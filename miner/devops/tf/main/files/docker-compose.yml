@@ -1,0 +1,103 @@
+version: '3.7'
+
+services:
+  app:
+    image: ${ecr_base_url}/${ecr_image}
+    init: true
+    restart: always
+    env_file: ./.env
+    
+    environment:
+     # add this setting to any container that should dump prometheus metrics
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+    
+    volumes:
+      - backend-static:/root/src/static
+      - ./media:/root/src/media
+
+      # If another container is using prometheus metrics, it should dump it's metrics to a subdirectory of the host dir,
+      # e.g `- ./prometheus-multiproc-dir/other_container:/prometheus-multiproc-dir` - all containers should use
+      # separate subdirs
+      - ./prometheus-multiproc-dir:/prometheus-multiproc-dir
+    
+      - ./prometheus-multiproc-dir/app:$${PROMETHEUS_MULTIPROC_DIR}
+    
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${region}
+        awslogs-group: /aws/ec2/${name}-${env}
+        tag: '$${INSTANCE_ID_SUBST}-app'
+        awslogs-create-group: "true"
+
+  
+  node-exporter:
+    image: ghcr.io/reef-technologies/node-exporter-aws-ec2:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    logging: &exporter_logging
+      driver: journald
+      options:
+        tag: '{{.Name}}'
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.40.0
+    container_name: cadvisor
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /cgroup:/cgroup:ro
+    restart: unless-stopped
+    logging:
+      <<: *exporter_logging
+  
+
+  nginx:
+    image: 'ghcr.io/reef-technologies/nginx-rt:v1.2.1'
+    restart: unless-stopped
+    healthcheck:
+      test: wget -q --spider http://0.0.0.0/admin/login || exit 1
+    depends_on:
+      - app
+      
+      - cadvisor
+      - node-exporter
+      
+    command: nginx -g 'daemon off;'
+    ports:
+      
+      - 10443:10443
+      
+      - 8000:8000
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates
+      - ./nginx/config_helpers:/etc/nginx/config_helpers
+      - backend-static:/srv/static:ro
+      - ./media:/srv/media:ro
+      - ./nginx/monitoring_certs:/etc/monitoring_certs
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${region}
+        awslogs-group: /aws/ec2/${name}-${env}
+        tag: '$${INSTANCE_ID_SUBST}-nginx'
+        awslogs-create-group: "true"
+    
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+
+volumes:
+  backend-static:

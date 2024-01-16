@@ -1,0 +1,5 @@
+export APP_NAME=${name}
+export APP_ENV=${env}
+export AWS_ACCOUNT_ID=${account_id}
+export AWS_ECR_BASE_URL=${ecr_base_url}
+export AWS_ECR_TAG=${ecr_image}

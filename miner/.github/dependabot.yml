@@ -1,0 +1,12 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/app/src"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 0
+  - package-ecosystem: "docker"
+    directory: "/app/envs/prod"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0

@@ -1,0 +1,17 @@
+*.pyc
+*.sqlite3
+*~
+*.egg-info/
+/docker-compose.yml
+/.idea/
+/redis/
+/db/
+.env
+venv
+media/
+.backups/
+.envrc
+.terraform.lock.hcl
+.terraform/
+.nox/
+__pycache__
