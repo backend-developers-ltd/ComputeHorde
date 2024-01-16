@@ -1,0 +1,25 @@
+name: Deploy to AWS on push to certain branches
+
+on:
+  push:
+    branches:
+      - 'deploy-*'
+
+jobs:
+  deploy:
+    env:
+      AWS_ACCESS_KEY_ID:  ${{ secrets.DEPLOYMENT_AWS_ACCESS_KEY_ID }} 
+      AWS_SECRET_ACCESS_KEY:  ${{ secrets.DEPLOYMENT_AWS_SECRET_ACCESS_KEY }} 
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: deploy to aws
+        run: |
+          set -e
+          export ENVIRONMENT=${GITHUB_REF_NAME:7}
+          ./deploy-to-aws.sh $ENVIRONMENT
+          export TAG=deployed-${ENVIRONMENT}-`date -u +"%Y-%m-%dT%H.%M.%S"`
+          git tag $TAG
+          git push origin $TAG

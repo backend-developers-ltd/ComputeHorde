@@ -1,0 +1,6 @@
+# disable common false-positive errors to ease adoption in existing projects
+disable=SC1090-SC1092  # disable errors related to sourcing files
+disable=SC2034  # disable errors related to unused variables
+disable=SC2028  # swapping echo for printf requires more testing to ensure correctness
+# disable errors related to cookiecutter templating:
+disable=SC1054,SC1056,SC1072,SC1073,SC1083,SC1009

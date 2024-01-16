@@ -1,0 +1,200 @@
+version: '3.7'
+
+services:
+  redis:
+    image: redis:6-alpine
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: redis-cli ping
+    restart: unless-stopped
+    volumes:
+      - ./redis/data:/data
+    logging: &logging
+      driver: journald
+      options:
+        tag: '{{.Name}}'
+
+  db:
+    image: postgres:14.0-alpine
+    healthcheck:
+      test: pg_isready -U ${POSTGRES_USER} || exit 1
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ./db/data:/var/lib/postgresql/data
+    logging:
+      <<: *logging
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    image: compute_horde_validator/app
+    healthcheck:
+      test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      # Add this variable to all containers that should dump Prometheus metrics.  Each container besides this one
+      # should use a different subdirectory of /prometheus-multiproc-dir, e.g.
+      # - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/other-container
+      # Don't forget to also mount the prometheus-metrics volume in other containers too.
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+    volumes:
+      - backend-static:/root/src/static
+      - ./media:/root/src/media
+      # Add this mount to each container that should dump Prometheus metrics.
+      - ./prometheus-metrics:/prometheus-multiproc-dir
+    depends_on:
+      - redis
+      - db
+    logging:
+      <<: *logging
+
+  celery-worker:
+    image: compute_horde_validator/app
+    init: true
+    healthcheck:
+      test: celery -A compute_horde_validator status > /dev/null || exit 1
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - DEBUG=off
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
+    command: ./celery-entrypoint.sh
+    volumes:
+      - ./prometheus-metrics:/prometheus-multiproc-dir
+    tmpfs: /run
+    depends_on:
+      - redis
+    logging:
+      <<: *logging
+
+  celery-beat:
+    image: compute_horde_validator/app
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - DEBUG=off
+    command: nice celery -A compute_horde_validator beat -l INFO --schedule /tmp/celerybeat-schedule -f /tmp/logs/celery-beat.log
+    volumes:
+      - ./logs:/tmp/logs
+    depends_on:
+      - redis
+    logging:
+      <<: *logging
+
+  celery-flower:
+    image: compute_horde_validator/app
+    healthcheck:
+      test: wget --user "${CELERY_FLOWER_USER}" --password "${CELERY_FLOWER_PASSWORD}" -qO- 127.0.0.1:5555 > /dev/null || exit 1
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - DEBUG=off
+    command: celery --app=compute_horde_validator --broker="${CELERY_BROKER_URL}" flower --basic_auth="${CELERY_FLOWER_USER}:${CELERY_FLOWER_PASSWORD}"
+    depends_on:
+      - celery-worker
+    ports:
+      - 5555:5555
+    logging:
+      <<: *logging
+  
+  nginx:
+    image: 'ghcr.io/reef-technologies/nginx-rt:v1.2.1'
+    restart: unless-stopped
+    healthcheck:
+      test: wget -q --spider 0.0.0.0:80 || exit 1
+    environment:
+      - NGINX_HOST=${NGINX_HOST}
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates
+      - ./nginx/config_helpers:/etc/nginx/config_helpers
+      - backend-static:/srv/static:ro
+      - ./media:/srv/media:ro
+      - ./letsencrypt/etc:/etc/letsencrypt
+      - ./nginx/monitoring_certs:/etc/monitoring_certs
+    depends_on:
+      - app
+      
+      - cadvisor
+      - node-exporter
+      
+    command: nginx -g 'daemon off;'
+    ports:
+      - 80:80
+      - 443:443
+      
+      - 10443:10443
+      
+    logging:
+      <<: *logging
+    
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+
+  
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|run|boot|var/.+)($$|/)'
+      
+      - '--collector.tcpstat'
+      
+    logging:
+      <<: *logging
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.40.0
+    container_name: cadvisor
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /cgroup:/cgroup:ro
+    restart: unless-stopped
+    logging:
+      <<: *logging
+  
+
+  
+  promtail:
+    image: grafana/promtail:2.9.2
+    restart: unless-stopped
+    environment:
+      - LOKI_URL=${LOKI_URL}
+      - LOKI_REFRESH_INTERVAL=${LOKI_REFRESH_INTERVAL}
+      - LOKI_USER=${LOKI_USER}
+      - LOKI_PASSWORD=${LOKI_PASSWORD}
+      - LOKI_CLIENT=${LOKI_CLIENT}
+      - LOKI_CLIENT_SERVER_GROUP=${LOKI_CLIENT_SERVER_GROUP}
+    volumes:
+      - ./promtail:/etc/promtail
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - -config.file=/etc/promtail/config.yml
+      - -config.expand-env=true
+    logging:
+      <<: *logging
+  
+
+volumes:
+  backend-static:
