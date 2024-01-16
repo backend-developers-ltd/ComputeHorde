@@ -1,0 +1,44 @@
+[project]
+name = "executor"
+requires-python = ">=3.9"
+version = "0"
+dynamic = ["dependencies"]
+[tool.setuptools.packages.find]
+where = ["app/src/"]
+[tool.setuptools.dynamic]
+dependencies = { file = ["app/src/requirements.txt"] }
+
+[project.optional-dependencies]
+format = ["ruff"]
+lint = [
+    "ruff",
+    "codespell[toml]",
+]
+type_check = [
+    "django-stubs[compatible-mypy]",
+    "djangorestframework-stubs[compatible-mypy]",
+    "mypy",
+    "types-freezegun",
+    "types-python-dateutil",
+    "types-requests",
+]
+
+[tool.ruff]
+src = ["app/src"]
+# TODO add D
+select = ["E", "F", "I", "UP"]
+# TODO: remove E501 once docstrings are formatted
+ignore = [
+    "D100", "D105", "D107", "D200", "D202", "D203", "D205", "D212", "D400", "D401", "D415",
+    "D101", "D102","D103", "D104", # TODO remove once we have docstring for all public methods
+    "E501", # TODO: remove E501 once docstrings are formatted
+]
+line-length = 100
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+"test/**" = ["D", "F403", "F405"]
+
+[tool.codespell]
+skip = '*.min.js'
+ignore-words-list = 'datas'
