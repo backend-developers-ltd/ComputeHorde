@@ -11,7 +11,7 @@ import nox
 CI = os.environ.get('CI') is not None
 
 ROOT = Path('.')
-PYTHON_VERSIONS = ['3.11']
+PYTHON_VERSIONS = ['3.12']
 PYTHON_DEFAULT_VERSION = PYTHON_VERSIONS[-1]
 APP_ROOT = ROOT / 'app' / 'src'
 
@@ -102,7 +102,11 @@ def run_shellcheck(session, mode="check"):
 @nox.session(name='format', python=PYTHON_DEFAULT_VERSION)
 def format_(session):
     """Lint the code and apply fixes in-place whenever possible."""
-    session.run('pip', 'install', '-e', '.[format]')
+    with session.chdir(str(APP_ROOT)):
+        session.run(
+            'pip', 'install', '-r', 'requirements.txt',
+            "ruff",
+        )
     session.run('ruff', 'check', '--fix', '.')
     run_shellcheck(session, mode="fmt")
     run_readable(session, mode="fmt")
@@ -111,7 +115,12 @@ def format_(session):
 @nox.session(python=PYTHON_DEFAULT_VERSION)
 def lint(session):
     """Run linters in readonly mode."""
-    session.run('pip', 'install', '-e', '.[lint]')
+    with session.chdir(str(APP_ROOT)):
+        session.run(
+            'pip', 'install', '-r', 'requirements.txt',
+            "ruff",
+            "codespell[toml]",
+        )
     session.run('ruff', 'check', '--diff', '.')
     session.run('codespell', '.')
     run_shellcheck(session, mode="check")
@@ -120,8 +129,16 @@ def lint(session):
 
 @nox.session(python=PYTHON_DEFAULT_VERSION)
 def type_check(session):
-    session.run('pip', 'install', '-e', '.[type_check]')
     with session.chdir(str(APP_ROOT)):
+        session.run(
+            'pip', 'install', '-r', 'requirements.txt',
+            "django-stubs[compatible-mypy]",
+            "djangorestframework-stubs[compatible-mypy]",
+            "mypy",
+            "types-freezegun",
+            "types-python-dateutil",
+            "types-requests",
+        )
         session.run(
             'mypy',
             '--config-file', 'mypy.ini',

@@ -12,6 +12,9 @@ sentry-sdk==1.29.2
 ipython~=8.14.0
 nox==2023.4.22
 
+channels[daphne]==4.*
+websockets==12.*
+
 prometheus-client~=0.17.0
 django-prometheus==2.3.1
 django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@7666285

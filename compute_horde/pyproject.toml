@@ -1,12 +1,14 @@
 [project]
-name = "validator"
+name = "compute_horde"
 requires-python = ">=3.12"
 version = "0"
-dynamic = ["dependencies"]
-[tool.setuptools.packages.find]
-where = ["app/src/"]
-[tool.setuptools.dynamic]
-dependencies = { file = ["app/src/requirements.txt"] }
+dependencies = [
+    'pydantic == 2.*',
+]
+license = {text = "MIT License"}
+
+[tool.setuptools.packages]
+find = {}
 
 [project.optional-dependencies]
 format = ["ruff"]
@@ -24,7 +26,7 @@ type_check = [
 ]
 
 [tool.ruff]
-src = ["app/src"]
+src = [""]
 # TODO add D
 select = ["E", "F", "I", "UP"]
 # TODO: remove E501 once docstrings are formatted
@@ -38,7 +40,3 @@ line-length = 100
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]
 "test/**" = ["D", "F403", "F405"]
-
-[tool.codespell]
-skip = '*.min.js'
-ignore-words-list = 'datas'

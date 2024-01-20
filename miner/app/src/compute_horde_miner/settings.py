@@ -50,6 +50,8 @@ DEBUG = env('DEBUG')
 ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'django_prometheus',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -141,7 +143,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'compute_horde_miner.wsgi.application'
+ASGI_APPLICATION = 'compute_horde_miner.asgi.application'
 
 DATABASES = {}
 if env('DATABASE_POOL_URL'):  # DB transaction-based connection pool, such as one provided PgBouncer
