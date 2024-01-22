@@ -1,27 +1,12 @@
 [project]
 name = "executor"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 version = "0"
 dynamic = ["dependencies"]
 [tool.setuptools.packages.find]
 where = ["app/src/"]
 [tool.setuptools.dynamic]
 dependencies = { file = ["app/src/requirements.txt"] }
-
-[project.optional-dependencies]
-format = ["ruff"]
-lint = [
-    "ruff",
-    "codespell[toml]",
-]
-type_check = [
-    "django-stubs[compatible-mypy]",
-    "djangorestframework-stubs[compatible-mypy]",
-    "mypy",
-    "types-freezegun",
-    "types-python-dateutil",
-    "types-requests",
-]
 
 [tool.ruff]
 src = ["app/src"]

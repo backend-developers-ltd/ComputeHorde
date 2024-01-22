@@ -144,13 +144,6 @@ TEMPLATES = [
 WSGI_APPLICATION = 'compute_horde_executor.wsgi.application'
 
 DATABASES = {}
-if env('DATABASE_POOL_URL'):  # DB transaction-based connection pool, such as one provided PgBouncer
-    DATABASES['default'] = {
-        **env.db_url('DATABASE_POOL_URL'),
-        'DISABLE_SERVER_SIDE_CURSORS': True,  # prevents random cursor errors with transaction-based connection pool
-    }
-elif env('DATABASE_URL'):
-    DATABASES['default'] = env.db_url('DATABASE_URL')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -252,6 +245,8 @@ LOGGING = {
         },
     },
 }
+
+MINER_ADDRESS = env.str('MINER_ADDRESS')
 
 # Sentry
 if SENTRY_DSN := env('SENTRY_DSN', default=''):
