@@ -18,27 +18,27 @@ class BaseExecutorRequest(BaseRequest):
 
 
 class V0ReadyRequest(BaseExecutorRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0ReadyRequest)
+    message_type: RequestType = RequestType.V0ReadyRequest
 
 
 class V0FailedToPrepare(BaseExecutorRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0FailedToPrepare)
+    message_type: RequestType = RequestType.V0FailedToPrepare
 
 
 class V0FailedRequest(BaseExecutorRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0FailedRequest)
+    message_type: RequestType = RequestType.V0FailedRequest
     docker_process_exit_status: int | None
     timeout: bool
-    docker_process_stdout: str
-    docker_process_stderr: str
+    docker_process_stdout: str  # TODO: add max_length
+    docker_process_stderr: str  # TODO: add max_length
 
 
 class V0FinishedRequest(BaseExecutorRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0FinishedRequest)
-    docker_process_stdout: str
-    docker_process_stderr: str
+    message_type: RequestType = RequestType.V0FinishedRequest
+    docker_process_stdout: str  # TODO: add max_length
+    docker_process_stderr: str  # TODO: add max_length
 
 
 class GenericError(BaseExecutorRequest):
-    message_type: RequestType = pydantic.Field(RequestType.GenericError)
+    message_type: RequestType = RequestType.GenericError
     details: str | None = None

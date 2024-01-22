@@ -27,18 +27,24 @@ def all_subclasses(cls: type):
         yield from all_subclasses(subcls)
 
 
+base_class_to_request_type_mapping = {}
+
+
 class BaseRequest(pydantic.BaseModel, abc.ABC):
     message_type: enum.Enum
 
     @classmethod
     def type_to_model(cls, type_: enum.Enum) -> type['BaseRequest']:
-        mapping = {}
-        for klass in all_subclasses(cls):
-            if not (message_type := klass.model_fields.get('message_type')):
-                continue
-            if not message_type.default:
-                continue
-            mapping[message_type.default] = klass
+        mapping = base_class_to_request_type_mapping.get(cls)
+        if not mapping:
+            mapping = {}
+            for klass in all_subclasses(cls):
+                if not (message_type := klass.model_fields.get('message_type')):
+                    continue
+                if not message_type.default:
+                    continue
+                mapping[message_type.default] = klass
+            base_class_to_request_type_mapping[cls] = mapping
 
         return mapping[type_]
 

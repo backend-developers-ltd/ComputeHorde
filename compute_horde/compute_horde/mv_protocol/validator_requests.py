@@ -27,7 +27,7 @@ class VolumeType(enum.Enum):
 
 
 class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0InitialJobRequest)
+    message_type: RequestType = RequestType.V0InitialJobRequest
     base_docker_image_name: str | None
     timeout_seconds: int | None
     volume_type: VolumeType
@@ -40,11 +40,11 @@ class Volume(pydantic.BaseModel):
 
 
 class V0JobRequest(BaseValidatorRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0JobRequest)
+    message_type: RequestType = RequestType.V0JobRequest
     docker_image_name: str
     volume: Volume
 
 
 class GenericError(BaseValidatorRequest):
-    message_type: RequestType = pydantic.Field(RequestType.GenericError)
+    message_type: RequestType = RequestType.GenericError
     _details: str | None = None

@@ -13,6 +13,7 @@ import pydantic
 import websockets
 from compute_horde.base_requests import ValidationError
 from compute_horde.em_protocol.executor_requests import (
+    BaseExecutorRequest,
     GenericError,
     V0FailedRequest,
     V0FailedToPrepare,
@@ -41,7 +42,9 @@ class MinerClient:
         self.ws: websockets.WebSocketClientProtocol | None = None
         self.job_uuid: str | None = None
         self.initial_msg = asyncio.Future()
+        self.initial_msg_lock = asyncio.Lock()
         self.full_payload = asyncio.Future()
+        self.full_payload_lock = asyncio.Lock()
         self.read_messages_task: asyncio.Task | None = None
 
     async def __aenter__(self):
@@ -90,79 +93,79 @@ class MinerClient:
                 continue
 
             if isinstance(msg, V0InitialJobRequest):
-                if self.initial_msg.done():
-                    logger.error(f'Received duplicate initial job request: first '
-                                 f'{self.job_uuid=} and then {msg.job_uuid=}')
-                    await self.ws.send(GenericError(
-                        details=f'Received duplicate initial job request: first '
-                                f'{self.job_uuid=} and then {msg.job_uuid=}'
-                    ).model_dump_json())
-                    continue
-                self.job_uuid = msg.job_uuid
-                logger.debug(f'Received initial job request: {msg.job_uuid=}')
-                self.initial_msg.set_result(msg)
+                await self.handle_initial_job_request(msg)
             elif isinstance(msg, V0JobRequest):
-                if not self.initial_msg.done():
-                    logger.error(f'Received job request before an initial job request {msg.job_uuid=}')
-                    await self.ws.send(GenericError(
-                        details=f'Received job request before an initial job request {msg.job_uuid=}'
-                    ).model_dump_json())
-                    continue
-                if self.full_payload.done():
-                    logger.error(f'Received duplicate full job payload request: first '
-                                 f'{self.job_uuid=} and then {msg.job_uuid=}')
-                    await self.ws.send(GenericError(
-                        details=f'Received duplicate full job payload request: first '
-                                f'{self.job_uuid=} and then {msg.job_uuid=}'
-                    ).model_dump_json())
-                    continue
-                logger.debug(f'Received full job payload request: {msg.job_uuid=}')
-                self.full_payload.set_result(msg)
+                await self.handle_job_request(msg)
             elif isinstance(msg, GenericError):
                 try:
                     raise RuntimeError(f'Received error message: {msg.model_dump_json()}')
                 except Exception:
-                    logger.error('', exc_info=True)
+                    logger.exception('')
             else:
                 try:
                     raise NotImplementedError(f'Received unsupported message: {msg.model_dump_json()}')
                 except Exception:
-                    logger.error('', exc_info=True)
+                    logger.exception('')
+
+    async def handle_initial_job_request(self, msg: V0InitialJobRequest):
+        async with self.initial_msg_lock:
+            if self.initial_msg.done():
+                msg = f'Received duplicate initial job request: first {self.job_uuid=} and then {msg.job_uuid=}'
+                logger.error(msg)
+                await self.ws.send(GenericError(details=msg).model_dump_json())
+                return
+            self.job_uuid = msg.job_uuid
+            logger.debug(f'Received initial job request: {msg.job_uuid=}')
+            self.initial_msg.set_result(msg)
+
+    async def handle_job_request(self, msg: V0JobRequest):
+        async with self.full_payload_lock:
+            if not self.initial_msg.done():
+                msg = f'Received job request before an initial job request {msg.job_uuid=}'
+                logger.error(msg)
+                await self.ws.send(GenericError(details=msg).model_dump_json())
+                return
+            if self.full_payload.done():
+                msg = (f'Received duplicate full job payload request: first '
+                       f'{self.job_uuid=} and then {msg.job_uuid=}')
+                logger.error(msg)
+                await self.ws.send(GenericError(details=msg).model_dump_json())
+                return
+            logger.debug(f'Received full job payload request: {msg.job_uuid=}')
+            self.full_payload.set_result(msg)
+
+    async def send_model(self, model: BaseExecutorRequest):
+        await self.ensure_connected()
+        await self.ws.send(model.model_dump_json())
 
     async def send_ready(self):
-        await self.ensure_connected()
-        await self.ws.send(V0ReadyRequest(job_uuid=self.job_uuid).model_dump_json())
+        await self.send_model(V0ReadyRequest(job_uuid=self.job_uuid))
 
     async def send_finished(self, job_result: 'JobResult'):
-        await self.ensure_connected()
-        await self.ws.send(V0FinishedRequest(
+        await self.send_model(V0FinishedRequest(
             job_uuid=self.job_uuid,
             docker_process_stdout=job_result.stdout,
             docker_process_stderr=job_result.stderr,
-        ).model_dump_json())
+        ))
 
     async def send_failed(self, job_result: 'JobResult'):
-        await self.ensure_connected()
-        await self.ws.send(V0FailedRequest(
+        await self.send_model(V0FailedRequest(
             job_uuid=self.job_uuid,
             docker_process_exit_status=job_result.exit_status,
             timeout=job_result.timeout,
             docker_process_stdout=job_result.stdout,
             docker_process_stderr=job_result.stderr,
-        ).model_dump_json())
+        ))
 
     async def send_generic_error(self, details: str):
-        await self.ensure_connected()
-        await self.ws.send(GenericError(
+        await self.send_model(GenericError(
             details=details,
-        ).model_dump_json())
-
+        ))
 
     async def send_failed_to_prepare(self):
-        await self.ensure_connected()
-        await self.ws.send(V0FailedToPrepare(
+        await self.send_model(V0FailedToPrepare(
             job_uuid=self.job_uuid,
-        ).model_dump_json())
+        ))
 
 
 class JobResult(pydantic.BaseModel):
@@ -192,12 +195,12 @@ class JobRunner:
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
-            logger.error(f'"docker pull {self.initial_job_request.base_docker_image_name}" '
-                         f'(job_uuid={self.initial_job_request.job_uuid})'
-                         f' failed with status={process.returncode}'
-                         f' stdout="{stdout.decode()}"\nstderr="{stderr.decode()}')
-            raise JobError(f'"docker pull" failed with status={process.returncode}'
-                           f' stdout="{stdout.decode()}"\nstderr="{stderr.decode()}')
+            msg = (f'"docker pull {self.initial_job_request.base_docker_image_name}" '
+                   f'(job_uuid={self.initial_job_request.job_uuid})'
+                   f' failed with status={process.returncode}'
+                   f' stdout="{stdout.decode()}"\nstderr="{stderr.decode()}')
+            logger.error(msg)
+            raise JobError(msg)
 
     async def run_job(self, job_request: V0JobRequest):
         self.unpack_volume(job_request)
@@ -246,6 +249,7 @@ class JobRunner:
         )
 
     def unpack_volume(self, job_request: V0JobRequest):
+        assert str(volume_mount_dir) not in {'~', '/'}
         if job_request.volume.volume_type == VolumeType.inline:
             for path in volume_mount_dir.glob("*"):
                 if path.is_file():
@@ -253,8 +257,7 @@ class JobRunner:
                 elif path.is_dir():
                     shutil.rmtree(path)
 
-            if not volume_mount_dir.exists():
-                volume_mount_dir.mkdir()
+            volume_mount_dir.mkdir(exist_ok=True)
 
             decoded_contents = base64.b64decode(job_request.volume.contents)
             bytes_io = io.BytesIO(decoded_contents)

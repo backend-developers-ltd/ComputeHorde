@@ -20,34 +20,34 @@ class BaseMinerRequest(BaseRequest):
 
 
 class V0AcceptJobRequest(BaseMinerRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0AcceptJobRequest)
+    message_type: RequestType = RequestType.V0AcceptJobRequest
 
 
 class V0DeclineJobRequest(BaseMinerRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0DeclineJobRequest)
+    message_type: RequestType = RequestType.V0DeclineJobRequest
 
 
 class V0ExecutorReadyRequest(BaseMinerRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0ExecutorReadyRequest)
+    message_type: RequestType = RequestType.V0ExecutorReadyRequest
 
 
 class V0ExecutorFailedRequest(BaseMinerRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0ExecutorFailedRequest)
+    message_type: RequestType = RequestType.V0ExecutorFailedRequest
 
 
 class V0JobFailedRequest(BaseMinerRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0JobFailedRequest)
+    message_type: RequestType = RequestType.V0JobFailedRequest
     docker_process_exit_status: int
-    docker_process_stdout: str
-    docker_process_stderr: str
+    docker_process_stdout: str  # TODO: add max_length
+    docker_process_stderr: str  # TODO: add max_length
 
 
 class V0JobFinishedRequest(BaseMinerRequest, JobMixin):
-    message_type: RequestType = pydantic.Field(RequestType.V0JobFinishedRequest)
-    docker_process_stdout: str
-    docker_process_stderr: str
+    message_type: RequestType = RequestType.V0JobFinishedRequest
+    docker_process_stdout: str  # TODO: add max_length
+    docker_process_stderr: str  # TODO: add max_length
 
 
 class GenericError(BaseMinerRequest):
-    message_type: RequestType = pydantic.Field(RequestType.GenericError)
+    message_type: RequestType = RequestType.GenericError
     _details: str | None = None
