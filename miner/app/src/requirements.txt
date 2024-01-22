@@ -13,7 +13,8 @@ ipython~=8.14.0
 nox==2023.4.22
 
 channels[daphne]==4.*
-compute_horde @ ../../../compute_horde
+channels-redis==4.*
+../../../compute_horde
 
 prometheus-client~=0.17.0
 django-prometheus==2.3.1

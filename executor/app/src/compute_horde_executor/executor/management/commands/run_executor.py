@@ -36,8 +36,9 @@ volume_mount_dir = temp_dir / 'volume'
 
 
 class MinerClient:
-    def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str):
+    def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, token: str):
         self.loop = loop
+        self.token = token
         self.miner_address = miner_address
         self.ws: websockets.WebSocketClientProtocol | None = None
         self.job_uuid: str | None = None
@@ -58,7 +59,7 @@ class MinerClient:
             await self.ws.close()
 
     async def _connect(self):
-        return await websockets.connect(f'{self.miner_address}/v0/executor_interface')
+        return await websockets.connect(f'{self.miner_address}/v0/executor_interface/{self.token}')
 
     async def await_connect(self):
         while True:
@@ -88,7 +89,7 @@ class MinerClient:
             try:
                 msg = BaseMinerRequest.parse(msg)
             except ValidationError as ex:
-                logger.error('Malformed message from miner:', exc_info=True)
+                logger.error(f'Malformed message from miner: {str(ex)}')
                 await self.ws.send(GenericError(details=f'Malformed message: {str(ex)}').model_dump_json())
                 continue
 
@@ -279,7 +280,7 @@ class Command(BaseCommand):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         self.loop = asyncio.get_event_loop()
-        self.miner_client = self.MINER_CLIENT_CLASS(self.loop, settings.MINER_ADDRESS)
+        self.miner_client = self.MINER_CLIENT_CLASS(self.loop, settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN)
 
     def handle(self, *args, **options):
         self.loop.run_until_complete(self._executor_loop())

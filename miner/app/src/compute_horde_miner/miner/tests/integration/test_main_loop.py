@@ -1,0 +1,54 @@
+import uuid
+
+import pytest
+from channels.testing import WebsocketCommunicator
+
+from compute_horde_miner import asgi
+from compute_horde_miner.miner.tests.executor_manager import fake_executor
+
+WEBSOCKET_TIMEOUT = 100000
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db
+async def test_main_loop():
+    job_uuid = str(uuid.uuid4())
+    fake_executor.job_uuid = job_uuid
+    communicator = WebsocketCommunicator(asgi.application, "v0/validator_interface/some_public_key")
+    connected, _ = await communicator.connect()
+    assert connected
+    await communicator.send_json_to({
+        "message_type": "V0InitialJobRequest",
+        "job_uuid": job_uuid,
+        "base_docker_image_name": "it's teeeeests",
+        "timeout_seconds": 60,
+        "volume_type": "inline"
+    })
+    response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
+    assert response == {
+        "message_type": "V0AcceptJobRequest",
+        "job_uuid": job_uuid,
+    }
+    response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
+    assert response == {
+        "message_type": "V0ExecutorReadyRequest",
+        "job_uuid": job_uuid,
+    }
+
+    await communicator.send_json_to({
+        "message_type": "V0JobRequest",
+        "job_uuid": job_uuid,
+        "docker_image_name": "it's teeeeests again",
+        "volume": {
+            "volume_type": "inline",
+            "contents": "nonsense"
+        }
+    })
+    response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
+    assert response == {
+        "message_type": "V0JobFinishedRequest",
+        "job_uuid": job_uuid,
+        "docker_process_stdout": "some stdout",
+        "docker_process_stderr": "some stderr",
+    }
+    await communicator.disconnect()

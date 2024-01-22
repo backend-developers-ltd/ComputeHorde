@@ -247,6 +247,7 @@ LOGGING = {
 }
 
 MINER_ADDRESS = env.str('MINER_ADDRESS')
+EXECUTOR_TOKEN = env.str('EXECUTOR_TOKEN')
 
 # Sentry
 if SENTRY_DSN := env('SENTRY_DSN', default=''):

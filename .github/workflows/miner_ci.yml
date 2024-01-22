@@ -1,4 +1,4 @@
-name: Run Executor linter and tests
+name: Run Miner linter and tests
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./executor
+        working-directory: ./miner
     steps:
       - uses: actions/checkout@v3
         with:
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./executor
+        working-directory: ./miner
     steps:
       - uses: actions/checkout@v3
         with:
@@ -49,5 +49,12 @@ jobs:
         run: ./setup-dev.sh
       - name: Install dependencies
         run: python -m pip install --upgrade nox pip setuptools
+      - name: Run dockerized services
+        run: docker compose up -d --wait
+      - name: Run migrations
+        run: cd app/src && python manage.py wait_for_database --timeout 120 && python manage.py migrate
       - name: Run unit tests
         run: nox -vs test
+      - name: Stop dockerized services
+        if: success() || failure()
+        run: docker compose down -v
