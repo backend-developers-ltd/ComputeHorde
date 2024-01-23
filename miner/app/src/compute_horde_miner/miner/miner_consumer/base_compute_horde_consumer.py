@@ -19,7 +19,7 @@ def log_errors_explicitly(f):
         try:
             return await f(*args, **kwargs)
         except Exception as ex:
-            logger.error('', exc_info=True)
+            logger.exception('')
             raise ex
     return wrapper
 
@@ -59,7 +59,7 @@ class BaseConsumer[T](AsyncWebsocketConsumer, abc.ABC):
             try:
                 raise RuntimeError(f'Received error message: {msg.model_dump_json()}')
             except Exception:
-                logger.error('', exc_info=True)
+                logger.exception('')
                 return
 
         await self.handle(msg)

@@ -3,6 +3,7 @@ import uuid
 
 from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
+from django.utils import timezone
 
 from compute_horde_miner.miner.executor_manager import current
 from compute_horde_miner.miner.executor_manager.base import ExecutorUnavailable
@@ -59,7 +60,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                     docker_process_exit_status=job.exit_status,
                 ).model_dump_json())
                 logger.debug(f'Failed job {job.job_uuid} reported to validator {self.validator_key}')
-            job.result_reported_to_validator = True
+            job.result_reported_to_validator = timezone.now()
             await job.asave()
         # TODO using advisory locks make sure that only one consumer per validator exists
 
@@ -77,6 +78,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             # TODO add rate limiting per validator key here
             token = f'{msg.job_uuid}-{uuid.uuid4()}'
             await self.group_add(token)
+            # let's create the job object before spinning up the executor, so if this process dies before getting
+            # confirmation from the executor_manager the object is there and the executor will get the job details
             job = AcceptedJob(
                 validator=self.validator,
                 job_uuid=msg.job_uuid,
@@ -118,10 +121,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):
         jobs = [job for job in self.pending_jobs.values() if job.executor_token == msg.executor_token]
-        if not jobs or jobs[0].status != AcceptedJob.Status.WAITING_FOR_EXECUTOR:
+        if not jobs:
             return
         job = jobs[0]
-        self.pending_jobs = {k: v for k, v in self.pending_jobs.items() if v.executor_token == msg.executor_token}
+        self.pending_jobs = {k: v for k, v in self.pending_jobs.items() if v.executor_token != msg.executor_token}
         await self.send(miner_requests.V0ExecutorFailedRequest(job_uuid=job.job_uuid).model_dump_json())
         logger.debug(f'Failure in preparation for job {job.job_uuid} reported to validator {self.validator_key}')
 
@@ -134,7 +137,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         logger.debug(f'Finished job {msg.job_uuid} reported to validator {self.validator_key}')
         job = self.pending_jobs.pop(msg.job_uuid)
         await job.arefresh_from_db()
-        job.result_reported_to_validator = True
+        job.result_reported_to_validator = timezone.now()
         await job.asave()
 
     async def _executor_failed(self, msg: ExecutorFailed):
@@ -147,7 +150,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         logger.debug(f'Failed job {msg.job_uuid} reported to validator {self.validator_key}')
         job = self.pending_jobs.pop(msg.job_uuid)
         await job.arefresh_from_db()
-        job.result_reported_to_validator = True
+        job.result_reported_to_validator = timezone.now()
         await job.asave()
 
     async def disconnect(self, close_code):

@@ -43,11 +43,11 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             await self.websocket_disconnect({"code": f'No job waiting for token {self.executor_token}'})
             return
         if job.status != AcceptedJob.Status.WAITING_FOR_EXECUTOR:
-            await self.send(miner_requests.GenericError(details=f'Job with token {self.executor_token} is '
-                                                                f'not waiting for an executor'))
-            logger.error(f'Job with token {self.executor_token} is not waiting for an executor')
+            msg = f'Job with token {self.executor_token} is not waiting for an executor'
+            await self.send(miner_requests.GenericError(details=msg))
+            logger.error(msg)
             await self.websocket_disconnect(
-                {"code": f'Job with token {self.executor_token} is not waiting for an executor'})
+                {"code": msg})
             return
 
         self.job = job

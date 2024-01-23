@@ -1,6 +1,12 @@
-from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager, ExecutorUnavailable
+import subprocess
+
+from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager
 
 
 class DevExecutorManager(BaseExecutorManager):
     def reserve_executor(self, token):
-        raise ExecutorUnavailable("Executor is not available for reservation")
+        subprocess.Popen(
+            ["python", "app/src/manage.py", "run_executor"],
+            env={},
+            cwd={}
+        )
