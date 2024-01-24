@@ -50,4 +50,4 @@ class V0JobFinishedRequest(BaseMinerRequest, JobMixin):
 
 class GenericError(BaseMinerRequest):
     message_type: RequestType = RequestType.GenericError
-    _details: str | None = None
+    details: str | None = None

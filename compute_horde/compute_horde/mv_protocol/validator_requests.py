@@ -47,4 +47,4 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
 
 class GenericError(BaseValidatorRequest):
     message_type: RequestType = RequestType.GenericError
-    _details: str | None = None
+    details: str | None = None

@@ -255,6 +255,17 @@ LOGGING = {
     },
 }
 
+EXECUTOR_MANAGER_CLASS_PATH = env.str('EXECUTOR_MANAGER_CLASS_PATH')
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "compute_horde_miner.channel_layer.ECRedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(env.str('REDIS_HOST'), env.int('REDIS_PORT'))],
+        },
+    },
+}
+
 # Sentry
 if SENTRY_DSN := env('SENTRY_DSN', default=''):
     import sentry_sdk
