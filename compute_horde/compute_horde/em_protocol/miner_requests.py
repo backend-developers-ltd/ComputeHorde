@@ -35,6 +35,7 @@ class Volume(pydantic.BaseModel):
 class V0JobRequest(BaseMinerRequest, JobMixin):
     message_type: RequestType = RequestType.V0RunJobRequest
     docker_image_name: str
+    docker_run_options: list[str] = []
     volume: Volume
 
 
