@@ -3,7 +3,8 @@ name = "compute_horde"
 requires-python = ">=3.12"
 version = "0"
 dependencies = [
-    'pydantic == 2.*',
+    'pydantic < 2.0.0,>=1.7.4',
+    'bittensor >= 6.5.0,<7.0.0'
 ]
 license = {text = "MIT License"}
 
