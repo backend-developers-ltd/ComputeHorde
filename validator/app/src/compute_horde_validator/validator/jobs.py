@@ -3,10 +3,23 @@ import secrets
 import string
 from dataclasses import dataclass
 from typing import ClassVar, Self
+from abc import ABC, abstractmethod
+
+
+class SyntheticJob(ABC):
+    @property
+    @abstractmethod
+    def payload(self) -> str:
+        ...
+
+    @property
+    @abstractmethod
+    def answer(self) -> str:
+        ...
 
 
 @dataclass
-class HashChallenge:
+class V0SyntheticJob(SyntheticJob):
     password: str
     salt: str
 
@@ -17,8 +30,8 @@ class HashChallenge:
         return ''.join(secrets.choice(cls.ALPHABET) for i in range(length))
 
     @classmethod
-    def generate(cls, password_length: int, salt_length_bytes: int = 8) -> Self:
-        return HashChallenge(
+    def generate(cls, password_length: int = 6, salt_length_bytes: int = 8) -> Self:
+        return cls(
             password=cls.random_string(password_length),
             salt=secrets.token_bytes(salt_length_bytes),
         )
@@ -27,12 +40,17 @@ class HashChallenge:
     def hash_hex(self) -> str:
         return hashlib.sha256(self.password.encode('ascii') + self.salt).hexdigest()
 
-    def as_hashcat(self) -> str:
+    @property
+    def payload(self) -> str:
         """ Convert this instance to a hashcat argument format. """
         return f'{self.hash_hex}:{self.salt.hex()}'
 
+    @property
+    def answer(self) -> str:
+        return self.password
+
 
 if __name__ == '__main__':
-    challenge = HashChallenge.generate(password_length=6)
-    print(f'Password: {challenge.password}')
-    print(f'Challenge: {challenge.as_hashcat()}')
+    job = V0SyntheticJob.generate()
+    print(f'Payload: {job.payload}')
+    print(f'Answer: {job.payload}:{job.answer}')

@@ -13,6 +13,6 @@ CMD [ \
     "--quiet", \
     "--outfile", "/volume/output.txt", \
     "--outfile-format", "2", \
-    "/volume/challenges.txt", \
+    "/volume/payload.txt", \
     "?1?1?1?1?1?1" \
 ]

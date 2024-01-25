@@ -1,6 +1,6 @@
-# Challenge executor
+# Job runner
 
-This is the executor for the challenge. It is a docker image that can be run on any machine that has docker installed.
+This is the runner for the job. It is a docker image that can be run on any machine that has docker installed.
 
 Fine-tuning is encouraged.
 
@@ -15,7 +15,7 @@ docker-compose build
 To list devices available for hashcat, run:
 
 ```bash
-docker run --rm computehorde/executor:v1 -I
+docker run --rm computehorde/job:v0 -I
 ```
 
 Only CPU will be available by default.
@@ -31,7 +31,7 @@ Running this docker image on Nvidia GPU requires [Nvidia Container Toolkit](http
 After it is installed, verify that nvidia GPU is recognized by docker container:
 
 ```bash
-> docker run --rm --runtime=nvidia --gpus all --entrypoint nvidia-smi computehorde/executor:v1
+> docker run --rm --runtime=nvidia --gpus all --entrypoint nvidia-smi computehorde/job:v0
 
 +---------------------------------------------------------------------------------------+
 | NVIDIA-SMI 545.23.08              Driver Version: 545.23.08    CUDA Version: 12.3     |
@@ -49,7 +49,7 @@ After it is installed, verify that nvidia GPU is recognized by docker container:
 And also verify that hashcat sees the GPU as well:
 
 ```bash
-> docker run --rm --runtime=nvidia --gpus all computehorde/executor:v1 -I
+> docker run --rm --runtime=nvidia --gpus all computehorde/job:v0 -I
 
 hashcat (v6.2.5) starting in backend information mode
 
@@ -113,15 +113,15 @@ OpenCL Platform ID #2
 The image automatically launches `hashcat`. If you want to run something else, use `--entrypoint` flag, i.e. to run bash, type:
 
 ```bash
-docker run --rm --entrypoint=/bin/bash -ti computehorde/executor:v1
+docker run --rm --entrypoint=/bin/bash -ti computehorde/job:v0
 ```
 
-Below is a command to run hashcat on test challenge. Output should be `passwd`, it takes up to 1min on T1 GPU:
+Below is a command to run hashcat on test payload. Output should be `passwd`, it takes up to 1min on T1 GPU:
 
 ```bash
 docker run --rm -ti \
     --runtime=nvidia --gpus all \
-    computehorde/executor:v1 \
+    computehorde/job:v0 \
     --attack-mode 3 \
     --workload-profile 3 \
     --optimized-kernel-enable \
@@ -132,4 +132,4 @@ docker run --rm -ti \
     aad072a7927f39651ccde815d3a0ead2a14aa19559ae89561a370bce20738baf:bec0fba4fecb176a ?1?1?1?1?1?1
 ```
 
-Instead of challenge string, one could specify path to text file with list of challenges.
+Instead of payload string, one could specify path to text file with list of payloads.
