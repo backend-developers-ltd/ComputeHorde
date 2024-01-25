@@ -118,7 +118,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
                     "volume_type": job_request.volume.volume_type.value,
                     "contents": job_request.volume.contents,
                 },
-            ).model_dump()
+            ).dict()
         })
 
 
@@ -134,7 +134,7 @@ class ExecutorInterfaceMixin(BaseMixin):
             group_name,
             {
                 'type': 'executor.ready',
-                **ExecutorReady(executor_token=executor_token).model_dump(),
+                **ExecutorReady(executor_token=executor_token).dict(),
             }
         )
 
@@ -144,7 +144,7 @@ class ExecutorInterfaceMixin(BaseMixin):
             group_name,
             {
                 'type': 'executor.failed_to_prepare',
-                **ExecutorFailedToPrepare(executor_token=executor_token).model_dump(),
+                **ExecutorFailedToPrepare(executor_token=executor_token).dict(),
             }
         )
 
@@ -158,7 +158,7 @@ class ExecutorInterfaceMixin(BaseMixin):
                     job_uuid=job_uuid,
                     docker_process_stdout=stdout,
                     docker_process_stderr=stderr,
-                ).model_dump(),
+                ).dict(),
             }
         )
 
@@ -174,7 +174,7 @@ class ExecutorInterfaceMixin(BaseMixin):
                     docker_process_stdout=stdout,
                     docker_process_stderr=stderr,
                     docker_process_exit_status=exit_status,
-                ).model_dump(),
+                ).dict(),
             }
         )
 

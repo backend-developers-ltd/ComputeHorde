@@ -1,6 +1,6 @@
 [project]
 name = "validator"
-requires-python = ">=3.12"
+requires-python = "==3.11.*"
 version = "0"
 dynamic = ["dependencies"]
 [tool.setuptools.packages.find]

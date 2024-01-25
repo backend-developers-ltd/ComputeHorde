@@ -9,6 +9,8 @@ from functools import wraps
 
 import environ
 
+from compute_horde import base  # noqa
+
 # from celery.schedules import crontab
 
 
