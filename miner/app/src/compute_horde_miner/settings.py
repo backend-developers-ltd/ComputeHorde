@@ -257,6 +257,8 @@ LOGGING = {
 
 EXECUTOR_MANAGER_CLASS_PATH = env.str('EXECUTOR_MANAGER_CLASS_PATH')
 
+ADDRESS_FOR_EXECUTORS = env.str('ADDRESS_FOR_EXECUTORS')
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "compute_horde_miner.channel_layer.channel_layer.ECRedisChannelLayer",

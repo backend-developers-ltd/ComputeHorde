@@ -38,13 +38,14 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             # TODO maybe one day tokens will be reused, then we will have to add filtering here
             job = await AcceptedJob.objects.aget(executor_token=self.executor_token)
         except AcceptedJob.DoesNotExist:
-            await self.send(miner_requests.GenericError(details=f'No job waiting for token {self.executor_token}'))
+            await self.send(miner_requests.GenericError(
+                details=f'No job waiting for token {self.executor_token}').model_dump_json())
             logger.error(f'No job waiting for token {self.executor_token}')
             await self.websocket_disconnect({"code": f'No job waiting for token {self.executor_token}'})
             return
         if job.status != AcceptedJob.Status.WAITING_FOR_EXECUTOR:
             msg = f'Job with token {self.executor_token} is not waiting for an executor'
-            await self.send(miner_requests.GenericError(details=msg))
+            await self.send(miner_requests.GenericError(details=msg).model_dump_json())
             logger.error(msg)
             await self.websocket_disconnect(
                 {"code": msg})
