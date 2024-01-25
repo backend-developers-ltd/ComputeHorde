@@ -6,7 +6,7 @@ from channels.testing import WebsocketCommunicator
 from compute_horde_miner import asgi
 from compute_horde_miner.miner.tests.executor_manager import fake_executor
 
-WEBSOCKET_TIMEOUT = 100000
+WEBSOCKET_TIMEOUT = 10
 
 
 @pytest.mark.asyncio
