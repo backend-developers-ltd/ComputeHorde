@@ -1,16 +1,11 @@
 import abc
 import functools
 import logging
-from typing import TypeVar
 
 from channels.generic.websocket import AsyncWebsocketConsumer
-from compute_horde.base_requests import ValidationError
-from compute_horde.em_protocol.executor_requests import BaseExecutorRequest
-from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
+from compute_horde.base_requests import BaseRequest, ValidationError
 
 logger = logging.getLogger(__name__)
-
-T = TypeVar('T', bound=BaseExecutorRequest | BaseValidatorRequest)
 
 
 def log_errors_explicitly(f):
@@ -24,9 +19,9 @@ def log_errors_explicitly(f):
     return wrapper
 
 
-class BaseConsumer[T](AsyncWebsocketConsumer, abc.ABC):
+class BaseConsumer(AsyncWebsocketConsumer, abc.ABC):
     @abc.abstractmethod
-    def accepted_request_type(self) -> type[T]:
+    def accepted_request_type(self) -> type[BaseRequest]:
         pass
 
     @abc.abstractmethod
@@ -38,7 +33,7 @@ class BaseConsumer[T](AsyncWebsocketConsumer, abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def handle(self, msg: T):
+    async def handle(self, msg):
         ...
 
     async def connect(self):
@@ -47,17 +42,17 @@ class BaseConsumer[T](AsyncWebsocketConsumer, abc.ABC):
     @log_errors_explicitly
     async def receive(self, text_data=None, bytes_data=None):
         try:
-            msg: T = self.accepted_request_type().parse(text_data)
+            msg = self.accepted_request_type().parse(text_data)
         except ValidationError as ex:
             logger.error(f'Malformed message: {str(ex)}')
             await self.send(
-                self.outgoing_generic_error_class()(details=f'Malformed message: {str(ex)}').model_dump_json()
+                self.outgoing_generic_error_class()(details=f'Malformed message: {str(ex)}').json()
             )
             return
 
         if isinstance(msg, self.incoming_generic_error_class()):
             try:
-                raise RuntimeError(f'Received error message: {msg.model_dump_json()}')
+                raise RuntimeError(f'Received error message: {msg.json()}')
             except Exception:
                 logger.exception('')
                 return

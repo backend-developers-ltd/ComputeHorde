@@ -90,7 +90,7 @@ class MinerClient:
                 msg = BaseMinerRequest.parse(msg)
             except ValidationError as ex:
                 logger.error(f'Malformed message from miner: {str(ex)}')
-                await self.ws.send(GenericError(details=f'Malformed message: {str(ex)}').model_dump_json())
+                await self.ws.send(GenericError(details=f'Malformed message: {str(ex)}').json())
                 continue
 
             if isinstance(msg, V0InitialJobRequest):
@@ -99,12 +99,12 @@ class MinerClient:
                 await self.handle_job_request(msg)
             elif isinstance(msg, GenericError):
                 try:
-                    raise RuntimeError(f'Received error message: {msg.model_dump_json()}')
+                    raise RuntimeError(f'Received error message: {msg.json()}')
                 except Exception:
                     logger.exception('')
             else:
                 try:
-                    raise NotImplementedError(f'Received unsupported message: {msg.model_dump_json()}')
+                    raise NotImplementedError(f'Received unsupported message: {msg.json()}')
                 except Exception:
                     logger.exception('')
 
@@ -113,7 +113,7 @@ class MinerClient:
             if self.initial_msg.done():
                 msg = f'Received duplicate initial job request: first {self.job_uuid=} and then {msg.job_uuid=}'
                 logger.error(msg)
-                await self.ws.send(GenericError(details=msg).model_dump_json())
+                await self.ws.send(GenericError(details=msg).json())
                 return
             self.job_uuid = msg.job_uuid
             logger.debug(f'Received initial job request: {msg.job_uuid=}')
@@ -124,20 +124,20 @@ class MinerClient:
             if not self.initial_msg.done():
                 msg = f'Received job request before an initial job request {msg.job_uuid=}'
                 logger.error(msg)
-                await self.ws.send(GenericError(details=msg).model_dump_json())
+                await self.ws.send(GenericError(details=msg).json())
                 return
             if self.full_payload.done():
                 msg = (f'Received duplicate full job payload request: first '
                        f'{self.job_uuid=} and then {msg.job_uuid=}')
                 logger.error(msg)
-                await self.ws.send(GenericError(details=msg).model_dump_json())
+                await self.ws.send(GenericError(details=msg).json())
                 return
             logger.debug(f'Received full job payload request: {msg.job_uuid=}')
             self.full_payload.set_result(msg)
 
     async def send_model(self, model: BaseExecutorRequest):
         await self.ensure_connected()
-        await self.ws.send(model.model_dump_json())
+        await self.ws.send(model.json())
 
     async def send_ready(self):
         await self.send_model(V0ReadyRequest(job_uuid=self.job_uuid))

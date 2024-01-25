@@ -11,7 +11,7 @@ import nox
 CI = os.environ.get('CI') is not None
 
 ROOT = Path('.')
-PYTHON_VERSIONS = ['3.12']
+PYTHON_VERSIONS = ['3.11']
 PYTHON_DEFAULT_VERSION = PYTHON_VERSIONS[-1]
 APP_ROOT = ROOT / 'app' / 'src'
 

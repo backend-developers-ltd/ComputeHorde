@@ -10,7 +10,7 @@ Skeleton of this project was generated with `cookiecutter-rt-django`, which some
 
 - docker
 - docker-compose
-- python 3.12
+- python 3.11
 
 # Setup development environment
 
