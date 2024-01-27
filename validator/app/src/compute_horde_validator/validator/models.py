@@ -25,6 +25,8 @@ class SyntheticJob(models.Model):
     miner_address_ip_version = models.IntegerField()
     miner_port = models.IntegerField()
     status = models.TextField(choices=Status.choices, default=Status.PENDING)
+    updated_at = models.DateTimeField(auto_now=True)
+    comment = models.TextField(blank=True, default='')
 
     class Meta:
         unique_together = ('batch', 'miner')

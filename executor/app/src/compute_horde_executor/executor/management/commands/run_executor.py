@@ -39,7 +39,7 @@ volume_mount_dir = temp_dir / 'volume'
 
 class MinerClient(AbstractMinerClient):
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, token: str):
-        super().__init__(loop)
+        super().__init__(loop, '')
         self.miner_address = miner_address
         self.token = token
         self.job_uuid: str | None = None
@@ -73,7 +73,7 @@ class MinerClient(AbstractMinerClient):
             if self.initial_msg.done():
                 msg = f'Received duplicate initial job request: first {self.job_uuid=} and then {msg.job_uuid=}'
                 logger.error(msg)
-                await self.ws.send(GenericError(details=msg).json())
+                self.deferred_send_model(GenericError(details=msg))
                 return
             self.job_uuid = msg.job_uuid
             logger.debug(f'Received initial job request: {msg.job_uuid=}')
@@ -84,13 +84,13 @@ class MinerClient(AbstractMinerClient):
             if not self.initial_msg.done():
                 msg = f'Received job request before an initial job request {msg.job_uuid=}'
                 logger.error(msg)
-                await self.ws.send(GenericError(details=msg).json())
+                await self.deferred_send_model(GenericError(details=msg))
                 return
             if self.full_payload.done():
                 msg = (f'Received duplicate full job payload request: first '
                        f'{self.job_uuid=} and then {msg.job_uuid=}')
                 logger.error(msg)
-                await self.ws.send(GenericError(details=msg).json())
+                await self.deferred_send_model(GenericError(details=msg))
                 return
             logger.debug(f'Received full job payload request: {msg.job_uuid=}')
             self.full_payload.set_result(msg)
@@ -271,4 +271,6 @@ class Command(BaseCommand):
                     await self.miner_client.send_failed(result)
             except Exception:
                 logger.error(f'Unhandled exception when working on job {initial_message.job_uuid}', exc_info=True)
+                # not deferred, because this is the end of the process, making it deferred would cause it never
+                # to be sent
                 await self.miner_client.send_generic_error('Unexpected error')

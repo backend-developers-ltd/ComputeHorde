@@ -2,14 +2,18 @@
 Django settings for compute_horde_validator project.
 """
 
+from compute_horde import base  # noqa
+
+
 import inspect
 import logging
+import pathlib
 from datetime import timedelta
 from functools import wraps
 
+import bittensor
 import environ
 
-from compute_horde import base  # noqa
 
 # from celery.schedules import crontab
 
@@ -254,6 +258,26 @@ LOGGING = {
         },
     },
 }
+
+BITTENSOR_NETUID = env.int('BITTENSOR_NETUID')
+BITTENSOR_NETWORK = env.str('BITTENSOR_NETWORK')
+
+BITTENSOR_WALLET_DIRECTORY = env.path(
+    'BITTENSOR_WALLET_DIRECTORY',
+    default=pathlib.Path('~').expanduser() / '.bittensor' / 'wallet',
+)
+BITTENSOR_WALLET_NAME = env.str('BITTENSOR_WALLET_NAME')
+BITTENSOR_WALLET_HOTKEY_NAME = env.str('BITTENSOR_WALLET_HOTKEY_NAME')
+
+
+def bittensor_wallet():
+    if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
+        raise RuntimeError('Wallet not configured')
+    wallet = bittensor.wallet(name=BITTENSOR_WALLET_NAME, hotkey=BITTENSOR_WALLET_HOTKEY_NAME,
+                              path=str(BITTENSOR_WALLET_DIRECTORY))
+    wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
+    return wallet
+
 
 # Sentry
 if SENTRY_DSN := env('SENTRY_DSN', default=''):
