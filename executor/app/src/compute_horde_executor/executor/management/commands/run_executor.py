@@ -10,16 +10,16 @@ import time
 import zipfile
 
 import pydantic
-import websockets
-from compute_horde.base_requests import ValidationError
+from compute_horde.base_requests import BaseRequest
+from compute_horde.em_protocol import executor_requests
 from compute_horde.em_protocol.executor_requests import (
-    BaseExecutorRequest,
     GenericError,
     V0FailedRequest,
     V0FailedToPrepare,
     V0FinishedRequest,
     V0ReadyRequest,
 )
+from compute_horde.em_protocol import miner_requests
 from compute_horde.em_protocol.miner_requests import (
     BaseMinerRequest,
     V0InitialJobRequest,
@@ -29,84 +29,44 @@ from compute_horde.em_protocol.miner_requests import (
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
+
 logger = logging.getLogger(__name__)
 
 temp_dir = pathlib.Path(tempfile.mkdtemp())
 volume_mount_dir = temp_dir / 'volume'
 
 
-class MinerClient:
+class MinerClient(AbstractMinerClient):
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, token: str):
-        self.loop = loop
-        self.token = token
+        super().__init__(loop)
         self.miner_address = miner_address
-        self.ws: websockets.WebSocketClientProtocol | None = None
+        self.token = token
         self.job_uuid: str | None = None
         self.initial_msg = asyncio.Future()
         self.initial_msg_lock = asyncio.Lock()
         self.full_payload = asyncio.Future()
         self.full_payload_lock = asyncio.Lock()
-        self.read_messages_task: asyncio.Task | None = None
 
-    async def __aenter__(self):
-        await self.await_connect()
+    def miner_url(self) -> str:
+        return f'{self.miner_address}/v0/executor_interface/{self.token}'
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.read_messages_task is not None and not self.read_messages_task.done():
-            self.read_messages_task.cancel()
+    def accepted_request_type(self) -> type[BaseRequest]:
+        return BaseMinerRequest
 
-        if self.ws is not None and not self.ws.closed:
-            await self.ws.close()
+    def incoming_generic_error_class(self):
+        return miner_requests.GenericError
 
-    async def _connect(self):
-        return await websockets.connect(f'{self.miner_address}/v0/executor_interface/{self.token}')
+    def outgoing_generic_error_class(self):
+        return executor_requests.GenericError
 
-    async def await_connect(self):
-        while True:
-            try:
-                self.ws = await self._connect()
-                self.read_messages_task = self.loop.create_task(self.read_messages())
-                return
-            except websockets.WebSocketException as ex:
-                logger.error(f'Could not connect to miner: {str(ex)}')
-            await asyncio.sleep(1)
-
-    async def ensure_connected(self):
-        if self.ws is None or self.ws.closed:
-            if self.read_messages_task is not None and not self.read_messages_task.done():
-                self.read_messages_task.cancel()
-            await self.await_connect()
-
-    async def read_messages(self):
-        while True:
-            try:
-                msg = await self.ws.recv()
-            except websockets.WebSocketException as ex:
-                logger.error(f'Connection to miner lost: {str(ex)}')
-                self.loop.create_task(self.await_connect())
-                return
-
-            try:
-                msg = BaseMinerRequest.parse(msg)
-            except ValidationError as ex:
-                logger.error(f'Malformed message from miner: {str(ex)}')
-                await self.ws.send(GenericError(details=f'Malformed message: {str(ex)}').json())
-                continue
-
-            if isinstance(msg, V0InitialJobRequest):
-                await self.handle_initial_job_request(msg)
-            elif isinstance(msg, V0JobRequest):
-                await self.handle_job_request(msg)
-            elif isinstance(msg, GenericError):
-                try:
-                    raise RuntimeError(f'Received error message: {msg.json()}')
-                except Exception:
-                    logger.exception('')
-            else:
-                try:
-                    raise NotImplementedError(f'Received unsupported message: {msg.json()}')
-                except Exception:
-                    logger.exception('')
+    async def handle_message(self, msg: BaseRequest):
+        if isinstance(msg, V0InitialJobRequest):
+            await self.handle_initial_job_request(msg)
+        elif isinstance(msg, V0JobRequest):
+            await self.handle_job_request(msg)
+        else:
+            raise UnsupportedMessageReceived(msg)
 
     async def handle_initial_job_request(self, msg: V0InitialJobRequest):
         async with self.initial_msg_lock:
@@ -134,10 +94,6 @@ class MinerClient:
                 return
             logger.debug(f'Received full job payload request: {msg.job_uuid=}')
             self.full_payload.set_result(msg)
-
-    async def send_model(self, model: BaseExecutorRequest):
-        await self.ensure_connected()
-        await self.ws.send(model.json())
 
     async def send_ready(self):
         await self.send_model(V0ReadyRequest(job_uuid=self.job_uuid))
