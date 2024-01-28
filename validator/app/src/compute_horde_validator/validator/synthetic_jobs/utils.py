@@ -7,6 +7,7 @@ import random
 import string
 import time
 import zipfile
+from typing import Iterable
 
 import bittensor
 from django.conf import settings
@@ -25,13 +26,12 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 from compute_horde.mv_protocol.validator_requests import V0InitialJobRequest, VolumeType, V0JobRequest
-from validator.app.src.compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
-
+from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
+from compute_horde_validator.validator.synthetic_jobs.generator import current
 
 BASE_DOCKER_IMAGE = "alpine"
 DOCKER_IMAGE = "ghcr.io/reef-technologies/computehorde/echo:latest"
 JOB_LENGTH = 20
-SINGLE_JOB_TIMEOUT = 3
 TIMEOUT_LEEWAY = 1
 TIMEOUT_MARGIN = 10
 
@@ -54,7 +54,7 @@ class MinerClient(AbstractMinerClient):
         self.miner_finished_or_failed_timestamp: int = 0
 
     def miner_url(self) -> str:
-        return f'wss://{self.miner_address}:{self.miner_port}/v0/validator_interface/{self.my_hotkey}'
+        return f'ws://{self.miner_address}:{self.miner_port}/v0/validator_interface/{self.my_hotkey}'
 
     def accepted_request_type(self) -> type[BaseRequest]:
         return BaseMinerRequest
@@ -100,39 +100,27 @@ def initiate_jobs(netuid, network) -> list[SyntheticJob]:
             miner_address_ip_version=neurons_by_key[miner.hotkey].axon_info.ip_type,
             miner_port=neurons_by_key[miner.hotkey].axon_info.port,
             status=SyntheticJob.Status.PENDING
-        ) for miner in miners]
+        ) for miner in miners if neurons_by_key[miner.hotkey].axon_info and neurons_by_key[miner.hotkey].axon_info.ip]
     ))
 
 
-def get_synthetic_job_contents(payload):
-    in_memory_output = io.BytesIO()
-    zipf = zipfile.ZipFile(in_memory_output, 'w')
-    zipf.writestr('payload.txt', payload)
-    zipf.close()
-    in_memory_output.seek(0)
-    zip_contents = in_memory_output.read()
-    return base64.b64encode(zip_contents).decode()
-
-
-def verify_result(msg: V0JobFinishedRequest, payload: str):
-    return msg.docker_process_stdout == payload
-
-
 async def execute_job(synthetic_job_id):
-    synthetic_job: SyntheticJob = await SyntheticJob.objects.aget(id=synthetic_job_id)
+    synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related('miner').aget(id=synthetic_job_id)
+    challenge_generator = current.ChallengeGenerator()
     loop = asyncio.get_event_loop()
+    key = settings.BITTENSOR_WALLET().get_hotkey()
     client = MinerClient(
         loop=loop,
         miner_address=synthetic_job.miner_address,
         miner_port=synthetic_job.miner_port,
-        miner_hotkey=synthetic_job.miner_hotkey,
-        my_hotkey=settings.BITTENSOR_HOTKEY,
+        miner_hotkey=synthetic_job.miner.hotkey,
+        my_hotkey=key.ss58_address,
     )
     async with client:
         await client.send_model(V0InitialJobRequest(
-            job_uuid=synthetic_job.job_uuid,
+            job_uuid=str(synthetic_job.job_uuid),
             base_docker_image_name=BASE_DOCKER_IMAGE,
-            timeout_seconds=SINGLE_JOB_TIMEOUT,
+            timeout_seconds=challenge_generator.timeout_seconds(),
             volume_type=VolumeType.inline.value,
         ))
         msg = await client.miner_ready_or_declining_future
@@ -147,22 +135,25 @@ async def execute_job(synthetic_job_id):
         else:
             raise ValueError(f'Unexpected msg: {msg}')
 
-        payload = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
         await client.send_model(V0JobRequest(
-            job_uuid=synthetic_job.job_uuid,
+            job_uuid=str(synthetic_job.job_uuid),
             docker_image_name=DOCKER_IMAGE,
             volume={
                 'volume_type': VolumeType.inline.value,
-                'contents': get_synthetic_job_contents(payload),
+                'contents': challenge_generator.volume_contents(),
             }
         ))
         full_job_sent = time.time()
         try:
             msg = await asyncio.wait_for(
                 client.miner_finished_or_failed_future,
-                SINGLE_JOB_TIMEOUT + TIMEOUT_LEEWAY + TIMEOUT_MARGIN
+                challenge_generator.timeout_seconds() + TIMEOUT_LEEWAY + TIMEOUT_MARGIN
             )
-            if (client.miner_finished_or_failed_timestamp - full_job_sent) > SINGLE_JOB_TIMEOUT + TIMEOUT_LEEWAY:
+            if (
+                    (client.miner_finished_or_failed_timestamp - full_job_sent)
+                    >
+                    (challenge_generator.timeout_seconds() + TIMEOUT_LEEWAY)
+            ):
                 logger.info(f'Miner {client.miner_name} sent a job result but too late: {msg}')
                 raise TimeoutError
         except TimeoutError:
@@ -179,7 +170,7 @@ async def execute_job(synthetic_job_id):
             await synthetic_job.asave()
             return
         elif isinstance(msg, V0JobFinishedRequest):
-            success = verify_result(msg, payload)
+            success, comment = challenge_generator.verify(msg)
             if success:
                 logger.info(f'Miner {client.miner_name} finished: {msg}')
                 synthetic_job.status = SyntheticJob.Status.COMPLETED
@@ -187,28 +178,26 @@ async def execute_job(synthetic_job_id):
                 await synthetic_job.asave()
                 return
             else:
-                logger.info(f'Miner {client.miner_name} finished but result does not match payload: {payload=} {msg=}')
+                logger.info(f'Miner {client.miner_name} finished but {comment}')
                 synthetic_job.status = SyntheticJob.Status.FAILED
-                synthetic_job.comment = f'Miner finished but result does not match payload: {payload=}: {msg.json()}'
+                synthetic_job.comment = f'Miner finished but {comment}'
                 await synthetic_job.asave()
                 return
         else:
             raise ValueError(f'Unexpected msg: {msg}')
 
 
+async def execute_jobs(synthetic_jobs: Iterable[SyntheticJob]):
+    tasks = [asyncio.create_task(asyncio.wait_for(execute_job(synthetic_job.id), JOB_LENGTH))
+             for synthetic_job in synthetic_jobs]
+    await asyncio.wait(tasks)
+
+
 def get_miners(metagraph) -> list[Miner]:
-    existing = Miner.objects.filter(hotkey__in=[n.hotkey for n in metagraph.neurons])
+    existing = list(Miner.objects.filter(hotkey__in=[n.hotkey for n in metagraph.neurons]))
     existing_keys = [m.hotkey for m in existing]
     new_miners = Miner.objects.bulk_create([
         Miner(hotkey=n.hotkey)
         for n in metagraph.neurons if n.hotkey not in existing_keys
     ])
     return existing + new_miners
-
-
-async def debug_run_synthetic_jobs():
-    """
-    For running in dev environment, not in production
-    """
-    jobs = initiate_jobs(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
-    await asyncio.wait_for(asyncio.gather(*[execute_job(job.id) for job in jobs]), JOB_LENGTH)

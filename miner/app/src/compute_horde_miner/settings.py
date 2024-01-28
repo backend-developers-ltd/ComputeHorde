@@ -159,6 +159,8 @@ if env('DATABASE_POOL_URL'):  # DB transaction-based connection pool, such as on
 elif env('DATABASE_URL'):
     DATABASES['default'] = env.db_url('DATABASE_URL')
 
+DATABASES['default']['NAME'] += env.str('DATABASE_SUFFIX', default='')
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -206,13 +208,16 @@ CELERY_COMPRESSION = 'gzip'  # task compression
 CELERY_MESSAGE_COMPRESSION = 'gzip'  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
-    # 'task_name': {
-    #     'task': 'compute_horde_miner.miner.tasks.demo_task',
-    #     'args': [2, 2],
-    #     'kwargs': {},
-    #     'schedule': crontab(minute=0, hour=0),
-    #     'options': {'time_limit': 300},
-    # },
+    'announce_address_and_port': {
+        'task': 'compute_horde_miner.miner.tasks.announce_address_and_port',
+        'schedule': 60,
+        'options': {},
+    },
+    'fetch_validators': {
+        'task': 'compute_horde_miner.miner.tasks.fetch_validators',
+        'schedule': 60,
+        'options': {},
+    },
 }
 CELERY_TASK_ROUTES = ['compute_horde_miner.celery.route_task']
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())

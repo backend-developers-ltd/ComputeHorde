@@ -264,13 +264,17 @@ BITTENSOR_NETWORK = env.str('BITTENSOR_NETWORK')
 
 BITTENSOR_WALLET_DIRECTORY = env.path(
     'BITTENSOR_WALLET_DIRECTORY',
-    default=pathlib.Path('~').expanduser() / '.bittensor' / 'wallet',
+    default=pathlib.Path('~').expanduser() / '.bittensor' / 'wallets',
 )
 BITTENSOR_WALLET_NAME = env.str('BITTENSOR_WALLET_NAME')
 BITTENSOR_WALLET_HOTKEY_NAME = env.str('BITTENSOR_WALLET_HOTKEY_NAME')
+CHALLENGE_GENERATOR = env.str(
+    'CHALLENGE_GENERATOR',
+    default='compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatChallengeGenerator',
+)
 
 
-def bittensor_wallet():
+def BITTENSOR_WALLET() -> bittensor.wallet:
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
         raise RuntimeError('Wallet not configured')
     wallet = bittensor.wallet(name=BITTENSOR_WALLET_NAME, hotkey=BITTENSOR_WALLET_HOTKEY_NAME,

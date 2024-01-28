@@ -4,6 +4,7 @@ import pytest
 from channels.testing import WebsocketCommunicator
 
 from compute_horde_miner import asgi
+from compute_horde_miner.miner.models import Validator
 from compute_horde_miner.miner.tests.executor_manager import fake_executor
 
 WEBSOCKET_TIMEOUT = 10
@@ -12,9 +13,12 @@ WEBSOCKET_TIMEOUT = 10
 @pytest.mark.asyncio
 @pytest.mark.django_db
 async def test_main_loop():
+    validator_key = 'some_public_key'
+    await Validator.objects.acreate(public_key=validator_key, active=True)
+
     job_uuid = str(uuid.uuid4())
     fake_executor.job_uuid = job_uuid
-    communicator = WebsocketCommunicator(asgi.application, "v0/validator_interface/some_public_key")
+    communicator = WebsocketCommunicator(asgi.application, f"v0/validator_interface/{validator_key}")
     connected, _ = await communicator.connect()
     assert connected
     await communicator.send_json_to({
