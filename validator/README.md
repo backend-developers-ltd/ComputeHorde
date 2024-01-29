@@ -136,31 +136,6 @@ with some_calculation_time.labels('blabla').time():
     do_some_work()
 ```
 
-# AWS
-
-Initiate the infrastructure with Terraform:
-TODO
-
-To push a new version of the application to AWS, just push to a branch named `deploy-$(ENVIRONMENT_NAME)`.
-Typical values for `$(ENVIRONMENT_NAME)` are `prod` and `staging`.
-For this to work, GitHub actions needs to be provided with credentials for an account that has the following policies enabled:
-
-- AutoScalingFullAccess
-- AmazonEC2ContainerRegistryFullAccess
-- AmazonS3FullAccess
-
-See `.github/workflows/cd.yml` to find out the secret names.
-
-# Vultr
-
-Initiate the infrastructure with Terraform and cloud-init:
-
-- see Terraform template in `<project>/devops/vultr_tf/core/`
-- see scripts for interacting with Vultr API in `<project>/devops/vultr_scripts/`
-  - note these scripts need `vultr-cli` installed
-
-- for more details see README_vultr.md
-
 # Setting up periodic backups
 
 Add to crontab:
@@ -193,37 +168,3 @@ Set in `.env` file:
 - `EMAIL_HOST_USER`
 - `EMAIL_HOST_PASSWORD`
 - `EMAIL_TARGET`
-
-# Handling requirements freeze
-
-Using `./deploy.sh` on production usually runs rebuilding python packages.
-
-This can cause errors when there is a new version of a package that is required by "main" dependency (like `kombu` for `celery` <https://stackoverflow.com/questions/50444988/celery-attributeerror-async-error>).
-To prevent this `./app/src/requirements_freeze.py` script is provided.
-This script freezes `requirements.txt` using `pip freeze` on virtualenv, but keeps "main" dependencies separate from freezed ones (using `# -- pip freezed` comment).
-Additionally it scans "main" dependencies for their requirements and adds only those packages that are required by "main" dependencies.
-
-This allows to run script in virtualenv with development packages installed (like `ipython`, `flake8`, `yapf` etc.).
-
-To use `requirements_freeze.py` script just activate virtualenv, install packages using `pip install -r requirements.txt` and then run `./requirements_freeze.py`.
-It can take a while (even more than 60s) but it would not be run often.
-
-To add new "main" dependency to project, just install package using `pip` and add package to `requirements.txt` above `# -- pip freezed` comment with freezed version (`package-name==x.x.x`).
-Then run `requirements_freeze.py`.
-
-To upgrade a package just upgrade it using `pip install --upgrade package-name` and then run `requirements_freeze.py` - script will update "main" package version in `requirements.txt` file.
-
-There is one limitation - main dependencies needs to be provided with freezed version (`package-name==x.x.x`) - all other notation is considered "custom" dependency (like github commit, etc.)
-and is processed without freezing version.
-Additionally if there is a match for package name in custom notation (eg.
-git+<https://github.com/django-recurrence/django-recurrence.git@7c6fcdf26d96032956a14fc9cd6841ff931a52fe#egg=django-recurrence>) then package dependencies are freezed (but custom package entry is left without change).
-
-Notations like `package-name>=x.x.x` or `package-name` (without version) are considered custom and **should not be used** - all dependencies should be freezed - either by `requirements_freeze.py` script or by github commit/tag reference (or any equivalent - **branch reference is not freezing version**).
-
-# Restoring system from backup after a catastrophical failure
-
-1. Follow the instructions above to set up a new production environment
-2. Restore the database using bin/restore-db.sh
-3. See if everything works
-4. Set up backups on the new machine
-5. Make sure everything is filled up in .env, error reporting integration, email accounts etc
