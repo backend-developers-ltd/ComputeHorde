@@ -127,9 +127,9 @@ docker run --rm -ti \
     --optimized-kernel-enable \
     --hash-type 1410 \
     --hex-salt \
-    -1 ?l?d?u \
+    -1 "?l?d?u" \
     --quiet \
-    aad072a7927f39651ccde815d3a0ead2a14aa19559ae89561a370bce20738baf:bec0fba4fecb176a ?1?1?1?1?1?1
+    aad072a7927f39651ccde815d3a0ead2a14aa19559ae89561a370bce20738baf:bec0fba4fecb176a "?1?1?1?1?1?1"
 ```
 
 Instead of payload string, one could specify path to text file with list of payloads.
