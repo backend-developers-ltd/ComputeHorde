@@ -15,6 +15,7 @@ class EnumEncoder(DjangoJSONEncoder):
 
 class Validator(models.Model):
     public_key = models.TextField(unique=True)
+    active = models.BooleanField()
 
 
 class AcceptedJob(models.Model):

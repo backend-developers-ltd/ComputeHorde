@@ -2,8 +2,10 @@ import asyncio
 import base64
 import io
 import json
+import os
 import random
 import string
+import subprocess
 import uuid
 import zipfile
 from unittest import mock
@@ -16,6 +18,7 @@ from compute_horde.test_base import ActiveSubnetworkBaseTest
 
 MINER_PORT = 8045
 WEBSOCKET_TIMEOUT = 10
+validator_key = str(uuid.uuid4())
 
 
 class Test(ActiveSubnetworkBaseTest):
@@ -37,8 +40,25 @@ class Test(ActiveSubnetworkBaseTest):
         return ['python', 'miner/app/src/manage.py', 'runserver', str(MINER_PORT)]
 
     @classmethod
+    def miner_preparation_tasks(cls):
+        db_shell_cmd = 'python miner/app/src/manage.py dbshell'
+        for cmd in [
+            f'echo "DROP DATABASE IF EXISTS compute_horde_miner_integration_test" | {db_shell_cmd}',
+            f'echo "CREATE DATABASE compute_horde_miner_integration_test" | {db_shell_cmd}',
+        ]:
+            subprocess.check_call(cmd, shell=True)
+        for args in [
+            ['python', 'miner/app/src/manage.py', 'migrate'],
+            ['python', 'miner/app/src/manage.py', 'debug_add_validator', validator_key],
+        ]:
+            subprocess.check_call(args, env={**os.environ, 'DATABASE_SUFFIX': '_integration_test'})
+
+    @classmethod
     def miner_environ(cls) -> dict[str, str]:
-        return {'ADDRESS_FOR_EXECUTORS': f'ws://localhost:{MINER_PORT}'}
+        return {
+            'ADDRESS_FOR_EXECUTORS': f'ws://localhost:{MINER_PORT}',
+            'DATABASE_SUFFIX': '_integration_test'
+        }
 
     @classmethod
     def validator_path_and_args(cls) -> list[str]:
@@ -51,7 +71,6 @@ class Test(ActiveSubnetworkBaseTest):
     @pytest.mark.asyncio
     async def test_echo_image(self):
         job_uuid = str(uuid.uuid4())
-        validator_key = str(uuid.uuid4())
 
         payload = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
         in_memory_output = io.BytesIO()

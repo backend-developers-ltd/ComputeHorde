@@ -35,7 +35,22 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         await super().connect()
         # TODO verify ssl cert
         self.validator_key = self.scope['url_route']['kwargs']['validator_key']
-        self.validator = (await Validator.objects.aget_or_create(public_key=self.validator_key))[0]
+        fail = False
+        msg = None
+        try:
+            self.validator = (await Validator.objects.aget(public_key=self.validator_key))
+        except Validator.DoesNotExist:
+            msg = f'Unknown validator: {self.validator_key}'
+            fail = True
+        if self.validator and not self.validator.active:
+            msg = f'Inactive validator: {self.validator_key}'
+            fail = True
+        if fail:
+            await self.send(miner_requests.GenericError(details=msg).json())
+            logger.error(msg)
+            await self.close(1000)
+            return
+
         self.pending_jobs = await AcceptedJob.get_for_validator(self.validator)
         for job in self.pending_jobs.values():
             await self.group_add(job.executor_token)

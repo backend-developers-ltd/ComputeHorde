@@ -1,14 +1,18 @@
 """
 Django settings for compute_horde_miner project.
 """
+import ipaddress
+
+from compute_horde import base  # noqa
 
 import inspect
 import logging
+import pathlib
 from datetime import timedelta
 from functools import wraps
 
+import bittensor
 import environ
-from compute_horde import base  # noqa
 
 # from celery.schedules import crontab
 
@@ -155,6 +159,8 @@ if env('DATABASE_POOL_URL'):  # DB transaction-based connection pool, such as on
 elif env('DATABASE_URL'):
     DATABASES['default'] = env.db_url('DATABASE_URL')
 
+DATABASES['default']['NAME'] += env.str('DATABASE_SUFFIX', default='')
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -202,13 +208,16 @@ CELERY_COMPRESSION = 'gzip'  # task compression
 CELERY_MESSAGE_COMPRESSION = 'gzip'  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
-    # 'task_name': {
-    #     'task': 'compute_horde_miner.miner.tasks.demo_task',
-    #     'args': [2, 2],
-    #     'kwargs': {},
-    #     'schedule': crontab(minute=0, hour=0),
-    #     'options': {'time_limit': 300},
-    # },
+    'announce_address_and_port': {
+        'task': 'compute_horde_miner.miner.tasks.announce_address_and_port',
+        'schedule': 60,
+        'options': {},
+    },
+    'fetch_validators': {
+        'task': 'compute_horde_miner.miner.tasks.fetch_validators',
+        'schedule': 60,
+        'options': {},
+    },
 }
 CELERY_TASK_ROUTES = ['compute_horde_miner.celery.route_task']
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())
@@ -259,6 +268,36 @@ LOGGING = {
 EXECUTOR_MANAGER_CLASS_PATH = env.str('EXECUTOR_MANAGER_CLASS_PATH')
 
 ADDRESS_FOR_EXECUTORS = env.str('ADDRESS_FOR_EXECUTORS')
+
+BITTENSOR_MINER_PORT = env.int('BITTENSOR_MINER_PORT')
+
+BITTENSOR_MINER_ADDRESS = env.str('BITTENSOR_MINER_ADDRESS', default='auto')
+BITTENSOR_MINER_ADDRESS_IS_AUTO = BITTENSOR_MINER_ADDRESS == 'auto'
+if not BITTENSOR_MINER_ADDRESS_IS_AUTO:
+    try:
+        ipaddress.ip_address(BITTENSOR_MINER_ADDRESS)
+    except ValueError:
+        raise RuntimeError('The BITTENSOR_MINER_ADDRESS is not a valid IP address')
+
+BITTENSOR_NETUID = env.int('BITTENSOR_NETUID')
+BITTENSOR_NETWORK = env.str('BITTENSOR_NETWORK')
+
+BITTENSOR_WALLET_DIRECTORY = env.path(
+    'BITTENSOR_WALLET_DIRECTORY',
+    default=pathlib.Path('~').expanduser() / '.bittensor' / 'wallets',
+)
+BITTENSOR_WALLET_NAME = env.str('BITTENSOR_WALLET_NAME')
+BITTENSOR_WALLET_HOTKEY_NAME = env.str('BITTENSOR_WALLET_HOTKEY_NAME')
+
+
+def BITTENSOR_WALLET():
+    if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
+        raise RuntimeError('Wallet not configured')
+    wallet = bittensor.wallet(name=BITTENSOR_WALLET_NAME, hotkey=BITTENSOR_WALLET_HOTKEY_NAME,
+                              path=str(BITTENSOR_WALLET_DIRECTORY))
+    wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
+    return wallet
+
 
 CHANNEL_LAYERS = {
     "default": {
