@@ -8,3 +8,4 @@ venv
 .envrc
 .nox/
 __pycache__
+build
