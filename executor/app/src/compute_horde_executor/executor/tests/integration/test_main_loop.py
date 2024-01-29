@@ -37,7 +37,7 @@ class MockWebsocket:
             }),
             json.dumps({
                 "message_type": "V0RunJobRequest",
-                "docker_image_name": "ghcr.io/reef-technologies/computehorde/echo:latest",
+                "docker_image_name": "ghcr.io/backend-developers-ltd/computehorde/echo:latest",
                 "volume": {
                     "volume_type": "inline",
                     "contents": base64_zipfile,

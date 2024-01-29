@@ -25,7 +25,7 @@ services:
       <<: *logging
 
   app:
-    image: ghcr.io/reef-technologies/computehorde/miner-app:latest
+    image: ghcr.io/backend-developers-ltd/computehorde/miner-app:latest
     pull_policy: missing
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
@@ -46,7 +46,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-worker:
-    image: ghcr.io/reef-technologies/computehorde/miner-app:latest
+    image: ghcr.io/backend-developers-ltd/computehorde/miner-app:latest
     pull_policy: missing
     init: true
     healthcheck:
@@ -68,7 +68,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-beat:
-    image: ghcr.io/reef-technologies/computehorde/miner-app:latest
+    image: ghcr.io/backend-developers-ltd/computehorde/miner-app:latest
     pull_policy: missing
     init: true
     restart: unless-stopped
