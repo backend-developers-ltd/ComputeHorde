@@ -29,6 +29,7 @@ async def fake_executor(token):
         "job_uuid": fake_executor.job_uuid,
         "message_type": "V0RunJobRequest",
         "docker_image_name": "it's teeeeests again",
+        'docker_run_options': [],
         "volume": {
             "volume_type": "inline",
             "contents": "nonsense"
