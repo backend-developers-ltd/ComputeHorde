@@ -23,6 +23,12 @@ class ActiveSubnetworkBaseTest(abc.ABC):
     miner_stderr_thread: Thread | None = None
 
     @classmethod
+    def miner_preparation_tasks(cls):
+        """
+        Arbitrary preparation tasks to be performed before starting the miner.
+        """
+
+    @classmethod
     @abc.abstractmethod
     def validator_path_and_args(cls) -> list[str]:
         """
@@ -109,6 +115,7 @@ class ActiveSubnetworkBaseTest(abc.ABC):
     @pytest.fixture(autouse=True, scope="session")
     def start_validator_and_miner(cls):
         logger.info('Starting miner')
+        cls.miner_preparation_tasks()
         cls.miner_process = cls.start_process(cls.miner_path_and_args(), cls.miner_environ())
         cls.miner_stdout_thread = Thread(target=cls.make_log_reader(cls.miner_process.stdout, 'miner stdout', cls.miner_process))
         cls.miner_stderr_thread = Thread(target=cls.make_log_reader(cls.miner_process.stderr, 'miner stderr', cls.miner_process))

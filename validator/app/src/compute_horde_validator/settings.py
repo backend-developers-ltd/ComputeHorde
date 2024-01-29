@@ -2,14 +2,18 @@
 Django settings for compute_horde_validator project.
 """
 
+from compute_horde import base  # noqa
+
+
 import inspect
 import logging
+import pathlib
 from datetime import timedelta
 from functools import wraps
 
+import bittensor
 import environ
 
-from compute_horde import base  # noqa
 
 # from celery.schedules import crontab
 
@@ -201,13 +205,16 @@ CELERY_COMPRESSION = 'gzip'  # task compression
 CELERY_MESSAGE_COMPRESSION = 'gzip'  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
-    # 'task_name': {
-    #     'task': 'compute_horde_validator.validator.tasks.demo_task',
-    #     'args': [2, 2],
-    #     'kwargs': {},
-    #     'schedule': crontab(minute=0, hour=0),
-    #     'options': {'time_limit': 300},
-    # },
+    'run_synthetic_jobs': {
+        'task': 'compute_horde_validator.validator.tasks.run_synthetic_jobs',
+        'schedule': 60 * 60,
+        'options': {},
+    },
+    'set_scores': {
+        'task': 'compute_horde_validator.validator.tasks.set_scores',
+        'schedule': 60 * 60 * 6,
+        'options': {},
+    },
 }
 CELERY_TASK_ROUTES = ['compute_horde_validator.celery.route_task']
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())
@@ -254,6 +261,30 @@ LOGGING = {
         },
     },
 }
+
+BITTENSOR_NETUID = env.int('BITTENSOR_NETUID')
+BITTENSOR_NETWORK = env.str('BITTENSOR_NETWORK')
+
+BITTENSOR_WALLET_DIRECTORY = env.path(
+    'BITTENSOR_WALLET_DIRECTORY',
+    default=pathlib.Path('~').expanduser() / '.bittensor' / 'wallets',
+)
+BITTENSOR_WALLET_NAME = env.str('BITTENSOR_WALLET_NAME')
+BITTENSOR_WALLET_HOTKEY_NAME = env.str('BITTENSOR_WALLET_HOTKEY_NAME')
+SYNTHETIC_JOB_GENERATOR = env.str(
+    'SYNTHETIC_JOB_GENERATOR',
+    default='compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatSyntheticJobGenerator',
+)
+
+
+def BITTENSOR_WALLET() -> bittensor.wallet:
+    if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
+        raise RuntimeError('Wallet not configured')
+    wallet = bittensor.wallet(name=BITTENSOR_WALLET_NAME, hotkey=BITTENSOR_WALLET_HOTKEY_NAME,
+                              path=str(BITTENSOR_WALLET_DIRECTORY))
+    wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
+    return wallet
+
 
 # Sentry
 if SENTRY_DSN := env('SENTRY_DSN', default=''):

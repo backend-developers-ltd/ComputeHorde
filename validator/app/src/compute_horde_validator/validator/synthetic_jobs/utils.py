@@ -1,0 +1,199 @@
+import asyncio
+import base64
+import datetime
+import io
+import logging
+import random
+import string
+import time
+import zipfile
+from typing import Iterable
+
+import bittensor
+from django.conf import settings
+from django.utils.timezone import now
+
+from compute_horde.base_requests import BaseRequest
+from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
+from compute_horde.mv_protocol import miner_requests, validator_requests
+from compute_horde.mv_protocol.miner_requests import (
+    BaseMinerRequest,
+    V0AcceptJobRequest,
+    V0DeclineJobRequest,
+    V0ExecutorReadyRequest,
+    V0ExecutorFailedRequest,
+    V0JobFailedRequest,
+    V0JobFinishedRequest,
+)
+from compute_horde.mv_protocol.validator_requests import V0InitialJobRequest, VolumeType, V0JobRequest
+from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
+from compute_horde_validator.validator.synthetic_jobs.generator import current
+
+JOB_LENGTH = 600
+TIMEOUT_LEEWAY = 1
+TIMEOUT_MARGIN = 10
+
+
+logger = logging.getLogger(__name__)
+
+
+class MinerClient(AbstractMinerClient):
+    def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, my_hotkey: str, miner_hotkey: str,
+                 miner_port: int):
+        super().__init__(loop, f'{miner_hotkey}({miner_address}:{miner_port})')
+        self.miner_hotkey = miner_hotkey
+        self.my_hotkey = my_hotkey
+        self.miner_address = miner_address
+        self.miner_port = miner_port
+
+        self.miner_ready_or_declining_future = asyncio.Future()
+        self.miner_ready_or_declining_timestamp: int = 0
+        self.miner_finished_or_failed_future = asyncio.Future()
+        self.miner_finished_or_failed_timestamp: int = 0
+
+    def miner_url(self) -> str:
+        return f'ws://{self.miner_address}:{self.miner_port}/v0/validator_interface/{self.my_hotkey}'
+
+    def accepted_request_type(self) -> type[BaseRequest]:
+        return BaseMinerRequest
+
+    def incoming_generic_error_class(self):
+        return miner_requests.GenericError
+
+    def outgoing_generic_error_class(self):
+        return validator_requests.GenericError
+
+    async def handle_message(self, msg: BaseRequest):
+        if isinstance(msg, V0AcceptJobRequest):
+            logger.info(f'Miner {self.miner_name} accepted job')
+        elif isinstance(
+                msg,
+                (V0DeclineJobRequest, V0ExecutorFailedRequest, V0ExecutorReadyRequest)
+        ):
+            self.miner_ready_or_declining_timestamp = time.time()
+            self.miner_ready_or_declining_future.set_result(msg)
+        elif isinstance(
+            msg,
+            (V0JobFailedRequest, V0JobFinishedRequest)
+        ):
+            self.miner_finished_or_failed_future.set_result(msg)
+            self.miner_finished_or_failed_timestamp = time.time()
+        else:
+            raise UnsupportedMessageReceived(msg)
+
+
+def initiate_jobs(netuid, network) -> list[SyntheticJob]:
+    metagraph = bittensor.metagraph(netuid, network=network)
+    neurons_by_key = {n.hotkey: n for n in metagraph.neurons}
+    batch = SyntheticJobBatch.objects.create(
+        accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
+    )
+
+    miners = get_miners(metagraph)
+    return list(SyntheticJob.objects.bulk_create([
+        SyntheticJob(
+            batch=batch,
+            miner=miner,
+            miner_address=neurons_by_key[miner.hotkey].axon_info.ip,
+            miner_address_ip_version=neurons_by_key[miner.hotkey].axon_info.ip_type,
+            miner_port=neurons_by_key[miner.hotkey].axon_info.port,
+            status=SyntheticJob.Status.PENDING
+        ) for miner in miners if neurons_by_key[miner.hotkey].axon_info.is_serving]
+    ))
+
+
+async def execute_job(synthetic_job_id):
+    synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related('miner').aget(id=synthetic_job_id)
+    job_generator = current.SyntheticJobGenerator()
+    loop = asyncio.get_event_loop()
+    key = settings.BITTENSOR_WALLET().get_hotkey()
+    client = MinerClient(
+        loop=loop,
+        miner_address=synthetic_job.miner_address,
+        miner_port=synthetic_job.miner_port,
+        miner_hotkey=synthetic_job.miner.hotkey,
+        my_hotkey=key.ss58_address,
+    )
+    async with client:
+        await client.send_model(V0InitialJobRequest(
+            job_uuid=str(synthetic_job.job_uuid),
+            base_docker_image_name=job_generator.base_docker_image_name(),
+            timeout_seconds=job_generator.timeout_seconds(),
+            volume_type=VolumeType.inline.value,
+        ))
+        msg = await client.miner_ready_or_declining_future
+        if isinstance(msg, (V0DeclineJobRequest, V0ExecutorFailedRequest)):
+            logger.info(f'Miner {client.miner_name} won\'t do job: {msg}')
+            synthetic_job.status = SyntheticJob.Status.FAILED
+            synthetic_job.comment = f'Miner didn\'t accept the job saying: {msg.json()}'
+            await synthetic_job.asave()
+            return
+        elif isinstance(msg, V0ExecutorReadyRequest):
+            logger.debug(f'Miner {client.miner_name} ready for job: {msg}')
+        else:
+            raise ValueError(f'Unexpected msg: {msg}')
+
+        await client.send_model(V0JobRequest(
+            job_uuid=str(synthetic_job.job_uuid),
+            docker_image_name=job_generator.docker_image_name(),
+            volume={
+                'volume_type': VolumeType.inline.value,
+                'contents': job_generator.volume_contents(),
+            }
+        ))
+        full_job_sent = time.time()
+        try:
+            msg = await asyncio.wait_for(
+                client.miner_finished_or_failed_future,
+                job_generator.timeout_seconds() + TIMEOUT_LEEWAY + TIMEOUT_MARGIN
+            )
+            time_took = client.miner_finished_or_failed_timestamp - full_job_sent
+            if time_took > (job_generator.timeout_seconds() + TIMEOUT_LEEWAY):
+                logger.info(f'Miner {client.miner_name} sent a job result but too late: {msg}')
+                raise TimeoutError
+        except TimeoutError:
+            logger.info(f'Miner {client.miner_name} timed out out')
+            synthetic_job.status = SyntheticJob.Status.FAILED
+            synthetic_job.comment = f'Miner timed out'
+            await synthetic_job.asave()
+            return
+
+        if isinstance(msg, V0JobFailedRequest):
+            logger.info(f'Miner {client.miner_name} failed: {msg}')
+            synthetic_job.status = SyntheticJob.Status.FAILED
+            synthetic_job.comment = f'Miner failed: {msg.json()}'
+            await synthetic_job.asave()
+            return
+        elif isinstance(msg, V0JobFinishedRequest):
+            success, comment, score = job_generator.verify(msg, time_took)
+            if success:
+                logger.info(f'Miner {client.miner_name} finished: {msg}')
+                synthetic_job.status = SyntheticJob.Status.COMPLETED
+                synthetic_job.comment = f'Miner finished: {msg.json()}'
+                synthetic_job.score = score
+                await synthetic_job.asave()
+                return
+            else:
+                logger.info(f'Miner {client.miner_name} finished but {comment}')
+                synthetic_job.status = SyntheticJob.Status.FAILED
+                synthetic_job.comment = f'Miner finished but {comment}'
+                await synthetic_job.asave()
+                return
+        else:
+            raise ValueError(f'Unexpected msg: {msg}')
+
+
+async def execute_jobs(synthetic_jobs: Iterable[SyntheticJob]):
+    tasks = [asyncio.create_task(asyncio.wait_for(execute_job(synthetic_job.id), JOB_LENGTH))
+             for synthetic_job in synthetic_jobs]
+    await asyncio.wait(tasks)
+
+
+def get_miners(metagraph) -> list[Miner]:
+    existing = list(Miner.objects.filter(hotkey__in=[n.hotkey for n in metagraph.neurons]))
+    existing_keys = [m.hotkey for m in existing]
+    new_miners = Miner.objects.bulk_create([
+        Miner(hotkey=n.hotkey)
+        for n in metagraph.neurons if n.hotkey not in existing_keys
+    ])
+    return existing + new_miners
