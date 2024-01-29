@@ -205,13 +205,16 @@ CELERY_COMPRESSION = 'gzip'  # task compression
 CELERY_MESSAGE_COMPRESSION = 'gzip'  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
-    # 'task_name': {
-    #     'task': 'compute_horde_validator.validator.tasks.demo_task',
-    #     'args': [2, 2],
-    #     'kwargs': {},
-    #     'schedule': crontab(minute=0, hour=0),
-    #     'options': {'time_limit': 300},
-    # },
+    'run_synthetic_jobs': {
+        'task': 'compute_horde_validator.validator.tasks.run_synthetic_jobs',
+        'schedule': 60 * 60,
+        'options': {},
+    },
+    'set_scores': {
+        'task': 'compute_horde_validator.validator.tasks.set_scores',
+        'schedule': 60 * 60 * 6,
+        'options': {},
+    },
 }
 CELERY_TASK_ROUTES = ['compute_horde_validator.celery.route_task']
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())
@@ -268,9 +271,9 @@ BITTENSOR_WALLET_DIRECTORY = env.path(
 )
 BITTENSOR_WALLET_NAME = env.str('BITTENSOR_WALLET_NAME')
 BITTENSOR_WALLET_HOTKEY_NAME = env.str('BITTENSOR_WALLET_HOTKEY_NAME')
-CHALLENGE_GENERATOR = env.str(
-    'CHALLENGE_GENERATOR',
-    default='compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatChallengeGenerator',
+SYNTHETIC_JOB_GENERATOR = env.str(
+    'SYNTHETIC_JOB_GENERATOR',
+    default='compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatSyntheticJobGenerator',
 )
 
 

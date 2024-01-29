@@ -3,7 +3,7 @@ import abc
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 
-class AbstractChallengeGenerator(abc.ABC):
+class AbstractSyntheticJobGenerator(abc.ABC):
     @abc.abstractmethod
     def timeout_seconds(self) -> int:
         ...
@@ -21,5 +21,5 @@ class AbstractChallengeGenerator(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def verify(self, msg: V0JobFinishedRequest) -> bool:
+    def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         ...

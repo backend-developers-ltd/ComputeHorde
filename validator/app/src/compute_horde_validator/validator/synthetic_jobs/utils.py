@@ -29,9 +29,7 @@ from compute_horde.mv_protocol.validator_requests import V0InitialJobRequest, Vo
 from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 
-BASE_DOCKER_IMAGE = "alpine"
-DOCKER_IMAGE = "ghcr.io/reef-technologies/computehorde/echo:latest"
-JOB_LENGTH = 20
+JOB_LENGTH = 600
 TIMEOUT_LEEWAY = 1
 TIMEOUT_MARGIN = 10
 
@@ -100,13 +98,13 @@ def initiate_jobs(netuid, network) -> list[SyntheticJob]:
             miner_address_ip_version=neurons_by_key[miner.hotkey].axon_info.ip_type,
             miner_port=neurons_by_key[miner.hotkey].axon_info.port,
             status=SyntheticJob.Status.PENDING
-        ) for miner in miners if neurons_by_key[miner.hotkey].axon_info and neurons_by_key[miner.hotkey].axon_info.ip]
+        ) for miner in miners if neurons_by_key[miner.hotkey].axon_info.is_serving]
     ))
 
 
 async def execute_job(synthetic_job_id):
     synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related('miner').aget(id=synthetic_job_id)
-    challenge_generator = current.ChallengeGenerator()
+    job_generator = current.SyntheticJobGenerator()
     loop = asyncio.get_event_loop()
     key = settings.BITTENSOR_WALLET().get_hotkey()
     client = MinerClient(
@@ -119,8 +117,8 @@ async def execute_job(synthetic_job_id):
     async with client:
         await client.send_model(V0InitialJobRequest(
             job_uuid=str(synthetic_job.job_uuid),
-            base_docker_image_name=BASE_DOCKER_IMAGE,
-            timeout_seconds=challenge_generator.timeout_seconds(),
+            base_docker_image_name=job_generator.base_docker_image_name(),
+            timeout_seconds=job_generator.timeout_seconds(),
             volume_type=VolumeType.inline.value,
         ))
         msg = await client.miner_ready_or_declining_future
@@ -137,23 +135,20 @@ async def execute_job(synthetic_job_id):
 
         await client.send_model(V0JobRequest(
             job_uuid=str(synthetic_job.job_uuid),
-            docker_image_name=DOCKER_IMAGE,
+            docker_image_name=job_generator.docker_image_name(),
             volume={
                 'volume_type': VolumeType.inline.value,
-                'contents': challenge_generator.volume_contents(),
+                'contents': job_generator.volume_contents(),
             }
         ))
         full_job_sent = time.time()
         try:
             msg = await asyncio.wait_for(
                 client.miner_finished_or_failed_future,
-                challenge_generator.timeout_seconds() + TIMEOUT_LEEWAY + TIMEOUT_MARGIN
+                job_generator.timeout_seconds() + TIMEOUT_LEEWAY + TIMEOUT_MARGIN
             )
-            if (
-                    (client.miner_finished_or_failed_timestamp - full_job_sent)
-                    >
-                    (challenge_generator.timeout_seconds() + TIMEOUT_LEEWAY)
-            ):
+            time_took = client.miner_finished_or_failed_timestamp - full_job_sent
+            if time_took > (job_generator.timeout_seconds() + TIMEOUT_LEEWAY):
                 logger.info(f'Miner {client.miner_name} sent a job result but too late: {msg}')
                 raise TimeoutError
         except TimeoutError:
@@ -170,11 +165,12 @@ async def execute_job(synthetic_job_id):
             await synthetic_job.asave()
             return
         elif isinstance(msg, V0JobFinishedRequest):
-            success, comment = challenge_generator.verify(msg)
+            success, comment, score = job_generator.verify(msg, time_took)
             if success:
                 logger.info(f'Miner {client.miner_name} finished: {msg}')
                 synthetic_job.status = SyntheticJob.Status.COMPLETED
                 synthetic_job.comment = f'Miner finished: {msg.json()}'
+                synthetic_job.score = score
                 await synthetic_job.asave()
                 return
             else:

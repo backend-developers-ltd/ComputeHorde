@@ -5,10 +5,10 @@ import string
 import zipfile
 
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
-from compute_horde_validator.validator.synthetic_jobs.generator.base import AbstractChallengeGenerator
+from compute_horde_validator.validator.synthetic_jobs.generator.base import AbstractSyntheticJobGenerator
 
 
-class EchoChallengeGenerator(AbstractChallengeGenerator):
+class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def __init__(self):
         self.payload = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
 
@@ -30,7 +30,7 @@ class EchoChallengeGenerator(AbstractChallengeGenerator):
         zip_contents = in_memory_output.read()
         return base64.b64encode(zip_contents).decode()
 
-    def verify(self, msg: V0JobFinishedRequest) -> tuple[bool, str]:
+    def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         if msg.docker_process_stdout == self.payload:
-            return True, ''
-        return False, f'result does not match payload: payload={self.payload} msg={msg.json()}'
+            return True, '', 1
+        return False, f'result does not match payload: payload={self.payload} msg={msg.json()}', 0
