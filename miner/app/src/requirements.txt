@@ -14,9 +14,8 @@ nox==2023.4.22
 
 channels[daphne]==4.*
 channels-redis==4.*
-../../../compute_horde
+../packages/compute_horde/
 
 prometheus-client~=0.17.0
 django-prometheus==2.3.1
 django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@7666285
-

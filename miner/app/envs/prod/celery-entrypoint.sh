@@ -1,12 +1,12 @@
 #!/bin/sh
 set -eu
 
-./prometheus-cleanup.sh
+type ./prometheus-cleanup.sh && ./prometheus-cleanup.sh
 
 # below we define two workers types (each may have any concurrency);
 # each worker may have its own settings
 WORKERS="master worker"
-OPTIONS="-A compute_horde_miner -E -l ERROR --pidfile=/var/run/celery-%n.pid --logfile=/var/log/celery-%n.log"
+OPTIONS="-A compute_horde_miner -E -l ERROR --pidfile=/var/run/celery-%n.pid --logfile=/var/celery-%n.log"
 
 # set up settings for workers and run the latter;
 # here events from "celery" queue (default one, will be used if queue not specified)
@@ -21,7 +21,7 @@ C_FORCE_ROOT=1 nice celery multi start $WORKERS $OPTIONS \
 # shellcheck disable=2064
 trap "celery multi stop $WORKERS $OPTIONS; exit 0" INT TERM
 
-tail -f /var/log/celery-*.log &
+tail -f /var/celery-*.log &
 
 # check celery status periodically to exit if it crashed
 while true; do

@@ -1,0 +1,120 @@
+version: '3.7'
+
+services:
+  redis:
+    image: redis:6-alpine
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: redis-cli ping
+    volumes:
+      - redis:/data
+    logging: &logging
+      driver: journald
+      options:
+        tag: '{{.Name}}'
+
+  db:
+    image: postgres:14.0-alpine
+    healthcheck:
+      test: pg_isready -U postgres || exit 1
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - db:/var/lib/postgresql/data
+    logging:
+      <<: *logging
+
+  app:
+    image: ghcr.io/reef-technologies/computehorde/miner-app:latest
+    pull_policy: missing
+    healthcheck:
+      test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
+    init: true
+    restart: unless-stopped
+    # env_file: ./.env
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - static:/root/src/static
+    depends_on:
+      - redis
+      - db
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  celery-worker:
+    image: ghcr.io/reef-technologies/computehorde/miner-app:latest
+    pull_policy: missing
+    init: true
+    healthcheck:
+      test: celery -A compute_horde_miner status > /dev/null || exit 1
+    restart: unless-stopped
+    # env_file: ./.env
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - CELERY_MASTER_CONCURRENCY=4
+      - CELERY_WORKER_CONCURRENCY=2
+    command: ./celery-entrypoint.sh
+    tmpfs: /run
+    depends_on:
+      - redis
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  celery-beat:
+    image: ghcr.io/reef-technologies/computehorde/miner-app:latest
+    pull_policy: missing
+    init: true
+    restart: unless-stopped
+    # env_file: ./.env
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - NGINX_PORT=${NGINX_PORT}
+    command: nice celery -A compute_horde_miner beat -l INFO --schedule /tmp/celerybeat-schedule -f /tmp/celery-beat.log
+    depends_on:
+      - redis
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  nginx:
+    image: 'ghcr.io/reef-technologies/nginx-rt:v1.2.1'
+    restart: unless-stopped
+    healthcheck:
+      test: wget -q --spider 0.0.0.0:${NGINX_PORT} || exit 1
+    environment:
+      - NGINX_PORT=${NGINX_PORT}
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates
+      - ./nginx/config_helpers:/etc/nginx/config_helpers
+      - static:/srv/static:ro
+      # - ./letsencrypt/etc:/etc/letsencrypt
+    depends_on:
+      - app
+
+    command: nginx -g 'daemon off;'
+    ports:
+      - ${NGINX_PORT}:80
+
+    logging:
+      <<: *logging
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 60 --cleanup --label-enable app celery-worker celery-beat nginx
+
+volumes:
+  redis:
+  db:
+  static:
