@@ -101,6 +101,8 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
         await self.send(miner_requests.V0JobRequest(
             job_uuid=msg.job_uuid,
             docker_image_name=msg.docker_image_name,
+            docker_run_options=msg.docker_run_options,
+            docker_run_cmd=msg.docker_run_cmd,
             volume=msg.volume,
         ).json())
 

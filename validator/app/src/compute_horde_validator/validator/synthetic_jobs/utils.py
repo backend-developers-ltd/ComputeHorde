@@ -39,12 +39,13 @@ logger = logging.getLogger(__name__)
 
 class MinerClient(AbstractMinerClient):
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, my_hotkey: str, miner_hotkey: str,
-                 miner_port: int):
+                 miner_port: int, job_uuid: str):
         super().__init__(loop, f'{miner_hotkey}({miner_address}:{miner_port})')
         self.miner_hotkey = miner_hotkey
         self.my_hotkey = my_hotkey
         self.miner_address = miner_address
         self.miner_port = miner_port
+        self.job_uuid = job_uuid
 
         self.miner_ready_or_declining_future = asyncio.Future()
         self.miner_ready_or_declining_timestamp: int = 0
@@ -64,6 +65,9 @@ class MinerClient(AbstractMinerClient):
         return validator_requests.GenericError
 
     async def handle_message(self, msg: BaseRequest):
+        if msg.job_uuid != self.job_uuid:
+            logger.info(f'Recevied info about another job: {msg}')
+            return
         if isinstance(msg, V0AcceptJobRequest):
             logger.info(f'Miner {self.miner_name} accepted job')
         elif isinstance(
@@ -113,6 +117,7 @@ async def execute_job(synthetic_job_id):
         miner_port=synthetic_job.miner_port,
         miner_hotkey=synthetic_job.miner.hotkey,
         my_hotkey=key.ss58_address,
+        job_uuid=str(synthetic_job.job_uuid),
     )
     async with client:
         await client.send_model(V0InitialJobRequest(
@@ -136,6 +141,8 @@ async def execute_job(synthetic_job_id):
         await client.send_model(V0JobRequest(
             job_uuid=str(synthetic_job.job_uuid),
             docker_image_name=job_generator.docker_image_name(),
+            docker_run_options=job_generator.docker_run_options(),
+            docker_run_cmd=job_generator.docker_run_cmd(),
             volume={
                 'volume_type': VolumeType.inline.value,
                 'contents': job_generator.volume_contents(),

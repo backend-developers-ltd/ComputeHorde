@@ -37,7 +37,7 @@ class V0ExecutorFailedRequest(BaseMinerRequest, JobMixin):
 
 class V0JobFailedRequest(BaseMinerRequest, JobMixin):
     message_type: RequestType = RequestType.V0JobFailedRequest
-    docker_process_exit_status: int
+    docker_process_exit_status: int | None
     docker_process_stdout: str  # TODO: add max_length
     docker_process_stderr: str  # TODO: add max_length
 

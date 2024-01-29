@@ -33,6 +33,9 @@ def run_synthetic_jobs():
     time.sleep(my_window_starts_at)
     jobs = initiate_jobs(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)  # metagraph will be refetched and
     # that's fine, after sleeping for e.g. 30 minutes we should refetch the miner list
+    if not jobs:
+        logger.info('Nothing to do')
+        return
     asyncio.run(execute_jobs(jobs))
 
 

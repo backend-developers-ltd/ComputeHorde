@@ -104,6 +104,8 @@ class Test(ActiveSubnetworkBaseTest):
                 "message_type": "V0JobRequest",
                 "job_uuid": job_uuid,
                 "docker_image_name": "ghcr.io/reef-technologies/computehorde/echo:latest",
+                "docker_run_cmd": [],
+                "docker_run_options": [],
                 "timeout_seconds": 60,
                 "volume": {
                     "volume_type": "inline",
