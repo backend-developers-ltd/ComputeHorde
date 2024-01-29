@@ -12,7 +12,7 @@ RUN pip3 install --user --no-cache-dir gunicorn==20.1.0
 
 RUN apt-get update && apt-get install -y git
 COPY ./src/requirements.txt /root/requirements.txt
-COPY ./packages /packages
+COPY ./packages/compute_horde /compute_horde
 RUN cd /root && pip3 install --user --no-cache-dir -r requirements.txt
 
 COPY ./src/ /root/src/
