@@ -10,20 +10,18 @@ ENV PATH=/root/.local/bin:$PATH
 RUN pip3 install --no-cache-dir -U pip
 RUN pip3 install --user --no-cache-dir gunicorn==20.1.0
 
-COPY ./src/requirements.txt requirements.txt
-
 RUN apt-get update && apt-get install -y git
-
-RUN pip3 install --user --no-cache-dir -r requirements.txt
+COPY ./src/requirements.txt /root/requirements.txt
+COPY ./packages/compute_horde /compute_horde
+RUN cd /root && pip3 install --user --no-cache-dir -r requirements.txt
 
 COPY ./src/ /root/src/
 COPY ./envs/prod/entrypoint.sh /root/src/
 COPY ./envs/prod/gunicorn.conf.py /root/src/
 COPY ./envs/prod/celery-entrypoint.sh /root/src/
-COPY ./envs/prod/prometheus-cleanup.sh /root/src/
 
 RUN python3 -m compileall -b -f -q /root/
-RUN ENV=prod ENV_FILL_MISSING_VALUES=1 SECRET_KEY=dummy python3 manage.py collectstatic --no-input --clear
+RUN ENV=prod ENV_FILL_MISSING_VALUES=1 DATABASE_URL= SECRET_KEY=dummy python3 manage.py collectstatic --no-input --clear
 
 
 FROM $BASE_IMAGE AS secondary-image
@@ -38,8 +36,6 @@ ENV PYTHONUNBUFFERED=1
 ENV PATH=/root/.local/bin:$PATH
 
 COPY --from=base-image /root/ /root/
-
-
 
 EXPOSE 8000
 

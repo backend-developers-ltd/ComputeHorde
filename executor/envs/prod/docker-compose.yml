@@ -3,10 +3,7 @@ version: '3.7'
 services:
 
   app:
-    build:
-      context: ./app
-      dockerfile: Dockerfile
-    image: compute_horde_executor/app
+    image: ghcr.io/backend-developers-ltd/computehorde/executor-app:latest
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
     init: true
@@ -47,25 +44,25 @@ services:
       - ./nginx/monitoring_certs:/etc/monitoring_certs
     depends_on:
       - app
-      
+
       - cadvisor
       - node-exporter
-      
+
     command: nginx -g 'daemon off;'
     ports:
       - 80:80
       - 443:443
-      
+
       - 10443:10443
-      
+
     logging:
       <<: *logging
-    
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    
 
-  
+
+
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
@@ -77,9 +74,9 @@ services:
     command:
       - '--path.rootfs=/host'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|run|boot|var/.+)($$|/)'
-      
+
       - '--collector.tcpstat'
-      
+
     logging:
       <<: *logging
 
@@ -97,9 +94,9 @@ services:
     restart: unless-stopped
     logging:
       <<: *logging
-  
 
-  
+
+
   promtail:
     image: grafana/promtail:2.9.2
     restart: unless-stopped
@@ -118,7 +115,7 @@ services:
       - -config.expand-env=true
     logging:
       <<: *logging
-  
+
 
 volumes:
   backend-static:

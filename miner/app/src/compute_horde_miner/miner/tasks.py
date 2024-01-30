@@ -34,6 +34,3 @@ def fetch_validators():
 
     Validator.objects.bulk_create(to_create)
     Validator.objects.bulk_update(to_activate + to_deactivate, ['active'])
-
-
-
