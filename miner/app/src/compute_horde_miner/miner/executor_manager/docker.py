@@ -1,14 +1,8 @@
-import os
-import pathlib
 import subprocess
-import sys
 
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager
-
-this_dir = pathlib.Path(__file__).parent
-executor_dir = this_dir / '..' / '..' / '..' / '..' / '..' / '..' / 'executor'
 
 
 class DockerExecutorManager(BaseExecutorManager):
