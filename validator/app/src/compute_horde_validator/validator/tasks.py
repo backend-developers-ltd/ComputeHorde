@@ -54,7 +54,7 @@ def set_scores():
             return
 
         for batch in batches:
-            for job in batch.synthetic_jobs:
+            for job in batch.synthetic_jobs.all():
                 uid = hotkey_to_uid.get(job.miner.hotkey)
                 if not uid:
                     continue
@@ -68,6 +68,7 @@ def set_scores():
         for ind, uid in enumerate(sorted(list(score_per_uid.keys()))):
             uids[ind] = uid
             scores[ind] = score_per_uid[uid]
+        logger.debug(f'Setting weights:\nuids={uids}\nscores={scores}')
         success = subtensor.set_weights(
             netuid=settings.BITTENSOR_NETUID,
             wallet=settings.BITTENSOR_WALLET(),
