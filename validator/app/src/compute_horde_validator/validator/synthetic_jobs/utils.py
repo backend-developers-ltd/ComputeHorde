@@ -110,14 +110,15 @@ def initiate_jobs(netuid, network) -> list[SyntheticJob]:
     batch = SyntheticJobBatch.objects.create(
         accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
     )
-    return [SyntheticJob.objects.create(
-        batch=batch,
-        miner=Miner.objects.get(hotkey='5HL5QqXDcee1rv55PMenWV2ivasn34EPyVJ9dyqUeKt2h4Fb'),
-        miner_address='127.0.0.1',
-        miner_address_ip_version=4,
-        miner_port=8000,
-        status=SyntheticJob.Status.PENDING
-    )]
+    if settings.DEBUG_MINER_KEY:
+        return [SyntheticJob.objects.create(
+            batch=batch,
+            miner=Miner.objects.get_or_create(hotkey=settings.DEBUG_MINER_ADDRESS)[0],
+            miner_address=settings.DEBUG_MINER_ADDRESS,
+            miner_address_ip_version=4,
+            miner_port=settings.DEBUG_MINER_PORT,
+            status=SyntheticJob.Status.PENDING
+        )]
     miners = get_miners(metagraph)
     return list(SyntheticJob.objects.bulk_create([
         SyntheticJob(

@@ -218,6 +218,10 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         'options': {},
     },
 }
+if env.bool('DEBUG_RUN_BEAT_VERY_OFTEN', default=False):
+    CELERY_BEAT_SCHEDULE['run_synthetic_jobs']['schedule'] = 60
+    CELERY_BEAT_SCHEDULE['run_synthetic_jobs']['set_scores'] = 60 * 3
+
 CELERY_TASK_ROUTES = ['compute_horde_validator.celery.route_task']
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())
 CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)
@@ -277,6 +281,10 @@ SYNTHETIC_JOB_GENERATOR = env.str(
     'SYNTHETIC_JOB_GENERATOR',
     default='compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatSyntheticJobGenerator',
 )
+# if you need to hit a particular miner, without fetching their key, address or port from the blockchain
+DEBUG_MINER_KEY = env.str('DEBUG_MINER_KEY', default='')
+DEBUG_MINER_ADDRESS = env.str('DEBUG_MINER_ADDRESS', default='')
+DEBUG_MINER_PORT = env.int('DEBUG_MINER_PORT', default=0)
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
