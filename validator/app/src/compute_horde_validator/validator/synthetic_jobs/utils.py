@@ -113,7 +113,7 @@ def initiate_jobs(netuid, network) -> list[SyntheticJob]:
     if settings.DEBUG_MINER_KEY:
         return [SyntheticJob.objects.create(
             batch=batch,
-            miner=Miner.objects.get_or_create(hotkey=settings.DEBUG_MINER_ADDRESS)[0],
+            miner=Miner.objects.get_or_create(hotkey=settings.DEBUG_MINER_KEY)[0],
             miner_address=settings.DEBUG_MINER_ADDRESS,
             miner_address_ip_version=4,
             miner_port=settings.DEBUG_MINER_PORT,
