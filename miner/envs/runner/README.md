@@ -46,6 +46,6 @@ computehorde/miner-runner
 
 The `watchtower` container may update:
 1) core services in `docker-compose.yml` (like `app` or `worker`), and
-2) `computehorde/miner-runner` container itself, which will automatically update ALL the other containers.
+2) `backenddevelopersltd/compute-horde-miner-runner` container itself, which will automatically update ALL the other containers.
 
-It is expected that only core services will be updated from time to time, but if infrastructure update is required, it will be done by auto-updating `computehorde/miner-runner` container.
+It is expected that only core services will be updated from time to time, but if infrastructure update is required, it will be done by auto-updating `backenddevelopersltd/compute-horde-miner-runner` container.

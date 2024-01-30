@@ -9,7 +9,7 @@ services:
     volumes:
       - redis:/data
     logging: &logging
-      driver: journald
+#      driver: journald
       options:
         tag: '{{.Name}}'
 
@@ -19,6 +19,7 @@ services:
       test: pg_isready -U postgres || exit 1
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB:postgres
     volumes:
       - db:/var/lib/postgresql/data
     logging:
@@ -26,15 +27,12 @@ services:
 
   app:
     image: backenddevelopersltd/computete-horde-miner:v0-latest
-    pull_policy: missing
+    pull_policy: always
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
     init: true
     restart: unless-stopped
-    # env_file: ./.env
-    environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    env_file: ./.env
     volumes:
       # mounting host docker socket to allow running executor images on host machine
       - /var/run/docker.sock:/var/run/docker.sock
@@ -49,15 +47,13 @@ services:
 
   celery-worker:
     image: backenddevelopersltd/computete-horde-miner:v0-latest
-    pull_policy: missing
+    pull_policy: always
     init: true
     healthcheck:
       test: celery -A compute_horde_miner status > /dev/null || exit 1
     restart: unless-stopped
-    # env_file: ./.env
+    env_file: ./.env
     environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - CELERY_MASTER_CONCURRENCY=4
       - CELERY_WORKER_CONCURRENCY=2
     command: ./celery-entrypoint.sh
@@ -71,14 +67,10 @@ services:
 
   celery-beat:
     image: backenddevelopersltd/computete-horde-miner:v0-latest
-    pull_policy: missing
+    pull_policy: always
     init: true
     restart: unless-stopped
-    # env_file: ./.env
-    environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - NGINX_PORT=${NGINX_PORT}
+    env_file: ./.env
     command: nice celery -A compute_horde_miner beat -l INFO --schedule /tmp/celerybeat-schedule -f /tmp/celery-beat.log
     depends_on:
       - redis
@@ -91,9 +83,8 @@ services:
     image: 'ghcr.io/reef-technologies/nginx-rt:v1.2.1'
     restart: unless-stopped
     healthcheck:
-      test: wget -q --spider 0.0.0.0:${NGINX_PORT} || exit 1
-    environment:
-      - NGINX_PORT=${NGINX_PORT}
+      test: wget -q --spider 0.0.0.0:80 || exit 1
+    env_file: ./.env
     volumes:
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/config_helpers:/etc/nginx/config_helpers
@@ -104,7 +95,7 @@ services:
 
     command: nginx -g 'daemon off;'
     ports:
-      - ${NGINX_PORT}:80
+      - ${BITTENSOR_MINER_PORT}:80
 
     logging:
       <<: *logging
