@@ -36,8 +36,9 @@ services:
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
-      # mounting host docker socket to allow running executor images on host machine
       - /root/.bittensor/wallets:/root/.bittensor/wallets
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+      # mounting host docker socket to allow running executor images on host machine
       - /var/run/docker.sock:/var/run/docker.sock
       - static:/root/src/static
     depends_on:
@@ -61,7 +62,7 @@ services:
       - CELERY_WORKER_CONCURRENCY=2
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
-      - /root/.bittensor/wallets:/root/.bittensor/wallets
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     command: ./celery-entrypoint.sh
     tmpfs: /run
     depends_on:
@@ -80,7 +81,7 @@ services:
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
-      - /root/.bittensor/wallets:/root/.bittensor/wallets
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     command: nice celery -A compute_horde_miner beat -l INFO --schedule /tmp/celerybeat-schedule -f /tmp/celery-beat.log
     depends_on:
       - redis
