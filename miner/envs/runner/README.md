@@ -17,6 +17,7 @@ docker run \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$HOME/.bittensor/wallets:/root/.bittensor/wallets" \
     --env-file .env \
+    -v ./.env:/root/.env \
     --name computehorde-miner-runner \
     --restart unless-stopped \
     --label=com.centurylinklabs.watchtower.enable=true \

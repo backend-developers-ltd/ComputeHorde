@@ -9,7 +9,7 @@ services:
     volumes:
       - redis:/data
     logging: &logging
-#      driver: journald
+      driver: journald
       options:
         tag: '{{.Name}}'
 
@@ -33,6 +33,8 @@ services:
     init: true
     restart: unless-stopped
     env_file: ./.env
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
       # mounting host docker socket to allow running executor images on host machine
       - /var/run/docker.sock:/var/run/docker.sock
@@ -56,6 +58,7 @@ services:
     environment:
       - CELERY_MASTER_CONCURRENCY=4
       - CELERY_WORKER_CONCURRENCY=2
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     command: ./celery-entrypoint.sh
     tmpfs: /run
     depends_on:
@@ -71,6 +74,8 @@ services:
     init: true
     restart: unless-stopped
     env_file: ./.env
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     command: nice celery -A compute_horde_miner beat -l INFO --schedule /tmp/celerybeat-schedule -f /tmp/celery-beat.log
     depends_on:
       - redis
