@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-./prometheus-cleanup.sh
+type prometheus-cleanup.sh && ./prometheus-cleanup.sh
 
 # below we define two workers types (each may have any concurrency);
 # each worker may have its own settings
