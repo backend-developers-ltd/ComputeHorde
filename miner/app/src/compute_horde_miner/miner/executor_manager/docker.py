@@ -13,6 +13,6 @@ class DockerExecutorManager(BaseExecutorManager):
             "-e", f"EXECUTOR_TOKEN={token}",
             # the executor must be able to spawn images on host
             "-v", "/var/run/docker.sock:/var/run/docker.sock",
-            "ghcr.io/backend-developers-ltd/computehorde/executor-app:latest",
+            "ghcr.io/backend-developers-ltd/computehorde/executor-app:v0-latest",
             "python", "manage.py", "run_executor",
         ])

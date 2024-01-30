@@ -25,7 +25,7 @@ services:
       <<: *logging
 
   app:
-    image: ghcr.io/backend-developers-ltd/computehorde/validator-app:latest
+    image: backenddevelopersltd/compute-horde-validator:v0-latest
     pull_policy: missing
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
@@ -50,7 +50,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-worker:
-    image: ghcr.io/backend-developers-ltd/computehorde/validator-app:latest
+    image: backenddevelopersltd/compute-horde-validator:v0-latest
     pull_policy: missing
     init: true
     healthcheck:
@@ -76,7 +76,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-beat:
-    image: ghcr.io/backend-developers-ltd/computehorde/validator-app:latest
+    image: backenddevelopersltd/compute-horde-validator:v0-latest
     pull_policy: missing
     init: true
     restart: unless-stopped

@@ -20,7 +20,7 @@ docker run \
     --name computehorde-miner-runner \
     --restart unless-stopped \
     --label=com.centurylinklabs.watchtower.enable=true \
-    ghcr.io/backend-developers-ltd/computehorde/miner-runner:latest
+    backenddevelopersltd/compute-horde-miner-runner:v0-latest
 ```
 
 or, if the container already exists:

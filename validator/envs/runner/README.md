@@ -20,7 +20,7 @@ docker run \
     --name computehorde-validator-runner \
     --restart unless-stopped \
     --label=com.centurylinklabs.watchtower.enable=true \
-    ghcr.io/backend-developers-ltd/computehorde/validator-runner:latest
+    backenddevelopersltd/compute-horde-validator-runner:v0-latest
 ```
 
 or, if the container already exists:
