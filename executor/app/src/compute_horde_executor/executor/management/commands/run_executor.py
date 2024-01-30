@@ -161,7 +161,15 @@ class JobRunner:
 
     async def run_job(self, job_request: V0JobRequest):
         self.unpack_volume(job_request)
-        cmd = ['docker', 'run', *job_request.docker_run_options, '-v', f'{volume_mount_dir.as_posix()}/:/volume/', job_request.docker_image_name]
+        cmd = [
+            'docker',
+            'run',
+            *job_request.docker_run_options,
+            '-v',
+            f'{volume_mount_dir.as_posix()}/:/volume/',
+            job_request.docker_image_name,
+            *job_request.docker_run_cmd,
+        ]
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,

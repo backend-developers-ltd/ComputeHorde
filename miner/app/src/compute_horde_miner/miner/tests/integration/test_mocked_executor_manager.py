@@ -43,6 +43,8 @@ async def test_main_loop():
         "message_type": "V0JobRequest",
         "job_uuid": job_uuid,
         "docker_image_name": "it's teeeeests again",
+        "docker_run_cmd": [],
+        "docker_run_options": [],
         "volume": {
             "volume_type": "inline",
             "contents": "nonsense"

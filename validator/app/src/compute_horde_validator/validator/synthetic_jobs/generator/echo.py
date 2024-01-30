@@ -9,6 +9,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import Abst
 
 
 class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
+
     def __init__(self):
         self.payload = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
 
@@ -20,6 +21,12 @@ class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
 
     def docker_image_name(self) -> str:
         return "ghcr.io/reef-technologies/computehorde/echo:latest"
+
+    def docker_run_options(self) -> list[str]:
+        return []
+
+    def docker_run_cmd(self) -> list[str]:
+        return []
 
     def volume_contents(self) -> str:
         in_memory_output = io.BytesIO()

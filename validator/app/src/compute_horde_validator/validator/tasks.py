@@ -33,6 +33,9 @@ def run_synthetic_jobs():
     time.sleep(my_window_starts_at)
     jobs = initiate_jobs(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)  # metagraph will be refetched and
     # that's fine, after sleeping for e.g. 30 minutes we should refetch the miner list
+    if not jobs:
+        logger.info('Nothing to do')
+        return
     asyncio.run(execute_jobs(jobs))
 
 
@@ -43,7 +46,7 @@ def set_scores():
     hotkey_to_uid = {n.hotkey: n.uid for n in metagraph.neurons}
     score_per_uid = {}
     with transaction.atomic():
-        batches = list(SyntheticJobBatch.objects.select_related('synthetic_jobs').filter(
+        batches = list(SyntheticJobBatch.objects.prefetch_related('synthetic_jobs').filter(
             scored=False, started_at__gte=now() - timedelta(days=1)))
         if not batches:
             logger.info('No batches - nothing to score')
@@ -51,10 +54,13 @@ def set_scores():
 
         for batch in batches:
             for job in batch.synthetic_jobs:
-                uid = hotkey_to_uid.get(job.hotkey)
+                uid = hotkey_to_uid.get(job.miner.hotkey)
                 if not uid:
                     continue
                 score_per_uid[uid] = score_per_uid.get(uid, 0) + job.score
+        if not score_per_uid:
+            logger.info('No miners on the subnet to score')
+            return
         uids = torch.zeros(len(score_per_uid), dtype=torch.long)
         scores = torch.zeros(len(score_per_uid), dtype=torch.float32)
 
