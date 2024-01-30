@@ -6,6 +6,7 @@ import os
 import random
 import string
 import subprocess
+import time
 import uuid
 import zipfile
 from unittest import mock
@@ -57,7 +58,8 @@ class Test(ActiveSubnetworkBaseTest):
     def miner_environ(cls) -> dict[str, str]:
         return {
             'ADDRESS_FOR_EXECUTORS': f'ws://localhost:{MINER_PORT}',
-            'DATABASE_SUFFIX': '_integration_test'
+            'DATABASE_SUFFIX': '_integration_test',
+            'DEBUG_TURN_AUTHENTICATION_OFF': '1',
         }
 
     @classmethod
@@ -82,6 +84,15 @@ class Test(ActiveSubnetworkBaseTest):
         base64_zipfile = base64.b64encode(zip_contents).decode()
 
         async with websockets.connect(f'ws://localhost:8045/v0/validator_interface/{validator_key}') as ws:
+            await ws.send(json.dumps({
+                "message_type": "V0AuthenticateRequest",
+                "payload": {
+                    'validator_hotkey': validator_key,
+                    'miner_hotkey': 'some key',
+                    'timestamp': int(time.time()),
+                },
+                "signature": "gibberish",
+            }))
             await ws.send(json.dumps({
                 "message_type": "V0InitialJobRequest",
                 "job_uuid": job_uuid,

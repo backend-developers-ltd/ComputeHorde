@@ -3,9 +3,11 @@ import io
 import zipfile
 
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
-from compute_horde_validator.validator.jobs import V0SyntheticJob
-from compute_horde_validator.validator.synthetic_jobs.generator.base import AbstractSyntheticJobGenerator
 
+from compute_horde_validator.validator.jobs import V0SyntheticJob
+from compute_horde_validator.validator.synthetic_jobs.generator.base import (
+    AbstractSyntheticJobGenerator,
+)
 
 MAX_SCORE = 2
 PASSWORD_LENGTH = 6

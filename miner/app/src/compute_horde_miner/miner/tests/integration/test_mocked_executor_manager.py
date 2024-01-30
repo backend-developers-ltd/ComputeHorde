@@ -1,3 +1,4 @@
+import time
 import uuid
 
 import pytest
@@ -21,6 +22,15 @@ async def test_main_loop():
     communicator = WebsocketCommunicator(asgi.application, f"v0/validator_interface/{validator_key}")
     connected, _ = await communicator.connect()
     assert connected
+    await communicator.send_json_to({
+        "message_type": "V0AuthenticateRequest",
+        "payload": {
+            'validator_hotkey': validator_key,
+            'miner_hotkey': 'some key',
+            'timestamp': int(time.time()),
+        },
+        "signature": "gibberish",
+    })
     await communicator.send_json_to({
         "message_type": "V0InitialJobRequest",
         "job_uuid": job_uuid,

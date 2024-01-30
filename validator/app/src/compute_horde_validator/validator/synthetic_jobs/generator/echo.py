@@ -5,7 +5,10 @@ import string
 import zipfile
 
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
-from compute_horde_validator.validator.synthetic_jobs.generator.base import AbstractSyntheticJobGenerator
+
+from compute_horde_validator.validator.synthetic_jobs.generator.base import (
+    AbstractSyntheticJobGenerator,
+)
 
 
 class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):

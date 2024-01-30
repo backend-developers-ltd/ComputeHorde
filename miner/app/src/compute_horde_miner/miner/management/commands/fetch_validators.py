@@ -1,6 +1,5 @@
 from django.core.management import BaseCommand
 
-from compute_horde_miner.miner.models import Validator
 from compute_horde_miner.miner.tasks import fetch_validators
 
 

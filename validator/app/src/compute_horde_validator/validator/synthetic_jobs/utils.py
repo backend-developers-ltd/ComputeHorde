@@ -1,18 +1,10 @@
 import asyncio
-import base64
 import datetime
-import io
 import logging
-import random
-import string
 import time
-import zipfile
-from typing import Iterable
+from collections.abc import Iterable
 
 import bittensor
-from django.conf import settings
-from django.utils.timezone import now
-
 from compute_horde.base_requests import BaseRequest
 from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
 from compute_horde.mv_protocol import miner_requests, validator_requests
@@ -20,12 +12,21 @@ from compute_horde.mv_protocol.miner_requests import (
     BaseMinerRequest,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
-    V0ExecutorReadyRequest,
     V0ExecutorFailedRequest,
+    V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
 )
-from compute_horde.mv_protocol.validator_requests import V0InitialJobRequest, VolumeType, V0JobRequest
+from compute_horde.mv_protocol.validator_requests import (
+    AuthenticationPayload,
+    V0AuthenticateRequest,
+    V0InitialJobRequest,
+    V0JobRequest,
+    VolumeType,
+)
+from django.conf import settings
+from django.utils.timezone import now
+
 from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 
@@ -39,13 +40,14 @@ logger = logging.getLogger(__name__)
 
 class MinerClient(AbstractMinerClient):
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, my_hotkey: str, miner_hotkey: str,
-                 miner_port: int, job_uuid: str):
+                 miner_port: int, job_uuid: str, keypair: bittensor.Keypair):
         super().__init__(loop, f'{miner_hotkey}({miner_address}:{miner_port})')
         self.miner_hotkey = miner_hotkey
         self.my_hotkey = my_hotkey
         self.miner_address = miner_address
         self.miner_port = miner_port
         self.job_uuid = job_uuid
+        self.keypair = keypair
 
         self.miner_ready_or_declining_future = asyncio.Future()
         self.miner_ready_or_declining_timestamp: int = 0
@@ -72,18 +74,34 @@ class MinerClient(AbstractMinerClient):
             logger.info(f'Miner {self.miner_name} accepted job')
         elif isinstance(
                 msg,
-                (V0DeclineJobRequest, V0ExecutorFailedRequest, V0ExecutorReadyRequest)
+                V0DeclineJobRequest | V0ExecutorFailedRequest | V0ExecutorReadyRequest
         ):
             self.miner_ready_or_declining_timestamp = time.time()
             self.miner_ready_or_declining_future.set_result(msg)
         elif isinstance(
             msg,
-            (V0JobFailedRequest, V0JobFinishedRequest)
+            V0JobFailedRequest | V0JobFinishedRequest
         ):
             self.miner_finished_or_failed_future.set_result(msg)
             self.miner_finished_or_failed_timestamp = time.time()
         else:
             raise UnsupportedMessageReceived(msg)
+
+    def generate_authentication_message(self):
+        payload = AuthenticationPayload(
+            validator_hotkey=self.my_hotkey,
+            miner_hotkey=self.miner_hotkey,
+            timestamp=int(time.time()),
+        )
+        return V0AuthenticateRequest(
+            payload=payload,
+            signature=f"0x{self.keypair.sign(payload.blob_for_signing()).hex()}"
+        )
+
+    async def _connect(self):
+        ws = await super()._connect()
+        await ws.send(self.generate_authentication_message().json())
+        return ws
 
 
 def initiate_jobs(netuid, network) -> list[SyntheticJob]:
@@ -92,7 +110,14 @@ def initiate_jobs(netuid, network) -> list[SyntheticJob]:
     batch = SyntheticJobBatch.objects.create(
         accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
     )
-
+    return [SyntheticJob.objects.create(
+        batch=batch,
+        miner=Miner.objects.get(hotkey='5HL5QqXDcee1rv55PMenWV2ivasn34EPyVJ9dyqUeKt2h4Fb'),
+        miner_address='127.0.0.1',
+        miner_address_ip_version=4,
+        miner_port=8000,
+        status=SyntheticJob.Status.PENDING
+    )]
     miners = get_miners(metagraph)
     return list(SyntheticJob.objects.bulk_create([
         SyntheticJob(
@@ -118,6 +143,7 @@ async def execute_job(synthetic_job_id):
         miner_hotkey=synthetic_job.miner.hotkey,
         my_hotkey=key.ss58_address,
         job_uuid=str(synthetic_job.job_uuid),
+        keypair=key,
     )
     async with client:
         await client.send_model(V0InitialJobRequest(
@@ -127,7 +153,7 @@ async def execute_job(synthetic_job_id):
             volume_type=VolumeType.inline.value,
         ))
         msg = await client.miner_ready_or_declining_future
-        if isinstance(msg, (V0DeclineJobRequest, V0ExecutorFailedRequest)):
+        if isinstance(msg, V0DeclineJobRequest | V0ExecutorFailedRequest):
             logger.info(f'Miner {client.miner_name} won\'t do job: {msg}')
             synthetic_job.status = SyntheticJob.Status.FAILED
             synthetic_job.comment = f'Miner didn\'t accept the job saying: {msg.json()}'
@@ -161,7 +187,7 @@ async def execute_job(synthetic_job_id):
         except TimeoutError:
             logger.info(f'Miner {client.miner_name} timed out out')
             synthetic_job.status = SyntheticJob.Status.FAILED
-            synthetic_job.comment = f'Miner timed out'
+            synthetic_job.comment = 'Miner timed out'
             await synthetic_job.asave()
             return
 

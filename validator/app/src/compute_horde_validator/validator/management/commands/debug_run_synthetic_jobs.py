@@ -4,7 +4,7 @@ import logging
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from compute_horde_validator.validator.synthetic_jobs.utils import initiate_jobs, execute_jobs
+from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs, initiate_jobs
 
 logger = logging.getLogger(__name__)
 

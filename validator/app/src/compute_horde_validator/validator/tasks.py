@@ -11,7 +11,7 @@ from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import SyntheticJobBatch
-from compute_horde_validator.validator.synthetic_jobs.utils import initiate_jobs, execute_jobs
+from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs, initiate_jobs
 
 logger = get_task_logger(__name__)
 
