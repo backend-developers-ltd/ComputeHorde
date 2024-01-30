@@ -156,6 +156,9 @@ if env('DATABASE_POOL_URL', default=''):  # DB transaction-based connection pool
 elif env('DATABASE_URL', default=default_db):
     DATABASES['default'] = env.db_url('DATABASE_URL', default=default_db)
 
+if 'default' in DATABASES:
+    DATABASES['default']['NAME'] += env.str('DATABASE_SUFFIX', default='')
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_PASSWORD_VALIDATORS = [
