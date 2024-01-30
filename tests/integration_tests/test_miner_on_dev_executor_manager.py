@@ -103,7 +103,7 @@ class Test(ActiveSubnetworkBaseTest):
             await ws.send(json.dumps({
                 "message_type": "V0JobRequest",
                 "job_uuid": job_uuid,
-                "docker_image_name": "ghcr.io/reef-technologies/computehorde/echo:latest",
+                "docker_image_name": "ghcr.io/backend-developers-ltd/computehorde/echo:latest",
                 "docker_run_cmd": [],
                 "docker_run_options": [],
                 "timeout_seconds": 60,

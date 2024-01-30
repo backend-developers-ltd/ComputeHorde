@@ -1,0 +1,31 @@
+server {
+    listen 80 default_server;
+    server_name _;
+
+    add_header                X-Content-Type-Options nosniff;
+    add_header                X-XSS-Protection "1; mode=block";
+    add_header                X-Frame-Options DENY;
+
+    include /etc/nginx/config_helpers/brotli.conf;
+    include /etc/nginx/config_helpers/gzip.conf;
+
+    access_log                /dev/stdout;
+    error_log                 /dev/stderr info;
+
+    client_max_body_size 100M;
+
+    location /static/ {
+        root /srv/;
+    }
+
+    location / {
+
+        proxy_pass_header Server;
+        proxy_redirect off;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_pass http://app:8000/;
+    }
+}

@@ -44,13 +44,13 @@ if env.bool('ENV_FILL_MISSING_VALUES', default=False):
 if env('ENV', default=None) is None:
     env.read_env(root('../../.env'))
 
-ENV = env('ENV')
+ENV = env('ENV', default='prod')
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env('DEBUG')
+DEBUG = env.bool('DEBUG', default=False)
 
 ALLOWED_HOSTS = ['*']
 
@@ -107,24 +107,24 @@ if CORS_ENABLED := env.bool('CORS_ENABLED', default=True):
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Content Security Policy
-if CSP_ENABLED := env.bool('CSP_ENABLED'):
+if CSP_ENABLED := env.bool('CSP_ENABLED', default=False):
     MIDDLEWARE.append('csp.middleware.CSPMiddleware')
 
     CSP_REPORT_ONLY = env.bool('CSP_REPORT_ONLY', default=True)
     CSP_REPORT_URL = env('CSP_REPORT_URL', default=None) or None
 
-    CSP_DEFAULT_SRC = env.tuple('CSP_DEFAULT_SRC')
-    CSP_SCRIPT_SRC = env.tuple('CSP_SCRIPT_SRC')
-    CSP_STYLE_SRC = env.tuple('CSP_STYLE_SRC')
-    CSP_FONT_SRC = env.tuple('CSP_FONT_SRC')
-    CSP_IMG_SRC = env.tuple('CSP_IMG_SRC')
-    CSP_MEDIA_SRC = env.tuple('CSP_MEDIA_SRC')
-    CSP_OBJECT_SRC = env.tuple('CSP_OBJECT_SRC')
-    CSP_FRAME_SRC = env.tuple('CSP_FRAME_SRC')
-    CSP_CONNECT_SRC = env.tuple('CSP_CONNECT_SRC')
-    CSP_CHILD_SRC = env.tuple('CSP_CHILD_SRC')
-    CSP_MANIFEST_SRC = env.tuple('CSP_MANIFEST_SRC')
-    CSP_WORKER_SRC = env.tuple('CSP_WORKER_SRC')
+    CSP_DEFAULT_SRC = env.tuple('CSP_DEFAULT_SRC', default=("'none'",))
+    CSP_SCRIPT_SRC = env.tuple('CSP_SCRIPT_SRC', default=("'self'",))
+    CSP_STYLE_SRC = env.tuple('CSP_STYLE_SRC', default=("'self'",))
+    CSP_FONT_SRC = env.tuple('CSP_FONT_SRC', default=("'self'",))
+    CSP_IMG_SRC = env.tuple('CSP_IMG_SRC', default=("'self'",))
+    CSP_MEDIA_SRC = env.tuple('CSP_MEDIA_SRC', default=("'self'",))
+    CSP_OBJECT_SRC = env.tuple('CSP_OBJECT_SRC', default=("'self'",))
+    CSP_FRAME_SRC = env.tuple('CSP_FRAME_SRC', default=("'self'",))
+    CSP_CONNECT_SRC = env.tuple('CSP_CONNECT_SRC', default=("'self'",))
+    CSP_CHILD_SRC = env.tuple('CSP_CHILD_SRC', default=("'self'",))
+    CSP_MANIFEST_SRC = env.tuple('CSP_MANIFEST_SRC', default=("'self'",))
+    CSP_WORKER_SRC = env.tuple('CSP_WORKER_SRC', default=("'self'",))
 
     CSP_BLOCK_ALL_MIXED_CONTENT = env.bool('CSP_BLOCK_ALL_MIXED_CONTENT', default=False)
     CSP_EXCLUDE_URL_PREFIXES = env.tuple('CSP_EXCLUDE_URL_PREFIXES', default=tuple())
@@ -151,15 +151,17 @@ TEMPLATES = [
 ASGI_APPLICATION = 'compute_horde_miner.asgi.application'
 
 DATABASES = {}
-if env('DATABASE_POOL_URL'):  # DB transaction-based connection pool, such as one provided PgBouncer
+default_db = f'postgres://postgres:{env("POSTGRES_PASSWORD")}@db:5432/postgres'
+if env('DATABASE_POOL_URL', default=''):  # DB transaction-based connection pool, such as one provided PgBouncer
     DATABASES['default'] = {
         **env.db_url('DATABASE_POOL_URL'),
         'DISABLE_SERVER_SIDE_CURSORS': True,  # prevents random cursor errors with transaction-based connection pool
     }
-elif env('DATABASE_URL'):
-    DATABASES['default'] = env.db_url('DATABASE_URL')
+elif env('DATABASE_URL', default=default_db):
+    DATABASES['default'] = env.db_url('DATABASE_URL', default=default_db)
 
-DATABASES['default']['NAME'] += env.str('DATABASE_SUFFIX', default='')
+if 'default' in DATABASES:
+    DATABASES['default']['NAME'] += env.str('DATABASE_SUFFIX', default='')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -201,8 +203,8 @@ if env.bool('HTTPS_REDIRECT', default=False) and not DEBUG:
 else:
     SECURE_SSL_REDIRECT = False
 
-CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='')
-CELERY_RESULT_BACKEND = env('CELERY_BROKER_URL', default='')  # store results in Redis
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://redis:6379/0')
+CELERY_RESULT_BACKEND = env('CELERY_BROKER_URL', default='redis://redis:6379/0')  # store results in Redis
 CELERY_RESULT_EXPIRES = int(timedelta(days=1).total_seconds())  # time until task result deletion
 CELERY_COMPRESSION = 'gzip'  # task compression
 CELERY_MESSAGE_COMPRESSION = 'gzip'  # result compression
@@ -228,14 +230,14 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_WORKER_PREFETCH_MULTIPLIER = env.int('CELERY_WORKER_PREFETCH_MULTIPLIER', default=10)
 CELERY_BROKER_POOL_LIMIT = env.int('CELERY_BROKER_POOL_LIMIT', default=50)
 
-EMAIL_BACKEND = env('EMAIL_BACKEND')
-EMAIL_FILE_PATH = env('EMAIL_FILE_PATH')
-EMAIL_HOST = env('EMAIL_HOST')
-EMAIL_PORT = env.int('EMAIL_PORT')
-EMAIL_HOST_USER = env('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
-EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL')
+EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
+EMAIL_FILE_PATH = env('EMAIL_FILE_PATH', default='/tmp/email')
+EMAIL_HOST = env('EMAIL_HOST', default='smtp.sendgrid.net')
+EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='apikey')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='mail@localhost')
 
 LOGGING = {
     'version': 1,
@@ -265,9 +267,8 @@ LOGGING = {
     },
 }
 
-EXECUTOR_MANAGER_CLASS_PATH = env.str('EXECUTOR_MANAGER_CLASS_PATH')
-
-ADDRESS_FOR_EXECUTORS = env.str('ADDRESS_FOR_EXECUTORS')
+EXECUTOR_MANAGER_CLASS_PATH = env.str('EXECUTOR_MANAGER_CLASS_PATH', default='compute_horde_miner.miner.executor_manager.dev:DevExecutorManager')
+ADDRESS_FOR_EXECUTORS = env.str('ADDRESS_FOR_EXECUTORS', default='ws://localhost:8000')
 
 BITTENSOR_MINER_PORT = env.int('BITTENSOR_MINER_PORT')
 
@@ -303,7 +304,7 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "compute_horde_miner.channel_layer.channel_layer.ECRedisChannelLayer",
         "CONFIG": {
-            "hosts": [(env.str('REDIS_HOST'), env.int('REDIS_PORT'))],
+            "hosts": [(env.str('REDIS_HOST', default='redis'), env.int('REDIS_PORT', default='6379'))],
         },
     },
 }
