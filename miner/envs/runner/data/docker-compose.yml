@@ -38,7 +38,6 @@ services:
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
-      - /root/.bittensor/wallets:/root/.bittensor/wallets
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
       # mounting host docker socket to allow running executor images on host machine
       - /var/run/docker.sock:/var/run/docker.sock
