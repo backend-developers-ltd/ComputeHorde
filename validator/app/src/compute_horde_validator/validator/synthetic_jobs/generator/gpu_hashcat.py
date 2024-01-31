@@ -22,10 +22,10 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return 90
 
     def base_docker_image_name(self) -> str:
-        return "ghcr.io/backend-developers-ltd/computehorde/job:v0"
+        return "backenddevelopersltd/compute-horde-job-base:v0-latest"
 
     def docker_image_name(self) -> str:
-        return "ghcr.io/backend-developers-ltd/computehorde/job:v0"
+        return "backenddevelopersltd/compute-horde-job:v0-latest"
 
     def docker_run_options(self) -> list[str]:
         return ['--runtime=nvidia', '--gpus', 'all']
