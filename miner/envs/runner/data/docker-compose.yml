@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
     env_file: ./.env
     ports:
-      - 7000:8000
+      - ${PORT_FOR_EXECUTORS}:8000
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
@@ -92,23 +92,18 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   nginx:
-    image: 'ghcr.io/reef-technologies/nginx-rt:v1.2.1'
+    image: backenddevelopersltd/compute-horde-miner-nginx:v0-latest
     restart: unless-stopped
     healthcheck:
       test: wget -q --spider 0.0.0.0:80 || exit 1
     env_file: ./.env
     volumes:
-      - ./nginx/templates:/etc/nginx/templates
-      - ./nginx/config_helpers:/etc/nginx/config_helpers
       - static:/srv/static:ro
-      # - ./letsencrypt/etc:/etc/letsencrypt
     depends_on:
       - app
-
     command: nginx -g 'daemon off;'
     ports:
       - ${BITTENSOR_MINER_PORT}:80
-
     logging:
       <<: *logging
 
