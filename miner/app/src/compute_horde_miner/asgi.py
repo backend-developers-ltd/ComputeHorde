@@ -2,6 +2,12 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
 from django.urls import path, re_path
 
+import django
+
+django.setup(
+)  # that's because channels doesn't support ROOT_URLCONF AFAIK and the ASGI application (URLRouter) has
+# to import consumers which import models
+
 from .miner.miner_consumer.executor_interface import MinerExecutorConsumer
 from .miner.miner_consumer.validator_interface import MinerValidatorConsumer
 

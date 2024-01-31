@@ -6,4 +6,4 @@
 ./manage.py wait_for_database --timeout 10
 ./manage.py migrate --no-input
 
-gunicorn -c gunicorn.conf.py
+daphne -b 0.0.0.0 -p 8000 compute_horde_miner.asgi:application
