@@ -1,9 +1,9 @@
 import hashlib
 import secrets
 import string
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar, Self
-from abc import ABC, abstractmethod
 
 
 class SyntheticJob(ABC):

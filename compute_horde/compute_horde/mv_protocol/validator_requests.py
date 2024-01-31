@@ -6,6 +6,7 @@ from ..base_requests import BaseRequest, JobMixin
 
 
 class RequestType(enum.Enum):
+    V0AuthenticateRequest = 'V0AuthenticateRequest'
     V0InitialJobRequest = 'V0InitialJobRequest'
     V0JobRequest = 'V0JobRequest'
     GenericError = 'GenericError'
@@ -14,16 +15,27 @@ class RequestType(enum.Enum):
 class BaseValidatorRequest(BaseRequest):
     message_type: RequestType
 
-    @classmethod
-    def type_to_model(cls, type_: RequestType) -> type['BaseValidatorRequest']:
-        return {
-            RequestType.V0InitialJobRequest: V0InitialJobRequest,
-            RequestType.V0JobRequest: V0JobRequest,
-        }[type_]
-
 
 class VolumeType(enum.Enum):
     inline = 'inline'
+
+
+class AuthenticationPayload(pydantic.BaseModel):
+    validator_hotkey: str
+    miner_hotkey: str
+    timestamp: int
+
+    def blob_for_signing(self):
+        return self.json(sort_keys=True)
+
+
+class V0AuthenticateRequest(BaseValidatorRequest):
+    message_type: RequestType = RequestType.V0AuthenticateRequest
+    payload: AuthenticationPayload
+    signature: str
+
+    def blob_for_signing(self):
+        return self.payload.blob_for_signing()
 
 
 class V0InitialJobRequest(BaseValidatorRequest, JobMixin):

@@ -1,11 +1,8 @@
 """
 Django settings for compute_horde_miner project.
 """
-import ipaddress
-
-from compute_horde import base  # noqa
-
 import inspect
+import ipaddress
 import logging
 import pathlib
 from datetime import timedelta
@@ -13,6 +10,7 @@ from functools import wraps
 
 import bittensor
 import environ
+from compute_horde import base  # noqa
 
 # from celery.schedules import crontab
 
@@ -289,6 +287,7 @@ BITTENSOR_WALLET_DIRECTORY = env.path(
 )
 BITTENSOR_WALLET_NAME = env.str('BITTENSOR_WALLET_NAME')
 BITTENSOR_WALLET_HOTKEY_NAME = env.str('BITTENSOR_WALLET_HOTKEY_NAME')
+DEBUG_TURN_AUTHENTICATION_OFF = env.bool('DEBUG_TURN_AUTHENTICATION_OFF', default=False)
 
 
 def BITTENSOR_WALLET():

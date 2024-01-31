@@ -1,8 +1,11 @@
 import logging
+import time
 import uuid
 
+import bittensor
 from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
+from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_miner.miner.executor_manager import current
@@ -22,12 +25,22 @@ from compute_horde_miner.miner.models import AcceptedJob, Validator
 
 logger = logging.getLogger(__name__)
 
+AUTH_MESSAGE_MAX_AGE = 10
+
+DONT_CHECK = 'DONT_CHECK'
+
 
 class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
+        if settings.DEBUG_TURN_AUTHENTICATION_OFF:
+            self.my_hotkey = DONT_CHECK
+        else:
+            self.my_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
         self.validator_key = ''
         self.validator: Validator | None = None
+        self.validator_authenticated = False
+        self.msg_queue = []
         self.pending_jobs: dict[str, 'AcceptedJob'] = {}
 
     @log_errors_explicitly
@@ -56,7 +69,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await self.group_add(job.executor_token)
             if job.status != AcceptedJob.Status.WAITING_FOR_PAYLOAD:
                 continue
-            await self.send(miner_requests.V0ExecutorReadyRequest(job_uuid=job.job_uuid).json())
+            await self.send(miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).json())
             logger.debug(f'Readiness for job {job.job_uuid} reported to validator {self.validator_key}')
 
         for job in (await AcceptedJob.get_not_reported(self.validator)):
@@ -88,7 +101,43 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
     def outgoing_generic_error_class(self):
         return miner_requests.GenericError
 
+    def verify_auth_msg(self, msg: validator_requests.V0AuthenticateRequest) -> tuple[bool, str]:
+        if msg.payload.timestamp < time.time() - AUTH_MESSAGE_MAX_AGE:
+            return False, 'msg too old'
+        if msg.payload.miner_hotkey != self.my_hotkey:
+            return False, f'wrong miner hotkey ({self.my_hotkey}!={msg.payload.miner_hotkey})'
+        if msg.payload.validator_hotkey != self.validator_key:
+            return False, f'wrong validator hotkey ({self.validator_key}!={msg.payload.validator_hotkey})'
+
+        keypair = bittensor.Keypair(ss58_address=self.validator_key)
+        if keypair.verify(msg.blob_for_signing(), msg.signature):
+            return True, ''
+
+        return False, 'Signature mismatches'
+
+    async def handle_authentication(self, msg: validator_requests.V0AuthenticateRequest):
+        if settings.DEBUG_TURN_AUTHENTICATION_OFF:
+            logger.critical(f'Validator {self.validator_key} passed authentication without checking, because '
+                            f'"DEBUG_TURN_AUTHENTICATION_OFF" is on')
+        else:
+            authenticated, error_msg = self.verify_auth_msg(msg)
+            if not authenticated:
+                response_msg = f'Validator {self.validator_key} not authenticated due to: {error_msg}'
+                logger.info(response_msg)
+                await self.send(miner_requests.GenericError(details=response_msg).json())
+                await self.close(1000)
+                return
+        self.validator_authenticated = True
+        for msg in self.msg_queue:
+            await self.handle(msg)
+
+
     async def handle(self, msg: BaseValidatorRequest):
+        if isinstance(msg, validator_requests.V0AuthenticateRequest):
+            return await self.handle_authentication(msg)
+        if not self.validator_authenticated:
+            self.msg_queue.append(msg)
+            return
         if isinstance(msg, validator_requests.V0InitialJobRequest):
             # TODO add rate limiting per validator key here
             token = f'{msg.job_uuid}-{uuid.uuid4()}'

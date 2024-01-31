@@ -11,7 +11,7 @@ from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import SyntheticJobBatch
-from compute_horde_validator.validator.synthetic_jobs.utils import initiate_jobs, execute_jobs
+from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs, initiate_jobs
 
 logger = get_task_logger(__name__)
 
@@ -22,15 +22,16 @@ SCORING_ALGO_VERSION = 1
 
 @app.task
 def run_synthetic_jobs():
-    metagraph = bittensor.metagraph(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
-    my_key = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-    validator_keys = sorted([n.hotkey for n in metagraph.neurons if n.validator_permit])
-    my_index = validator_keys.index(my_key)  # this will throw an error if we're not a registered validator
-    # and that's fine
-    window_per_validator = JOB_WINDOW / (len(validator_keys) + 1)
-    my_window_starts_at = window_per_validator * my_index
-    logger.info(f'Sleeping for {my_window_starts_at:02f}s because I am {my_index} out of {len(validator_keys)}')
-    time.sleep(my_window_starts_at)
+    if not settings.DEBUG_DONT_STAGGER_VALIDATORS:
+        metagraph = bittensor.metagraph(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
+        my_key = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+        validator_keys = sorted([n.hotkey for n in metagraph.neurons if n.validator_permit])
+        my_index = validator_keys.index(my_key)  # this will throw an error if we're not a registered validator
+        # and that's fine
+        window_per_validator = JOB_WINDOW / (len(validator_keys) + 1)
+        my_window_starts_at = window_per_validator * my_index
+        logger.info(f'Sleeping for {my_window_starts_at:02f}s because I am {my_index} out of {len(validator_keys)}')
+        time.sleep(my_window_starts_at)
     jobs = initiate_jobs(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)  # metagraph will be refetched and
     # that's fine, after sleeping for e.g. 30 minutes we should refetch the miner list
     if not jobs:
@@ -53,7 +54,7 @@ def set_scores():
             return
 
         for batch in batches:
-            for job in batch.synthetic_jobs:
+            for job in batch.synthetic_jobs.all():
                 uid = hotkey_to_uid.get(job.miner.hotkey)
                 if not uid:
                     continue
@@ -67,6 +68,7 @@ def set_scores():
         for ind, uid in enumerate(sorted(list(score_per_uid.keys()))):
             uids[ind] = uid
             scores[ind] = score_per_uid[uid]
+        logger.debug(f'Setting weights:\nuids={uids}\nscores={scores}')
         success = subtensor.set_weights(
             netuid=settings.BITTENSOR_NETUID,
             wallet=settings.BITTENSOR_WALLET(),

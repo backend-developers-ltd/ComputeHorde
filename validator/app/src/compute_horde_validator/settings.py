@@ -1,6 +1,7 @@
 """
 Django settings for compute_horde_validator project.
 """
+from celery.schedules import crontab
 
 from compute_horde import base  # noqa
 
@@ -209,17 +210,21 @@ CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
     'run_synthetic_jobs': {
         'task': 'compute_horde_validator.validator.tasks.run_synthetic_jobs',
-        'schedule': 60 * 60,
+        'schedule': crontab(minute='0'),
         'options': {},
     },
     'set_scores': {
         'task': 'compute_horde_validator.validator.tasks.set_scores',
-        'schedule': 60 * 60 * 6,
+        'schedule': crontab(minute='0', hour='*/6'),
         'options': {},
     },
 }
+if env.bool('DEBUG_RUN_BEAT_VERY_OFTEN', default=False):
+    CELERY_BEAT_SCHEDULE['run_synthetic_jobs']['schedule'] = crontab(minute='*')
+    CELERY_BEAT_SCHEDULE['run_synthetic_jobs']['set_scores'] = crontab(minute='*/3')
+
 CELERY_TASK_ROUTES = ['compute_horde_validator.celery.route_task']
-CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())
+CELERY_TASK_TIME_LIMIT = int(timedelta(hours=1, minutes=5).total_seconds())
 CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
@@ -277,6 +282,12 @@ SYNTHETIC_JOB_GENERATOR = env.str(
     'SYNTHETIC_JOB_GENERATOR',
     default='compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatSyntheticJobGenerator',
 )
+# if you need to hit a particular miner, without fetching their key, address or port from the blockchain
+DEBUG_MINER_KEY = env.str('DEBUG_MINER_KEY', default='')
+DEBUG_MINER_ADDRESS = env.str('DEBUG_MINER_ADDRESS', default='')
+DEBUG_MINER_PORT = env.int('DEBUG_MINER_PORT', default=0)
+# if you don't want to wait for your celery beat job to sleep on staging:
+DEBUG_DONT_STAGGER_VALIDATORS = env.bool('DEBUG_DONT_STAGGER_VALIDATORS', default=False)
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
