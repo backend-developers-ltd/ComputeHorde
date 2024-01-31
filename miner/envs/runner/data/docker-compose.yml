@@ -95,7 +95,7 @@ services:
     image: backenddevelopersltd/compute-horde-miner-nginx:v0-latest
     restart: unless-stopped
     healthcheck:
-      test: wget -q --spider 0.0.0.0:80 || exit 1
+      test: wget -q --spider 0.0.0.0:80/admin/login/ || exit 1
     env_file: ./.env
     volumes:
       - static:/srv/static:ro
