@@ -16,7 +16,7 @@ class DevExecutorManager(BaseExecutorManager):
         subprocess.Popen(
             [sys.executable, "app/src/manage.py", "run_executor"],
             env={
-                'MINER_ADDRESS': settings.ADDRESS_FOR_EXECUTORS,
+                'MINER_ADDRESS': f'ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}',
                 'EXECUTOR_TOKEN': token,
                 'PATH': os.environ['PATH'],
             },

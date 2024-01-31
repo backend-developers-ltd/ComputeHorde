@@ -57,7 +57,8 @@ class Test(ActiveSubnetworkBaseTest):
     @classmethod
     def miner_environ(cls) -> dict[str, str]:
         return {
-            'ADDRESS_FOR_EXECUTORS': f'ws://localhost:{MINER_PORT}',
+            'ADDRESS_FOR_EXECUTORS': 'localhost',
+            'PORT_FOR_EXECUTORS': str(MINER_PORT),
             'DATABASE_SUFFIX': '_integration_test',
             'DEBUG_TURN_AUTHENTICATION_OFF': '1',
         }

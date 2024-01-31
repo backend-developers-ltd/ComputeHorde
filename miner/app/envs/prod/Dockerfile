@@ -29,7 +29,7 @@ FROM $BASE_IMAGE AS secondary-image
 LABEL builder=false
 
 RUN apt-get update \
-  && apt-get install -y wget \
+  && apt-get install -y wget docker.io docker-compose \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/src/

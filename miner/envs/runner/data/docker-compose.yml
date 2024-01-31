@@ -33,6 +33,8 @@ services:
     init: true
     restart: unless-stopped
     env_file: ./.env
+    ports:
+      - 7000:8000
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:

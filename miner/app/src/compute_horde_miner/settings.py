@@ -266,7 +266,8 @@ LOGGING = {
 }
 
 EXECUTOR_MANAGER_CLASS_PATH = env.str('EXECUTOR_MANAGER_CLASS_PATH', default='compute_horde_miner.miner.executor_manager.dev:DockerExecutorManager')
-ADDRESS_FOR_EXECUTORS = env.str('ADDRESS_FOR_EXECUTORS', default='ws://localhost:8000')
+ADDRESS_FOR_EXECUTORS = env.str('ADDRESS_FOR_EXECUTORS', default='')
+PORT_FOR_EXECUTORS = env.int('PORT_FOR_EXECUTORS')
 
 BITTENSOR_MINER_PORT = env.int('BITTENSOR_MINER_PORT')
 
