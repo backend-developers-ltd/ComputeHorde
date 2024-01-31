@@ -29,9 +29,21 @@ or, if the container already exists:
 docker start computehorde-miner-runner
 ```
 
+## Auto-updates
+
+Automatic updates are enabled thanks to watchtower container:
+
+```bash
+docker run \
+    --restart unless-stopped \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    containrrr/watchtower:latest \
+    --interval 60 --cleanup --label-enable
+```
+
 ## How it works
 
-The `computehorde/miner-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a miner. It also contains a `watchtower` container that will automatically apply updates for containers.
+The `computehorde/miner-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a miner. A `watchtower` container will automatically apply updates for containers.
 
 ```
 computehorde/miner-runner
@@ -41,7 +53,6 @@ computehorde/miner-runner
 |__worker
 |__nginx
 |__...
-|__watchtower
 ```
 
 The `watchtower` container may update:
