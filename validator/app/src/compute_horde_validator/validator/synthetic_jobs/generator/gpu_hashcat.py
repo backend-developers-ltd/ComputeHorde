@@ -48,7 +48,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
             "--outfile-format",
             "2",
             "--quiet",
-            "/volume/payload.txt",
+            self.hash_job.payload,
             "?1" * PASSWORD_LENGTH,
         ]
 
