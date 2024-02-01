@@ -18,6 +18,7 @@ server {
         root /srv/;
     }
 
+
     location / {
           proxy_buffering off;
           proxy_pass_header Server;
@@ -30,7 +31,8 @@ server {
           proxy_set_header Connection "Upgrade";
           proxy_set_header X-Real-IP $remote_addr;
           proxy_set_header X_SCHEME $scheme;
-          set $backend "http://app:8000/";
+          resolver 127.0.0.11 valid=10s;
+          set $backend "http://app:8000";
           proxy_pass $backend;
     }
 }
