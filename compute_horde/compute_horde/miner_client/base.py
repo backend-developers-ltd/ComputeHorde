@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class AbstractMinerClient(abc.ABC):
 
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_name: str):
-        self.debounce_counter = -1
+        self.debounce_counter = 0
         self.loop = loop
         self.miner_name = miner_name
         self.ws: websockets.WebSocketClientProtocol | None = None
@@ -63,15 +63,16 @@ class AbstractMinerClient(abc.ABC):
     async def await_connect(self):
         while True:
             try:
+                if self.debounce_counter:
+                    sleep_time = self.sleep_time()
+                    logger.info(f'Retrying connection to miner {self.miner_name} in {sleep_time:0.2f}')
+                    await asyncio.sleep(sleep_time)
                 self.debounce_counter += 1
                 self.ws = await self._connect()
                 self.read_messages_task = self.loop.create_task(self.read_messages())
                 return
             except (websockets.WebSocketException, OSError) as ex:
                 logger.info(f'Could not connect to miner {self.miner_name}: {str(ex)}')
-            sleep_time = self.sleep_time()
-            logger.info(f'Retrying connection to miner {self.miner_name} in {sleep_time:0.2f}')
-            await asyncio.sleep(sleep_time)
 
     def sleep_time(self):
         return (2 ** self.debounce_counter) + random.random()
