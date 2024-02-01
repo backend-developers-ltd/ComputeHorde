@@ -104,6 +104,8 @@ services:
       - ${BITTENSOR_MINER_PORT}:80
     logging:
       <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
 volumes:
   redis:
