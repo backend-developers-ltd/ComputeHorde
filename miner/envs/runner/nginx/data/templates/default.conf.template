@@ -30,6 +30,7 @@ server {
           proxy_set_header Connection "Upgrade";
           proxy_set_header X-Real-IP $remote_addr;
           proxy_set_header X_SCHEME $scheme;
-          proxy_pass http://app:8000/;
+          set $backend "http://app:8000/";
+          proxy_pass $backend;
     }
 }
