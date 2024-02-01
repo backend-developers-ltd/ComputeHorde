@@ -44,7 +44,8 @@ def run_synthetic_jobs():
 def set_scores():
     subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
     metagraph = subtensor.metagraph(netuid=settings.BITTENSOR_NETUID)
-    hotkey_to_uid = {n.hotkey: n.uid for n in metagraph.neurons}
+    neurons = metagraph.neurons
+    hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
     score_per_uid = {}
     with transaction.atomic():
         batches = list(SyntheticJobBatch.objects.prefetch_related('synthetic_jobs').filter(
@@ -62,12 +63,12 @@ def set_scores():
         if not score_per_uid:
             logger.info('No miners on the subnet to score')
             return
-        uids = torch.zeros(len(score_per_uid), dtype=torch.long)
-        scores = torch.zeros(len(score_per_uid), dtype=torch.float32)
+        uids = torch.zeros(len(neurons), dtype=torch.long)
+        scores = torch.zeros(len(neurons), dtype=torch.float32)
+        for ind, n in enumerate(neurons):
+            uids[ind] = n.uid
+            scores[ind] = score_per_uid.get(n.uid, 0)
 
-        for ind, uid in enumerate(sorted(list(score_per_uid.keys()))):
-            uids[ind] = uid
-            scores[ind] = score_per_uid[uid]
         logger.debug(f'Setting weights:\nuids={uids}\nscores={scores}')
         success = subtensor.set_weights(
             netuid=settings.BITTENSOR_NETUID,
