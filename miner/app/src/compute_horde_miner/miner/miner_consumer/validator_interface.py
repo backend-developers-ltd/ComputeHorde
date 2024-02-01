@@ -55,7 +55,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         except Validator.DoesNotExist:
             msg = f'Unknown validator: {self.validator_key}'
             fail = True
-        if self.validator and not self.validator.active:
+        if not settings.DEBUG_TURN_AUTHENTICATION_OFF and self.validator and not self.validator.active:
             msg = f'Inactive validator: {self.validator_key}'
             fail = True
         if fail:
