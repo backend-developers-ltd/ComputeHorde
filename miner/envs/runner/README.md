@@ -7,46 +7,43 @@ Runner is a helper container that launches all the necessary services for a mine
 Ensure docker is installed on your instance:
 
 ```bash
-apt-get install -y docker.io
+apt-get install -y docker.io docker-compoe
 ```
 
-Put your miner configuration into `.env` file (see [.env.template](.env.template) for reference), and run:
+Put your miner configuration into `.env` file (see [.env.template](.env.template) for reference)
 
-```bash
-docker run \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v "$HOME/.bittensor/wallets:/root/.bittensor/wallets" \
-    -v ./.env:/root/.env \
-    --name computehorde-miner-runner \
-    --restart unless-stopped \
-    --label=com.centurylinklabs.watchtower.enable=true \
-    backenddevelopersltd/compute-horde-miner-runner:v0-latest
+Copy this to `docker-compose.yml`:
+
 ```
+version: '3.7'
 
-or, if the container already exists:
+services:
+    
+  miner-runner:
+    image: backenddevelopersltd/compute-horde-miner-runner:v0-latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "$HOME/.bittensor/wallets:/root/.bittensor/wallets"
+      - ./.env:/root/.env
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
-```bash
-docker start computehorde-miner-runner
-```
+  watchtower:
+    image: containrrr/watchtower:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 60 --cleanup --label-enable
 
-## Auto-updates
-
-Automatic updates are enabled thanks to watchtower container:
-
-```bash
-docker run \
-    --restart unless-stopped \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    containrrr/watchtower:latest \
-    --interval 60 --cleanup --label-enable
 ```
 
 ## How it works
 
-The `computehorde/miner-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a miner. A `watchtower` container will automatically apply updates for containers.
+The `backenddevelopersltd/compute-horde-miner-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a miner. A `watchtower` container will automatically apply updates for containers.
 
 ```
-computehorde/miner-runner
+backenddevelopersltd/compute-horde-miner-runner
 |__postgres
 |__redis
 |__app
@@ -58,5 +55,3 @@ computehorde/miner-runner
 The `watchtower` container may update:
 1) core services in `docker-compose.yml` (like `app` or `worker`), and
 2) `backenddevelopersltd/compute-horde-miner-runner` container itself, which will automatically update ALL the other containers.
-
-It is expected that only core services will be updated from time to time, but if infrastructure update is required, it will be done by auto-updating `backenddevelopersltd/compute-horde-miner-runner` container.

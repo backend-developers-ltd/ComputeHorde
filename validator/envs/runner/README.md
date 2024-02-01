@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 60 --cleanup --label-enable celery-worker celery-beat
+    command: --interval 60 --cleanup --label-enable
 
 ```
 
@@ -46,11 +46,11 @@ docker-compose up -d
 
 ## How it works
 
-The `computehorde/validator-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a validator. 
+The `backenddevelopersltd/compute-horde-validator-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a validator. 
 A `watchtower` container that will automatically apply updates for containers.
 
 ```
-computehorde/validator-runner
+backenddevelopersltd/compute-horde-validator-runner
 |__postgres
 |__redis
 |__worker
@@ -60,6 +60,4 @@ computehorde/validator-runner
 
 The `watchtower` container may update:
 1) core services in `docker-compose.yml` (like `worker`), and
-2) `computehorde/validator-runner` container itself, which will automatically update ALL the other containers.
-
-It is expected that only core services will be updated from time to time, but if infrastructure update is required, it will be done by auto-updating `computehorde/validator-runner` container.
+2) `backenddevelopersltd/compute-horde-validator-runner` container itself, which will automatically update ALL the other containers.
