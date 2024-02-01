@@ -6,7 +6,7 @@ type ./prometheus-cleanup.sh && ./prometheus-cleanup.sh
 # below we define two workers types (each may have any concurrency);
 # each worker may have its own settings
 WORKERS="master worker"
-OPTIONS="-A compute_horde_miner -E -l ERROR --pidfile=/var/run/celery-%n.pid --logfile=/var/celery-%n.log"
+OPTIONS="-A compute_horde_miner -E -l INFO --pidfile=/var/run/celery-%n.pid --logfile=/var/celery-%n.log"
 
 # set up settings for workers and run the latter;
 # here events from "celery" queue (default one, will be used if queue not specified)
