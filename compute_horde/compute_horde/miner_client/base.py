@@ -67,7 +67,12 @@ class AbstractMinerClient(abc.ABC):
                 return
             except websockets.WebSocketException as ex:
                 logger.error(f'Could not connect to miner {self.miner_name}: {str(ex)}')
-            await asyncio.sleep(1 + random.random())
+            sleep_time = self.sleep_time()
+            logger.info(f'Retrying connection to miner {self.miner_name} in {sleep_time:0.2f}')
+            await asyncio.sleep(sleep_time)
+
+    def sleep_time(self):
+        return 1 + random.random()
 
     async def ensure_connected(self):
         if self.ws is None or self.ws.closed:

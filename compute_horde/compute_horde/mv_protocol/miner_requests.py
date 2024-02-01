@@ -13,6 +13,7 @@ class RequestType(enum.Enum):
     V0JobFailedRequest = 'V0JobFailedRequest'
     V0JobFinishedRequest = 'V0JobFinishedRequest'
     GenericError = 'GenericError'
+    UnauthorizedError = 'UnauthorizedError'
 
 
 class BaseMinerRequest(BaseRequest):
@@ -50,4 +51,17 @@ class V0JobFinishedRequest(BaseMinerRequest, JobMixin):
 
 class GenericError(BaseMinerRequest):
     message_type: RequestType = RequestType.GenericError
+    details: str | None = None
+
+
+class UnauthorizedErrorType(enum.Enum):
+
+    TOKEN_TOO_OLD = 'TOKEN_TOO_OLD'
+    UNKNOWN_VALIDATOR = 'UNKNOWN_VALIDATOR'
+    VALIDATOR_INACTIVE = 'VALIDATOR_INACTIVE'
+
+
+class UnauthorizedError(BaseMinerRequest):
+    message_type: RequestType = RequestType.GenericError
+    code: UnauthorizedErrorType
     details: str | None = None
