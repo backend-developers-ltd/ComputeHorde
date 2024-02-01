@@ -62,6 +62,6 @@ class UnauthorizedErrorType(enum.Enum):
 
 
 class UnauthorizedError(BaseMinerRequest):
-    message_type: RequestType = RequestType.GenericError
+    message_type: RequestType = RequestType.UnauthorizedError
     code: UnauthorizedErrorType
     details: str | None = None
