@@ -24,31 +24,6 @@ services:
     logging:
       <<: *logging
 
-  app:
-    image: backenddevelopersltd/compute-horde-validator:v0-latest
-    pull_policy: missing
-    healthcheck:
-      test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
-    init: true
-    restart: unless-stopped
-    # env_file: ./.env
-    environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - BITTENSOR_NETUID=${BITTENSOR_NETUID}
-      - BITTENSOR_NETWORK=${BITTENSOR_NETWORK}
-      - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
-      - BITTENSOR_WALLET_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
-    volumes:
-      - static:/root/src/static
-    depends_on:
-      - redis
-      - db
-    logging:
-      <<: *logging
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-
   celery-worker:
     image: backenddevelopersltd/compute-horde-validator:v0-latest
     pull_policy: missing
@@ -96,35 +71,6 @@ services:
       <<: *logging
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-
-  nginx:
-    image: 'ghcr.io/reef-technologies/nginx-rt:v1.2.1'
-    restart: unless-stopped
-    healthcheck:
-      test: wget -q --spider 0.0.0.0:${NGINX_PORT} || exit 1
-    environment:
-      - NGINX_PORT=${NGINX_PORT}
-    volumes:
-      - ./nginx/templates:/etc/nginx/templates
-      - ./nginx/config_helpers:/etc/nginx/config_helpers
-      - static:/srv/static:ro
-      # - ./letsencrypt/etc:/etc/letsencrypt
-    depends_on:
-      - app
-
-    command: nginx -g 'daemon off;'
-    ports:
-      - ${NGINX_PORT}:80
-
-    logging:
-      <<: *logging
-
-  watchtower:
-    image: containrrr/watchtower:latest
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 60 --cleanup --label-enable app celery-worker celery-beat nginx
 
 volumes:
   redis:

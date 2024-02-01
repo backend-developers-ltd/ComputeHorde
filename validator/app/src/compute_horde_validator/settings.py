@@ -55,7 +55,7 @@ DEBUG = env.bool('DEBUG', default=False)
 ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
-    'django_prometheus',
+    #  'django_prometheus',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -72,7 +72,7 @@ PROMETHEUS_LATENCY_BUCKETS = (.008, .016, .032, .062, .125, .25, .5, 1.0, 2.0, 4
 
 
 MIDDLEWARE = [
-    'django_prometheus.middleware.PrometheusBeforeMiddleware',
+    #  'django_prometheus.middleware.PrometheusBeforeMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -80,7 +80,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django_prometheus.middleware.PrometheusAfterMiddleware',
+    #  'django_prometheus.middleware.PrometheusAfterMiddleware',
 ]
 
 

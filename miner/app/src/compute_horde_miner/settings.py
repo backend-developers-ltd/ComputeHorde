@@ -1,6 +1,8 @@
 """
 Django settings for compute_horde_miner project.
 """
+from compute_horde import base  # noqa
+
 import inspect
 import ipaddress
 import logging
@@ -10,7 +12,7 @@ from functools import wraps
 
 import bittensor
 import environ
-from compute_horde import base  # noqa
+
 
 # from celery.schedules import crontab
 
