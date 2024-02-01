@@ -67,7 +67,7 @@ class AbstractMinerClient(abc.ABC):
                 self.ws = await self._connect()
                 self.read_messages_task = self.loop.create_task(self.read_messages())
                 return
-            except websockets.WebSocketException as ex:
+            except (websockets.WebSocketException, OSError) as ex:
                 logger.error(f'Could not connect to miner {self.miner_name}: {str(ex)}')
             sleep_time = self.sleep_time()
             logger.info(f'Retrying connection to miner {self.miner_name} in {sleep_time:0.2f}')
