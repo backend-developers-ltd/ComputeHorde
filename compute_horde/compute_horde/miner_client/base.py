@@ -68,7 +68,7 @@ class AbstractMinerClient(abc.ABC):
                 self.read_messages_task = self.loop.create_task(self.read_messages())
                 return
             except (websockets.WebSocketException, OSError) as ex:
-                logger.error(f'Could not connect to miner {self.miner_name}: {str(ex)}')
+                logger.info(f'Could not connect to miner {self.miner_name}: {str(ex)}')
             sleep_time = self.sleep_time()
             logger.info(f'Retrying connection to miner {self.miner_name} in {sleep_time:0.2f}')
             await asyncio.sleep(sleep_time)
@@ -102,7 +102,7 @@ class AbstractMinerClient(abc.ABC):
             try:
                 msg = await self.ws.recv()
             except websockets.WebSocketException as ex:
-                logger.error(f'Connection to miner {self.miner_name} lost: {str(ex)}')
+                logger.info(f'Connection to miner {self.miner_name} lost: {str(ex)}')
                 self.loop.create_task(self.await_connect())
                 return
 
@@ -110,7 +110,7 @@ class AbstractMinerClient(abc.ABC):
                 msg = self.accepted_request_type().parse(msg)
             except ValidationError as ex:
                 error_msg = f'Malformed message from miner {self.miner_name}: {str(ex)}'
-                logger.error(error_msg)
+                logger.info(error_msg)
                 self.deferred_send_model((self.outgoing_generic_error_class()(details=error_msg)))
                 continue
 

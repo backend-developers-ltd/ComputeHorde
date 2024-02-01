@@ -60,7 +60,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             fail = True
         if fail:
             await self.send(miner_requests.GenericError(details=msg).json())
-            logger.error(msg)
+            logger.info(msg)
             await self.close(1000)
             return
 
