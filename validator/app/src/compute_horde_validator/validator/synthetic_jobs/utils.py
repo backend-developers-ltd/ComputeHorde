@@ -43,7 +43,6 @@ class MinerClient(AbstractMinerClient):
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, my_hotkey: str, miner_hotkey: str,
                  miner_port: int, job_uuid: str, keypair: bittensor.Keypair):
         super().__init__(loop, f'{miner_hotkey}({miner_address}:{miner_port})')
-        self.debounce_counter = 0
         self.miner_hotkey = miner_hotkey
         self.my_hotkey = my_hotkey
         self.miner_address = miner_address
@@ -68,13 +67,9 @@ class MinerClient(AbstractMinerClient):
     def outgoing_generic_error_class(self):
         return validator_requests.GenericError
 
-    def sleep_time(self):
-        return (2 ** self.debounce_counter) + random.random()
-
     async def handle_message(self, msg: BaseRequest):
         if isinstance(msg, UnauthorizedError):
-            logger.error(f'Unauthorized: {msg.code}, details: {msg.details}')
-            self.debounce_counter += 1
+            logger.error(f'Unauthorized in {self.miner_name}: {msg.code}, details: {msg.details}')
             return
         if msg.job_uuid != self.job_uuid:
             logger.info(f'Recevied info about another job: {msg}')

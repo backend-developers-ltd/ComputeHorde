@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 class AbstractMinerClient(abc.ABC):
 
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_name: str):
+        self.debounce_counter = -1
         self.loop = loop
         self.miner_name = miner_name
         self.ws: websockets.WebSocketClientProtocol | None = None
@@ -62,6 +63,7 @@ class AbstractMinerClient(abc.ABC):
     async def await_connect(self):
         while True:
             try:
+                self.debounce_counter += 1
                 self.ws = await self._connect()
                 self.read_messages_task = self.loop.create_task(self.read_messages())
                 return
@@ -72,7 +74,7 @@ class AbstractMinerClient(abc.ABC):
             await asyncio.sleep(sleep_time)
 
     def sleep_time(self):
-        return 1 + random.random()
+        return (2 ** self.debounce_counter) + random.random()
 
     async def ensure_connected(self):
         if self.ws is None or self.ws.closed:
