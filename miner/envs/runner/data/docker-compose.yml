@@ -26,7 +26,7 @@ services:
       <<: *logging
 
   app:
-    image: backenddevelopersltd/computete-horde-miner:v0-latest
+    image: backenddevelopersltd/compute-horde-miner:v0-latest
     pull_policy: always
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
@@ -49,7 +49,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-worker:
-    image: backenddevelopersltd/computete-horde-miner:v0-latest
+    image: backenddevelopersltd/compute-horde-miner:v0-latest
     pull_policy: always
     init: true
     healthcheck:
@@ -72,7 +72,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-beat:
-    image: backenddevelopersltd/computete-horde-miner:v0-latest
+    image: backenddevelopersltd/compute-horde-miner:v0-latest
     pull_policy: always
     init: true
     restart: unless-stopped
