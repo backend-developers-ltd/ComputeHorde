@@ -221,7 +221,7 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
 }
 if env.bool('DEBUG_RUN_BEAT_VERY_OFTEN', default=False):
     CELERY_BEAT_SCHEDULE['run_synthetic_jobs']['schedule'] = crontab(minute='*')
-    CELERY_BEAT_SCHEDULE['run_synthetic_jobs']['set_scores'] = crontab(minute='*/3')
+    CELERY_BEAT_SCHEDULE['set_scores']['schedule'] = crontab(minute='*/3')
 
 CELERY_TASK_ROUTES = ['compute_horde_validator.celery.route_task']
 CELERY_TASK_TIME_LIMIT = int(timedelta(hours=1, minutes=5).total_seconds())

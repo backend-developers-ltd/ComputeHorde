@@ -4,11 +4,22 @@ Runner is a helper container that launches all the necessary services for a mine
 
 ## Usage
 
+Only tested on Ubuntu. Running requires installing nvidia drivers (this will change in a near relese).
+
 Ensure docker is installed on your instance:
 
 ```bash
 apt-get install -y docker.io docker-compoe
 ```
+
+To test that all the drivers are working properly, run the following command:
+
+```
+docker run --runtime=nvidia --gpus all  backenddevelopersltd/compute-horde-job:v0-latest --runtime 600 --restore-disable --attack-mode 3 --workload-profile 3 --optimized-kernel-enable --hash-type 1410 --hex-salt -1 ?l?d?u --outfile-format 2 --quiet 5726c17704f709432e2c7d816b8b3fc3236263c4cf7383267bf13bea22e91a85:55507f1971ff79d5 ?1?1?1?1?1?1
+```
+
+If everything works fine, you should see `mQNJTt` and nothing else in stdout (some warnings in stderr) 
+are negligible.
 
 Put your miner configuration into `.env` file (see [.env.template](.env.template) for reference)
 

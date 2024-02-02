@@ -27,3 +27,8 @@ Data flow looks like this:
 Currently miners are rewarded for providing the time of networkless GPU-equipped servers, proportionally to their efficiency. Each miner can (for now) provide only their fastest Executor.
 
 In February 2024 this will change - subnet will define more resource types andValidators will reward miners more for providing resources that are in higher demand. The system will quickly fill to capacity with organic traffic.
+
+# Running
+
+Refer to [Miner runner README](miner/envs/runner/README.md) and to 
+[Validator runner README](validator/envs/runner/README.md)

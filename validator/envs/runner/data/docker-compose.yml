@@ -58,7 +58,7 @@ services:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
-    command: ./celery-beat-entrypoint.sh
+    command: nice celery -A compute_horde_validator beat -l INFO --schedule /tmp/celerybeat-schedule -f /tmp/celery-beat.log
     depends_on:
       - redis
     logging:
