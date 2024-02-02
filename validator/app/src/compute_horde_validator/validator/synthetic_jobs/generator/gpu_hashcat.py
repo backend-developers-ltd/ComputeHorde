@@ -22,7 +22,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return 90
 
     def base_docker_image_name(self) -> str:
-        return "backenddevelopersltd/compute-horde-job-base:v0-latest"
+        return "backenddevelopersltd/compute-horde-job:v0-latest"
 
     def docker_image_name(self) -> str:
         return "backenddevelopersltd/compute-horde-job:v0-latest"
