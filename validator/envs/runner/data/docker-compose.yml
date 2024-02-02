@@ -19,6 +19,7 @@ services:
       test: pg_isready -U postgres || exit 1
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB:postgres
     volumes:
       - db:/var/lib/postgresql/data
     logging:
@@ -26,21 +27,18 @@ services:
 
   celery-worker:
     image: backenddevelopersltd/compute-horde-validator:v0-latest
-    pull_policy: missing
+    pull_policy: always
     init: true
     healthcheck:
       test: celery -A compute_horde_validator status > /dev/null || exit 1
     restart: unless-stopped
-    # env_file: ./.env
+    env_file: ./.env
     environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - BITTENSOR_NETUID=${BITTENSOR_NETUID}
-      - BITTENSOR_NETWORK=${BITTENSOR_NETWORK}
-      - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
-      - BITTENSOR_WALLET_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
       - CELERY_MASTER_CONCURRENCY=4
       - CELERY_WORKER_CONCURRENCY=2
+        - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+    volumes:
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     command: ./celery-entrypoint.sh
     tmpfs: /run
     depends_on:
@@ -52,18 +50,14 @@ services:
 
   celery-beat:
     image: backenddevelopersltd/compute-horde-validator:v0-latest
-    pull_policy: missing
+    pull_policy: always
     init: true
     restart: unless-stopped
-    # env_file: ./.env
+    env_file: ./.env
     environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - BITTENSOR_NETUID=${BITTENSOR_NETUID}
-      - BITTENSOR_NETWORK=${BITTENSOR_NETWORK}
-      - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
-      - BITTENSOR_WALLET_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
-      - NGINX_PORT=${NGINX_PORT}
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+    volumes:
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     command: nice celery -A compute_horde_validator beat -l INFO --schedule /tmp/celerybeat-schedule -f /tmp/celery-beat.log
     depends_on:
       - redis
