@@ -3,6 +3,9 @@ set -eu
 
 type prometheus-cleanup.sh && ./prometheus-cleanup.sh
 
+./manage.py wait_for_database --timeout 10
+./manage.py migrate --no-input
+
 # below we define two workers types (each may have any concurrency);
 # each worker may have its own settings
 WORKERS="master worker"
