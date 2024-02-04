@@ -5,14 +5,14 @@ from django.core.asgi import get_asgi_application
 from django.urls import path, re_path
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'compute_horde_miner.settings')
-import django
+import django  # noqa
 
 django.setup(
 )  # that's because channels doesn't support ROOT_URLCONF AFAIK and the ASGI application (URLRouter) has
 # to import consumers which import models
 
-from .miner.miner_consumer.executor_interface import MinerExecutorConsumer
-from .miner.miner_consumer.validator_interface import MinerValidatorConsumer
+from .miner.miner_consumer.executor_interface import MinerExecutorConsumer  # noqa
+from .miner.miner_consumer.validator_interface import MinerValidatorConsumer  # noqa
 
 application = ProtocolTypeRouter({
     'http': URLRouter([
