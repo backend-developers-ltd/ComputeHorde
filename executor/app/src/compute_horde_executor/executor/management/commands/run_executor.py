@@ -11,7 +11,7 @@ import zipfile
 
 import pydantic
 from compute_horde.base_requests import BaseRequest
-from compute_horde.em_protocol import executor_requests
+from compute_horde.em_protocol import executor_requests, miner_requests
 from compute_horde.em_protocol.executor_requests import (
     GenericError,
     V0FailedRequest,
@@ -19,17 +19,15 @@ from compute_horde.em_protocol.executor_requests import (
     V0FinishedRequest,
     V0ReadyRequest,
 )
-from compute_horde.em_protocol import miner_requests
 from compute_horde.em_protocol.miner_requests import (
     BaseMinerRequest,
     V0InitialJobRequest,
     V0JobRequest,
     VolumeType,
 )
+from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
 from django.conf import settings
 from django.core.management.base import BaseCommand
-
-from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +179,7 @@ class JobRunner:
             stdout, stderr = await asyncio.wait_for(process.communicate(),
                                                     timeout=self.initial_job_request.timeout_seconds)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # If the process did not finish in time, kill it
             logger.error(f'Process didn\'t finish in time, killing it, job_uuid={self.initial_job_request.job_uuid}')
             process.kill()

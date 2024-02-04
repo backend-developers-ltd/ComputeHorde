@@ -4,7 +4,7 @@ Runner is a helper container that launches all the necessary services for a mine
 
 ## Usage
 
-Only tested on Ubuntu. Running requires installing nvidia drivers (this will change in a near relese).
+Only tested on Ubuntu. Running requires installing nvidia drivers (this will change in a near release).
 
 Ensure docker is installed on your instance:
 
