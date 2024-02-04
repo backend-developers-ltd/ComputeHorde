@@ -28,7 +28,7 @@ from compute_horde.mv_protocol.validator_requests import (
 from django.conf import settings
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
+from compute_horde_validator.validator.models import JobBase, Miner, SyntheticJob, SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 
 JOB_LENGTH = 600
@@ -136,23 +136,25 @@ def initiate_jobs(netuid, network) -> list[SyntheticJob]:
     ))
 
 
-async def execute_job(synthetic_job_id):
-    synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related('miner').aget(id=synthetic_job_id)
+async def _execute_job(job: JobBase) -> tuple[
+    float | None,
+    V0DeclineJobRequest | V0ExecutorFailedRequest | V0JobFailedRequest | V0JobFinishedRequest
+]:
     job_generator = current.SyntheticJobGenerator()
     loop = asyncio.get_event_loop()
     key = settings.BITTENSOR_WALLET().get_hotkey()
     client = MinerClient(
         loop=loop,
-        miner_address=synthetic_job.miner_address,
-        miner_port=synthetic_job.miner_port,
-        miner_hotkey=synthetic_job.miner.hotkey,
+        miner_address=job.miner_address,
+        miner_port=job.miner_port,
+        miner_hotkey=job.miner.hotkey,
         my_hotkey=key.ss58_address,
-        job_uuid=str(synthetic_job.job_uuid),
+        job_uuid=str(job.job_uuid),
         keypair=key,
     )
     async with client:
         await client.send_model(V0InitialJobRequest(
-            job_uuid=str(synthetic_job.job_uuid),
+            job_uuid=str(job.job_uuid),
             base_docker_image_name=job_generator.base_docker_image_name(),
             timeout_seconds=job_generator.timeout_seconds(),
             volume_type=VolumeType.inline.value,
@@ -160,17 +162,17 @@ async def execute_job(synthetic_job_id):
         msg = await client.miner_ready_or_declining_future
         if isinstance(msg, V0DeclineJobRequest | V0ExecutorFailedRequest):
             logger.info(f'Miner {client.miner_name} won\'t do job: {msg}')
-            synthetic_job.status = SyntheticJob.Status.FAILED
-            synthetic_job.comment = f'Miner didn\'t accept the job saying: {msg.json()}'
-            await synthetic_job.asave()
-            return
+            job.status = JobBase.Status.FAILED
+            job.comment = f'Miner didn\'t accept the job saying: {msg.json()}'
+            await job.asave()
+            return None, msg
         elif isinstance(msg, V0ExecutorReadyRequest):
             logger.debug(f'Miner {client.miner_name} ready for job: {msg}')
         else:
             raise ValueError(f'Unexpected msg: {msg}')
 
         await client.send_model(V0JobRequest(
-            job_uuid=str(synthetic_job.job_uuid),
+            job_uuid=str(job.job_uuid),
             docker_image_name=job_generator.docker_image_name(),
             docker_run_options=job_generator.docker_run_options(),
             docker_run_cmd=job_generator.docker_run_cmd(),
@@ -180,6 +182,7 @@ async def execute_job(synthetic_job_id):
             }
         ))
         full_job_sent = time.time()
+        msg = None
         try:
             msg = await asyncio.wait_for(
                 client.miner_finished_or_failed_future,
@@ -191,34 +194,41 @@ async def execute_job(synthetic_job_id):
                 raise TimeoutError
         except TimeoutError:
             logger.info(f'Miner {client.miner_name} timed out out')
-            synthetic_job.status = SyntheticJob.Status.FAILED
-            synthetic_job.comment = 'Miner timed out'
-            await synthetic_job.asave()
-            return
+            job.status = SyntheticJob.Status.FAILED
+            job.comment = 'Miner timed out'
+            await job.asave()
+            return None, msg
 
         if isinstance(msg, V0JobFailedRequest):
             logger.info(f'Miner {client.miner_name} failed: {msg}')
-            synthetic_job.status = SyntheticJob.Status.FAILED
-            synthetic_job.comment = f'Miner failed: {msg.json()}'
-            await synthetic_job.asave()
-            return
+            job.status = job.Status.FAILED
+            job.comment = f'Miner failed: {msg.json()}'
+            await job.asave()
+            return None, msg
         elif isinstance(msg, V0JobFinishedRequest):
             success, comment, score = job_generator.verify(msg, time_took)
             if success:
                 logger.info(f'Miner {client.miner_name} finished: {msg}')
-                synthetic_job.status = SyntheticJob.Status.COMPLETED
-                synthetic_job.comment = f'Miner finished: {msg.json()}'
-                synthetic_job.score = score
-                await synthetic_job.asave()
-                return
+                job.status = JobBase.Status.COMPLETED
+                job.comment = f'Miner finished: {msg.json()}'
+                await job.asave()
+                return score, msg
             else:
                 logger.info(f'Miner {client.miner_name} finished but {comment}')
-                synthetic_job.status = SyntheticJob.Status.FAILED
-                synthetic_job.comment = f'Miner finished but {comment}'
-                await synthetic_job.asave()
-                return
+                job.status = JobBase.Status.FAILED
+                job.comment = f'Miner finished but {comment}'
+                await job.asave()
+                return None, msg
         else:
             raise ValueError(f'Unexpected msg: {msg}')
+
+
+async def execute_job(synthetic_job_id):
+    synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related('miner').aget(id=synthetic_job_id)
+    score, msg = await _execute_job(synthetic_job)
+    if score is not None:
+        synthetic_job.score = score
+        await synthetic_job.asave()
 
 
 async def execute_jobs(synthetic_jobs: Iterable[SyntheticJob]):
