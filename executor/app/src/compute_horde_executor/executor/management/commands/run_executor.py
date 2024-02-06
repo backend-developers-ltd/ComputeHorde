@@ -160,17 +160,26 @@ class JobRunner:
             raise JobError(msg)
 
     async def run_job(self, job_request: V0JobRequest):
+        msg = None
         for arg in job_request.docker_run_options:
+            if '--cap-add' in arg:
+                msg = 'You tried specifying --cap-add in docker run args'
+                logger.error(
+                    f'Job was trying to meddle with docker linux capabilities,'
+                    f' job_uuid={self.initial_job_request.job_uuid}'
+                )
             if '--network' in arg:
+                msg = 'You tried specifying --network in docker run args'
                 logger.error(
                     f'Job was trying to meddle with docker network settings,'
                     f' job_uuid={self.initial_job_request.job_uuid}'
                 )
+            if msg:
                 return JobResult(
                     success=False,
                     exit_status=None,
                     timeout=False,
-                    stdout='You tried specifying --network in docker run args',
+                    stdout=msg,
                     stderr="Don't try that again",
                 )
 
