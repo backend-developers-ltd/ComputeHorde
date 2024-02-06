@@ -37,6 +37,17 @@ volume_mount_dir = temp_dir / 'volume'
 CVE_2022_0492_TIMEOUT_SECONDS = 120
 
 
+class RunConfigManager:
+    @classmethod
+    def preset_to_docker_run_args(cls, preset: str) -> list[str]:
+        if preset == 'none':
+            return []
+        elif preset == 'nvidia_all':
+            return ['--runtime=nvidia', '--gpus', 'all']
+        else:
+            raise JobError(f"Invalid preset: {preset}")
+
+
 class MinerClient(AbstractMinerClient):
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, token: str):
         super().__init__(loop, '')
@@ -160,34 +171,22 @@ class JobRunner:
             raise JobError(msg)
 
     async def run_job(self, job_request: V0JobRequest):
-        msg = None
-        for arg in job_request.docker_run_options:
-            if '--cap-add' in arg:
-                msg = 'You tried specifying --cap-add in docker run args'
-                logger.error(
-                    f'Job was trying to meddle with docker linux capabilities,'
-                    f' job_uuid={self.initial_job_request.job_uuid}'
-                )
-            if '--network' in arg:
-                msg = 'You tried specifying --network in docker run args'
-                logger.error(
-                    f'Job was trying to meddle with docker network settings,'
-                    f' job_uuid={self.initial_job_request.job_uuid}'
-                )
-            if msg:
-                return JobResult(
-                    success=False,
-                    exit_status=None,
-                    timeout=False,
-                    stdout=msg,
-                    stderr="Don't try that again",
-                )
+        try:
+            docker_run_options = RunConfigManager.preset_to_docker_run_args(job_request.docker_run_options_preset)
+        except JobError as ex:
+            return JobResult(
+                success=False,
+                exit_status=None,
+                timeout=False,
+                stdout=ex,
+                stderr="",
+            )
 
         self.unpack_volume(job_request)
         cmd = [
             'docker',
             'run',
-            *job_request.docker_run_options,
+            *docker_run_options,
             '--network',
             'none',
             '-v',

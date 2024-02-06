@@ -117,7 +117,7 @@ class Test(ActiveSubnetworkBaseTest):
                 "job_uuid": job_uuid,
                 "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                 "docker_run_cmd": [],
-                "docker_run_options": [],
+                "docker_run_options_preset": 'none',
                 "timeout_seconds": 60,
                 "volume": {
                     "volume_type": "inline",
