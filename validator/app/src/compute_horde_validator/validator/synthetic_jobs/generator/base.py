@@ -17,7 +17,7 @@ class AbstractSyntheticJobGenerator(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def docker_run_options(self) -> list[str]:
+    def docker_run_options_preset(self) -> str:
         ...
 
     @abc.abstractmethod

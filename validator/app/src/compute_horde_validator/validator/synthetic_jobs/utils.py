@@ -174,7 +174,7 @@ async def _execute_job(job: JobBase) -> tuple[
         await client.send_model(V0JobRequest(
             job_uuid=str(job.job_uuid),
             docker_image_name=job_generator.docker_image_name(),
-            docker_run_options=job_generator.docker_run_options(),
+            docker_run_options_preset=job_generator.docker_run_options_preset(),
             docker_run_cmd=job_generator.docker_run_cmd(),
             volume={
                 'volume_type': VolumeType.inline.value,

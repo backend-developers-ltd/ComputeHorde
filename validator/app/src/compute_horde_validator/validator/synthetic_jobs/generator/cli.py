@@ -1,7 +1,5 @@
 import base64
 import io
-import random
-import string
 import zipfile
 
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
@@ -16,7 +14,7 @@ class CLIJobGenerator(AbstractSyntheticJobGenerator):
     _timeout = None
     _base_docker_image_name = None
     _docker_image_name = None
-    _docker_run_options = None
+    _docker_run_options_preset = None
     _docker_run_cmd = None
 
     @classmethod
@@ -25,13 +23,13 @@ class CLIJobGenerator(AbstractSyntheticJobGenerator):
         timeout: int,
         base_docker_image_name: str,
         docker_image_name: str,
-        docker_run_options: list[str],
+        docker_run_options_preset: str,
         docker_run_cmd: list[str],
     ):
         cls._timeout = timeout
         cls._base_docker_image_name = base_docker_image_name
         cls._docker_image_name = docker_image_name
-        cls._docker_run_options = docker_run_options
+        cls._docker_run_options_preset = docker_run_options_preset
         cls._docker_run_cmd = docker_run_cmd
 
     def timeout_seconds(self) -> int:
@@ -49,10 +47,10 @@ class CLIJobGenerator(AbstractSyntheticJobGenerator):
             raise RuntimeError('Call set_parameters() before delegating job execution')
         return self._docker_image_name
 
-    def docker_run_options(self) -> list[str]:
-        if self._docker_run_options is None:
+    def docker_run_options_preset(self) -> str:
+        if self._docker_run_options_preset is None:
             raise RuntimeError('Call set_parameters() before delegating job execution')
-        return self._docker_run_options
+        return self._docker_run_options_preset
 
     def docker_run_cmd(self) -> list[str]:
         if self._docker_run_cmd is None:

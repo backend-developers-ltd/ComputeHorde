@@ -37,15 +37,15 @@ class Command(BaseCommand):
         parser.add_argument('--docker_image_name', type=str, help='Second string argument', required=True)
 
         parser.add_argument(
-            '--docker_run_options',
-            type=string_list,
-            help="the 'RUN_OPTS' part of  'docker run *RUN_OPTS image_name *RUN_CMD'",
+            '--docker_run_options_preset',
+            type=str,
+            help="executors translate this to the 'RUN_OPTS' part of 'docker run *RUN_OPTS image_name *RUN_CMD'",
             required=True
         )
         parser.add_argument(
             '--docker_run_cmd',
             type=string_list,
-            help="the 'RUN_CMD' part of  'docker run *RUN_OPTS image_name *RUN_CMD'",
+            help="the 'RUN_CMD' part of 'docker run *RUN_OPTS image_name *RUN_CMD'",
             required=True
         )
 
@@ -54,13 +54,13 @@ class Command(BaseCommand):
         timeout = options['timeout']
         base_docker_image_name = options['base_docker_image_name']
         docker_image_name = options['docker_image_name']
-        docker_run_options = options['docker_run_options']
+        docker_run_options_preset = options['docker_run_options_preset']
         docker_run_cmd = options['docker_run_cmd']
         CLIJobGenerator.set_parameters(
             timeout=timeout,
             base_docker_image_name=base_docker_image_name,
             docker_image_name=docker_image_name,
-            docker_run_options=docker_run_options,
+            docker_run_options_preset=docker_run_options_preset,
             docker_run_cmd=docker_run_cmd,
         )
         metagraph = bittensor.metagraph(settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)

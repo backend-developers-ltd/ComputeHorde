@@ -27,8 +27,8 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def docker_image_name(self) -> str:
         return "backenddevelopersltd/compute-horde-job:v0-latest"
 
-    def docker_run_options(self) -> list[str]:
-        return ['--runtime=nvidia', '--gpus', 'all']
+    def docker_run_options_preset(self) -> str:
+        return 'nvidia_all'
 
     def docker_run_cmd(self) -> list[str]:
         return [

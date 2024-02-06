@@ -54,7 +54,7 @@ async def test_main_loop():
         "job_uuid": job_uuid,
         "docker_image_name": "it's teeeeests again",
         "docker_run_cmd": [],
-        "docker_run_options": [],
+        "docker_run_options_preset": 'none',
         "volume": {
             "volume_type": "inline",
             "contents": "nonsense"

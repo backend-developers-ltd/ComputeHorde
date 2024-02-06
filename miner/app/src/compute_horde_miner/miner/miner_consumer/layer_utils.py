@@ -24,7 +24,7 @@ class ExecutorFailedToPrepare(pydantic.BaseModel):
 class JobRequest(pydantic.BaseModel):
     job_uuid: str
     docker_image_name: str
-    docker_run_options: list[str]
+    docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
 
@@ -116,7 +116,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
             **JobRequest(
                 job_uuid=job_request.job_uuid,
                 docker_image_name=job_request.docker_image_name,
-                docker_run_options=job_request.docker_run_options,
+                docker_run_options_preset=job_request.docker_run_options_preset,
                 docker_run_cmd=job_request.docker_run_cmd,
                 volume={
                     "volume_type": job_request.volume.volume_type.value,

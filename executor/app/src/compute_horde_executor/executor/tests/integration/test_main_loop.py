@@ -39,7 +39,7 @@ class MockWebsocket:
                 "message_type": "V0RunJobRequest",
                 "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                 "docker_run_cmd": [],
-                "docker_run_options": [],
+                "docker_run_options_preset": 'none',
                 "volume": {
                     "volume_type": "inline",
                     "contents": base64_zipfile,
