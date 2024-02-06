@@ -304,11 +304,11 @@ class Command(BaseCommand):
         logger.debug(f'Connecting to miner: {settings.MINER_ADDRESS}')
         async with self.miner_client:
             logger.debug(f'Connected to miner: {settings.MINER_ADDRESS}')
+            initial_message: V0InitialJobRequest = await self.miner_client.initial_msg
             logger.debug('Checking for CVE-2022-0492 vulnerability')
             if not await self.is_system_safe_for_cve_2022_0492():
                 await self.miner_client.send_failed_to_prepare()
                 return
-            initial_message: V0InitialJobRequest = await self.miner_client.initial_msg
             try:
                 job_runner = self.JOB_RUNNER_CLASS(initial_message)
                 logger.debug(f'Preparing for job {initial_message.job_uuid}')
