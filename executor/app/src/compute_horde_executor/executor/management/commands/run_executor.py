@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 temp_dir = pathlib.Path(tempfile.mkdtemp())
 volume_mount_dir = temp_dir / 'volume'
 
+CVE_2022_0492_TIMEOUT_SECONDS = 120
+
 
 class MinerClient(AbstractMinerClient):
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, token: str):
@@ -158,11 +160,27 @@ class JobRunner:
             raise JobError(msg)
 
     async def run_job(self, job_request: V0JobRequest):
+        for arg in job_request.docker_run_options:
+            if '--network' in arg:
+                logger.error(
+                    f'Job was trying to meddle with docker network settings,'
+                    f' job_uuid={self.initial_job_request.job_uuid}'
+                )
+                return JobResult(
+                    success=False,
+                    exit_status=None,
+                    timeout=False,
+                    stdout='You tried specifying --network in docker run args',
+                    stderr="Don't try that again",
+                )
+
         self.unpack_volume(job_request)
         cmd = [
             'docker',
             'run',
             *job_request.docker_run_options,
+            '--network',
+            'none',
             '-v',
             f'{volume_mount_dir.as_posix()}/:/volume/',
             job_request.docker_image_name,
@@ -247,11 +265,40 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.loop.run_until_complete(self._executor_loop())
 
+    async def is_system_safe_for_cve_2022_0492(self):
+        process = await asyncio.create_subprocess_exec(
+            'docker',
+            'run',
+            'us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), CVE_2022_0492_TIMEOUT_SECONDS)
+        except TimeoutError:
+            logger.error('CVE-2022-0492 check timed out')
+            return False
+
+        if process.returncode != 0:
+            logger.error(f'CVE-2022-0492 check failed: stdout="{stdout.decode()}"\nstderr="{stderr.decode()}')
+            return False
+        expected_output = 'Contained: cannot escape via CVE-2022-0492'
+        if expected_output not in stdout.decode():
+            logger.error(f'CVE-2022-0492 check failed: "{expected_output}" not in stdout.'
+                         f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}')
+            return False
+
+        return True
+
     async def _executor_loop(self):
         logger.debug(f'Connecting to miner: {settings.MINER_ADDRESS}')
         async with self.miner_client:
             logger.debug(f'Connected to miner: {settings.MINER_ADDRESS}')
-
+            logger.debug('Checking for CVE-2022-0492 vulnerability')
+            if not await self.is_system_safe_for_cve_2022_0492():
+                await self.miner_client.send_failed_to_prepare()
+                return
             initial_message: V0InitialJobRequest = await self.miner_client.initial_msg
             try:
                 job_runner = self.JOB_RUNNER_CLASS(initial_message)
