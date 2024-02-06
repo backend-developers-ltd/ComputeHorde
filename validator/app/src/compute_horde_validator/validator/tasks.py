@@ -4,9 +4,9 @@ from datetime import timedelta
 
 import bittensor
 import torch
+from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery.utils.log import get_task_logger
 from django.conf import settings
-from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
@@ -18,6 +18,9 @@ logger = get_task_logger(__name__)
 JOB_WINDOW = 60 * 60
 
 SCORING_ALGO_VERSION = 1
+
+WEIGHT_SETTING_TTL = 60
+WEIGHT_SETTING_ATTEMPTS = 100
 
 
 @app.task
@@ -47,40 +50,58 @@ def set_scores():
     neurons = metagraph.neurons
     hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
     score_per_uid = {}
-    with transaction.atomic():
-        batches = list(SyntheticJobBatch.objects.prefetch_related('synthetic_jobs').filter(
-            scored=False, started_at__gte=now() - timedelta(days=1)))
-        if not batches:
-            logger.info('No batches - nothing to score')
-            return
+    batches = list(SyntheticJobBatch.objects.prefetch_related('synthetic_jobs').filter(
+        scored=False, started_at__gte=now() - timedelta(days=1)))
+    if not batches:
+        logger.info('No batches - nothing to score')
+        return
 
-        for batch in batches:
-            for job in batch.synthetic_jobs.all():
-                uid = hotkey_to_uid.get(job.miner.hotkey)
-                if not uid:
-                    continue
-                score_per_uid[uid] = score_per_uid.get(uid, 0) + job.score
-        if not score_per_uid:
-            logger.info('No miners on the subnet to score')
-            return
-        uids = torch.zeros(len(neurons), dtype=torch.long)
-        scores = torch.zeros(len(neurons), dtype=torch.float32)
-        for ind, n in enumerate(neurons):
-            uids[ind] = n.uid
-            scores[ind] = score_per_uid.get(n.uid, 0)
+    for batch in batches:
+        for job in batch.synthetic_jobs.all():
+            uid = hotkey_to_uid.get(job.miner.hotkey)
+            if not uid:
+                continue
+            score_per_uid[uid] = score_per_uid.get(uid, 0) + job.score
+    if not score_per_uid:
+        logger.info('No miners on the subnet to score')
+        return
+    uids = torch.zeros(len(neurons), dtype=torch.long)
+    weights = torch.zeros(len(neurons), dtype=torch.float32)
+    for ind, n in enumerate(neurons):
+        uids[ind] = n.uid
+        weights[ind] = score_per_uid.get(n.uid, 0)
 
-        logger.debug(f'Setting weights:\nuids={uids}\nscores={scores}')
-        success = subtensor.set_weights(
-            netuid=settings.BITTENSOR_NETUID,
-            wallet=settings.BITTENSOR_WALLET(),
-            uids=uids,
-            weights=scores,
-            wait_for_inclusion=True,
-            wait_for_finalization=True,
-            version_key=SCORING_ALGO_VERSION,
-        )
+    uids, weights = process_weights_for_netuid(
+        uids,
+        weights,
+        settings.BITTENSOR_NETUID,
+        subtensor,
+        metagraph,
+    )
+
+    for try_number in range(WEIGHT_SETTING_ATTEMPTS):
+        logger.debug(f'Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}')
+        try:
+            success = subtensor.set_weights(
+                netuid=settings.BITTENSOR_NETUID,
+                wallet=settings.BITTENSOR_WALLET(),
+                uids=uids,
+                weights=weights,
+                wait_for_inclusion=True,
+                wait_for_finalization=False,
+                version_key=SCORING_ALGO_VERSION,
+                ttl=WEIGHT_SETTING_TTL,
+            )
+        except Exception:
+            logger.exception('Encountered when setting weights: ')
         if not success:
-            raise RuntimeError('Failed to set weights')
-        for batch in batches:
-            batch.scored = True
-        SyntheticJobBatch.objects.bulk_update(batches, ['scored'])
+            logger.info(f'Failed to set weights (attempt #{try_number})')
+        else:
+            logger.info(f'Successfully set weights!!! (attempt #{try_number})')
+            break
+    else:
+        raise RuntimeError(f'Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts')
+
+    for batch in batches:
+        batch.scored = True
+    SyntheticJobBatch.objects.bulk_update(batches, ['scored'])
