@@ -4,15 +4,16 @@ Runner is a helper container that launches all the necessary services for a vali
 
 ## Usage
 
-Ensure docker is installed on your instance:
-
-```bash
-apt-get install -y docker.io docker-compose
-```
-
-Put your validator configuration into `.env` file (see [.env.template](.env.template) for reference).
-
-Copy this to `docker-compose.yml`:
+1. Get a linux host, recommended:
+   1. 8GB RAM
+   2. 4x2.3GHz CPU
+   3. 60GB SSD
+   4. (No GPU is used by validators)
+2. install `docker` and `docker-compose`, e.g. `apt-get install -y docker.io docker-compose`
+   (has been tested on docker `24.0.5` and docker-compose `1.29.2`).
+3. choose a directory on your host to save two text files, e.g `/home/josephus/compute_horde_validator`, contents
+   coming in following points
+4. save the following contents as `docker-compose.yml`, e.g. `/home/josephus/compute_horde_validator/docker-compose.yml`
 
 ```
 version: '3.7'
@@ -38,11 +39,26 @@ services:
 
 ```
 
-and execute
+5. save the following contents as `.env`, e.g. `/home/josephus/compute_horde_validator/.env` (read the comments,
+   they contain hints as to what values to give to these variables):
 
-```bash
-docker-compose up -d
 ```
+# generate one for yourself, e.g. `python3 -c 'import random; import string; print("".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(50)))'`
+SECRET_KEY=
+# generate one for yourself, e.g. `python3 -c 'import random; import string; print("".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(15)))'`
+POSTGRES_PASSWORD=
+BITTENSOR_NETUID=12
+# network specification has the same syntax as `btcli --subtensor.network ... `
+# so you can use "finney", "test", "186.12.13.150:9944" etc. but if you want to use a subtensor run on the same host,
+# then due to docker networking, use the example provided below
+BITTENSOR_NETWORK=172.17.0.1:9944
+BITTENSOR_WALLET_NAME=validator
+BITTENSOR_WALLET_HOTKEY_NAME=default
+HOST_WALLET_DIR=/home/josephus/.bittensor/wallets
+```
+6. run `docker-compose -d` in the directory containing your `docker-compose.yml`, 
+   e.g. `/home/josephus/compute_horde_validator/`
+7. done. complete.
 
 ## How it works
 
