@@ -143,6 +143,12 @@ class JobResult(pydantic.BaseModel):
     stdout: str
     stderr: str
 
+    @pydantic.validator('stdout', 'stderr')
+    def truncate(cls, v: str) -> str:
+        if len(v) >= 1000:
+            return f'{v[:100]} ... {v[-100:]}'
+        return v
+
 
 class JobError(Exception):
     def __init__(self, description: str):
@@ -178,7 +184,7 @@ class JobRunner:
                 success=False,
                 exit_status=None,
                 timeout=False,
-                stdout=ex,
+                stdout=ex.description,
                 stderr="",
             )
 
@@ -187,6 +193,7 @@ class JobRunner:
             'docker',
             'run',
             *docker_run_options,
+            '--rm',
             '--network',
             'none',
             '-v',
