@@ -46,7 +46,7 @@ docker push "$IMAGE_NAME_AND_TAG"
 docker-compose exec validator-runner docker-compose exec celery-worker /bin/bash -c \
 "SYNTHETIC_JOB_GENERATOR='compute_horde_validator.validator.synthetic_jobs.generator.cli:CLIJobGenerator' python manage.py debug_run_organic_job \
 --miner_uid $MINER_UID \
---timeout 90 \
+--timeout 900 \
 --base_docker_image_name $IMAGE_NAME_AND_TAG \
 --docker_image_name $IMAGE_NAME_AND_TAG \
 --docker_run_options_preset 'nvidia_all' \
