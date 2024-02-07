@@ -25,6 +25,9 @@ then
   exit 1
 fi
 
+ORIG_DIR="$PWD"
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
 echo '
 FROM python:3.11-slim
 RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
@@ -42,6 +45,8 @@ ENTRYPOINT python gen_caption.py data.img
 docker build -t "$IMAGE_NAME_AND_TAG" --build-arg INPUT_URL="$INPUT_URL" .
 
 docker push "$IMAGE_NAME_AND_TAG"
+
+cd "$ORIG_DIR"
 
 docker-compose exec validator-runner docker-compose exec celery-worker /bin/bash -c \
 "SYNTHETIC_JOB_GENERATOR='compute_horde_validator.validator.synthetic_jobs.generator.cli:CLIJobGenerator' python manage.py debug_run_organic_job \
