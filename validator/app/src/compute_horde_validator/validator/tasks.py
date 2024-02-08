@@ -81,6 +81,7 @@ def set_scores():
 
     for try_number in range(WEIGHT_SETTING_ATTEMPTS):
         logger.debug(f'Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}')
+        success = False
         try:
             success = subtensor.set_weights(
                 netuid=settings.BITTENSOR_NETUID,
