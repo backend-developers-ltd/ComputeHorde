@@ -12,12 +12,20 @@ Ensure docker is installed on your instance:
 apt-get install -y docker.io docker-compose
 ```
 
+Install nvidia drivers. For example, on ubuntu:
+
+1. follow https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html#ubuntu-lts
+2. follow https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installation
+3. follow https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#configuring-docker
+
 To test that all the drivers are working properly, run the following command:
 
 ```
 docker run --runtime=nvidia --gpus all backenddevelopersltd/compute-horde-job:v0-latest --runtime 600 --restore-disable --attack-mode 3 --workload-profile 3 --optimized-kernel-enable --hash-type 1410 --hex-salt -1 ?l?d?u --outfile-format 2 --quiet 5726c17704f709432e2c7d816b8b3fc3236263c4cf7383267bf13bea22e91a85:55507f1971ff79d5 ?1?1?1?1?1?1
 ```
-(please skip `--runtime=nvidia` flag when running on Ubuntu version >22)
+
+For example, on ubuntu you can install all the required drivers with:
+
 
 If everything works fine, you should see `mQNJTt` and nothing else in stdout (some warnings in stderr) 
 are negligible.
