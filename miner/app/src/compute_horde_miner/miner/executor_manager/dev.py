@@ -12,7 +12,7 @@ executor_dir = this_dir / '..' / '..' / '..' / '..' / '..' / '..' / 'executor'
 
 
 class DevExecutorManager(BaseExecutorManager):
-    def reserve_executor(self, token):
+    async def reserve_executor(self, token):
         subprocess.Popen(
             [sys.executable, "app/src/manage.py", "run_executor"],
             env={
