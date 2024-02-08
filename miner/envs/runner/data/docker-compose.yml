@@ -35,8 +35,10 @@ services:
     env_file: ./.env
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+      - PYTHONPATH=/root/vendor
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+      - ${HOST_VENDOR_DIR:-/tmp}:/root/vendor
       # mounting host docker socket to allow running executor images on host machine
       - /var/run/docker.sock:/var/run/docker.sock
       - static:/root/src/static

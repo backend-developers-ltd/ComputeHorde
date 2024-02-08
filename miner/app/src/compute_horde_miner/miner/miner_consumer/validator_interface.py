@@ -155,7 +155,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             self.pending_jobs[msg.job_uuid] = job
 
             try:
-                current.executor_manager.reserve_executor(token)
+                await current.executor_manager.reserve_executor(token)
             except ExecutorUnavailable:
                 await self.send(miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).json())
                 await self.group_discard(token)

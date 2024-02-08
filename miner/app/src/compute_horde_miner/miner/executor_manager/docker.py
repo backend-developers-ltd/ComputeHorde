@@ -9,7 +9,7 @@ EXECUTOR_IMAGE = "backenddevelopersltd/compute-horde-executor:v0-latest"
 
 
 class DockerExecutorManager(BaseExecutorManager):
-    def reserve_executor(self, token):
+    async def reserve_executor(self, token):
         if settings.ADDRESS_FOR_EXECUTORS:
             address = settings.ADDRESS_FOR_EXECUTORS
         else:
