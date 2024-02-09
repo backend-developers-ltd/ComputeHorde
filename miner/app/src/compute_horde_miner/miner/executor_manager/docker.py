@@ -1,11 +1,15 @@
+import asyncio
+import logging
 import subprocess
 
 from django.conf import settings
 
-from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager
-
+from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager, ExecutorUnavailable
 
 EXECUTOR_IMAGE = "backenddevelopersltd/compute-horde-executor:v0-latest"
+PULLING_TIMEOUT = 300
+
+logger = logging.getLogger(__name__)
 
 
 class DockerExecutorManager(BaseExecutorManager):
@@ -20,7 +24,16 @@ class DockerExecutorManager(BaseExecutorManager):
                 '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
                 'root_app_1'
             ]).decode().strip()
-        subprocess.check_call(['docker', 'pull', EXECUTOR_IMAGE])
+        process = await asyncio.create_subprocess_exec('docker', 'pull', EXECUTOR_IMAGE)
+        try:
+            await asyncio.wait_for(process.communicate(), timeout=PULLING_TIMEOUT)
+            if process.returncode:
+                logger.error(f'Pulling executor container failed with returncode={process.returncode}')
+                raise ExecutorUnavailable('Failed to pull executor image')
+        except asyncio.TimeoutError:
+            process.kill()
+            logger.error('Pulling executor container timed out, pulling it from shell might provide more details')
+            raise ExecutorUnavailable('Failed to pull executor image')
         subprocess.Popen([  # noqa: S607
             "docker", "run", "--rm",
             "-e", f"MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS}",
