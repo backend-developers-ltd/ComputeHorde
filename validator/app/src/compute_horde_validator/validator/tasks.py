@@ -21,6 +21,7 @@ SCORING_ALGO_VERSION = 1
 
 WEIGHT_SETTING_TTL = 60
 WEIGHT_SETTING_ATTEMPTS = 100
+MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO = 9
 
 
 @app.task
@@ -28,9 +29,12 @@ def run_synthetic_jobs():
     if not settings.DEBUG_DONT_STAGGER_VALIDATORS:
         metagraph = bittensor.metagraph(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
         my_key = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-        validator_keys = sorted([n.hotkey for n in metagraph.neurons if n.validator_permit])
-        my_index = validator_keys.index(my_key)  # this will throw an error if we're not a registered validator
-        # and that's fine
+        validator_keys = sorted([n.hotkey for n in metagraph.neurons if
+                                 n.validator_permit and n.stake.tao >= MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO])
+        if my_key not in validator_keys:
+            raise ValueError(f"Can't determine proper synthetic job window due to stake being < "
+                             f"{MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO}")
+        my_index = validator_keys.index(my_key)
         window_per_validator = JOB_WINDOW / (len(validator_keys) + 1)
         my_window_starts_at = window_per_validator * my_index
         logger.info(f'Sleeping for {my_window_starts_at:02f}s because I am {my_index} out of {len(validator_keys)}')
