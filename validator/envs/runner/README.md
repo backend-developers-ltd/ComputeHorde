@@ -56,7 +56,7 @@ BITTENSOR_WALLET_NAME=validator
 BITTENSOR_WALLET_HOTKEY_NAME=default
 HOST_WALLET_DIR=/home/josephus/.bittensor/wallets
 ```
-6. run `docker-compose -d` in the directory containing your `docker-compose.yml`, 
+6. run `docker-compose up -d` in the directory containing your `docker-compose.yml`, 
    e.g. `/home/josephus/compute_horde_validator/`
 7. done. complete.
 
