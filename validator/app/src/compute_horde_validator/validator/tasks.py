@@ -2,9 +2,13 @@ import asyncio
 import time
 from datetime import timedelta
 
+import billiard.exceptions
 import bittensor
+import celery.exceptions
 import torch
+from bittensor.extrinsics.set_weights import set_weights_extrinsic
 from bittensor.utils.weight_utils import process_weights_for_netuid
+from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from django.conf import settings
 from django.utils.timezone import now
@@ -47,6 +51,33 @@ def run_synthetic_jobs():
     asyncio.run(execute_jobs(jobs))
 
 
+@app.task()
+def do_set_weights(
+    subtensor_chain_endpoint: str,
+    netuid: int,
+    uids: list,
+    weights: list,
+    wait_for_inclusion: bool,
+    wait_for_finalization: bool,
+    version_key: int,
+):
+    """
+    Set weights. To be used in other celery tasks in order to facilitate a timeout,
+     since the multiprocessing version of this doesn't work in celery.
+    """
+    bittensor.turn_console_off()
+    set_weights_extrinsic(
+        subtensor_endpoint=subtensor_chain_endpoint,
+        wallet=settings.BITTENSOR_WALLET(),
+        netuid=netuid,
+        uids=torch.LongTensor(uids),
+        weights=torch.FloatTensor(weights),
+        version_key=version_key,
+        wait_for_inclusion=wait_for_inclusion,
+        wait_for_finalization=wait_for_finalization,
+    )
+
+
 @app.task
 def set_scores():
     subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
@@ -55,7 +86,7 @@ def set_scores():
     hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
     score_per_uid = {}
     batches = list(SyntheticJobBatch.objects.prefetch_related('synthetic_jobs').filter(
-        scored=False, started_at__gte=now() - timedelta(days=1)))
+        scored=False, started_at__gte=now() - timedelta(days=1), accepting_results_until__lt=now()))
     if not batches:
         logger.info('No batches - nothing to score')
         return
@@ -82,21 +113,30 @@ def set_scores():
         subtensor,
         metagraph,
     )
-
     for try_number in range(WEIGHT_SETTING_ATTEMPTS):
         logger.debug(f'Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}')
         success = False
         try:
-            success = subtensor.set_weights(
-                netuid=settings.BITTENSOR_NETUID,
-                wallet=settings.BITTENSOR_WALLET(),
-                uids=uids,
-                weights=weights,
-                wait_for_inclusion=True,
-                wait_for_finalization=False,
-                version_key=SCORING_ALGO_VERSION,
-                ttl=WEIGHT_SETTING_TTL,
+
+            result = do_set_weights.apply_async(
+                kwargs=dict(
+                    subtensor_chain_endpoint=subtensor.chain_endpoint,
+                    netuid=settings.BITTENSOR_NETUID,
+                    uids=uids.tolist(),
+                    weights=weights.tolist(),
+                    wait_for_inclusion=True,
+                    wait_for_finalization=False,
+                    version_key=SCORING_ALGO_VERSION,
+                ),
+                time_limit=WEIGHT_SETTING_TTL,
             )
+            logger.info(f'Setting weights task id: {result.id}')
+            try:
+                with allow_join_result():
+                    success = result.get(timeout=WEIGHT_SETTING_TTL)
+            except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
+                result.revoke(terminate=True)
+                logger.info(f'Setting weights timed out (attempt #{try_number})')
         except Exception:
             logger.exception('Encountered when setting weights: ')
         if not success:
