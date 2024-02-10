@@ -46,6 +46,7 @@ services:
 # generate one for yourself, e.g. `python3 -c 'import random; import string; print("".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(50)))'`
 SECRET_KEY=
 # generate one for yourself, e.g. `python3 -c 'import random; import string; print("".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(15)))'`
+# don't change this starting the validator for the first time
 POSTGRES_PASSWORD=
 BITTENSOR_NETUID=12
 # network specification has the same syntax as `btcli --subtensor.network ... `
@@ -59,6 +60,23 @@ HOST_WALLET_DIR=/home/josephus/.bittensor/wallets
 6. run `docker-compose up -d` in the directory containing your `docker-compose.yml`, 
    e.g. `/home/josephus/compute_horde_validator/`
 7. done. complete.
+
+## Updating config
+
+If you make any changes to `.env`, be it changing values, adding new ones or removing them, you need to stop all 
+services and star them again:
+
+```
+docker-compose down
+docker-compose up -d
+```
+
+you may see an error like:
+
+```
+ERROR: error while removing network: network ... has active endpoints
+```
+it is inconsequential, and we will remove it soon.
 
 ## How it works
 
