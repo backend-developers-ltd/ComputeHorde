@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-docker-compose up -d
+docker-compose up -d --force-recreate
 
 while true
 do
