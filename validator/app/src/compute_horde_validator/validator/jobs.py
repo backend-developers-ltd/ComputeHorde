@@ -1,3 +1,4 @@
+import enum
 import hashlib
 import secrets
 import string
@@ -18,10 +19,17 @@ class SyntheticJob(ABC):
         ...
 
 
+class Algorithm(enum.Enum):
+    SHA256 = "SHA256"
+    SHA384 = "SHA384"
+    SHA512 = "SHA512"
+
+
 @dataclass
 class V0SyntheticJob(SyntheticJob):
+    algorithm: Algorithm
     password: str
-    salt: str
+    salt: bytes
 
     ALPHABET: ClassVar[str] = string.ascii_letters + string.digits
 
@@ -30,15 +38,24 @@ class V0SyntheticJob(SyntheticJob):
         return ''.join(secrets.choice(cls.ALPHABET) for i in range(length))
 
     @classmethod
-    def generate(cls, password_length: int = 6, salt_length_bytes: int = 8) -> Self:
+    def generate(cls, algorithm: Algorithm, password_length: int = 6, salt_length_bytes: int = 8) -> Self:
         return cls(
+            algorithm=algorithm,
             password=cls.random_string(password_length),
             salt=secrets.token_bytes(salt_length_bytes),
         )
 
     @property
     def hash_hex(self) -> str:
-        return hashlib.sha256(self.password.encode('ascii') + self.salt).hexdigest()
+        if self.algorithm == Algorithm.SHA256:
+            hash_function = hashlib.sha256
+        elif self.algorithm == Algorithm.SHA384:
+            hash_function = hashlib.sha384
+        elif self.algorithm == Algorithm.SHA512:
+            hash_function = hashlib.sha512
+        else:
+            raise ValueError(f'Unsupported algorithm {self.algorithm}')
+        return hash_function(self.password.encode('ascii') + self.salt).hexdigest()
 
     @property
     def payload(self) -> str:
@@ -51,6 +68,6 @@ class V0SyntheticJob(SyntheticJob):
 
 
 if __name__ == '__main__':
-    job = V0SyntheticJob.generate()
+    job = V0SyntheticJob.generate(Algorithm.SHA256)
     print(f'Payload: {job.payload}')
     print(f'Answer: {job.payload}:{job.answer}')
