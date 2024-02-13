@@ -31,3 +31,7 @@ class AbstractSyntheticJobGenerator(abc.ABC):
     @abc.abstractmethod
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         ...
+
+    @abc.abstractmethod
+    def job_description(self) -> str:
+        ...

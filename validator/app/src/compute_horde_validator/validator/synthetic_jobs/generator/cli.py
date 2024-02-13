@@ -68,3 +68,6 @@ class CLIJobGenerator(AbstractSyntheticJobGenerator):
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         return True, '', 1
+
+    def job_description(self):
+        return 'custom'

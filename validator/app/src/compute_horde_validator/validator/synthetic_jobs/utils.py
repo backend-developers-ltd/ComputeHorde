@@ -141,6 +141,8 @@ async def _execute_job(job: JobBase) -> tuple[
     V0DeclineJobRequest | V0ExecutorFailedRequest | V0JobFailedRequest | V0JobFinishedRequest
 ]:
     job_generator = current.SyntheticJobGenerator()
+    job.job_description = job_generator.job_description()
+    await job.asave()
     loop = asyncio.get_event_loop()
     key = settings.BITTENSOR_WALLET().get_hotkey()
     client = MinerClient(

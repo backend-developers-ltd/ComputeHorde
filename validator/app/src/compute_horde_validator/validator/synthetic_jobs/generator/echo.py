@@ -44,3 +44,6 @@ class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         if msg.docker_process_stdout == self.payload:
             return True, '', 1
         return False, f'result does not match payload: payload={self.payload} msg={msg.json()}', 0
+
+    def job_description(self):
+        return 'echo'

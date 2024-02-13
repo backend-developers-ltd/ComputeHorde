@@ -30,6 +30,7 @@ class JobBase(models.Model):
     status = models.TextField(choices=Status.choices, default=Status.PENDING)
     updated_at = models.DateTimeField(auto_now=True)
     comment = models.TextField(blank=True, default='')
+    job_description = models.TextField(blank=True)
 
 
 class SyntheticJob(JobBase):
