@@ -46,8 +46,8 @@ services:
 # generate one for yourself, e.g. `python3 -c 'import random; import string; print("".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(50)))'`
 SECRET_KEY=
 # generate one for yourself, e.g. `python3 -c 'import random; import string; print("".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(15)))'`
-# don't change this starting the validator for the first time
 POSTGRES_PASSWORD=
+# don't change POSTGRES_PASSWORD after you start your validator for the first time (but you have generate it before that)
 BITTENSOR_NETUID=12
 # network specification has the same syntax as `btcli --subtensor.network ... `
 # so you can use "finney", "test", "186.12.13.150:9944" etc. but if you want to use a subtensor run on the same host,
