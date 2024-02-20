@@ -31,7 +31,7 @@ from django.utils.timezone import now
 from compute_horde_validator.validator.models import JobBase, Miner, SyntheticJob, SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 
-JOB_LENGTH = 1800
+JOB_LENGTH = 300
 TIMEOUT_LEEWAY = 1
 TIMEOUT_MARGIN = 10
 
