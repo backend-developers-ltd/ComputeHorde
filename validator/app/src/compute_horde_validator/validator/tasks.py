@@ -20,15 +20,34 @@ from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs,
 logger = get_task_logger(__name__)
 
 JOB_WINDOW = 60 * 60
+SYNTHETIC_JOBS_SOFT_LIMIT = 300
+SYNTHETIC_JOBS_HARD_LIMIT = 305
 
 SCORING_ALGO_VERSION = 1
 
 WEIGHT_SETTING_TTL = 60
+WEIGHT_SETTING_HARD_TTL = 65
 WEIGHT_SETTING_ATTEMPTS = 100
 MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO = 9
 
 
-@app.task
+@app.task(
+    soft_time_limit=SYNTHETIC_JOBS_SOFT_LIMIT,
+    time_limit=SYNTHETIC_JOBS_HARD_LIMIT,
+)
+def _run_synthetic_jobs():
+    jobs = initiate_jobs(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)  # metagraph will be refetched and
+    # that's fine, after sleeping for e.g. 30 minutes we should refetch the miner list
+    if not jobs:
+        logger.info('Nothing to do')
+        return
+    try:
+        asyncio.run(execute_jobs(jobs))
+    except billiard.exceptions.SoftTimeLimitExceeded:
+        logger.info('Running synthetic jobs timed out')
+
+
+@app.task()
 def run_synthetic_jobs():
     if not settings.DEBUG_DONT_STAGGER_VALIDATORS:
         metagraph = bittensor.metagraph(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
@@ -43,12 +62,7 @@ def run_synthetic_jobs():
         my_window_starts_at = window_per_validator * my_index
         logger.info(f'Sleeping for {my_window_starts_at:02f}s because I am {my_index} out of {len(validator_keys)}')
         time.sleep(my_window_starts_at)
-    jobs = initiate_jobs(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)  # metagraph will be refetched and
-    # that's fine, after sleeping for e.g. 30 minutes we should refetch the miner list
-    if not jobs:
-        logger.info('Nothing to do')
-        return
-    asyncio.run(execute_jobs(jobs))
+    _run_synthetic_jobs.apply_async()
 
 
 @app.task()
@@ -66,7 +80,7 @@ def do_set_weights(
      since the multiprocessing version of this doesn't work in celery.
     """
     bittensor.turn_console_off()
-    set_weights_extrinsic(
+    return set_weights_extrinsic(
         subtensor_endpoint=subtensor_chain_endpoint,
         wallet=settings.BITTENSOR_WALLET(),
         netuid=netuid,
@@ -128,7 +142,8 @@ def set_scores():
                     wait_for_finalization=False,
                     version_key=SCORING_ALGO_VERSION,
                 ),
-                time_limit=WEIGHT_SETTING_TTL,
+                soft_time_limit=WEIGHT_SETTING_TTL,
+                time_limit=WEIGHT_SETTING_HARD_TTL,
             )
             logger.info(f'Setting weights task id: {result.id}')
             try:
@@ -146,7 +161,3 @@ def set_scores():
             break
     else:
         raise RuntimeError(f'Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts')
-
-    for batch in batches:
-        batch.scored = True
-    SyntheticJobBatch.objects.bulk_update(batches, ['scored'])
