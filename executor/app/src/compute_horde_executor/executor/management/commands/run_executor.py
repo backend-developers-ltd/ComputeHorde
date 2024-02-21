@@ -4,11 +4,11 @@ import io
 import logging
 import pathlib
 import shutil
-import subprocess
 import tempfile
 import time
 import zipfile
 
+import httpx
 import pydantic
 from compute_horde.base_requests import BaseRequest
 from compute_horde.em_protocol import executor_requests, miner_requests
@@ -18,6 +18,7 @@ from compute_horde.em_protocol.executor_requests import (
     V0FailedToPrepare,
     V0FinishedRequest,
     V0ReadyRequest,
+    V0RequestOutputUploadStatus,
 )
 from compute_horde.em_protocol.miner_requests import (
     BaseMinerRequest,
@@ -29,12 +30,18 @@ from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMess
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from compute_horde_executor.executor.output_uploader import OutputUploader
+
 logger = logging.getLogger(__name__)
 
 temp_dir = pathlib.Path(tempfile.mkdtemp())
 volume_mount_dir = temp_dir / 'volume'
+output_volume_mount_dir = temp_dir / 'output'
 
 CVE_2022_0492_TIMEOUT_SECONDS = 120
+MAX_RESULT_SIZE_IN_RESPONSE = 1000
+TRUNCATED_RESPONSE_PREFIX_LEN = 100
+TRUNCATED_RESPONSE_SUFFIX_LEN = 100
 
 
 class RunConfigManager:
@@ -125,6 +132,13 @@ class MinerClient(AbstractMinerClient):
             docker_process_stderr=job_result.stderr,
         ))
 
+    async def send_uploaded_request_status(self, output_upload_success, output_upload_message):
+        await self.send_model(V0RequestOutputUploadStatus(
+            job_uuid=self.job_uuid,
+            output_upload_success=output_upload_success,
+            output_upload_message=output_upload_message,
+        ))
+
     async def send_generic_error(self, details: str):
         await self.send_model(GenericError(
             details=details,
@@ -143,11 +157,9 @@ class JobResult(pydantic.BaseModel):
     stdout: str
     stderr: str
 
-    @pydantic.validator('stdout', 'stderr')
-    def truncate(cls, v: str) -> str:
-        if len(v) >= 1000:
-            return f'{v[:100]} ... {v[-100:]}'
-        return v
+
+def truncate(v: str) -> str:
+    return f'{v[:TRUNCATED_RESPONSE_PREFIX_LEN]} ... {v[-TRUNCATED_RESPONSE_SUFFIX_LEN:]}'
 
 
 class JobError(Exception):
@@ -179,6 +191,7 @@ class JobRunner:
     async def run_job(self, job_request: V0JobRequest):
         try:
             docker_run_options = RunConfigManager.preset_to_docker_run_args(job_request.docker_run_options_preset)
+            await self.unpack_volume(job_request)
         except JobError as ex:
             return JobResult(
                 success=False,
@@ -188,7 +201,6 @@ class JobRunner:
                 stderr="",
             )
 
-        self.unpack_volume(job_request)
         cmd = [
             'docker',
             'run',
@@ -198,6 +210,8 @@ class JobRunner:
             'none',
             '-v',
             f'{volume_mount_dir.as_posix()}/:/volume/',
+            '-v',
+            f'{output_volume_mount_dir.as_posix()}/:/output/',
             job_request.docker_image_name,
             *job_request.docker_run_cmd,
         ]
@@ -244,26 +258,39 @@ class JobRunner:
             stderr=stderr,
         )
 
-    def unpack_volume(self, job_request: V0JobRequest):
+    async def unpack_volume(self, job_request: V0JobRequest):
         assert str(volume_mount_dir) not in {'~', '/'}
+        for path in volume_mount_dir.glob("*"):
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path)
+
+        volume_mount_dir.mkdir(exist_ok=True)
+
         if job_request.volume.volume_type == VolumeType.inline:
-            for path in volume_mount_dir.glob("*"):
-                if path.is_file():
-                    path.unlink()
-                elif path.is_dir():
-                    shutil.rmtree(path)
-
-            volume_mount_dir.mkdir(exist_ok=True)
-
             decoded_contents = base64.b64decode(job_request.volume.contents)
             bytes_io = io.BytesIO(decoded_contents)
             zip_file = zipfile.ZipFile(bytes_io)
             zip_file.extractall(volume_mount_dir.as_posix())
+        elif job_request.volume.volume_type == VolumeType.zip_url:
+            with tempfile.NamedTemporaryFile() as download_file:
+                async with httpx.AsyncClient() as client:
+                    async with client.stream('GET', job_request.volume.contents) as response:
+                        volume_size = int(response.headers["Content-Length"])
+                        if 0 < settings.VOLUME_MAX_SIZE_BYTES < volume_size:
+                            raise JobError(f"Input volume too large")
 
-            subprocess.check_call(["chmod", "-R", "777", temp_dir.as_posix()])
-
+                        async for chunk in response.aiter_bytes():
+                            download_file.write(chunk)
+                download_file.seek(0)
+                zip_file = zipfile.ZipFile(download_file)
+                zip_file.extractall(volume_mount_dir.as_posix())
         else:
             raise NotImplementedError(f'Unsupported volume_type: {job_request.volume.volume_type}')
+
+        chmod_proc = await asyncio.create_subprocess_exec("chmod", "-R", "777", temp_dir.as_posix())
+        assert 0 == await chmod_proc.wait()
 
 
 class Command(BaseCommand):
@@ -333,10 +360,37 @@ class Command(BaseCommand):
                 logger.debug(f'Running job {initial_message.job_uuid}')
                 result = await job_runner.run_job(job_request)
 
+                # Check if output streams exceed a certain size.
+                # If it does, save the streams in output volume and truncate them in response.
+                for field in ('stdout', 'stderr'):
+                    value = getattr(result, field)
+                    if len(value) > MAX_RESULT_SIZE_IN_RESPONSE:
+                        # TODO: Replace open() with async calls (aiofiles or something) if it becomes a async-bottleneck
+                        with open(output_volume_mount_dir / f'{field}.txt') as f:
+                            f.write(value)
+                        setattr(result, field, truncate(value))
+
                 if result.success:
                     await self.miner_client.send_finished(result)
                 else:
                     await self.miner_client.send_failed(result)
+
+                try:
+                    if job_request.upload_volume is None:
+                        raise Exception('output upload is not requested')
+                    uploader = OutputUploader.for_output_type(job_request.upload_volume)
+                    await uploader.upload(output_volume_mount_dir)
+                    await self.miner_client.send_uploaded_request_status(
+                        output_upload_success=True,
+                        output_upload_message='',
+                    )
+                except Exception:
+                    logger.error(f'Unhandled exception when uploading output of job {initial_message.job_uuid}',
+                                 exc_info=True)
+                    await self.miner_client.send_uploaded_request_status(
+                        output_upload_success=False,
+                        output_upload_message='Unknown error',
+                    )
             except Exception:
                 logger.error(f'Unhandled exception when working on job {initial_message.job_uuid}', exc_info=True)
                 # not deferred, because this is the end of the process, making it deferred would cause it never

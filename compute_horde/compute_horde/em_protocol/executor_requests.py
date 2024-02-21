@@ -10,6 +10,7 @@ class RequestType(enum.Enum):
     V0FailedToPrepare = 'V0FailedToPrepare'
     V0FinishedRequest = 'V0FinishedRequest'
     V0FailedRequest = 'V0FailedRequest'
+    V0UploadedRequestOutput = 'V0UploadedRequestOutput'
     GenericError = 'GenericError'
 
 
@@ -37,6 +38,12 @@ class V0FinishedRequest(BaseExecutorRequest, JobMixin):
     message_type: RequestType = RequestType.V0FinishedRequest
     docker_process_stdout: str  # TODO: add max_length
     docker_process_stderr: str  # TODO: add max_length
+
+
+class V0RequestOutputUploadStatus(BaseExecutorRequest, JobMixin):
+    message_type: RequestType = RequestType.V0UploadedRequestOutput
+    output_upload_success: bool
+    output_upload_message: str  # i.e. for failure message
 
 
 class GenericError(BaseExecutorRequest):

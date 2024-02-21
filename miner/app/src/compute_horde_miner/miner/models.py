@@ -36,6 +36,9 @@ class AcceptedJob(models.Model):
     stdout = models.TextField(blank=True, default='')
     stderr = models.TextField(blank=True, default='')
     result_reported_to_validator = models.DateTimeField(null=True)
+    uploaded_s3_endpoint = models.CharField(blank=True, default='')
+    uploaded_s3_bucket_name = models.CharField(blank=True, default='')
+    uploaded_s3_object_name = models.CharField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -1,4 +1,5 @@
 import enum
+from typing import Mapping
 
 import pydantic
 
@@ -17,6 +18,7 @@ class BaseMinerRequest(BaseRequest):
 
 class VolumeType(enum.Enum):
     inline = 'inline'
+    zip_url = 'zip_url'
 
 
 class V0InitialJobRequest(BaseMinerRequest, JobMixin):
@@ -32,12 +34,25 @@ class Volume(pydantic.BaseModel):
     # required here
 
 
+class UploadOutputType(enum.Enum):
+    zip_and_http_post = 'zip_and_http_post'
+
+
+class UploadOutput(pydantic.BaseModel):
+    upload_type: UploadOutputType
+    # TODO: the following are only valid for upload_type = zip_and_http_post, some polymorphism like with BaseRequest
+    #   is required here
+    post_url: str
+    post_form_fields: Mapping[str, str]
+
+
 class V0JobRequest(BaseMinerRequest, JobMixin):
     message_type: RequestType = RequestType.V0RunJobRequest
     docker_image_name: str
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
+    upload_volume: UploadOutput | None
 
 
 class GenericError(BaseMinerRequest):
