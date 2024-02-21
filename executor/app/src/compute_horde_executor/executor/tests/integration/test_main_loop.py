@@ -134,3 +134,46 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
             "job_uuid": job_uuid,
         }
     ]
+
+
+def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
+    settings.VOLUME_MAX_SIZE_BYTES = 1
+
+    zip_url = 'https://localhost/payload.txt'
+    httpx_mock.add_response(url=zip_url, content=zip_contents)
+
+    command = TestCommand(iter([
+        json.dumps({
+            "message_type": "V0PrepareJobRequest",
+            "base_docker_image_name": "alpine",
+            "timeout_seconds": None,
+            "volume_type": "zip_url",
+            "job_uuid": job_uuid,
+        }),
+        json.dumps({
+            "message_type": "V0RunJobRequest",
+            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+            "docker_run_cmd": [],
+            "docker_run_options_preset": 'none',
+            "volume": {
+                "volume_type": "zip_url",
+                "contents": zip_url,
+            },
+            "job_uuid": job_uuid,
+        }),
+    ]))
+    command.handle()
+    assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FailedRequest",
+            "docker_process_exit_status": None,
+            "timeout": False,
+            "docker_process_stdout": "Input volume too large",
+            "docker_process_stderr": "",
+            "job_uuid": job_uuid,
+        }
+    ]

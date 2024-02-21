@@ -179,6 +179,7 @@ class JobRunner:
     async def run_job(self, job_request: V0JobRequest):
         try:
             docker_run_options = RunConfigManager.preset_to_docker_run_args(job_request.docker_run_options_preset)
+            await self.unpack_volume(job_request)
         except JobError as ex:
             return JobResult(
                 success=False,
@@ -188,7 +189,6 @@ class JobRunner:
                 stderr="",
             )
 
-        await self.unpack_volume(job_request)
         cmd = [
             'docker',
             'run',
@@ -263,6 +263,10 @@ class JobRunner:
             with tempfile.NamedTemporaryFile() as download_file:
                 async with httpx.AsyncClient() as client:
                     async with client.stream('GET', job_request.volume.contents) as response:
+                        volume_size = int(response.headers["Content-Length"])
+                        if 0 < settings.VOLUME_MAX_SIZE_BYTES < volume_size:
+                            raise JobError(f"Input volume too large")
+
                         async for chunk in response.aiter_bytes():
                             download_file.write(chunk)
                 download_file.seek(0)
