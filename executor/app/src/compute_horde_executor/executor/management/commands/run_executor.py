@@ -4,11 +4,11 @@ import io
 import logging
 import pathlib
 import shutil
-import subprocess
 import tempfile
 import time
 import zipfile
 
+import httpx
 import pydantic
 from compute_horde.base_requests import BaseRequest
 from compute_horde.em_protocol import executor_requests, miner_requests
@@ -179,6 +179,7 @@ class JobRunner:
     async def run_job(self, job_request: V0JobRequest):
         try:
             docker_run_options = RunConfigManager.preset_to_docker_run_args(job_request.docker_run_options_preset)
+            await self.unpack_volume(job_request)
         except JobError as ex:
             return JobResult(
                 success=False,
@@ -188,7 +189,6 @@ class JobRunner:
                 stderr="",
             )
 
-        self.unpack_volume(job_request)
         cmd = [
             'docker',
             'run',
@@ -244,26 +244,39 @@ class JobRunner:
             stderr=stderr,
         )
 
-    def unpack_volume(self, job_request: V0JobRequest):
+    async def unpack_volume(self, job_request: V0JobRequest):
         assert str(volume_mount_dir) not in {'~', '/'}
+        for path in volume_mount_dir.glob("*"):
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path)
+
+        volume_mount_dir.mkdir(exist_ok=True)
+
         if job_request.volume.volume_type == VolumeType.inline:
-            for path in volume_mount_dir.glob("*"):
-                if path.is_file():
-                    path.unlink()
-                elif path.is_dir():
-                    shutil.rmtree(path)
-
-            volume_mount_dir.mkdir(exist_ok=True)
-
             decoded_contents = base64.b64decode(job_request.volume.contents)
             bytes_io = io.BytesIO(decoded_contents)
             zip_file = zipfile.ZipFile(bytes_io)
             zip_file.extractall(volume_mount_dir.as_posix())
+        elif job_request.volume.volume_type == VolumeType.zip_url:
+            with tempfile.NamedTemporaryFile() as download_file:
+                async with httpx.AsyncClient() as client:
+                    async with client.stream('GET', job_request.volume.contents) as response:
+                        volume_size = int(response.headers["Content-Length"])
+                        if 0 < settings.VOLUME_MAX_SIZE_BYTES < volume_size:
+                            raise JobError(f"Input volume too large")
 
-            subprocess.check_call(["chmod", "-R", "777", temp_dir.as_posix()])
-
+                        async for chunk in response.aiter_bytes():
+                            download_file.write(chunk)
+                download_file.seek(0)
+                zip_file = zipfile.ZipFile(download_file)
+                zip_file.extractall(volume_mount_dir.as_posix())
         else:
             raise NotImplementedError(f'Unsupported volume_type: {job_request.volume.volume_type}')
+
+        chmod_proc = await asyncio.create_subprocess_exec("chmod", "-R", "777", temp_dir.as_posix())
+        assert 0 == await chmod_proc.wait()
 
 
 class Command(BaseCommand):

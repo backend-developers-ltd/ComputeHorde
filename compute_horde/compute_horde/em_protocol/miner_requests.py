@@ -17,6 +17,7 @@ class BaseMinerRequest(BaseRequest):
 
 class VolumeType(enum.Enum):
     inline = 'inline'
+    zip_url = 'zip_url'
 
 
 class V0InitialJobRequest(BaseMinerRequest, JobMixin):

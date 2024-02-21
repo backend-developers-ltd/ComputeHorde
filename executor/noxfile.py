@@ -169,6 +169,7 @@ def test(session):
             'pytest',
             'pytest-django',
             'pytest-xdist',
+            'pytest-httpx',
             'ipdb',
             'freezegun',
         )
