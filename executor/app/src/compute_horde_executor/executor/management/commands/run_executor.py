@@ -265,7 +265,8 @@ class JobRunner:
                     async with client.stream('GET', job_request.volume.contents) as response:
                         async for chunk in response.aiter_bytes():
                             download_file.write(chunk)
-                zip_file = zipfile.ZipFile(download_file.name)
+                download_file.seek(0)
+                zip_file = zipfile.ZipFile(download_file)
                 zip_file.extractall(volume_mount_dir.as_posix())
         else:
             raise NotImplementedError(f'Unsupported volume_type: {job_request.volume.volume_type}')
