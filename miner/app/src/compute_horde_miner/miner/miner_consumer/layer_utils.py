@@ -43,6 +43,12 @@ class ExecutorFailed(pydantic.BaseModel):
     docker_process_stderr: str
 
 
+class ExecutorOutputUploadStatus(pydantic.BaseModel):
+    job_uuid: str
+    output_upload_success: bool
+    output_upload_message: str
+
+
 class BaseMixin(AsyncWebsocketConsumer, abc.ABC):
 
     @classmethod
@@ -180,6 +186,21 @@ class ExecutorInterfaceMixin(BaseMixin):
                     docker_process_stdout=stdout,
                     docker_process_stderr=stderr,
                     docker_process_exit_status=exit_status,
+                ).dict(),
+            }
+        )
+
+    async def send_executor_output_upload_status(self, job_uuid: str, executor_token: str,
+                                                 output_upload_success: bool, output_upload_message: str):
+        group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        await self.channel_layer.group_send(
+            group_name,
+            {
+                'type': 'executor.finished',
+                **ExecutorOutputUploadStatus(
+                    job_uuid=job_uuid,
+                    output_upload_success=output_upload_success,
+                    output_upload_message=output_upload_message,
                 ).dict(),
             }
         )
