@@ -4,12 +4,11 @@ import abc
 import pathlib
 import tempfile
 import zipfile
-from typing import Type, Self
+from typing import Self
 
 import httpx
-from django.conf import settings
-
 from compute_horde.em_protocol.miner_requests import UploadOutput, UploadOutputType
+from django.conf import settings
 
 
 class OutputUploader(metaclass=abc.ABCMeta):
@@ -24,7 +23,7 @@ class OutputUploader(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def handles_output_type(cls) -> UploadOutputType: ...
 
-    __output_type_map: dict[UploadOutputType, Type[OutputUploader]] = {}
+    __output_type_map: dict[UploadOutputType, type[OutputUploader]] = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
