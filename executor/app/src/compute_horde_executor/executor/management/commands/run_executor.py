@@ -167,11 +167,17 @@ class JobError(Exception):
         self.description = description
 
 
+class OutputUploadNotRequested(Exception):
+    pass
+
+
 class JobRunner:
     def __init__(self, initial_job_request: V0InitialJobRequest):
         self.initial_job_request = initial_job_request
 
     async def prepare(self):
+        volume_mount_dir.mkdir(exist_ok=True)
+        output_volume_mount_dir.mkdir(exist_ok=True)
 
         process = await asyncio.create_subprocess_exec(
             'docker', 'pull', self.initial_job_request.base_docker_image_name,
@@ -265,8 +271,6 @@ class JobRunner:
                 path.unlink()
             elif path.is_dir():
                 shutil.rmtree(path)
-
-        volume_mount_dir.mkdir(exist_ok=True)
 
         if job_request.volume.volume_type == VolumeType.inline:
             decoded_contents = base64.b64decode(job_request.volume.contents)
@@ -375,15 +379,18 @@ class Command(BaseCommand):
                 else:
                     await self.miner_client.send_failed(result)
 
+                # If we are told to upload all the crap in /output, then we try to do it :)
                 try:
                     if job_request.upload_volume is None:
-                        raise Exception('output upload is not requested')
-                    uploader = OutputUploader.for_output_type(job_request.upload_volume)
+                        raise OutputUploadNotRequested
+                    uploader = OutputUploader.for_upload_output(job_request.upload_volume)
                     await uploader.upload(output_volume_mount_dir)
                     await self.miner_client.send_uploaded_request_status(
                         output_upload_success=True,
                         output_upload_message='',
                     )
+                except OutputUploadNotRequested:
+                    pass
                 except Exception:
                     logger.error(f'Unhandled exception when uploading output of job {initial_message.job_uuid}',
                                  exc_info=True)

@@ -31,7 +31,7 @@ class OutputUploader(metaclass=abc.ABCMeta):
         cls.__output_type_map[cls.handles_output_type()] = cls
 
     @classmethod
-    def for_output_type(cls, upload_output: UploadOutput) -> Self:
+    def for_upload_output(cls, upload_output: UploadOutput) -> Self:
         return cls.__output_type_map[upload_output.upload_type](upload_output)
 
 
@@ -45,8 +45,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
         with tempfile.TemporaryFile() as fp:
             zipf = zipfile.ZipFile(fp, mode="w")
             for file in directory.glob('**/*'):
-                file = file.relative_to(directory)
-                zipf.write(file)
+                zipf.write(filename=file, arcname=file.relative_to(directory))
 
             file_size = fp.tell()
             fp.seek(0)
@@ -61,7 +60,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
                 }
                 files = {"file": ("output.zip", fp, "application/zip")}
                 headers = {
-                    "Content-Length": file_size,
+                    "Content-Length": str(file_size),
                     "Content-Type": "application/zip",
                 }
                 await client.post(

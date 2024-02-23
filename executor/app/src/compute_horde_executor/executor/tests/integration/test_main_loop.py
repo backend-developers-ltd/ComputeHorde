@@ -177,3 +177,64 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
             "job_uuid": job_uuid,
         }
     ]
+
+
+def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
+    # Arrange
+    httpx_mock.add_response(match_content='')
+    post_url = 'http://localhost/bucket/file.zip?hash=blabla'
+    post_form_fields = {'a': 'b', 'c': 'd'}
+
+    command = TestCommand(iter([
+        json.dumps({
+            "message_type": "V0PrepareJobRequest",
+            "base_docker_image_name": "alpine",
+            "timeout_seconds": None,
+            "volume_type": "inline",
+            "job_uuid": job_uuid,
+        }),
+        json.dumps({
+            "message_type": "V0RunJobRequest",
+            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+            "docker_run_cmd": [],
+            "docker_run_options_preset": 'none',
+            "volume": {
+                "volume_type": "inline",
+                "contents": base64_zipfile,
+            },
+            "upload_volume": {
+                "upload_type": "zip_and_http_post",
+                "post_url": post_url,
+                "post_form_fields": post_form_fields,
+            },
+            "job_uuid": job_uuid,
+        }),
+    ]))
+
+    # Act
+    command.handle()
+
+    # Assert
+    assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FinishedRequest",
+            "docker_process_stdout": payload,
+            "docker_process_stderr": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0UploadedRequestOutput",
+            "output_upload_success": mock.ANY,
+            "output_upload_message": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+    ]
+
+    request = httpx_mock.get_request()
+    assert request is not None
+    assert request.url == post_url
+    assert request.method == 'POST'
