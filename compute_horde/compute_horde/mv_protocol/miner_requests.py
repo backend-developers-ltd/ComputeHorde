@@ -12,6 +12,7 @@ class RequestType(enum.Enum):
     V0ExecutorFailedRequest = 'V0ExecutorFailedRequest'
     V0JobFailedRequest = 'V0JobFailedRequest'
     V0JobFinishedRequest = 'V0JobFinishedRequest'
+    V0RequestOutputUploadStatus = 'V0RequestOutputUploadStatus'
     GenericError = 'GenericError'
     UnauthorizedError = 'UnauthorizedError'
 
@@ -47,6 +48,12 @@ class V0JobFinishedRequest(BaseMinerRequest, JobMixin):
     message_type: RequestType = RequestType.V0JobFinishedRequest
     docker_process_stdout: str  # TODO: add max_length
     docker_process_stderr: str  # TODO: add max_length
+
+
+class V0RequestOutputUploadStatus(BaseMinerRequest, JobMixin):
+    message_type: RequestType = RequestType.V0RequestOutputUploadStatus
+    output_upload_success: bool
+    output_upload_message: str  # i.e. for failure message
 
 
 class GenericError(BaseMinerRequest):

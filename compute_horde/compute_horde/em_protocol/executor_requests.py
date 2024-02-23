@@ -10,7 +10,7 @@ class RequestType(enum.Enum):
     V0FailedToPrepare = 'V0FailedToPrepare'
     V0FinishedRequest = 'V0FinishedRequest'
     V0FailedRequest = 'V0FailedRequest'
-    V0UploadedRequestOutput = 'V0UploadedRequestOutput'
+    V0RequestOutputUploadStatus = 'V0RequestOutputUploadStatus'
     GenericError = 'GenericError'
 
 
@@ -41,7 +41,7 @@ class V0FinishedRequest(BaseExecutorRequest, JobMixin):
 
 
 class V0RequestOutputUploadStatus(BaseExecutorRequest, JobMixin):
-    message_type: RequestType = RequestType.V0UploadedRequestOutput
+    message_type: RequestType = RequestType.V0RequestOutputUploadStatus
     output_upload_success: bool
     output_upload_message: str  # i.e. for failure message
 

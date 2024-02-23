@@ -36,9 +36,9 @@ class AcceptedJob(models.Model):
     stdout = models.TextField(blank=True, default='')
     stderr = models.TextField(blank=True, default='')
     result_reported_to_validator = models.DateTimeField(null=True)
-    uploaded_s3_endpoint = models.CharField(blank=True, default='')
-    uploaded_s3_bucket_name = models.CharField(blank=True, default='')
-    uploaded_s3_object_name = models.CharField(blank=True, default='')
+    output_upload_success = models.BooleanField(blank=True, default=False)
+    output_upload_message = models.TextField(blank=True, default='')
+    output_upload_status_reported_to_validator = models.DateTimeField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -61,4 +61,12 @@ class AcceptedJob(models.Model):
             validator=validator,
             status__in=[cls.Status.FINISHED.value, cls.Status.FAILED.value],
             result_reported_to_validator__isnull=True,
+        )]
+
+    @classmethod
+    async def get_upload_success_not_reported(cls, validator: Validator) -> Iterable[Self]:
+        return [job async for job in cls.objects.filter(
+            validator=validator,
+            status__in=[cls.Status.FINISHED.value, cls.Status.FAILED.value],
+            output_upload_status_reported_to_validator__isnull=True,
         )]
