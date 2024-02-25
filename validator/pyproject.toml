@@ -85,5 +85,5 @@ ignore = [
 "test/**" = ["D", "F403", "F405"]
 
 [tool.codespell]
-skip = '*.min.js'
+skip = '*.min.js,pdm.lock'
 ignore-words-list = 'datas'
