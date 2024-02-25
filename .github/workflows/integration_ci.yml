@@ -45,6 +45,9 @@ jobs:
       - name: Run validator migrations
         run: cd app/src && pdm run python manage.py wait_for_database --timeout 120 && pdm run python manage.py migrate
         working-directory: ./validator
+      - name: Build backenddevelopersltd/compute-horde-job-echo:v0-latest image
+        run: docker build . -t backenddevelopersltd/compute-horde-job-echo:v0-latest
+        working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_tests/
       - name: Run unit tests
         run: nox -vs test
       - name: Stop miner dockerized services
