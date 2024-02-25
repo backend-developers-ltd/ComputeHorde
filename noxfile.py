@@ -5,6 +5,9 @@ from pathlib import Path
 
 import nox
 
+
+os.environ["PDM_IGNORE_SAVED_PYTHON"] = "1"
+
 CI = os.environ.get('CI') is not None
 
 ROOT = Path('.')
@@ -13,19 +16,12 @@ PYTHON_DEFAULT_VERSION = PYTHON_VERSIONS[-1]
 
 nox.options.default_venv_backend = 'venv'
 nox.options.stop_on_first_error = True
-nox.options.reuse_existing_virtualenvs = True
-
-# In CI, use Python interpreter provided by GitHub Actions
-if CI:
-    nox.options.force_venv_backend = 'none'
+nox.options.reuse_existing_virtualenvs = not CI
 
 
 @nox.session(python=PYTHON_VERSIONS)
 def test(session):
-    session.run('pip', 'install', 'pytest', 'pytest-asyncio', 'pytest-xdist', 'requests')
-    for module in ['miner', 'executor', 'validator']:
-        with session.chdir(str(ROOT / module / 'app' / 'src')):
-            session.run('pip', 'install', '-r', 'requirements.txt')
+    session.run('pdm', 'install', '--check', external=True)
     session.run(
         'pytest',
         '-W', 'ignore::DeprecationWarning', '-s', '-x', '-vv',

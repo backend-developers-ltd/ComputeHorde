@@ -8,6 +8,8 @@ from pathlib import Path
 
 import nox
 
+os.environ["PDM_IGNORE_SAVED_PYTHON"] = "1"
+
 CI = os.environ.get('CI') is not None
 
 ROOT = Path('.')
@@ -17,11 +19,14 @@ APP_ROOT = ROOT / 'app' / 'src'
 
 nox.options.default_venv_backend = 'venv'
 nox.options.stop_on_first_error = True
-nox.options.reuse_existing_virtualenvs = True
+nox.options.reuse_existing_virtualenvs = not CI
 
-# In CI, use Python interpreter provided by GitHub Actions
-if CI:
-    nox.options.force_venv_backend = 'none'
+
+def install(session: nox.Session, *args):
+    groups = []
+    for group in args:
+        groups.extend(['--group', group])
+    session.run('pdm', 'install', '--check', *groups, external=True)
 
 
 @functools.lru_cache
@@ -102,11 +107,7 @@ def run_shellcheck(session, mode="check"):
 @nox.session(name='format', python=PYTHON_DEFAULT_VERSION)
 def format_(session):
     """Lint the code and apply fixes in-place whenever possible."""
-    with session.chdir(str(APP_ROOT)):
-        session.run(
-            'pip', 'install', '-r', 'requirements.txt',
-            "ruff",
-        )
+    install(session, 'format')
     session.run('ruff', 'check', '--fix', '.')
     run_shellcheck(session, mode="fmt")
     run_readable(session, mode="fmt")
@@ -115,12 +116,7 @@ def format_(session):
 @nox.session(python=PYTHON_DEFAULT_VERSION)
 def lint(session):
     """Run linters in readonly mode."""
-    with session.chdir(str(APP_ROOT)):
-        session.run(
-            'pip', 'install', '-r', 'requirements.txt',
-            "ruff",
-            "codespell[toml]",
-        )
+    install(session, 'lint')
     session.run('ruff', 'check', '--diff', '.')
     session.run('codespell', '.')
     run_shellcheck(session, mode="check")
@@ -129,16 +125,8 @@ def lint(session):
 
 @nox.session(python=PYTHON_DEFAULT_VERSION)
 def type_check(session):
+    install(session, 'type_check')
     with session.chdir(str(APP_ROOT)):
-        session.run(
-            'pip', 'install', '-r', 'requirements.txt',
-            "django-stubs[compatible-mypy]",
-            "djangorestframework-stubs[compatible-mypy]",
-            "mypy",
-            "types-freezegun",
-            "types-python-dateutil",
-            "types-requests",
-        )
         session.run(
             'mypy',
             '--config-file', 'mypy.ini',
@@ -149,12 +137,11 @@ def type_check(session):
 
 @nox.session(python=PYTHON_DEFAULT_VERSION)
 def security_check(session):
-    session.run('pip', 'install', 'bandit')
+    install(session, 'security_check')
     with session.chdir(str(APP_ROOT)):
         session.run(
             'bandit',
             '--ini', 'bandit.ini',
-            '-x', 'requirements_freeze.py',
             '-r',
             '.',
             *session.posargs
@@ -163,16 +150,8 @@ def security_check(session):
 
 @nox.session(python=PYTHON_VERSIONS)
 def test(session):
+    install(session, 'test')
     with session.chdir(str(APP_ROOT)):
-        session.run(
-            'pip', 'install', '-r', 'requirements.txt',
-            'pytest',
-            'pytest-django',
-            'pytest-asyncio',
-            'pytest-xdist',
-            'ipdb',
-            'freezegun',
-        )
         session.run(
             'pytest',
             '-W', 'ignore::DeprecationWarning', '-s', '-x', '-vv',
