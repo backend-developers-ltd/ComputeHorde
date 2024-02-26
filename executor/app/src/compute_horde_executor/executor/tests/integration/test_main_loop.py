@@ -181,7 +181,7 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
 
 def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     # Arrange
-    httpx_mock.add_response(match_content='')
+    httpx_mock.add_response()
     post_url = 'http://localhost/bucket/file.zip?hash=blabla'
     post_form_fields = {'a': 'b', 'c': 'd'}
 
@@ -227,7 +227,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0UploadedRequestOutput",
+            "message_type": "V0RequestOutputUploadStatus",
             "output_upload_success": mock.ANY,
             "output_upload_message": mock.ANY,
             "job_uuid": job_uuid,
@@ -238,3 +238,5 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     assert request is not None
     assert request.url == post_url
     assert request.method == 'POST'
+
+    # TODO: check the uploaded zip is valid
