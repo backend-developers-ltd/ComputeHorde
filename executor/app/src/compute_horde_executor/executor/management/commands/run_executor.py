@@ -167,10 +167,6 @@ class JobError(Exception):
         self.description = description
 
 
-class OutputUploadNotRequested(Exception):
-    pass
-
-
 class JobRunner:
     def __init__(self, initial_job_request: V0InitialJobRequest):
         self.initial_job_request = initial_job_request
@@ -380,24 +376,23 @@ class Command(BaseCommand):
                     await self.miner_client.send_failed(result)
 
                 # If we are told to upload all the crap in /output, then we try to do it :)
-                try:
-                    if job_request.output_upload is None:
-                        raise OutputUploadNotRequested
-                    uploader = OutputUploader.for_upload_output(job_request.output_upload)
-                    await uploader.upload(output_volume_mount_dir)
-                    await self.miner_client.send_output_upload_status(
-                        output_upload_success=True,
-                        output_upload_message='',
-                    )
-                except OutputUploadNotRequested:
-                    pass
-                except Exception:
-                    logger.error(f'Unhandled exception when uploading output of job {initial_message.job_uuid}',
-                                 exc_info=True)
-                    await self.miner_client.send_output_upload_status(
-                        output_upload_success=False,
-                        output_upload_message='Unknown error',
-                    )
+                if job_request.output_upload is not None:
+                    try:
+                        uploader = OutputUploader.for_upload_output(job_request.output_upload)
+                        await uploader.upload(output_volume_mount_dir)
+                        await self.miner_client.send_output_upload_status(
+                            output_upload_success=True,
+                            output_upload_message='',
+                        )
+                    except Exception:
+                        logger.error(
+                            f'Unhandled exception when uploading output of job {initial_message.job_uuid}',
+                            exc_info=True,
+                        )
+                        await self.miner_client.send_output_upload_status(
+                            output_upload_success=False,
+                            output_upload_message='Unknown error',
+                        )
             except Exception:
                 logger.error(f'Unhandled exception when working on job {initial_message.job_uuid}', exc_info=True)
                 # not deferred, because this is the end of the process, making it deferred would cause it never
