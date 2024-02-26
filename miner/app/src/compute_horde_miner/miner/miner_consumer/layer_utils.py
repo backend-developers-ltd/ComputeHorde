@@ -27,7 +27,7 @@ class JobRequest(pydantic.BaseModel):
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
-    upload_volume: OutputUpload | None
+    output_upload: OutputUpload | None
 
 
 class ExecutorFinished(pydantic.BaseModel):
@@ -139,7 +139,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
                     "volume_type": job_request.volume.volume_type.value,
                     "contents": job_request.volume.contents,
                 },
-                upload_volume=None,  # TODO
+                output_upload=job_request.output_upload,
             ).dict()
         })
 

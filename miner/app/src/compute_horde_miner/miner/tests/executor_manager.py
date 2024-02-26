@@ -36,7 +36,7 @@ async def fake_executor(token):
             "volume_type": "inline",
             "contents": "nonsense"
         },
-        "upload_volume": mock.ANY,
+        "output_upload": mock.ANY,
     }, response
     await communicator.send_json_to({
         "message_type": "V0FinishedRequest",

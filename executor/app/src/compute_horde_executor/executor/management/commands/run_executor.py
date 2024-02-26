@@ -17,8 +17,8 @@ from compute_horde.em_protocol.executor_requests import (
     V0FailedRequest,
     V0FailedToPrepare,
     V0FinishedRequest,
+    V0OutputUploadStatus,
     V0ReadyRequest,
-    V0RequestOutputUploadStatus,
 )
 from compute_horde.em_protocol.miner_requests import (
     BaseMinerRequest,
@@ -132,8 +132,8 @@ class MinerClient(AbstractMinerClient):
             docker_process_stderr=job_result.stderr,
         ))
 
-    async def send_uploaded_request_status(self, output_upload_success, output_upload_message):
-        await self.send_model(V0RequestOutputUploadStatus(
+    async def send_output_upload_status(self, output_upload_success, output_upload_message):
+        await self.send_model(V0OutputUploadStatus(
             job_uuid=self.job_uuid,
             output_upload_success=output_upload_success,
             output_upload_message=output_upload_message,
@@ -381,11 +381,11 @@ class Command(BaseCommand):
 
                 # If we are told to upload all the crap in /output, then we try to do it :)
                 try:
-                    if job_request.upload_volume is None:
+                    if job_request.output_upload is None:
                         raise OutputUploadNotRequested
-                    uploader = OutputUploader.for_upload_output(job_request.upload_volume)
+                    uploader = OutputUploader.for_upload_output(job_request.output_upload)
                     await uploader.upload(output_volume_mount_dir)
-                    await self.miner_client.send_uploaded_request_status(
+                    await self.miner_client.send_output_upload_status(
                         output_upload_success=True,
                         output_upload_message='',
                     )
@@ -394,7 +394,7 @@ class Command(BaseCommand):
                 except Exception:
                     logger.error(f'Unhandled exception when uploading output of job {initial_message.job_uuid}',
                                  exc_info=True)
-                    await self.miner_client.send_uploaded_request_status(
+                    await self.miner_client.send_output_upload_status(
                         output_upload_success=False,
                         output_upload_message='Unknown error',
                     )

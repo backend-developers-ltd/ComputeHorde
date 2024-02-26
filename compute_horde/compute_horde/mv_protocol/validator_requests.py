@@ -70,7 +70,7 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
-    upload_volume: OutputUpload | None
+    output_upload: OutputUpload | None
 
 
 class GenericError(BaseValidatorRequest):

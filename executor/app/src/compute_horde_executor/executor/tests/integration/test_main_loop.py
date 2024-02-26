@@ -202,7 +202,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
                 "volume_type": "inline",
                 "contents": base64_zipfile,
             },
-            "upload_volume": {
+            "output_upload": {
                 "output_upload_type": "zip_and_http_post",
                 "post_url": post_url,
                 "post_form_fields": post_form_fields,
@@ -227,7 +227,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0RequestOutputUploadStatus",
+            "message_type": "V0OutputUploadStatus",
             "output_upload_success": mock.ANY,
             "output_upload_message": mock.ANY,
             "job_uuid": job_uuid,

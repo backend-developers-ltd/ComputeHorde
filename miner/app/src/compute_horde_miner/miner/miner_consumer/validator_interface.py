@@ -93,7 +93,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await job.asave()
 
         for job in (await AcceptedJob.get_upload_success_not_reported(self.validator)):
-            await self.send(miner_requests.V0RequestOutputUploadStatus(
+            await self.send(miner_requests.V0OutputUploadStatus(
                 job_uuid=str(job.job_uuid),
                 output_upload_success=job.output_upload_success,
                 output_upload_message=job.output_upload_message,
@@ -227,7 +227,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         await job.asave()
 
     async def _executor_upload_output_status(self, msg: ExecutorOutputUploadStatus):
-        await self.send(miner_requests.V0RequestOutputUploadStatus(
+        await self.send(miner_requests.V0OutputUploadStatus(
             job_uuid=msg.job_uuid,
             output_upload_success=msg.output_upload_success,
             output_upload_message=msg.output_upload_message,

@@ -96,7 +96,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 stderr=msg.docker_process_stderr,
                 exit_status=msg.docker_process_exit_status,
             )
-        if isinstance(msg, executor_requests.V0RequestOutputUploadStatus):
+        if isinstance(msg, executor_requests.V0OutputUploadStatus):
             self.job.output_upload_success = msg.output_upload_success
             self.job.output_upload_message = msg.output_upload_message
 
@@ -115,7 +115,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             docker_run_options_preset=msg.docker_run_options_preset,
             docker_run_cmd=msg.docker_run_cmd,
             volume=msg.volume,
-            upload_volum=None,  # TODO
+            upload_volum=msg.output_upload,
         ).json())
 
     async def disconnect(self, close_code):
