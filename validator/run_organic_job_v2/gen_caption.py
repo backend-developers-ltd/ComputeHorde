@@ -1,7 +1,7 @@
 import sys
 
 from PIL import Image
-from transformers import BlipProcessor, BlipForConditionalGeneration
+from transformers import BlipForConditionalGeneration, BlipProcessor
 
 processor = BlipProcessor.from_pretrained('./Salesforce__blip-image-captioning-base', local_files_only=True)
 model = BlipForConditionalGeneration.from_pretrained('./Salesforce__blip-image-captioning-base', local_files_only=True).to("cuda")

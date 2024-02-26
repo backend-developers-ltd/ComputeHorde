@@ -1,11 +1,11 @@
-import time
 import sys
+import time
 
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-from transformers import DistilBertTokenizer, AdamW
+from transformers import AdamW, DistilBertTokenizer
 
 epochs = int(sys.argv[1])
 
@@ -25,7 +25,7 @@ test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
 class SimpleNN(nn.Module):
     def __init__(self):
-        super(SimpleNN, self).__init__()
+        super().__init__()
         self.fc1 = nn.Linear(28 * 28, 256)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(256, 10)
