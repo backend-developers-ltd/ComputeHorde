@@ -7,13 +7,13 @@ import zipfile
 from typing import Self
 
 import httpx
-from compute_horde.em_protocol.miner_requests import UploadOutput, UploadOutputType
+from compute_horde.em_protocol.miner_requests import OutputUpload, OutputUploadType
 from django.conf import settings
 
 
 class OutputUploader(metaclass=abc.ABCMeta):
-    """Upload the output directory to JobRequest.UploadOutput"""
-    def __init__(self, upload_output: UploadOutput):
+    """Upload the output directory to JobRequest.OutputUpload"""
+    def __init__(self, upload_output: OutputUpload):
         self.upload_output = upload_output
 
     @abc.abstractmethod
@@ -21,24 +21,24 @@ class OutputUploader(metaclass=abc.ABCMeta):
 
     @classmethod
     @abc.abstractmethod
-    def handles_output_type(cls) -> UploadOutputType: ...
+    def handles_output_type(cls) -> OutputUploadType: ...
 
-    __output_type_map: dict[UploadOutputType, type[OutputUploader]] = {}
+    __output_type_map: dict[OutputUploadType, type[OutputUploader]] = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls.__output_type_map[cls.handles_output_type()] = cls
 
     @classmethod
-    def for_upload_output(cls, upload_output: UploadOutput) -> Self:
-        return cls.__output_type_map[upload_output.upload_type](upload_output)
+    def for_upload_output(cls, upload_output: OutputUpload) -> Self:
+        return cls.__output_type_map[upload_output.output_upload_type](upload_output)
 
 
 class ZipAndHTTPPostOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP POST the zip file to the given URL"""
     @classmethod
-    def handles_output_type(cls) -> UploadOutputType:
-        return UploadOutputType.zip_and_http_post
+    def handles_output_type(cls) -> OutputUploadType:
+        return OutputUploadType.zip_and_http_post
 
     async def upload(self, directory: pathlib.Path):
         with tempfile.TemporaryFile() as fp:

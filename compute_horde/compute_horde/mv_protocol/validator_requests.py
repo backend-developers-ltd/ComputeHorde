@@ -52,14 +52,14 @@ class Volume(pydantic.BaseModel):
     # required here
 
 
-class UploadOutputType(enum.Enum):
+class OutputUploadType(enum.Enum):
     zip_and_http_post = 'zip_and_http_post'
 
 
-class UploadOutput(pydantic.BaseModel):
-    upload_type: UploadOutputType
-    # TODO: the following are only valid for upload_type = zip_and_http_post, some polymorphism like with BaseRequest
-    #   is required here
+class OutputUpload(pydantic.BaseModel):
+    output_upload_type: OutputUploadType
+    # TODO: the following are only valid for output_upload_type = zip_and_http_post, some polymorphism like with
+    #  BaseRequest is required here
     post_url: str
     post_form_fields: Mapping[str, str]
 
@@ -70,7 +70,7 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
-    upload_volume: UploadOutput | None
+    upload_volume: OutputUpload | None
 
 
 class GenericError(BaseValidatorRequest):

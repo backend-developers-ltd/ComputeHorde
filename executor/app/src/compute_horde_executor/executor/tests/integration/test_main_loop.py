@@ -203,7 +203,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
                 "contents": base64_zipfile,
             },
             "upload_volume": {
-                "upload_type": "zip_and_http_post",
+                "output_upload_type": "zip_and_http_post",
                 "post_url": post_url,
                 "post_form_fields": post_form_fields,
             },

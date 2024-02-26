@@ -3,7 +3,7 @@ import logging
 
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
-from compute_horde.em_protocol.miner_requests import Volume, UploadOutput
+from compute_horde.em_protocol.miner_requests import Volume, OutputUpload
 from compute_horde.mv_protocol import validator_requests
 
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
@@ -27,7 +27,7 @@ class JobRequest(pydantic.BaseModel):
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
-    upload_volume: UploadOutput | None
+    upload_volume: OutputUpload | None
 
 
 class ExecutorFinished(pydantic.BaseModel):
