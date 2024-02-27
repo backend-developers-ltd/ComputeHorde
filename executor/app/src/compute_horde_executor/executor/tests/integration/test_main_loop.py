@@ -226,12 +226,6 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             "docker_process_stderr": mock.ANY,
             "job_uuid": job_uuid,
         },
-        {
-            "message_type": "V0OutputUploadStatus",
-            "output_upload_success": mock.ANY,
-            "output_upload_message": mock.ANY,
-            "job_uuid": job_uuid,
-        },
     ]
 
     request = httpx_mock.get_request()

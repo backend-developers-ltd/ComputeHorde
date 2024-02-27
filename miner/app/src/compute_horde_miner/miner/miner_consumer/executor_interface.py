@@ -96,17 +96,6 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 stderr=msg.docker_process_stderr,
                 exit_status=msg.docker_process_exit_status,
             )
-        if isinstance(msg, executor_requests.V0OutputUploadStatus):
-            self.job.output_upload_success = msg.output_upload_success
-            self.job.output_upload_message = msg.output_upload_message
-
-            await self.job.asave()
-            await self.send_executor_output_upload_status(
-                job_uuid=msg.job_uuid,
-                executor_token=self.executor_token,
-                output_upload_success=msg.output_upload_success,
-                output_upload_message=msg.output_upload_message,
-            )
 
     async def _miner_job_request(self, msg: JobRequest):
         await self.send(miner_requests.V0JobRequest(

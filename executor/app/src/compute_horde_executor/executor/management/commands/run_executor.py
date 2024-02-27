@@ -17,7 +17,6 @@ from compute_horde.em_protocol.executor_requests import (
     V0FailedRequest,
     V0FailedToPrepare,
     V0FinishedRequest,
-    V0OutputUploadStatus,
     V0ReadyRequest,
 )
 from compute_horde.em_protocol.miner_requests import (
@@ -131,13 +130,6 @@ class MinerClient(AbstractMinerClient):
             timeout=job_result.timeout,
             docker_process_stdout=job_result.stdout,
             docker_process_stderr=job_result.stderr,
-        ))
-
-    async def send_output_upload_status(self, output_upload_success, output_upload_message):
-        await self.send_model(V0OutputUploadStatus(
-            job_uuid=self.job_uuid,
-            output_upload_success=output_upload_success,
-            output_upload_message=output_upload_message,
         ))
 
     async def send_generic_error(self, details: str):
@@ -387,18 +379,10 @@ class Command(BaseCommand):
                     try:
                         uploader = OutputUploader.for_upload_output(job_request.output_upload)
                         await uploader.upload(output_volume_mount_dir)
-                        await self.miner_client.send_output_upload_status(
-                            output_upload_success=True,
-                            output_upload_message='',
-                        )
                     except Exception:
                         logger.error(
                             f'Unhandled exception when uploading output of job {initial_message.job_uuid}',
                             exc_info=True,
-                        )
-                        await self.miner_client.send_output_upload_status(
-                            output_upload_success=False,
-                            output_upload_message='Unknown error',
                         )
             except Exception:
                 logger.error(f'Unhandled exception when working on job {initial_message.job_uuid}', exc_info=True)

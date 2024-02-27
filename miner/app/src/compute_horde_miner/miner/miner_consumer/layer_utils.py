@@ -117,16 +117,6 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
     async def _executor_failed(self, msg: ExecutorFailed):
         ...
 
-    @log_errors_explicitly
-    async def executor_upload_output_status(self, event: dict):
-        payload = self.validate_event('executor_output_upload_status', ExecutorOutputUploadStatus, event)
-        if payload:
-            await self._executor_upload_output_status(payload)
-
-    @abc.abstractmethod
-    async def _executor_upload_output_status(self, msg: ExecutorOutputUploadStatus):
-        ...
-
     async def send_job_request(self, executor_token, job_request: validator_requests.V0JobRequest):
         await self.channel_layer.group_send(ExecutorInterfaceMixin.group_name(executor_token), {
             'type': 'miner.job_request',
@@ -196,21 +186,6 @@ class ExecutorInterfaceMixin(BaseMixin):
                     docker_process_stdout=stdout,
                     docker_process_stderr=stderr,
                     docker_process_exit_status=exit_status,
-                ).dict(),
-            }
-        )
-
-    async def send_executor_output_upload_status(self, job_uuid: str, executor_token: str,
-                                                 output_upload_success: bool, output_upload_message: str):
-        group_name = ValidatorInterfaceMixin.group_name(executor_token)
-        await self.channel_layer.group_send(
-            group_name,
-            {
-                'type': 'executor.output_upload_status',
-                **ExecutorOutputUploadStatus(
-                    job_uuid=job_uuid,
-                    output_upload_success=output_upload_success,
-                    output_upload_message=output_upload_message,
                 ).dict(),
             }
         )

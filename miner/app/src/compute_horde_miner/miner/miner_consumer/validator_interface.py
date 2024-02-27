@@ -91,15 +91,6 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 logger.debug(f'Failed job {job.job_uuid} reported to validator {self.validator_key}')
             job.result_reported_to_validator = timezone.now()
             await job.asave()
-
-        for job in (await AcceptedJob.get_upload_success_not_reported(self.validator)):
-            await self.send(miner_requests.V0OutputUploadStatus(
-                job_uuid=str(job.job_uuid),
-                output_upload_success=job.output_upload_success,
-                output_upload_message=job.output_upload_message,
-            ))
-            job.output_upload_status_reported_to_validator = timezone.now()
-            await job.asave()
         # TODO using advisory locks make sure that only one consumer per validator exists
 
     def accepted_request_type(self):
@@ -224,18 +215,6 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         job = self.pending_jobs.pop(msg.job_uuid)
         await job.arefresh_from_db()
         job.result_reported_to_validator = timezone.now()
-        await job.asave()
-
-    async def _executor_upload_output_status(self, msg: ExecutorOutputUploadStatus):
-        await self.send(miner_requests.V0OutputUploadStatus(
-            job_uuid=msg.job_uuid,
-            output_upload_success=msg.output_upload_success,
-            output_upload_message=msg.output_upload_message,
-        ).json())
-        logger.debug(f'Output upload status of job {msg.job_uuid} reported to validator {self.validator_key}')
-        job = self.pending_jobs.pop(msg.job_uuid)
-        await job.arefresh_from_db()
-        job.output_upload_status_reported_to_validator = timezone.now()
         await job.asave()
 
     async def disconnect(self, close_code):

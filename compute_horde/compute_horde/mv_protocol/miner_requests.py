@@ -50,12 +50,6 @@ class V0JobFinishedRequest(BaseMinerRequest, JobMixin):
     docker_process_stderr: str  # TODO: add max_length
 
 
-class V0OutputUploadStatus(BaseMinerRequest, JobMixin):
-    message_type: RequestType = RequestType.V0OutputUploadStatus
-    output_upload_success: bool
-    output_upload_message: str  # i.e. for failure message
-
-
 class GenericError(BaseMinerRequest):
     message_type: RequestType = RequestType.GenericError
     details: str | None = None

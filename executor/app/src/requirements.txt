@@ -20,4 +20,3 @@ websockets==12.*
 prometheus-client~=0.17.0
 django-prometheus==2.3.1
 django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@7666285
-
