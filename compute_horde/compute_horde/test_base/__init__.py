@@ -9,7 +9,6 @@ from threading import Thread
 
 import pytest
 
-
 logger = logging.getLogger(__name__)
 
 

@@ -9,4 +9,5 @@ venv
 .nox/
 __pycache__
 build
+dist
 .pdm-python

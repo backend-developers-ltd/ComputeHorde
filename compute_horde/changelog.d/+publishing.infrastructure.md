@@ -1,0 +1,1 @@
+Add CI job to publish `compute-horde` library.
