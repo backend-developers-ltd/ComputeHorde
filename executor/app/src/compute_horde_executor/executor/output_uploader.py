@@ -10,6 +10,8 @@ import httpx
 from compute_horde.em_protocol.miner_requests import OutputUpload, OutputUploadType
 from django.conf import settings
 
+OUTPUT_UPLOAD_TIMEOUT_SECONDS = 300
+
 
 class OutputUploader(metaclass=abc.ABCMeta):
     """Upload the output directory to JobRequest.OutputUpload"""
@@ -67,4 +69,5 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
                     data=form_fields,
                     files=files,
                     headers=headers,
+                    timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
                 )
