@@ -42,6 +42,7 @@ CVE_2022_0492_TIMEOUT_SECONDS = 120
 MAX_RESULT_SIZE_IN_RESPONSE = 1000
 TRUNCATED_RESPONSE_PREFIX_LEN = 100
 TRUNCATED_RESPONSE_SUFFIX_LEN = 100
+INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 300
 
 
 class RunConfigManager:
@@ -260,7 +261,7 @@ class JobRunner:
             stderr=stderr,
         )
 
-    async def unpack_volume(self, job_request: V0JobRequest):
+    async def _unpack_volume(self, job_request: V0JobRequest):
         assert str(volume_mount_dir) not in {'~', '/'}
         for path in volume_mount_dir.glob("*"):
             if path.is_file():
@@ -291,6 +292,12 @@ class JobRunner:
 
         chmod_proc = await asyncio.create_subprocess_exec("chmod", "-R", "777", temp_dir.as_posix())
         assert 0 == await chmod_proc.wait()
+
+    async def unpack_volume(self, job_request: V0JobRequest):
+        try:
+            await asyncio.wait_for(self._unpack_volume(job_request), timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS)
+        except TimeoutError:
+            raise JobError("Input volume downloading took too long")
 
 
 class Command(BaseCommand):
