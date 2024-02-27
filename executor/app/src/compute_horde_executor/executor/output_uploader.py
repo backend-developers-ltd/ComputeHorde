@@ -78,5 +78,5 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
                         timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
                     )
                     response.raise_for_status()
-                except httpx.RequestError as ex:
+                except httpx.HTTPError as ex:
                     raise OutputUploadFailed(f'Uploading output failed with http error {ex}')

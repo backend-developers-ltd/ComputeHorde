@@ -26,6 +26,14 @@ base64_zipfile = base64.b64encode(zip_contents).decode()
 job_uuid = str(uuid.uuid4())
 
 
+class ContainsStr:
+    def __init__(self, contained: str) -> None:
+        self.contained = contained
+
+    def __eq__(self, other):
+        return self.contained in other
+
+
 class MockWebsocket:
     def __init__(self, messages):
         self.closed = False
@@ -233,4 +241,51 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     assert request.url == post_url
     assert request.method == 'POST'
 
-    # TODO: check the uploaded zip is valid
+
+def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
+    # Arrange
+    httpx_mock.add_response(status_code=400)
+    command = TestCommand(iter([
+        json.dumps({
+            "message_type": "V0PrepareJobRequest",
+            "base_docker_image_name": "alpine",
+            "timeout_seconds": None,
+            "volume_type": "inline",
+            "job_uuid": job_uuid,
+        }),
+        json.dumps({
+            "message_type": "V0RunJobRequest",
+            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+            "docker_run_cmd": [],
+            "docker_run_options_preset": 'none',
+            "volume": {
+                "volume_type": "inline",
+                "contents": base64_zipfile,
+            },
+            "output_upload": {
+                "output_upload_type": "zip_and_http_post",
+                "post_url": "http://localhost",
+                "post_form_fields": {},
+            },
+            "job_uuid": job_uuid,
+        }),
+    ]))
+
+    # Act
+    command.handle()
+
+    # Assert
+    assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FailedRequest",
+            "docker_process_exit_status": None,
+            "timeout": False,
+            "docker_process_stdout": ContainsStr("Uploading output failed"),
+            "docker_process_stderr": "",
+            "job_uuid": job_uuid,
+        },
+    ]
