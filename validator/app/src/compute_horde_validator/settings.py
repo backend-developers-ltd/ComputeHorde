@@ -1,10 +1,6 @@
 """
 Django settings for compute_horde_validator project.
 """
-from celery.schedules import crontab
-
-from compute_horde import base  # noqa
-
 import inspect
 import logging
 import pathlib
@@ -13,6 +9,8 @@ from functools import wraps
 
 import bittensor
 import environ
+from celery.schedules import crontab
+from compute_horde import base  # noqa
 
 # from celery.schedules import crontab
 

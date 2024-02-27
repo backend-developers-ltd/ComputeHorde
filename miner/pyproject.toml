@@ -2,14 +2,72 @@
 name = "miner"
 requires-python = "==3.11.*"
 version = "0"
-dynamic = ["dependencies"]
-[tool.setuptools.packages.find]
-where = ["app/src/"]
-[tool.setuptools.dynamic]
-dependencies = { file = ["app/src/requirements.txt"] }
+
+dependencies = [
+    "Django~=4.2.4",
+    "django-cors-headers~=4.2.0",
+    "django-environ~=0.11.2",
+    "django-extensions==3.2.3",
+    "django-probes==1.7.0",
+    "django-debug-toolbar==4.1.0",
+    "celery~=5.3.1",
+    "flower~=2.0.0",
+    "gunicorn==20.1.0",
+    "psycopg2-binary~=2.9.7",
+    "redis~=4.6.0",
+    "sentry-sdk==1.29.2",
+    "ipython~=8.14.0",
+    "nox==2023.4.22",
+
+    "channels[daphne]==4.*",
+    "channels-redis==4.*",
+    "compute_horde @ file:///${PROJECT_ROOT}/../compute_horde/",
+
+    "prometheus-client~=0.17.0",
+    "django-prometheus==2.3.1",
+    "django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01",
+]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm]
+distribution = false
+
+[tool.pdm.dev-dependencies]
+test = [
+    "pytest",
+    "pytest-django",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "ipdb",
+    "freezegun",
+]
+format = [
+    "ruff",
+]
+lint = [
+    "ruff",
+    "codespell[toml]",
+]
+type_check = [
+    "django-stubs[compatible-mypy]",
+    "djangorestframework-stubs[compatible-mypy]",
+    "mypy",
+    "types-freezegun",
+    "types-python-dateutil",
+    "types-requests",
+]
+security_check = [
+    "bandit>=1.7.7",
+]
 
 [tool.ruff]
 src = ["app/src"]
+line-length = 100
+
+[tool.ruff.lint]
 # TODO add D
 select = ["E", "F", "I", "UP"]
 # TODO: remove E501 once docstrings are formatted
@@ -18,12 +76,11 @@ ignore = [
     "D101", "D102","D103", "D104", # TODO remove once we have docstring for all public methods
     "E501", # TODO: remove E501 once docstrings are formatted
 ]
-line-length = 100
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "test/**" = ["D", "F403", "F405"]
 
 [tool.codespell]
-skip = '*.min.js'
+skip = '*.min.js,pdm.lock'
 ignore-words-list = 'datas'

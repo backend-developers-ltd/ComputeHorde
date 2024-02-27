@@ -265,7 +265,7 @@ class JobRunner:
                     async with client.stream('GET', job_request.volume.contents) as response:
                         volume_size = int(response.headers["Content-Length"])
                         if 0 < settings.VOLUME_MAX_SIZE_BYTES < volume_size:
-                            raise JobError(f"Input volume too large")
+                            raise JobError("Input volume too large")
 
                         async for chunk in response.aiter_bytes():
                             download_file.write(chunk)

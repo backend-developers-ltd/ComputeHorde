@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import logging
-import random
 import time
 from collections.abc import Iterable
 
@@ -11,12 +10,13 @@ from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMess
 from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.miner_requests import (
     BaseMinerRequest,
+    UnauthorizedError,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
-    V0JobFinishedRequest, UnauthorizedError,
+    V0JobFinishedRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,

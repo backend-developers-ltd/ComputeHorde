@@ -5,9 +5,7 @@ from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 from functools import lru_cache
 from pathlib import Path
-from typing import (
-    TypeVar,
-)
+from typing import TypeVar
 
 from django.conf import settings
 from django.contrib.staticfiles import finders

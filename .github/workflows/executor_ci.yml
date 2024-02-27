@@ -25,9 +25,7 @@ jobs:
           python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
           cache: "pip"
       - name: Install dependencies
-        run: python -m pip install --upgrade nox pip setuptools
-      - name: Run format
-        run: nox -vs format
+        run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
       - name: Run linters
         run: nox -vs lint
   test:
@@ -45,9 +43,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
           cache: "pip"
+      - name: Install dependencies
+        run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
       - name: Prepare environment
         run: ./setup-dev.sh
-      - name: Install dependencies
-        run: python -m pip install --upgrade nox pip setuptools
+      - name: Build backenddevelopersltd/compute-horde-job-echo:v0-latest image
+        run: docker build . -t backenddevelopersltd/compute-horde-job-echo:v0-latest
+        working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_tests
       - name: Run unit tests
         run: nox -vs test

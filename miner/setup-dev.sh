@@ -8,16 +8,9 @@ ENV_DIR="./envs/dev"
 # shellcheck disable=SC2164
 cd "${PROJECT_DIR}"
 
-# Check if we are inside virtualenv or CI
-[[ -n $VIRTUAL_ENV || -n $CI ]] || { echo -e "\e[31mYou must run this script inside virtualenv!\e[0m"; exit 1; }
-
-# Install pip packages
-[[ -z $(pip freeze) ]] || echo -e "\e[33mVirtualenv is not clean, already installed packages may be upgraded\e[0m"
-echo "Installing pip development requirements"
-pip install --upgrade pip
-cd "${PROJECT_DIR}/app/src/"
-pip install --upgrade -r requirements.txt
-cd -
+# Create a lock file, install Python dependencies
+[ -f pdm.lock ] || pdm lock --group :all
+pdm sync --group :all
 
 # Create .env from the template if doesn't exist
 [[ -f "${ENV_DIR}/.env" ]] || cp "${ENV_DIR}/.env.template" "${ENV_DIR}/.env"

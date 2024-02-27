@@ -5,20 +5,26 @@ FROM $BASE_IMAGE AS base-image
 LABEL builder=true
 
 WORKDIR /root/src/
-ENV PATH=/root/.local/bin:$PATH
 
-RUN pip3 install --no-cache-dir -U pip
-RUN pip3 install --user --no-cache-dir gunicorn==20.1.0
+RUN pip3 install --no-cache-dir 'pdm>=2.12,<3'
 
 RUN apt-get update && apt-get install -y git
-COPY ./src/requirements.txt /root/requirements.txt
-COPY ./packages/compute_horde /compute_horde
-RUN cd /root && pip3 install --user --no-cache-dir -r requirements.txt
+COPY pyproject.toml pdm.lock ./
+RUN pdm lock --check
+COPY ./app/packages/compute_horde /root/compute_horde
 
-COPY ./src/ /root/src/
-COPY ./envs/prod/entrypoint.sh /root/src/
-COPY ./envs/prod/gunicorn.conf.py /root/src/
-COPY ./envs/prod/celery-entrypoint.sh /root/src/
+RUN --mount=type=cache,target=/tmp/pdm_cache \
+  pdm config cache_dir /tmp/pdm_cache && \
+  pdm config python.use_venv False && \
+  pdm sync --prod --group :all
+RUN mkdir -p /opt/ && mv __pypackages__/3.11/ /opt/pypackages/
+ENV PATH=/opt/pypackages/bin:$PATH
+ENV PYTHONPATH=/opt/pypackages/lib:$PYTHONPATH
+
+COPY ./app/src/ /root/src/
+COPY ./app/envs/prod/entrypoint.sh /root/src/
+COPY ./app/envs/prod/gunicorn.conf.py /root/src/
+COPY ./app/envs/prod/celery-entrypoint.sh /root/src/
 
 RUN python3 -m compileall -b -f -q /root/
 RUN ENV=prod ENV_FILL_MISSING_VALUES=1 DATABASE_URL= SECRET_KEY=dummy python3 manage.py collectstatic --no-input --clear
@@ -33,9 +39,11 @@ RUN apt-get update \
 
 WORKDIR /root/src/
 ENV PYTHONUNBUFFERED=1
-ENV PATH=/root/.local/bin:$PATH
+ENV PATH=/opt/pypackages/bin:$PATH
+ENV PYTHONPATH=/opt/pypackages/lib:$PYTHONPATH
 
-COPY --from=base-image /root/ /root/
+COPY --from=base-image /root/src/ /root/src/
+COPY --from=base-image /opt/pypackages/ /opt/pypackages/
 
 EXPOSE 8000
 
