@@ -43,12 +43,6 @@ class ExecutorFailed(pydantic.BaseModel):
     docker_process_stderr: str
 
 
-class ExecutorOutputUploadStatus(pydantic.BaseModel):
-    job_uuid: str
-    output_upload_success: bool
-    output_upload_message: str
-
-
 class BaseMixin(AsyncWebsocketConsumer, abc.ABC):
 
     @classmethod

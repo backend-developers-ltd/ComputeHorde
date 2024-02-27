@@ -10,7 +10,6 @@ class RequestType(enum.Enum):
     V0FailedToPrepare = 'V0FailedToPrepare'
     V0FinishedRequest = 'V0FinishedRequest'
     V0FailedRequest = 'V0FailedRequest'
-    V0OutputUploadStatus = 'V0OutputUploadStatus'
     GenericError = 'GenericError'
 
 

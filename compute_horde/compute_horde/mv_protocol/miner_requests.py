@@ -12,7 +12,6 @@ class RequestType(enum.Enum):
     V0ExecutorFailedRequest = 'V0ExecutorFailedRequest'
     V0JobFailedRequest = 'V0JobFailedRequest'
     V0JobFinishedRequest = 'V0JobFinishedRequest'
-    V0OutputUploadStatus = 'V0OutputUploadStatus'
     GenericError = 'GenericError'
     UnauthorizedError = 'UnauthorizedError'
 

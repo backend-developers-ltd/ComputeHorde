@@ -18,7 +18,6 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ExecutorFailed,
     ExecutorFailedToPrepare,
     ExecutorFinished,
-    ExecutorOutputUploadStatus,
     ExecutorReady,
     ValidatorInterfaceMixin,
 )
