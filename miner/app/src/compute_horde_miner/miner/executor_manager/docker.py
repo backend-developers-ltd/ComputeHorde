@@ -30,7 +30,7 @@ class DockerExecutorManager(BaseExecutorManager):
             if process.returncode:
                 logger.error(f'Pulling executor container failed with returncode={process.returncode}')
                 raise ExecutorUnavailable('Failed to pull executor image')
-        except asyncio.TimeoutError:
+        except TimeoutError:
             process.kill()
             logger.error('Pulling executor container timed out, pulling it from shell might provide more details')
             raise ExecutorUnavailable('Failed to pull executor image')

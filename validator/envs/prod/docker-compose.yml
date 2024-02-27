@@ -31,8 +31,8 @@ services:
 
   app:
     build:
-      context: ./app
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: app/Dockerfile
     image: compute_horde_validator/app
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1

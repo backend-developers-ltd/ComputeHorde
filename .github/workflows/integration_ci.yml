@@ -22,6 +22,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
           cache: "pip"
+      - name: Install dependencies
+        run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
+      - name: Setup common virtualenv
+        # In order not to exhaust disk on GitHub runner, we use one single
+        # virtualenv for all pdm projects: miner, executor, validator.
+        run: |
+          pdm config venv.backend venv
+          python -m venv .venv
+          echo "$.venv/bin" >> $GITHUB_PATH
+          echo "VIRTUAL_ENV=${{ github.workspace }}/.venv" >> $GITHUB_ENV
+          echo "PDM_IGNORE_SAVED_PYTHON=1" >> $GITHUB_ENV
+      - name: Install test dependencies
+        run: pdm install --check
       - name: Prepare miner environment
         run: ./setup-dev.sh
         working-directory: ./miner
@@ -31,8 +44,6 @@ jobs:
       - name: Prepare validator environment
         run: ./setup-dev.sh
         working-directory: ./validator
-      - name: Install dependencies
-        run: python -m pip install --upgrade nox pip setuptools
       - name: Run miner dockerized services
         run: docker compose up -d --wait
         working-directory: ./miner
@@ -40,11 +51,14 @@ jobs:
         run: docker compose up -d --wait
         working-directory: ./validator
       - name: Run miner migrations
-        run: cd app/src && python manage.py wait_for_database --timeout 120 && python manage.py migrate
+        run: cd app/src && pdm run python manage.py wait_for_database --timeout 120 && pdm run python manage.py migrate
         working-directory: ./miner
       - name: Run validator migrations
-        run: cd app/src && python manage.py wait_for_database --timeout 120 && python manage.py migrate
+        run: cd app/src && pdm run python manage.py wait_for_database --timeout 120 && pdm run python manage.py migrate
         working-directory: ./validator
+      - name: Build backenddevelopersltd/compute-horde-job-echo:v0-latest image
+        run: docker build . -t backenddevelopersltd/compute-horde-job-echo:v0-latest
+        working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_tests/
       - name: Run unit tests
         run: nox -vs test
       - name: Stop miner dockerized services

@@ -18,10 +18,10 @@ Alternatively, you can use `docker-compose` to launch all the necessary services
 
 # Setup development environment
 
+You'll need to have Python 3.11 and [pdm](https://pdm-project.org) installed.
+
 ```sh
 # 1st tab
-$ python -m venv venv
-$ source venv/bin/activate
 $ ./setup-dev.sh
 ```
 
@@ -33,7 +33,7 @@ docker-compose up
 ```sh
 # 1st tab
 cd app/src
-python manage.py wait_for_database --timeout 10
-python manage.py migrate
-python manage.py runserver
+pdm run python manage.py wait_for_database --timeout 10
+pdm run python manage.py migrate
+pdm run python manage.py runserver
 ```
