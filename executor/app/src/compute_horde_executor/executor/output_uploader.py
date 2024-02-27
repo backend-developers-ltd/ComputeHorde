@@ -13,17 +13,22 @@ from django.conf import settings
 OUTPUT_UPLOAD_TIMEOUT_SECONDS = 300
 
 
+class OutputUploadFailed(Exception):
+    def __init__(self, description: str):
+        self.description = description
+
+
 class OutputUploader(metaclass=abc.ABCMeta):
     """Upload the output directory to JobRequest.OutputUpload"""
     def __init__(self, upload_output: OutputUpload):
         self.upload_output = upload_output
 
-    @abc.abstractmethod
-    async def upload(self, directory: pathlib.Path): ...
-
     @classmethod
     @abc.abstractmethod
-    def handles_output_type(cls) -> OutputUploadType: ...
+    def handles_output_type(cls) -> OutputUploadType | None: ...
+
+    @abc.abstractmethod
+    async def upload(self, directory: pathlib.Path): ...
 
     __output_type_map: dict[OutputUploadType, type[OutputUploader]] = {}
 
@@ -39,7 +44,7 @@ class OutputUploader(metaclass=abc.ABCMeta):
 class ZipAndHTTPPostOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP POST the zip file to the given URL"""
     @classmethod
-    def handles_output_type(cls) -> OutputUploadType:
+    def handles_output_type(cls) -> OutputUploadType | None:
         return OutputUploadType.zip_and_http_post
 
     async def upload(self, directory: pathlib.Path):
@@ -52,7 +57,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
             fp.seek(0)
 
             if file_size > settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES:
-                raise Exception('Attempting to upload too large file')
+                raise OutputUploadFailed('Attempting to upload too large file')
 
             async with httpx.AsyncClient() as client:
                 form_fields = {
@@ -64,10 +69,14 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
                     "Content-Length": str(file_size),
                     "Content-Type": "application/zip",
                 }
-                await client.post(
-                    url=self.upload_output.post_url,
-                    data=form_fields,
-                    files=files,
-                    headers=headers,
-                    timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
-                )
+                try:
+                    response = await client.post(
+                        url=self.upload_output.post_url,
+                        data=form_fields,
+                        files=files,
+                        headers=headers,
+                        timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
+                    )
+                    response.raise_for_status()
+                except httpx.RequestError as ex:
+                    raise OutputUploadFailed(f'Uploading output failed with http error {ex}')

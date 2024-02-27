@@ -29,7 +29,7 @@ from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMess
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from compute_horde_executor.executor.output_uploader import OutputUploader
+from compute_horde_executor.executor.output_uploader import OutputUploader, OutputUploadFailed
 
 logger = logging.getLogger(__name__)
 
@@ -370,20 +370,21 @@ class Command(BaseCommand):
                         setattr(result, field, truncate(value))
 
                 if result.success:
+                    if job_request.output_upload:
+                        output_uploader = OutputUploader.for_upload_output(job_request.output_upload)
+                        await output_uploader.upload(output_volume_mount_dir)
                     await self.miner_client.send_finished(result)
                 else:
                     await self.miner_client.send_failed(result)
-
-                # If we are told to upload all the crap in /output, then we try to do it :)
-                if job_request.output_upload is not None:
-                    try:
-                        uploader = OutputUploader.for_upload_output(job_request.output_upload)
-                        await uploader.upload(output_volume_mount_dir)
-                    except Exception:
-                        logger.error(
-                            f'Unhandled exception when uploading output of job {initial_message.job_uuid}',
-                            exc_info=True,
-                        )
+            except OutputUploadFailed as ex:
+                logger.info(f'Uploading output failed for job {initial_message.job_uuid} with error: {ex!r}')
+                await self.miner_client.send_failed(JobResult(
+                    success=False,
+                    exit_status=None,
+                    timeout=False,
+                    stdout=ex.description,
+                    stderr="",
+                ))
             except Exception:
                 logger.error(f'Unhandled exception when working on job {initial_message.job_uuid}', exc_info=True)
                 # not deferred, because this is the end of the process, making it deferred would cause it never
