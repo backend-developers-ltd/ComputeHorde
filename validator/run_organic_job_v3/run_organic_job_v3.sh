@@ -1,3 +1,5 @@
+#!/bin/bash -eux
+
 # In order for this script to work, a docker image pushed by it must be a public one. It's up to the
 # user to perform a relevant `docker login` before executing. Both DockerHub and GitHub Packages provide free
 # public image hosting. See

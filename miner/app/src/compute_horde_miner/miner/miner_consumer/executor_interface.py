@@ -104,6 +104,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             docker_run_options_preset=msg.docker_run_options_preset,
             docker_run_cmd=msg.docker_run_cmd,
             volume=msg.volume,
+            output_upload=msg.output_upload,
         ).json())
 
     async def disconnect(self, close_code):

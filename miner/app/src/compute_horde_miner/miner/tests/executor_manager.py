@@ -1,4 +1,5 @@
 import asyncio
+from unittest import mock
 
 from channels.testing import WebsocketCommunicator
 
@@ -34,7 +35,8 @@ async def fake_executor(token):
         "volume": {
             "volume_type": "inline",
             "contents": "nonsense"
-        }
+        },
+        "output_upload": mock.ANY,
     }, response
     await communicator.send_json_to({
         "message_type": "V0FinishedRequest",

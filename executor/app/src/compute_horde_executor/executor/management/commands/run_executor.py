@@ -29,12 +29,19 @@ from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMess
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from compute_horde_executor.executor.output_uploader import OutputUploader, OutputUploadFailed
+
 logger = logging.getLogger(__name__)
 
 temp_dir = pathlib.Path(tempfile.mkdtemp())
 volume_mount_dir = temp_dir / 'volume'
+output_volume_mount_dir = temp_dir / 'output'
 
 CVE_2022_0492_TIMEOUT_SECONDS = 120
+MAX_RESULT_SIZE_IN_RESPONSE = 1000
+TRUNCATED_RESPONSE_PREFIX_LEN = 100
+TRUNCATED_RESPONSE_SUFFIX_LEN = 100
+INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 300
 
 
 class RunConfigManager:
@@ -143,10 +150,11 @@ class JobResult(pydantic.BaseModel):
     stdout: str
     stderr: str
 
-    @pydantic.validator('stdout', 'stderr')
-    def truncate(cls, v: str) -> str:
-        if len(v) >= 1000:
-            return f'{v[:100]} ... {v[-100:]}'
+
+def truncate(v: str) -> str:
+    if len(v) > MAX_RESULT_SIZE_IN_RESPONSE:
+        return f'{v[:TRUNCATED_RESPONSE_PREFIX_LEN]} ... {v[-TRUNCATED_RESPONSE_SUFFIX_LEN:]}'
+    else:
         return v
 
 
@@ -160,6 +168,8 @@ class JobRunner:
         self.initial_job_request = initial_job_request
 
     async def prepare(self):
+        volume_mount_dir.mkdir(exist_ok=True)
+        output_volume_mount_dir.mkdir(exist_ok=True)
 
         process = await asyncio.create_subprocess_exec(
             'docker', 'pull', self.initial_job_request.base_docker_image_name,
@@ -198,6 +208,8 @@ class JobRunner:
             'none',
             '-v',
             f'{volume_mount_dir.as_posix()}/:/volume/',
+            '-v',
+            f'{output_volume_mount_dir.as_posix()}/:/output/',
             job_request.docker_image_name,
             *job_request.docker_run_cmd,
         ]
@@ -244,15 +256,13 @@ class JobRunner:
             stderr=stderr,
         )
 
-    async def unpack_volume(self, job_request: V0JobRequest):
+    async def _unpack_volume(self, job_request: V0JobRequest):
         assert str(volume_mount_dir) not in {'~', '/'}
         for path in volume_mount_dir.glob("*"):
             if path.is_file():
                 path.unlink()
             elif path.is_dir():
                 shutil.rmtree(path)
-
-        volume_mount_dir.mkdir(exist_ok=True)
 
         if job_request.volume.volume_type == VolumeType.inline:
             decoded_contents = base64.b64decode(job_request.volume.contents)
@@ -277,6 +287,12 @@ class JobRunner:
 
         chmod_proc = await asyncio.create_subprocess_exec("chmod", "-R", "777", temp_dir.as_posix())
         assert 0 == await chmod_proc.wait()
+
+    async def unpack_volume(self, job_request: V0JobRequest):
+        try:
+            await asyncio.wait_for(self._unpack_volume(job_request), timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS)
+        except TimeoutError as exc:
+            raise JobError("Input volume downloading took too long") from exc
 
 
 class Command(BaseCommand):
@@ -346,10 +362,30 @@ class Command(BaseCommand):
                 logger.debug(f'Running job {initial_message.job_uuid}')
                 result = await job_runner.run_job(job_request)
 
+                # Save the streams in output volume and truncate them in response.
+                for field in ('stdout', 'stderr'):
+                    value = getattr(result, field)
+                    # TODO: Replace open() with async calls (aiofiles or something) if it becomes a async-bottleneck
+                    with open(output_volume_mount_dir / f'{field}.txt', 'w') as f:
+                        f.write(value)
+                    setattr(result, field, truncate(value))
+
                 if result.success:
+                    if job_request.output_upload:
+                        output_uploader = OutputUploader.for_upload_output(job_request.output_upload)
+                        await output_uploader.upload(output_volume_mount_dir)
                     await self.miner_client.send_finished(result)
                 else:
                     await self.miner_client.send_failed(result)
+            except OutputUploadFailed as ex:
+                logger.warning(f'Uploading output failed for job {initial_message.job_uuid} with error: {ex!r}')
+                await self.miner_client.send_failed(JobResult(
+                    success=False,
+                    exit_status=None,
+                    timeout=False,
+                    stdout=ex.description,
+                    stderr="",
+                ))
             except Exception:
                 logger.error(f'Unhandled exception when working on job {initial_message.job_uuid}', exc_info=True)
                 # not deferred, because this is the end of the process, making it deferred would cause it never

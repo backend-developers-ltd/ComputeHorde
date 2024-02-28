@@ -3,7 +3,7 @@ import logging
 
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
-from compute_horde.em_protocol.miner_requests import Volume
+from compute_horde.em_protocol.miner_requests import OutputUpload, Volume
 from compute_horde.mv_protocol import validator_requests
 
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
@@ -27,6 +27,7 @@ class JobRequest(pydantic.BaseModel):
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
+    output_upload: OutputUpload | None
 
 
 class ExecutorFinished(pydantic.BaseModel):
@@ -122,6 +123,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
                     "volume_type": job_request.volume.volume_type.value,
                     "contents": job_request.volume.contents,
                 },
+                output_upload=job_request.output_upload,
             ).dict()
         })
 

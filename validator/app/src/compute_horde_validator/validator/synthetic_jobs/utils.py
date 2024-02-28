@@ -181,7 +181,8 @@ async def _execute_job(job: JobBase) -> tuple[
             volume={
                 'volume_type': VolumeType.inline.value,
                 'contents': job_generator.volume_contents(),
-            }
+            },
+            output_upload=None,  # TODO
         ))
         full_job_sent = time.time()
         msg = None
