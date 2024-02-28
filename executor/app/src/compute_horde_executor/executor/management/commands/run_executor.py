@@ -39,31 +39,7 @@ MAX_RESULT_SIZE_IN_RESPONSE = 1000
 TRUNCATED_RESPONSE_PREFIX_LEN = 100
 TRUNCATED_RESPONSE_SUFFIX_LEN = 100
 INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 300
-
-DOCKER_BASE_IMAGES_TO_KEEP = {
-    *[f"ubuntu:{version}" for version in ("20.04", "22.04", "focal", "jammy")],
-    *[
-        f"debian:{version}" for version in (
-            "10",
-            "10-slim",
-            "11",
-            "11-slim",
-            "12",
-            "12-slim",
-            "bookworm",
-            "bookworm-slim",
-            "bullseye",
-            "bullseye-slim",
-            "buster",
-            "buster-slim",
-        )
-    ],
-    *[
-        f"python:3.{minor}-{suffix}"
-        for minor in range(8, 13)
-        for suffix in ("bookworm", "slim-bookworm", "slim", "bullseye", "slim-bullseye")
-    ],
-}
+DOCKER_BASE_IMAGES_TO_KEEP = {"python", "ubuntu", "debian", "alpine"}
 
 
 class RunConfigManager:
@@ -211,10 +187,22 @@ class JobRunner:
             logger.error(msg)
             raise JobError(msg)
 
-        # Run a container to mark the base image as "used" to avoid GC.
-        # Ignore errors (like "container name already in use").
-        if self.initial_job_request.base_docker_image_name in DOCKER_BASE_IMAGES_TO_KEEP:
+        # Check if base image is one of predefined "common" images to avoid GC.
+        image_repo, _, _ = self.initial_job_request.base_docker_image_name.partition(":")
+        if image_repo in DOCKER_BASE_IMAGES_TO_KEEP:
             keep_container_name = "keep_" + self.initial_job_request.base_docker_image_name.replace(":", "_")
+            # Remove previous container, so that newly pulled image is marked
+            # Ignore errors (like "No such container")
+            process = await asyncio.create_subprocess_exec(
+                'docker',
+                'rm',
+                keep_container_name,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await process.wait()
+
+            # Run a container to mark the base image as "used" to avoid GC
             process = await asyncio.create_subprocess_exec(
                 'docker',
                 'run',
@@ -320,10 +308,6 @@ class JobRunner:
     async def clean(self):
         # remove input/output directories
         root_for_remove = pathlib.Path('/temp_dir/')
-        things_to_remove = [
-            (root_for_remove / path.relative_to(self.temp_dir)).as_posix()
-            for path in self.temp_dir.glob('*')
-        ]
         process = await asyncio.create_subprocess_exec(
             'docker',
             'run',
@@ -346,8 +330,6 @@ class JobRunner:
             "prune",
             "--all",
             "--force",
-            # job_request.docker_image_name,
-            # initial_message.base_docker_image_name,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
