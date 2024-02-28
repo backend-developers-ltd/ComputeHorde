@@ -11,12 +11,14 @@ RUN pip3 install --no-cache-dir 'pdm>=2.12,<3'
 RUN apt-get update && apt-get install -y git
 COPY pyproject.toml pdm.lock ./
 RUN pdm lock --check
-COPY ./app/packages/compute_horde /root/compute_horde
+COPY --from=compute-horde . /root/compute_horde
 
 RUN --mount=type=cache,target=/tmp/pdm_cache \
   pdm config cache_dir /tmp/pdm_cache && \
   pdm config python.use_venv False && \
-  pdm sync --prod --group :all
+  # compute-horde from path computes version from git tag which is unavailable here, 
+  # hence we pass PDM_BUILD_SCM_VERSION=0 manually
+  PDM_BUILD_SCM_VERSION=0 pdm sync --prod --group :all
 RUN mkdir -p /opt/ && mv __pypackages__/3.11/ /opt/pypackages/
 ENV PATH=/opt/pypackages/bin:$PATH
 ENV PYTHONPATH=/opt/pypackages/lib:$PYTHONPATH
