@@ -45,10 +45,19 @@ jobs:
           cache: "pip"
       - name: Install dependencies
         run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
+      - name: Setup common virtualenv
+        # In order not to exhaust disk on GitHub runner, we use one single
+        # virtualenv for all pdm projects: miner, executor, validator.
+        run: |
+          pdm config venv.backend venv
+          python -m venv .venv
+          echo "$.venv/bin" >> $GITHUB_PATH
+          echo "VIRTUAL_ENV=${{ github.workspace }}/.venv" >> $GITHUB_ENV
+          echo "PDM_IGNORE_SAVED_PYTHON=1" >> $GITHUB_ENV
       - name: Prepare environment
         run: ./setup-dev.sh
       - name: Build backenddevelopersltd/compute-horde-job-echo:v0-latest image
         run: docker build . -t backenddevelopersltd/compute-horde-job-echo:v0-latest
         working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_tests
       - name: Run unit tests
-        run: nox -vs test
+        run: pdm run nox -vs test --no-venv
