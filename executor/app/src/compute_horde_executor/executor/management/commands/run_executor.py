@@ -291,8 +291,8 @@ class JobRunner:
     async def unpack_volume(self, job_request: V0JobRequest):
         try:
             await asyncio.wait_for(self._unpack_volume(job_request), timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS)
-        except TimeoutError:
-            raise JobError("Input volume downloading took too long")
+        except TimeoutError as exc:
+            raise JobError("Input volume downloading took too long") from exc
 
 
 class Command(BaseCommand):
@@ -366,7 +366,7 @@ class Command(BaseCommand):
                 for field in ('stdout', 'stderr'):
                     value = getattr(result, field)
                     # TODO: Replace open() with async calls (aiofiles or something) if it becomes a async-bottleneck
-                    with open(output_volume_mount_dir / f'{field}.txt') as f:
+                    with open(output_volume_mount_dir / f'{field}.txt', 'w') as f:
                         f.write(value)
                     setattr(result, field, truncate(value))
 
@@ -378,7 +378,7 @@ class Command(BaseCommand):
                 else:
                     await self.miner_client.send_failed(result)
             except OutputUploadFailed as ex:
-                logger.info(f'Uploading output failed for job {initial_message.job_uuid} with error: {ex!r}')
+                logger.warning(f'Uploading output failed for job {initial_message.job_uuid} with error: {ex!r}')
                 await self.miner_client.send_failed(JobResult(
                     success=False,
                     exit_status=None,
