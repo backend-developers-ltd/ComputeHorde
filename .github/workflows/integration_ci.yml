@@ -60,7 +60,7 @@ jobs:
         run: docker build . -t backenddevelopersltd/compute-horde-job-echo:v0-latest
         working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_tests/
       - name: Run unit tests
-        run: nox -vs test
+        run: pdm run nox -vs test --no-venv
       - name: Stop miner dockerized services
         if: success() || failure()
         run: docker compose down -v
