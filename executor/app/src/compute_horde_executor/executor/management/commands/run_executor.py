@@ -3,6 +3,7 @@ import base64
 import io
 import logging
 import pathlib
+import shlex
 import shutil
 import tempfile
 import time
@@ -330,11 +331,9 @@ class JobRunner:
             '-v',
             f'{self.temp_dir.as_posix()}/:/{root_for_remove.as_posix()}/',
             'alpine:3.19',
-            'rm',
-            '-rf',
-            *things_to_remove,
-            'ls',
-            '/temp_dir/',
+            'sh',
+            '-c',
+            f'rm -rf {shlex.quote(root_for_remove.as_posix())}/*',
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
