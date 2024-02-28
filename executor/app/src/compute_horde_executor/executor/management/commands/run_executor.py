@@ -152,7 +152,10 @@ class JobResult(pydantic.BaseModel):
 
 
 def truncate(v: str) -> str:
-    return f'{v[:TRUNCATED_RESPONSE_PREFIX_LEN]} ... {v[-TRUNCATED_RESPONSE_SUFFIX_LEN:]}'
+    if len(v) > MAX_RESULT_SIZE_IN_RESPONSE:
+        return f'{v[:TRUNCATED_RESPONSE_PREFIX_LEN]} ... {v[-TRUNCATED_RESPONSE_SUFFIX_LEN:]}'
+    else:
+        return v
 
 
 class JobError(Exception):
@@ -359,15 +362,13 @@ class Command(BaseCommand):
                 logger.debug(f'Running job {initial_message.job_uuid}')
                 result = await job_runner.run_job(job_request)
 
-                # Check if output streams exceed a certain size.
-                # If it does, save the streams in output volume and truncate them in response.
+                # Save the streams in output volume and truncate them in response.
                 for field in ('stdout', 'stderr'):
                     value = getattr(result, field)
-                    if len(value) > MAX_RESULT_SIZE_IN_RESPONSE:
-                        # TODO: Replace open() with async calls (aiofiles or something) if it becomes a async-bottleneck
-                        with open(output_volume_mount_dir / f'{field}.txt') as f:
-                            f.write(value)
-                        setattr(result, field, truncate(value))
+                    # TODO: Replace open() with async calls (aiofiles or something) if it becomes a async-bottleneck
+                    with open(output_volume_mount_dir / f'{field}.txt') as f:
+                        f.write(value)
+                    setattr(result, field, truncate(value))
 
                 if result.success:
                     if job_request.output_upload:
