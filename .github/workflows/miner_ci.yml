@@ -45,6 +45,15 @@ jobs:
           cache: "pip"
       - name: Install dependencies
         run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
+      - name: Setup common virtualenv
+        # In order not to exhaust disk on GitHub runner, we use one single
+        # virtualenv for all pdm projects: miner, executor, validator.
+        run: |
+          pdm config venv.backend venv
+          python -m venv .venv
+          echo "$.venv/bin" >> $GITHUB_PATH
+          echo "VIRTUAL_ENV=${{ github.workspace }}/.venv" >> $GITHUB_ENV
+          echo "PDM_IGNORE_SAVED_PYTHON=1" >> $GITHUB_ENV
       - name: Prepare environment
         run: ./setup-dev.sh
       - name: Run dockerized services
@@ -52,7 +61,7 @@ jobs:
       - name: Run migrations
         run: cd app/src && pdm run python manage.py wait_for_database --timeout 120 && pdm run python manage.py migrate
       - name: Run unit tests
-        run: nox -vs test
+        run: pdm run nox -vs test --no-venv
       - name: Stop dockerized services
         if: success() || failure()
         run: docker compose down -v
