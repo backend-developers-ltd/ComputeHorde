@@ -187,34 +187,6 @@ class JobRunner:
             logger.error(msg)
             raise JobError(msg)
 
-        # Check if base image is one of predefined "common" images to avoid GC.
-        image_repo, _, _ = self.initial_job_request.base_docker_image_name.partition(":")
-        if image_repo in DOCKER_BASE_IMAGES_TO_KEEP:
-            keep_container_name = "keep_" + self.initial_job_request.base_docker_image_name.replace(":", "_")
-            # Remove previous container, so that newly pulled image is marked
-            # Ignore errors (like "No such container")
-            process = await asyncio.create_subprocess_exec(
-                'docker',
-                'rm',
-                keep_container_name,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await process.wait()
-
-            # Run a container to mark the base image as "used" to avoid GC
-            process = await asyncio.create_subprocess_exec(
-                'docker',
-                'run',
-                '--name',
-                keep_container_name,
-                self.initial_job_request.base_docker_image_name,
-                'echo',
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await process.wait()
-
     async def run_job(self, job_request: V0JobRequest):
         try:
             docker_run_options = RunConfigManager.preset_to_docker_run_args(job_request.docker_run_options_preset)
@@ -306,7 +278,7 @@ class JobRunner:
         )
 
     async def clean(self):
-        # remove input/output directories
+        # remove input/output directories with docker, to deal with funky file permissions
         root_for_remove = pathlib.Path('/temp_dir/')
         process = await asyncio.create_subprocess_exec(
             'docker',
@@ -322,6 +294,35 @@ class JobRunner:
             stderr=asyncio.subprocess.DEVNULL,
         )
         await process.wait()
+        self.temp_dir.rmdir()
+
+        # Check if base image is one of predefined "common" images to avoid GC.
+        image_repo, _, _ = self.initial_job_request.base_docker_image_name.partition(":")
+        if image_repo in DOCKER_BASE_IMAGES_TO_KEEP:
+            keep_container_name = "keep_" + self.initial_job_request.base_docker_image_name.replace(":", "_")
+            # Remove previous container, so that newly pulled image is marked
+            # Ignore errors (like "No such container")
+            process = await asyncio.create_subprocess_exec(
+                'docker',
+                'rm',
+                keep_container_name,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await process.wait()
+
+            # Run a container to mark the base image as "used" to avoid GC
+            process = await asyncio.create_subprocess_exec(
+                'docker',
+                'run',
+                '--name',
+                keep_container_name,
+                self.initial_job_request.base_docker_image_name,
+                'echo',
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await process.wait()
 
         # remove docker images
         process = await asyncio.create_subprocess_exec(
@@ -334,7 +335,6 @@ class JobRunner:
             stderr=asyncio.subprocess.DEVNULL,
         )
         await process.wait()
-        self.temp_dir.rmdir()
 
     async def _unpack_volume(self, job_request: V0JobRequest):
         assert str(self.volume_mount_dir) not in {'~', '/'}
