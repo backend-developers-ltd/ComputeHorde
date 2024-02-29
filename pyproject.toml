@@ -8,7 +8,7 @@ dev = [
     "pytest-asyncio",
     "pytest-xdist",
     "requests",
-    "-e compute_horde @ file:///${PROJECT_ROOT}/compute_horde/",
+    "-e compute-horde @ file:///${PROJECT_ROOT}/compute_horde/",
     "-e file:///${PROJECT_ROOT}/miner",
     "-e file:///${PROJECT_ROOT}/executor",
     "-e file:///${PROJECT_ROOT}/validator",

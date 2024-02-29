@@ -7,7 +7,6 @@ import websockets
 
 from compute_horde.base_requests import BaseRequest, ValidationError
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -112,7 +111,7 @@ class AbstractMinerClient(abc.ABC):
             except ValidationError as ex:
                 error_msg = f'Malformed message from miner {self.miner_name}: {str(ex)}'
                 logger.info(error_msg)
-                self.deferred_send_model((self.outgoing_generic_error_class()(details=error_msg)))
+                self.deferred_send_model(self.outgoing_generic_error_class()(details=error_msg))
                 continue
 
             if isinstance(msg, self.incoming_generic_error_class()):

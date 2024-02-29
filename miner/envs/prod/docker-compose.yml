@@ -33,6 +33,8 @@ services:
     build:
       context: .
       dockerfile: app/Dockerfile
+      additional_contexts:
+        compute-horde: ../compute_horde
     image: compute_horde_miner/app
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1

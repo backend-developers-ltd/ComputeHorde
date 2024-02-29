@@ -1,7 +1,5 @@
 import enum
 
-import pydantic
-
 from ..base_requests import BaseRequest, JobMixin
 
 
