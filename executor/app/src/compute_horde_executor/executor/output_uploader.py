@@ -25,7 +25,7 @@ class OutputUploader(metaclass=abc.ABCMeta):
 
     @classmethod
     @abc.abstractmethod
-    def handles_output_type(cls) -> OutputUploadType | None: ...
+    def handles_output_type(cls) -> OutputUploadType: ...
 
     @abc.abstractmethod
     async def upload(self, directory: pathlib.Path): ...
@@ -44,14 +44,14 @@ class OutputUploader(metaclass=abc.ABCMeta):
 class ZipAndHTTPPostOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP POST the zip file to the given URL"""
     @classmethod
-    def handles_output_type(cls) -> OutputUploadType | None:
+    def handles_output_type(cls) -> OutputUploadType:
         return OutputUploadType.zip_and_http_post
 
     async def upload(self, directory: pathlib.Path):
         with tempfile.TemporaryFile() as fp:
-            zipf = zipfile.ZipFile(fp, mode="w")
-            for file in directory.glob('**/*'):
-                zipf.write(filename=file, arcname=file.relative_to(directory))
+            with zipfile.ZipFile(fp, mode="w") as zipf:
+                for file in directory.glob('**/*'):
+                    zipf.write(filename=file, arcname=file.relative_to(directory))
 
             file_size = fp.tell()
             fp.seek(0)
@@ -62,7 +62,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
             async with httpx.AsyncClient() as client:
                 form_fields = {
                     "Content-Type": "application/zip",
-                    **self.upload_output.post_form_fields,
+                    **self.upload_output.form_fields,
                 }
                 files = {"file": ("output.zip", fp, "application/zip")}
                 headers = {
@@ -71,7 +71,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
                 }
                 try:
                     response = await client.post(
-                        url=self.upload_output.post_url,
+                        url=self.upload_output.url,
                         data=form_fields,
                         files=files,
                         headers=headers,
@@ -80,3 +80,45 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
                     response.raise_for_status()
                 except httpx.HTTPError as ex:
                     raise OutputUploadFailed(f'Uploading output failed with http error {ex}')
+
+
+class ZipAndHTTPPutOutputUploader(OutputUploader):
+    """Zip the upload the output directory and HTTP PUT the zip file to the given URL"""
+
+    @classmethod
+    def handles_output_type(cls) -> OutputUploadType:
+        return OutputUploadType.zip_and_http_put
+
+    async def upload(self, directory: pathlib.Path):
+        with tempfile.TemporaryFile() as fp:
+            with zipfile.ZipFile(fp, mode="w") as zipf:
+                for file in directory.glob('**/*'):
+                    zipf.write(filename=file, arcname=file.relative_to(directory))
+
+            file_size = fp.tell()
+            fp.seek(0)
+
+            if file_size > settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES:
+                raise OutputUploadFailed('Attempting to upload too large file')
+
+            async with httpx.AsyncClient() as client:
+                headers = {
+                    "Content-Length": str(file_size),
+                    "Content-Type": "application/zip",
+                }
+                try:
+                    response = await client.put(
+                        url=self.upload_output.url,
+                        content=iterator_to_async_streem(fp),
+                        headers=headers,
+                        timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
+                    )
+                    response.raise_for_status()
+                except httpx.HTTPError as ex:
+                    raise OutputUploadFailed(f'Uploading output failed with http error {ex}')
+
+
+async def iterator_to_async_streem(it):
+    """ This is stupid. """
+    for x in it:
+        yield x
