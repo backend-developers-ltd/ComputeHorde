@@ -11,6 +11,7 @@ from compute_horde.em_protocol.miner_requests import OutputUpload, OutputUploadT
 from django.conf import settings
 
 OUTPUT_UPLOAD_TIMEOUT_SECONDS = 300
+MAX_NUMBER_OF_FILES = 1000
 
 
 class OutputUploadFailed(Exception):
@@ -50,7 +51,9 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
     async def upload(self, directory: pathlib.Path):
         with tempfile.TemporaryFile() as fp:
             with zipfile.ZipFile(fp, mode="w") as zipf:
-                for file in directory.glob('**/*'):
+                for count, file in enumerate(directory.glob('**/*'), start=1):
+                    if count > MAX_NUMBER_OF_FILES:
+                        raise OutputUploadFailed('Attempting to upload too many files')
                     zipf.write(filename=file, arcname=file.relative_to(directory))
 
             file_size = fp.tell()
@@ -92,7 +95,9 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
     async def upload(self, directory: pathlib.Path):
         with tempfile.TemporaryFile() as fp:
             with zipfile.ZipFile(fp, mode="w") as zipf:
-                for file in directory.glob('**/*'):
+                for count, file in enumerate(directory.glob('**/*'), start=1):
+                    if count > MAX_NUMBER_OF_FILES:
+                        raise OutputUploadFailed('Attempting to upload too many files')
                     zipf.write(filename=file, arcname=file.relative_to(directory))
 
             file_size = fp.tell()
@@ -109,7 +114,7 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
                 try:
                     response = await client.put(
                         url=self.upload_output.url,
-                        content=iterator_to_async_streem(fp),
+                        content=make_iterator_async(fp),
                         headers=headers,
                         timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
                     )
@@ -118,7 +123,7 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
                     raise OutputUploadFailed(f'Uploading output failed with http error {ex}')
 
 
-async def iterator_to_async_streem(it):
+async def make_iterator_async(it):
     """ This is stupid. """
     for x in it:
         yield x
