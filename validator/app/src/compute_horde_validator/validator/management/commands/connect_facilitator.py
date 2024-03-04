@@ -150,6 +150,7 @@ class FacilitatorClient:
                 if self.ws is None:
                     raise websockets.ConnectionClosed
                 await self.ws.send(msg.json())
+                return
             except websockets.ConnectionClosed:
                 # wait for run_forever loop to reconnect
                 logger.warning("Failed to send message to facilitator, waiting for re-connection")
