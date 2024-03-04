@@ -1,6 +1,10 @@
 import asyncio
+import base64
+import io
 import logging
 import time
+import zipfile
+from functools import cache
 from typing import Literal, Self
 from typing import NoReturn
 
@@ -90,6 +94,17 @@ class JobStatusUpdate(BaseModel, extra=Extra.forbid):
     uuid: str
     status: Literal['failed', 'rejected', 'accepted', 'completed']
     metadata: dict = {}
+
+
+@cache
+def get_dummy_inline_zip_volume() -> str:
+    in_memory_output = io.BytesIO()
+    with zipfile.ZipFile(in_memory_output, 'w'):
+        pass
+    in_memory_output.seek(0)
+    zip_contents = in_memory_output.read()
+    base64_zip_contents = base64.b64encode(zip_contents)
+    return base64_zip_contents.decode()
 
 
 class FacilitatorClient:
@@ -216,16 +231,26 @@ class FacilitatorClient:
                 raise ValueError(f'Unexpected msg: {msg}')
 
             docker_run_options_preset = 'nvidia_all' if job_request.use_gpu else 'none'
+            if job_request.input_url:
+                volume = Volume(volume_type=VolumeType.zip_url, contents=job_request.input_url)
+            else:
+                volume = Volume(volume_type=VolumeType.inline, contents=get_dummy_inline_zip_volume())
+
+            if job_request.output_url:
+                output_upload = OutputUpload(
+                    output_upload_type=OutputUploadType.zip_and_http_put,
+                    url=job_request.output_url,
+                )
+            else:
+                output_upload = None
+
             await miner_client.send_model(V0JobRequest(
                 job_uuid=job_request.uuid,
                 docker_image_name=job_request.docker_image_url,
                 docker_run_options_preset=docker_run_options_preset,
                 docker_run_cmd=job_request.args,
-                volume=Volume(volume_type=VolumeType.zip_url, contents=job_request.input_url),  # TODO: raw scripts
-                output_upload=OutputUpload(
-                    output_upload_type=OutputUploadType.zip_and_http_put,
-                    url=job_request.output_url,
-                ),
+                volume=volume,  # TODO: raw scripts
+                output_upload=output_upload,
             ))
             full_job_sent = time.time()
             try:
