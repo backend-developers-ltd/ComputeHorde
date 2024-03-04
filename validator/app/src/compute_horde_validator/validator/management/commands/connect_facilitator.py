@@ -234,6 +234,7 @@ class FacilitatorClient:
                     timeout=DEFAULT_JOB_TIMEOUT,
                 )
                 time_took = miner_client.miner_finished_or_failed_timestamp - full_job_sent
+                logger.info(f"Miner took {time_took} seconds to finish {job_request.uuid}")
             except TimeoutError:
                 logger.error(f'Miner {miner_client.miner_name} timed out out')
                 await self.send_model(JobStatusUpdate(
@@ -247,7 +248,7 @@ class FacilitatorClient:
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='failed',
-                    metadata={'comment': f'Miner failed: {msg.json()}'},
+                    metadata={'comment': 'Miner failed', 'miner_response': msg.dict()},
                 ))
                 return
             elif isinstance(msg, V0JobFinishedRequest):
@@ -255,7 +256,7 @@ class FacilitatorClient:
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='completed',
-                    metadata={'comment': f'Miner finished: {msg.json()}'},
+                    metadata={'comment': 'Miner finished', 'miner_response': msg.dict()},
                 ))
                 return
             else:
