@@ -77,6 +77,9 @@ class JobRequest(BaseModel, extra=Extra.forbid):
     use_gpu: bool
     input_url: str
     output_url: str
+    miner_address: str
+    miner_port: int
+    miner_hotkey: str
 
 
 class JobStatusUpdate(BaseModel, extra=Extra.forbid):
@@ -114,7 +117,7 @@ class FacilitatorClient:
             try:
                 await task
             except Exception as exc:
-                logger.error("Error occurred during waiting for a miner driver: %r", exc)
+                logger.error("Error occurred during driving a miner client: %r", exc)
 
     async def __aenter__(self):
         pass
@@ -134,10 +137,11 @@ class FacilitatorClient:
             self.ws = ws
 
             try:
-                raw_msg = await asyncio.wait_for(ws.recv(), timeout=10)
-                await self.handle_message(raw_msg)
+                async for raw_msg in ws:
+                    await self.handle_message(raw_msg)
             except websockets.ConnectionClosed as exc:
-                logger.warning("validator connection closed with code %r and reason %r, reconnecting...", exc.code, exc.reason)
+                logger.warning("validator connection closed with code %r and reason %r, reconnecting...",
+                               exc.code, exc.reason)
 
     async def send_model(self, msg: BaseModel):
         retry_count = 0
@@ -172,16 +176,11 @@ class FacilitatorClient:
     async def miner_driver(self, job_request: JobRequest):
         """ drive a miner client from job start to completion, the close miner connection """
 
-        # TODO: if passed from validator, get them from job_request
-        miner_address = ...
-        miner_port = ...
-        miner_hotkey = ...
-
         miner_client = self.MINER_CLIENT_CLASS(
             loop=asyncio.get_event_loop(),
-            miner_address=miner_address,
-            miner_port=miner_port,
-            miner_hotkey=miner_hotkey,
+            miner_address=job_request.miner_address,
+            miner_port=job_request.miner_port,
+            miner_hotkey=job_request.miner_hotkey,
             my_hotkey=self.my_hotkey(),
             job_uuid=job_request.uuid,
             keypair=self.keypair,
