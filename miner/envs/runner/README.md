@@ -56,11 +56,13 @@ services:
 
 ```
 
-With the `.env` and `docker-compose.yml` already in place, you can start the miner with `docker-compose up -d`. Test if it is running properly with `docker-compose ps`.
+With the `.env` and `docker-compose.yml` already in place, you can start the miner with `docker-compose up -d`.
+Test if it is running properly with `docker-compose ps`.
 
 ## How it works
 
-The `backenddevelopersltd/compute-horde-miner-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a miner. A `watchtower` container will automatically apply updates for containers.
+The `backenddevelopersltd/compute-horde-miner-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a miner.
+A `watchtower` container will automatically apply updates for containers.
 
 ```
 backenddevelopersltd/compute-horde-miner-runner
