@@ -19,6 +19,7 @@ class BaseValidatorRequest(BaseRequest):
 
 class VolumeType(enum.Enum):
     inline = 'inline'
+    zip_url = 'zip_url'
 
 
 class AuthenticationPayload(pydantic.BaseModel):
@@ -61,7 +62,7 @@ class OutputUpload(pydantic.BaseModel):
     # TODO: the following are only valid for output_upload_type = zip_and_http_post, some polymorphism like with
     #  BaseRequest is required here
     post_url: str
-    post_form_fields: Mapping[str, str]
+    post_form_fields: Mapping[str, str]  # TODO: make it optional
 
 
 class V0JobRequest(BaseValidatorRequest, JobMixin):
