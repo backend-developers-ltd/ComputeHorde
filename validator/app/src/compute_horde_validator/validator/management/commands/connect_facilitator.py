@@ -90,12 +90,19 @@ class JobStatusUpdate(BaseModel, extra=Extra.forbid):
 
 
 class FacilitatorClient:
-    def __init__(self, keypair: bittensor.Keypair):
+    MINER_CLIENT_CLASS = MinerClient
+
+    def __init__(self, keypair: bittensor.Keypair, facilitator_address: str, facilitator_port: int):
         self.keypair = keypair
         self.ws: websockets.WebSocketClientProtocol | None = None
-        self.ws_connect = websockets.connect(f"ws://{settings.FACILITATOR_ADDRESS}:{settings.FACILITATOR_PORT}/ws/v0/")
+        self.facilitator_address = facilitator_address
+        self.facilitator_port = facilitator_port
         self.miner_drivers = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
+
+    def connect(self):
+        facilitator_url = f"ws://{self.facilitator_address}:{self.facilitator_port}/ws/v0/"
+        return websockets.connect(facilitator_url)
 
     async def miner_driver_awaiter(self):
         """ avoid memory leak by awaiting miner driver tasks """
@@ -122,7 +129,7 @@ class FacilitatorClient:
 
     async def run_forever(self) -> NoReturn:
         """ connect (and re-connect) to facilitator and keep reading messages ... forever """
-        async for ws in self.ws_connect:
+        async for ws in self.connect():
             await ws.send(AuthenticationRequest.from_keypair(self.keypair).json())
             self.ws = ws
 
@@ -141,9 +148,10 @@ class FacilitatorClient:
                 await self.ws.send(msg.json())
             except websockets.ConnectionClosed:
                 # wait for run_forever loop to reconnect
-                if retry_count > 10:
+                logger.warning("Failed to send message to facilitator, waiting for re-connection")
+                if retry_count > 7:
                     raise
-                await asyncio.sleep(0.1 * 2 ** retry_count)
+                await asyncio.sleep(2 ** retry_count)
                 retry_count += 1
 
     async def handle_message(self, raw_msg: str | bytes):
@@ -169,7 +177,7 @@ class FacilitatorClient:
         miner_port = ...
         miner_hotkey = ...
 
-        miner_client = MinerClient(
+        miner_client = self.MINER_CLIENT_CLASS(
             loop=asyncio.get_event_loop(),
             miner_address=miner_address,
             miner_port=miner_port,
@@ -191,7 +199,10 @@ class FacilitatorClient:
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='rejected',
-                    metadata={'comment': f"Miner didn't accept the job saying: {msg.json()}"},
+                    metadata={
+                        'comment': f"Miner didn't accept the job saying: {msg.json()}",
+                        'miner_response': msg.dict(),
+                    },
                 ))
                 return
             elif isinstance(msg, V0ExecutorReadyRequest):
@@ -252,8 +263,12 @@ class FacilitatorClient:
 
 
 class Command(BaseCommand):
+    FACILITATOR_CLIENT_CLASS = FacilitatorClient
+
     @async_to_sync
     async def handle(self, *args, **options):
         keypair = settings.BITTENSOR_WALLET().get_hotkey()
-        vc = FacilitatorClient(keypair)
-        await vc.run_forever()
+        facilitator_client = self.FACILITATOR_CLIENT_CLASS(
+            keypair, settings.FACILITATOR_ADDRESS, settings.FACILITATOR_PORT
+        )
+        await facilitator_client.run_forever()
