@@ -108,7 +108,22 @@ services:
       - 5555:5555
     logging:
       <<: *logging
-  
+
+  connect-facilitator:
+    image: compute_horde_validator/app
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - DEBUG=off
+    command: python manage.py connect_facilitator
+    volumes:
+      - ./logs:/tmp/logs
+    depends_on:
+      - redis
+    logging:
+      <<: *logging
+
   nginx:
     image: 'ghcr.io/reef-technologies/nginx-rt:v1.2.1'
     restart: unless-stopped
