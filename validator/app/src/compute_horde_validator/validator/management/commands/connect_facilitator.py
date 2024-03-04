@@ -26,7 +26,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_JOB_TIMEOUT = 10 * 60
+DEFAULT_JOB_TIMEOUT = 300
 
 
 class Error(BaseModel, extra=Extra.allow):
@@ -72,7 +72,7 @@ class JobRequest(BaseModel, extra=Extra.forbid):
     uuid: str
     docker_image_url: str
     raw_script: str
-    args: dict
+    args: list[str]
     env: dict
     use_gpu: bool
     input_url: str
@@ -161,24 +161,19 @@ class FacilitatorClient:
             task = asyncio.create_task(self.miner_driver(msg))
             await self.miner_drivers.put(task)
 
-    # TODO: look for ... and fill in proper values
     async def miner_driver(self, job_request: JobRequest):
         """ drive a miner client from job start to completion, the close miner connection """
 
-        # class JobRequest(BaseModel, extra=Extra.forbid):
-        #     uuid: str
-        #     docker_image_url: str
-        #     raw_script: str
-        #     args: dict
-        #     env: dict
-        #     input_url: str
-        #     output_url: str
+        # TODO: if passed from validator, get them from job_request
+        miner_address = ...
+        miner_port = ...
+        miner_hotkey = ...
 
         miner_client = MinerClient(
             loop=asyncio.get_event_loop(),
-            miner_address=job_request.miner_address,  # TODO
-            miner_port=job_request.miner_port,  # TODO
-            miner_hotkey=job_request.miner_hotkey,  # TODO
+            miner_address=miner_address,
+            miner_port=miner_port,
+            miner_hotkey=miner_hotkey,
             my_hotkey=self.my_hotkey(),
             job_uuid=job_request.uuid,
             keypair=self.keypair,
@@ -186,7 +181,7 @@ class FacilitatorClient:
         async with miner_client:
             await miner_client.send_model(V0InitialJobRequest(
                 job_uuid=job_request.uuid,
-                base_docker_image_name=job_request.base_docker_image_name,  # TODO
+                base_docker_image_name=job_request.docker_image_url,
                 timeout_seconds=DEFAULT_JOB_TIMEOUT,
                 volume_type=VolumeType.zip_url,
             ))
@@ -209,13 +204,17 @@ class FacilitatorClient:
             else:
                 raise ValueError(f'Unexpected msg: {msg}')
 
+            docker_run_options_preset = 'nvidia_all' if job_request.use_gpu else 'none'
             await miner_client.send_model(V0JobRequest(
                 job_uuid=job_request.uuid,
                 docker_image_name=job_request.docker_image_url,
-                docker_run_options_preset=...,
-                docker_run_cmd=...,
-                volume=Volume(volume_type=VolumeType.zip_url, contents=...),
-                output_upload=OutputUpload(...),  # TODO: implement PUT upload
+                docker_run_options_preset=docker_run_options_preset,
+                docker_run_cmd=job_request.args,
+                volume=Volume(volume_type=VolumeType.zip_url, contents=job_request.input_url),  # TODO: raw scripts
+                output_upload=OutputUpload(
+                    output_upload_type=OutputUploadType.zip_and_http_put,
+                    url=job_request.output_url,
+                ),
             ))
             full_job_sent = time.time()
             try:
