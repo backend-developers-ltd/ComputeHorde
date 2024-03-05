@@ -26,11 +26,13 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from compute_horde.mv_protocol.validator_requests import V0InitialJobRequest, V0JobRequest, Volume, VolumeType, \
     OutputUpload, OutputUploadType
+from compute_horde_validator.validator.models import OrganicJob, Miner
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_JOB_TIMEOUT = 300
+PREPARE_WAIT_TIMEOUT = 60
+JOB_WAIT_TIMEOUT = 300
 
 
 class Error(BaseModel, extra=Extra.allow):
@@ -82,6 +84,7 @@ class JobRequest(BaseModel, extra=Extra.forbid):
     input_url: str
     output_url: str
     miner_address: str
+    miner_address_ip_version: int
     miner_port: int
     miner_hotkey: str
 
@@ -192,6 +195,16 @@ class FacilitatorClient:
     async def miner_driver(self, job_request: JobRequest):
         """ drive a miner client from job start to completion, the close miner connection """
 
+        miner, _ = Miner.objects.get_or_create(hotkey=job_request.miner_hotkey)
+        job = OrganicJob.objects.create(
+            job_uuid=job_request.uuid,
+            miner=miner,
+            miner_address=job_request.miner_address,
+            miner_address_ip_version=job_request.miner_address_ip_version,
+            miner_port=job_request.miner_port,
+            job_description="User job from facilitator",
+        )
+
         miner_client = self.MINER_CLIENT_CLASS(
             loop=asyncio.get_event_loop(),
             miner_address=job_request.miner_address,
@@ -205,20 +218,40 @@ class FacilitatorClient:
             await miner_client.send_model(V0InitialJobRequest(
                 job_uuid=job_request.uuid,
                 base_docker_image_name=job_request.docker_image_url,
-                timeout_seconds=DEFAULT_JOB_TIMEOUT,
+                timeout_seconds=JOB_WAIT_TIMEOUT,
                 volume_type=VolumeType.zip_url,
             ))
-            msg = await miner_client.miner_ready_or_declining_future
+
+            try:
+                msg = await asyncio.wait_for(
+                    miner_client.miner_ready_or_declining_future,
+                    timeout=PREPARE_WAIT_TIMEOUT,
+                )
+            except TimeoutError:
+                logger.error(f'Miner {miner_client.miner_name} timed out out while preparing executor for job {job_request.uuid}')
+                await self.send_model(JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status='failed',
+                    metadata={'comment': 'Miner timed out while preparing executor'},
+                ))
+                job.status = OrganicJob.Status.FAILED
+                job.comment = f'Miner timed out while preparing executor'
+                await job.asave()
+                return
+
             if isinstance(msg, V0DeclineJobRequest | V0ExecutorFailedRequest):
                 logger.info(f"Miner {miner_client.miner_name} won't do job: {msg}")
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='rejected',
                     metadata={
-                        'comment': f"Miner didn't accept the job saying: {msg.json()}",
+                        'comment': "Miner didn't accept the job",
                         'miner_response': msg.dict(),
                     },
                 ))
+                job.status = OrganicJob.Status.FAILED
+                job.comment = f"Miner didn't accept the job saying: {msg.json()}"
+                await job.asave()
                 return
             elif isinstance(msg, V0ExecutorReadyRequest):
                 logger.debug(f'Miner {miner_client.miner_name} ready for job: {msg}')
@@ -256,7 +289,7 @@ class FacilitatorClient:
             try:
                 msg = await asyncio.wait_for(
                     miner_client.miner_finished_or_failed_future,
-                    timeout=DEFAULT_JOB_TIMEOUT,
+                    timeout=JOB_WAIT_TIMEOUT,
                 )
                 time_took = miner_client.miner_finished_or_failed_timestamp - full_job_sent
                 logger.info(f"Miner took {time_took} seconds to finish {job_request.uuid}")
@@ -267,6 +300,9 @@ class FacilitatorClient:
                     status='failed',
                     metadata={'comment': 'Miner timed out'},
                 ))
+                job.status = OrganicJob.Status.FAILED
+                job.comment = 'Miner timed out'
+                await job.asave()
                 return
             if isinstance(msg, V0JobFailedRequest):
                 logger.info(f'Miner {miner_client.miner_name} failed: {msg}')
@@ -275,6 +311,9 @@ class FacilitatorClient:
                     status='failed',
                     metadata={'comment': 'Miner failed', 'miner_response': msg.dict()},
                 ))
+                job.status = OrganicJob.Status.FAILED
+                job.comment = f'Miner failed: {msg.json()}'
+                await job.asave()
                 return
             elif isinstance(msg, V0JobFinishedRequest):
                 logger.info(f'Miner {miner_client.miner_name} finished: {msg}')
@@ -283,6 +322,9 @@ class FacilitatorClient:
                     status='completed',
                     metadata={'comment': 'Miner finished', 'miner_response': msg.dict()},
                 ))
+                job.status = OrganicJob.Status.COMPLETED
+                job.comment = f'Miner finished: {msg.json()}'
+                await job.asave()
                 return
             else:
                 raise ValueError(f'Unexpected msg: {msg}')
