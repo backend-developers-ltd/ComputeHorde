@@ -134,6 +134,7 @@ def set_scores():
         for try_number in range(WEIGHT_SETTING_ATTEMPTS):
             logger.debug(f'Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}')
             success = False
+            message = 'unknown error'
             try:
 
                 result = do_set_weights.apply_async(
@@ -155,6 +156,7 @@ def set_scores():
                 except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
                     result.revoke(terminate=True)
                     logger.info(f'Setting weights timed out (attempt #{try_number})')
+                    message = 'timeout'
             except Exception:
                 logger.exception('Encountered when setting weights: ')
             if not success:
