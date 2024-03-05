@@ -345,5 +345,5 @@ class Command(BaseCommand):
         facilitator_client = self.FACILITATOR_CLIENT_CLASS(
             keypair, settings.FACILITATOR_ADDRESS, settings.FACILITATOR_PORT
         )
-        with facilitator_client:
+        async with facilitator_client:
             await facilitator_client.run_forever()
