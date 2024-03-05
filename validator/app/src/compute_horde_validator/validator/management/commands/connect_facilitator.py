@@ -11,8 +11,7 @@ from typing import NoReturn
 import bittensor
 import pydantic
 import websockets
-from asgiref.sync import async_to_sync
-from bittensor import Keypair
+from asgiref.sync import async_to_sync, sync_to_async
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from pydantic import BaseModel, Extra, Field
@@ -53,7 +52,7 @@ class AuthenticationRequest(BaseModel, extra=Extra.forbid):
     signature: str
 
     @classmethod
-    def from_keypair(cls, keypair: Keypair) -> Self:
+    def from_keypair(cls, keypair: bittensor.Keypair) -> Self:
         return cls(
             public_key=keypair.public_key.hex(),
             signature=f'0x{keypair.sign(keypair.public_key).hex()}',
@@ -67,17 +66,14 @@ class JobRequest(BaseModel, extra=Extra.forbid):
     type: str = Field('job.new', const=True)
 
     uuid: str
-    docker_image_url: str
+    miner_hotkey: str
+    docker_image: str
     raw_script: str
     args: list[str]
-    env: dict
+    env: dict[str, str]
     use_gpu: bool
     input_url: str
     output_url: str
-    miner_address: str
-    miner_address_ip_version: int
-    miner_port: int
-    miner_hotkey: str
 
 
 class JobStatusUpdate(BaseModel, extra=Extra.forbid):
@@ -99,6 +95,15 @@ def get_dummy_inline_zip_volume() -> str:
     zip_contents = in_memory_output.read()
     base64_zip_contents = base64.b64encode(zip_contents)
     return base64_zip_contents.decode()
+
+
+@sync_to_async
+def get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
+    metagraph = bittensor.metagraph(netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
+    neurons = [n for n in metagraph.neurons if n.hotkey == hotkey]
+    if not neurons:
+        raise ValueError(f'Miner with {hotkey=} not present in this subnetowrk')
+    return neurons[0].axon_info
 
 
 class FacilitatorClient:
@@ -156,7 +161,6 @@ class FacilitatorClient:
         async for raw_msg in ws:
             await self.handle_message(raw_msg)
 
-
     async def send_model(self, msg: BaseModel):
         retry_count = 0
         while True:
@@ -192,19 +196,20 @@ class FacilitatorClient:
         """ drive a miner client from job start to completion, the close miner connection """
 
         miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
+        miner_axon_info = await get_miner_axon_info(job_request.miner_hotkey)
         job = await OrganicJob.objects.acreate(
             job_uuid=job_request.uuid,
             miner=miner,
-            miner_address=job_request.miner_address,
-            miner_address_ip_version=job_request.miner_address_ip_version,
-            miner_port=job_request.miner_port,
+            miner_address=miner_axon_info.ip,
+            miner_address_ip_version=miner_axon_info.ip_type,
+            miner_port=miner_axon_info.port,
             job_description="User job from facilitator",
         )
 
         miner_client = self.MINER_CLIENT_CLASS(
             loop=asyncio.get_event_loop(),
-            miner_address=job_request.miner_address,
-            miner_port=job_request.miner_port,
+            miner_address=miner_axon_info.ip,
+            miner_port=miner_axon_info.port,
             miner_hotkey=job_request.miner_hotkey,
             my_hotkey=self.my_hotkey(),
             job_uuid=job_request.uuid,
@@ -213,7 +218,7 @@ class FacilitatorClient:
         async with miner_client:
             await miner_client.send_model(V0InitialJobRequest(
                 job_uuid=job_request.uuid,
-                base_docker_image_name=job_request.docker_image_url,
+                base_docker_image_name=job_request.docker_image,
                 timeout_seconds=JOB_WAIT_TIMEOUT,
                 volume_type=VolumeType.zip_url,
             ))
@@ -275,7 +280,7 @@ class FacilitatorClient:
 
             await miner_client.send_model(V0JobRequest(
                 job_uuid=job_request.uuid,
-                docker_image_name=job_request.docker_image_url,
+                docker_image_name=job_request.docker_image,
                 docker_run_options_preset=docker_run_options_preset,
                 docker_run_cmd=job_request.args,
                 volume=volume,  # TODO: raw scripts
