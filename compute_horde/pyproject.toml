@@ -4,7 +4,7 @@ requires-python = "==3.11.*"
 version = "0"
 dependencies = [
     'pydantic < 2.0.0,>=1.7.4',
-    'bittensor >= 6.5.0,<7.0.0'
+    'bittensor == 6.8.2'
 ]
 license = {text = "MIT License"}
 
