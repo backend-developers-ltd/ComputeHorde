@@ -5,17 +5,12 @@ import logging
 import time
 import zipfile
 from functools import cache
-from typing import Literal, Self
-from typing import NoReturn
+from typing import Literal, NoReturn, Self
 
 import bittensor
 import pydantic
 import websockets
 from asgiref.sync import async_to_sync, sync_to_async
-from django.conf import settings
-from django.core.management.base import BaseCommand
-from pydantic import BaseModel, Extra, Field
-
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
@@ -23,9 +18,19 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
     V0JobFinishedRequest,
 )
-from compute_horde.mv_protocol.validator_requests import V0InitialJobRequest, V0JobRequest, Volume, VolumeType, \
-    OutputUpload, OutputUploadType
-from compute_horde_validator.validator.models import OrganicJob, Miner
+from compute_horde.mv_protocol.validator_requests import (
+    OutputUpload,
+    OutputUploadType,
+    V0InitialJobRequest,
+    V0JobRequest,
+    Volume,
+    VolumeType,
+)
+from django.conf import settings
+from django.core.management.base import BaseCommand
+from pydantic import BaseModel, Extra, Field
+
+from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
 
 logger = logging.getLogger(__name__)
@@ -236,7 +241,7 @@ class FacilitatorClient:
                     metadata={'comment': 'Miner timed out while preparing executor'},
                 ))
                 job.status = OrganicJob.Status.FAILED
-                job.comment = f'Miner timed out while preparing executor'
+                job.comment = 'Miner timed out while preparing executor'
                 await job.asave()
                 return
 
