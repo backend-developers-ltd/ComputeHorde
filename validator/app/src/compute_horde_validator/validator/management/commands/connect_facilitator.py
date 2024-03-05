@@ -59,15 +59,6 @@ class AuthenticationRequest(BaseModel, extra=Extra.forbid):
             signature=f'0x{keypair.sign(keypair.public_key).hex()}',
         )
 
-    def verify_signature(self) -> bool:
-        public_key_bytes = bytes.fromhex(self.public_key)
-        keypair = Keypair(public_key=public_key_bytes, ss58_format=42)
-        return keypair.verify(public_key_bytes, self.signature)
-
-    @property
-    def ss58_address(self) -> str:
-        return Keypair(public_key=bytes.fromhex(self.public_key), ss58_format=42).ss58_address
-
 
 class JobRequest(BaseModel, extra=Extra.forbid):
     """ Message sent from facilitator to validator to request a job execution """
@@ -122,6 +113,7 @@ class FacilitatorClient:
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
 
     def connect(self):
+        """ Create an awaitable/async-iterable websockets.connect() object """
         facilitator_url = f"ws://{self.facilitator_address}:{self.facilitator_port}/ws/v0/"
         return websockets.connect(facilitator_url)
 
@@ -142,7 +134,6 @@ class FacilitatorClient:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.miner_drivers.put(None)
-        await self.miner_drivers.join()
         await self.miner_driver_awaiter_task
 
     def my_hotkey(self) -> str:
@@ -151,15 +142,20 @@ class FacilitatorClient:
     async def run_forever(self) -> NoReturn:
         """ connect (and re-connect) to facilitator and keep reading messages ... forever """
         async for ws in self.connect():
-            await ws.send(AuthenticationRequest.from_keypair(self.keypair).json())
-            self.ws = ws
-
             try:
-                async for raw_msg in ws:
-                    await self.handle_message(raw_msg)
+                await self.handle_connection(ws)
             except websockets.ConnectionClosed as exc:
                 logger.warning("validator connection closed with code %r and reason %r, reconnecting...",
                                exc.code, exc.reason)
+
+    async def handle_connection(self, ws: websockets.WebSocketClientProtocol):
+        """ handle a single websocket connection """
+        await ws.send(AuthenticationRequest.from_keypair(self.keypair).json())
+        self.ws = ws
+
+        async for raw_msg in ws:
+            await self.handle_message(raw_msg)
+
 
     async def send_model(self, msg: BaseModel):
         retry_count = 0
@@ -195,8 +191,8 @@ class FacilitatorClient:
     async def miner_driver(self, job_request: JobRequest):
         """ drive a miner client from job start to completion, the close miner connection """
 
-        miner, _ = Miner.objects.get_or_create(hotkey=job_request.miner_hotkey)
-        job = OrganicJob.objects.create(
+        miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
+        job = await OrganicJob.objects.acreate(
             job_uuid=job_request.uuid,
             miner=miner,
             miner_address=job_request.miner_address,
@@ -339,4 +335,5 @@ class Command(BaseCommand):
         facilitator_client = self.FACILITATOR_CLIENT_CLASS(
             keypair, settings.FACILITATOR_ADDRESS, settings.FACILITATOR_PORT
         )
-        await facilitator_client.run_forever()
+        with facilitator_client:
+            await facilitator_client.run_forever()
