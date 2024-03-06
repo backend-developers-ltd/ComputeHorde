@@ -9,6 +9,7 @@ from typing import Literal, NoReturn, Self
 
 import bittensor
 import pydantic
+import tenacity
 import websockets
 from asgiref.sync import async_to_sync, sync_to_async
 from compute_horde.mv_protocol.miner_requests import (
@@ -166,21 +167,15 @@ class FacilitatorClient:
         async for raw_msg in ws:
             await self.handle_message(raw_msg)
 
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(7),
+        wait=tenacity.wait_exponential(multiplier=1, exp_base=2, min=1, max=10),
+        retry=tenacity.retry_if_exception_type(websockets.ConnectionClosed)
+    )
     async def send_model(self, msg: BaseModel):
-        retry_count = 0
-        while True:
-            try:
-                if self.ws is None:
-                    raise websockets.ConnectionClosed
-                await self.ws.send(msg.json())
-                return
-            except websockets.ConnectionClosed:
-                # wait for run_forever loop to reconnect
-                logger.warning("Failed to send message to facilitator, waiting for re-connection")
-                if retry_count > 7:
-                    raise
-                await asyncio.sleep(2 ** retry_count)
-                retry_count += 1
+        if self.ws is None:
+            raise websockets.ConnectionClosed
+        await self.ws.send(msg.json())
 
     async def handle_message(self, raw_msg: str | bytes):
         """ handle message received from facilitator """

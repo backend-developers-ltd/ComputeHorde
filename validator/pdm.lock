@@ -5,7 +5,7 @@
 groups = ["default", "format", "lint", "security_check", "test", "type_check"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:61c8a9e6d7855fa78a0a6fe772707a916e85ae38c70d9751b8182a22f9512419"
+content_hash = "sha256:6d3992c996a48921f639ed28cf6f6bbf44f2ff4b4825a9a5f86b5cd0e94e5029"
 
 [[package]]
 name = "aiohttp"
@@ -2605,6 +2605,17 @@ dependencies = [
 files = [
     {file = "sympy-1.12-py3-none-any.whl", hash = "sha256:c3588cd4295d0c0f603d0f2ae780587e64e2efeedb3521e46b9bb1d08d184fa5"},
     {file = "sympy-1.12.tar.gz", hash = "sha256:ebf595c8dac3e0fdc4152c51878b498396ec7f30e7a914d6071e674d49420fb8"},
+]
+
+[[package]]
+name = "tenacity"
+version = "8.2.3"
+requires_python = ">=3.7"
+summary = "Retry code until it succeeds"
+groups = ["default"]
+files = [
+    {file = "tenacity-8.2.3-py3-none-any.whl", hash = "sha256:ce510e327a630c9e1beaf17d42e6ffacc88185044ad85cf74c0a8887c6a0f88c"},
+    {file = "tenacity-8.2.3.tar.gz", hash = "sha256:5398ef0d78e63f40007c1fb4c0bff96e1911394d2fa8d194f77619c05ff6cc8a"},
 ]
 
 [[package]]
