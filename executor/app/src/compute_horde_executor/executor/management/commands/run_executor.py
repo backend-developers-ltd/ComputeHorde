@@ -318,8 +318,11 @@ class JobRunner:
         await process.wait()
         self.temp_dir.rmdir()
 
-        # Check if base image is one of predefined "common" images to avoid GC.
-        image_repo, _, _ = self.initial_job_request.base_docker_image_name.partition(":")
+        if self.initial_job_request.base_docker_image_name:
+            image_repo, _, _ = self.initial_job_request.base_docker_image_name.partition(":")
+        else:
+            image_repo = None
+
         if image_repo in DOCKER_BASE_IMAGES_TO_KEEP:
             keep_container_name = "keep_" + self.initial_job_request.base_docker_image_name.replace(":", "_")
             # Remove previous container, so that newly pulled image is marked
