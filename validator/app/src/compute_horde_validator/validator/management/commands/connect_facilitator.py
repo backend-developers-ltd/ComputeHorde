@@ -229,11 +229,16 @@ class FacilitatorClient:
                     timeout=PREPARE_WAIT_TIMEOUT,
                 )
             except TimeoutError:
-                logger.error(f'Miner {miner_client.miner_name} timed out out while preparing executor for job {job_request.uuid}')
+                logger.error(
+                    f'Miner {miner_client.miner_name} timed out out while preparing executor for job {job_request.uuid}'
+                    f' after {PREPARE_WAIT_TIMEOUT} seconds'
+                )
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='failed',
-                    metadata={'comment': 'Miner timed out while preparing executor'},
+                    metadata={
+                        'comment': f'Miner timed out while preparing executor after {PREPARE_WAIT_TIMEOUT} seconds',
+                    },
                 ))
                 job.status = OrganicJob.Status.FAILED
                 job.comment = 'Miner timed out while preparing executor'
@@ -295,11 +300,11 @@ class FacilitatorClient:
                 time_took = miner_client.miner_finished_or_failed_timestamp - full_job_sent
                 logger.info(f"Miner took {time_took} seconds to finish {job_request.uuid}")
             except TimeoutError:
-                logger.error(f'Miner {miner_client.miner_name} timed out out')
+                logger.error(f'Miner {miner_client.miner_name} timed out after {JOB_WAIT_TIMEOUT} seconds')
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='failed',
-                    metadata={'comment': 'Miner timed out'},
+                    metadata={'comment': f'Miner timed out after {JOB_WAIT_TIMEOUT} seconds'},
                 ))
                 job.status = OrganicJob.Status.FAILED
                 job.comment = 'Miner timed out'
