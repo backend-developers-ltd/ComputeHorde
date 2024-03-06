@@ -1,8 +1,10 @@
 import abc
 import logging
+from typing import Any
 
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
+from pydantic import root_validator
 from compute_horde.em_protocol.miner_requests import OutputUpload, Volume
 from compute_horde.mv_protocol import validator_requests
 
@@ -23,11 +25,18 @@ class ExecutorFailedToPrepare(pydantic.BaseModel):
 
 class JobRequest(pydantic.BaseModel):
     job_uuid: str
-    docker_image_name: str
+    docker_image_name: str | None = None
+    raw_script: str | None = None
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
     output_upload: OutputUpload | None
+
+    @root_validator()
+    def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
+        if bool(values.get("docker_image_name")) == bool(values.get("raw_script")):
+            raise ValueError("Expected only one, either `docker_image_name` or `raw_script`, not together")
+        return values
 
 
 class ExecutorFinished(pydantic.BaseModel):
@@ -117,6 +126,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
             **JobRequest(
                 job_uuid=job_request.job_uuid,
                 docker_image_name=job_request.docker_image_name,
+                raw_script=job_request.raw_script,
                 docker_run_options_preset=job_request.docker_run_options_preset,
                 docker_run_cmd=job_request.docker_run_cmd,
                 volume={

@@ -5,7 +5,7 @@ import logging
 import time
 import zipfile
 from functools import cache
-from typing import Literal, NoReturn, Self
+from typing import Literal, NoReturn, Self, Any
 
 import bittensor
 import pydantic
@@ -29,7 +29,7 @@ from compute_horde.mv_protocol.validator_requests import (
 )
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from pydantic import BaseModel, Extra, Field
+from pydantic import BaseModel, Extra, Field, root_validator
 
 from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
@@ -80,6 +80,12 @@ class JobRequest(BaseModel, extra=Extra.forbid):
     use_gpu: bool
     input_url: str
     output_url: str
+
+    @root_validator()
+    def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
+        if bool(values["docker_image"]) == bool(values["raw_script"]):
+            raise ValueError("Expected only one, either `docker_image` or `raw_script`, not together")
+        return values
 
 
 class JobStatusUpdate(BaseModel, extra=Extra.forbid):
@@ -218,7 +224,7 @@ class FacilitatorClient:
         async with miner_client:
             await miner_client.send_model(V0InitialJobRequest(
                 job_uuid=job_request.uuid,
-                base_docker_image_name=job_request.docker_image,
+                base_docker_image_name=job_request.docker_image or None,
                 timeout_seconds=JOB_WAIT_TIMEOUT,
                 volume_type=VolumeType.zip_url,
             ))
@@ -285,7 +291,8 @@ class FacilitatorClient:
 
             await miner_client.send_model(V0JobRequest(
                 job_uuid=job_request.uuid,
-                docker_image_name=job_request.docker_image,
+                docker_image_name=job_request.docker_image or None,
+                raw_script=job_request.raw_script or None,
                 docker_run_options_preset=docker_run_options_preset,
                 docker_run_cmd=job_request.args,
                 volume=volume,  # TODO: raw scripts

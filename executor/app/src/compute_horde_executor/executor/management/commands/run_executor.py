@@ -53,6 +53,11 @@ class RunConfigManager:
         else:
             raise JobError(f"Invalid preset: {preset}")
 
+    @classmethod
+    def preset_to_image_for_raw_script(cls, preset: str) -> str:
+        # TODO: return pre-built base image for preset, i.e. with numpy, pandas, tensorflow, torch etc.
+        return "python:3.11-slim"
+
 
 class MinerClient(AbstractMinerClient):
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, token: str):
@@ -173,20 +178,21 @@ class JobRunner:
         self.volume_mount_dir.mkdir(exist_ok=True)
         self.output_volume_mount_dir.mkdir(exist_ok=True)
 
-        process = await asyncio.create_subprocess_exec(
-            'docker', 'pull', self.initial_job_request.base_docker_image_name,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await process.communicate()
+        if self.initial_job_request.base_docker_image_name is not None:
+            process = await asyncio.create_subprocess_exec(
+                'docker', 'pull', self.initial_job_request.base_docker_image_name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
 
-        if process.returncode != 0:
-            msg = (f'"docker pull {self.initial_job_request.base_docker_image_name}" '
-                   f'(job_uuid={self.initial_job_request.job_uuid})'
-                   f' failed with status={process.returncode}'
-                   f' stdout="{stdout.decode()}"\nstderr="{stderr.decode()}')
-            logger.error(msg)
-            raise JobError(msg)
+            if process.returncode != 0:
+                msg = (f'"docker pull {self.initial_job_request.base_docker_image_name}" '
+                       f'(job_uuid={self.initial_job_request.job_uuid})'
+                       f' failed with status={process.returncode}'
+                       f' stdout="{stdout.decode()}"\nstderr="{stderr.decode()}')
+                logger.error(msg)
+                raise JobError(msg)
 
     async def run_job(self, job_request: V0JobRequest):
         try:
@@ -201,6 +207,20 @@ class JobRunner:
                 stderr="",
             )
 
+        docker_image = job_request.docker_image_name
+        extra_volume_flags = []
+        docker_run_cmd = job_request.docker_run_cmd
+
+        if job_request.raw_script:
+            docker_image = RunConfigManager.preset_to_image_for_raw_script(job_request.docker_run_options_preset)
+            raw_script_path = self.temp_dir / "script.py"
+            with open(raw_script_path, "w") as f:
+                f.write(job_request.raw_script)
+            extra_volume_flags = ["-v", f"{raw_script_path.absolute().as_posix()}:/script.py"]
+
+            if not docker_run_cmd:
+                docker_run_cmd = ["python", "/script.py"]
+
         cmd = [
             'docker',
             'run',
@@ -212,8 +232,9 @@ class JobRunner:
             f'{self.volume_mount_dir.as_posix()}/:/volume/',
             '-v',
             f'{self.output_volume_mount_dir.as_posix()}/:/output/',
-            job_request.docker_image_name,
-            *job_request.docker_run_cmd,
+            *extra_volume_flags,
+            docker_image,
+            *docker_run_cmd,
         ]
         process = await asyncio.create_subprocess_exec(
             *cmd,
