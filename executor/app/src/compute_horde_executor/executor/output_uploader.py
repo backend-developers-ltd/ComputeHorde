@@ -49,11 +49,13 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
         return OutputUploadType.zip_and_http_post
 
     async def upload(self, directory: pathlib.Path):
+        files = list(directory.glob('**/*'))
+        if len(files) > MAX_NUMBER_OF_FILES:
+            raise OutputUploadFailed('Attempting to upload too many files')
+
         with tempfile.TemporaryFile() as fp:
             with zipfile.ZipFile(fp, mode="w") as zipf:
-                for count, file in enumerate(directory.glob('**/*'), start=1):
-                    if count > MAX_NUMBER_OF_FILES:
-                        raise OutputUploadFailed('Attempting to upload too many files')
+                for file in files:
                     zipf.write(filename=file, arcname=file.relative_to(directory))
 
             file_size = fp.tell()
@@ -93,11 +95,13 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
         return OutputUploadType.zip_and_http_put
 
     async def upload(self, directory: pathlib.Path):
+        files = list(directory.glob('**/*'))
+        if len(files) > MAX_NUMBER_OF_FILES:
+            raise OutputUploadFailed('Attempting to upload too many files')
+
         with tempfile.TemporaryFile() as fp:
             with zipfile.ZipFile(fp, mode="w") as zipf:
-                for count, file in enumerate(directory.glob('**/*'), start=1):
-                    if count > MAX_NUMBER_OF_FILES:
-                        raise OutputUploadFailed('Attempting to upload too many files')
+                for file in files:
                     zipf.write(filename=file, arcname=file.relative_to(directory))
 
             file_size = fp.tell()
