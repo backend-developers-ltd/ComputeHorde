@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import contextlib
 import pathlib
 import tempfile
 import zipfile
@@ -49,21 +50,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
         return OutputUploadType.zip_and_http_post
 
     async def upload(self, directory: pathlib.Path):
-        files = list(directory.glob('**/*'))
-        if len(files) > MAX_NUMBER_OF_FILES:
-            raise OutputUploadFailed('Attempting to upload too many files')
-
-        with tempfile.TemporaryFile() as fp:
-            with zipfile.ZipFile(fp, mode="w") as zipf:
-                for file in files:
-                    zipf.write(filename=file, arcname=file.relative_to(directory))
-
-            file_size = fp.tell()
-            fp.seek(0)
-
-            if file_size > settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES:
-                raise OutputUploadFailed('Attempting to upload too large file')
-
+        with zipped_directory(directory) as (file_size, fp):
             async with httpx.AsyncClient() as client:
                 form_fields = {
                     "Content-Type": "application/zip",
@@ -95,21 +82,7 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
         return OutputUploadType.zip_and_http_put
 
     async def upload(self, directory: pathlib.Path):
-        files = list(directory.glob('**/*'))
-        if len(files) > MAX_NUMBER_OF_FILES:
-            raise OutputUploadFailed('Attempting to upload too many files')
-
-        with tempfile.TemporaryFile() as fp:
-            with zipfile.ZipFile(fp, mode="w") as zipf:
-                for file in files:
-                    zipf.write(filename=file, arcname=file.relative_to(directory))
-
-            file_size = fp.tell()
-            fp.seek(0)
-
-            if file_size > settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES:
-                raise OutputUploadFailed('Attempting to upload too large file')
-
+        with zipped_directory(directory) as (file_size, fp):
             async with httpx.AsyncClient() as client:
                 headers = {
                     "Content-Length": str(file_size),
@@ -131,3 +104,29 @@ async def make_iterator_async(it):
     """ This is stupid. """
     for x in it:
         yield x
+
+
+@contextlib.contextmanager
+def zipped_directory(directory: pathlib.Path):
+    """
+    Context manager that creates a temporary zip file with the files from given directory.
+    The temporary file is cleared after the context manager exits.
+
+    Returns: tuple of size and the file object of the zip file
+    """
+    files = list(directory.glob('**/*'))
+    if len(files) > MAX_NUMBER_OF_FILES:
+        raise OutputUploadFailed('Attempting to upload too many files')
+
+    with tempfile.TemporaryFile() as fp:
+        with zipfile.ZipFile(fp, mode="w") as zipf:
+            for file in files:
+                zipf.write(filename=file, arcname=file.relative_to(directory))
+
+        file_size = fp.tell()
+        fp.seek(0)
+
+        if file_size > settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES:
+            raise OutputUploadFailed('Attempting to upload too large file')
+
+        yield file_size, fp
