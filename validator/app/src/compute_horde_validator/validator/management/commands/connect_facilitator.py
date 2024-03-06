@@ -5,7 +5,7 @@ import logging
 import time
 import zipfile
 from functools import cache
-from typing import Literal, NoReturn, Self, Any
+from typing import Any, Literal, NoReturn, Self
 
 import bittensor
 import pydantic

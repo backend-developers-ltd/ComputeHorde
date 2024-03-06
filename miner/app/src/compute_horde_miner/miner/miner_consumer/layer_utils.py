@@ -4,9 +4,9 @@ from typing import Any
 
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
-from pydantic import root_validator
 from compute_horde.em_protocol.miner_requests import OutputUpload, Volume
 from compute_horde.mv_protocol import validator_requests
+from pydantic import root_validator
 
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
     log_errors_explicitly,
