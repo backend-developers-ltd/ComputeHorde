@@ -33,6 +33,8 @@ def fetch_validators():
         to_create.append(Validator(public_key=key, active=True))
 
     Validator.objects.bulk_create(to_create)
-    Validator.objects.bulk_update(to_activate + to_deactivate, ['active'])
-    logger.info(f'Fetched validators. Activated: {len(to_activate)}, deactivated: {len(to_deactivate)}, '
-                f'created: {len(to_create)}')
+    Validator.objects.bulk_update(to_activate + to_deactivate, ["active"])
+    logger.info(
+        f"Fetched validators. Activated: {len(to_activate)}, deactivated: {len(to_deactivate)}, "
+        f"created: {len(to_create)}"
+    )

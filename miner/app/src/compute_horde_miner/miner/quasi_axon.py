@@ -16,4 +16,4 @@ def announce_address_and_port():
     )
     subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
     axon.serve(netuid=settings.BITTENSOR_NETUID, subtensor=subtensor)
-    logger.info(f'Announced port and address: {settings.BITTENSOR_MINER_ADDRESS}: {settings.BITTENSOR_MINER_PORT}')
+    logger.info(f"Announced port and address: {settings.BITTENSOR_MINER_ADDRESS}: {settings.BITTENSOR_MINER_PORT}")

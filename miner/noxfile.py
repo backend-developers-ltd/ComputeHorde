@@ -108,7 +108,7 @@ def run_shellcheck(session, mode="check"):
     session.run(*shellcheck_cmd, external=True)
 
 
-@nox.session(name='format', python=PYTHON_DEFAULT_VERSION)
+@nox.session(name="format", python=PYTHON_DEFAULT_VERSION)
 def format_(session):
     """Lint the code and apply fixes in-place whenever possible."""
     install(session, "format")
