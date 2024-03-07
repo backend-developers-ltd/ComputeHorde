@@ -64,7 +64,7 @@ security_check = [
 
 [tool.ruff]
 src = ["app/src"]
-line-length = 100
+line-length = 120
 
 [tool.ruff.lint]
 # TODO add D

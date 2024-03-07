@@ -1,1 +1,1 @@
-default_app_config = 'compute_horde_validator.validator.apps.ValidatorConfig'
+default_app_config = "compute_horde_validator.validator.apps.ValidatorConfig"
