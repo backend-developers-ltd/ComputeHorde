@@ -156,6 +156,6 @@ def test(session):
             "-vv",
             "-n",
             "auto",
-            "{{cookiecutter.django_project_name}}",
+            "compute_horde_miner",
             *session.posargs,
         )
