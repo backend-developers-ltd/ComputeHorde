@@ -4,7 +4,7 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
 from django.urls import path, re_path
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'compute_horde_miner.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "compute_horde_miner.settings")
 import django  # noqa
 
 django.setup(
@@ -23,4 +23,3 @@ application = ProtocolTypeRouter({
         path('v0/executor_interface/<str:executor_token>', MinerExecutorConsumer.as_asgi()),
     ]),
 })
-
