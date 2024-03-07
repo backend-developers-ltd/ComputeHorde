@@ -2,6 +2,7 @@ import enum
 from typing import Mapping
 
 import pydantic
+from pydantic import Field
 
 from ..base_requests import BaseRequest, JobMixin
 
@@ -19,6 +20,7 @@ class BaseValidatorRequest(BaseRequest):
 
 class VolumeType(enum.Enum):
     inline = 'inline'
+    zip_url = 'zip_url'
 
 
 class AuthenticationPayload(pydantic.BaseModel):
@@ -54,14 +56,15 @@ class Volume(pydantic.BaseModel):
 
 class OutputUploadType(enum.Enum):
     zip_and_http_post = 'zip_and_http_post'
+    zip_and_http_put = 'zip_and_http_put'
 
 
 class OutputUpload(pydantic.BaseModel):
     output_upload_type: OutputUploadType
     # TODO: the following are only valid for output_upload_type = zip_and_http_post, some polymorphism like with
     #  BaseRequest is required here
-    post_url: str
-    post_form_fields: Mapping[str, str]
+    url: str
+    form_fields: Mapping[str, str] | None = Field(default=None)
 
 
 class V0JobRequest(BaseValidatorRequest, JobMixin):

@@ -190,8 +190,8 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
 def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     # Arrange
     httpx_mock.add_response()
-    post_url = 'http://localhost/bucket/file.zip?hash=blabla'
-    post_form_fields = {'a': 'b', 'c': 'd'}
+    url = 'http://localhost/bucket/file.zip?hash=blabla'
+    form_fields = {'a': 'b', 'c': 'd'}
 
     command = TestCommand(iter([
         json.dumps({
@@ -212,8 +212,8 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             },
             "output_upload": {
                 "output_upload_type": "zip_and_http_post",
-                "post_url": post_url,
-                "post_form_fields": post_form_fields,
+                "url": url,
+                "form_fields": form_fields,
             },
             "job_uuid": job_uuid,
         }),
@@ -238,8 +238,61 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
 
     request = httpx_mock.get_request()
     assert request is not None
-    assert request.url == post_url
+    assert request.url == url
     assert request.method == 'POST'
+
+
+def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
+    # Arrange
+    httpx_mock.add_response()
+    url = 'http://localhost/bucket/file.zip?hash=blabla'
+
+    command = TestCommand(iter([
+        json.dumps({
+            "message_type": "V0PrepareJobRequest",
+            "base_docker_image_name": "alpine",
+            "timeout_seconds": None,
+            "volume_type": "inline",
+            "job_uuid": job_uuid,
+        }),
+        json.dumps({
+            "message_type": "V0RunJobRequest",
+            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+            "docker_run_cmd": [],
+            "docker_run_options_preset": 'none',
+            "volume": {
+                "volume_type": "inline",
+                "contents": base64_zipfile,
+            },
+            "output_upload": {
+                "output_upload_type": "zip_and_http_put",
+                "url": url,
+            },
+            "job_uuid": job_uuid,
+        }),
+    ]))
+
+    # Act
+    command.handle()
+
+    # Assert
+    assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FinishedRequest",
+            "docker_process_stdout": payload,
+            "docker_process_stderr": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+    ]
+
+    request = httpx_mock.get_request()
+    assert request is not None
+    assert request.url == url
+    assert request.method == 'PUT'
 
 
 def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
@@ -264,8 +317,8 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
             },
             "output_upload": {
                 "output_upload_type": "zip_and_http_post",
-                "post_url": "http://localhost",
-                "post_form_fields": {},
+                "url": "http://localhost",
+                "form_fields": {},
             },
             "job_uuid": job_uuid,
         }),

@@ -123,7 +123,11 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
                     "volume_type": job_request.volume.volume_type.value,
                     "contents": job_request.volume.contents,
                 },
-                output_upload=job_request.output_upload,
+                output_upload={
+                    "output_upload_type": job_request.output_upload.output_upload_type.value,
+                    "url": job_request.output_upload.url,
+                    "form_fields": job_request.output_upload.form_fields,
+                } if job_request.output_upload else None,
             ).dict()
         })
 

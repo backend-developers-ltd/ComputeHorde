@@ -39,6 +39,7 @@ MAX_RESULT_SIZE_IN_RESPONSE = 1000
 TRUNCATED_RESPONSE_PREFIX_LEN = 100
 TRUNCATED_RESPONSE_SUFFIX_LEN = 100
 INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 300
+CVE_2022_0492_IMAGE = "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
 DOCKER_BASE_IMAGES_TO_KEEP = {"python", "ubuntu", "debian", "alpine"}
 
 
@@ -324,6 +325,18 @@ class JobRunner:
             )
             await process.wait()
 
+        # Run a container to mark the CVE checking image as "used" to avoid GC
+        process = await asyncio.create_subprocess_exec(
+            'docker',
+            'run',
+            '--name',
+            'keep_cve_2022_0492',
+            CVE_2022_0492_IMAGE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await process.wait()
+
         # remove docker images
         process = await asyncio.create_subprocess_exec(
             "docker",
@@ -394,7 +407,7 @@ class Command(BaseCommand):
             'docker',
             'run',
             '--rm',
-            'us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest',
+            CVE_2022_0492_IMAGE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
