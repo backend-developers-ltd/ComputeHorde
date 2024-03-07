@@ -1,8 +1,8 @@
 import enum
-from typing import Mapping
+from typing import Mapping, Any
 
 import pydantic
-from pydantic import Field
+from pydantic import Field, root_validator
 
 from ..base_requests import BaseRequest, JobMixin
 
@@ -50,11 +50,18 @@ class OutputUpload(pydantic.BaseModel):
 
 class V0JobRequest(BaseMinerRequest, JobMixin):
     message_type: RequestType = RequestType.V0RunJobRequest
-    docker_image_name: str
+    docker_image_name: str | None = None
+    raw_script: str | None = None
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
     output_upload: OutputUpload | None
+
+    @root_validator()
+    def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
+        if bool(values.get("docker_image_name")) == bool(values.get("raw_script")):
+            raise ValueError("Expected only one, either `docker_image_name` or `raw_script`, not together")
+        return values
 
 
 class GenericError(BaseMinerRequest):

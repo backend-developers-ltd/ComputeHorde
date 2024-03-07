@@ -342,3 +342,40 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
     ]
+
+
+def test_raw_script_job():
+    command = TestCommand(iter([
+        json.dumps({
+            "message_type": "V0PrepareJobRequest",
+            "base_docker_image_name": None,
+            "timeout_seconds": None,
+            "volume_type": "inline",
+            "job_uuid": job_uuid,
+        }),
+        json.dumps({
+            "message_type": "V0RunJobRequest",
+            "docker_image_name": None,
+            "raw_script": f"print('{payload}')",
+            "docker_run_cmd": [],
+            "docker_run_options_preset": 'none',
+            "volume": {
+                "volume_type": "inline",
+                "contents": base64_zipfile,
+            },
+            "job_uuid": job_uuid,
+        }),
+    ]))
+    command.handle()
+    assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FinishedRequest",
+            "docker_process_stdout": f"{payload}\n",
+            "docker_process_stderr": mock.ANY,
+            "job_uuid": job_uuid,
+        }
+    ]
