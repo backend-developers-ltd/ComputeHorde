@@ -5,7 +5,7 @@
 groups = ["default", "format", "lint", "security_check", "test", "type_check"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:6d3992c996a48921f639ed28cf6f6bbf44f2ff4b4825a9a5f86b5cd0e94e5029"
+content_hash = "sha256:e8ba6095063ad758e8264dc75107c0cd4749345aa9093d7e83e5bcf650c6272e"
 
 [[package]]
 name = "aiohttp"
@@ -918,10 +918,6 @@ dependencies = [
     "django-stubs[compatible-mypy]",
     "djangorestframework-stubs==3.14.5",
     "mypy~=1.7.0",
-]
-files = [
-    {file = "djangorestframework-stubs-3.14.5.tar.gz", hash = "sha256:5dd6f638aa5291fb7863e6166128a6ed20bf4986e2fc5cf334e6afc841797a09"},
-    {file = "djangorestframework_stubs-3.14.5-py3-none-any.whl", hash = "sha256:43d788fd50cda49b922cd411e59c5b8cdc3f3de49c02febae12ce42139f0269b"},
 ]
 
 [[package]]
