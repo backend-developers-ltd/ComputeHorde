@@ -35,7 +35,7 @@ class V0SyntheticJob(SyntheticJob):
 
     @classmethod
     def random_string(cls, length: int) -> str:
-        return ''.join(secrets.choice(cls.ALPHABET) for i in range(length))
+        return "".join(secrets.choice(cls.ALPHABET) for i in range(length))
 
     @classmethod
     def generate(cls, algorithm: Algorithm, password_length: int = 6, salt_length_bytes: int = 8) -> Self:
@@ -54,20 +54,20 @@ class V0SyntheticJob(SyntheticJob):
         elif self.algorithm == Algorithm.SHA512:
             hash_function = hashlib.sha512
         else:
-            raise ValueError(f'Unsupported algorithm {self.algorithm}')
-        return hash_function(self.password.encode('ascii') + self.salt).hexdigest()
+            raise ValueError(f"Unsupported algorithm {self.algorithm}")
+        return hash_function(self.password.encode("ascii") + self.salt).hexdigest()
 
     @property
     def payload(self) -> str:
-        """ Convert this instance to a hashcat argument format. """
-        return f'{self.hash_hex}:{self.salt.hex()}'
+        """Convert this instance to a hashcat argument format."""
+        return f"{self.hash_hex}:{self.salt.hex()}"
 
     @property
     def answer(self) -> str:
         return self.password
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     job = V0SyntheticJob.generate(Algorithm.SHA256)
-    print(f'Payload: {job.payload}')
-    print(f'Answer: {job.payload}:{job.answer}')
+    print(f"Payload: {job.payload}")
+    print(f"Answer: {job.payload}:{job.answer}")

@@ -12,9 +12,8 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
 
 
 class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
-
     def __init__(self):
-        self.payload = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
+        self.payload = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
 
     def timeout_seconds(self) -> int:
         return 3
@@ -26,15 +25,15 @@ class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return "ghcr.io/reef-technologies/computehorde/echo:latest"
 
     def docker_run_options_preset(self) -> str:
-        return 'none'
+        return "none"
 
     def docker_run_cmd(self) -> list[str]:
         return []
 
     def volume_contents(self) -> str:
         in_memory_output = io.BytesIO()
-        zipf = zipfile.ZipFile(in_memory_output, 'w')
-        zipf.writestr('payload.txt', self.payload)
+        zipf = zipfile.ZipFile(in_memory_output, "w")
+        zipf.writestr("payload.txt", self.payload)
         zipf.close()
         in_memory_output.seek(0)
         zip_contents = in_memory_output.read()
@@ -42,8 +41,8 @@ class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         if msg.docker_process_stdout == self.payload:
-            return True, '', 1
-        return False, f'result does not match payload: payload={self.payload} msg={msg.json()}', 0
+            return True, "", 1
+        return False, f"result does not match payload: payload={self.payload} msg={msg.json()}", 0
 
     def job_description(self):
-        return 'echo'
+        return "echo"

@@ -19,9 +19,10 @@ class JobBase(models.Model):
         abstract = True
 
     class Status(models.TextChoices):
-        PENDING = 'PENDING'
-        COMPLETED = 'COMPLETED'
-        FAILED = 'FAILED'
+        PENDING = "PENDING"
+        COMPLETED = "COMPLETED"
+        FAILED = "FAILED"
+
     job_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
     miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
     miner_address = models.CharField(max_length=255)
@@ -29,18 +30,18 @@ class JobBase(models.Model):
     miner_port = models.IntegerField()
     status = models.TextField(choices=Status.choices, default=Status.PENDING)
     updated_at = models.DateTimeField(auto_now=True)
-    comment = models.TextField(blank=True, default='')
+    comment = models.TextField(blank=True, default="")
     job_description = models.TextField(blank=True)
 
 
 class SyntheticJob(JobBase):
-    batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE, related_name='synthetic_jobs')
+    batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE, related_name="synthetic_jobs")
     score = models.FloatField(default=0)
 
     class Meta:
         # unique_together = ('batch', 'miner')
         constraints = [
-            models.UniqueConstraint(fields=['batch', 'miner'], name='one_job_per_batch_per_miner'),
+            models.UniqueConstraint(fields=["batch", "miner"], name="one_job_per_batch_per_miner"),
         ]
 
 

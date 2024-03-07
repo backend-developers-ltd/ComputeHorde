@@ -47,7 +47,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return "backenddevelopersltd/compute-horde-job:v0-latest"
 
     def docker_run_options_preset(self) -> str:
-        return 'nvidia_all'
+        return "nvidia_all"
 
     def docker_run_cmd(self) -> list[str]:
         return [
@@ -73,8 +73,8 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
 
     def volume_contents(self) -> str:
         in_memory_output = io.BytesIO()
-        zipf = zipfile.ZipFile(in_memory_output, 'w')
-        zipf.writestr('payload.txt', self.hash_job.payload)
+        zipf = zipfile.ZipFile(in_memory_output, "w")
+        zipf.writestr("payload.txt", self.hash_job.payload)
         zipf.close()
         in_memory_output.seek(0)
         zip_contents = in_memory_output.read()
@@ -84,12 +84,14 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         if msg.docker_process_stdout.strip() != self.expected_answer:
             return (
                 False,
-                f'result does not match expected answer: expected answer={self.expected_answer} msg={msg.json()}',
+                f"result does not match expected answer: expected answer={self.expected_answer} msg={msg.json()}",
                 0,
             )
         score = MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds())))
-        return True, '', score
+        return True, "", score
 
     def job_description(self):
-        return (f'Hashcat {self.algorithm.value}, password length = {self.password_length}, '
-                f'timeout={self.timeout_seconds()}s')
+        return (
+            f"Hashcat {self.algorithm.value}, password length = {self.password_length}, "
+            f"timeout={self.timeout_seconds()}s"
+        )

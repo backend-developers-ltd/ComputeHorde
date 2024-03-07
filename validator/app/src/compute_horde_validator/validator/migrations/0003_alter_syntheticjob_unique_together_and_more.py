@@ -15,8 +15,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name="syntheticjob",
-            constraint=models.UniqueConstraint(
-                fields=("batch", "miner"), name="one_job_per_batch_per_miner"
-            ),
+            constraint=models.UniqueConstraint(fields=("batch", "miner"), name="one_job_per_batch_per_miner"),
         ),
     ]

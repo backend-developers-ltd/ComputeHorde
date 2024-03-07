@@ -39,12 +39,12 @@ def _run_synthetic_jobs():
     jobs = initiate_jobs(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)  # metagraph will be refetched and
     # that's fine, after sleeping for e.g. 30 minutes we should refetch the miner list
     if not jobs:
-        logger.info('Nothing to do')
+        logger.info("Nothing to do")
         return
     try:
         asyncio.run(execute_jobs(jobs))
     except billiard.exceptions.SoftTimeLimitExceeded:
-        logger.info('Running synthetic jobs timed out')
+        logger.info("Running synthetic jobs timed out")
 
 
 @app.task()
@@ -52,15 +52,22 @@ def run_synthetic_jobs():
     if not settings.DEBUG_DONT_STAGGER_VALIDATORS:
         metagraph = bittensor.metagraph(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
         my_key = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-        validator_keys = sorted([n.hotkey for n in metagraph.neurons if
-                                 n.validator_permit and n.stake.tao >= MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO])
+        validator_keys = sorted(
+            [
+                n.hotkey
+                for n in metagraph.neurons
+                if n.validator_permit and n.stake.tao >= MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO
+            ]
+        )
         if my_key not in validator_keys:
-            raise ValueError(f"Can't determine proper synthetic job window due to stake being < "
-                             f"{MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO}")
+            raise ValueError(
+                f"Can't determine proper synthetic job window due to stake being < "
+                f"{MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO}"
+            )
         my_index = validator_keys.index(my_key)
         window_per_validator = JOB_WINDOW / (len(validator_keys) + 1)
         my_window_starts_at = window_per_validator * my_index
-        logger.info(f'Sleeping for {my_window_starts_at:02f}s because I am {my_index} out of {len(validator_keys)}')
+        logger.info(f"Sleeping for {my_window_starts_at:02f}s because I am {my_index} out of {len(validator_keys)}")
         time.sleep(my_window_starts_at)
     _run_synthetic_jobs.apply_async()
 
@@ -99,10 +106,13 @@ def set_scores():
     neurons = metagraph.neurons
     hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
     score_per_uid = {}
-    batches = list(SyntheticJobBatch.objects.prefetch_related('synthetic_jobs').filter(
-        scored=False, started_at__gte=now() - timedelta(days=1), accepting_results_until__lt=now()))
+    batches = list(
+        SyntheticJobBatch.objects.prefetch_related("synthetic_jobs").filter(
+            scored=False, started_at__gte=now() - timedelta(days=1), accepting_results_until__lt=now()
+        )
+    )
     if not batches:
-        logger.info('No batches - nothing to score')
+        logger.info("No batches - nothing to score")
         return
 
     for batch in batches:
@@ -112,7 +122,7 @@ def set_scores():
                 continue
             score_per_uid[uid] = score_per_uid.get(uid, 0) + job.score
     if not score_per_uid:
-        logger.info('No miners on the subnet to score')
+        logger.info("No miners on the subnet to score")
         return
     uids = torch.zeros(len(neurons), dtype=torch.long)
     weights = torch.zeros(len(neurons), dtype=torch.float32)
@@ -128,10 +138,9 @@ def set_scores():
         metagraph,
     )
     for try_number in range(WEIGHT_SETTING_ATTEMPTS):
-        logger.debug(f'Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}')
+        logger.debug(f"Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}")
         success = False
         try:
-
             result = do_set_weights.apply_async(
                 kwargs=dict(
                     subtensor_chain_endpoint=subtensor.chain_endpoint,
@@ -145,19 +154,19 @@ def set_scores():
                 soft_time_limit=WEIGHT_SETTING_TTL,
                 time_limit=WEIGHT_SETTING_HARD_TTL,
             )
-            logger.info(f'Setting weights task id: {result.id}')
+            logger.info(f"Setting weights task id: {result.id}")
             try:
                 with allow_join_result():
                     success = result.get(timeout=WEIGHT_SETTING_TTL)
             except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
                 result.revoke(terminate=True)
-                logger.info(f'Setting weights timed out (attempt #{try_number})')
+                logger.info(f"Setting weights timed out (attempt #{try_number})")
         except Exception:
-            logger.exception('Encountered when setting weights: ')
+            logger.exception("Encountered when setting weights: ")
         if not success:
-            logger.info(f'Failed to set weights (attempt #{try_number})')
+            logger.info(f"Failed to set weights (attempt #{try_number})")
         else:
-            logger.info(f'Successfully set weights!!! (attempt #{try_number})')
+            logger.info(f"Successfully set weights!!! (attempt #{try_number})")
             break
     else:
-        raise RuntimeError(f'Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts')
+        raise RuntimeError(f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts")
