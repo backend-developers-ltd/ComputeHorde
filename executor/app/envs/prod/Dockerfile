@@ -23,10 +23,7 @@ RUN mkdir -p /opt/ && mv __pypackages__/3.11/ /opt/pypackages/
 ENV PATH=/opt/pypackages/bin:$PATH
 ENV PYTHONPATH=/opt/pypackages/lib:$PYTHONPATH
 
-COPY ./app/src/ /root/src/
-COPY ./app/envs/prod/entrypoint.sh /root/src/
-COPY ./app/envs/prod/gunicorn.conf.py /root/src/
-COPY ./app/envs/prod/celery-entrypoint.sh /root/src/
+COPY ./app/src/ ./app/envs/prod/entrypoint.sh ./app/envs/prod/gunicorn.conf.py ./app/envs/prod/celery-entrypoint.sh /root/src/
 
 RUN python3 -m compileall -b -f -q /root/
 RUN ENV=prod ENV_FILL_MISSING_VALUES=1 DATABASE_URL= SECRET_KEY=dummy python3 manage.py collectstatic --no-input --clear

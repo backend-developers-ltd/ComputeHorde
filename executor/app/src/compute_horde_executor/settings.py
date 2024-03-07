@@ -21,16 +21,22 @@ env = environ.Env(DEBUG=(bool, False))
 # this results in errors if you require some env var to be set, as if in "env('MYVAR')" -
 # obviously it's not set during build stage, but you don't care and want to ignore that.
 # To mitigate this, we set ENV_FILL_MISSING_VALUES=1 during build phase, and it activates
-# monkey-patching of "environ" module, so that all unset variables are set to None and
-# the library is not complaining anymore
-if env.bool('ENV_FILL_MISSING_VALUES', default=False):
+# monkey-patching of "environ" module, so that all unset variables get some default value
+# and the library does not complain anymore
+if env.bool("ENV_FILL_MISSING_VALUES", default=False):
 
     def patch(fn):
         @wraps(fn)
         def wrapped(*args, **kwargs):
-            if kwargs.get('default') is env.NOTSET:
-                kwargs['default'] = None
+            if kwargs.get("default") is env.NOTSET:
+                kwargs["default"] = {
+                    bool: False,
+                    int: 0,
+                    float: 0.0,
+                }.get(kwargs.get("cast"), None)
+
             return fn(*args, **kwargs)
+
         return wrapped
 
     for name, method in inspect.getmembers(env, predicate=inspect.ismethod):
