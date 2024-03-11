@@ -147,8 +147,8 @@ class FacilitatorClient:
 
             try:
                 await task
-            except Exception as exc:
-                logger.error("Error occurred during driving a miner client: %r", exc)
+            except Exception:
+                logger.error("Error occurred during driving a miner client", exc_info=True)
 
     async def __aenter__(self):
         pass
@@ -199,17 +199,24 @@ class FacilitatorClient:
     async def handle_message(self, raw_msg: str | bytes):
         """ handle message received from facilitator """
         try:
-            msg = pydantic.parse_raw_as(Response | JobRequest, raw_msg)  # type: ignore[arg-type]
+            response = Response.parse_raw(raw_msg)
         except pydantic.ValidationError:
-            logger.error("unsupported message received from facilitator: %s", raw_msg)
+            logger.debug("could not parse raw message as Response")
+        else:
+            if response.status != 'success':
+                logger.error("received error response from facilitator: %r", response)
             return
 
-        if isinstance(msg, Response):
-            if msg.status != 'success':
-                logger.error("received error response from facilitator: %r", msg)
-        elif isinstance(msg, JobRequest):
-            task = asyncio.create_task(self.miner_driver(msg))
+        try:
+            job_request = JobRequest.parse_raw(raw_msg)
+        except pydantic.ValidationError:
+            logger.debug("could not parse raw message as JobRequest")
+        else:
+            task = asyncio.create_task(self.miner_driver(job_request))
             await self.miner_drivers.put(task)
+            return
+
+        logger.error("unsupported message received from facilitator: %s", raw_msg)
 
     async def miner_driver(self, job_request: JobRequest):
         """ drive a miner client from job start to completion, the close miner connection """
