@@ -242,11 +242,16 @@ class FacilitatorClient:
             keypair=self.keypair,
         )
         async with miner_client:
+            if job_request.input_url:
+                volume = Volume(volume_type=VolumeType.zip_url, contents=job_request.input_url)
+            else:
+                volume = Volume(volume_type=VolumeType.inline, contents=get_dummy_inline_zip_volume())
+
             await miner_client.send_model(V0InitialJobRequest(
                 job_uuid=job_request.uuid,
                 base_docker_image_name=job_request.docker_image or None,
                 timeout_seconds=JOB_WAIT_TIMEOUT,
-                volume_type=VolumeType.zip_url,
+                volume_type=volume.volume_type.value,
             ))
 
             try:
@@ -296,10 +301,6 @@ class FacilitatorClient:
                 raise ValueError(f'Unexpected msg: {msg}')
 
             docker_run_options_preset = 'nvidia_all' if job_request.use_gpu else 'none'
-            if job_request.input_url:
-                volume = Volume(volume_type=VolumeType.zip_url, contents=job_request.input_url)
-            else:
-                volume = Volume(volume_type=VolumeType.inline, contents=get_dummy_inline_zip_volume())
 
             if job_request.output_url:
                 output_upload = OutputUpload(
