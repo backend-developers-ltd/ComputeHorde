@@ -56,8 +56,7 @@ BITTENSOR_NETWORK=172.17.0.1:9944
 BITTENSOR_WALLET_NAME=validator
 BITTENSOR_WALLET_HOTKEY_NAME=default
 HOST_WALLET_DIR=/home/josephus/.bittensor/wallets
-FACILITATOR_ADDRESS=staging.facilitator.computehorde.io
-FACILITATOR_PORT=443
+FACILITATOR_URI=wss://staging.facilitator.computehorde.io/ws/v0/
 ```
 6. run `docker-compose up -d` in the directory containing your `docker-compose.yml`, 
    e.g. `/home/josephus/compute_horde_validator/`

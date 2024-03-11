@@ -121,18 +121,16 @@ def get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
 class FacilitatorClient:
     MINER_CLIENT_CLASS = MinerClient
 
-    def __init__(self, keypair: bittensor.Keypair, facilitator_address: str, facilitator_port: int):
+    def __init__(self, keypair: bittensor.Keypair, facilitator_uri: str):
         self.keypair = keypair
         self.ws: websockets.WebSocketClientProtocol | None = None
-        self.facilitator_address = facilitator_address
-        self.facilitator_port = facilitator_port
+        self.facilitator_uri = facilitator_uri
         self.miner_drivers = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
 
     def connect(self):
         """ Create an awaitable/async-iterable websockets.connect() object """
-        facilitator_url = f"ws://{self.facilitator_address}:{self.facilitator_port}/ws/v0/"
-        return websockets.connect(facilitator_url)
+        return websockets.connect(self.facilitator_uri)
 
     async def miner_driver_awaiter(self):
         """ avoid memory leak by awaiting miner driver tasks """
@@ -349,8 +347,6 @@ class Command(BaseCommand):
     @async_to_sync
     async def handle(self, *args, **options):
         keypair = settings.BITTENSOR_WALLET().get_hotkey()
-        facilitator_client = self.FACILITATOR_CLIENT_CLASS(
-            keypair, settings.FACILITATOR_ADDRESS, settings.FACILITATOR_PORT
-        )
+        facilitator_client = self.FACILITATOR_CLIENT_CLASS(keypair, settings.FACILITATOR_URI)
         async with facilitator_client:
             await facilitator_client.run_forever()
