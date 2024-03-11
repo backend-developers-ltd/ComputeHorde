@@ -65,6 +65,12 @@ class AuthenticationRequest(BaseModel, extra=Extra.forbid):
         )
 
 
+class AuthenticationError(Exception):
+    def __init__(self, reason: str, errors: list[Error]):
+        self.reason = reason
+        self.errors = errors
+
+
 class JobRequest(BaseModel, extra=Extra.forbid):
     """ Message sent from facilitator to validator to request a job execution """
 
@@ -166,6 +172,15 @@ class FacilitatorClient:
     async def handle_connection(self, ws: websockets.WebSocketClientProtocol):
         """ handle a single websocket connection """
         await ws.send(AuthenticationRequest.from_keypair(self.keypair).json())
+
+        raw_msg = await ws.recv()
+        try:
+            response = Response.parse_raw(raw_msg)
+        except pydantic.ValidationError as exc:
+            raise AuthenticationError("did not receive Response for AuthenticationRequest", []) from exc
+        if response.status != 'success':
+            raise AuthenticationError("auth request received failed response", response.errors)
+
         self.ws = ws
 
         async for raw_msg in ws:
