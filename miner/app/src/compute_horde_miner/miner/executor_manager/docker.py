@@ -6,7 +6,6 @@ from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager, ExecutorUnavailable
 
-EXECUTOR_IMAGE = "backenddevelopersltd/compute-horde-executor:v0-latest"
 PULLING_TIMEOUT = 300
 
 logger = logging.getLogger(__name__)
@@ -24,7 +23,7 @@ class DockerExecutorManager(BaseExecutorManager):
                 '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
                 'root_app_1'
             ]).decode().strip()
-        process = await asyncio.create_subprocess_exec('docker', 'pull', EXECUTOR_IMAGE)
+        process = await asyncio.create_subprocess_exec('docker', 'pull', settings.EXECUTOR_IMAGE)
         try:
             await asyncio.wait_for(process.communicate(), timeout=PULLING_TIMEOUT)
             if process.returncode:
@@ -41,6 +40,6 @@ class DockerExecutorManager(BaseExecutorManager):
             # the executor must be able to spawn images on host
             "-v", "/var/run/docker.sock:/var/run/docker.sock",
             "-v", "/tmp:/tmp",
-            EXECUTOR_IMAGE,
+            settings.EXECUTOR_IMAGE,
             "python", "manage.py", "run_executor",
         ])
