@@ -276,6 +276,7 @@ BITTENSOR_WALLET_DIRECTORY = env.path(
 )
 BITTENSOR_WALLET_NAME = env.str('BITTENSOR_WALLET_NAME')
 BITTENSOR_WALLET_HOTKEY_NAME = env.str('BITTENSOR_WALLET_HOTKEY_NAME')
+JOB_WAIT_TIMEOUT = 300
 SYNTHETIC_JOB_GENERATOR = env.str(
     'SYNTHETIC_JOB_GENERATOR',
     default='compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatSyntheticJobGenerator',

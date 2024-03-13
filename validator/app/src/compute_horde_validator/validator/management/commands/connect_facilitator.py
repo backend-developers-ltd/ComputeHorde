@@ -33,11 +33,9 @@ from pydantic import BaseModel, Extra, Field, root_validator
 
 from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
+from compute_horde_validator.validator.utils import Timer
 
 logger = logging.getLogger(__name__)
-
-PREPARE_WAIT_TIMEOUT = 60
-JOB_WAIT_TIMEOUT = 300
 
 
 class Error(BaseModel, extra=Extra.allow):
@@ -199,7 +197,7 @@ class FacilitatorClient:
             await self.miner_drivers.put(task)
 
     async def miner_driver(self, job_request: JobRequest):
-        """ drive a miner client from job start to completion, the close miner connection """
+        """ drive a miner client from job start to completion, then close miner connection """
 
         miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
         miner_axon_info = await get_miner_axon_info(job_request.miner_hotkey)
@@ -222,28 +220,31 @@ class FacilitatorClient:
             keypair=self.keypair,
         )
         async with miner_client:
+            remaining_time = settings.JOB_WAIT_TIMEOUT
             await miner_client.send_model(V0InitialJobRequest(
                 job_uuid=job_request.uuid,
                 base_docker_image_name=job_request.docker_image or None,
-                timeout_seconds=JOB_WAIT_TIMEOUT,
+                timeout_seconds=remaining_time.total_seconds(),
                 volume_type=VolumeType.zip_url,
             ))
 
             try:
-                msg = await asyncio.wait_for(
-                    miner_client.miner_ready_or_declining_future,
-                    timeout=PREPARE_WAIT_TIMEOUT,
-                )
+                with Timer() as timer:
+                    msg = await asyncio.wait_for(
+                        miner_client.miner_ready_or_declining_future,
+                        timeout=remaining_time.total_seconds(),
+                    )
+                remaining_time -= timer.elapsed
             except TimeoutError:
                 logger.error(
                     f'Miner {miner_client.miner_name} timed out out while preparing executor for job {job_request.uuid}'
-                    f' after {PREPARE_WAIT_TIMEOUT} seconds'
+                    f' after {remaining_time}'
                 )
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='failed',
                     metadata={
-                        'comment': f'Miner timed out while preparing executor after {PREPARE_WAIT_TIMEOUT} seconds',
+                        'comment': f'Miner timed out while preparing executor after {remaining_time}',
                     },
                 ))
                 job.status = OrganicJob.Status.FAILED
@@ -302,16 +303,16 @@ class FacilitatorClient:
             try:
                 msg = await asyncio.wait_for(
                     miner_client.miner_finished_or_failed_future,
-                    timeout=JOB_WAIT_TIMEOUT,
+                    timeout=remaining_time.total_seconds(),
                 )
                 time_took = miner_client.miner_finished_or_failed_timestamp - full_job_sent
                 logger.info(f"Miner took {time_took} seconds to finish {job_request.uuid}")
             except TimeoutError:
-                logger.error(f'Miner {miner_client.miner_name} timed out after {JOB_WAIT_TIMEOUT} seconds')
+                logger.error(f'Miner {miner_client.miner_name} timed out after {remaining_time}')
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='failed',
-                    metadata={'comment': f'Miner timed out after {JOB_WAIT_TIMEOUT} seconds'},
+                    metadata={'comment': f'Miner timed out after {remaining_time}'},
                 ))
                 job.status = OrganicJob.Status.FAILED
                 job.comment = 'Miner timed out'
