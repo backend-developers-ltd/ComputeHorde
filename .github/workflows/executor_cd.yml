@@ -1,0 +1,15 @@
+name: Continuous Delivery: executor 
+
+on: workflow_dispatch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Docker build and push
+        run: |
+          export IMAGE_NAME="backenddevelopersltd/compute-horde-executor-staging:cd-test-latest"
+          cd executor && docker build --build-context compute-horde=../compute_horde -t "$IMAGE_NAME" -f app/envs/prod/Dockerfile .
+          echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          docker push "$IMAGE_NAME"
+          
