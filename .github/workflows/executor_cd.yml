@@ -1,4 +1,4 @@
-name: Continuous Delivery: executor 
+name: "Continuous Delivery: executor" 
 
 on: workflow_dispatch
 
