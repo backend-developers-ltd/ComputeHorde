@@ -224,7 +224,7 @@ class FacilitatorClient:
             await miner_client.send_model(V0InitialJobRequest(
                 job_uuid=job_request.uuid,
                 base_docker_image_name=job_request.docker_image or None,
-                timeout_seconds=remaining_time.total_seconds(),
+                timeout_seconds=int(remaining_time.total_seconds()),
                 volume_type=VolumeType.zip_url,
             ))
 
