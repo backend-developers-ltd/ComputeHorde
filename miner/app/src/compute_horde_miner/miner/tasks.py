@@ -1,7 +1,7 @@
-import bittensor
 from celery.utils.log import get_task_logger
 from django.conf import settings
 
+from compute_horde.utils import get_validators
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import quasi_axon
 from compute_horde_miner.miner.models import Validator
@@ -16,8 +16,8 @@ def announce_address_and_port():
 
 @app.task
 def fetch_validators():
-    metagraph = bittensor.metagraph(netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
-    validator_keys = {n.hotkey for n in metagraph.neurons if n.validator_permit}
+    validators = get_validators(netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
+    validator_keys = {validator.hotkey for validator in validators}
     to_activate = []
     to_deactivate = []
     to_create = []
