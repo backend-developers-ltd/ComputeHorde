@@ -1,7 +1,7 @@
 from celery.utils.log import get_task_logger
+from compute_horde.utils import get_validators
 from django.conf import settings
 
-from compute_horde.utils import get_validators
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import quasi_axon
 from compute_horde_miner.miner.models import Validator
