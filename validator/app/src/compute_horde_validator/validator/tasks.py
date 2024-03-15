@@ -54,7 +54,7 @@ def run_synthetic_jobs():
         validators = get_validators(netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
         my_key = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
         validator_keys = sorted([n.hotkey for n in validators if
-                                 n.validator_permit and n.stake.tao >= MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO])
+                                 n.stake.tao >= MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO])
         if my_key not in validator_keys:
             raise ValueError(f"Can't determine proper synthetic job window due to stake being < "
                              f"{MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO}, or not in top 12 validators")
