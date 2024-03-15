@@ -407,8 +407,13 @@ class JobRunner:
     async def unpack_volume(self, job_request: V0JobRequest):
         try:
             await asyncio.wait_for(self._unpack_volume(job_request), timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS)
+        except JobError:
+            raise
         except TimeoutError as exc:
             raise JobError("Input volume downloading took too long") from exc
+        except Exception as exc:
+            logger.exception("error occurred during unpacking input volume")
+            raise JobError("Unknown error happened while downloading input volume") from exc
 
 
 class Command(BaseCommand):
