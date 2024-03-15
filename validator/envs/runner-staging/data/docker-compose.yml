@@ -26,7 +26,7 @@ services:
       <<: *logging
 
   celery-worker:
-    image: backenddevelopersltd/compute-horde-validator:v0-latest
+    image: backenddevelopersltd/compute-horde-validator-staging:v0-latest
     pull_policy: always
     init: true
     healthcheck:
@@ -49,7 +49,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-beat:
-    image: backenddevelopersltd/compute-horde-validator:v0-latest
+    image: backenddevelopersltd/compute-horde-validator-staging:v0-latest
     pull_policy: always
     init: true
     restart: unless-stopped
@@ -67,7 +67,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   connect-facilitator:
-    image: backenddevelopersltd/compute-horde-validator:v0-latest
+    image: backenddevelopersltd/compute-horde-validator-staging:v0-latest
     pull_policy: always
     init: true
     restart: unless-stopped

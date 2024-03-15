@@ -25,12 +25,37 @@ services:
     logging:
       <<: *logging
 
+  app:
+    image: backenddevelopersltd/compute-horde-miner-staging:v0-latest
+    pull_policy: always
+    healthcheck:
+      test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+      # - PYTHONPATH=/root/vendor
+    volumes:
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+      - ${HOST_VENDOR_DIR:-/tmp}:/root/vendor
+      # mounting host docker socket to allow running executor images on host machine
+      - /var/run/docker.sock:/var/run/docker.sock
+      - static:/root/src/static
+    depends_on:
+      - redis
+      - db
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
   celery-worker:
-    image: backenddevelopersltd/compute-horde-validator:v0-latest
+    image: backenddevelopersltd/compute-horde-miner-staging:v0-latest
     pull_policy: always
     init: true
     healthcheck:
-      test: celery -A compute_horde_validator status > /dev/null || exit 1
+      test: celery -A compute_horde_miner status > /dev/null || exit 1
     restart: unless-stopped
     env_file: ./.env
     environment:
@@ -49,7 +74,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-beat:
-    image: backenddevelopersltd/compute-horde-validator:v0-latest
+    image: backenddevelopersltd/compute-horde-miner-staging:v0-latest
     pull_policy: always
     init: true
     restart: unless-stopped
@@ -58,7 +83,7 @@ services:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
-    command: ./celery-beat-entrypoint.sh
+    command: nice celery -A compute_horde_miner beat -l INFO --schedule /tmp/celerybeat-schedule -f /tmp/celery-beat.log
     depends_on:
       - redis
     logging:
@@ -66,19 +91,19 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
-  connect-facilitator:
-    image: backenddevelopersltd/compute-horde-validator:v0-latest
-    pull_policy: always
-    init: true
+  nginx:
+    image: backenddevelopersltd/compute-horde-miner-nginx:v0-latest
     restart: unless-stopped
+    healthcheck:
+      test: wget -q --spider 0.0.0.0:80/admin/login/ || exit 1
     env_file: ./.env
-    environment:
-      - DEBUG=off
     volumes:
-      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
-    command: python manage.py connect_facilitator
+      - static:/srv/static:ro
     depends_on:
-      - redis
+      - app
+    command: nginx -g 'daemon off;'
+    ports:
+      - ${BITTENSOR_MINER_PORT}:80
     logging:
       <<: *logging
     labels:

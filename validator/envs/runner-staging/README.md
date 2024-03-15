@@ -1,4 +1,4 @@
-# Validator runner
+# Validator staging runner
 
 Runner is a helper container that launches all the necessary services for a validator to run.
 
@@ -21,7 +21,7 @@ version: '3.7'
 services:
     
   validator-runner:
-    image: backenddevelopersltd/compute-horde-validator-runner:v0-latest
+    image: backenddevelopersltd/compute-horde-validator-runner-staging:v0-latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -56,7 +56,7 @@ BITTENSOR_NETWORK=172.17.0.1:9944
 BITTENSOR_WALLET_NAME=validator
 BITTENSOR_WALLET_HOTKEY_NAME=default
 HOST_WALLET_DIR=/home/josephus/.bittensor/wallets
-FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
+FACILITATOR_URI=wss://staging.facilitator.computehorde.io/ws/v0/
 ```
 6. run `docker-compose up -d` in the directory containing your `docker-compose.yml`, 
    e.g. `/home/josephus/compute_horde_validator/`

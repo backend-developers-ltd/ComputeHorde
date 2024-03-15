@@ -65,6 +65,12 @@ class AuthenticationRequest(BaseModel, extra=Extra.forbid):
         )
 
 
+class AuthenticationError(Exception):
+    def __init__(self, reason: str, errors: list[Error]):
+        self.reason = reason
+        self.errors = errors
+
+
 class JobRequest(BaseModel, extra=Extra.forbid):
     """ Message sent from facilitator to validator to request a job execution """
 
@@ -121,18 +127,16 @@ def get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
 class FacilitatorClient:
     MINER_CLIENT_CLASS = MinerClient
 
-    def __init__(self, keypair: bittensor.Keypair, facilitator_address: str, facilitator_port: int):
+    def __init__(self, keypair: bittensor.Keypair, facilitator_uri: str):
         self.keypair = keypair
         self.ws: websockets.WebSocketClientProtocol | None = None
-        self.facilitator_address = facilitator_address
-        self.facilitator_port = facilitator_port
+        self.facilitator_uri = facilitator_uri
         self.miner_drivers = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
 
     def connect(self):
         """ Create an awaitable/async-iterable websockets.connect() object """
-        facilitator_url = f"ws://{self.facilitator_address}:{self.facilitator_port}/ws/v0/"
-        return websockets.connect(facilitator_url)
+        return websockets.connect(self.facilitator_uri)
 
     async def miner_driver_awaiter(self):
         """ avoid memory leak by awaiting miner driver tasks """
@@ -143,8 +147,8 @@ class FacilitatorClient:
 
             try:
                 await task
-            except Exception as exc:
-                logger.error("Error occurred during driving a miner client: %r", exc)
+            except Exception:
+                logger.error("Error occurred during driving a miner client", exc_info=True)
 
     async def __aenter__(self):
         pass
@@ -168,6 +172,15 @@ class FacilitatorClient:
     async def handle_connection(self, ws: websockets.WebSocketClientProtocol):
         """ handle a single websocket connection """
         await ws.send(AuthenticationRequest.from_keypair(self.keypair).json())
+
+        raw_msg = await ws.recv()
+        try:
+            response = Response.parse_raw(raw_msg)
+        except pydantic.ValidationError as exc:
+            raise AuthenticationError("did not receive Response for AuthenticationRequest", []) from exc
+        if response.status != 'success':
+            raise AuthenticationError("auth request received failed response", response.errors)
+
         self.ws = ws
 
         async for raw_msg in ws:
@@ -186,17 +199,24 @@ class FacilitatorClient:
     async def handle_message(self, raw_msg: str | bytes):
         """ handle message received from facilitator """
         try:
-            msg = pydantic.parse_raw_as(Response | JobRequest, raw_msg)  # type: ignore[arg-type]
+            response = Response.parse_raw(raw_msg)
         except pydantic.ValidationError:
-            logger.error("unsupported message received from facilitator: %s", raw_msg)
+            logger.debug("could not parse raw message as Response")
+        else:
+            if response.status != 'success':
+                logger.error("received error response from facilitator: %r", response)
             return
 
-        if isinstance(msg, Response):
-            if msg.status != 'success':
-                logger.error("received error response from facilitator: %r", msg)
-        elif isinstance(msg, JobRequest):
-            task = asyncio.create_task(self.miner_driver(msg))
+        try:
+            job_request = JobRequest.parse_raw(raw_msg)
+        except pydantic.ValidationError:
+            logger.debug("could not parse raw message as JobRequest")
+        else:
+            task = asyncio.create_task(self.miner_driver(job_request))
             await self.miner_drivers.put(task)
+            return
+
+        logger.error("unsupported message received from facilitator: %s", raw_msg)
 
     async def miner_driver(self, job_request: JobRequest):
         """ drive a miner client from job start to completion, the close miner connection """
@@ -222,11 +242,16 @@ class FacilitatorClient:
             keypair=self.keypair,
         )
         async with miner_client:
+            if job_request.input_url:
+                volume = Volume(volume_type=VolumeType.zip_url, contents=job_request.input_url)
+            else:
+                volume = Volume(volume_type=VolumeType.inline, contents=get_dummy_inline_zip_volume())
+
             await miner_client.send_model(V0InitialJobRequest(
                 job_uuid=job_request.uuid,
                 base_docker_image_name=job_request.docker_image or None,
                 timeout_seconds=JOB_WAIT_TIMEOUT,
-                volume_type=VolumeType.zip_url,
+                volume_type=volume.volume_type.value,
             ))
 
             try:
@@ -276,10 +301,6 @@ class FacilitatorClient:
                 raise ValueError(f'Unexpected msg: {msg}')
 
             docker_run_options_preset = 'nvidia_all' if job_request.use_gpu else 'none'
-            if job_request.input_url:
-                volume = Volume(volume_type=VolumeType.zip_url, contents=job_request.input_url)
-            else:
-                volume = Volume(volume_type=VolumeType.inline, contents=get_dummy_inline_zip_volume())
 
             if job_request.output_url:
                 output_upload = OutputUpload(
@@ -349,8 +370,6 @@ class Command(BaseCommand):
     @async_to_sync
     async def handle(self, *args, **options):
         keypair = settings.BITTENSOR_WALLET().get_hotkey()
-        facilitator_client = self.FACILITATOR_CLIENT_CLASS(
-            keypair, settings.FACILITATOR_ADDRESS, settings.FACILITATOR_PORT
-        )
+        facilitator_client = self.FACILITATOR_CLIENT_CLASS(keypair, settings.FACILITATOR_URI)
         async with facilitator_client:
             await facilitator_client.run_forever()
