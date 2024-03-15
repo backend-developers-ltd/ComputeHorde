@@ -10,10 +10,10 @@ from bittensor.extrinsics.set_weights import set_weights_extrinsic
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
+from compute_horde.utils import get_validators
 from django.conf import settings
 from django.utils.timezone import now
 
-from compute_horde.utils import get_validators
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs, initiate_jobs
