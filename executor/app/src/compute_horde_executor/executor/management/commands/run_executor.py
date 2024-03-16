@@ -389,11 +389,16 @@ class JobRunner:
             with tempfile.NamedTemporaryFile() as download_file:
                 async with httpx.AsyncClient() as client:
                     async with client.stream('GET', job_request.volume.contents) as response:
-                        volume_size = int(response.headers["Content-Length"])
-                        if 0 < settings.VOLUME_MAX_SIZE_BYTES < volume_size:
-                            raise JobError("Input volume too large")
+                        if (content_length := response.headers.get("Content-Length")) is not None:
+                            # check size early if Content-Length is present
+                            if 0 < settings.VOLUME_MAX_SIZE_BYTES < int(content_length):
+                                raise JobError("Input volume too large")
 
+                        bytes_received = 0
                         async for chunk in response.aiter_bytes():
+                            bytes_received += len(chunk)
+                            if 0 < settings.VOLUME_MAX_SIZE_BYTES < bytes_received:
+                                raise JobError("Input volume too large")
                             download_file.write(chunk)
                 download_file.seek(0)
                 zip_file = zipfile.ZipFile(download_file)

@@ -9,6 +9,7 @@ import zipfile
 from functools import partial
 from unittest import mock
 
+import httpx
 from pytest_httpx import HTTPXMock
 
 from compute_horde_executor.executor.management.commands.run_executor import Command, MinerClient
@@ -149,6 +150,108 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
 
     zip_url = 'https://localhost/payload.txt'
     httpx_mock.add_response(url=zip_url, content=zip_contents)
+
+    command = TestCommand(iter([
+        json.dumps({
+            "message_type": "V0PrepareJobRequest",
+            "base_docker_image_name": "alpine",
+            "timeout_seconds": None,
+            "volume_type": "zip_url",
+            "job_uuid": job_uuid,
+        }),
+        json.dumps({
+            "message_type": "V0RunJobRequest",
+            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+            "docker_run_cmd": [],
+            "docker_run_options_preset": 'none',
+            "volume": {
+                "volume_type": "zip_url",
+                "contents": zip_url,
+            },
+            "job_uuid": job_uuid,
+        }),
+    ]))
+    command.handle()
+    assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FailedRequest",
+            "docker_process_exit_status": None,
+            "timeout": False,
+            "docker_process_stdout": "Input volume too large",
+            "docker_process_stderr": "",
+            "job_uuid": job_uuid,
+        }
+    ]
+
+
+def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
+    zip_url = 'https://localhost/payload.txt'
+
+    def response_callback(request: httpx.Request) -> httpx.Response:
+        response = httpx.Response(
+            status_code=200,
+            extensions={"http_version": b"HTTP/1.1"},
+            content=zip_contents,
+        )
+        del response.headers["Content-Length"]
+        return response
+
+    httpx_mock.add_callback(response_callback, url=zip_url)
+
+    command = TestCommand(iter([
+        json.dumps({
+            "message_type": "V0PrepareJobRequest",
+            "base_docker_image_name": "alpine",
+            "timeout_seconds": None,
+            "volume_type": "zip_url",
+            "job_uuid": job_uuid,
+        }),
+        json.dumps({
+            "message_type": "V0RunJobRequest",
+            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+            "docker_run_cmd": [],
+            "docker_run_options_preset": 'none',
+            "volume": {
+                "volume_type": "zip_url",
+                "contents": zip_url,
+            },
+            "job_uuid": job_uuid,
+        }),
+    ]))
+    command.handle()
+    assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FinishedRequest",
+            "docker_process_stdout": payload,
+            "docker_process_stderr": mock.ANY,
+            "job_uuid": job_uuid,
+        }
+    ]
+
+
+def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: HTTPXMock, settings):
+    settings.VOLUME_MAX_SIZE_BYTES = 1
+
+    zip_url = 'https://localhost/payload.txt'
+
+    def response_callback(request: httpx.Request) -> httpx.Response:
+        response = httpx.Response(
+            status_code=200,
+            extensions={"http_version": "HTTP/1.1".encode("ascii")},
+            content=zip_contents,
+        )
+        del response.headers["Content-Length"]
+        return response
+
+    httpx_mock.add_callback(response_callback, url=zip_url)
 
     command = TestCommand(iter([
         json.dumps({
