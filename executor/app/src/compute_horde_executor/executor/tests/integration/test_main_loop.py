@@ -9,6 +9,7 @@ import zipfile
 from functools import partial
 from unittest import mock
 
+import httpx
 from pytest_httpx import HTTPXMock
 
 from compute_horde_executor.executor.management.commands.run_executor import Command, MinerClient
@@ -190,8 +191,7 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
 def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
     zip_url = 'https://localhost/payload.txt'
 
-    def response_callback(request):
-        import httpx
+    def response_callback(request: httpx.Request) -> httpx.Response:
         response = httpx.Response(
             status_code=200,
             extensions={"http_version": b"HTTP/1.1"},
@@ -242,8 +242,7 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
 
     zip_url = 'https://localhost/payload.txt'
 
-    def response_callback(request):
-        import httpx
+    def response_callback(request: httpx.Request) -> httpx.Response:
         response = httpx.Response(
             status_code=200,
             extensions={"http_version": "HTTP/1.1".encode("ascii")},
