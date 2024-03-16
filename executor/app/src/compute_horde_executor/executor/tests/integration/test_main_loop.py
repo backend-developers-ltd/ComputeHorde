@@ -194,7 +194,7 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
         import httpx
         response = httpx.Response(
             status_code=200,
-            extensions={"http_version": "HTTP/1.1".encode("ascii")},
+            extensions={"http_version": b"HTTP/1.1"},
             content=zip_contents,
         )
         del response.headers["Content-Length"]
