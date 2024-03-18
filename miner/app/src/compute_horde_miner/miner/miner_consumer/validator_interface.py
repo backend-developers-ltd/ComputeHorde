@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 import uuid
@@ -28,6 +29,8 @@ logger = logging.getLogger(__name__)
 AUTH_MESSAGE_MAX_AGE = 10
 
 DONT_CHECK = 'DONT_CHECK'
+NUMBER_OF_EXECUTORS = 1
+executor_semaphore = asyncio.Semaphore(NUMBER_OF_EXECUTORS)
 
 
 class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
@@ -139,6 +142,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             return
         if isinstance(msg, validator_requests.V0InitialJobRequest):
             # TODO add rate limiting per validator key here
+            await executor_semaphore.acquire()
             token = f'{msg.job_uuid}-{uuid.uuid4()}'
             await self.group_add(token)
             # let's create the job object before spinning up the executor, so if this process dies before getting
@@ -156,6 +160,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             try:
                 await current.executor_manager.reserve_executor(token)
             except ExecutorUnavailable:
+                executor_semaphore.release()
                 await self.send(miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).json())
                 await self.group_discard(token)
                 await job.adelete()
@@ -183,6 +188,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         logger.debug(f'Readiness for job {job.job_uuid} reported to validator {self.validator_key}')
 
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):
+        executor_semaphore.release()
         jobs = [job for job in self.pending_jobs.values() if job.executor_token == msg.executor_token]
         if not jobs:
             return
@@ -192,6 +198,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         logger.debug(f'Failure in preparation for job {job.job_uuid} reported to validator {self.validator_key}')
 
     async def _executor_finished(self, msg: ExecutorFinished):
+        executor_semaphore.release()
         await self.send(miner_requests.V0JobFinishedRequest(
             job_uuid=msg.job_uuid,
             docker_process_stdout=msg.docker_process_stdout,
@@ -204,6 +211,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         await job.asave()
 
     async def _executor_failed(self, msg: ExecutorFailed):
+        executor_semaphore.release()
         await self.send(miner_requests.V0JobFailedRequest(
             job_uuid=msg.job_uuid,
             docker_process_stdout=msg.docker_process_stdout,
