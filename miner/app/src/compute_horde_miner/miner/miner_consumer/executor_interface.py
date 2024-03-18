@@ -9,6 +9,7 @@ from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import
     log_errors_explicitly,
 )
 from compute_horde_miner.miner.miner_consumer.layer_utils import ExecutorInterfaceMixin, JobRequest
+from compute_horde_miner.miner.miner_consumer.validator_interface import executor_semaphore
 from compute_horde_miner.miner.models import AcceptedJob
 
 logger = logging.getLogger(__name__)
@@ -110,3 +111,4 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
 
     async def disconnect(self, close_code):
         logger.info(f'Executor {self.executor_token} disconnected')
+        executor_semaphore.release()

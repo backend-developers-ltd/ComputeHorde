@@ -188,7 +188,6 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         logger.debug(f'Readiness for job {job.job_uuid} reported to validator {self.validator_key}')
 
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):
-        executor_semaphore.release()
         jobs = [job for job in self.pending_jobs.values() if job.executor_token == msg.executor_token]
         if not jobs:
             return
@@ -198,7 +197,6 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         logger.debug(f'Failure in preparation for job {job.job_uuid} reported to validator {self.validator_key}')
 
     async def _executor_finished(self, msg: ExecutorFinished):
-        executor_semaphore.release()
         await self.send(miner_requests.V0JobFinishedRequest(
             job_uuid=msg.job_uuid,
             docker_process_stdout=msg.docker_process_stdout,
@@ -211,7 +209,6 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         await job.asave()
 
     async def _executor_failed(self, msg: ExecutorFailed):
-        executor_semaphore.release()
         await self.send(miner_requests.V0JobFailedRequest(
             job_uuid=msg.job_uuid,
             docker_process_stdout=msg.docker_process_stdout,
