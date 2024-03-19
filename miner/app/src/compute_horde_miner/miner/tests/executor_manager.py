@@ -55,3 +55,6 @@ class TestExecutorManager(BaseExecutorManager):
 
     async def reserve_executor(self, token):
         asyncio.get_running_loop().create_task(fake_executor(token))
+
+    async def destroy_executor(self, token):
+        pass

@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 
 
 class DockerExecutorManager(BaseExecutorManager):
+    def __init__(self):
+        self._procs = {}
+
     async def reserve_executor(self, token):
         if settings.ADDRESS_FOR_EXECUTORS:
             address = settings.ADDRESS_FOR_EXECUTORS
@@ -33,7 +36,7 @@ class DockerExecutorManager(BaseExecutorManager):
             process.kill()
             logger.error('Pulling executor container timed out, pulling it from shell might provide more details')
             raise ExecutorUnavailable('Failed to pull executor image')
-        subprocess.Popen([  # noqa: S607
+        self._procs[token] = subprocess.Popen([  # noqa: S607
             "docker", "run", "--rm",
             "-e", f"MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS}",
             "-e", f"EXECUTOR_TOKEN={token}",
@@ -43,3 +46,7 @@ class DockerExecutorManager(BaseExecutorManager):
             settings.EXECUTOR_IMAGE,
             "python", "manage.py", "run_executor",
         ])
+
+    async def destroy_executor(self, token):
+        if token in self._procs:
+            self._procs.pop(token).kill()

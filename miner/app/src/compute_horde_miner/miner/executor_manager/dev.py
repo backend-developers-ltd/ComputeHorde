@@ -12,8 +12,11 @@ executor_dir = this_dir / '..' / '..' / '..' / '..' / '..' / '..' / 'executor'
 
 
 class DevExecutorManager(BaseExecutorManager):
+    def __init__(self):
+        self._procs = {}
+
     async def reserve_executor(self, token):
-        subprocess.Popen(
+        self._procs[token] = subprocess.Popen(
             [sys.executable, "app/src/manage.py", "run_executor"],
             env={
                 'MINER_ADDRESS': f'ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}',
@@ -22,3 +25,7 @@ class DevExecutorManager(BaseExecutorManager):
             },
             cwd=executor_dir,
         )
+
+    async def destroy_executor(self, token):
+        if token in self._procs:
+            self._procs.pop(token).kill()
