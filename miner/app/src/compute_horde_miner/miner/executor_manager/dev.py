@@ -16,6 +16,7 @@ class DevExecutorManager(BaseExecutorManager):
         self._procs = {}
 
     async def reserve_executor(self, token):
+        self._procs = {t: proc for t, proc in self._procs.values() if proc.poll() is None}
         self._procs[token] = subprocess.Popen(
             [sys.executable, "app/src/manage.py", "run_executor"],
             env={

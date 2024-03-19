@@ -16,6 +16,7 @@ class DockerExecutorManager(BaseExecutorManager):
         self._procs = {}
 
     async def reserve_executor(self, token):
+        self._procs = {t: proc for t, proc in self._procs.values() if proc.poll() is None}
         if settings.ADDRESS_FOR_EXECUTORS:
             address = settings.ADDRESS_FOR_EXECUTORS
         else:
