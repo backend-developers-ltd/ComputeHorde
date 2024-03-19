@@ -12,8 +12,8 @@ executor_dir = this_dir / '..' / '..' / '..' / '..' / '..' / '..' / 'executor'
 
 
 class DevExecutorManager(BaseExecutorManager):
-    async def reserve_executor(self, token):
-        subprocess.Popen(
+    async def _reserve_executor(self, token):
+        return subprocess.Popen(
             [sys.executable, "app/src/manage.py", "run_executor"],
             env={
                 'MINER_ADDRESS': f'ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}',
@@ -22,3 +22,7 @@ class DevExecutorManager(BaseExecutorManager):
             },
             cwd=executor_dir,
         )
+
+    def _kill_executor(self, executor):
+        # simply send kill signal on dev, and don't care much about it
+        executor.kill()

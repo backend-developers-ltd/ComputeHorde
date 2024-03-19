@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import subprocess
 
 from django.conf import settings
@@ -9,6 +10,14 @@ from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager,
 PULLING_TIMEOUT = 300
 
 logger = logging.getLogger(__name__)
+
+
+def is_child_process(parent_pid, child_pid):
+    try:
+        with open(f"/proc/{parent_pid}/task/{child_pid}/status") as f:
+            return True
+    except FileNotFoundError:
+        return False
 
 
 class DockerExecutorManager(BaseExecutorManager):
@@ -33,7 +42,7 @@ class DockerExecutorManager(BaseExecutorManager):
             process.kill()
             logger.error('Pulling executor container timed out, pulling it from shell might provide more details')
             raise ExecutorUnavailable('Failed to pull executor image')
-        subprocess.Popen([  # noqa: S607
+        return subprocess.Popen([  # noqa: S607
             "docker", "run", "--rm",
             "-e", f"MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS}",
             "-e", f"EXECUTOR_TOKEN={token}",
@@ -43,3 +52,10 @@ class DockerExecutorManager(BaseExecutorManager):
             settings.EXECUTOR_IMAGE,
             "python", "manage.py", "run_executor",
         ])
+
+    def _kill_executor(self, executor):
+        my_pid = os.getpid()
+        # executor could stop running long time ago - prevent sending kill to random process
+        # a little bit naive, but should be enough
+        if is_child_process(my_pid, executor.pid):
+            executor.kill()
