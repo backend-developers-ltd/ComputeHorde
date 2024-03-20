@@ -33,7 +33,6 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         """Wait for executor to finish the job for till timout"""
 
     async def reserve_executor(self, token):
-        # basic logic here - only send kill signal to most recently
         async with self._semaphore:
             if self._executor is not None:
                 wait_time = max(0, EXECUTOR_TIMEOUT - (dt.datetime.now() - self._executor_start_timestamp).total_seconds())
