@@ -60,5 +60,5 @@ class TestExecutorManager(BaseExecutorManager):
     async def _wait_for_executor(self, executor, timeout):
         pass
 
-    async def kill_executor(self, executor):
+    async def _kill_executor(self, executor):
         pass
