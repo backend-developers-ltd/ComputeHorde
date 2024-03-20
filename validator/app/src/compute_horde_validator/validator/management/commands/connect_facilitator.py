@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import datetime as dt
 import io
 import logging
 import time

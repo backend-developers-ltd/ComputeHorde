@@ -1,5 +1,4 @@
 import bittensor
-
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.management.base import BaseCommand

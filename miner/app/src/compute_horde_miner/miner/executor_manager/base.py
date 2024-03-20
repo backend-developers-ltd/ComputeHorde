@@ -1,7 +1,7 @@
 import abc
 import asyncio
-import logging
 import datetime as dt
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,8 @@ class ExecutorUnavailable(Exception):
 
 class BaseExecutorManager(metaclass=abc.ABCMeta):
     def __init__(self):
-        self._semaphore = asyncio.Semaphore(1)  # supporting multiple executors requires significant refactor
+        # supporting multiple executors requires significant refactor
+        self._semaphore = asyncio.Semaphore(1)
         self._executor = None
         self._executor_start_timestamp = None
 
@@ -35,11 +36,15 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
     async def reserve_executor(self, token):
         async with self._semaphore:
             if self._executor is not None:
-                wait_time = max(0, EXECUTOR_TIMEOUT - (dt.datetime.now() - self._executor_start_timestamp).total_seconds())
+                wait_time = max(
+                    0,
+                    EXECUTOR_TIMEOUT
+                    - (dt.datetime.now() - self._executor_start_timestamp).total_seconds(),
+                )
                 if wait_time > 0:
-                    logger.debug(f'waiting for {wait_time}s for previous executor to finish')
+                    logger.debug(f"waiting for {wait_time}s for previous executor to finish")
                     await self._wait_for_executor(self._executor, wait_time)
-                logger.debug(f'killing previous executor if it is still running')
+                logger.debug("killing previous executor if it is still running")
                 await self._kill_executor(self._executor)
                 self._executor = None
                 self._executor_start_timestamp = None
