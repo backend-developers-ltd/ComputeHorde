@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import subprocess
 
 from django.conf import settings
@@ -8,20 +7,19 @@ from django.conf import settings
 from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager, ExecutorUnavailable
 
 PULLING_TIMEOUT = 300
+DOCKER_STOP_TIMEOUT = 10
 
 logger = logging.getLogger(__name__)
 
 
-def is_child_process(parent_pid, child_pid):
-    try:
-        with open(f"/proc/{parent_pid}/task/{child_pid}/status") as f:
-            return True
-    except FileNotFoundError:
-        return False
+class DockerExecutor:
+    def __init__(self, process_executor, token):
+        self.process_executor = process_executor
+        self.token = token
 
 
 class DockerExecutorManager(BaseExecutorManager):
-    async def reserve_executor(self, token):
+    async def _reserve_executor(self, token):
         if settings.ADDRESS_FOR_EXECUTORS:
             address = settings.ADDRESS_FOR_EXECUTORS
         else:
@@ -42,20 +40,32 @@ class DockerExecutorManager(BaseExecutorManager):
             process.kill()
             logger.error('Pulling executor container timed out, pulling it from shell might provide more details')
             raise ExecutorUnavailable('Failed to pull executor image')
-        return subprocess.Popen([  # noqa: S607
+        process_executor =  await asyncio.create_subprocess_exec( # noqa: S607
             "docker", "run", "--rm",
             "-e", f"MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS}",
             "-e", f"EXECUTOR_TOKEN={token}",
+            "--name", token,
             # the executor must be able to spawn images on host
             "-v", "/var/run/docker.sock:/var/run/docker.sock",
             "-v", "/tmp:/tmp",
             settings.EXECUTOR_IMAGE,
             "python", "manage.py", "run_executor",
-        ])
+        )
+        return DockerExecutor(process_executor, token)
 
-    def _kill_executor(self, executor):
-        my_pid = os.getpid()
-        # executor could stop running long time ago - prevent sending kill to random process
-        # a little bit naive, but should be enough
-        if is_child_process(my_pid, executor.pid):
-            executor.kill()
+    async def _kill_executor(self, executor):
+        process = await asyncio.create_subprocess_exec("docker", "stop", executor.token)
+        try:
+            await asyncio.wait_for(process.wait(), timeout=DOCKER_STOP_TIMEOUT)
+        except TimeoutError:
+            pass
+        try:
+            executor.process_executor.kill()
+        except OSError:
+            pass
+
+    async def _wait_for_executor(self, executor, timeout):
+        try:
+            await asyncio.wait_for(executor.process_executor.wait(), timeout=timeout)
+        except TimeoutError:
+            pass

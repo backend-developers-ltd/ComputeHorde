@@ -23,6 +23,14 @@ class DevExecutorManager(BaseExecutorManager):
             cwd=executor_dir,
         )
 
-    def _kill_executor(self, executor):
-        # simply send kill signal on dev, and don't care much about it
-        executor.kill()
+    async def _kill_executor(self, executor):
+        try:
+            executor.kill()
+        except OSError:
+            pass
+
+    async def _wait_for_executor(self, executor, timeout):
+        try:
+            executor.wait(timeout)
+        except subprocess.TimeoutExpired:
+            pass

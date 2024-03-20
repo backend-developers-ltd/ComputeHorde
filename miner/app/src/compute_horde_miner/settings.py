@@ -264,6 +264,16 @@ LOGGING = {
             'level': 'INFO',
             'propagate': True,
         },
+        'websockets': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'daphne': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
     },
 }
 
