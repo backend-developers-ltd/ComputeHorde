@@ -31,7 +31,7 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     async def _wait_for_executor(self, executor, timeout):
-        """Wait for executor to finish the job for till timout"""
+        """Wait for executor to finish the job for till timeout"""
 
     async def reserve_executor(self, token):
         async with self._semaphore:
