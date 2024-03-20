@@ -117,6 +117,17 @@ def get_dummy_inline_zip_volume() -> str:
 
 @sync_to_async
 def get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
+    if settings.DEBUG_MINER_KEY:
+        logger.warning("using debug miner address instead of fetching from metagraph")
+        return bittensor.AxonInfo(
+            version=0,
+            ip=settings.DEBUG_MINER_ADDRESS,
+            port=settings.DEBUG_MINER_PORT,
+            ip_type=4,
+            hotkey=settings.DEBUG_MINER_KEY,
+            coldkey='',
+        )
+
     metagraph = bittensor.metagraph(netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
     neurons = [n for n in metagraph.neurons if n.hotkey == hotkey]
     if not neurons:
