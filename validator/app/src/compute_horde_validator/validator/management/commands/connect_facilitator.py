@@ -295,7 +295,7 @@ class FacilitatorClient:
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='accepted',
-                    metadata={},
+                    metadata={'comment': "Miner accepted job"},
                 ))
             else:
                 raise ValueError(f'Unexpected msg: {msg}')
