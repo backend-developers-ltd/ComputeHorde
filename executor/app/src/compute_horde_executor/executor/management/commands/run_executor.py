@@ -224,6 +224,8 @@ class JobRunner:
             'docker',
             'run',
             *docker_run_options,
+            '--name',
+            f'{settings.EXECUTOR_TOKEN}-job',
             '--rm',
             '--network',
             'none',

@@ -53,5 +53,12 @@ fake_executor.job_uuid = None
 
 class TestExecutorManager(BaseExecutorManager):
 
-    async def reserve_executor(self, token):
+    async def _reserve_executor(self, token):
         asyncio.get_running_loop().create_task(fake_executor(token))
+        return object()
+
+    async def _wait_for_executor(self, executor, timeout):
+        pass
+
+    async def _kill_executor(self, executor):
+        pass
