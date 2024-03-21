@@ -95,6 +95,18 @@ class JobRequest(BaseModel, extra=Extra.forbid):
         return values
 
 
+class MinerResponse(BaseModel, extra=Extra.allow):
+    job_uuid: str
+    message_type: str
+    docker_process_stderr: str
+    docker_process_stdout: str
+
+
+class JobStatusMetadata(BaseModel, extra=Extra.allow):
+    comment: str
+    miner_response: MinerResponse | None = None
+
+
 class JobStatusUpdate(BaseModel, extra=Extra.forbid):
     """
     Message sent from validator to facilitator in response to NewJobRequest.
@@ -102,7 +114,7 @@ class JobStatusUpdate(BaseModel, extra=Extra.forbid):
 
     uuid: str
     status: Literal['failed', 'rejected', 'accepted', 'completed']
-    metadata: dict = {}
+    metadata: JobStatusMetadata | None = None
 
 
 @cache
@@ -272,9 +284,9 @@ class FacilitatorClient:
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='failed',
-                    metadata={
-                        'comment': f'Miner timed out while preparing executor after {PREPARE_WAIT_TIMEOUT} seconds',
-                    },
+                    metadata=JobStatusMetadata(
+                        comment=f'Miner timed out while preparing executor after {PREPARE_WAIT_TIMEOUT} seconds',
+                    ),
                 ))
                 job.status = OrganicJob.Status.FAILED
                 job.comment = 'Miner timed out while preparing executor'
@@ -286,10 +298,7 @@ class FacilitatorClient:
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='rejected',
-                    metadata={
-                        'comment': "Miner didn't accept the job",
-                        'miner_response': msg.dict(),
-                    },
+                    metadata=JobStatusMetadata(comment=f"Miner didn't accept the job. Miner sent {msg.message_type}"),
                 ))
                 job.status = OrganicJob.Status.FAILED
                 job.comment = f"Miner didn't accept the job saying: {msg.json()}"
@@ -300,7 +309,7 @@ class FacilitatorClient:
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='accepted',
-                    metadata={'comment': "Miner accepted job"},
+                    metadata=JobStatusMetadata(comment="Miner accepted job"),
                 ))
             else:
                 raise ValueError(f'Unexpected msg: {msg}')
@@ -337,7 +346,7 @@ class FacilitatorClient:
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='failed',
-                    metadata={'comment': f'Miner timed out after {TOTAL_JOB_TIMEOUT} seconds'},
+                    metadata=JobStatusMetadata(comment=f'Miner timed out after {TOTAL_JOB_TIMEOUT} seconds'),
                 ))
                 job.status = OrganicJob.Status.FAILED
                 job.comment = 'Miner timed out'
@@ -348,7 +357,15 @@ class FacilitatorClient:
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='failed',
-                    metadata={'comment': 'Miner failed', 'miner_response': msg.dict()},
+                    metadata=JobStatusMetadata(
+                        comment='Miner failed',
+                        miner_response=MinerResponse(
+                            job_uuid=msg.job_uuid,
+                            message_type=msg.message_type.value,
+                            docker_process_stderr=msg.docker_process_stderr,
+                            docker_process_stdout=msg.docker_process_stdout,
+                        ),
+                    ),
                 ))
                 job.status = OrganicJob.Status.FAILED
                 job.comment = f'Miner failed: {msg.json()}'
@@ -359,7 +376,15 @@ class FacilitatorClient:
                 await self.send_model(JobStatusUpdate(
                     uuid=job_request.uuid,
                     status='completed',
-                    metadata={'comment': 'Miner finished', 'miner_response': msg.dict()},
+                    metadata=JobStatusMetadata(
+                        comment='Miner finished',
+                        miner_response=MinerResponse(
+                            job_uuid=msg.job_uuid,
+                            message_type=msg.message_type.value,
+                            docker_process_stderr=msg.docker_process_stderr,
+                            docker_process_stdout=msg.docker_process_stdout,
+                        ),
+                    ),
                 ))
                 job.status = OrganicJob.Status.COMPLETED
                 job.comment = f'Miner finished: {msg.json()}'
