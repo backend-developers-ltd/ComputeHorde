@@ -59,7 +59,7 @@ def run_synthetic_jobs():
             raise ValueError(f"Can't determine proper synthetic job window due to stake being < "
                              f"{MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO}, or not in top 12 validators")
         my_index = validator_keys.index(my_key)
-        window_per_validator = JOB_WINDOW / (len(validator_keys) + 1)
+        window_per_validator = JOB_WINDOW / len(validator_keys)
         my_window_starts_at = window_per_validator * my_index
         logger.info(f'Sleeping for {my_window_starts_at:02f}s because I am {my_index} out of {len(validator_keys)}')
         time.sleep(my_window_starts_at)
