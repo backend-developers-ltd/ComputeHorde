@@ -67,7 +67,6 @@ class TestMinerClient(MinerClient):
 class TestCommand(Command):
     def __init__(self, messages, *args, **kwargs):
         self.MINER_CLIENT_CLASS = partial(TestMinerClient, messages=messages)
-        settings.EXECUTOR_TOKEN = str(uuid.uuid4())
         super().__init__(*args, **kwargs)
 
 
