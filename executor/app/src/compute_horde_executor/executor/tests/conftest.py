@@ -1,5 +1,4 @@
 import uuid
-
 from collections.abc import Generator
 
 import pytest
@@ -13,5 +12,5 @@ def some() -> Generator[int, None, None]:
 
 
 @pytest.fixture(autouse=True)
-def unique_seetings(settings):
+def unique_settings(settings):
     settings.EXECUTOR_TOKEN = str(uuid.uuid4())
