@@ -5,8 +5,8 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs, JOB_LENGTH
 from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
+from compute_horde_validator.validator.synthetic_jobs.utils import JOB_LENGTH, execute_jobs
 
 
 class Command(BaseCommand):
@@ -19,7 +19,6 @@ class Command(BaseCommand):
         miner_hotkey = options['miner_hotkey']
         miner_address = options['miner_address']
         miner_port = options['miner_port']
-        keypair = settings.BITTENSOR_WALLET().get_hotkey()
         batch = SyntheticJobBatch.objects.create(
             accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
         )
