@@ -47,7 +47,7 @@ class ExecutorFinished(pydantic.BaseModel):
 
 class ExecutorFailed(pydantic.BaseModel):
     job_uuid: str
-    docker_process_exit_status: int
+    docker_process_exit_status: int | None
     docker_process_stdout: str
     docker_process_stderr: str
 
@@ -183,7 +183,7 @@ class ExecutorInterfaceMixin(BaseMixin):
         )
 
     async def send_executor_failed(self, job_uuid: str, executor_token: str, stdout: str, stderr: str,
-                                   exit_status: int):
+                                   exit_status: int | None):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
         await self.channel_layer.group_send(
             group_name,
