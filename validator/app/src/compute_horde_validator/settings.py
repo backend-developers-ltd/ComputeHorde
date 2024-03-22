@@ -208,12 +208,12 @@ CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
     'run_synthetic_jobs': {
         'task': 'compute_horde_validator.validator.tasks.run_synthetic_jobs',
-        'schedule': crontab(minute='0'),
+        'schedule': crontab(minute='0', hour='*/2'),
         'options': {},
     },
     'set_scores': {
         'task': 'compute_horde_validator.validator.tasks.set_scores',
-        'schedule': crontab(minute='0', hour='*/3'),
+        'schedule': crontab(minute='0', hour='*/4'),
         'options': {},
     },
 }
@@ -222,7 +222,7 @@ if env.bool('DEBUG_RUN_BEAT_VERY_OFTEN', default=False):
     CELERY_BEAT_SCHEDULE['set_scores']['schedule'] = crontab(minute='*/3')
 
 CELERY_TASK_ROUTES = ['compute_horde_validator.celery.route_task']
-CELERY_TASK_TIME_LIMIT = int(timedelta(hours=1, minutes=5).total_seconds())
+CELERY_TASK_TIME_LIMIT = int(timedelta(hours=2, minutes=5).total_seconds())
 CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'

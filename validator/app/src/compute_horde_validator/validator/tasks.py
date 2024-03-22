@@ -20,7 +20,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs,
 
 logger = get_task_logger(__name__)
 
-JOB_WINDOW = 60 * 60
+JOB_WINDOW = 2 * 60 * 60
 SYNTHETIC_JOBS_SOFT_LIMIT = 300
 SYNTHETIC_JOBS_HARD_LIMIT = 305
 
@@ -52,9 +52,9 @@ def run_synthetic_jobs():
     if not settings.DEBUG_DONT_STAGGER_VALIDATORS:
         validators = get_validators(netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
         my_key = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-        validator_keys = sorted([n.hotkey for n in validators])
+        validator_keys = [n.hotkey for n in validators]
         if my_key not in validator_keys:
-            raise ValueError("Can't determine proper synthetic job window due to not in top 12 validators")
+            raise ValueError("Can't determine proper synthetic job window due to not in top 23 validators")
         my_index = validator_keys.index(my_key)
         window_per_validator = JOB_WINDOW / len(validator_keys)
         my_window_starts_at = window_per_validator * my_index
