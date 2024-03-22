@@ -109,7 +109,7 @@ def set_scores():
     for batch in batches:
         for job in batch.synthetic_jobs.all():
             uid = hotkey_to_uid.get(job.miner.hotkey)
-            if not uid:
+            if uid is None:
                 continue
             score_per_uid[uid] = score_per_uid.get(uid, 0) + job.score
     if not score_per_uid:

@@ -285,7 +285,7 @@ SYNTHETIC_JOB_GENERATOR = env.str(
     'SYNTHETIC_JOB_GENERATOR',
     default='compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatSyntheticJobGenerator',
 )
-FACILITATOR_URI = env.str('FACILITATOR_URI')
+FACILITATOR_URI = env.str('FACILITATOR_URI', default='wss://facilitator.computehorde.io/ws/v0/')
 # if you need to hit a particular miner, without fetching their key, address or port from the blockchain
 DEBUG_MINER_KEY = env.str('DEBUG_MINER_KEY', default='')
 DEBUG_MINER_ADDRESS = env.str('DEBUG_MINER_ADDRESS', default='')
