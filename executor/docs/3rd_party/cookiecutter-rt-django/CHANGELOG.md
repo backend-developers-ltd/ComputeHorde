@@ -12,6 +12,8 @@ Currently, `cookiecutter-rt-django` has no explicit versioning amd we purely rel
 
 ## [Unreleased]
 
+* **BREAKING** Started using [pdm](https://github.com/pdm-project/pdm) for managing Python dependencies.
+* **BREAKING** root of repository is used as docker build context instead of just `./app/`.
 * **BREAKING** Updated django-environ from 0.4.5 to 0.10 (https://django-environ.readthedocs.io/en/latest/changelog.html)
 * **BREAKING** Updated redis python package from 3.5.3 to 4.6 (breaking changes listed in https://github.com/redis/redis-py/releases/tag/v4.0.0b1)
 * **BREAKING** Updated Python from 3.9 to 3.11

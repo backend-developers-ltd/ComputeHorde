@@ -1,4 +1,5 @@
 import asyncio
+from unittest import mock
 
 from channels.testing import WebsocketCommunicator
 
@@ -29,12 +30,14 @@ async def fake_executor(token):
         "job_uuid": fake_executor.job_uuid,
         "message_type": "V0RunJobRequest",
         "docker_image_name": "it's teeeeests again",
+        "raw_script": None,
         'docker_run_options_preset': 'none',
         "docker_run_cmd": [],
         "volume": {
             "volume_type": "inline",
             "contents": "nonsense"
-        }
+        },
+        "output_upload": mock.ANY,
     }, response
     await communicator.send_json_to({
         "message_type": "V0FinishedRequest",
@@ -50,5 +53,12 @@ fake_executor.job_uuid = None
 
 class TestExecutorManager(BaseExecutorManager):
 
-    async def reserve_executor(self, token):
+    async def _reserve_executor(self, token):
         asyncio.get_running_loop().create_task(fake_executor(token))
+        return object()
+
+    async def _wait_for_executor(self, executor, timeout):
+        pass
+
+    async def _kill_executor(self, executor):
+        pass

@@ -1,17 +1,23 @@
 import argparse
 import asyncio
-import bittensor
 import json
 import logging
 
+import bittensor
+from compute_horde.mv_protocol.miner_requests import (
+    V0DeclineJobRequest,
+    V0ExecutorFailedRequest,
+    V0JobFailedRequest,
+    V0JobFinishedRequest,
+)
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from compute_horde.mv_protocol.miner_requests import V0DeclineJobRequest, V0ExecutorFailedRequest, V0JobFailedRequest, \
-    V0JobFinishedRequest
-from compute_horde_validator.validator.synthetic_jobs.generator.cli import CLIJobGenerator
-from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs, initiate_jobs, _execute_job
 from compute_horde_validator.validator.models import Miner, OrganicJob
+from compute_horde_validator.validator.synthetic_jobs.generator.cli import CLIJobGenerator
+from compute_horde_validator.validator.synthetic_jobs.utils import (
+    _execute_job,
+)
 
 logger = logging.getLogger(__name__)
 

@@ -1,2 +1,4 @@
 /db
 /redis
+.nox/
+.venv/

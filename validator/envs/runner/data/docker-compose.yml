@@ -66,6 +66,24 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
+  connect-facilitator:
+    image: backenddevelopersltd/compute-horde-validator:v0-latest
+    pull_policy: always
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - DEBUG=off
+    volumes:
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+    command: python manage.py connect_facilitator
+    depends_on:
+      - redis
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
 volumes:
   redis:
   db:

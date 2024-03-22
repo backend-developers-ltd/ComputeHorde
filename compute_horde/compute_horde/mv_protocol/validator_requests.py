@@ -1,6 +1,8 @@
 import enum
+from typing import Mapping, Any
 
 import pydantic
+from pydantic import Field, root_validator
 
 from ..base_requests import BaseRequest, JobMixin
 
@@ -18,6 +20,7 @@ class BaseValidatorRequest(BaseRequest):
 
 class VolumeType(enum.Enum):
     inline = 'inline'
+    zip_url = 'zip_url'
 
 
 class AuthenticationPayload(pydantic.BaseModel):
@@ -51,12 +54,33 @@ class Volume(pydantic.BaseModel):
     # required here
 
 
+class OutputUploadType(enum.Enum):
+    zip_and_http_post = 'zip_and_http_post'
+    zip_and_http_put = 'zip_and_http_put'
+
+
+class OutputUpload(pydantic.BaseModel):
+    output_upload_type: OutputUploadType
+    # TODO: the following are only valid for output_upload_type = zip_and_http_post, some polymorphism like with
+    #  BaseRequest is required here
+    url: str
+    form_fields: Mapping[str, str] | None = Field(default=None)
+
+
 class V0JobRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0JobRequest
-    docker_image_name: str
+    docker_image_name: str | None = None
+    raw_script: str | None = None
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
+    output_upload: OutputUpload | None
+
+    @root_validator()
+    def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
+        if bool(values.get("docker_image_name")) == bool(values.get("raw_script")):
+            raise ValueError("Expected only one, either `docker_image_name` or `raw_script`, not together")
+        return values
 
 
 class GenericError(BaseValidatorRequest):

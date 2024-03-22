@@ -9,6 +9,7 @@ import torch
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
+from compute_horde.utils import get_validators
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
@@ -50,15 +51,15 @@ def _run_synthetic_jobs():
 @app.task()
 def run_synthetic_jobs():
     if not settings.DEBUG_DONT_STAGGER_VALIDATORS:
-        metagraph = bittensor.metagraph(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
+        validators = get_validators(netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
         my_key = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-        validator_keys = sorted([n.hotkey for n in metagraph.neurons if
-                                 n.validator_permit and n.stake.tao >= MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO])
+        validator_keys = sorted([n.hotkey for n in validators if
+                                 n.stake.tao >= MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO])
         if my_key not in validator_keys:
             raise ValueError(f"Can't determine proper synthetic job window due to stake being < "
-                             f"{MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO}")
+                             f"{MEANINGFUL_VALIDATOR_STAKE_THRESHOLD_TAO}, or not in top 12 validators")
         my_index = validator_keys.index(my_key)
-        window_per_validator = JOB_WINDOW / (len(validator_keys) + 1)
+        window_per_validator = JOB_WINDOW / len(validator_keys)
         my_window_starts_at = window_per_validator * my_index
         logger.info(f'Sleeping for {my_window_starts_at:02f}s because I am {my_index} out of {len(validator_keys)}')
         time.sleep(my_window_starts_at)

@@ -131,7 +131,6 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         for msg in self.msg_queue:
             await self.handle(msg)
 
-
     async def handle(self, msg: BaseValidatorRequest):
         if isinstance(msg, validator_requests.V0AuthenticateRequest):
             return await self.handle_authentication(msg)

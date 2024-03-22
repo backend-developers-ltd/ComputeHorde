@@ -101,9 +101,11 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
         await self.send(miner_requests.V0JobRequest(
             job_uuid=msg.job_uuid,
             docker_image_name=msg.docker_image_name,
+            raw_script=msg.raw_script,
             docker_run_options_preset=msg.docker_run_options_preset,
             docker_run_cmd=msg.docker_run_cmd,
             volume=msg.volume,
+            output_upload=msg.output_upload,
         ).json())
 
     async def disconnect(self, close_code):

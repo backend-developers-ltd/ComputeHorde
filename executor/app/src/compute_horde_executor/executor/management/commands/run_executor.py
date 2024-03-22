@@ -3,12 +3,13 @@ import base64
 import io
 import logging
 import pathlib
+import shlex
 import shutil
-import subprocess
 import tempfile
 import time
 import zipfile
 
+import httpx
 import pydantic
 from compute_horde.base_requests import BaseRequest
 from compute_horde.em_protocol import executor_requests, miner_requests
@@ -29,12 +30,17 @@ from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMess
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from compute_horde_executor.executor.output_uploader import OutputUploader, OutputUploadFailed
+
 logger = logging.getLogger(__name__)
 
-temp_dir = pathlib.Path(tempfile.mkdtemp())
-volume_mount_dir = temp_dir / 'volume'
-
 CVE_2022_0492_TIMEOUT_SECONDS = 120
+MAX_RESULT_SIZE_IN_RESPONSE = 1000
+TRUNCATED_RESPONSE_PREFIX_LEN = 100
+TRUNCATED_RESPONSE_SUFFIX_LEN = 100
+INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 300
+CVE_2022_0492_IMAGE = "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
+DOCKER_BASE_IMAGES_TO_KEEP = {"python", "ubuntu", "debian", "alpine"}
 
 
 class RunConfigManager:
@@ -46,6 +52,11 @@ class RunConfigManager:
             return ['--runtime=nvidia', '--gpus', 'all']
         else:
             raise JobError(f"Invalid preset: {preset}")
+
+    @classmethod
+    def preset_to_image_for_raw_script(cls, preset: str) -> str:
+        # TODO: return pre-built base image for preset, i.e. with numpy, pandas, tensorflow, torch etc.
+        return "python:3.11-slim"
 
 
 class MinerClient(AbstractMinerClient):
@@ -143,10 +154,11 @@ class JobResult(pydantic.BaseModel):
     stdout: str
     stderr: str
 
-    @pydantic.validator('stdout', 'stderr')
-    def truncate(cls, v: str) -> str:
-        if len(v) >= 1000:
-            return f'{v[:100]} ... {v[-100:]}'
+
+def truncate(v: str) -> str:
+    if len(v) > MAX_RESULT_SIZE_IN_RESPONSE:
+        return f'{v[:TRUNCATED_RESPONSE_PREFIX_LEN]} ... {v[-TRUNCATED_RESPONSE_SUFFIX_LEN:]}'
+    else:
         return v
 
 
@@ -158,27 +170,34 @@ class JobError(Exception):
 class JobRunner:
     def __init__(self, initial_job_request: V0InitialJobRequest):
         self.initial_job_request = initial_job_request
+        self.temp_dir = pathlib.Path(tempfile.mkdtemp())
+        self.volume_mount_dir = self.temp_dir / 'volume'
+        self.output_volume_mount_dir = self.temp_dir / 'output'
 
     async def prepare(self):
+        self.volume_mount_dir.mkdir(exist_ok=True)
+        self.output_volume_mount_dir.mkdir(exist_ok=True)
 
-        process = await asyncio.create_subprocess_exec(
-            'docker', 'pull', self.initial_job_request.base_docker_image_name,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await process.communicate()
+        if self.initial_job_request.base_docker_image_name is not None:
+            process = await asyncio.create_subprocess_exec(
+                'docker', 'pull', self.initial_job_request.base_docker_image_name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
 
-        if process.returncode != 0:
-            msg = (f'"docker pull {self.initial_job_request.base_docker_image_name}" '
-                   f'(job_uuid={self.initial_job_request.job_uuid})'
-                   f' failed with status={process.returncode}'
-                   f' stdout="{stdout.decode()}"\nstderr="{stderr.decode()}')
-            logger.error(msg)
-            raise JobError(msg)
+            if process.returncode != 0:
+                msg = (f'"docker pull {self.initial_job_request.base_docker_image_name}" '
+                       f'(job_uuid={self.initial_job_request.job_uuid})'
+                       f' failed with status={process.returncode}'
+                       f' stdout="{stdout.decode()}"\nstderr="{stderr.decode()}')
+                logger.error(msg)
+                raise JobError(msg)
 
     async def run_job(self, job_request: V0JobRequest):
         try:
             docker_run_options = RunConfigManager.preset_to_docker_run_args(job_request.docker_run_options_preset)
+            await self.unpack_volume(job_request)
         except JobError as ex:
             return JobResult(
                 success=False,
@@ -188,18 +207,35 @@ class JobRunner:
                 stderr="",
             )
 
-        self.unpack_volume(job_request)
+        docker_image = job_request.docker_image_name
+        extra_volume_flags = []
+        docker_run_cmd = job_request.docker_run_cmd
+
+        if job_request.raw_script:
+            docker_image = RunConfigManager.preset_to_image_for_raw_script(job_request.docker_run_options_preset)
+            raw_script_path = self.temp_dir / "script.py"
+            raw_script_path.write_text(job_request.raw_script)
+            extra_volume_flags = ["-v", f"{raw_script_path.absolute().as_posix()}:/script.py"]
+
+            if not docker_run_cmd:
+                docker_run_cmd = ["python", "/script.py"]
+
         cmd = [
             'docker',
             'run',
             *docker_run_options,
+            '--name',
+            f'{settings.EXECUTOR_TOKEN}-job',
             '--rm',
             '--network',
             'none',
             '-v',
-            f'{volume_mount_dir.as_posix()}/:/volume/',
-            job_request.docker_image_name,
-            *job_request.docker_run_cmd,
+            f'{self.volume_mount_dir.as_posix()}/:/volume/',
+            '-v',
+            f'{self.output_volume_mount_dir.as_posix()}/:/output/',
+            *extra_volume_flags,
+            docker_image,
+            *docker_run_cmd,
         ]
         process = await asyncio.create_subprocess_exec(
             *cmd,
@@ -226,8 +262,28 @@ class JobRunner:
             exit_status = process.returncode
             timeout = False
 
-        time_took = time.time() - t1
+        # Save the streams in output volume and truncate them in response.
+        with open(self.output_volume_mount_dir / 'stdout.txt', 'w') as f:
+            f.write(stdout)
+        stdout = truncate(stdout)
+        with open(self.output_volume_mount_dir / 'stderr.txt', 'w') as f:
+            f.write(stderr)
+        stderr = truncate(stderr)
+
         success = exit_status == 0
+
+        # upload the output if requested
+        if job_request.output_upload:
+            try:
+                output_uploader = OutputUploader.for_upload_output(job_request.output_upload)
+                await output_uploader.upload(self.output_volume_mount_dir)
+            except OutputUploadFailed as ex:
+                logger.warning(f'Uploading output failed for job {self.initial_job_request.job_uuid} with error: {ex!r}')
+                success = False
+                stdout = ex.description
+                stderr = ""
+
+        time_took = time.time() - t1
 
         if success:
             logger.info(f'Job "{self.initial_job_request.job_uuid}" finished successfully in {time_took:0.2f} seconds')
@@ -244,26 +300,127 @@ class JobRunner:
             stderr=stderr,
         )
 
-    def unpack_volume(self, job_request: V0JobRequest):
-        assert str(volume_mount_dir) not in {'~', '/'}
+    async def clean(self):
+        # remove input/output directories with docker, to deal with funky file permissions
+        root_for_remove = pathlib.Path('/temp_dir/')
+        process = await asyncio.create_subprocess_exec(
+            'docker',
+            'run',
+            '--rm',
+            '-v',
+            f'{self.temp_dir.as_posix()}/:/{root_for_remove.as_posix()}/',
+            'alpine:3.19',
+            'sh',
+            '-c',
+            f'rm -rf {shlex.quote(root_for_remove.as_posix())}/*',
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await process.wait()
+        self.temp_dir.rmdir()
+
+        if self.initial_job_request.base_docker_image_name:
+            image_repo, _, _ = self.initial_job_request.base_docker_image_name.partition(":")
+        else:
+            image_repo = None
+
+        if image_repo in DOCKER_BASE_IMAGES_TO_KEEP:
+            keep_container_name = "keep_" + self.initial_job_request.base_docker_image_name.replace(":", "_")
+            # Remove previous container, so that newly pulled image is marked
+            # Ignore errors (like "No such container")
+            process = await asyncio.create_subprocess_exec(
+                'docker',
+                'rm',
+                keep_container_name,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await process.wait()
+
+            # Run a container to mark the base image as "used" to avoid GC
+            process = await asyncio.create_subprocess_exec(
+                'docker',
+                'run',
+                '--name',
+                keep_container_name,
+                self.initial_job_request.base_docker_image_name,
+                'echo',
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await process.wait()
+
+        # Run a container to mark the CVE checking image as "used" to avoid GC
+        process = await asyncio.create_subprocess_exec(
+            'docker',
+            'run',
+            '--name',
+            'keep_cve_2022_0492',
+            CVE_2022_0492_IMAGE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await process.wait()
+
+        # remove docker images
+        process = await asyncio.create_subprocess_exec(
+            "docker",
+            "image",
+            "prune",
+            "--all",
+            "--force",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await process.wait()
+
+    async def _unpack_volume(self, job_request: V0JobRequest):
+        assert str(self.volume_mount_dir) not in {'~', '/'}
+        for path in self.volume_mount_dir.glob("*"):
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path)
+
         if job_request.volume.volume_type == VolumeType.inline:
-            for path in volume_mount_dir.glob("*"):
-                if path.is_file():
-                    path.unlink()
-                elif path.is_dir():
-                    shutil.rmtree(path)
-
-            volume_mount_dir.mkdir(exist_ok=True)
-
             decoded_contents = base64.b64decode(job_request.volume.contents)
             bytes_io = io.BytesIO(decoded_contents)
             zip_file = zipfile.ZipFile(bytes_io)
-            zip_file.extractall(volume_mount_dir.as_posix())
+            zip_file.extractall(self.volume_mount_dir.as_posix())
+        elif job_request.volume.volume_type == VolumeType.zip_url:
+            with tempfile.NamedTemporaryFile() as download_file:
+                async with httpx.AsyncClient() as client:
+                    async with client.stream('GET', job_request.volume.contents) as response:
+                        if (content_length := response.headers.get("Content-Length")) is not None:
+                            # check size early if Content-Length is present
+                            if 0 < settings.VOLUME_MAX_SIZE_BYTES < int(content_length):
+                                raise JobError("Input volume too large")
 
-            subprocess.check_call(["chmod", "-R", "777", temp_dir.as_posix()])
-
+                        bytes_received = 0
+                        async for chunk in response.aiter_bytes():
+                            bytes_received += len(chunk)
+                            if 0 < settings.VOLUME_MAX_SIZE_BYTES < bytes_received:
+                                raise JobError("Input volume too large")
+                            download_file.write(chunk)
+                download_file.seek(0)
+                zip_file = zipfile.ZipFile(download_file)
+                zip_file.extractall(self.volume_mount_dir.as_posix())
         else:
             raise NotImplementedError(f'Unsupported volume_type: {job_request.volume.volume_type}')
+
+        chmod_proc = await asyncio.create_subprocess_exec("chmod", "-R", "777", self.temp_dir.as_posix())
+        assert 0 == await chmod_proc.wait()
+
+    async def unpack_volume(self, job_request: V0JobRequest):
+        try:
+            await asyncio.wait_for(self._unpack_volume(job_request), timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS)
+        except JobError:
+            raise
+        except TimeoutError as exc:
+            raise JobError("Input volume downloading took too long") from exc
+        except Exception as exc:
+            logger.exception("error occurred during unpacking input volume")
+            raise JobError("Unknown error happened while downloading input volume") from exc
 
 
 class Command(BaseCommand):
@@ -284,7 +441,8 @@ class Command(BaseCommand):
         process = await asyncio.create_subprocess_exec(
             'docker',
             'run',
-            'us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest',
+            '--rm',
+            CVE_2022_0492_IMAGE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -315,8 +473,9 @@ class Command(BaseCommand):
             if not await self.is_system_safe_for_cve_2022_0492():
                 await self.miner_client.send_failed_to_prepare()
                 return
+
+            job_runner = self.JOB_RUNNER_CLASS(initial_message)
             try:
-                job_runner = self.JOB_RUNNER_CLASS(initial_message)
                 logger.debug(f'Preparing for job {initial_message.job_uuid}')
                 try:
                     await job_runner.prepare()
@@ -342,3 +501,5 @@ class Command(BaseCommand):
                 # not deferred, because this is the end of the process, making it deferred would cause it never
                 # to be sent
                 await self.miner_client.send_generic_error('Unexpected error')
+            finally:
+                await job_runner.clean()

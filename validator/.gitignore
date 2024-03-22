@@ -7,7 +7,9 @@
 /redis/
 /db/
 .env
+.venv
 venv
+logs/
 media/
 .backups/
 .envrc

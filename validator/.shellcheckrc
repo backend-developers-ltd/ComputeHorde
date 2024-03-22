@@ -4,3 +4,4 @@ disable=SC2034  # disable errors related to unused variables
 disable=SC2028  # swapping echo for printf requires more testing to ensure correctness
 # disable errors related to cookiecutter templating:
 disable=SC1054,SC1056,SC1072,SC1073,SC1083,SC1009
+disable=SC2016  # we need to specify Dockerfile contents in single quotes that does not expand expressions

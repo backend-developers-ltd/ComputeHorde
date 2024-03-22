@@ -7,7 +7,7 @@ IMAGE_NAME="backenddevelopersltd/compute-horde-job-echo:v0-latest"
 docker build -t $IMAGE_NAME .
 
 # Login to GitHub Docker Registry
-echo "$DOCKERHUB_PAT" | docker login -u $DOCKERHUB_USERNAME --password-stdin
+echo "$DOCKERHUB_PAT" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
 # Push image to GitHub Docker Registry
 docker push $IMAGE_NAME
