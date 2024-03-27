@@ -55,6 +55,7 @@ class Response(BaseModel, extra=Extra.forbid):
 
 class AuthenticationRequest(BaseModel, extra=Extra.forbid):
     """ Message sent from validator to facilitator to authenticate itself """
+    message_type: str = 'V0AuthenticationRequest'
     public_key: str
     signature: str
 
@@ -77,6 +78,7 @@ class JobRequest(BaseModel, extra=Extra.forbid):
 
     # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
     type: str = Field('job.new', const=True)
+    message_type: str = 'V0JobRequest'
 
     uuid: str
     miner_hotkey: str
@@ -93,6 +95,10 @@ class JobRequest(BaseModel, extra=Extra.forbid):
         if bool(values["docker_image"]) == bool(values["raw_script"]):
             raise ValueError("Expected only one, either `docker_image` or `raw_script`, not together")
         return values
+
+
+class Heartbeat(BaseModel, extra=Extra.forbid):
+    message_type: str = 'V0Heartbeat'
 
 
 class MinerResponse(BaseModel, extra=Extra.allow):
@@ -112,6 +118,7 @@ class JobStatusUpdate(BaseModel, extra=Extra.forbid):
     Message sent from validator to facilitator in response to NewJobRequest.
     """
 
+    message_type: str = 'V0JobStatusUpdate'
     uuid: str
     status: Literal['failed', 'rejected', 'accepted', 'completed']
     metadata: JobStatusMetadata | None = None
@@ -139,6 +146,7 @@ def get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
 
 class FacilitatorClient:
     MINER_CLIENT_CLASS = MinerClient
+    HEARTBEAT_PERIOD = 60
 
     def __init__(self, keypair: bittensor.Keypair, facilitator_uri: str):
         self.keypair = keypair
@@ -146,6 +154,7 @@ class FacilitatorClient:
         self.facilitator_uri = facilitator_uri
         self.miner_drivers = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
+        self.heartbeat_task = asyncio.create_task(self.heartbeat())
 
     def connect(self):
         """ Create an awaitable/async-iterable websockets.connect() object """
@@ -198,6 +207,12 @@ class FacilitatorClient:
 
         async for raw_msg in ws:
             await self.handle_message(raw_msg)
+
+    async def heartbeat(self):
+        while True:
+            if self.ws is not None:
+                await self.send_model(Heartbeat())
+            await asyncio.sleep(self.HEARTBEAT_PERIOD)
 
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(7),
