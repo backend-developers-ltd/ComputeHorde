@@ -111,7 +111,14 @@ services:
 
   docuum:
     image: stephanmisc/docuum
-    command: --threshold ${DOCKER_STORAGE_THRESHOLD:-50 GB}
+    command: [
+      "--threshold", "${DOCKER_STORAGE_THRESHOLD:-50 GB}",
+      "--keep", "^redis:6-alpine",
+      "--keep", "^postgres:14.0-alpine",
+      "--keep", "^backenddevelopersltd/compute-horde-miner-staging:v0-latest",
+      "--keep", "^backenddevelopersltd/compute-horde-miner-nginx:v0-latest",
+      "--keep", "^backenddevelopersltd/compute-horde-job",
+    ]
     pull_policy: always
     init: true
     restart: unless-stopped
