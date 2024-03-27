@@ -118,6 +118,7 @@ services:
       "--keep", "^backenddevelopersltd/compute-horde-miner-staging:v0-latest",
       "--keep", "^backenddevelopersltd/compute-horde-miner-nginx:v0-latest",
       "--keep", "^backenddevelopersltd/compute-horde-job",
+      "--keep", "^us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest",
     ]
     pull_policy: always
     init: true
