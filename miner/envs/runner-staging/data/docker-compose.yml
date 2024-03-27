@@ -109,7 +109,23 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
+  docuum:
+    image: stephanmisc/docuum
+    command: --threshold ${DOCKER_STORAGE_THRESHOLD:-50 GB}
+    pull_policy: always
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    volumes:
+      - docuum:/root
+      - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
 volumes:
   redis:
   db:
   static:
+  docuum:
