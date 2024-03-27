@@ -1,4 +1,6 @@
 FROM docker:26-cli
 WORKDIR /root
 COPY data/docker-compose.yml docker-compose.yml
-ENTRYPOINT ["docker", "compose", "up"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod u+x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
