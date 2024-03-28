@@ -123,7 +123,6 @@ services:
       "--keep", "^backenddevelopersltd/compute-horde-job:v0-latest",
       "--keep", "^us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest",
     ]
-    pull_policy: always
     init: true
     restart: unless-stopped
     env_file: ./.env
