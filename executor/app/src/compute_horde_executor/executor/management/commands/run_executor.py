@@ -40,7 +40,6 @@ TRUNCATED_RESPONSE_PREFIX_LEN = 100
 TRUNCATED_RESPONSE_SUFFIX_LEN = 100
 INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 300
 CVE_2022_0492_IMAGE = "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
-DOCKER_BASE_IMAGES_TO_KEEP = {"python", "ubuntu", "debian", "alpine", "backenddevelopersltd/compute-horde-job"}
 
 
 class RunConfigManager:
@@ -320,24 +319,6 @@ class JobRunner:
         )
         await process.wait()
         self.temp_dir.rmdir()
-
-        image_names = [self.initial_job_request.base_docker_image_name]
-        if self.full_job_request:
-            image_names.append(self.full_job_request.docker_image_name)
-        for image_name in image_names:
-            if not image_name:
-                continue
-            image_repo, _, _ = self.initial_job_request.base_docker_image_name.partition(":")
-            if image_repo not in DOCKER_BASE_IMAGES_TO_KEEP:
-                process = await asyncio.create_subprocess_exec(
-                    'docker',
-                    'rmi',
-                    image_name,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                await process.wait()
-
 
     async def _unpack_volume(self, job_request: V0JobRequest):
         assert str(self.volume_mount_dir) not in {'~', '/'}
