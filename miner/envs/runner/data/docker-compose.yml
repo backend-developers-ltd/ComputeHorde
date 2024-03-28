@@ -125,7 +125,6 @@ services:
     ]
     init: true
     restart: unless-stopped
-    env_file: ./.env
     volumes:
       - docuum:/root
       - /var/run/docker.sock:/var/run/docker.sock
