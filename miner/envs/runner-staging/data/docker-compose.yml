@@ -115,9 +115,12 @@ services:
       "--threshold", "${DOCKER_STORAGE_THRESHOLD:-50 GB}",
       "--keep", "^redis:6-alpine",
       "--keep", "^postgres:14.0-alpine",
+      "--keep", "^containrrr/watchtower",
+      "--keep", "^stephanmisc/docuum",
+      "--keep", "^backenddevelopersltd/compute-horde-miner-runner-staging:v0-latest",
       "--keep", "^backenddevelopersltd/compute-horde-miner-staging:v0-latest",
       "--keep", "^backenddevelopersltd/compute-horde-miner-nginx:v0-latest",
-      "--keep", "^backenddevelopersltd/compute-horde-job",
+      "--keep", "^backenddevelopersltd/compute-horde-job:v0-latest",
       "--keep", "^us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest",
     ]
     pull_policy: always
