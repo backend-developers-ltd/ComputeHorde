@@ -110,13 +110,13 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   docuum:
-    image: stephanmisc/docuum
+    image: stephanmisc/docuum:0.23.1
     command: [
       "--threshold", "${DOCKER_STORAGE_THRESHOLD:-50 GB}",
       "--keep", "^redis:6-alpine",
       "--keep", "^postgres:14.0-alpine",
       "--keep", "^containrrr/watchtower",
-      "--keep", "^stephanmisc/docuum",
+      "--keep", "^stephanmisc/docuum:0.23.1",
       "--keep", "^backenddevelopersltd/compute-horde-miner-runner:v0-latest",
       "--keep", "^backenddevelopersltd/compute-horde-miner:v0-latest",
       "--keep", "^backenddevelopersltd/compute-horde-miner-nginx:v0-latest",
@@ -132,8 +132,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     logging:
       <<: *logging
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
 
 volumes:
   redis:
