@@ -211,7 +211,10 @@ class FacilitatorClient:
     async def heartbeat(self):
         while True:
             if self.ws is not None:
-                await self.send_model(Heartbeat())
+                try:
+                    await self.send_model(Heartbeat())
+                except Exception as exc:
+                    logger.error("Error occurred", exc_info=exc)
             await asyncio.sleep(self.HEARTBEAT_PERIOD)
 
     @tenacity.retry(
