@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import contextlib
 import io
 import logging
 import time
@@ -12,6 +13,7 @@ import pydantic
 import tenacity
 import websockets
 from asgiref.sync import async_to_sync, sync_to_async
+from compute_horde.miner_client.base import MinerConnectionError
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
@@ -275,7 +277,22 @@ class FacilitatorClient:
             job_uuid=job_request.uuid,
             keypair=self.keypair,
         )
-        async with miner_client:
+        async with contextlib.AsyncExitStack() as exit_stack:
+            try:
+                await exit_stack.enter_async_context(miner_client)
+            except MinerConnectionError as exc:
+                comment = f'Miner connection error: {exc}'
+                logger.error(comment)
+                await self.send_model(JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status='failed',
+                    metadata=JobStatusMetadata(comment=comment),
+                ))
+                job.status = OrganicJob.Status.FAILED
+                job.comment = comment
+                await job.asave()
+                return
+
             job_timer = Timer(timeout=TOTAL_JOB_TIMEOUT)
             if job_request.input_url:
                 volume = Volume(volume_type=VolumeType.zip_url, contents=job_request.input_url)

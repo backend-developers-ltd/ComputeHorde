@@ -2,6 +2,7 @@ import abc
 import asyncio
 import logging
 import random
+import time
 
 import websockets
 
@@ -10,10 +11,15 @@ from compute_horde.base_requests import BaseRequest, ValidationError
 logger = logging.getLogger(__name__)
 
 
+class MinerConnectionError(Exception):
+    pass
+
+
 class AbstractMinerClient(abc.ABC):
 
     def __init__(self, loop: asyncio.AbstractEventLoop, miner_name: str):
         self.debounce_counter = 0
+        self.max_debounce_count: int | None = 5  # set to None for unlimited debounce
         self.loop = loop
         self.miner_name = miner_name
         self.ws: websockets.WebSocketClientProtocol | None = None
@@ -60,8 +66,15 @@ class AbstractMinerClient(abc.ABC):
         return await websockets.connect(self.miner_url())
 
     async def await_connect(self):
+        start_time = time.time()
         while True:
             try:
+                if self.max_debounce_count is not None and self.debounce_counter > self.max_debounce_count:
+                    time_took = time.time() - start_time
+                    raise MinerConnectionError(
+                        f'Could not connect to miner {self.miner_name} after {self.max_debounce_count} tries'
+                        f' in {time_took:0.2f} seconds'
+                    )
                 if self.debounce_counter:
                     sleep_time = self.sleep_time()
                     logger.info(f'Retrying connection to miner {self.miner_name} in {sleep_time:0.2f}')
