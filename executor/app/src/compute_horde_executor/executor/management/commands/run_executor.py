@@ -70,7 +70,7 @@ class MinerClient(AbstractMinerClient):
         self.full_payload_lock = asyncio.Lock()
 
     def miner_url(self) -> str:
-        return f'{self.miner_address}/v0/executor_interface/{self.token}'
+        return f'{self.miner_address}/v0.1/executor_interface/{self.token}'
 
     def accepted_request_type(self) -> type[BaseRequest]:
         return BaseMinerRequest

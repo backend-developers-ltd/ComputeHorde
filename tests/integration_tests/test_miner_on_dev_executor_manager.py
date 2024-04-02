@@ -84,7 +84,7 @@ class Test(ActiveSubnetworkBaseTest):
         zip_contents = in_memory_output.read()
         base64_zipfile = base64.b64encode(zip_contents).decode()
 
-        async with websockets.connect(f'ws://localhost:8045/v0/validator_interface/{validator_key}') as ws:
+        async with websockets.connect(f'ws://localhost:8045/v0.1/validator_interface/{validator_key}') as ws:
             await ws.send(json.dumps({
                 "message_type": "V0AuthenticateRequest",
                 "payload": {

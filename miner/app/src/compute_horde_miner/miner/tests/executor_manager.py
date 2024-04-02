@@ -10,7 +10,7 @@ WEBSOCKET_TIMEOUT = 100000
 
 
 async def fake_executor(token):
-    communicator = WebsocketCommunicator(asgi.application, f"v0/executor_interface/{token}")
+    communicator = WebsocketCommunicator(asgi.application, f"v0.1/executor_interface/{token}")
     connected, _ = await communicator.connect()
     assert connected
     response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)

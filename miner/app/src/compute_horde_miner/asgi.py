@@ -19,8 +19,8 @@ application = ProtocolTypeRouter({
         re_path(r'.*', get_asgi_application()),
     ]),
     'websocket': URLRouter([
-        path('v0/validator_interface/<str:validator_key>', MinerValidatorConsumer.as_asgi()),
-        path('v0/executor_interface/<str:executor_token>', MinerExecutorConsumer.as_asgi()),
+        path('v0.1/validator_interface/<str:validator_key>', MinerValidatorConsumer.as_asgi()),
+        path('v0.1/executor_interface/<str:executor_token>', MinerExecutorConsumer.as_asgi()),
     ]),
 })
 
