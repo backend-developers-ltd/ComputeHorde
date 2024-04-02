@@ -56,7 +56,7 @@ class MinerClient(AbstractMinerClient):
         self.miner_finished_or_failed_timestamp: int = 0
 
     def miner_url(self) -> str:
-        return f'ws://{self.miner_address}:{self.miner_port}/v0/validator_interface/{self.my_hotkey}'
+        return f'ws://{self.miner_address}:{self.miner_port}/v0.1/validator_interface/{self.my_hotkey}'
 
     def accepted_request_type(self) -> type[BaseRequest]:
         return BaseMinerRequest

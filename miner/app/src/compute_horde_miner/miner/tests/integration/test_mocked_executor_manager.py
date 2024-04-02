@@ -19,7 +19,7 @@ async def test_main_loop():
 
     job_uuid = str(uuid.uuid4())
     fake_executor.job_uuid = job_uuid
-    communicator = WebsocketCommunicator(asgi.application, f"v0/validator_interface/{validator_key}")
+    communicator = WebsocketCommunicator(asgi.application, f"v0.1/validator_interface/{validator_key}")
     connected, _ = await communicator.connect()
     assert connected
     await communicator.send_json_to({
