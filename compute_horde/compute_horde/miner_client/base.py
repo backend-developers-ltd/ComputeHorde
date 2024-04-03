@@ -117,6 +117,7 @@ class AbstractMinerClient(abc.ABC):
             try:
                 msg = await self.ws.recv()
             except websockets.WebSocketException as ex:
+                self.debounce_counter += 1
                 logger.info(f'Connection to miner {self.miner_name} lost: {str(ex)}')
                 self.loop.create_task(self.await_connect())
                 return
