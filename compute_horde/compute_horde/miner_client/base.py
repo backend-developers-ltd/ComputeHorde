@@ -83,7 +83,6 @@ class AbstractMinerClient(abc.ABC):
                 self.read_messages_task = self.loop.create_task(self.read_messages())
                 if self.debounce_counter:
                     logger.info(f'Connected to miner {self.miner_name} after {self.debounce_counter + 1} attempts')
-                    self.debounce_counter = 0
                 return
             except (websockets.WebSocketException, OSError) as ex:
                 self.debounce_counter += 1
@@ -142,6 +141,10 @@ class AbstractMinerClient(abc.ABC):
                 error_msg = f'Unsupported message from miner {self.miner_name}'
                 logger.exception(error_msg)
                 self.deferred_send_model(self.outgoing_generic_error_class()(details=error_msg))
+            else:
+                if self.debounce_counter:
+                    logger.info(f'Receviced valid message from miner {self.miner_name} after {self.debounce_counter + 1} connection attempts')
+                    self.debounce_counter = 0
 
 
 class UnsupportedMessageReceived(Exception):
