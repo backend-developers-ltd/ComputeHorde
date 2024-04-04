@@ -76,7 +76,7 @@ services:
       - DEBUG=off
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
-    command: python manage.py connect_facilitator
+    command: python manage.py connect_facilitator wss://facilitator.computehorde.io/ws/v0/
     depends_on:
       - redis
     logging:
