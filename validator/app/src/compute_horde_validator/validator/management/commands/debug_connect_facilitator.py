@@ -30,17 +30,17 @@ class Command(BaseCommand):
     FACILITATOR_CLIENT_CLASS = DebugFacilitatorClient
 
     def add_arguments(self, parser):
+        parser.add_argument('facilitator_uri', type=str, help='Facilitator URI')
         parser.add_argument('--miner_hotkey', type=str, help='Miner hotkey', required=True)
         parser.add_argument('--miner_address', type=str, help='Miner IPv4 address', default='127.0.0.1')
         parser.add_argument('--miner_port', type=int, help='Miner port', default=8000)
 
     @async_to_sync
-    async def handle(self, *args, **options):
+    async def handle(self, facilitator_uri, *args, **options):
         miner_hotkey = options['miner_hotkey']
         miner_address = options['miner_address']
         miner_port = options['miner_port']
         keypair = settings.BITTENSOR_WALLET().get_hotkey()
-        print(settings.FACILITATOR_URI)
-        facilitator_client = self.FACILITATOR_CLIENT_CLASS(keypair, settings.FACILITATOR_URI, miner_hotkey, miner_address, miner_port)
+        facilitator_client = self.FACILITATOR_CLIENT_CLASS(keypair, facilitator_uri, miner_hotkey, miner_address, miner_port)
         async with facilitator_client:
             await facilitator_client.run_forever()
