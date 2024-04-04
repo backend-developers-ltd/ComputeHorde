@@ -464,9 +464,12 @@ class FacilitatorClient:
 class Command(BaseCommand):
     FACILITATOR_CLIENT_CLASS = FacilitatorClient
 
+    def add_arguments(self, parser):
+        parser.add_argument('facilitator_uri', type=str, help='Facilitator URI')
+
     @async_to_sync
-    async def handle(self, *args, **options):
+    async def handle(self, facilitator_uri, *args, **options):
         keypair = settings.BITTENSOR_WALLET().get_hotkey()
-        facilitator_client = self.FACILITATOR_CLIENT_CLASS(keypair, settings.FACILITATOR_URI)
+        facilitator_client = self.FACILITATOR_CLIENT_CLASS(keypair, facilitator_uri)
         async with facilitator_client:
             await facilitator_client.run_forever()
