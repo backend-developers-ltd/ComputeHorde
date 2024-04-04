@@ -5,7 +5,7 @@ from datetime import timedelta
 import billiard.exceptions
 import bittensor
 import celery.exceptions
-import torch
+import numpy as np
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
@@ -82,8 +82,8 @@ def do_set_weights(
     return subtensor.set_weights(
         wallet=settings.BITTENSOR_WALLET(),
         netuid=netuid,
-        uids=torch.LongTensor(uids),
-        weights=torch.FloatTensor(weights),
+        uids=np.int64(uids),
+        weights=np.float32(weights),
         version_key=version_key,
         wait_for_inclusion=wait_for_inclusion,
         wait_for_finalization=wait_for_finalization,
@@ -112,8 +112,8 @@ def set_scores():
     if not score_per_uid:
         logger.info('No miners on the subnet to score')
         return
-    uids = torch.zeros(len(neurons), dtype=torch.long)
-    weights = torch.zeros(len(neurons), dtype=torch.float32)
+    uids = np.zeros(len(neurons), dtype=np.int64)
+    weights = np.zeros(len(neurons), dtype=np.float32)
     for ind, n in enumerate(neurons):
         uids[ind] = n.uid
         weights[ind] = score_per_uid.get(n.uid, 0)

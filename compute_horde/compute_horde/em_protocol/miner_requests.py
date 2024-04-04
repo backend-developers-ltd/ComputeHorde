@@ -1,5 +1,6 @@
 import enum
-from typing import Mapping, Any
+from collections.abc import Mapping
+from typing import Any
 
 import pydantic
 from pydantic import Field, root_validator
