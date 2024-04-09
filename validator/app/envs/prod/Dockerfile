@@ -13,9 +13,7 @@ COPY pyproject.toml pdm.lock ./
 RUN pdm lock --check
 COPY --from=compute-horde . /root/compute_horde
 
-RUN --mount=type=cache,target=/tmp/pdm_cache \
-  pdm config cache_dir /tmp/pdm_cache && \
-  pdm config python.use_venv False && \
+RUN pdm config python.use_venv False && \
   # compute-horde from path computes version from git tag which is unavailable here, 
   # hence we pass PDM_BUILD_SCM_VERSION=0 manually
   PDM_BUILD_SCM_VERSION=0 pdm sync --prod --group :all
