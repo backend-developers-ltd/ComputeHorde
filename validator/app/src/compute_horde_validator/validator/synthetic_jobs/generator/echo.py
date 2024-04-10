@@ -1,9 +1,7 @@
-import base64
-import io
 import random
 import string
-import zipfile
 
+from app.src.compute_horde_validator.validator.utils import single_file_zip
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
@@ -32,13 +30,7 @@ class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return []
 
     def volume_contents(self) -> str:
-        in_memory_output = io.BytesIO()
-        zipf = zipfile.ZipFile(in_memory_output, 'w')
-        zipf.writestr('payload.txt', self.payload)
-        zipf.close()
-        in_memory_output.seek(0)
-        zip_contents = in_memory_output.read()
-        return base64.b64encode(zip_contents).decode()
+        return single_file_zip('payload.txt', self.payload)
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         if msg.docker_process_stdout == self.payload:

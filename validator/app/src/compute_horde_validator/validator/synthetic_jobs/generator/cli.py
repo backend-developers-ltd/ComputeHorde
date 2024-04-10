@@ -4,9 +4,8 @@ import zipfile
 
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
-from compute_horde_validator.validator.synthetic_jobs.generator.base import (
-    AbstractSyntheticJobGenerator,
-)
+from compute_horde_validator.validator.synthetic_jobs.generator.base import AbstractSyntheticJobGenerator
+from compute_horde_validator.validator.utils import single_file_zip
 
 
 class CLIJobGenerator(AbstractSyntheticJobGenerator):
@@ -58,13 +57,7 @@ class CLIJobGenerator(AbstractSyntheticJobGenerator):
         return self._docker_run_cmd
 
     def volume_contents(self) -> str:
-        in_memory_output = io.BytesIO()
-        zipf = zipfile.ZipFile(in_memory_output, 'w')
-        zipf.writestr('payload.txt', 'nothing')
-        zipf.close()
-        in_memory_output.seek(0)
-        zip_contents = in_memory_output.read()
-        return base64.b64encode(zip_contents).decode()
+        return single_file_zip('payload.txt', 'nothing')
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         return True, '', 1
