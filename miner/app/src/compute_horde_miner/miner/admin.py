@@ -30,7 +30,12 @@ admin.site.register(Validator, admin_class=ReadOnlyAdmin)
 
 def maybe_create_default_admin():
     # Create default admin user if missing
-    if not User.objects.filter(is_superuser=True).exists():
+    try:
+        admin_user_exists = User.objects.filter(is_superuser=True).exists()
+    except Exception:
+        # If database not setup skip creating default admin
+        return
+    if not admin_user_exists:
         admin_password = os.getenv("DEFAULT_ADMIN_PASSWORD")
         if admin_password is None:
             logger.warning("Not creating Admin user - please set DEFAULT_ADMIN_PASSWORD env variable")
