@@ -32,6 +32,9 @@ class JobBase(models.Model):
     comment = models.TextField(blank=True, default='')
     job_description = models.TextField(blank=True)
 
+    def __str__(self):
+        return f'{self.job_uuid} - {self.miner.hotkey} - {self.status}'
+
 
 class SyntheticJob(JobBase):
     batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE, related_name='synthetic_jobs')
