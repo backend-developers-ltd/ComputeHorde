@@ -6,7 +6,7 @@
 #
 
 server {
-    listen 80 default_server;
+    listen 127.0.0.1:80 default_server;
     server_name _;
     server_name_in_redirect off;
 
@@ -14,13 +14,13 @@ server {
 }
 
 server {
-    listen 80;
+    listen 127.0.0.1:80;
     server_name www.${NGINX_HOST} ${NGINX_HOST};
     return 301 https://${NGINX_HOST}$request_uri;
 }
 
 server {
-    listen 443 ssl default_server;
+    listen 127.0.0.1:443 ssl default_server;
     server_name _;
     server_name_in_redirect off;
 
@@ -37,7 +37,7 @@ server {
 
 
 server {
-    listen                    443 ssl http2;
+    listen                    127.0.0.1:443 ssl http2;
     server_name               ${NGINX_HOST} www.${NGINX_HOST};
 
     add_header                Strict-Transport-Security "max-age=31536000" always;
