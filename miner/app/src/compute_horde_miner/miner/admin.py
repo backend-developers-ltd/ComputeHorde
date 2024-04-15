@@ -5,7 +5,7 @@ from django.contrib import admin  # noqa
 from django.contrib.admin import register  # noqa
 from django.contrib.auth.models import User  # noqa
 
-from compute_horde_miner.miner.models import AcceptedJob, Validator
+from compute_horde_miner.miner.models import AcceptedJob, Validator, ValidatorBlacklist
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ class ReadOnlyAdmin(admin.ModelAdmin):
 
 admin.site.register(AcceptedJob, admin_class=ReadOnlyAdmin)
 admin.site.register(Validator, admin_class=ReadOnlyAdmin)
+admin.site.register(ValidatorBlacklist)
 
 def maybe_create_default_admin():
     # Create default admin user if missing
