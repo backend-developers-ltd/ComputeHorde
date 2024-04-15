@@ -26,7 +26,7 @@ services:
       <<: *logging
 
   app:
-    image: backenddevelopersltd/compute-horde-miner-staging:v0-latest
+    image: backenddevelopersltd/compute-horde-miner-staging:${MINER_IMAGE_TAG:-v0-latest}
     pull_policy: always
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
@@ -35,7 +35,7 @@ services:
     env_file: ./.env
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
-      # - PYTHONPATH=/root/vendor
+      - VENDOR_DIRECTORY=/root/vendor
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
       - ${HOST_VENDOR_DIR:-/tmp}:/root/vendor
@@ -51,7 +51,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-worker:
-    image: backenddevelopersltd/compute-horde-miner-staging:v0-latest
+    image: backenddevelopersltd/compute-horde-miner-staging:${MINER_IMAGE_TAG:-v0-latest}
     pull_policy: always
     init: true
     healthcheck:
@@ -62,8 +62,10 @@ services:
       - CELERY_MASTER_CONCURRENCY=4
       - CELERY_WORKER_CONCURRENCY=2
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+      - VENDOR_DIRECTORY=/root/vendor
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+      - ${HOST_VENDOR_DIR:-/tmp}:/root/vendor
     command: ./celery-entrypoint.sh
     tmpfs: /run
     depends_on:
@@ -74,7 +76,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-beat:
-    image: backenddevelopersltd/compute-horde-miner-staging:v0-latest
+    image: backenddevelopersltd/compute-horde-miner-staging:${MINER_IMAGE_TAG:-v0-latest}
     pull_policy: always
     init: true
     restart: unless-stopped

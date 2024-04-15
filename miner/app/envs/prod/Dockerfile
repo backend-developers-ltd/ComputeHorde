@@ -28,6 +28,7 @@ COPY ./app/envs/prod/entrypoint.sh /root/src/
 COPY ./app/envs/prod/gunicorn.conf.py /root/src/
 COPY ./app/envs/prod/celery-entrypoint.sh /root/src/
 COPY ./app/envs/prod/prometheus-cleanup.sh /root/src/
+COPY ./app/envs/prod/vendor_setup.sh /root/src/
 
 RUN python3 -m compileall -b -f -q /root/
 
