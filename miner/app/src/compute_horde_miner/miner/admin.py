@@ -1,13 +1,7 @@
-import logging
-import os
-
 from django.contrib import admin  # noqa
 from django.contrib.admin import register  # noqa
-from django.contrib.auth.models import User  # noqa
 
 from compute_horde_miner.miner.models import AcceptedJob, Validator, ValidatorBlacklist
-
-logger = logging.getLogger(__name__)
 
 admin.site.site_header = "compute_horde_miner Administration"
 admin.site.site_title = "compute_horde_miner"
@@ -28,21 +22,3 @@ class ReadOnlyAdmin(admin.ModelAdmin):
 admin.site.register(AcceptedJob, admin_class=ReadOnlyAdmin)
 admin.site.register(Validator, admin_class=ReadOnlyAdmin)
 admin.site.register(ValidatorBlacklist)
-
-def maybe_create_default_admin():
-    # Create default admin user if missing
-    try:
-        admin_user_exists = User.objects.filter(is_superuser=True).exists()
-    except Exception:
-        # If database not setup skip creating default admin
-        return
-    if not admin_user_exists:
-        admin_password = os.getenv("DEFAULT_ADMIN_PASSWORD")
-        if admin_password is None:
-            logger.warning("Not creating Admin user - please set DEFAULT_ADMIN_PASSWORD env variable")
-        else:
-            logger.info("Creating Admin user with DEFAULT_ADMIN_PASSWORD")
-            admin_user = User.objects.create_superuser(username='admin', email='admin@admin.com', password=admin_password)
-            admin_user.save()
-
-maybe_create_default_admin()
