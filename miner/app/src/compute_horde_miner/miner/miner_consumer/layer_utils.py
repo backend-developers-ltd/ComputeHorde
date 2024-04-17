@@ -34,8 +34,8 @@ class JobRequest(pydantic.BaseModel):
 
     @root_validator()
     def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if bool(values.get("docker_image_name")) == bool(values.get("raw_script")):
-            raise ValueError("Expected only one, either `docker_image_name` or `raw_script`, not together")
+        if not (bool(values.get("docker_image_name")) or bool(values.get("raw_script"))):
+            raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
         return values
 
 
