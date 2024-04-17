@@ -3,16 +3,16 @@ set -euxo pipefail
 
 if [ $# -ne 2 ]
 then
-  echo >2 "USAGE: ./install_miner.sh SSH_DESTINATION HOTKEY_PATH"
+  >&2 echo "USAGE: ./install_miner.sh SSH_DESTINATION HOTKEY_PATH"
   exit 1
 fi
 
 SSH_DESTINATION="$1"
 LOCAL_HOTKEY_PATH=$(realpath "$2")
-LOCAL_COLDKEY_PUB_PATH=$(dirname $(dirname "$LOCAL_HOTKEY_PATH"))/coldkeypub.txt
+LOCAL_COLDKEY_PUB_PATH=$(dirname "$(dirname "$LOCAL_HOTKEY_PATH")")/coldkeypub.txt
 
-if [ ! -f $LOCAL_HOTKEY_PATH ]; then
-  echo "Given HOTKEY_PATH does not exist"
+if [ ! -f "$LOCAL_HOTKEY_PATH" ]; then
+  >&2 echo "Given HOTKEY_PATH does not exist"
   exit 1
 fi
 
@@ -28,12 +28,13 @@ set -euxo pipefail
 mkdir -p $REMOTE_HOTKEY_DIR
 cat > tmpvars <<ENDCAT
 HOTKEY_NAME="$(basename "$REMOTE_HOTKEY_PATH")"
-WALLET_NAME="$(basename $(dirname "$REMOTE_HOTKEY_DIR"))"
+WALLET_NAME="$(basename "$(dirname "$REMOTE_HOTKEY_DIR")")"
 ENDCAT
 ENDSSH
 scp "$LOCAL_HOTKEY_PATH" "$SSH_DESTINATION:$REMOTE_HOTKEY_PATH"
 scp "$LOCAL_COLDKEY_PUB_PATH" "$SSH_DESTINATION:$REMOTE_COLDKEY_PUB_PATH"
 
+# install necessary software in the server
 ssh "$SSH_DESTINATION" <<'ENDSSH'
 set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -98,13 +99,12 @@ SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(25))')
 POSTGRES_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_hex(8))')
 BITTENSOR_NETUID=12
 BITTENSOR_NETWORK=finney
-BITTENSOR_WALLET_NAME=$(. ~/tmpvars && echo "$WALLET_NAME")
-BITTENSOR_WALLET_HOTKEY_NAME=$(. ~/tmpvars && echo "$HOTKEY_NAME")
+BITTENSOR_WALLET_NAME="$(. ~/tmpvars && echo "$WALLET_NAME")"
+BITTENSOR_WALLET_HOTKEY_NAME="$(. ~/tmpvars && echo "$HOTKEY_NAME")"
 HOST_WALLET_DIR=$HOME/.bittensor/wallets
 BITTENSOR_MINER_PORT=8000
 BITTENSOR_MINER_ADDRESS=auto
 PORT_FOR_EXECUTORS=8000
-# TODO:               vvvvvvvvvv - what should be the value here?
 ADDRESS_FOR_EXECUTORS=172.17.0.1
 ENDENV
 
