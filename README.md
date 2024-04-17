@@ -56,7 +56,7 @@ for miner in miners:
 
 # Running
 
-To quickly start a validator or miner, create an ubuntu server and execute the following command from your local machine (where you have your wallet files).
+To quickly start a validator or miner, create an Ubuntu Server and execute the following command from your local machine (where you have your wallet files).
 
 **Validator:**
 ```shell

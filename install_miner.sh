@@ -95,8 +95,8 @@ services:
 ENDDOCKERCOMPOSE
 
 cat > .env <<ENDENV
-SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(25))')
-POSTGRES_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_hex(8))')
+SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')
+POSTGRES_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
 BITTENSOR_NETUID=12
 BITTENSOR_NETWORK=finney
 BITTENSOR_WALLET_NAME="$(. ~/tmpvars && echo "$WALLET_NAME")"
