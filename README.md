@@ -28,6 +28,32 @@ Currently miners are rewarded for providing the time of networkless GPU-equipped
 
 In February 2024 this will change - subnet will define more resource types andValidators will reward miners more for providing resources that are in higher demand. The system will quickly fill to capacity with organic traffic.
 
+# Incoming changes
+* Introduce hardware classes to create a free market that delivers the most cost-effective hardware, rather than solely focusing on the strongest hardware.
+* Organic jobs should not be free to allow the free market to regulate demand on hardware classes effectively.
+* Support long-running jobs by accounting for miners' work in 10-minute intervals, ensuring they can be paid for unfinished long-running jobs.
+* Implement rules and safeguards to prevent malicious actors from exploiting the network, ensuring a fair and secure environment for all participants.
+* Develop a resource-sharing system that allocates resources proportionally to each user's stake. However, also allow low-stake users to utilize network resources freely when there is no competing demand from other users.
+* Implement a mechanism for miner servers to reject jobs for a given hardware class if accepting the job would result in a financial loss for the miner.
+* Ensure that benchmark jobs are paid in the same manner as organic jobs: job duration multiplied by the hardware class multiplier and the benchmark value.
+* When a new miner is registered, require all validators to benchmark the miner's hardware classes with extended timeouts to accurately assess their capabilities.
+* When a new validator registers, they must benchmark every other miner in the network to maintain an up-to-date and comprehensive understanding of available resources. Until a miner is benchmarked by the validator, the validator defaults to 1 as the locally_measured_efficiency_factor for that miner.
+* Miners will have the ability to modify their hardware class availability manifest at a frequency of once every 2 hours. In the event that a miner has available executors, they are obligated to accept assigned jobs and cannot reject them. Should a miner reject a job under such circumstances, the validator will impose a penalty by lowering the hardware class local multiplier for all tasks associated with that miner.
+
+
+```python
+points = {}
+for miner in miners:
+    for hardware_class in miner.executors:
+        executor = miner.executors[hardware_class]
+        hardware_class_relative_value = hardware_classes[hardware_class].relative_value
+        points[miner.hotkey] = (
+            hardware_class_relative_value
+            * executor.locally_measured_efficiency_factor
+            * executor.total_worked_seconds
+        )
+```
+
 # Running
 
 To quickly start a validator or miner, create an ubuntu server and execute the following command from your local machine (where you have your wallet files).
