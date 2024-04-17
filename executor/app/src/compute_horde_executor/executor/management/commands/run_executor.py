@@ -213,7 +213,8 @@ class JobRunner:
         docker_run_cmd = job_request.docker_run_cmd
 
         if job_request.raw_script:
-            docker_image = RunConfigManager.preset_to_image_for_raw_script(job_request.docker_run_options_preset)
+            if docker_image is None:
+                docker_image = RunConfigManager.preset_to_image_for_raw_script(job_request.docker_run_options_preset)
             raw_script_path = self.temp_dir / "script.py"
             raw_script_path.write_text(job_request.raw_script)
             extra_volume_flags = ["-v", f"{raw_script_path.absolute().as_posix()}:/script.py"]
