@@ -1,0 +1,49 @@
+name: "Continuous Delivery: validator (pre-prod)"
+
+on:
+  push:
+    branches:
+      - 'deploy-validator-preprod'
+
+env:
+  TAG_VERSION: "v0-preprod"
+  STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator-staging"
+  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator"
+  DIST_VERSION_PREFIX: "validator-preprod"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Docker build and push
+        run: |
+          IMAGE_NAME="${DOCKER_REPO_NAME}:${TAG_VERSION}"
+          SHA_IMAGE_NAME="${STAGING_DOCKER_REPO_NAME}:git-${GITHUB_SHA}"
+
+          docker pull "${SHA_IMAGE_NAME}"
+          docker image tag "${SHA_IMAGE_NAME}" "${IMAGE_NAME}"
+
+          echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+          docker push "${IMAGE_NAME}"
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+      - name: Set Dist Version
+        run: |
+          BUILD_NUMBER="${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
+          echo "DIST_VERSION=${DIST_VERSION_PREFIX}-${{ steps.date.outputs.date }}-${BUILD_NUMBER}" >> $GITHUB_ENV
+      - name: Create Tag
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const {DIST_VERSION} = process.env
+            github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `refs/tags/${DIST_VERSION}`,
+                sha: context.sha
+            })
