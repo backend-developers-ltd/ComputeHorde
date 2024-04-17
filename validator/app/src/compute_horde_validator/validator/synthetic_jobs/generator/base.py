@@ -20,9 +20,11 @@ class AbstractSyntheticJobGenerator(abc.ABC):
     def docker_run_options_preset(self) -> str:
         ...
 
-    @abc.abstractmethod
-    def docker_run_cmd(self) -> list[str]:
-        ...
+    def docker_run_cmd(self) -> list[str] | None:
+        return None
+
+    def raw_script(self) -> str | None:
+        return None
 
     @abc.abstractmethod
     def volume_contents(self) -> str:
