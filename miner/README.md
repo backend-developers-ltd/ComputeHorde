@@ -24,9 +24,55 @@ Miners are encouraged to optimize their setup by implementing their own executor
 
 2. (Optional) Add a `setup.sh` file in the custom code directory to run additional commands when the miner container starts. For example, you can install dependencies using `pip install`.
 
-3. To use your custom executor, set the `EXECUTOR_MANAGER_CLASS_PATH` variable in the `.env` file of the miner runner. For example: `EXECUTOR_MANAGER_CLASS_PATH=myexecutor:MyExecutor`.
+3. To use your custom executor, set the `EXECUTOR_MANAGER_CLASS_PATH` variable in the `.env` file of the miner runner.
 
 This feature is currently in early access stage and is only available on `v0-preprod` images. See the section about preprod images to set up your environment.
+
+To create a custom executor manager, follow these steps:
+
+1. Create a directory for your code, e.g., `/home/ubuntu/custom_executor`.
+
+2. Inside the directory, create a file named `my_executor.py` and add the following code:
+
+   ```python
+   from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager
+
+   class MyExecutor(BaseExecutorManager):
+       async def _reserve_executor(self, token):
+           """Start spinning up an executor with `token` or raise ExecutorUnavailable if at capacity"""
+           pass
+
+       async def _kill_executor(self, executor):
+           """Kill running executor."""
+           pass
+
+       async def _wait_for_executor(self, executor, timeout):
+           """Wait for executor to finish the job until timeout"""
+           pass
+   ```
+
+   You need to implement all three methods (`_reserve_executor`, `_kill_executor`, and `_wait_for_executor`) to make the executor work. For reference, you can check the implementation in `compute_horde_miner.miner.executor_manager.docker`.
+
+3. Update your `.env` file with the following variables:
+
+   ```
+   HOST_VENDOR_DIR=/home/ubuntu/custom_executor
+   EXECUTOR_MANAGER_CLASS_PATH=my_executor:MyExecutor
+   ```
+
+   This tells the miner where to find your custom executor implementation.
+
+4. If your implementation has any dependencies, you can create a `setup.sh` file in the same directory. For example:
+
+   ```bash
+   pip install requests
+   ```
+
+   This file will be executed during the setup process to install the required dependencies.
+
+5. Remember to set up the preprod miner images if the feature is not yet officially released.
+
+By following these steps, you can create and use a custom executor manager in your compute_horde_miner setup.
 
 ## Early Access Features - Preprod Images
 
