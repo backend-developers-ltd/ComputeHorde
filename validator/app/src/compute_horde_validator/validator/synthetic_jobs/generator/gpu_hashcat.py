@@ -24,7 +24,7 @@ def get_subnet_weights_version():
             raise RuntimeError("Network hyperparameters are None")
         return hyperparameters.weights_version
     except Exception as e:
-        raise RuntimeError(f"Failed to get subnet weight version: {e}")
+        raise RuntimeError("Failed to get subnet weight version") from e
 
 
 class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
@@ -73,7 +73,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
                 f"result does not match expected answer: expected answer={self.expected_answer} msg={msg.json()}",
                 0,
             )
-        # TODO (timeout -time_taken) **2 ?
+
         score = MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds())))
         return True, "", score
 
