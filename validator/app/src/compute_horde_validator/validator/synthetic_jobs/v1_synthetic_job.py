@@ -4,6 +4,7 @@ import secrets
 import string
 from base64 import b64encode
 from dataclasses import dataclass
+from pathlib import Path
 from typing import ClassVar, Self
 
 from app.src.compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
@@ -12,7 +13,6 @@ from app.src.compute_horde_validator.validator.synthetic_jobs.synthetic_job impo
     JobParams,
     SyntheticJob,
 )
-from app.src.compute_horde_validator.validator.synthetic_jobs.v1_decrypt import DECRYPT_SCRIPT
 from cryptography.fernet import Fernet
 
 
@@ -27,7 +27,7 @@ class V1SyntheticJob(SyntheticJob):
     ALPHABET: ClassVar[str] = string.ascii_letters + DIGITS
 
     @classmethod
-    def random_string(cls, num_digits: int, num_letters: int) -> str:
+    def random_string(cls, num_letters: int, num_digits: int) -> str:
         return "".join(secrets.choice(cls.ALPHABET) for _ in range(num_letters)) + "".join(
             secrets.choice(cls.DIGITS) for _ in range(num_digits)
         )
@@ -43,7 +43,7 @@ class V1SyntheticJob(SyntheticJob):
         for _params in params:
             _passwords = set()
             while len(_passwords) < _params.num_hashes:
-                _passwords.add(cls.random_string(_params.num_letters, _params.num_digits))
+                _passwords.add(cls.random_string(num_letters=_params.num_letters, num_digits=_params.num_digits))
             passwords.append(sorted(list(_passwords)))
 
         return cls(
@@ -95,6 +95,9 @@ class V1SyntheticJob(SyntheticJob):
             "payloads": self._payloads(),
             "masks": self.hash_masks(),
             "algorithms": [algorithm.type for algorithm in self.algorithms],
+            "timeout": [params.timeout for params in self.params],
+            "num_letters": [params.num_letters for params in self.params],
+            "num_digits": [params.num_digits for params in self.params],
         }
         return pickle.dumps(data)
 
@@ -102,7 +105,8 @@ class V1SyntheticJob(SyntheticJob):
         return [ "/script.py" ]
 
     def raw_script(self) -> str:
-        return DECRYPT_SCRIPT
+        with open(Path(__file__).parent / "v1_decrypt.py") as file:
+            return file.read()
 
     @property
     def answer(self) -> str:

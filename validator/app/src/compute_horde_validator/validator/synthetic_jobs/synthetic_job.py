@@ -50,13 +50,13 @@ class Algorithm(enum.Enum):
     def type(self):
         return self.params[self]["hash_type"]
 
-    @staticmethod
-    def get_random_algorithm():
-        algorithms = list(Algorithm)
+    @classmethod
+    def get_random_algorithm(cls):
+        algorithms = cls.get_all_algorithms()
         return algorithms[datetime.datetime.utcnow().hour % len(algorithms)]
 
-    @staticmethod
-    def get_all_algorithms():
+    @classmethod
+    def get_all_algorithms(cls):
         return list(Algorithm)
 
 
@@ -81,9 +81,9 @@ HASHJOB_PARAMS = {
         Algorithm.SHA384: JobParams(timeout=45, num_letters=5, num_digits=0, num_hashes=1),
         Algorithm.SHA512: JobParams(timeout=45, num_letters=5, num_digits=0, num_hashes=1),
     },
-    1: { # TODO
-        Algorithm.SHA256: JobParams(timeout=999990, num_letters=6, num_digits=1, num_hashes=50000),
-        Algorithm.SHA384: JobParams(timeout=999945, num_letters=5, num_digits=1, num_hashes=50000),
-        Algorithm.SHA512: JobParams(timeout=999945, num_letters=5, num_digits=1, num_hashes=50000),
+    1: {
+        Algorithm.SHA256: JobParams(timeout=90, num_letters=6, num_digits=0, num_hashes=50000),
+        Algorithm.SHA384: JobParams(timeout=55, num_letters=5, num_digits=1, num_hashes=50000),
+        Algorithm.SHA512: JobParams(timeout=55, num_letters=5, num_digits=1, num_hashes=50000),
     },
 }
