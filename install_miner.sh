@@ -30,6 +30,7 @@ fi
 REMOTE_HOTKEY_DIR=$(dirname "$REMOTE_HOTKEY_PATH")
 
 # Copy the wallet files to the server
+# shellcheck disable=SC2087
 ssh "$SSH_DESTINATION" <<ENDSSH
 set -euxo pipefail
 
