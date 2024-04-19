@@ -75,13 +75,11 @@ To create a custom executor manager, follow these steps:
 By following these steps, you can create and use a custom executor manager in your compute_horde_miner setup.
 
 ## Early Access Features - Preprod Images
-
 Some features are released early and can be used before the official release for the entire subnet. To use these features, you need to set up `v0-preprod` images. Currently, this is only available for miners.
-
 To switch your miner code to preprod images, follow these steps:
-
 1. Stop your miner runner: `docker-compose down --remove-orphans`
 2. Add `MINER_IMAGE_TAG=v0-preprod` to the miner runner's `.env` file.
+   - Note: Ensure that the `COMPOSE_PROJECT_NAME` in your `.env` file is set to the name of the directory containing the `docker-compose.yaml` file. If it's not set correctly, you may need to manually stop all running Docker containers related to the miner before proceeding.
 3. Start the miner runner: `docker-compose up -d`
 
 **IMPORTANT**: Currently, this feature is only available on the preprod miner runner. You need to manually change the image tag in `docker-compose.yml` from `v0-latest` to `v0-preprod` before starting the miner runner. This additional step will not be required once the miner preprod feature is released to the upstream miner runner.
