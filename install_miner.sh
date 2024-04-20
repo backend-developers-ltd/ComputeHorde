@@ -16,17 +16,15 @@ if [ ! -f "$LOCAL_HOTKEY_PATH" ]; then
   exit 1
 fi
 
-# try to retain the path, but bail if it contains special characters to avoid inconsistent behavious by `.env` readers
-if [[ $LOCAL_HOTKEY_PATH =~ ['$#!;*?&()<>'\"\'] ]]
-then
-  REMOTE_HOTKEY_PATH=.bittensor/wallets/mywallet/hotkeys/default
-  REMOTE_COLDKEY_PUB_PATH=.bittensor/wallets/mywallet/coldkeypub.txt
-else
-  # BSD (i.e. mac) `realpath` does not support `-s` or `--relative-to` :'(
-  REMOTE_HOTKEY_PATH=$(python3 -c "import os.path; print(os.path.relpath('$LOCAL_HOTKEY_PATH', '$HOME'))")
-  REMOTE_COLDKEY_PUB_PATH=$(python3 -c "import os.path; print(os.path.relpath('$LOCAL_COLDKEY_PUB_PATH', '$HOME'))")
-fi
+HOTKEY_NAME=$(basename "$LOCAL_HOTKEY_PATH")
+WALLET_NAME=$(basename "$(dirname "$(dirname "$LOCAL_HOTKEY_PATH")")")
 
+# set default names if they contain special characters to avoid inconsistent behaviors by `.env` readers
+[[ $HOTKEY_NAME =~ ['$#!;*?&()<>'\"\'] ]] && HOTKEY_NAME=default
+[[ $WALLET_NAME =~ ['$#!;*?&()<>'\"\'] ]] && WALLET_NAME=mywallet
+
+REMOTE_HOTKEY_PATH=".bittensor/wallets/$WALLET_NAME/hotkeys/$HOTKEY_NAME"
+REMOTE_COLDKEY_PUB_PATH=".bittensor/wallets/$WALLET_NAME/coldkeypub.txt"
 REMOTE_HOTKEY_DIR=$(dirname "$REMOTE_HOTKEY_PATH")
 
 # Copy the wallet files to the server
