@@ -1,6 +1,8 @@
 from typing import TYPE_CHECKING
+from dataclasses import dataclass
 
 import bittensor
+import pydantic
 
 if TYPE_CHECKING:
     from bittensor.chain_data import NeuronInfo
@@ -9,6 +11,17 @@ BAC_VALIDATOR_SS58_ADDRESS = '5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE'
 MIN_STAKE = 1000
 VALIDATORS_LIMIT = 24
 
+@dataclass
+class MachineSpecs(pydantic.BaseModel):
+    specs: dict
+
+    @classmethod
+    def from_dict(cls, specs: dict[str, any]) -> 'MachineSpecs':
+        cls.specs = specs
+        return cls
+
+    def __str__(self) -> str:
+        return str(self.specs)
 
 def get_validators(netuid=12, network="finney") -> list['NeuronInfo']:
     """

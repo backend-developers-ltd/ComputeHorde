@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+import json
 import logging
 import pathlib
 import shlex
@@ -18,6 +19,7 @@ from compute_horde.em_protocol.executor_requests import (
     V0FailedRequest,
     V0FailedToPrepare,
     V0FinishedRequest,
+    V0MachineSpecsRequest,
     V0ReadyRequest,
 )
 from compute_horde.em_protocol.miner_requests import (
@@ -27,6 +29,7 @@ from compute_horde.em_protocol.miner_requests import (
     VolumeType,
 )
 from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
+from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -125,6 +128,11 @@ class MinerClient(AbstractMinerClient):
             docker_process_stdout=job_result.stdout,
             docker_process_stderr=job_result.stderr,
         ))
+        if job_result.specs:
+            await self.send_model(V0MachineSpecsRequest(
+                job_uuid=self.job_uuid,
+                specs=job_result.specs,
+            ))
 
     async def send_failed(self, job_result: 'JobResult'):
         await self.send_model(V0FailedRequest(
@@ -152,6 +160,7 @@ class JobResult(pydantic.BaseModel):
     timeout: bool
     stdout: str
     stderr: str
+    specs: MachineSpecs | None = None
 
 
 def truncate(v: str) -> str:
@@ -173,6 +182,7 @@ class JobRunner:
         self.temp_dir = pathlib.Path(tempfile.mkdtemp())
         self.volume_mount_dir = self.temp_dir / 'volume'
         self.output_volume_mount_dir = self.temp_dir / 'output'
+        self.specs_volume_mount_dir = self.temp_dir / 'specs'
 
     async def prepare(self):
         self.volume_mount_dir.mkdir(exist_ok=True)
@@ -235,6 +245,8 @@ class JobRunner:
             f'{self.volume_mount_dir.as_posix()}/:/volume/',
             '-v',
             f'{self.output_volume_mount_dir.as_posix()}/:/output/',
+            '-v',
+            f'{self.specs_volume_mount_dir.as_posix()}/:/specs/',
             *extra_volume_flags,
             docker_image,
             *docker_run_cmd,
@@ -263,6 +275,12 @@ class JobRunner:
             stderr = stderr.decode()
             exit_status = process.returncode
             timeout = False
+
+        # fetch machine specs if synthetic job generated
+        specs = None
+        if (self.specs_volume_mount_dir / 'specs.json').exists():
+            with open(self.specs_volume_mount_dir / 'specs.json') as f:
+                specs = MachineSpecs.from_dict(json.load(f))
 
         # Save the streams in output volume and truncate them in response.
         with open(self.output_volume_mount_dir / 'stdout.txt', 'w') as f:
@@ -300,6 +318,7 @@ class JobRunner:
             timeout=timeout,
             stdout=stdout,
             stderr=stderr,
+            specs=specs,
         )
 
     async def clean(self):
