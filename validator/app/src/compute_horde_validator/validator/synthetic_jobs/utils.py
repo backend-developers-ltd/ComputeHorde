@@ -17,6 +17,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
+    V0MachineSpecsRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
@@ -178,6 +179,7 @@ async def _execute_job(job: JobBase) -> tuple[
             docker_image_name=job_generator.docker_image_name(),
             docker_run_options_preset=job_generator.docker_run_options_preset(),
             docker_run_cmd=job_generator.docker_run_cmd(),
+            raw_script=job_generator.raw_script(),
             volume={
                 'volume_type': VolumeType.inline.value,
                 'contents': job_generator.volume_contents(),
@@ -222,6 +224,8 @@ async def _execute_job(job: JobBase) -> tuple[
                 job.comment = f'Miner finished but {comment}'
                 await job.asave()
                 return None, msg
+        elif isinstance(msg, V0MachineSpecsRequest):
+            return None, msg
         else:
             raise ValueError(f'Unexpected msg: {msg}')
 

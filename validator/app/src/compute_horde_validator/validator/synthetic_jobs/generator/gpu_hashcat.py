@@ -1,3 +1,5 @@
+import math
+
 import bittensor
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
@@ -66,16 +68,23 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def volume_contents(self) -> str:
         return single_file_zip("payload.txt", self.hash_job.payload)
 
+    def score(self, time_took: float) -> float:
+        if self.weights_version == 0:
+            return MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds())))
+        elif self.weights_version == 1:
+            return math.e ** ((1 - (time_took / self.timeout_seconds())) * 1.5 )
+        else:
+            raise RuntimeError(f"No score function for weights_version: {self.weights_version}")
+
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
-        if msg.docker_process_stdout.strip() != self.expected_answer:
+        if str(msg.docker_process_stdout).strip() != str(self.expected_answer):
             return (
                 False,
                 f"result does not match expected answer: expected answer={self.expected_answer} msg={msg.json()}",
                 0,
             )
 
-        score = MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds())))
-        return True, "", score
+        return True, "", self.score(time_took)
 
     def job_description(self) -> str:
         return f"Hashcat {self.hash_job}"

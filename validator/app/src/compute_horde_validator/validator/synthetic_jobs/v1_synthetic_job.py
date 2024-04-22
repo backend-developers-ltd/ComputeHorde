@@ -7,13 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
-from app.src.compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
+from cryptography.fernet import Fernet
+
+from compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
     HASHJOB_PARAMS,
     Algorithm,
     JobParams,
     SyntheticJob,
 )
-from cryptography.fernet import Fernet
 
 
 @dataclass
@@ -66,9 +67,12 @@ class V1SyntheticJob(SyntheticJob):
             for password in self.passwords[i]
         ]
 
-    def _encrypt(self, key, payload) -> bytes:
-        key = b64encode(hashlib.sha256(key).digest(), altchars=b"-_")
-        return Fernet(key).encrypt(payload.encode("utf-8"))
+    def _hash(self, s: bytes) -> bytes:
+        return b64encode(hashlib.sha256(s).digest(), altchars=b"-_")
+        
+    def _encrypt(self, key: str, payload: str) -> str:
+        key_bytes = self._hash(key.encode("utf-8"))
+        return Fernet(key_bytes).encrypt(payload.encode("utf-8")).decode("utf-8")
 
     def _payload(self, i) -> str:
         return "\n".join([f"{hash_hex}:{self.salts[i].hex()}" for hash_hex in self.hash_hexes(i)])
@@ -81,8 +85,8 @@ class V1SyntheticJob(SyntheticJob):
                 payloads.append(self._payload(i))
                 continue
             # encrypt subsequent payloads with previous payload's passwords
-            prev_passwords = "\n".join(self.passwords[i - 1]).encode("utf-8")
-            encrypted_payload = self._encrypt(prev_passwords, self._payload(i)).decode("utf-8")
+            prev_passwords = "\n".join(self.passwords[i - 1])
+            encrypted_payload = self._encrypt(prev_passwords, self._payload(i))
             payloads.append(encrypted_payload)
         return payloads
 
@@ -110,7 +114,7 @@ class V1SyntheticJob(SyntheticJob):
 
     @property
     def answer(self) -> str:
-        return str(self.passwords)
+        return self._hash(str(self.passwords).encode("utf-8")).decode("utf-8")
 
 
 if __name__ == "__main__":
