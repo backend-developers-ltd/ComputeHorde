@@ -82,6 +82,12 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 stdout=msg.docker_process_stdout,
                 stderr=msg.docker_process_stderr
             )
+        if isinstance(msg, executor_requests.V0MachineSpecsRequest):
+            await self.send_executor_specs(
+                executor_token=self.executor_token,
+                job_uuid=msg.job_uuid,
+                specs = msg.specs
+            )
         if isinstance(msg, executor_requests.V0FailedRequest):
             self.job.status = AcceptedJob.Status.FAILED
             self.job.stderr = msg.docker_process_stderr

@@ -203,6 +203,13 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         job.result_reported_to_validator = timezone.now()
         await job.asave()
 
+    async def _executor_specs(self, msg: validator_requests.V0MachineSpecsRequest):
+        await self.send(miner_requests.V0MachineSpecsRequest(
+            job_uuid=msg.job_uuid,
+            specs=msg.specs,
+        ).json())
+        logger.debug(f'Specs for job {msg.job_uuid} reported to validator {self.validator_key}')
+
     async def _executor_failed(self, msg: ExecutorFailed):
         await self.send(miner_requests.V0JobFailedRequest(
             job_uuid=msg.job_uuid,
