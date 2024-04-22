@@ -3,7 +3,7 @@ import string
 from dataclasses import dataclass
 from typing import ClassVar, Self
 
-from app.src.compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
+from compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
     HASHJOB_PARAMS,
     Algorithm,
     JobParams,

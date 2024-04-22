@@ -1,15 +1,18 @@
 import enum
-from typing import Mapping, Any
+from collections.abc import Mapping
+from typing import Any
 
 import pydantic
 from pydantic import Field, root_validator
 
 from ..base_requests import BaseRequest, JobMixin
+from ..utils import MachineSpecs
 
 
 class RequestType(enum.Enum):
     V0AuthenticateRequest = 'V0AuthenticateRequest'
     V0InitialJobRequest = 'V0InitialJobRequest'
+    V0MachineSpecsRequest = 'V0MachineSpecsRequest'
     V0JobRequest = 'V0JobRequest'
     GenericError = 'GenericError'
 
@@ -82,6 +85,9 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
             raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
         return values
 
+class V0MachineSpecsRequest(BaseValidatorRequest, JobMixin):
+    message_type: RequestType = RequestType.V0MachineSpecsRequest
+    specs: MachineSpecs
 
 class GenericError(BaseValidatorRequest):
     message_type: RequestType = RequestType.GenericError
