@@ -1,12 +1,12 @@
 import random
 import string
 
-from app.src.compute_horde_validator.validator.utils import single_file_zip
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     AbstractSyntheticJobGenerator,
 )
+from compute_horde_validator.validator.utils import single_file_zip
 
 
 class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
