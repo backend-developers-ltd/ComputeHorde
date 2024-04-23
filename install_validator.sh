@@ -49,7 +49,7 @@ export DEBIAN_FRONTEND=noninteractive
 # install docker
 for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc
 do
-  sudo apt-get remove $pkg || true
+  (yes | sudo apt-get remove $pkg) || true
 done
 
 sudo apt-get update
