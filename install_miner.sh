@@ -85,7 +85,8 @@ sudo apt-get update
 sudo apt-get install -y nvidia-container-toolkit
 
 sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
+sudo systemctl stop docke
+sudo systemctl start docker
 ENDSSH
 
 # start a new ssh connection so that usermod changes are effective
