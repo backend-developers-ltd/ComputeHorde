@@ -73,3 +73,14 @@ and `HOTKEY_PATH` with the path of your hotkey (i.e. `~/.bittensor/wallets/my-wa
 This script installs necessary tools in the server, copies the keys and starts the validator/miner with the corresponding runner and default config.
 
 If you want to change the default config, see [Validator runner README](validator/envs/runner/README.md) and [Miner runner README](miner/envs/runner/README.md) for details.
+
+
+# Checking that your miner works properly
+
+1. Check if your miner is reachable from a machine different from the miner: `curl {ADDRESS}:{PORT}/admin/login/ -i`.
+   Both `PORT` and `ADDRESS` can be obtained from the metagraph. If everything is ok the first line should read
+   `HTTP/1.1 200 OK`. By default, the address is automatically determined by bittensor lib, but you can input 
+   your own in .env
+2. Check if you're getting any jobs and what the outcomes are. An admin panel for that is coming but for now you
+   achieve that with `docker-compose exec miner-runner docker-compose exec db psql postgres -U postgres -c 'select *
+   from miner_acceptedjob order by id desc;`
