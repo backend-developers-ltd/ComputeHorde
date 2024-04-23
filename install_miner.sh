@@ -85,7 +85,7 @@ sudo apt-get update
 sudo apt-get install -y nvidia-container-toolkit
 
 sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl stop docke
+sudo systemctl stop docker
 sudo systemctl start docker
 ENDSSH
 
