@@ -40,7 +40,7 @@ def scrape_specs() -> dict[str, any]:
         pass
     try:
         data['os'] = run_cmd('lsb_release -d | grep -Po \"Description:\\s*\\K.*\"').strip()
-        data['virtualization'] = run_cmd('sudo virt-what').strip()
+        data['virtualization'] = run_cmd('virt-what').strip()
 
         data['ram'] = {}
         data['ram']['total'] = run_cmd('cat /proc/meminfo | grep -P "MemTotal" | grep -o \"[0-9]*\"').strip()
