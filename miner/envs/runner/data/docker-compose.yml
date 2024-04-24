@@ -65,6 +65,7 @@ services:
       - VENDOR_DIRECTORY=/root/vendor
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+      - ${HOST_VENDOR_DIR:-/tmp}:/root/vendor
     command: ./celery-entrypoint.sh
     tmpfs: /run
     depends_on:
