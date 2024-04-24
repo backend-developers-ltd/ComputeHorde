@@ -3,6 +3,7 @@ import base64
 import contextlib
 import io
 import logging
+import os
 import time
 import zipfile
 from functools import cache
@@ -188,7 +189,11 @@ class FacilitatorClient:
 
     def connect(self):
         """ Create an awaitable/async-iterable websockets.connect() object """
-        return websockets.connect(self.facilitator_uri)
+        extra_headers = {
+            'X-Validator-Runner-Version': os.environ.get('VALIDATOR_RUNNER_VERSION', 'unknown'),
+            'X-Validator-Version': os.environ.get('VALIDATOR_VERSION', 'unknown'),
+        }
+        return websockets.connect(self.facilitator_uri, extra_headers=extra_headers)
 
     async def miner_driver_awaiter(self):
         """ avoid memory leak by awaiting miner driver tasks """

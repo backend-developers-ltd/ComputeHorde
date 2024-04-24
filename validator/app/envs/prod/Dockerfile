@@ -48,6 +48,9 @@ ENV PYTHONPATH=/opt/pypackages/lib:$PYTHONPATH
 COPY --from=base-image /root/src/ /root/src/
 COPY --from=base-image /opt/pypackages/ /opt/pypackages/
 
+ARG VALIDATOR_VERSION=notset
+ENV VALIDATOR_VERSION=$VALIDATOR_VERSION
+
 EXPOSE 8000
 
 CMD ["./entrypoint.sh"]
