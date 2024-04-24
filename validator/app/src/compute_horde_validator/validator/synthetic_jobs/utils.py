@@ -194,6 +194,7 @@ async def _execute_job(job: JobBase) -> tuple[
                 job_generator.timeout_seconds() + TIMEOUT_LEEWAY + TIMEOUT_MARGIN
             )
             time_took = client.miner_finished_or_failed_timestamp - full_job_sent
+            logger.error(f'!!!! Time took: {time_took}, job timeout: {job_generator.timeout_seconds()} + leeeway: {TIMEOUT_LEEWAY}, margin: {TIMEOUT_MARGIN} !!!!')
             if time_took > (job_generator.timeout_seconds() + TIMEOUT_LEEWAY):
                 logger.info(f'Miner {client.miner_name} sent a job result but too late: {msg}')
                 raise TimeoutError
@@ -225,6 +226,8 @@ async def _execute_job(job: JobBase) -> tuple[
                 await job.asave()
                 return None, msg
         elif isinstance(msg, V0MachineSpecsRequest):
+            logger.error(f'!!!!!! Miner {client.miner_name} sent machine specs: {msg}')
+            # TODO handle machine specs
             return None, msg
         else:
             raise ValueError(f'Unexpected msg: {msg}')
