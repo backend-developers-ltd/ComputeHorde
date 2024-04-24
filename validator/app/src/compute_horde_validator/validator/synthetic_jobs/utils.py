@@ -85,7 +85,7 @@ class MinerClient(AbstractMinerClient):
             self.miner_ready_or_declining_future.set_result(msg)
         elif isinstance(
             msg,
-            V0JobFailedRequest | V0JobFinishedRequest
+            V0JobFailedRequest | V0JobFinishedRequest | V0MachineSpecsRequest
         ):
             self.miner_finished_or_failed_future.set_result(msg)
             self.miner_finished_or_failed_timestamp = time.time()
@@ -225,6 +225,8 @@ async def _execute_job(job: JobBase) -> tuple[
                 await job.asave()
                 return None, msg
         elif isinstance(msg, V0MachineSpecsRequest):
+            # TODO handle machine specs
+            logger.debug(f'Miner {client.miner_name} sent machine specs: {msg}')
             return None, msg
         else:
             raise ValueError(f'Unexpected msg: {msg}')
