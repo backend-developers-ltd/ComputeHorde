@@ -178,6 +178,7 @@ class ExecutorInterfaceMixin(BaseMixin):
 
     async def send_executor_specs(self, job_uuid: str, executor_token: str, specs: MachineSpecs):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        logger.error(f"!!!!!!! Sending specs {specs}")
         await self.channel_layer.group_send(
             group_name,
             {
