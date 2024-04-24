@@ -208,7 +208,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job_uuid=msg.job_uuid,
             specs=msg.specs,
         ).json())
-        logger.debug(f'Specs for job {msg.job_uuid} reported to validator {self.validator_key}')
+        logger.debug(f'Specs for job {msg.job_uuid} reported to validator {msg.specs}')
 
     async def _executor_failed(self, msg: ExecutorFailed):
         await self.send(miner_requests.V0JobFailedRequest(

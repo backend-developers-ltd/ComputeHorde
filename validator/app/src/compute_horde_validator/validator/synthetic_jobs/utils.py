@@ -88,7 +88,8 @@ class MinerClient(AbstractMinerClient):
             V0JobFailedRequest | V0JobFinishedRequest
         ):
             self.miner_finished_or_failed_future.set_result(msg)
-            self.miner_finished_or_failed_timestamp = time.time()
+        elif isinstance(msg, V0MachineSpecsRequest):
+            pass
         else:
             raise UnsupportedMessageReceived(msg)
 
@@ -225,6 +226,8 @@ async def _execute_job(job: JobBase) -> tuple[
                 await job.asave()
                 return None, msg
         elif isinstance(msg, V0MachineSpecsRequest):
+            # TODO handle machine specs
+            logger.debug(f'Miner {client.miner_name} sent machine specs: {msg}')
             return None, msg
         else:
             raise ValueError(f'Unexpected msg: {msg}')
