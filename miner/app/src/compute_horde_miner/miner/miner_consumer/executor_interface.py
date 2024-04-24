@@ -33,9 +33,11 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
     async def connect(self):
         # TODO using advisory locks make sure that only one consumer per executor token exists
         await super().connect()
+
         self.executor_token = self.scope['url_route']['kwargs']['executor_token']
         try:
             # TODO maybe one day tokens will be reused, then we will have to add filtering here
+            logger.error(f'!!!! Getting accepted job')
             job = await AcceptedJob.objects.aget(executor_token=self.executor_token)
         except AcceptedJob.DoesNotExist:
             await self.send(miner_requests.GenericError(
@@ -43,8 +45,9 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             logger.error(f'No job waiting for token {self.executor_token}')
             await self.websocket_disconnect({"code": f'No job waiting for token {self.executor_token}'})
             return
+        logger.error(f'!!!! Executor connecting on job {job.job_uuid} status {job.status}')
         if job.status != AcceptedJob.Status.WAITING_FOR_EXECUTOR:
-            msg = f'Job with token {self.executor_token} is not waiting for an executor'
+            msg = f'Job with token {self.executor_token} is not waiting for an executor - current job status: {job.status}'
             await self.send(miner_requests.GenericError(details=msg).json())
             logger.error(msg)
             await self.websocket_disconnect(
@@ -62,6 +65,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
         ).json())
 
     async def handle(self, msg: BaseExecutorRequest):
+        logger.error(f'!!!! Executer handling {type(msg)}')
         if isinstance(msg, executor_requests.V0ReadyRequest):
             self.job.status = AcceptedJob.Status.WAITING_FOR_PAYLOAD
             await self.job.asave()

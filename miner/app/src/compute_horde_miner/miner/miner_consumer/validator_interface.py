@@ -132,12 +132,14 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await self.handle(msg)
 
     async def handle(self, msg: BaseValidatorRequest):
+        logger.error(f'!!!! Validator interface handling {type(msg)}')
         if isinstance(msg, validator_requests.V0AuthenticateRequest):
             return await self.handle_authentication(msg)
         if not self.validator_authenticated:
             self.msg_queue.append(msg)
             return
         if isinstance(msg, validator_requests.V0InitialJobRequest):
+            logger.error(f'!!!! Validator interface handling V0InitialJobRequest')
             # TODO add rate limiting per validator key here
             token = f'{msg.job_uuid}-{uuid.uuid4()}'
             await self.group_add(token)
@@ -150,6 +152,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 initial_job_details=msg.dict(),
                 status=AcceptedJob.Status.WAITING_FOR_EXECUTOR,
             )
+            logger.error(f'!!!! Validator interface saving {job}')
             await job.asave()
             self.pending_jobs[msg.job_uuid] = job
 

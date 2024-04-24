@@ -63,7 +63,7 @@ class AbstractMinerClient(abc.ABC):
             await self.ws.close()
 
     async def _connect(self):
-        return await websockets.connect(self.miner_url(), max_size=25*(2**20)) # 25MB
+        return await websockets.connect(self.miner_url(), max_size=50*(2**20)) # 50MB
 
     async def await_connect(self):
         start_time = time.time()
