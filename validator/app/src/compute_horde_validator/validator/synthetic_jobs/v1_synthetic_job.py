@@ -99,7 +99,6 @@ class V1SyntheticJob(SyntheticJob):
             "payloads": self._payloads(),
             "masks": self.hash_masks(),
             "algorithms": [algorithm.type for algorithm in self.algorithms],
-            "timeout": [params.timeout for params in self.params],
             "num_letters": [params.num_letters for params in self.params],
             "num_digits": [params.num_digits for params in self.params],
         }
@@ -114,7 +113,7 @@ class V1SyntheticJob(SyntheticJob):
 
     @property
     def answer(self) -> str:
-        return self._hash(str(self.passwords).encode("utf-8")).decode("utf-8")
+        return self._hash("".join(["".join(passwords) for passwords in self.passwords]).encode("utf-8")).decode("utf-8")
 
 
 if __name__ == "__main__":

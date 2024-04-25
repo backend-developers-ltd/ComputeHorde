@@ -19,12 +19,13 @@ def scrape_specs() -> dict[str, any]:
     data: dict[str, any] = {}
 
     try:
-        nvidia_cmd = run_cmd('nvidia-smi --query-gpu=driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem --format=csv').splitlines()
+        nvidia_cmd = run_cmd('nvidia-smi --query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem --format=csv').splitlines()
         csv_data = csv.reader(nvidia_cmd)
         header = [x.strip() for x in next(csv_data)]
         row = [x.strip() for x in next(csv_data)]
         gpu_data = dict(zip(header, row))
         data['gpu'] = {}
+        data['gpu']["name"] = gpu_data["name"]
         data['gpu']["driver"] = gpu_data["driver_version"]
         data['gpu']["memory_mb"] = gpu_data["memory.total [MiB]"].split(' ')[0]
         data['gpu']["cuda_compute_cap"] = gpu_data["compute_cap"]
@@ -76,7 +77,6 @@ with open("/volume/payload.txt", "rb") as file:
         payload = data["payloads"][i]
         mask = data["masks"][i]
         algorithm = data["algorithms"][i]
-        timeout = data["timeout"][i]
 
         if i > 0:
             # decrypt payload with previous cracked passwords
@@ -87,12 +87,12 @@ with open("/volume/payload.txt", "rb") as file:
         with open("_payload.txt", mode="wb") as f:
             f.write(payload.encode("utf-8"))
 
-        cmd = f'hashcat --runtime {timeout} --potfile-disable --restore-disable --attack-mode 3 --workload-profile 3 --optimized-kernel-enable --hash-type {algorithm} --hex-salt -1 "?l?d?u" --outfile-format 2 --quiet _payload.txt "{mask}"'
+        cmd = f'hashcat --potfile-disable --restore-disable --attack-mode 3 --workload-profile 3 --optimized-kernel-enable --hash-type {algorithm} --hex-salt -1 "?l?d?u" --outfile-format 2 --quiet _payload.txt "{mask}"'
         passwords = subprocess.check_output(cmd, shell=True, text=True)
         passwords = [p for p in sorted(passwords.split('\n')) if p != '']
         answers.append(passwords)
 
     print(
-        b64encode(hashlib.sha256(str(answers).encode("utf-8")).digest(), altchars=b"-_").decode("utf-8")
+        b64encode(hashlib.sha256("".join(["".join(passwords) for passwords in answers]).encode("utf-8")).digest(), altchars=b"-_").decode("utf-8")
         )
 
