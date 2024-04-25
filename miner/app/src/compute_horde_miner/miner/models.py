@@ -22,6 +22,10 @@ class Validator(models.Model):
 class ValidatorBlacklist(models.Model):
     validator = models.OneToOneField(Validator, on_delete=models.CASCADE)
 
+    class Meta:
+        verbose_name = 'Blacklisted Validator'
+        verbose_name_plural = 'Blacklisted Validators'
+
     def __str__(self):
         return f'hotkey: {self.validator.public_key}'
 
