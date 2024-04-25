@@ -1,7 +1,6 @@
 #!/bin/bash -eux
 
-# TODO:
-# ( cd nginx && ./build-image.sh )
+( cd nginx && ./build-image.sh )
 
 MINER_RUNNER_VERSION=$(git rev-parse HEAD)
 docker build \
