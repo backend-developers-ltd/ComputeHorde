@@ -5,9 +5,11 @@ from django.contrib.auth.models import User  # noqa
 from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
 
 
-admin.site.site_header = "compute_horde_validator Administration"
+admin.site.site_header = "ComputeHorde Validator Administration"
 admin.site.site_title = "compute_horde_validator"
-admin.site.index_title = "Welcome to compute_horde_validator Administration"
+admin.site.index_title = "Welcome to ComputeHorde Validator Administration"
+
+admin.site.index_template = 'admin/validator_index.html'
 
 class AddOnlyAdmin(admin.ModelAdmin):
     def has_change_permission(self, *args, **kwargs):
