@@ -21,6 +21,10 @@ class JobAddOnlyAdmin(AddOnlyAdmin):
     search_fields = ['job_uuid', 'miner__hotkey']
     ordering = ['-updated_at']
 
+    # TODO: read only for now - remove when handling job creation is implemented
+    def has_add_permission(self, *args, **kwargs):
+        return False
+
 class MinerReadOnlyAdmin(AddOnlyAdmin):
     change_form_template = "admin/read_only_view.html"
     search_fields = ['hotkey']
