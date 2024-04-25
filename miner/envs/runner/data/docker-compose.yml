@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
     env_file: ./.env
     environment:
-      - MINER_IMAGE_REPO=${MINER_IMAGE_REPO}
+      - MINER_RUNNER_VERSION=${MINER_RUNNER_VERSION}
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
       - VENDOR_DIRECTORY=/root/vendor
     volumes:
