@@ -17,7 +17,9 @@ class AddOnlyAdmin(admin.ModelAdmin):
         return False
 
 class JobAddOnlyAdmin(AddOnlyAdmin):
-    search_fields = ['job_uuid']
+    list_display = ['job_uuid', 'miner', 'status', 'updated_at']
+    search_fields = ['job_uuid', 'miner__hotkey']
+    ordering = ['-updated_at']
 
 class MinerReadOnlyAdmin(AddOnlyAdmin):
     change_form_template = "admin/read_only_view.html"
