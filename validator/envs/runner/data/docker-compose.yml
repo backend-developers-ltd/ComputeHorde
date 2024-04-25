@@ -107,6 +107,35 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
+  nginx:
+    image: 'ghcr.io/reef-technologies/nginx-rt:v1.2.1'
+    restart: unless-stopped
+    healthcheck:
+      test: wget -q --spider 0.0.0.0:80/admin/login/ || exit 1
+    environment:
+      - NGINX_HOST=${NGINX_HOST}
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates
+      - ./nginx/config_helpers:/etc/nginx/config_helpers
+      - backend-static:/srv/static:ro
+      - ./media:/srv/media:ro
+      - ./letsencrypt/etc:/etc/letsencrypt
+      - ./nginx/monitoring_certs:/etc/monitoring_certs
+    depends_on:
+      - app
+    command: nginx -g 'daemon off;'
+    ports:
+      - 127.0.0.1:80:80
+      - 127.0.0.1:443:443
+      - 10443:10443
+    logging:
+      <<: *logging
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+
 volumes:
   redis:
   db:
