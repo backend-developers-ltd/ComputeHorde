@@ -34,7 +34,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator import current
 
 JOB_LENGTH = 300
 TIMEOUT_LEEWAY = 1
-TIMEOUT_MARGIN = 10
+TIMEOUT_MARGIN = 60
 
 
 logger = logging.getLogger(__name__)
