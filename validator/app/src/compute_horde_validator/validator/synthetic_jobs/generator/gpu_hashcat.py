@@ -1,5 +1,3 @@
-import math
-
 import bittensor
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
@@ -72,7 +70,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         if self.weights_version == 0:
             return MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds())))
         elif self.weights_version == 1:
-            return math.e ** ((1 - (time_took / self.timeout_seconds())) * 1.5 )
+            return 1 / time_took
         else:
             raise RuntimeError(f"No score function for weights_version: {self.weights_version}")
 
@@ -80,7 +78,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         if str(msg.docker_process_stdout).strip() != str(self.expected_answer):
             return (
                 False,
-                f"result does not match expected answer: expected answer={self.expected_answer} msg={msg.json()}",
+                f"result does not match expected answer: {self.expected_answer}, msg: {msg.json()}",
                 0,
             )
 

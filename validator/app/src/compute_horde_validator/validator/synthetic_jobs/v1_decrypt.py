@@ -69,6 +69,9 @@ def scrape_specs() -> dict[str, any]:
 with open("/specs/specs.json", "w") as file:
     json.dump(scrape_specs(), file)
 
+def hash(s: bytes) -> bytes:
+    return b64encode(hashlib.sha256(s).digest(), altchars=b"-_")
+
 with open("/volume/payload.txt", "rb") as file:
     data = pickle.load(file)
 
@@ -93,6 +96,6 @@ with open("/volume/payload.txt", "rb") as file:
         answers.append(passwords)
 
     print(
-        b64encode(hashlib.sha256("".join(["".join(passwords) for passwords in answers]).encode("utf-8")).digest(), altchars=b"-_").decode("utf-8")
+        hash("".join(["".join(passwords) for passwords in answers]).encode("utf-8")).decode("utf-8")
         )
 
