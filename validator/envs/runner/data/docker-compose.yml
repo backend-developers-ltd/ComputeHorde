@@ -25,6 +25,28 @@ services:
     logging:
       <<: *logging
 
+  app:
+    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
+    pull_policy: always
+    healthcheck:
+      test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+    volumes:
+      - static:/root/src/static
+      # Add this mount to each container that should dump Prometheus metrics.
+      - ./prometheus-metrics:/prometheus-multiproc-dir
+    depends_on:
+      - redis
+      - db
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
   celery-worker:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
     pull_policy: always
