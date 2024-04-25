@@ -20,6 +20,7 @@ def get_subnet_weights_version():
     try:
         subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
         hyperparameters = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
+        return 1
         if hyperparameters is None:
             raise RuntimeError("Network hyperparameters are None")
         return hyperparameters.weights_version
