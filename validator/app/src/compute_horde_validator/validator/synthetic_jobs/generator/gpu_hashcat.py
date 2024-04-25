@@ -1,3 +1,5 @@
+import time
+
 import bittensor
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
@@ -16,21 +18,30 @@ from compute_horde_validator.validator.utils import single_file_zip
 MAX_SCORE = 2
 
 
-def get_subnet_weights_version():
-    try:
-        subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-        hyperparameters = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
-        if hyperparameters is None:
-            raise RuntimeError("Network hyperparameters are None")
-        return hyperparameters.weights_version
-    except Exception as e:
-        raise RuntimeError("Failed to get subnet weight version") from e
+class WeightVersionHolder:
+
+    def __init__(self):
+        self._time_set = 0
+        self.value = None
+
+    def get(self):
+        if time.time() - self._time_set > 300:
+            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+            hyperparameters = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
+            if hyperparameters is None:
+                raise RuntimeError("Network hyperparameters are None")
+            self.value = hyperparameters.weights_version
+            self._time_set = time.time()
+        return self.value
+
+
+weights_version_holder = WeightVersionHolder()
 
 
 class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def __init__(self):
         # set synthetic_jobs based on subnet weights_version
-        self.weights_version = get_subnet_weights_version()
+        self.weights_version = weights_version_holder.get()
         if self.weights_version == 0:
             algorithm = Algorithm.get_random_algorithm()
             self.hash_job = V0SyntheticJob.generate(
