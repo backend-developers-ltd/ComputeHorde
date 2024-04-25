@@ -123,16 +123,16 @@ class MinerClient(AbstractMinerClient):
         await self.send_model(V0ReadyRequest(job_uuid=self.job_uuid))
 
     async def send_finished(self, job_result: 'JobResult'):
-        await self.send_model(V0FinishedRequest(
-            job_uuid=self.job_uuid,
-            docker_process_stdout=job_result.stdout,
-            docker_process_stderr=job_result.stderr,
-        ))
         if job_result.specs:
             await self.send_model(V0MachineSpecsRequest(
                 job_uuid=self.job_uuid,
                 specs=job_result.specs,
             ))
+        await self.send_model(V0FinishedRequest(
+            job_uuid=self.job_uuid,
+            docker_process_stdout=job_result.stdout,
+            docker_process_stderr=job_result.stderr,
+        ))
 
     async def send_failed(self, job_result: 'JobResult'):
         await self.send_model(V0FailedRequest(

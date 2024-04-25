@@ -110,9 +110,15 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
         if payload:
             await self._executor_finished(payload)
 
+    @abc.abstractmethod
+    async def _executor_specs(self, event: dict):
+        ...
+
     @log_errors_explicitly
     async def executor_specs(self, event: dict):
-        ...
+        payload = self.validate_event('executor_specs', ExecutorSpecs, event)
+        if payload:
+            await self._executor_specs(payload)
 
     @abc.abstractmethod
     async def _executor_finished(self, msg: ExecutorFinished):
