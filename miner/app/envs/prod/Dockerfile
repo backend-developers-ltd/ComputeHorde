@@ -47,6 +47,9 @@ ENV PYTHONPATH=/opt/pypackages/lib:$PYTHONPATH
 COPY --from=base-image /root/src/ /root/src/
 COPY --from=base-image /opt/pypackages/ /opt/pypackages/
 
+ARG MINER_VERSION=notset
+ENV MINER_VERSION=$MINER_VERSION
+
 EXPOSE 8000
 
 CMD ["./entrypoint.sh"]
