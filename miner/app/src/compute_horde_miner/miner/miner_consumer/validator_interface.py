@@ -140,7 +140,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         if isinstance(msg, validator_requests.V0InitialJobRequest):
             validator_blacklisted = await ValidatorBlacklist.objects.filter(validator=self.validator).aexists()
             if validator_blacklisted:
-                logger.info(f"Declining job {msg.job_uuid} from blacklisted validator: self.validator_key")
+                logger.info(f"Declining job {msg.job_uuid} from blacklisted validator: {self.validator_key}")
                 await self.send(miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).json())
                 return
 

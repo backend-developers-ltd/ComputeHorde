@@ -17,13 +17,13 @@ class Validator(models.Model):
     active = models.BooleanField()
 
     def __str__(self):
-        return self.public_key
+        return f'hotkey: {self.public_key}'
 
 class ValidatorBlacklist(models.Model):
     validator = models.OneToOneField(Validator, on_delete=models.CASCADE)
 
     def __str__(self):
-        return self.validator.public_key
+        return f'hotkey: {self.validator.public_key}'
 
 class AcceptedJob(models.Model):
     class Status(models.TextChoices):
@@ -47,7 +47,7 @@ class AcceptedJob(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f'{self.job_uuid} - {self.status}'
+        return f'uuid: {self.job_uuid} - validator hotkey: {self.validator.public_key} - {self.status}'
 
     @classmethod
     async def get_for_validator(cls, validator: Validator) -> dict[str, Self]:
