@@ -1,5 +1,3 @@
-import math
-
 import bittensor
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
@@ -22,6 +20,7 @@ def get_subnet_weights_version():
     try:
         subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
         hyperparameters = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
+        return 1
         if hyperparameters is None:
             raise RuntimeError("Network hyperparameters are None")
         return hyperparameters.weights_version
@@ -72,7 +71,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         if self.weights_version == 0:
             return MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds())))
         elif self.weights_version == 1:
-            return math.e ** ((1 - (time_took / self.timeout_seconds())) * 1.5 )
+            return MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds()))) # math.e ** ((1 - (time_took / self.timeout_seconds())) * 1.5 )
         else:
             raise RuntimeError(f"No score function for weights_version: {self.weights_version}")
 
