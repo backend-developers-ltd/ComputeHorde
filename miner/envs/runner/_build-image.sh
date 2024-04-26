@@ -1,6 +1,8 @@
-#!/bin/bash -eux
+#!/bin/bash
+set -eux -o pipefail
 
-( cd nginx && ./build-image.sh )
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "${SCRIPT_DIR}"
 
 MINER_RUNNER_VERSION=$(git rev-parse HEAD)
 docker build \

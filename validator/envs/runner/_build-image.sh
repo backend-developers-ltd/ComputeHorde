@@ -1,4 +1,8 @@
-#!/bin/bash -eux
+#!/bin/bash
+set -eux -o pipefail
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "${SCRIPT_DIR}"
 
 VALIDATOR_RUNNER_VERSION=$(git rev-parse HEAD)
 docker build \

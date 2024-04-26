@@ -1,4 +1,5 @@
-#!/bin/bash -eux
+#!/bin/bash
+set -eux -o pipefail
 
 source ./build-image.sh
 if [ -z "$(docker info 2>/dev/null | grep 'Username' | awk '{print $2}')" ]; then

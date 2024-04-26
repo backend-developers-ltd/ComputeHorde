@@ -27,7 +27,7 @@ jobs:
             docker build \
             --build-context compute-horde=../compute_horde \
             -t "${IMAGE_NAME}" \
-            --build-arg MINER_VERSION=${GITHUB_SHA} \
+            --build-arg MINER_VERSION="${GITHUB_SHA}" \
             -f app/envs/prod/Dockerfile .
 
           docker image tag "${IMAGE_NAME}" "${SHA_IMAGE_NAME}"
