@@ -58,6 +58,12 @@ BITTENSOR_WALLET_HOTKEY_NAME=default
 HOST_WALLET_DIR=/home/josephus/.bittensor/wallets
 FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
 ```
+
+Validator support admin panel that binds to 127.0.0.1:80. If you want to change default port add set it in `.env`, e.g.
+```
+HTTP_PORT=8080
+```
+
 6. run `docker-compose up -d` in the directory containing your `docker-compose.yml`, 
    e.g. `/home/josephus/compute_horde_validator/`
 7. done. complete.
