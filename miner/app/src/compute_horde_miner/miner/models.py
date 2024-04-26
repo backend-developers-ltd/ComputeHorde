@@ -12,11 +12,22 @@ class EnumEncoder(DjangoJSONEncoder):
             return obj.value
         return super().default(obj)
 
-
 class Validator(models.Model):
     public_key = models.TextField(unique=True)
     active = models.BooleanField()
 
+    def __str__(self):
+        return f'hotkey: {self.public_key}'
+
+class ValidatorBlacklist(models.Model):
+    validator = models.OneToOneField(Validator, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name = 'Blacklisted Validator'
+        verbose_name_plural = 'Blacklisted Validators'
+
+    def __str__(self):
+        return f'hotkey: {self.validator.public_key}'
 
 class AcceptedJob(models.Model):
     class Status(models.TextChoices):
@@ -40,7 +51,7 @@ class AcceptedJob(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f'{self.job_uuid} - {self.status.value}'
+        return f'uuid: {self.job_uuid} - validator hotkey: {self.validator.public_key} - {self.status}'
 
     @classmethod
     async def get_for_validator(cls, validator: Validator) -> dict[str, Self]:

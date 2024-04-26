@@ -1,6 +1,7 @@
 import enum
 
 from ..base_requests import BaseRequest, JobMixin
+from ..utils import MachineSpecs
 
 
 class RequestType(enum.Enum):
@@ -10,6 +11,7 @@ class RequestType(enum.Enum):
     V0ExecutorFailedRequest = 'V0ExecutorFailedRequest'
     V0JobFailedRequest = 'V0JobFailedRequest'
     V0JobFinishedRequest = 'V0JobFinishedRequest'
+    V0MachineSpecsRequest = 'V0MachineSpecsRequest'
     GenericError = 'GenericError'
     UnauthorizedError = 'UnauthorizedError'
 
@@ -46,6 +48,9 @@ class V0JobFinishedRequest(BaseMinerRequest, JobMixin):
     docker_process_stdout: str  # TODO: add max_length
     docker_process_stderr: str  # TODO: add max_length
 
+class V0MachineSpecsRequest(BaseMinerRequest, JobMixin):
+    message_type: RequestType = RequestType.V0MachineSpecsRequest
+    specs: MachineSpecs
 
 class GenericError(BaseMinerRequest):
     message_type: RequestType = RequestType.GenericError

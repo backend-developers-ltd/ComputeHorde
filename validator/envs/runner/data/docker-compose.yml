@@ -1,4 +1,4 @@
-version: '3.7'
+version: '3.8'
 
 services:
   redis:
@@ -24,6 +24,29 @@ services:
       - db:/var/lib/postgresql/data
     logging:
       <<: *logging
+
+  app:
+    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
+    pull_policy: always
+    healthcheck:
+      test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+    volumes:
+      - static:/root/src/static
+      # Add this mount to each container that should dump Prometheus metrics.
+      - ./prometheus-metrics:/prometheus-multiproc-dir
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+    depends_on:
+      - redis
+      - db
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   celery-worker:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
@@ -84,6 +107,25 @@ services:
       <<: *logging
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
+
+  nginx:
+    image: backenddevelopersltd/compute-horde-validator-nginx:v0-latest
+    restart: unless-stopped
+    healthcheck:
+      test: wget -q --spider 0.0.0.0:80/admin/login/ || exit 1
+    env_file: ./.env
+    volumes:
+      - static:/srv/static:ro
+    depends_on:
+      - app
+    command: nginx -g 'daemon off;'
+    ports:
+      - 127.0.0.1:${HTTP_PORT:-80}:80
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
 
 volumes:
   redis:

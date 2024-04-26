@@ -21,7 +21,7 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ExecutorReady,
     ValidatorInterfaceMixin,
 )
-from compute_horde_miner.miner.models import AcceptedJob, Validator
+from compute_horde_miner.miner.models import AcceptedJob, Validator, ValidatorBlacklist
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,12 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             self.msg_queue.append(msg)
             return
         if isinstance(msg, validator_requests.V0InitialJobRequest):
+            validator_blacklisted = await ValidatorBlacklist.objects.filter(validator=self.validator).aexists()
+            if validator_blacklisted:
+                logger.info(f"Declining job {msg.job_uuid} from blacklisted validator: {self.validator_key}")
+                await self.send(miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).json())
+                return
+
             # TODO add rate limiting per validator key here
             token = f'{msg.job_uuid}-{uuid.uuid4()}'
             await self.group_add(token)
@@ -202,6 +208,13 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         await job.arefresh_from_db()
         job.result_reported_to_validator = timezone.now()
         await job.asave()
+
+    async def _executor_specs(self, msg: validator_requests.V0MachineSpecsRequest):
+        await self.send(miner_requests.V0MachineSpecsRequest(
+            job_uuid=msg.job_uuid,
+            specs=msg.specs,
+        ).json())
+        logger.debug(f'Reported specs for job {msg.job_uuid}: {msg.specs} to validator {self.validator_key}')
 
     async def _executor_failed(self, msg: ExecutorFailed):
         await self.send(miner_requests.V0JobFailedRequest(

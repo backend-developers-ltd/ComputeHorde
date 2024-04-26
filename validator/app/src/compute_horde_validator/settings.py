@@ -44,6 +44,10 @@ if env('ENV', default=None) is None:
 
 ENV = env('ENV', default='prod')
 
+DEFAULT_ADMIN_PASSWORD = env('DEFAULT_ADMIN_PASSWORD', default=None)
+DEFAULT_ADMIN_USERNAME = env('DEFAULT_ADMIN_USERNAME', default='admin')
+DEFAULT_ADMIN_EMAIL = env('DEFAULT_ADMIN_EMAIL', default='admin@admin.com')
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY')
 
@@ -54,7 +58,7 @@ ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     #  'django_prometheus',
-    'django.contrib.admin',
+    # 'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -64,6 +68,7 @@ INSTALLED_APPS = [
     'django_extensions',
     'django_probes',
     'compute_horde_validator.validator',
+    'compute_horde_validator.validator.admin_config.ValidatorAdminConfig',
 ]
 PROMETHEUS_EXPORT_MIGRATIONS = True
 PROMETHEUS_LATENCY_BUCKETS = (.008, .016, .032, .062, .125, .25, .5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, float("inf"))

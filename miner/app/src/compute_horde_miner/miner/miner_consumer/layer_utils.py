@@ -6,6 +6,7 @@ import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.em_protocol.miner_requests import OutputUpload, Volume
 from compute_horde.mv_protocol import validator_requests
+from compute_horde.utils import MachineSpecs
 from pydantic import root_validator
 
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
@@ -34,10 +35,13 @@ class JobRequest(pydantic.BaseModel):
 
     @root_validator()
     def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if bool(values.get("docker_image_name")) == bool(values.get("raw_script")):
-            raise ValueError("Expected only one, either `docker_image_name` or `raw_script`, not together")
+        if not (bool(values.get("docker_image_name")) or bool(values.get("raw_script"))):
+            raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
         return values
 
+class ExecutorSpecs(pydantic.BaseModel):
+    job_uuid: str
+    specs: MachineSpecs
 
 class ExecutorFinished(pydantic.BaseModel):
     job_uuid: str
@@ -107,6 +111,16 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
             await self._executor_finished(payload)
 
     @abc.abstractmethod
+    async def _executor_specs(self, event: dict):
+        ...
+
+    @log_errors_explicitly
+    async def executor_specs(self, event: dict):
+        payload = self.validate_event('executor_specs', ExecutorSpecs, event)
+        if payload:
+            await self._executor_specs(payload)
+
+    @abc.abstractmethod
     async def _executor_finished(self, msg: ExecutorFinished):
         ...
 
@@ -165,6 +179,19 @@ class ExecutorInterfaceMixin(BaseMixin):
             {
                 'type': 'executor.failed_to_prepare',
                 **ExecutorFailedToPrepare(executor_token=executor_token).dict(),
+            }
+        )
+
+    async def send_executor_specs(self, job_uuid: str, executor_token: str, specs: MachineSpecs):
+        group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        await self.channel_layer.group_send(
+            group_name,
+            {
+                'type': 'executor.specs',
+                **ExecutorSpecs(
+                    job_uuid=job_uuid,
+                    specs=specs,
+                ).dict(),
             }
         )
 

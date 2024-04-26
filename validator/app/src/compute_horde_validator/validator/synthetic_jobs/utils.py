@@ -17,6 +17,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
+    V0MachineSpecsRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
@@ -33,7 +34,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator import current
 
 JOB_LENGTH = 300
 TIMEOUT_LEEWAY = 1
-TIMEOUT_MARGIN = 10
+TIMEOUT_MARGIN = 60
 
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,8 @@ class MinerClient(AbstractMinerClient):
             V0JobFailedRequest | V0JobFinishedRequest
         ):
             self.miner_finished_or_failed_future.set_result(msg)
-            self.miner_finished_or_failed_timestamp = time.time()
+        elif isinstance(msg, V0MachineSpecsRequest):
+            pass
         else:
             raise UnsupportedMessageReceived(msg)
 
@@ -178,6 +180,7 @@ async def _execute_job(job: JobBase) -> tuple[
             docker_image_name=job_generator.docker_image_name(),
             docker_run_options_preset=job_generator.docker_run_options_preset(),
             docker_run_cmd=job_generator.docker_run_cmd(),
+            raw_script=job_generator.raw_script(),
             volume={
                 'volume_type': VolumeType.inline.value,
                 'contents': job_generator.volume_contents(),
@@ -222,6 +225,10 @@ async def _execute_job(job: JobBase) -> tuple[
                 job.comment = f'Miner finished but {comment}'
                 await job.asave()
                 return None, msg
+        elif isinstance(msg, V0MachineSpecsRequest):
+            # TODO handle machine specs
+            logger.debug(f'Miner {client.miner_name} sent machine specs: {msg}')
+            return None, msg
         else:
             raise ValueError(f'Unexpected msg: {msg}')
 

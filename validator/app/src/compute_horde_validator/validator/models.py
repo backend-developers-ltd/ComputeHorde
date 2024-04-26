@@ -7,6 +7,9 @@ class Miner(models.Model):
     hotkey = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f'hotkey: {self.hotkey}'
+
 
 class SyntheticJobBatch(models.Model):
     started_at = models.DateTimeField(auto_now_add=True)
@@ -31,6 +34,9 @@ class JobBase(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     comment = models.TextField(blank=True, default='')
     job_description = models.TextField(blank=True)
+
+    def __str__(self):
+        return f'uuid: {self.job_uuid} - miner hotkey: {self.miner.hotkey} - {self.status}'
 
 
 class SyntheticJob(JobBase):

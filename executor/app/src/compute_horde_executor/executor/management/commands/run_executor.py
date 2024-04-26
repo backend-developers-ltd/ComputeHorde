@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+import json
 import logging
 import pathlib
 import shlex
@@ -18,6 +19,7 @@ from compute_horde.em_protocol.executor_requests import (
     V0FailedRequest,
     V0FailedToPrepare,
     V0FinishedRequest,
+    V0MachineSpecsRequest,
     V0ReadyRequest,
 )
 from compute_horde.em_protocol.miner_requests import (
@@ -27,6 +29,7 @@ from compute_horde.em_protocol.miner_requests import (
     VolumeType,
 )
 from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
+from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -120,6 +123,11 @@ class MinerClient(AbstractMinerClient):
         await self.send_model(V0ReadyRequest(job_uuid=self.job_uuid))
 
     async def send_finished(self, job_result: 'JobResult'):
+        if job_result.specs:
+            await self.send_model(V0MachineSpecsRequest(
+                job_uuid=self.job_uuid,
+                specs=job_result.specs,
+            ))
         await self.send_model(V0FinishedRequest(
             job_uuid=self.job_uuid,
             docker_process_stdout=job_result.stdout,
@@ -152,6 +160,7 @@ class JobResult(pydantic.BaseModel):
     timeout: bool
     stdout: str
     stderr: str
+    specs: MachineSpecs | None = None
 
 
 def truncate(v: str) -> str:
@@ -173,6 +182,7 @@ class JobRunner:
         self.temp_dir = pathlib.Path(tempfile.mkdtemp())
         self.volume_mount_dir = self.temp_dir / 'volume'
         self.output_volume_mount_dir = self.temp_dir / 'output'
+        self.specs_volume_mount_dir = self.temp_dir / 'specs'
 
     async def prepare(self):
         self.volume_mount_dir.mkdir(exist_ok=True)
@@ -213,7 +223,8 @@ class JobRunner:
         docker_run_cmd = job_request.docker_run_cmd
 
         if job_request.raw_script:
-            docker_image = RunConfigManager.preset_to_image_for_raw_script(job_request.docker_run_options_preset)
+            if docker_image is None:
+                docker_image = RunConfigManager.preset_to_image_for_raw_script(job_request.docker_run_options_preset)
             raw_script_path = self.temp_dir / "script.py"
             raw_script_path.write_text(job_request.raw_script)
             extra_volume_flags = ["-v", f"{raw_script_path.absolute().as_posix()}:/script.py"]
@@ -234,6 +245,8 @@ class JobRunner:
             f'{self.volume_mount_dir.as_posix()}/:/volume/',
             '-v',
             f'{self.output_volume_mount_dir.as_posix()}/:/output/',
+            '-v',
+            f'{self.specs_volume_mount_dir.as_posix()}/:/specs/',
             *extra_volume_flags,
             docker_image,
             *docker_run_cmd,
@@ -262,6 +275,12 @@ class JobRunner:
             stderr = stderr.decode()
             exit_status = process.returncode
             timeout = False
+
+        # fetch machine specs if synthetic job generated
+        specs = None
+        if (self.specs_volume_mount_dir / 'specs.json').exists():
+            with open(self.specs_volume_mount_dir / 'specs.json') as f:
+                specs = MachineSpecs(specs=json.load(f))
 
         # Save the streams in output volume and truncate them in response.
         with open(self.output_volume_mount_dir / 'stdout.txt', 'w') as f:
@@ -299,6 +318,7 @@ class JobRunner:
             timeout=timeout,
             stdout=stdout,
             stderr=stderr,
+            specs=specs,
         )
 
     async def clean(self):
