@@ -1,6 +1,9 @@
+import logging
 import time
 
 import bittensor
+import requests
+
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
 
@@ -17,21 +20,27 @@ from compute_horde_validator.validator.utils import single_file_zip
 
 MAX_SCORE = 2
 
+logger = logging.getLogger(__name__)
+
 
 class WeightVersionHolder:
 
     def __init__(self):
         self._time_set = 0
-        self.value = None
+        self.value = 0  # fallback value
 
     def get(self):
         if time.time() - self._time_set > 300:
-            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-            hyperparameters = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
-            if hyperparameters is None:
-                raise RuntimeError("Network hyperparameters are None")
-            self.value = hyperparameters.weights_version
-            self._time_set = time.time()
+            try:
+                # TODO reading hyperparameters doesn't work because the version of bittensor lib we're using is too old
+                # this is temporary and will be removed ASAP
+                resp = requests.get(
+                    'https://raw.githubusercontent.com/backend-developers-ltd/weights_version/master/weights_version')
+                resp.raise_for_status()
+                self.value = int(resp.content)
+                self._time_set = time.time()
+            except Exception:
+                logger.exception("Encountered when fetching hyperparameters: ")
         return self.value
 
 
