@@ -5,4 +5,6 @@ set -eux -o pipefail
 
 IMAGE_NAME="backenddevelopersltd/compute-horde-miner-runner:v0-latest"
 MINER_IMAGE_REPO="compute-horde-miner"
-source _build-image.sh
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "${SCRIPT_DIR}/_build-image.sh"
