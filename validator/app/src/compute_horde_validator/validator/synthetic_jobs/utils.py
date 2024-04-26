@@ -88,6 +88,7 @@ class MinerClient(AbstractMinerClient):
             V0JobFailedRequest | V0JobFinishedRequest
         ):
             self.miner_finished_or_failed_future.set_result(msg)
+            self.miner_finished_or_failed_timestamp = time.time()
         elif isinstance(msg, V0MachineSpecsRequest):
             pass
         else:
