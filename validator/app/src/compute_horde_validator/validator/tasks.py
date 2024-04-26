@@ -5,7 +5,7 @@ from datetime import timedelta
 import billiard.exceptions
 import bittensor
 import celery.exceptions
-import torch
+import numpy as np
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
@@ -71,7 +71,7 @@ def do_set_weights(
     wait_for_inclusion: bool,
     wait_for_finalization: bool,
     version_key: int,
-) -> tuple[bool, str]:
+) -> bool:
     """
     Set weights. To be used in other celery tasks in order to facilitate a timeout,
      since the multiprocessing version of this doesn't work in celery.
@@ -82,8 +82,8 @@ def do_set_weights(
     return subtensor.set_weights(
         wallet=settings.BITTENSOR_WALLET(),
         netuid=netuid,
-        uids=torch.LongTensor(uids),
-        weights=torch.FloatTensor(weights),
+        uids=np.int64(uids),
+        weights=np.float32(weights),
         version_key=version_key,
         wait_for_inclusion=wait_for_inclusion,
         wait_for_finalization=wait_for_finalization,
@@ -112,8 +112,8 @@ def set_scores():
     if not score_per_uid:
         logger.info('No miners on the subnet to score')
         return
-    uids = torch.zeros(len(neurons), dtype=torch.long)
-    weights = torch.zeros(len(neurons), dtype=torch.float32)
+    uids = np.zeros(len(neurons), dtype=np.int64)
+    weights = np.zeros(len(neurons), dtype=np.float32)
     for ind, n in enumerate(neurons):
         uids[ind] = n.uid
         weights[ind] = score_per_uid.get(n.uid, 0)
@@ -150,7 +150,8 @@ def set_scores():
                 logger.info(f'Setting weights task id: {result.id}')
                 try:
                     with allow_join_result():
-                        success, message = result.get(timeout=WEIGHT_SETTING_TTL)
+                        success = result.get(timeout=WEIGHT_SETTING_TTL)
+                        message = 'bittensor lib error'
                 except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
                     result.revoke(terminate=True)
                     logger.info(f'Setting weights timed out (attempt #{try_number})')
@@ -158,9 +159,9 @@ def set_scores():
             except Exception:
                 logger.exception('Encountered when setting weights: ')
             if not success:
-                logger.info(f'Failed to set weights {message=} (attempt #{try_number})')
+                logger.info(f'Failed to set weights dut to {message=} (attempt #{try_number})')
             else:
-                logger.info(f'Successfully set weights!!! {message=} (attempt #{try_number})')
+                logger.info(f'Successfully set weights!!! (attempt #{try_number})')
                 break
         else:
             raise RuntimeError(f'Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts')
