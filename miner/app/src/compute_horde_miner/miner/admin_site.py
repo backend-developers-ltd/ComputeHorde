@@ -1,5 +1,4 @@
 from django.conf import settings
-
 from django.contrib.admin import AdminSite
 
 
