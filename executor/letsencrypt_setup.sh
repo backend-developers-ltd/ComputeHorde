@@ -1,4 +1,5 @@
-#!/bin/bash -eux
+#!/bin/bash
+set -eux -o pipefail
 
 RELPATH="$(dirname "$0")"
 ABSPATH="$(realpath "$RELPATH")"
