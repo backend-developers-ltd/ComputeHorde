@@ -1,4 +1,5 @@
-#!/bin/bash -eux
+#!/bin/bash
+set -eux -o pipefail
 
 BASE_IMAGE_NAME="backenddevelopersltd/compute-horde-job-base:v0-latest"
 IMAGE_NAME="backenddevelopersltd/compute-horde-job:v0-latest"
