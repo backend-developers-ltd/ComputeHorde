@@ -1,4 +1,5 @@
-#!/bin/bash -eux
+#!/bin/bash
+set -eux -o pipefail
 
 ( cd nginx && ./build-image.sh )
 

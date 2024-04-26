@@ -1,4 +1,5 @@
-#!/bin/bash -eux
+#!/bin/bash
+set -eux -o pipefail
 
 MINER_RUNNER_VERSION=$(git rev-parse HEAD)
 docker build \

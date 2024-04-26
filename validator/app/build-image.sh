@@ -1,4 +1,5 @@
-#!/bin/bash -eux
+#!/bin/bash
+set -eux -o pipefail
 
 IMAGE_NAME="backenddevelopersltd/compute-horde-validator:v0-latest"
 # Dockerfile assumes that build is run in the parent dir
