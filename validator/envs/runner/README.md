@@ -45,6 +45,9 @@ services:
 ```
 # generate one for yourself, e.g. `python3 -c 'import random; import string; print("".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(50)))'`
 SECRET_KEY=
+# password for user "admin"
+# generate one for yourself, e.g. `python3 -c 'import random; import string; print("".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(16)))'`
+DEFAULT_ADMIN_PASSWORD=
 # generate one for yourself, e.g. `python3 -c 'import random; import string; print("".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(15)))'`
 POSTGRES_PASSWORD=
 # don't change POSTGRES_PASSWORD after you start your validator for the first time (but you have generate it before that)
@@ -84,6 +87,21 @@ you may see an error like:
 ERROR: error while removing network: network ... has active endpoints
 ```
 it is inconsequential, and we will remove it soon.
+
+## Admin panel
+
+Your validator exposes an admin panel that allows you to check its health. For security purposes, it is only accessible
+at 127.0.0.1, so to access it, assuming you have SSH access to that machine do: 
+`ssh -L 8000:127.0.0.1:80 user@validator_machine`. After that you can access the panel on your local (the machine 
+on which you ran `ssh ...`) machine at `http://127.0.0.1:8000`. Important! the `80` in `ssh ...` will be different 
+if you set `HTTP_PORT`. If you don't, then 80 is the default. To log in you need to set up an admin password, either 
+in .env or manually.
+
+## Creating an admin user manually (not using DEFAULT_ADMIN_PASSWORD in .env)
+
+Run `docker-compose exec validator-runner docker-compose exec app python manage.py createsuperuser` and follow 
+the instructions.
+
 
 ## How it works
 
