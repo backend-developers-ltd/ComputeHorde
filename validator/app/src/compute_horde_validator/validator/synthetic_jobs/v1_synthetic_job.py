@@ -1,6 +1,7 @@
 import hashlib
 import pickle
 import secrets
+import random
 import string
 from base64 import b64encode
 from dataclasses import dataclass
@@ -29,8 +30,8 @@ class V1SyntheticJob(SyntheticJob):
 
     @classmethod
     def random_string(cls, num_letters: int, num_digits: int) -> str:
-        return "".join(secrets.choice(cls.ALPHABET) for _ in range(num_letters)) + "".join(
-            secrets.choice(cls.DIGITS) for _ in range(num_digits)
+        return "".join(random.choice(cls.ALPHABET) for _ in range(num_letters)) + "".join(
+            random.choice(cls.DIGITS) for _ in range(num_digits)
         )
 
 
