@@ -34,6 +34,7 @@ services:
     restart: unless-stopped
     env_file: ./.env
     environment:
+      - MINER_RUNNER_VERSION=${MINER_RUNNER_VERSION}
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
       - VENDOR_DIRECTORY=/root/vendor
     volumes:
@@ -120,7 +121,7 @@ services:
       "--keep", "^containrrr/watchtower",
       "--keep", "^stephanmisc/docuum:0.23.1",
       "--keep", "^backenddevelopersltd/compute-horde-miner-runner:v0-latest",
-      "--keep", "^backenddevelopersltd/compute-horde-miner:v0-(latest|preprod)",
+      "--keep", "^backenddevelopersltd/${MINER_IMAGE_REPO}:v0-(latest|preprod)",
       "--keep", "^backenddevelopersltd/compute-horde-miner-nginx:v0-latest",
       "--keep", "^backenddevelopersltd/compute-horde-job:v0-latest",
       "--keep", "^us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest",
