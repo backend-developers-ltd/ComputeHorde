@@ -5,6 +5,7 @@ import time
 from collections.abc import Iterable
 
 import bittensor
+from channels.layers import get_channel_layer
 from compute_horde.base_requests import BaseRequest
 from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
 from compute_horde.mv_protocol import miner_requests, validator_requests
@@ -31,6 +32,7 @@ from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import JobBase, Miner, SyntheticJob, SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.generator import current
+from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 JOB_LENGTH = 300
 TIMEOUT_LEEWAY = 1
@@ -226,8 +228,16 @@ async def _execute_job(job: JobBase) -> tuple[
                 await job.asave()
                 return None, msg
         elif isinstance(msg, V0MachineSpecsRequest):
-            # TODO handle machine specs
             logger.debug(f'Miner {client.miner_name} sent machine specs: {msg}')
+            channel_layer = get_channel_layer()
+            await channel_layer.group_send(
+                MACHINE_SPEC_GROUP_NAME,
+                {
+                    'type': 'machine.specs',
+                    'miner_hotkey': job.miner.hotkey,
+                    **msg.dict(),
+                }
+            )
             return None, msg
         else:
             raise ValueError(f'Unexpected msg: {msg}')
