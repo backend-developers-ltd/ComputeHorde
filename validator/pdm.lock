@@ -5,7 +5,7 @@
 groups = ["default", "format", "lint", "security_check", "test", "type_check"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:e8ba6095063ad758e8264dc75107c0cd4749345aa9093d7e83e5bcf650c6272e"
+content_hash = "sha256:dff2fbe4fa3be59520025346e8555c308a1ed656732d2cc94de16d954d54569d"
 
 [[package]]
 name = "aiohttp"
@@ -426,6 +426,23 @@ dependencies = [
 files = [
     {file = "channels-4.1.0-py3-none-any.whl", hash = "sha256:a3c4419307f582c3f71d67bfb6eff748ae819c2f360b9b141694d84f242baa48"},
     {file = "channels-4.1.0.tar.gz", hash = "sha256:e0ed375719f5c1851861f05ed4ce78b0166f9245ca0ecd836cb77d4bb531489d"},
+]
+
+[[package]]
+name = "channels-redis"
+version = "4.2.0"
+requires_python = ">=3.8"
+summary = "Redis-backed ASGI channel layer implementation"
+groups = ["default"]
+dependencies = [
+    "asgiref<4,>=3.2.10",
+    "channels",
+    "msgpack~=1.0",
+    "redis>=4.6",
+]
+files = [
+    {file = "channels_redis-4.2.0-py3-none-any.whl", hash = "sha256:2c5b944a39bd984b72aa8005a3ae11637bf29b5092adeb91c9aad4ab819a8ac4"},
+    {file = "channels_redis-4.2.0.tar.gz", hash = "sha256:01c26c4d5d3a203f104bba9e5585c0305a70df390d21792386586068162027fd"},
 ]
 
 [[package]]
