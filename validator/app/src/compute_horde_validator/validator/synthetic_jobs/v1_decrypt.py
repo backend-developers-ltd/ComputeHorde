@@ -22,20 +22,25 @@ def scrape_specs() -> dict[str, any]:
         nvidia_cmd = run_cmd('nvidia-smi --query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem --format=csv').splitlines()
         csv_data = csv.reader(nvidia_cmd)
         header = [x.strip() for x in next(csv_data)]
-        row = [x.strip() for x in next(csv_data)]
-        gpu_data = dict(zip(header, row))
-        data['gpu'] = {}
-        data['gpu']["name"] = gpu_data["name"]
-        data['gpu']["driver"] = gpu_data["driver_version"]
-        data['gpu']["memory_mb"] = gpu_data["memory.total [MiB]"].split(' ')[0]
-        data['gpu']["cuda_compute_cap"] = gpu_data["compute_cap"]
-        data['gpu']["power_limit"] = gpu_data["power.limit [W]"].split(' ')[0]
-        data['gpu']["graphics_speed"] = gpu_data["clocks.current.graphics [MHz]"].split(' ')[0]
-        data['gpu']["memory_speed"] = gpu_data["clocks.current.memory [MHz]"].split(' ')[0]
-
-        gpus = run_cmd('nvidia-smi -L | grep -Po \"NVIDIA[A-Za-z0-9-_ ]*\\b\"').splitlines()
-        data['gpu']['count'] = len(gpus)
-        data['gpu']['models'] = [ gpu for gpu in gpus ]
+        gpus = []
+        for row in csv_data:
+            row = [x.strip() for x in row]
+            gpu_data = dict(zip(header, row))
+            print(gpu_data)
+            gpus.append({
+                'name': gpu_data["name"],
+                'driver': gpu_data["driver_version"],
+                'capacity': gpu_data["memory.total [MiB]"].split(' ')[0],
+                'cuda': gpu_data["compute_cap"],
+                'power_limit': gpu_data["power.limit [W]"].split(' ')[0],
+                'graphics_speed': gpu_data["clocks.current.graphics [MHz]"].split(' ')[0],
+                'memory_speed': gpu_data["clocks.current.memory [MHz]"].split(' ')[0],
+            })
+        print(gpus)
+        data['gpu'] = {
+                'details': gpus,
+                'count': len(gpus)
+                }
     except Exception:
         # print(f'Error processing scraped gpu specs: {e}', flush=True)
         pass
@@ -54,12 +59,11 @@ def scrape_specs() -> dict[str, any]:
         data['hard_disk']['free'] = run_cmd('df . -P | sed -n 2p  | cut -d \' \' -f 13').strip()
 
         data['cpu'] = {}
-        data['cpu']['model'] = run_cmd('lscpu | grep -Po \"Model name:\\s*\\K.*\"').strip()
+        data['cpu']['model'] = run_cmd('lscpu | grep -Po \"^Model name:\\s*\\K.*\"').strip()
         data['cpu']['count'] = run_cmd('lscpu | grep -Po \"^CPU\\(s\\):\\s*\\K.*\"').strip()
 
-        cpu_data = run_cmd('lscpu --parse=MAXMHZ | grep -Po \"^[0-9,.]*$\"').splitlines()
-        csv_data = csv.reader(cpu_data)
-        data['cpu']['clocks'] = [ x[1] for x in csv_data ]
+        cpu_data = run_cmd('lscpu --parse=MHZ | grep -Po \"^[0-9,.]*$\"').splitlines()
+        data['cpu']['clocks'] = [ float(x) for x in cpu_data ]
     except Exception:
         # print(f'Error processing scraped specs: {e}', flush=True)
         pass
