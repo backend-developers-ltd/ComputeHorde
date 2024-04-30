@@ -307,6 +307,14 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
     wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
     return wallet
 
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(env.str('REDIS_HOST', default='redis'), env.int('REDIS_PORT', default='6379'))],
+        },
+    },
+}
 
 # Sentry
 if SENTRY_DSN := env('SENTRY_DSN', default=''):

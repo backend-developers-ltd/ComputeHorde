@@ -3,6 +3,7 @@ import datetime as dt
 import io
 import zipfile
 
+MACHINE_SPEC_GROUP_NAME = 'machine_spec_sending'
 
 def single_file_zip(filename: str, contents: str) -> str:
     in_memory_output = io.BytesIO()
