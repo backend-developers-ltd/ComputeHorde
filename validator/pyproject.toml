@@ -19,6 +19,7 @@ dependencies = [
     "ipython~=8.14.0",
     "nox==2023.4.22",
     "channels[daphne]==4.*",
+    "channels-redis>=4.2.0",
     "websockets==12.*",
     "compute-horde @ file:///${PROJECT_ROOT}/../compute_horde",
     "prometheus-client~=0.17.0",
