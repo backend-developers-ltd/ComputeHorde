@@ -57,6 +57,7 @@ class MinerClient(AbstractMinerClient):
         self.miner_ready_or_declining_timestamp: int = 0
         self.miner_finished_or_failed_future = asyncio.Future()
         self.miner_finished_or_failed_timestamp: int = 0
+        self.miner_machine_specs: V0MachineSpecsRequest | None = None
 
     def miner_url(self) -> str:
         return f'ws://{self.miner_address}:{self.miner_port}/v0.1/validator_interface/{self.my_hotkey}'
@@ -91,7 +92,7 @@ class MinerClient(AbstractMinerClient):
         ):
             self.miner_finished_or_failed_future.set_result(msg)
         elif isinstance(msg, V0MachineSpecsRequest):
-            pass
+            self.miner_machine_specs = msg
         else:
             raise UnsupportedMessageReceived(msg)
 
@@ -215,6 +216,20 @@ async def _execute_job(job: JobBase) -> tuple[
             return None, msg
         elif isinstance(msg, V0JobFinishedRequest):
             success, comment, score = job_generator.verify(msg, time_took)
+
+            # Send machine specs to facilitator
+            if client.miner_machine_specs is not None:
+                logger.debug(f'Miner {client.miner_name} sent machine specs: {client.miner_machine_specs}')
+                channel_layer = get_channel_layer()
+                await channel_layer.group_send(
+                    MACHINE_SPEC_GROUP_NAME,
+                    {
+                        'type': 'machine.specs',
+                        'miner_hotkey': job.miner.hotkey,
+                        **client.miner_machine_specs.dict(),
+                    }
+                )
+
             if success:
                 logger.info(f'Miner {client.miner_name} finished: {msg}')
                 job.status = JobBase.Status.COMPLETED
@@ -227,18 +242,6 @@ async def _execute_job(job: JobBase) -> tuple[
                 job.comment = f'Miner finished but {comment}'
                 await job.asave()
                 return None, msg
-        elif isinstance(msg, V0MachineSpecsRequest):
-            logger.debug(f'Miner {client.miner_name} sent machine specs: {msg}')
-            channel_layer = get_channel_layer()
-            await channel_layer.group_send(
-                MACHINE_SPEC_GROUP_NAME,
-                {
-                    'type': 'machine.specs',
-                    'miner_hotkey': job.miner.hotkey,
-                    **msg.dict(),
-                }
-            )
-            return None, msg
         else:
             raise ValueError(f'Unexpected msg: {msg}')
 
