@@ -1,8 +1,5 @@
-import time
 
-import bittensor
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
-from django.conf import settings
 
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     AbstractSyntheticJobGenerator,
@@ -22,17 +19,10 @@ class WeightVersionHolder:
 
     def __init__(self):
         self._time_set = 0
-        self.value = None
+        self.value = 1
 
     def get(self):
-        if time.time() - self._time_set > 300:
-            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-            hyperparameters = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
-            if hyperparameters is None:
-                raise RuntimeError("Network hyperparameters are None")
-            self.value = hyperparameters.weights_version
-            self._time_set = time.time()
-        return self.value
+        return 1
 
 
 weights_version_holder = WeightVersionHolder()
