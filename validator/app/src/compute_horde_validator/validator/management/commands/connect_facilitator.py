@@ -14,6 +14,7 @@ import pydantic
 import tenacity
 import websockets
 from asgiref.sync import async_to_sync, sync_to_async
+from channels.layers import get_channel_layer
 from compute_horde.miner_client.base import MinerConnectionError
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
@@ -36,7 +37,10 @@ from pydantic import BaseModel, Extra, Field, root_validator
 
 from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
-from compute_horde_validator.validator.utils import Timer
+from compute_horde_validator.validator.utils import (
+    MACHINE_SPEC_GROUP_NAME,
+    Timer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +130,11 @@ class JobStatusUpdate(BaseModel, extra=Extra.forbid):
     status: Literal['failed', 'rejected', 'accepted', 'completed']
     metadata: JobStatusMetadata | None = None
 
+class MachineSpecsUpdate(BaseModel, extra=Extra.forbid):
+    message_type: str = 'V0MachineSpecsUpdate'
+    miner_hotkey: str
+    validator_hotkey: str
+    specs: dict[str, Any]
 
 @cache
 def get_dummy_inline_zip_volume() -> str:
@@ -186,6 +195,8 @@ class FacilitatorClient:
         self.miner_drivers = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
+        self.channel_layer = get_channel_layer()
+        self.channel_name = None
 
     def connect(self):
         """ Create an awaitable/async-iterable websockets.connect() object """
@@ -219,6 +230,14 @@ class FacilitatorClient:
 
     async def run_forever(self) -> NoReturn:
         """ connect (and re-connect) to facilitator and keep reading messages ... forever """
+
+        # setup channel for receiving machine specs
+        self.channel_name = await self.channel_layer.new_channel()
+        await self.channel_layer.group_add(MACHINE_SPEC_GROUP_NAME, self.channel_name)
+
+
+        # send machine specs to facilitator
+        self.specs_task = asyncio.create_task(self.wait_for_specs())
         async for ws in self.connect():
             try:
                 await self.handle_connection(ws)
@@ -242,6 +261,25 @@ class FacilitatorClient:
 
         async for raw_msg in ws:
             await self.handle_message(raw_msg)
+
+    async def wait_for_specs(self):
+        specs_queue = []
+        while True:
+            validator_hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address
+            msg = await self.channel_layer.receive(self.channel_name)
+            specs = MachineSpecsUpdate(
+                specs=msg['specs'],
+                miner_hotkey=msg['miner_hotkey'],
+                validator_hotkey=validator_hotkey,
+            )
+            logger.debug(f"sending machine specs update to facilitator: {specs}")
+
+            if self.ws is None:
+                specs_queue.append(specs)
+            else:
+                while len(specs_queue) > 0:
+                    await self.send_model(specs_queue.pop(0))
+                await self.send_model(specs)
 
     async def heartbeat(self):
         while True:
