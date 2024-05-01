@@ -52,9 +52,9 @@ def scrape_specs() -> dict[str, any]:
         data['ram']['free'] = run_cmd('cat /proc/meminfo | grep -P "MemFree" | grep -o \"[0-9]*\"').strip()
         data['ram']['available'] = run_cmd('cat /proc/meminfo | grep -P "MemAvailable" | grep -o \"[0-9]*\"').strip()
         data['hard_disk'] = {}
-        data['hard_disk']['total'] = run_cmd('df . -P | sed -n 2p  | cut -d \' \' -f 9').strip()
-        data['hard_disk']['used'] = run_cmd('df . -P | sed -n 2p  | cut -d \' \' -f 10').strip()
-        data['hard_disk']['free'] = run_cmd('df . -P | sed -n 2p  | cut -d \' \' -f 13').strip()
+        data['hard_disk']['total'] = run_cmd('df . -P | sed -nr \'s/\\s+/ /g;2p\' | cut -d \' \' -f 2').strip()
+        data['hard_disk']['used'] = run_cmd('df . -P | sed -nr \'s/\\s+/ /g;2p\' | cut -d \' \' -f 3').strip()
+        data['hard_disk']['free'] = run_cmd('df . -P | sed -nr \'s/\\s+/ /g;2p\' | cut -d \' \' -f 4').strip()
 
         data['cpu'] = {}
         data['cpu']['model'] = run_cmd('lscpu | grep -Po \"^Model name:\\s*\\K.*\"').strip()
