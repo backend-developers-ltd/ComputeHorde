@@ -77,7 +77,7 @@ def scrape_specs() -> dict[str, any]:
         ]:
             data["ram"][key] = int(
                 re.search(rf"^{name}:\s*(\d+)\s+kB$", meminfo, re.M).group(1)
-            ) // 1024
+            )
         data["ram"]["used"] = data["ram"]["total"] - data["ram"]["free"]
     except Exception:
         # print(f"Error reading /proc/meminfo; Exc: {e}", file=sys.stderr)
@@ -87,7 +87,7 @@ def scrape_specs() -> dict[str, any]:
     try:
         disk_usage = shutil.disk_usage(".")
         data["hard_disk"] = {
-            "total": disk_usage.total // 1024,
+            "total": disk_usage.total // 1024, # in kiB
             "used": disk_usage.used // 1024,
             "free": disk_usage.free // 1024,
         }
