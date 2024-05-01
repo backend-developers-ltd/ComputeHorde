@@ -40,7 +40,10 @@ def scrape_specs() -> dict[str, any]:
                 'count': len(gpus)
                 }
     except Exception:
-        # print(f'Error processing scraped gpu specs: {e}', flush=True)
+        data['gpu'] = {
+            'details': [],
+            'count': 0
+        }
         pass
     try:
         data['os'] = run_cmd('lsb_release -d | grep -Po \"Description:\\s*\\K.*\"').strip()
