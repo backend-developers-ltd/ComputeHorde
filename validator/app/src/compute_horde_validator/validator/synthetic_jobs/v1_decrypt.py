@@ -2,6 +2,8 @@ import csv
 import hashlib
 import json
 import pickle
+import re
+import shutil
 import subprocess
 from base64 import b64encode
 
@@ -10,61 +12,98 @@ from cryptography.fernet import Fernet
 
 def run_cmd(cmd):
     try:
-        return subprocess.check_output(['bash', '-c', cmd]).decode()
+        return subprocess.check_output(cmd, shell=True).decode()
     except Exception:
-        # print(f'Error running command {cmd}: {e}', flush=True)
         return ""
 
 def scrape_specs() -> dict[str, any]:
     data: dict[str, any] = {}
 
+    gpus = []
     try:
-        nvidia_cmd = run_cmd('nvidia-smi --query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem --format=csv').splitlines()
+        nvidia_cmd = run_cmd(
+            "nvidia-smi --query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem --format=csv"
+        ).splitlines()
         csv_data = csv.reader(nvidia_cmd)
         header = [x.strip() for x in next(csv_data)]
-        gpus = []
         for row in csv_data:
             row = [x.strip() for x in row]
             gpu_data = dict(zip(header, row))
-            gpus.append({
-                'name': gpu_data["name"],
-                'driver': gpu_data["driver_version"],
-                'capacity': gpu_data["memory.total [MiB]"].split(' ')[0],
-                'cuda': gpu_data["compute_cap"],
-                'power_limit': gpu_data["power.limit [W]"].split(' ')[0],
-                'graphics_speed': gpu_data["clocks.current.graphics [MHz]"].split(' ')[0],
-                'memory_speed': gpu_data["clocks.current.memory [MHz]"].split(' ')[0],
-            })
-        data['gpu'] = {
-                'details': gpus,
-                'count': len(gpus)
+            gpus.append(
+                {
+                    "name": gpu_data["name"],
+                    "driver": gpu_data["driver_version"],
+                    "capacity": gpu_data["memory.total [MiB]"].split(" ")[0],
+                    "cuda": gpu_data["compute_cap"],
+                    "power_limit": gpu_data["power.limit [W]"].split(" ")[0],
+                    "graphics_speed": gpu_data["clocks.current.graphics [MHz]"].split(
+                        " "
+                    )[0],
+                    "memory_speed": gpu_data["clocks.current.memory [MHz]"].split(" ")[
+                        0
+                    ],
                 }
+            )
     except Exception:
         # print(f'Error processing scraped gpu specs: {e}', flush=True)
         pass
+    data["gpu"] = {"details": gpus, "count": len(gpus)}
+
+    data["cpu"] = {}
     try:
-        data['os'] = run_cmd('lsb_release -d | grep -Po \"Description:\\s*\\K.*\"').strip()
-        data['virtualization'] = run_cmd('virt-what').strip()
+        lscpu_output = run_cmd("lscpu")
+        data["cpu"]["model"] = re.search(
+            r"Model name:\s*(.*)$", lscpu_output, re.M
+        ).group(1)
+        data["cpu"]["count"] = int(
+            re.search(r"CPU\(s\):\s*(.*)", lscpu_output).group(1)
+        )
 
-        data['ram'] = {}
-        data['ram']['total'] = run_cmd('cat /proc/meminfo | grep -P "MemTotal" | grep -o \"[0-9]*\"').strip()
-        data['ram']['used'] = run_cmd('cat /proc/meminfo | grep -P "MemUsed" | grep -o \"[0-9]*\"').strip()
-        data['ram']['free'] = run_cmd('cat /proc/meminfo | grep -P "MemFree" | grep -o \"[0-9]*\"').strip()
-        data['ram']['available'] = run_cmd('cat /proc/meminfo | grep -P "MemAvailable" | grep -o \"[0-9]*\"').strip()
-        data['hard_disk'] = {}
-        data['hard_disk']['total'] = run_cmd('df . -P | sed -n 2p  | cut -d \' \' -f 9').strip()
-        data['hard_disk']['used'] = run_cmd('df . -P | sed -n 2p  | cut -d \' \' -f 10').strip()
-        data['hard_disk']['free'] = run_cmd('df . -P | sed -n 2p  | cut -d \' \' -f 13').strip()
-
-        data['cpu'] = {}
-        data['cpu']['model'] = run_cmd('lscpu | grep -Po \"^Model name:\\s*\\K.*\"').strip()
-        data['cpu']['count'] = run_cmd('lscpu | grep -Po \"^CPU\\(s\\):\\s*\\K.*\"').strip()
-
-        cpu_data = run_cmd('lscpu --parse=MHZ | grep -Po \"^[0-9,.]*$\"').splitlines()
-        data['cpu']['clocks'] = [ float(x) for x in cpu_data ]
+        cpu_data = run_cmd('lscpu --parse=MHZ | grep -Po "^[0-9,.]*$"').splitlines()
+        data["cpu"]["clocks"] = [float(x) for x in cpu_data]
     except Exception:
-        # print(f'Error processing scraped specs: {e}', flush=True)
+        # print(f'Error getting cpu specs: {e}', flush=True)
         pass
+
+    data["ram"] = {}
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = f.read()
+
+        for name, key in [
+            ("MemAvailable", "available"),
+            ("MemFree", "free"),
+            ("MemTotal", "total"),
+        ]:
+            data["ram"][key] = int(
+                re.search(rf"^{name}:\s*(\d+)\s+kB$", meminfo, re.M).group(1)
+            )
+        data["ram"]["used"] = data["ram"]["total"] - data["ram"]["free"]
+    except Exception:
+        # print(f"Error reading /proc/meminfo; Exc: {e}", file=sys.stderr)
+        pass
+
+    data["hard_disk"] = {}
+    try:
+        disk_usage = shutil.disk_usage(".")
+        data["hard_disk"] = {
+            "total": disk_usage.total // 1024, # in kiB
+            "used": disk_usage.used // 1024,
+            "free": disk_usage.free // 1024,
+        }
+    except Exception:
+        # print(f"Error getting disk_usage from shutil: {e}", file=sys.stderr)
+        pass
+
+    try:
+        data["os"] = run_cmd(
+            'lsb_release -d | grep -Po "Description:\\s*\\K.*"'
+        ).strip()
+        data["virtualization"] = run_cmd("virt-what").strip()
+    except Exception:
+        # print(f'Error getting os specs: {e}', flush=True)
+        pass
+
     return data
 
 # json dump to file
