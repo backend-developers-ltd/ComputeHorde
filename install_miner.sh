@@ -139,3 +139,33 @@ docker pull backenddevelopersltd/compute-horde-job:v0-latest
 docker compose up -d
 
 ENDSSH
+
+set +x
+MINER_HOSTNAME=$(ssh -G "$SSH_DESTINATION" | grep '^hostname' | cut -d' ' -f2)
+
+for run in {1..10}
+do
+  echo "Checking miner status..."
+
+  STATUS_CODE=$(curl --silent --max-time 2 --output /dev/null --write-out "%{http_code}" "http://$MINER_HOSTNAME:8000/admin/login/" || true)
+  if [[ $STATUS_CODE -eq 200 ]]
+  then
+    cat <<'EOF'
+  ____                            _         _       _   _                 _
+ / ___|___  _ __   __ _ _ __ __ _| |_ _   _| | __ _| |_(_) ___  _ __  ___| |
+| |   / _ \| '_ \ / _` | '__/ _` | __| | | | |/ _` | __| |/ _ \| '_ \/ __| |
+| |__| (_) | | | | (_| | | | (_| | |_| |_| | | (_| | |_| | (_) | | | \__ \_|
+ \____\___/|_| |_|\__, |_|  \__,_|\__|\__,_|_|\__,_|\__|_|\___/|_| |_|___(_)
+                  |___/
+EOF
+
+    echo "Miner installed successfully"
+    exit 0
+  fi
+
+  sleep "$run"
+done
+
+>&2 echo "Cannot connect to miner. Please check if everything is installed and running properly."
+>&2 echo "Also make sure port 8000 is reachable from outside (i.e. not blocked in firewall)."
+exit 1
