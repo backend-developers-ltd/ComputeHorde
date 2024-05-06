@@ -3,9 +3,9 @@
 A Facilitator need to have a websocket endpoint `/ws/v0/` that validators connect to.
 The communication consists of the following steps:
 
-1. Validator connects to facilitator via websockets at `/ws/v0/`
+1. Validator connects to facilitator via websockets at `/ws/v0/`.
 2. Validator sends `AuthenticationRequest` message (and wait for `Response`). This is done once per connection.
-3. Validator and facilitator enters in a job loop
+3. Validator and facilitator enters in a job loop:
     1. Validator waits for a job
     2. Facilitator sends `JobRequest` message
     3. Validator sends `JobStatusUpdate` message when there is new info about the job and wait for `Response` from
