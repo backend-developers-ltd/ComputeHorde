@@ -1,6 +1,6 @@
-# Facilitator Protocol
+# Facilitator Protocol v0
 
-A Facilitator need to have one websocket endpoint `/ws/v0/` that validators connect to.
+A Facilitator need to have a websocket endpoint `/ws/v0/` that validators connect to.
 The communication consists of the following steps:
 
 1. Validator connects to facilitator via websockets at `/ws/v0/`
