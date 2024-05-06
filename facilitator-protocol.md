@@ -31,9 +31,7 @@ sequenceDiagram
     facilitator->>validator: Response
 ```
 
-## Message schemas
-
-### `AuthenticationRequest`
+## `AuthenticationRequest` message
 
 ```json
 {
@@ -48,7 +46,7 @@ sequenceDiagram
 | `public_key` | the hex of the public key of validator hotkey                                                         |
 | `signature`  | the hex of the signature of the validator hotkey's public key with the private key prefixed with `0x` |
 
-### `JobRequest`
+## `JobRequest` message
 
 ```json
 {
@@ -81,7 +79,7 @@ sequenceDiagram
 | input_url    | URL to a zip file to be mounted in the job environment                                               |
 | output_url   | URL to upload output volume to, miner will do a PUT request with a zip file containing output volume |
 
-### `JobStatusUpdate`
+## `JobStatusUpdate` message
 
 ```json
 {
@@ -108,7 +106,7 @@ sequenceDiagram
 | metadata.comment        | summery of the metadata                               |
 | metadata.miner_response | (optional) the response of miner when a job completes |
 
-### `Response`
+## `Response` message
 
 ```json
 {
