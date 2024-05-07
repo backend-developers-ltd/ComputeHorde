@@ -99,8 +99,8 @@ class JobRequest(BaseModel, extra=Extra.forbid):
 
     @root_validator()
     def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if not (bool(values.get("docker_image_name")) or bool(values.get("raw_script"))):
-            raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
+        if not (bool(values.get("docker_image")) or bool(values.get("raw_script"))):
+            raise ValueError("Expected at least one of `docker_image` or `raw_script`")
         return values
 
 
