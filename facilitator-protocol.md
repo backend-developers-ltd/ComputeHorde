@@ -4,11 +4,11 @@ A Facilitator need to have a websocket endpoint `/ws/v0/` that validators connec
 The communication consists of the following steps:
 
 1. Validator connects to facilitator via websockets at `/ws/v0/`.
-2. Validator sends `AuthenticationRequest` message (and wait for `Response`). This is done once per connection.
+2. Validator sends `V0AuthenticationRequest` message (and wait for `Response`). This is done once per connection.
 3. Validator and facilitator enters in a job loop:
     1. Validator waits for a job
-    2. Facilitator sends `JobRequest` message
-    3. Validator sends `JobStatusUpdate` message when there is new info about the job and wait for `Response` from
+    2. Facilitator sends `V0JobRequest` message
+    3. Validator sends `V0JobStatusUpdate` message when there is new info about the job and wait for `Response` from
        facilitator (i.e., after sending the job to a miner, after a miner accepts the job, after the job has
        finished/failed)
 4. Validator sends a `V0Heartbeat` message periodically (i.e. every 60 seconds) as long as the connection is open.
@@ -21,18 +21,18 @@ sequenceDiagram
     participant facilitator
 
     validator->>facilitator: connect
-    validator->>facilitator: AuthenticationRequest
+    validator->>facilitator: V0AuthenticationRequest
     facilitator->>validator: Response
 
-    facilitator->>validator: <br/><br/>JobRequest
+    facilitator->>validator: <br/><br/>V0JobRequest
 
-    validator->>facilitator: <br/><br/>JobStatusUpdate
+    validator->>facilitator: <br/><br/>V0JobStatusUpdate
     facilitator->>validator: Response
-    validator->>facilitator: <br/><br/>JobStatusUpdate
+    validator->>facilitator: <br/><br/>V0JobStatusUpdate
     facilitator->>validator: Response
 ```
 
-## `AuthenticationRequest` message
+## `V0AuthenticationRequest` message
 
 ```json
 {
@@ -47,7 +47,7 @@ sequenceDiagram
 | `public_key` | the hex of the public key of validator hotkey                                                         |
 | `signature`  | the hex of the signature of the validator hotkey's public key with the private key prefixed with `0x` |
 
-## `JobRequest` message
+## `V0JobRequest` message
 
 ```json
 {
@@ -80,7 +80,7 @@ sequenceDiagram
 | input_url    | URL to a zip file to be mounted in the job environment                                               |
 | output_url   | URL to upload output volume to, miner will do a PUT request with a zip file containing output volume |
 
-## `JobStatusUpdate` message
+## `V0JobStatusUpdate` message
 
 ```json
 {
