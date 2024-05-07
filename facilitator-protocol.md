@@ -11,6 +11,7 @@ The communication consists of the following steps:
     3. Validator sends `JobStatusUpdate` message when there is new info about the job and wait for `Response` from
        facilitator (i.e., after sending the job to a miner, after a miner accepts the job, after the job has
        finished/failed)
+4. Validator sends a `V0Heartbeat` message periodically (i.e. every 60 seconds) as long as the connection is open.
 
 Sequence diagram:
 
@@ -114,6 +115,14 @@ sequenceDiagram
 | message_type          | `V0JobFailedRequest` if job failed, `V0JobFinishedRequest` if succeeded |
 | docker_process_stderr | standard out of job process                                             |
 | docker_process_stdout | standard error of job process                                           |
+
+## `Heartbeat` message
+
+```json
+{
+  "message_type": "V0Heartbeat"
+}
+```
 
 ## `Response` message
 
