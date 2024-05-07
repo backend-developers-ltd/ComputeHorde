@@ -1,3 +1,4 @@
+import datetime
 import enum
 from collections.abc import Mapping
 from typing import Any
@@ -14,6 +15,7 @@ class RequestType(enum.Enum):
     V0InitialJobRequest = 'V0InitialJobRequest'
     V0MachineSpecsRequest = 'V0MachineSpecsRequest'
     V0JobRequest = 'V0JobRequest'
+    V0ReceiptRequest = 'V0ReceiptRequest'
     GenericError = 'GenericError'
 
 
@@ -85,10 +87,34 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
             raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
         return values
 
+
 class V0MachineSpecsRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0MachineSpecsRequest
     specs: MachineSpecs
 
+
 class GenericError(BaseValidatorRequest):
     message_type: RequestType = RequestType.GenericError
     details: str | None = None
+
+
+class ReceiptPayload(pydantic.BaseModel):
+    job_uuid: str
+    miner_hotkey: str
+    # TODO: include validator hotkey as well? (if anyone wants to verify the signatures)
+    time_started: datetime.datetime
+    time_took: datetime.timedelta
+    score: float
+
+    def blob_for_signing(self):
+        return self.json(sort_keys=True)
+
+
+class V0ReceiptRequest(BaseValidatorRequest):
+    message_type: RequestType = RequestType.V0ReceiptRequest
+    payload: ReceiptPayload
+    validator_signature: str
+    miner_signature: str | None = None
+
+    def blob_for_signing(self):
+        return self.payload.blob_for_signing()

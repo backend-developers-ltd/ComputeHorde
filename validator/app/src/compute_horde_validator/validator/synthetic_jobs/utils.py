@@ -22,9 +22,11 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
+    ReceiptPayload,
     V0AuthenticateRequest,
     V0InitialJobRequest,
     V0JobRequest,
+    V0ReceiptRequest,
     VolumeType,
 )
 from compute_horde.utils import MachineSpecs
@@ -107,6 +109,21 @@ class MinerClient(AbstractMinerClient):
         return V0AuthenticateRequest(
             payload=payload,
             signature=f"0x{self.keypair.sign(payload.blob_for_signing()).hex()}"
+        )
+
+    def generate_receipt_message(self, job: JobBase, started_timestamp: float, time_took_seconds: float, score: float) -> V0ReceiptRequest:
+        time_started = datetime.datetime.fromtimestamp(started_timestamp, datetime.UTC)
+        time_took = datetime.timedelta(seconds=time_took_seconds)
+        receipt_payload = ReceiptPayload(
+            job_uuid=str(job.job_uuid),
+            miner_hotkey=job.miner.hotkey,
+            time_started=time_started,
+            time_took=time_took,
+            score=score,
+        )
+        return V0ReceiptRequest(
+            payload=receipt_payload,
+            validator_signature=f"0x{self.keypair.sign(receipt_payload.blob_for_signing()).hex()}"
         )
 
     async def _connect(self):
@@ -237,7 +254,16 @@ async def _execute_job(job: JobBase) -> tuple[
                 job.status = JobBase.Status.COMPLETED
                 job.comment = f'Miner finished: {msg.json()}'
                 await job.asave()
-                return score, msg
+
+                try:
+                    receipt_message = client.generate_receipt_message(job, full_job_sent, time_took, score)
+                    logger.info(f'Receipt message: {receipt_message}')
+                    await client.send_model(receipt_message)
+                    logger.info('Receipt message sent')
+                except Exception:
+                    logger.exception(f'Failed to send receipt to miner {client.miner_name} for job {job.job_uuid}')
+                finally:
+                    return score, msg
             else:
                 logger.info(f'Miner {client.miner_name} finished but {comment}')
                 job.status = JobBase.Status.FAILED

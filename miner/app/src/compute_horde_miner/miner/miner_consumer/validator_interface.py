@@ -115,6 +115,16 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
         return False, 'Signature mismatches'
 
+    def verify_receipt_msg(self, msg: validator_requests.V0ReceiptRequest) -> bool:
+        if msg.payload.miner_hotkey != self.my_hotkey:
+            return False
+
+        keypair = bittensor.Keypair(ss58_address=self.validator_key)
+        if keypair.verify(msg.blob_for_signing(), msg.validator_signature):
+            return True
+
+        return False
+
     async def handle_authentication(self, msg: validator_requests.V0AuthenticateRequest):
         if settings.DEBUG_TURN_AUTHENTICATION_OFF:
             logger.critical(f'Validator {self.validator_key} passed authentication without checking, because '
@@ -181,6 +191,11 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.status = AcceptedJob.Status.RUNNING
             job.full_job_details = msg.dict()
             await job.asave()
+
+        if isinstance(msg, validator_requests.V0ReceiptRequest) and self.verify_receipt_msg(msg):
+            keypair = settings.BITTENSOR_WALLET().get_hotkey()
+            msg.miner_signature = f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
+            # TODO: store the receipt
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
