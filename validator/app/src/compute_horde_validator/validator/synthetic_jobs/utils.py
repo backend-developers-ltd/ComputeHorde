@@ -117,6 +117,7 @@ class MinerClient(AbstractMinerClient):
         receipt_payload = ReceiptPayload(
             job_uuid=str(job.job_uuid),
             miner_hotkey=job.miner.hotkey,
+            validator_hotkey=self.my_hotkey,
             time_started=time_started,
             time_took=time_took,
             score=score,

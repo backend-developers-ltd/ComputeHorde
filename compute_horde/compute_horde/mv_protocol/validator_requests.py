@@ -101,7 +101,7 @@ class GenericError(BaseValidatorRequest):
 class ReceiptPayload(pydantic.BaseModel):
     job_uuid: str
     miner_hotkey: str
-    # TODO: include validator hotkey as well? (if anyone wants to verify the signatures)
+    validator_hotkey: str
     time_started: datetime.datetime
     time_took: datetime.timedelta
     score: float

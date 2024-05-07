@@ -118,6 +118,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
     def verify_receipt_msg(self, msg: validator_requests.V0ReceiptRequest) -> bool:
         if msg.payload.miner_hotkey != self.my_hotkey:
             return False
+        if msg.payload.validator_hotkey != self.validator_key:
+            return False
 
         keypair = bittensor.Keypair(ss58_address=self.validator_key)
         if keypair.verify(msg.blob_for_signing(), msg.validator_signature):
