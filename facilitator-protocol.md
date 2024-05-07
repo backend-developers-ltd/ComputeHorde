@@ -106,6 +106,15 @@ sequenceDiagram
 | metadata.comment        | summary of the metadata                               |
 | metadata.miner_response | (optional) the response of miner when a job completes |
 
+`metadata.miner_response`:
+
+| Field                 | Details                                                                 |
+|-----------------------|-------------------------------------------------------------------------|
+| job_uuid              | the unique job uuid this status is for                                  |
+| message_type          | `V0JobFailedRequest` if job failed, `V0JobFinishedRequest` if succeeded |
+| docker_process_stderr | standard out of job process                                             |
+| docker_process_stdout | standard error of job process                                           |
+
 ## `Response` message
 
 ```json
