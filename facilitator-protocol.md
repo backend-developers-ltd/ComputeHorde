@@ -103,7 +103,7 @@ sequenceDiagram
 | uuid                    | the unique job uuid this status is for                |
 | status                  | `failed`, `rejected`, `accepted` or, `completed`      |
 | metadata                | (optional) the metadata for this status               |
-| metadata.comment        | summery of the metadata                               |
+| metadata.comment        | summary of the metadata                               |
 | metadata.miner_response | (optional) the response of miner when a job completes |
 
 ## `Response` message
