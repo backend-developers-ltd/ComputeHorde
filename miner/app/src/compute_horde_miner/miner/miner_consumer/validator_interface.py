@@ -21,7 +21,7 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ExecutorReady,
     ValidatorInterfaceMixin,
 )
-from compute_horde_miner.miner.models import AcceptedJob, Validator, ValidatorBlacklist
+from compute_horde_miner.miner.models import AcceptedJob, Validator, ValidatorBlacklist, JobReceipt
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         return False, 'Signature mismatches'
 
     def verify_receipt_msg(self, msg: validator_requests.V0ReceiptRequest) -> bool:
-        if msg.payload.miner_hotkey != self.my_hotkey:
+        if self.my_hotkey != DONT_CHECK and msg.payload.miner_hotkey != self.my_hotkey:
             return False
         if msg.payload.validator_hotkey != self.validator_key:
             return False
@@ -195,9 +195,26 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await job.asave()
 
         if isinstance(msg, validator_requests.V0ReceiptRequest) and self.verify_receipt_msg(msg):
+            logger.debug(f'Received receipt for job_uuid: {msg.payload.job_uuid}')
+            job = await AcceptedJob.objects.aget(job_uuid=msg.payload.job_uuid)
+            job.time_took = msg.payload.time_took
+            job.score = msg.payload.score
+            await job.asave()
+
             keypair = settings.BITTENSOR_WALLET().get_hotkey()
             msg.miner_signature = f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
-            # TODO: store the receipt
+
+            await JobReceipt.objects.acreate(
+                job=job,
+                validator_signature=msg.validator_signature,
+                miner_signature=msg.miner_signature,
+                job_uuid=msg.payload.job_uuid,  # TODO
+                miner_hotkey=msg.payload.miner_hotkey,  # TODO
+                validator_hotkey=msg.payload.validator_hotkey,  # TODO
+                time_started=msg.payload.time_started,
+                time_took=msg.payload.time_took,
+                score=msg.payload.score,
+            )
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)

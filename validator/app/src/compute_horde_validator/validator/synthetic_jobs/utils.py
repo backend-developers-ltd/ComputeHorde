@@ -258,7 +258,6 @@ async def _execute_job(job: JobBase) -> tuple[
 
                 try:
                     receipt_message = client.generate_receipt_message(job, full_job_sent, time_took, score)
-                    logger.info(f'Receipt message: {receipt_message}')
                     await client.send_model(receipt_message)
                     logger.info('Receipt message sent')
                 except Exception:

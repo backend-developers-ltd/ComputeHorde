@@ -1,7 +1,7 @@
 from django.contrib import admin  # noqa
 from django.contrib.admin import register, AdminSite  # noqa
 
-from compute_horde_miner.miner.models import AcceptedJob, Validator, ValidatorBlacklist
+from compute_horde_miner.miner.models import AcceptedJob, Validator, ValidatorBlacklist, JobReceipt
 
 
 admin.site.site_header = "ComputeHorde Miner Administration"
@@ -23,14 +23,22 @@ class ReadOnlyAdmin(admin.ModelAdmin):
     def has_delete_permission(self, *args, **kwargs):
         return False
 
+
 class ValidatorReadOnlyAdmin(ReadOnlyAdmin):
     search_fields = ['public_key']
+
 
 class AcceptedJobReadOnlyAdmin(ReadOnlyAdmin):
     list_display = ['job_uuid', 'validator', 'status', 'result_reported_to_validator', 'created_at', 'updated_at']
     search_fields = ['job_uuid', 'validator__public_key']
     ordering = ['-created_at']
 
+
+class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+    list_display = ['job_uuid', 'synced_with_storage']
+
+
 admin.site.register(AcceptedJob, admin_class=AcceptedJobReadOnlyAdmin)
 admin.site.register(Validator, admin_class=ValidatorReadOnlyAdmin)
+admin.site.register(JobReceipt, admin_class=JobReceiptsReadOnlyAdmin)
 admin.site.register(ValidatorBlacklist)
