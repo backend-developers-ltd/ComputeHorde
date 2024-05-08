@@ -25,6 +25,8 @@ class WeightVersionHolder:
         self.value = None
 
     def get(self):
+        if settings.DEBUG_WEIGHTS_VERSION is not None:
+            return settings.DEBUG_WEIGHTS_VERSION
         if time.time() - self._time_set > 300:
             subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
             hyperparameters = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
@@ -101,7 +103,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def score(self, time_took: float) -> float:
         if self._weights_version == 0:
             return MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds())))
-        elif self._weights_version == 1:
+        elif self._weights_version in (1, 2):
             return 1 / time_took
         else:
             raise RuntimeError(f"No score function for weights_version: {self._weights_version}")

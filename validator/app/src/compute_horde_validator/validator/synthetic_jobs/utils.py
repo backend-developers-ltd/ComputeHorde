@@ -29,6 +29,7 @@ from compute_horde.mv_protocol.validator_requests import (
 )
 from compute_horde.utils import MachineSpecs
 from django.conf import settings
+from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
@@ -153,17 +154,18 @@ async def _execute_job(job: JobBase) -> tuple[
     float | None,
     V0DeclineJobRequest | V0ExecutorFailedRequest | V0JobFailedRequest | V0JobFinishedRequest
 ]:
-    prepared_job = await SyntheticJobContents.objects.select_for_update().afirst()
-    if prepared_job is not None:
-        kwargs = {
-            'weights_version': prepared_job.weights_version,
-            'answer': prepared_job.answer,
-            'contents': prepared_job.contents,
-        }
-        await prepared_job.adelete()
-    else:
-        kwargs = {}
-        logger.warning('No prepared job found. Generating one')
+    with transaction.atomic():
+        prepared_job = await SyntheticJobContents.objects.select_for_update(skip_locked=True).afirst()
+        if prepared_job is not None:
+            kwargs = {
+                'weights_version': prepared_job.weights_version,
+                'answer': prepared_job.answer,
+                'contents': prepared_job.contents,
+            }
+            await prepared_job.adelete()
+        else:
+            kwargs = {}
+            logger.warning('No prepared job found. Generating one')
     job_generator = current.SyntheticJobGenerator(**kwargs)
     job.job_description = job_generator.job_description()
     await job.asave()

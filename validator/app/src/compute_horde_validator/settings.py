@@ -282,7 +282,7 @@ LOGGING = {
     },
 }
 
-GENERATE_SYNTHETIC_JOB_COUNT = env.int('GENERATE_SYNTHETIC_JOB_COUNT')
+GENERATE_SYNTHETIC_JOB_COUNT = env.int('GENERATE_SYNTHETIC_JOB_COUNT', default=256)
 
 BITTENSOR_NETUID = env.int('BITTENSOR_NETUID')
 BITTENSOR_NETWORK = env.str('BITTENSOR_NETWORK')
@@ -304,6 +304,7 @@ DEBUG_MINER_ADDRESS = env.str('DEBUG_MINER_ADDRESS', default='')
 DEBUG_MINER_PORT = env.int('DEBUG_MINER_PORT', default=0)
 # if you don't want to wait for your celery beat job to sleep on staging:
 DEBUG_DONT_STAGGER_VALIDATORS = env.bool('DEBUG_DONT_STAGGER_VALIDATORS', default=False)
+DEBUG_WEIGHTS_VERSION = env.int('DEBUG_WEIGHTS_VERSION', default=None)
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
