@@ -31,7 +31,7 @@ from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.models import JobBase, Miner, SyntheticJob, SyntheticJobBatch
+from compute_horde_validator.validator.models import JobBase, Miner, SyntheticJob, SyntheticJobBatch, SyntheticJobContents
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
@@ -147,7 +147,18 @@ async def _execute_job(job: JobBase) -> tuple[
     float | None,
     V0DeclineJobRequest | V0ExecutorFailedRequest | V0JobFailedRequest | V0JobFinishedRequest
 ]:
-    job_generator = current.SyntheticJobGenerator()
+    prepared_job = await SyntheticJobContents.objects.select_for_update().afirst()
+    if prepared_job is not None:
+        kwargs = {
+            'weights_version': prepared_job.weights_version,
+            'answer': prepared_job.answer,
+            'contents': prepared_job.contents,
+        }
+        await prepared_job.adelete()
+    else:
+        kwargs = {}
+        logger.warning('No prepared job found. Generating one')
+    job_generator = current.SyntheticJobGenerator(**kwargs)
     job.job_description = job_generator.job_description()
     await job.asave()
     loop = asyncio.get_event_loop()
