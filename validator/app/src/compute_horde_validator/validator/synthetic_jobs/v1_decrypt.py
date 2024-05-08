@@ -44,9 +44,9 @@ def scrape_specs() -> dict[str, any]:
                     ],
                 }
             )
-    except Exception:
+    except Exception as exc:
         # print(f'Error processing scraped gpu specs: {e}', flush=True)
-        pass
+        data["gpu_scrape_error"] = repr(exc)
     data["gpu"] = {"details": gpus, "count": len(gpus)}
 
     data["cpu"] = {}
@@ -61,9 +61,9 @@ def scrape_specs() -> dict[str, any]:
 
         cpu_data = run_cmd('lscpu --parse=MHZ | grep -Po "^[0-9,.]*$"').splitlines()
         data["cpu"]["clocks"] = [float(x) for x in cpu_data]
-    except Exception:
+    except Exception as exc:
         # print(f'Error getting cpu specs: {e}', flush=True)
-        pass
+        data["cpu_scrape_error"] = repr(exc)
 
     data["ram"] = {}
     try:
@@ -79,9 +79,9 @@ def scrape_specs() -> dict[str, any]:
                 re.search(rf"^{name}:\s*(\d+)\s+kB$", meminfo, re.M).group(1)
             )
         data["ram"]["used"] = data["ram"]["total"] - data["ram"]["free"]
-    except Exception:
+    except Exception as exc:
         # print(f"Error reading /proc/meminfo; Exc: {e}", file=sys.stderr)
-        pass
+        data["ram_scrape_error"] = repr(exc)
 
     data["hard_disk"] = {}
     try:
@@ -91,18 +91,18 @@ def scrape_specs() -> dict[str, any]:
             "used": disk_usage.used // 1024,
             "free": disk_usage.free // 1024,
         }
-    except Exception:
+    except Exception as exc:
         # print(f"Error getting disk_usage from shutil: {e}", file=sys.stderr)
-        pass
+        data["hard_disk_scrape_error"] = repr(exc)
 
     try:
         data["os"] = run_cmd(
             'lsb_release -d | grep -Po "Description:\\s*\\K.*"'
         ).strip()
         data["virtualization"] = run_cmd("virt-what").strip()
-    except Exception:
+    except Exception as exc:
         # print(f'Error getting os specs: {e}', flush=True)
-        pass
+        data["os_scrape_error"] = repr(exc)
 
     return data
 
