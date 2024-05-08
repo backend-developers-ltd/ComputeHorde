@@ -1,6 +1,8 @@
 """
 Django settings for compute_horde_miner project.
 """
+from celery.schedules import crontab
+
 from compute_horde import base  # noqa
 
 import inspect
@@ -225,6 +227,11 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         'schedule': 60,
         'options': {},
     },
+    'prepare_receipts': {
+        'task': 'compute_horde_miner.miner.tasks.prepare_receipts',
+        'schedule': crontab(minute='0', hour='1'),
+        'options': {},
+    },
 }
 CELERY_TASK_ROUTES = ['compute_horde_miner.celery.route_task']
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())
@@ -289,7 +296,7 @@ ADDRESS_FOR_EXECUTORS = env.str('ADDRESS_FOR_EXECUTORS', default='')
 PORT_FOR_EXECUTORS = env.int('PORT_FOR_EXECUTORS')
 
 RECEIPT_STORE_CLASS_PATH = env.str('RECEIPT_STORE_CLASS_PATH', default='compute_horde_miner.miner.receipt_store.local:LocalReceiptStore')
-LOCAL_RECEIPTS_URL = env.path('LOCAL_RECEIPTS_URL', default=root('/receipts/'))
+LOCAL_RECEIPTS_URL = env.str('LOCAL_RECEIPTS_URL', default='/receipts/')
 LOCAL_RECEIPTS_ROOT = env.path('LOCAL_RECEIPTS_ROOT', default=root('..', '..', 'receipts'))
 
 BITTENSOR_MINER_PORT = env.int('BITTENSOR_MINER_PORT')
