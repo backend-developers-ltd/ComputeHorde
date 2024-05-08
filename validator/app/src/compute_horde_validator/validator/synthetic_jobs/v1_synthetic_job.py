@@ -29,9 +29,8 @@ def gen_keys(num_keys, num_letters, num_digits):
     alphabet = string.ascii_letters + string.digits
     alphabet_len = len(alphabet)
 
-    with open('/dev/urandom', 'rb') as urandom:
-        entropy_len = num_keys * key_len * 4
-        entropy = urandom.read(entropy_len)
+    entropy_len = num_keys * key_len * 4
+    entropy = secrets.token_bytes(entropy_len)
 
     marker = 0
     for _ in range(num_keys):
