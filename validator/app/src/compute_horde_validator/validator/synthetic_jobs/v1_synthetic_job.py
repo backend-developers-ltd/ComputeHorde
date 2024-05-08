@@ -29,7 +29,7 @@ class V1SyntheticJob(SyntheticJob):
     ALPHABET: ClassVar[str] = string.ascii_letters + DIGITS
 
     @classmethod
-    def random_string(cls, num_letters: int, num_digits: int) -> str:
+    def _random_string(cls, num_letters: int, num_digits: int) -> str:
         return "".join(random.choice(cls.ALPHABET) for _ in range(num_letters)) + "".join(
             random.choice(cls.DIGITS) for _ in range(num_digits)
         )
@@ -45,7 +45,7 @@ class V1SyntheticJob(SyntheticJob):
         for _params in params:
             _passwords = set()
             while len(_passwords) < _params.num_hashes:
-                _passwords.add(cls.random_string(num_letters=_params.num_letters, num_digits=_params.num_digits))
+                _passwords.add(cls._random_string(num_letters=_params.num_letters, num_digits=_params.num_digits))
             passwords.append(sorted(list(_passwords)))
 
         return cls(
@@ -59,10 +59,10 @@ class V1SyntheticJob(SyntheticJob):
     def timeout_seconds(self) -> int:
         return sum([p.timeout for p in self.params])
 
-    def hash_masks(self) -> list[str]:
+    def _hash_masks(self) -> list[str]:
         return ["?1" * params.num_letters + "?d" * params.num_digits for params in self.params]
 
-    def hash_hexes(self, i) -> list[str]:
+    def _hash_hexes(self, i) -> list[str]:
         return [
             self.algorithms[i].hash(password.encode("ascii") + self.salts[i]).hexdigest()
             for password in self.passwords[i]
@@ -76,7 +76,7 @@ class V1SyntheticJob(SyntheticJob):
         return Fernet(key_bytes).encrypt(payload.encode("utf-8")).decode("utf-8")
 
     def _payload(self, i) -> str:
-        return "\n".join([f"{hash_hex}:{self.salts[i].hex()}" for hash_hex in self.hash_hexes(i)])
+        return "\n".join([f"{hash_hex}:{self.salts[i].hex()}" for hash_hex in self._hash_hexes(i)])
 
     def _payloads(self) -> list[str]:
         payloads = []
@@ -98,7 +98,7 @@ class V1SyntheticJob(SyntheticJob):
         data = {
             "n": len(self.algorithms),
             "payloads": self._payloads(),
-            "masks": self.hash_masks(),
+            "masks": self._hash_masks(),
             "algorithms": [algorithm.type for algorithm in self.algorithms],
             "num_letters": [params.num_letters for params in self.params],
             "num_digits": [params.num_digits for params in self.params],

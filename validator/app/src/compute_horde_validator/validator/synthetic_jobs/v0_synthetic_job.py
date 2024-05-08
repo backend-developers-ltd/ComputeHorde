@@ -21,14 +21,14 @@ class V0SyntheticJob(SyntheticJob):
     ALPHABET: ClassVar[str] = string.ascii_letters + string.digits
 
     @classmethod
-    def random_string(cls, length: int) -> str:
+    def _random_string(cls, length: int) -> str:
         return "".join(secrets.choice(cls.ALPHABET) for _ in range(length))
 
     @classmethod
     def generate(cls, algorithm: Algorithm, params: JobParams, salt_length_bytes: int = 8) -> Self:
         return cls(
             algorithm=algorithm,
-            password=cls.random_string(params.password_length),
+            password=cls._random_string(params.password_length),
             params=params,
             salt=secrets.token_bytes(salt_length_bytes),
         )
@@ -38,13 +38,13 @@ class V0SyntheticJob(SyntheticJob):
         return self.params.timeout
 
     @property
-    def hash_hex(self) -> str:
+    def _hash_hex(self) -> str:
         return self.algorithm.hash(self.password.encode("ascii") + self.salt).hexdigest()
 
     @property
     def payload(self) -> str:
         """Convert this instance to a hashcat argument format."""
-        return f"{self.hash_hex}:{self.salt.hex()}"
+        return f"{self._hash_hex}:{self.salt.hex()}"
 
     @property
     def answer(self) -> str:
