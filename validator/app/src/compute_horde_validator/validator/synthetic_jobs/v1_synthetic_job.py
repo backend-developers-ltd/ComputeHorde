@@ -18,6 +18,35 @@ from compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
 )
 
 
+def gen_keys(num_keys, num_letters, num_digits):
+    key_len = num_letters + num_digits
+    # we read 8 bytes at a time, which is approximately 10 chars
+    assert key_len <= 10
+
+    digits = string.digits
+    digits_len = 10
+
+    alphabet = string.ascii_letters + string.digits
+    alphabet_len = len(alphabet)
+
+    with open('/dev/urandom', 'rb') as urandom:
+        entropy_len = num_keys * key_len * 4
+        entropy = urandom.read(entropy_len)
+        marker = 0
+        for _ in range(num_keys):
+            new_marker = marker + 8
+            number = int.from_bytes(entropy[marker:new_marker], "little")
+            marker = new_marker
+
+            chars = [' '] * key_len
+            for i in range(num_letters):
+                number, r = divmod(number, alphabet_len)
+                chars[i] = alphabet[r]
+            for i in range(num_digits):
+                number, r = divmod(number, digits_len)
+                chars[num_letters + i] = digits[r]
+            yield ''.join(chars)
+
 @dataclass
 class V1SyntheticJob(SyntheticJob):
     algorithms: list[Algorithm]
@@ -43,10 +72,9 @@ class V1SyntheticJob(SyntheticJob):
         # generate distinct passwords for each algorithm
         passwords = []
         for _params in params:
-            _passwords = set()
-            while len(_passwords) < _params.num_hashes:
-                _passwords.add(cls.random_string(num_letters=_params.num_letters, num_digits=_params.num_digits))
-            passwords.append(sorted(list(_passwords)))
+            _passwords = list(gen_keys(_params.num_hashes, _params.num_letters, _params.num_digits))
+            assert len(_passwords) == _params.num_hashes
+            passwords.append(_passwords)
 
         return cls(
             algorithms=algorithms,
