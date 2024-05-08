@@ -113,8 +113,7 @@ class ReceiptPayload(pydantic.BaseModel):
 class V0ReceiptRequest(BaseValidatorRequest):
     message_type: RequestType = RequestType.V0ReceiptRequest
     payload: ReceiptPayload
-    validator_signature: str
-    miner_signature: str | None = None
+    signature: str
 
     def blob_for_signing(self):
         return self.payload.blob_for_signing()

@@ -124,7 +124,7 @@ class MinerClient(AbstractMinerClient):
         )
         return V0ReceiptRequest(
             payload=receipt_payload,
-            validator_signature=f"0x{self.keypair.sign(receipt_payload.blob_for_signing()).hex()}"
+            signature=f"0x{self.keypair.sign(receipt_payload.blob_for_signing()).hex()}"
         )
 
     async def _connect(self):

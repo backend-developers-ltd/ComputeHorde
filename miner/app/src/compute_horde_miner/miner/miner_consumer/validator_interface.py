@@ -122,7 +122,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             return False
 
         keypair = bittensor.Keypair(ss58_address=self.validator_key)
-        if keypair.verify(msg.blob_for_signing(), msg.validator_signature):
+        if keypair.verify(msg.blob_for_signing(), msg.signature):
             return True
 
         return False
@@ -202,12 +202,12 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await job.asave()
 
             keypair = settings.BITTENSOR_WALLET().get_hotkey()
-            msg.miner_signature = f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
+            miner_signature = f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
 
             await JobReceipt.objects.acreate(
                 job=job,
-                validator_signature=msg.validator_signature,
-                miner_signature=msg.miner_signature,
+                validator_signature=msg.signature,
+                miner_signature=miner_signature,
                 job_uuid=msg.payload.job_uuid,  # TODO
                 miner_hotkey=msg.payload.miner_hotkey,  # TODO
                 validator_hotkey=msg.payload.validator_hotkey,  # TODO
