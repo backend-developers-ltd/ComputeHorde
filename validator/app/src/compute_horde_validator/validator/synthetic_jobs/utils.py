@@ -4,6 +4,7 @@ import logging
 import time
 from collections.abc import Iterable
 
+from asgiref.sync import sync_to_async
 import bittensor
 from channels.layers import get_channel_layer
 from compute_horde.base_requests import BaseRequest
@@ -150,22 +151,27 @@ def initiate_jobs(netuid, network) -> list[SyntheticJob]:
     ))
 
 
-async def _execute_job(job: JobBase) -> tuple[
-    float | None,
-    V0DeclineJobRequest | V0ExecutorFailedRequest | V0JobFailedRequest | V0JobFinishedRequest
-]:
+@sync_to_async
+def get_prepated_job_kwargs():
     with transaction.atomic():
-        prepared_job = await SyntheticJobContents.objects.select_for_update(skip_locked=True).afirst()
+        prepared_job = SyntheticJobContents.objects.select_for_update(skip_locked=True).first()
         if prepared_job is not None:
             kwargs = {
                 'weights_version': prepared_job.weights_version,
                 'answer': prepared_job.answer,
                 'contents': prepared_job.contents,
             }
-            await prepared_job.adelete()
+            prepared_job.delete()
         else:
             kwargs = {}
             logger.warning('No prepared job found. Generating one')
+
+
+async def _execute_job(job: JobBase) -> tuple[
+    float | None,
+    V0DeclineJobRequest | V0ExecutorFailedRequest | V0JobFailedRequest | V0JobFinishedRequest
+]:
+    kwargs = await get_prepated_job_kwargs()
     job_generator = current.SyntheticJobGenerator(**kwargs)
     job.job_description = job_generator.job_description()
     await job.asave()
