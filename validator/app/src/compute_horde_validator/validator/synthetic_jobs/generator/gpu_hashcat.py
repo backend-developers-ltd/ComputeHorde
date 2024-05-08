@@ -39,7 +39,11 @@ weights_version_holder = WeightVersionHolder()
 
 
 class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
-    def __init__(self):
+    def __init__(self, *,
+        weights_version: int | None = None,
+        answer: str | None = None,
+        contents: str | None = None,
+    ):
         # set synthetic_jobs based on subnet weights_version
         self._weights_version = weights_version_holder.get()
         if self._weights_version == 0:

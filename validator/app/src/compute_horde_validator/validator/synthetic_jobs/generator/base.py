@@ -5,6 +5,14 @@ from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 class AbstractSyntheticJobGenerator(abc.ABC):
     @abc.abstractmethod
+    def __init__(self, *,
+        weights_version: int | None = None,
+        answer: str | None = None,
+        contents: str | None = None,
+    ):
+        ...
+
+    @abc.abstractmethod
     def timeout_seconds(self) -> int:
         ...
 

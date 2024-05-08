@@ -11,7 +11,11 @@ from compute_horde_validator.validator.utils import single_file_zip
 
 class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
 
-    def __init__(self):
+    def __init__(self, *,
+        weights_version: int | None = None,
+        answer: str | None = None,
+        contents: str | None = None,
+    ):
         self.payload = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
 
     def timeout_seconds(self) -> int:

@@ -14,6 +14,13 @@ class CLIJobGenerator(AbstractSyntheticJobGenerator):
     _docker_run_options_preset = None
     _docker_run_cmd = None
 
+    def __init__(self, *,
+        weights_version: int | None = None,
+        answer: str | None = None,
+        contents: str | None = None,
+    ):
+        pass
+
     @classmethod
     def set_parameters(
         cls,
