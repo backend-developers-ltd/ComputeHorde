@@ -17,3 +17,4 @@ media/
 .terraform/
 .nox/
 __pycache__
+/receipts

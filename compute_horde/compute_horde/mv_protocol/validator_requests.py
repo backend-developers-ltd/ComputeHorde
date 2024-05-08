@@ -109,6 +109,10 @@ class ReceiptPayload(pydantic.BaseModel):
     def blob_for_signing(self):
         return self.json(sort_keys=True)
 
+    def json(self, *args, **kwargs) -> str:
+        kwargs.setdefault("sort_keys", True)
+        return super().json(*args, **kwargs)
+
 
 class V0ReceiptRequest(BaseValidatorRequest):
     message_type: RequestType = RequestType.V0ReceiptRequest
@@ -117,3 +121,7 @@ class V0ReceiptRequest(BaseValidatorRequest):
 
     def blob_for_signing(self):
         return self.payload.blob_for_signing()
+
+    def json(self, *args, **kwargs) -> str:
+        kwargs.setdefault("sort_keys", True)
+        return super().json(*args, **kwargs)
