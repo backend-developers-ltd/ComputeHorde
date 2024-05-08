@@ -8,6 +8,10 @@ from dataclasses import dataclass
 class SyntheticJob(ABC):
     @property
     @abstractmethod
+    def timeout_seconds(self) -> int: ...
+
+    @property
+    @abstractmethod
     def payload(self) -> str | bytes: ...
 
     @property
