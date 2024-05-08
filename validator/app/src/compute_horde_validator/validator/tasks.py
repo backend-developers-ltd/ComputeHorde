@@ -43,8 +43,8 @@ def generate_synthetic_jobs():
         job_generator = current.SyntheticJobGenerator()
         SyntheticJobContents.objects.create(
             weights_version=job_generator.weights_version(),
-            expected_answer=job_generator.expected_answer(),
-            volume_contents=job_generator.volume_contents(),
+            answer=job_generator.expected_answer(),
+            contents=job_generator.volume_contents(),
         )
 
 

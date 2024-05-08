@@ -58,4 +58,4 @@ class SyntheticJobContents(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     weights_version = models.IntegerField(db_index=True)
     answer = models.TextField()
-    contents = models.BinaryField()
+    contents = models.TextField()
