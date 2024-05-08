@@ -22,6 +22,11 @@ from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs,
 logger = get_task_logger(__name__)
 
 JOB_WINDOW = 2 * 60 * 60
+
+GENERATE_SYNTHETIC_JOBS_NICE_LIMIT = 30
+GENERATE_SYNTHETIC_JOBS_SOFT_LIMIT = 55
+GENERATE_SYNTHETIC_JOBS_HARD_LIMIT = 60
+
 SYNTHETIC_JOBS_SOFT_LIMIT = 300
 SYNTHETIC_JOBS_HARD_LIMIT = 305
 
@@ -32,11 +37,17 @@ WEIGHT_SETTING_HARD_TTL = 65
 WEIGHT_SETTING_ATTEMPTS = 100
 
 
-@app.task()
+@app.task(
+    soft_time_limit=GENERATE_SYNTHETIC_JOBS_SOFT_LIMIT,
+    time_limit=GENERATE_SYNTHETIC_JOBS_HARD_LIMIT,
+)
 def generate_synthetic_jobs():
+    start_time = time.time()
     while True:
         prepared_job_count = SyntheticJobContents.objects.all().count()
         if prepared_job_count >= settings.GENERATE_SYNTHETIC_JOB_COUNT:
+            break
+        if time.time() - start_time > GENERATE_SYNTHETIC_JOBS_NICE_LIMIT:
             break
 
         logger.info('%s synthetic jobs prepared, generating another one', prepared_job_count)
