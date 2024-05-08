@@ -41,29 +41,27 @@ weights_version_holder = WeightVersionHolder()
 class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def __init__(self):
         # set synthetic_jobs based on subnet weights_version
-        self.weights_version = weights_version_holder.get()
-        if self.weights_version == 0:
+        self._weights_version = weights_version_holder.get()
+        if self._weights_version == 0:
             algorithm = Algorithm.get_random_algorithm()
             self.hash_job = V0SyntheticJob.generate(
-                algorithm, HASHJOB_PARAMS[self.weights_version][algorithm]
+                algorithm, HASHJOB_PARAMS[self._weights_version][algorithm]
             )
-        elif self.weights_version == 1:
+        elif self._weights_version == 1:
             algorithms = Algorithm.get_all_algorithms()
-            params = [HASHJOB_PARAMS[self.weights_version][algorithm] for algorithm in algorithms]
+            params = [HASHJOB_PARAMS[self._weights_version][algorithm] for algorithm in algorithms]
             self.hash_job = V1SyntheticJob.generate(algorithms, params)
         else:
-            raise RuntimeError(f"No SyntheticJob for weights_version: {self.weights_version}")
-
-        self.expected_answer = self.hash_job.answer
+            raise RuntimeError(f"No SyntheticJob for weights_version: {self._weights_version}")
 
     def timeout_seconds(self) -> int:
         return self.hash_job.timeout_seconds
 
     def base_docker_image_name(self) -> str:
-        return f"backenddevelopersltd/compute-horde-job:v{self.weights_version}-latest"
+        return f"backenddevelopersltd/compute-horde-job:v{self._weights_version}-latest"
 
     def docker_image_name(self) -> str:
-        return f"backenddevelopersltd/compute-horde-job:v{self.weights_version}-latest"
+        return f"backenddevelopersltd/compute-horde-job:v{self._weights_version}-latest"
 
     def docker_run_options_preset(self) -> str:
         return "nvidia_all"
@@ -74,22 +72,28 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def raw_script(self) -> str | None:
         return self.hash_job.raw_script()
 
+    def weights_version(self) -> int:
+        return self._weights_version
+
+    def expected_answer(self) -> str:
+        return self.hash_job.answer
+
     def volume_contents(self) -> str:
         return single_file_zip("payload.txt", self.hash_job.payload)
 
     def score(self, time_took: float) -> float:
-        if self.weights_version == 0:
+        if self._weights_version == 0:
             return MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds())))
-        elif self.weights_version == 1:
+        elif self._weights_version == 1:
             return 1 / time_took
         else:
-            raise RuntimeError(f"No score function for weights_version: {self.weights_version}")
+            raise RuntimeError(f"No score function for weights_version: {self._weights_version}")
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
-        if str(msg.docker_process_stdout).strip() != str(self.expected_answer):
+        if str(msg.docker_process_stdout).strip() != str(self.expected_answer()):
             return (
                 False,
-                f"result does not match expected answer: {self.expected_answer}, msg: {msg.json()}",
+                f"result does not match expected answer: {self.expected_answer()}, msg: {msg.json()}",
                 0,
             )
 

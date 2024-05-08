@@ -29,6 +29,12 @@ class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def docker_run_cmd(self) -> list[str]:
         return []
 
+    def weights_version(self) -> int:
+        return 0
+
+    def expected_answer(self) -> str:
+        return self.payload
+
     def volume_contents(self) -> str:
         return single_file_zip('payload.txt', self.payload)
 

@@ -27,6 +27,14 @@ class AbstractSyntheticJobGenerator(abc.ABC):
         return None
 
     @abc.abstractmethod
+    def weights_version(self) -> int:
+        ...
+
+    @abc.abstractmethod
+    def expected_answer(self) -> str:
+        ...
+
+    @abc.abstractmethod
     def volume_contents(self) -> str:
         ...
 

@@ -54,6 +54,12 @@ class CLIJobGenerator(AbstractSyntheticJobGenerator):
             raise RuntimeError('Call set_parameters() before delegating job execution')
         return self._docker_run_cmd
 
+    def weights_version(self) -> int:
+        return 0
+
+    def expected_answer(self) -> str:
+        return 'nothing'
+
     def volume_contents(self) -> str:
         return single_file_zip('payload.txt', 'nothing')
 
