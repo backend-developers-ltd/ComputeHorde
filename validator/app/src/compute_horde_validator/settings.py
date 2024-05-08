@@ -211,6 +211,11 @@ CELERY_COMPRESSION = 'gzip'  # task compression
 CELERY_MESSAGE_COMPRESSION = 'gzip'  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
+    'generate_synthetic_jobs': {
+        'task': 'compute_horde_validator.validator.tasks.generate_synthetic_jobs',
+        'schedule': crontab(),
+        'options': {},
+    },
     'run_synthetic_jobs': {
         'task': 'compute_horde_validator.validator.tasks.run_synthetic_jobs',
         'schedule': crontab(minute='0', hour='*/2'),
@@ -276,6 +281,8 @@ LOGGING = {
         },
     },
 }
+
+GENERATE_SYNTHETIC_JOB_COUNT = env.int('GENERATE_SYNTHETIC_JOB_COUNT')
 
 BITTENSOR_NETUID = env.int('BITTENSOR_NETUID')
 BITTENSOR_NETWORK = env.str('BITTENSOR_NETWORK')

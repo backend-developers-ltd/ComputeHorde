@@ -15,7 +15,8 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator.models import SyntheticJobBatch
+from compute_horde_validator.validator.models import SyntheticJobBatch, SyntheticJobContents
+from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs, initiate_jobs
 
 logger = get_task_logger(__name__)
@@ -29,6 +30,22 @@ SCORING_ALGO_VERSION = 2
 WEIGHT_SETTING_TTL = 60
 WEIGHT_SETTING_HARD_TTL = 65
 WEIGHT_SETTING_ATTEMPTS = 100
+
+
+@app.task()
+def generate_synthetic_jobs():
+    while True:
+        prepared_job_count = SyntheticJobContents.objects.all().count()
+        if prepared_job_count >= settings.GENERATE_SYNTHETIC_JOB_COUNT:
+            break
+
+        logger.info('%s synthetic jobs prepared, generating another one', prepared_job_count)
+        job_generator = current.SyntheticJobGenerator()
+        SyntheticJobContents.objects.create(
+            weights_version=job_generator.weights_version(),
+            expected_answer=job_generator.expected_answer(),
+            volume_contents=job_generator.volume_contents(),
+        )
 
 
 @app.task(
