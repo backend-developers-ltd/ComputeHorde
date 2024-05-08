@@ -24,7 +24,7 @@ def gen_keys(num_keys, num_letters, num_digits):
     assert key_len <= 10
 
     digits = string.digits
-    digits_len = 10
+    digits_len = len(digits)
 
     alphabet = string.ascii_letters + string.digits
     alphabet_len = len(alphabet)
