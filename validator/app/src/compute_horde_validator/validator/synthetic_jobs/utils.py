@@ -165,6 +165,7 @@ def get_prepated_job_kwargs():
         else:
             kwargs = {}
             logger.warning('No prepared job found. Generating one')
+    return kwargs
 
 
 async def _execute_job(job: JobBase) -> tuple[
