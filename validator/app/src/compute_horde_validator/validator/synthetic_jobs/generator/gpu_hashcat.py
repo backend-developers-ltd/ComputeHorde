@@ -47,7 +47,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
             self.hash_job = V0SyntheticJob.generate(
                 algorithm, HASHJOB_PARAMS[self._weights_version][algorithm]
             )
-        elif self._weights_version == 1:
+        elif self._weights_version in (1, 2):
             algorithms = Algorithm.get_all_algorithms()
             params = [HASHJOB_PARAMS[self._weights_version][algorithm] for algorithm in algorithms]
             self.hash_job = V1SyntheticJob.generate(algorithms, params)
