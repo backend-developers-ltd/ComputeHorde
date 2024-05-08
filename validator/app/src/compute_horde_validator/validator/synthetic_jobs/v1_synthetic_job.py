@@ -55,6 +55,15 @@ class V1SyntheticJob(SyntheticJob):
             salts=[secrets.token_bytes(salt_length_bytes) for _ in range(len(algorithms))],
         )
 
+    @classmethod
+    def pregenerated(cls, algorithms: list[Algorithm], params: list[JobParams]) -> Self:
+        return cls(
+            algorithms=algorithms,
+            params=params,
+            passwords=[],
+            salts=[],
+        )
+
     @property
     def timeout_seconds(self) -> int:
         return sum([p.timeout for p in self.params])

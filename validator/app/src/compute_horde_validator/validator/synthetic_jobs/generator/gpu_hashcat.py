@@ -44,16 +44,27 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         answer: str | None = None,
         contents: str | None = None,
     ):
-        # set synthetic_jobs based on subnet weights_version
-        self._weights_version = weights_version_holder.get()
+        self._weights_version = weights_version
+        self._answer = answer
+        self._contents = contents
+
+        if self._weights_version is None:
+            # set synthetic_jobs based on subnet weights_version
+            self._weights_version = weights_version_holder.get()
+            self._pregenerated = False
+        else:
+            self._pregenerated = True
+
         if self._weights_version == 0:
             algorithm = Algorithm.get_random_algorithm()
-            self.hash_job = V0SyntheticJob.generate(
+            create_method = V0SyntheticJob.pregenerated if self._pregenerated else V0SyntheticJob.generate
+            self.hash_job = create_method(
                 algorithm, HASHJOB_PARAMS[self._weights_version][algorithm]
             )
         elif self._weights_version in (1, 2):
             algorithms = Algorithm.get_all_algorithms()
             params = [HASHJOB_PARAMS[self._weights_version][algorithm] for algorithm in algorithms]
+            create_method = V1SyntheticJob.pregenerated if self._pregenerated else V1SyntheticJob.generate
             self.hash_job = V1SyntheticJob.generate(algorithms, params)
         else:
             raise RuntimeError(f"No SyntheticJob for weights_version: {self._weights_version}")
@@ -80,9 +91,11 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return self._weights_version
 
     def expected_answer(self) -> str:
-        return self.hash_job.answer
+        return self._answer if self._pregenerated else self.hash_job.answer
 
     def volume_contents(self) -> str:
+        if self._pregenerated:
+            return self._contents
         return single_file_zip("payload.txt", self.hash_job.payload)
 
     def score(self, time_took: float) -> float:

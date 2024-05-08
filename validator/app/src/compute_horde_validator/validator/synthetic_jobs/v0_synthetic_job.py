@@ -33,6 +33,15 @@ class V0SyntheticJob(SyntheticJob):
             salt=secrets.token_bytes(salt_length_bytes),
         )
 
+    @classmethod
+    def pregenerated(cls, algorithm: Algorithm, params: JobParams) -> Self:
+        return cls(
+            algorithm=algorithm,
+            password="",
+            params=params,
+            salt=b"",
+        )
+
     @property
     def timeout_seconds(self) -> int:
         return self.params.timeout
