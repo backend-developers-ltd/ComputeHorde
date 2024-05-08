@@ -32,20 +32,21 @@ def gen_keys(num_keys, num_letters, num_digits):
     with open('/dev/urandom', 'rb') as urandom:
         entropy_len = num_keys * key_len * 4
         entropy = urandom.read(entropy_len)
-        marker = 0
-        for _ in range(num_keys):
-            new_marker = marker + 8
-            number = int.from_bytes(entropy[marker:new_marker], "little")
-            marker = new_marker
 
-            chars = [' '] * key_len
-            for i in range(num_letters):
-                number, r = divmod(number, alphabet_len)
-                chars[i] = alphabet[r]
-            for i in range(num_digits):
-                number, r = divmod(number, digits_len)
-                chars[num_letters + i] = digits[r]
-            yield ''.join(chars)
+    marker = 0
+    for _ in range(num_keys):
+        new_marker = marker + 8
+        number = int.from_bytes(entropy[marker:new_marker], "little")
+        marker = new_marker
+
+        chars = [' '] * key_len
+        for i in range(num_letters):
+            number, r = divmod(number, alphabet_len)
+            chars[i] = alphabet[r]
+        for i in range(num_digits):
+            number, r = divmod(number, digits_len)
+            chars[num_letters + i] = digits[r]
+        yield ''.join(chars)
 
 @dataclass
 class V1SyntheticJob(SyntheticJob):
