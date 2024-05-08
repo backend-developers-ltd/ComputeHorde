@@ -31,7 +31,13 @@ from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.models import JobBase, Miner, SyntheticJob, SyntheticJobBatch, SyntheticJobContents
+from compute_horde_validator.validator.models import (
+    JobBase,
+    Miner,
+    SyntheticJob,
+    SyntheticJobBatch,
+    SyntheticJobContents,
+)
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
