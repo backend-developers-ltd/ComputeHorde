@@ -10,6 +10,7 @@ env:
   TAG_VERSION: "v0-latest"
   DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-runner"
   MINER_IMAGE_REPO: "compute-horde-miner"
+  NGINX_IMAGE_TAG: "v0-latest"
   DIST_VERSION_PREFIX: "miner-runner"
 
 jobs:
@@ -29,6 +30,7 @@ jobs:
             -t "${IMAGE_NAME}" \
             --build-arg MINER_RUNNER_VERSION="${GITHUB_SHA}" \
             --build-arg MINER_IMAGE_REPO="${MINER_IMAGE_REPO}" \
+            --build-arg NGINX_IMAGE_TAG="${NGINX_IMAGE_TAG}" \
             .
 
           docker image tag "${IMAGE_NAME}" "${SHA_IMAGE_NAME}"

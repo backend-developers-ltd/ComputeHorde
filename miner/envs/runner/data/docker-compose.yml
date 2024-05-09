@@ -101,7 +101,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   nginx:
-    image: backenddevelopersltd/compute-horde-miner-nginx:v0-latest
+    image: backenddevelopersltd/compute-horde-miner-nginx:${NGINX_IMAGE_TAG:-v0-latest}
     restart: unless-stopped
     healthcheck:
       test: wget -q --spider 0.0.0.0:80/admin/login/ || exit 1
