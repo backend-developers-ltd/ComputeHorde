@@ -2,10 +2,10 @@ import abc
 import datetime
 from typing import Self
 
+from compute_horde.mv_protocol.validator_requests import ReceiptPayload
 from django.conf import settings
 from pydantic import BaseModel
 
-from compute_horde.mv_protocol.validator_requests import ReceiptPayload
 from compute_horde_miner.miner.models import JobReceipt
 
 

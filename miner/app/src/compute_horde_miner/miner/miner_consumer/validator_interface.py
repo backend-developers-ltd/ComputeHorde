@@ -21,7 +21,7 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ExecutorReady,
     ValidatorInterfaceMixin,
 )
-from compute_horde_miner.miner.models import AcceptedJob, Validator, ValidatorBlacklist, JobReceipt
+from compute_horde_miner.miner.models import AcceptedJob, JobReceipt, Validator, ValidatorBlacklist
 
 logger = logging.getLogger(__name__)
 

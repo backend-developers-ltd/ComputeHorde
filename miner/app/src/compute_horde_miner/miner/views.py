@@ -1,7 +1,7 @@
 import datetime
 import os
 
-from django.http import JsonResponse, HttpResponseRedirect, HttpResponseBadRequest
+from django.http import HttpResponseBadRequest, HttpResponseRedirect, JsonResponse
 from django.utils.timezone import now
 
 from compute_horde_miner.miner.receipt_store.current import receipts_store
