@@ -14,4 +14,3 @@ async def prepare_receipts(date: datetime.date | None = None) -> None:
     job_receipts = JobReceipt.objects.filter(time_started__date=date)
     receipts = [Receipt.from_job_receipt(jr) async for jr in job_receipts]
     await receipts_store.store(date, receipts)
-    await job_receipts.aupdate(synced_with_storage=True)

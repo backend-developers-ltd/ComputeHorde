@@ -90,7 +90,5 @@ class JobReceipt(models.Model):
     time_took = models.DurationField()
     score = models.FloatField()
 
-    synced_with_storage = models.BooleanField(default=False)
-
     def __str__(self):
         return f'uuid: {self.job_uuid}'

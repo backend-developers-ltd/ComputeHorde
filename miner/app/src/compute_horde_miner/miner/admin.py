@@ -35,7 +35,7 @@ class AcceptedJobReadOnlyAdmin(ReadOnlyAdmin):
 
 
 class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
-    list_display = ['job_uuid', 'synced_with_storage']
+    pass
 
 
 admin.site.register(AcceptedJob, admin_class=AcceptedJobReadOnlyAdmin)

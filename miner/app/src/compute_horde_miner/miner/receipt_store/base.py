@@ -3,18 +3,20 @@ import datetime
 from typing import Self
 
 from django.conf import settings
+from pydantic import BaseModel
 
-from compute_horde.mv_protocol.validator_requests import V0ReceiptRequest, RequestType, ReceiptPayload
+from compute_horde.mv_protocol.validator_requests import ReceiptPayload
 from compute_horde_miner.miner.models import JobReceipt
 
 
-class Receipt(V0ReceiptRequest):
+class Receipt(BaseModel):
+    payload: ReceiptPayload
+    validator_signature: str
     miner_signature: str
 
     @classmethod
     def from_job_receipt(cls, jr: JobReceipt) -> Self:
         return cls(
-            message_type=RequestType.V0ReceiptRequest,
             payload=ReceiptPayload(
                 job_uuid=str(jr.job_uuid),
                 miner_hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address,
@@ -23,7 +25,7 @@ class Receipt(V0ReceiptRequest):
                 time_took=jr.time_took,
                 score=jr.score,
             ),
-            signature=jr.validator_signature,
+            validator_signature=jr.validator_signature,
             miner_signature=jr.miner_signature,
         )
 
