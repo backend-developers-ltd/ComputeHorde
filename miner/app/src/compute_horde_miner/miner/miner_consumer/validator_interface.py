@@ -209,9 +209,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 job=job,
                 validator_signature=msg.signature,
                 miner_signature=miner_signature,
-                job_uuid=msg.payload.job_uuid,  # TODO
-                miner_hotkey=msg.payload.miner_hotkey,  # TODO
-                validator_hotkey=msg.payload.validator_hotkey,  # TODO
+                job_uuid=msg.payload.job_uuid,
+                miner_hotkey=msg.payload.miner_hotkey,
+                validator_hotkey=msg.payload.validator_hotkey,
                 time_started=msg.payload.time_started,
                 time_took=msg.payload.time_took,
                 score=msg.payload.score,

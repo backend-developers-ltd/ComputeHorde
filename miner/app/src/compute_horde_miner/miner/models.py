@@ -83,9 +83,9 @@ class JobReceipt(models.Model):
     miner_signature = models.CharField(max_length=256)
 
     # payload fields
-    job_uuid = models.UUIDField()  # TODO: can be found from job.job_uuid
-    miner_hotkey = models.CharField(max_length=256)  # TODO: can be found from settings
-    validator_hotkey = models.CharField(max_length=256)  # TODO: can be found from job.validator.public_key
+    job_uuid = models.UUIDField()
+    miner_hotkey = models.CharField(max_length=256)
+    validator_hotkey = models.CharField(max_length=256)
     time_started = models.DateTimeField()
     time_took = models.DurationField()
     score = models.FloatField()
