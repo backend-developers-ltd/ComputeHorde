@@ -12,7 +12,6 @@ from functools import wraps
 
 import bittensor
 import environ
-from celery.schedules import crontab
 
 
 # from celery.schedules import crontab
@@ -224,11 +223,6 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
     'fetch_validators': {
         'task': 'compute_horde_miner.miner.tasks.fetch_validators',
         'schedule': 60,
-        'options': {},
-    },
-    'prepare_receipts': {
-        'task': 'compute_horde_miner.miner.tasks.prepare_receipts',
-        'schedule': crontab(minute='0', hour='1'),
         'options': {},
     },
 }

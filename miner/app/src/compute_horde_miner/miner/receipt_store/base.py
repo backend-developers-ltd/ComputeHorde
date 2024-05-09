@@ -1,5 +1,4 @@
 import abc
-import datetime
 from typing import Self
 
 from compute_horde.mv_protocol.validator_requests import ReceiptPayload
@@ -29,12 +28,16 @@ class Receipt(BaseModel):
             miner_signature=jr.miner_signature,
         )
 
+    def json(self, *args, **kwargs) -> str:
+        kwargs.setdefault("sort_keys", True)
+        return super().json(*args, **kwargs)
+
 
 class BaseReceiptStore(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    async def store(self, date: datetime.date, receipts: list[Receipt]):
+    async def store(self, receipts: list[Receipt]):
         ...
 
     @abc.abstractmethod
-    async def get_url(self, date: datetime.date) -> str:
+    async def get_url(self) -> str:
         ...

@@ -22,6 +22,7 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ValidatorInterfaceMixin,
 )
 from compute_horde_miner.miner.models import AcceptedJob, JobReceipt, Validator, ValidatorBlacklist
+from compute_horde_miner.miner.utils import prepare_receipts
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +216,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 time_took=msg.payload.time_took,
                 score=msg.payload.score,
             )
+            await prepare_receipts()
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
