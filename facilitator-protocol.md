@@ -23,20 +23,20 @@ sequenceDiagram
 
     validator->>facilitator: connect
     
-    rect rgb(128, 128, 128)
+    rect rgba(128, 128, 128, .5)
         validator->>facilitator: V0AuthenticationRequest
         facilitator->>validator: Response
     end
     
-    rect rgb(100, 100, 100)
+    rect rgba(100, 100, 100, .5)
         facilitator->>validator: V0JobRequest
     
-        rect rgb(128, 128, 128)
+        rect rgba(128, 128, 128, .5)
             validator->>facilitator: V0JobStatusUpdate
             facilitator->>validator: Response
         end
     
-        rect rgb(128, 128, 128)
+        rect rgba(128, 128, 128, .5)
             validator->>facilitator: V0JobStatusUpdate
             facilitator->>validator: Response
         end
