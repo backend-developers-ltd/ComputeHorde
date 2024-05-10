@@ -118,14 +118,17 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
     def verify_receipt_msg(self, msg: validator_requests.V0ReceiptRequest) -> bool:
         if self.my_hotkey != DONT_CHECK and msg.payload.miner_hotkey != self.my_hotkey:
+            logger.warning(f'Miner hotkey mismatch in receipt for job_uuid {msg.payload.job_uuid} ({msg.payload.miner_hotkey!r} != {self.my_hotkey!r})')
             return False
         if msg.payload.validator_hotkey != self.validator_key:
+            logger.warning(f'Validator hotkey mismatch in receipt for job_uuid {msg.payload.job_uuid} ({msg.payload.validator_hotkey!r} != {self.validator_key!r})')
             return False
 
         keypair = bittensor.Keypair(ss58_address=self.validator_key)
         if keypair.verify(msg.blob_for_signing(), msg.signature):
             return True
 
+        logger.warning(f'Validator signature mismatch in receipt for job_uuid {msg.payload.job_uuid}')
         return False
 
     async def handle_authentication(self, msg: validator_requests.V0AuthenticateRequest):
@@ -196,7 +199,11 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await job.asave()
 
         if isinstance(msg, validator_requests.V0ReceiptRequest) and self.verify_receipt_msg(msg):
-            logger.debug(f'Received receipt for job_uuid: {msg.payload.job_uuid}')
+            logger.info(
+                f'Received receipt for'
+                f' job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}'
+                f' time_took={msg.payload.time_took} score={msg.payload.score}'
+            )
             job = await AcceptedJob.objects.aget(job_uuid=msg.payload.job_uuid)
             job.time_took = msg.payload.time_took
             job.score = msg.payload.score
