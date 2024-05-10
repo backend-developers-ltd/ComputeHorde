@@ -27,6 +27,8 @@ REMOTE_HOTKEY_PATH=".bittensor/wallets/$WALLET_NAME/hotkeys/$HOTKEY_NAME"
 REMOTE_COLDKEY_PUB_PATH=".bittensor/wallets/$WALLET_NAME/coldkeypub.txt"
 REMOTE_HOTKEY_DIR=$(dirname "$REMOTE_HOTKEY_PATH")
 
+DEFAULT_ADMIN_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(30))')
+
 # Copy the wallet files to the server
 # shellcheck disable=SC2087
 ssh "$SSH_DESTINATION" <<ENDSSH
@@ -36,6 +38,7 @@ mkdir -p $REMOTE_HOTKEY_DIR
 cat > tmpvars <<ENDCAT
 HOTKEY_NAME="$(basename "$REMOTE_HOTKEY_PATH")"
 WALLET_NAME="$(basename "$(dirname "$REMOTE_HOTKEY_DIR")")"
+DEFAULT_ADMIN_PASSWORD="$DEFAULT_ADMIN_PASSWORD"
 ENDCAT
 ENDSSH
 scp "$LOCAL_HOTKEY_PATH" "$SSH_DESTINATION:$REMOTE_HOTKEY_PATH"
@@ -131,7 +134,10 @@ BITTENSOR_MINER_ADDRESS=auto
 COMPOSE_PROJECT_NAME=compute_horde_miner
 PORT_FOR_EXECUTORS=8000
 ADDRESS_FOR_EXECUTORS=172.17.0.1
+DEFAULT_ADMIN_PASSWORD="$(. ~/tmpvars && echo "$DEFAULT_ADMIN_PASSWORD")"
 ENDENV
+
+rm ~/tmpvars
 
 docker pull backenddevelopersltd/compute-horde-executor:v0-latest
 docker pull backenddevelopersltd/compute-horde-miner:v0-latest
@@ -142,12 +148,13 @@ ENDSSH
 
 set +x
 MINER_HOSTNAME=$(ssh -G "$SSH_DESTINATION" | grep '^hostname' | cut -d' ' -f2)
+MINER_ADMIN_LOGIN_URL="http://$MINER_HOSTNAME:8000/admin/login/" 
 
 for run in {1..10}
 do
   echo "Checking miner status..."
 
-  STATUS_CODE=$(curl --silent --max-time 2 --output /dev/null --write-out "%{http_code}" "http://$MINER_HOSTNAME:8000/admin/login/" || true)
+  STATUS_CODE=$(curl --silent --max-time 2 --output /dev/null --write-out "%{http_code}" "$MINER_ADMIN_LOGIN_URL" || true)
   if [[ $STATUS_CODE -eq 200 ]]
   then
     cat <<'EOF'
@@ -157,9 +164,26 @@ do
 | |__| (_) | | | | (_| | | | (_| | |_| |_| | | (_| | |_| | (_) | | | \__ \_|
  \____\___/|_| |_|\__, |_|  \__,_|\__|\__,_|_|\__,_|\__|_|\___/|_| |_|___(_)
                   |___/
+
+Miner installed successfully
+
 EOF
 
-    echo "Miner installed successfully"
+  cat <<EOF
+You can log into your miner admin panel with the following info:
+    URL: $MINER_ADMIN_LOGIN_URL
+    Username: admin
+    Password: $DEFAULT_ADMIN_PASSWORD
+
+EOF
+
+  cat <<'EOF'
+To change your username/password:
+  1. Select "Users" from the left sidebar
+  2. Select "admin"
+  3. Change username and/or password in this form and save
+EOF
+
     exit 0
   fi
 
