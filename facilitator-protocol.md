@@ -25,12 +25,27 @@ sequenceDiagram
     validator->>facilitator: V0AuthenticationRequest
     facilitator->>validator: Response
 
-    facilitator->>validator: <br/><br/>V0JobRequest
+    rect rgb(100, 100, 100)
+        facilitator->>validator: V0JobRequest
+    
+        rect rgb(128, 128, 128)
+            validator->>facilitator: V0JobStatusUpdate
+            facilitator->>validator: Response
+        end
+    
+        rect rgb(128, 128, 128)
+            validator->>facilitator: V0JobStatusUpdate
+            facilitator->>validator: Response
+        end
+    end
 
-    validator->>facilitator: <br/><br/>V0JobStatusUpdate
-    facilitator->>validator: Response
-    validator->>facilitator: <br/><br/>V0JobStatusUpdate
-    facilitator->>validator: Response
+    rect rgb(100, 100, 100)
+        validator->>facilitator: V0Heartbeat
+    end
+
+    rect rgb(100, 100, 100)
+        validator->>facilitator: MachineSpecsUpdate
+    end
 ```
 
 ## `V0AuthenticationRequest` message
