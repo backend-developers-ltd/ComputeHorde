@@ -12,6 +12,7 @@ The communication consists of the following steps:
        facilitator (i.e., after sending the job to a miner, after a miner accepts the job, after the job has
        finished/failed)
 4. Validator sends a `V0Heartbeat` message periodically (i.e. every 60 seconds) as long as the connection is open.
+5. Validator will sometimes send `V0MachineSpecsUpdate` messages.
 
 Sequence diagram:
 
@@ -55,6 +56,16 @@ import bittensor
 hotkey = bittensor.wallet(name="wallet-name", hotkey="hotkey-name", path="wallets-path").get_hotkey()
 public_key = hotkey.public_key.hex()
 signature = f'0x{hotkey.sign(hotkey.public_key).hex()}'
+```
+
+The signature can be verified with the following snippet:
+
+```python
+from bittensor import Keypair
+
+public_key_bytes = bytes.fromhex(public_key)
+keypair = Keypair(public_key=public_key_bytes, ss58_format=42)
+keypair.verify(public_key_bytes, signature)
 ```
 
 ## `V0JobRequest` message
@@ -129,7 +140,7 @@ signature = f'0x{hotkey.sign(hotkey.public_key).hex()}'
 * The standard out and standard error texts are truncated if they are large.
   The full output is saved in the output zip file at `/stdout.txt` and `/stderr.txt` respectively.
 
-## `Heartbeat` message
+## `V0Heartbeat` message
 
 ```json
 {
@@ -167,3 +178,59 @@ or,
 | errors[].msg  | description of error             |
 | errors[].type | type of error                    |
 | errors[].help | optional help text for the error |
+
+## `V0MachineSpecsUpdate` message
+
+```json
+{
+  "message_type": "V0MachineSpecsUpdate",
+  "miner_hotkey": "...",
+  "validator_hotkey": "...",
+  "specs": {}
+}
+```
+
+| Field            | Details                                    |
+|------------------|--------------------------------------------|
+| miner_hotkey     | The hotkey of miner whose specs was sent   |
+| validator_hotkey | The hotkey of validator who sent the specs |
+| specs            | Raw specs of the miner hardware            |
+
+`specs` field have roughly the following format:
+
+```json
+{
+  "os": "Ubuntu Noble Numbat (development branch)",
+  "cpu": {
+    "count": "8",
+    "model": "Intel(R) Xeon(R) Gold 5315Y CPU @ 3.20GHz",
+    "clocks": [3202.303, 3202.303, 3202.303, 3202.303, 3202.303, 3202.303, 3202.303, 3202.303]
+  },
+  "gpu": {
+    "count": 1,
+    "details": [
+      {
+        "cuda": "8.6",
+        "name": "NVIDIA RTX A6000",
+        "driver": "550.54.15",
+        "capacity": "49140",
+        "power_limit": "300.00",
+        "memory_speed": "405",
+        "graphics_speed": "0"
+      }
+    ]
+  },
+  "ram": {
+    "free": "22817068",
+    "used": "",
+    "total": "46236340",
+    "available": "43255832"
+  },
+  "hard_disk": {
+    "free": "210912280",
+    "used": "",
+    "total": ""
+  },
+  "virtualization": "xen\nxen-hvm\ndocker"
+}
+```
