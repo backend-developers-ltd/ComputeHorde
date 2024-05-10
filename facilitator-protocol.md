@@ -22,9 +22,12 @@ sequenceDiagram
     participant facilitator
 
     validator->>facilitator: connect
-    validator->>facilitator: V0AuthenticationRequest
-    facilitator->>validator: Response
-
+    
+    rect rgb(128, 128, 128)
+        validator->>facilitator: V0AuthenticationRequest
+        facilitator->>validator: Response
+    end
+    
     rect rgb(100, 100, 100)
         facilitator->>validator: V0JobRequest
     
@@ -39,13 +42,8 @@ sequenceDiagram
         end
     end
 
-    rect rgb(100, 100, 100)
-        validator->>facilitator: V0Heartbeat
-    end
-
-    rect rgb(100, 100, 100)
-        validator->>facilitator: MachineSpecsUpdate
-    end
+    validator->>facilitator: V0Heartbeat
+    validator->>facilitator: MachineSpecsUpdate
 ```
 
 ## `V0AuthenticationRequest` message
