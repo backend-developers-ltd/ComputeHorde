@@ -122,15 +122,16 @@ cat > .env <<ENDENV
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')
 POSTGRES_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
 BITTENSOR_NETUID=12
-BITTENSOR_NETWORK=finney
+BITTENSOR_NETWORK=finney  # leave it as "finney" if you want to use the public mainnet chain
 BITTENSOR_WALLET_NAME="$(. ~/tmpvars && echo "$WALLET_NAME")"
 BITTENSOR_WALLET_HOTKEY_NAME="$(. ~/tmpvars && echo "$HOTKEY_NAME")"
 HOST_WALLET_DIR=$HOME/.bittensor/wallets
-BITTENSOR_MINER_PORT=8000
+BITTENSOR_MINER_PORT=8000 # for now, PORT_FOR_EXECUTORS has to be the same as BITTENSOR_MINER_PORT, unless you change nginx configuration yourself (we don't advise doing that)
 BITTENSOR_MINER_ADDRESS=auto
 COMPOSE_PROJECT_NAME=compute_horde_miner
-PORT_FOR_EXECUTORS=8000
+PORT_FOR_EXECUTORS=8000 # make sure to unblock access to that port in your firewall
 ADDRESS_FOR_EXECUTORS=172.17.0.1
+DEFAULT_ADMIN_PASSWORD=               #PASS FOR ADMIN UI BITTENSOR_MINER_ADDRESS:BITTENSOR_MINER_PORT LOG ADMIN
 ENDENV
 
 docker pull backenddevelopersltd/compute-horde-executor:v0-latest
