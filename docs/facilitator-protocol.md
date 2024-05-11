@@ -1,14 +1,14 @@
 # Facilitator Protocol v0
 
-A Facilitator need to have a websocket endpoint `/ws/v0/` that validators connect to.
+A Facilitator needs to have a websocket endpoint `/ws/v0/` that validators connect to.
 The communication consists of the following steps:
 
 1. Validator connects to facilitator via websockets at `/ws/v0/`.
-2. Validator sends `V0AuthenticationRequest` message (and wait for `Response`). This is done once per connection.
-3. Validator and facilitator enters in a job loop:
+2. Validator sends `V0AuthenticationRequest` message (and waits for `Response`). This is done once per connection.
+3. Validator and facilitator enter a job loop:
     1. Validator waits for a job
     2. Facilitator sends `V0JobRequest` message
-    3. Validator sends `V0JobStatusUpdate` message when there is new info about the job and wait for `Response` from
+    3. Validator sends `V0JobStatusUpdate` message when there is new info about the job and waits for `Response` from
        facilitator (i.e., after sending the job to a miner, after a miner accepts the job, after the job has
        finished/failed)
 4. Validator sends a `V0Heartbeat` message periodically (i.e. every 60 seconds) as long as the connection is open.
@@ -81,6 +81,8 @@ keypair = Keypair(public_key=public_key_bytes, ss58_format=42)
 keypair.verify(public_key_bytes, signature)
 ```
 
+This is a very temporary measure that is only here because we are waiting for the encryption support PR to be merged to bittensor core and then we'll replace it all with TLS client certificates, terminated on nginx if we can have it our way.
+
 ## `V0JobRequest` message
 
 ```json
@@ -107,7 +109,7 @@ keypair.verify(public_key_bytes, signature)
 | uuid         | unique ID for a job (UUIDv4)                                                                                                                                                                                                                            |
 | miner_hotkey | SS58 address of miner that will perform the job                                                                                                                                                                                                         |
 | docker_image | user provided docker image                                                                                                                                                                                                                              |
-| raw_script   | user provided raw python script                                                                                                                                                                                                                         |
+| raw_script   | user provided raw python script (legacy flow)                                                                                                                                                                                                           |
 | args         | list of arguments for the docker image or raw script                                                                                                                                                                                                    |
 | env          | key-value pairs of environment variables                                                                                                                                                                                                                |
 | use_gpu      | whether GPU is needed to run the job                                                                                                                                                                                                                    |
