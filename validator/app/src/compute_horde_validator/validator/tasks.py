@@ -1,6 +1,8 @@
 import asyncio
+import contextlib
 import time
 from collections import defaultdict
+import traceback
 from datetime import timedelta
 
 import billiard.exceptions
@@ -21,7 +23,7 @@ from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
-from compute_horde_validator.validator.models import JobReceipt, OrganicJob, SyntheticJobBatch
+from compute_horde_validator.validator.models import JobReceipt, OrganicJob, SyntheticJobBatch, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
     create_and_run_sythethic_job_batch,
@@ -29,6 +31,8 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 
 from .miner_driver import run_miner_job
 from .models import AdminJobRequest
+from compute_horde_validator.validator.locks import get_weight_setting_lock, Locked
+from compute_horde_validator.validator.models import SyntheticJobBatch
 
 logger = get_task_logger(__name__)
 
@@ -41,6 +45,7 @@ SCORING_ALGO_VERSION = 2
 WEIGHT_SETTING_TTL = 60
 WEIGHT_SETTING_HARD_TTL = 65
 WEIGHT_SETTING_ATTEMPTS = 100
+WEIGHT_SETTING_FAILURE_BACKOFF = 5
 
 
 @app.task(
@@ -90,7 +95,7 @@ def do_set_weights(
     wait_for_inclusion: bool,
     wait_for_finalization: bool,
     version_key: int,
-) -> bool:
+) -> tuple[bool, str]:
     """
     Set weights. To be used in other celery tasks in order to facilitate a timeout,
      since the multiprocessing version of this doesn't work in celery.
@@ -194,6 +199,42 @@ def horde_score(benchmarks, alpha=0, beta=0, delta=0):
     return scaled_avg_benchmark * sum_agent * scaled_inverted_n
 
 
+def save_weight_setting_event(type_: str, subtype: str, long_description: str, data: dict):
+    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        type=type_,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
+    )
+
+
+def save_weight_setting_failure(subtype: str, long_description: str, data: dict):
+    save_weight_setting_event(
+        type_=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
+    )
+
+
+@contextlib.contextmanager
+def save_event_on_error(subtype):
+    try:
+        yield
+    except Exception as ex:
+        save_weight_setting_failure(subtype, traceback.format_exc(), {})
+
+
+def get_subtensor(network):
+    with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
+        return bittensor.subtensor(network=network)
+
+
+def get_metagraph(subtensor, netuid):
+    with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
+        return subtensor.metagraph(netuid=netuid)
+
+
 @app.task
 def set_scores():
     if not config.SERVING:
@@ -257,6 +298,10 @@ def set_scores():
             logger.debug(f"Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}")
             success = False
             message = "unknown error"
+
+    with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR):
+        with transaction.atomic():
+            # dupa
             try:
                 result = do_set_weights.apply_async(
                     kwargs=dict(
@@ -270,25 +315,87 @@ def set_scores():
                     soft_time_limit=WEIGHT_SETTING_TTL,
                     time_limit=WEIGHT_SETTING_HARD_TTL,
                 )
-                logger.info(f"Setting weights task id: {result.id}")
+                logger.info(f'Setting weights task id: {result.id}')
+                get_weight_setting_lock()
+            except Locked:
+                logger.debug("Another thread already setting weights")
+                return
+            subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+            metagraph = get_metagraph(subtensor=subtensor, netuid=settings.BITTENSOR_NETUID)
+            neurons = metagraph.neurons
+            hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
+            score_per_uid = {}
+            batches = list(SyntheticJobBatch.objects.prefetch_related('synthetic_jobs').filter(
+                scored=False, started_at__gte=now() - timedelta(days=1), accepting_results_until__lt=now()))
+            if len(batches) <= 2:
+                logger.info(f'Not enough batches({len(batches)}) to score')
+                return
+
+            for batch in batches:
+                for job in batch.synthetic_jobs.all():
+                    uid = hotkey_to_uid.get(job.miner.hotkey)
+                    if uid is None:
+                        continue
+                    score_per_uid[uid] = score_per_uid.get(uid, 0) + job.score
+            if not score_per_uid:
+                logger.info('No miners on the subnet to score')
+                return
+            uids = np.zeros(len(neurons), dtype=np.int64)
+            weights = np.zeros(len(neurons), dtype=np.float32)
+            for ind, n in enumerate(neurons):
+                uids[ind] = n.uid
+                weights[ind] = score_per_uid.get(n.uid, 0)
+
+            uids, weights = process_weights_for_netuid(
+                uids,
+                weights,
+                settings.BITTENSOR_NETUID,
+                subtensor,
+                metagraph,
+            )
+            for batch in batches:
+                batch.scored = True
+                batch.save()
+
+            for try_number in range(WEIGHT_SETTING_ATTEMPTS):
+                logger.debug(f'Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}')
+                success = False
+                message = 'unknown error'
                 try:
                     with allow_join_result():
                         success = result.get(timeout=WEIGHT_SETTING_TTL)
-                        message = "bittensor lib error"
+                        message = 'bittensor lib error'
                 except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
                     result.revoke(terminate=True)
-                    logger.info(f"Setting weights timed out (attempt #{try_number})")
-                    message = "timeout"
-            except Exception:
-                logger.exception("Encountered when setting weights: ")
-            if not success:
-                logger.info(f"Failed to set weights due to {message=} (attempt #{try_number})")
+                    logger.info(f'Setting weights timed out (attempt #{try_number})')
+                    message = 'timeout'
+                except Exception:
+                    logger.exception('Encountered when setting weights: ')
+                    save_weight_setting_failure(
+                        subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+                        long_description=traceback.format_exc(),
+                        data={'try_number': try_number},
+                    )
+                if not success:
+                    logger.info(f'Failed to set weights due to {message=} (attempt #{try_number})')
+                    save_weight_setting_failure(
+                        subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_FAILED,
+                        long_description=f'message from chain: {message}',
+                        data={'try_number': try_number},
+                    )
+                else:
+                    logger.info(f'Successfully set weights!!! (attempt #{try_number})')
+                    save_weight_setting_event(
+                        type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+                        subtype=SystemEvent.EventSubType.SUCCESS,
+                        long_description=f'message from chain: {message}',
+                        data={'try_number': try_number},
+                    )
+                    break
+                time.sleep(WEIGHT_SETTING_FAILURE_BACKOFF)
             else:
                 logger.info(f"Successfully set weights!!! (attempt #{try_number})")
-                break
-        else:
             raise RuntimeError(f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts")
-
 
 @app.task
 def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):

@@ -66,11 +66,13 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+
     "django_extensions",
     "django_probes",
     "constance",
     "compute_horde_validator.validator",
     "compute_horde_validator.validator.admin_config.ValidatorAdminConfig",
+    'rangefilter',
 ]
 PROMETHEUS_EXPORT_MIGRATIONS = True
 PROMETHEUS_LATENCY_BUCKETS = (
@@ -192,6 +194,10 @@ if "default" in DATABASES:
     DATABASES["default"]["NAME"] += env.str("DATABASE_SUFFIX", default="")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+DEFAULT_DB_ALIAS = 'default_alias'  # useful for bypassing transaction while connecting to the same db
+DATABASES[DEFAULT_DB_ALIAS] = DATABASES['default']
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {
