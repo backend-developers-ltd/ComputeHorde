@@ -131,7 +131,7 @@ BITTENSOR_MINER_ADDRESS=auto
 COMPOSE_PROJECT_NAME=compute_horde_miner
 PORT_FOR_EXECUTORS=8000 # make sure to unblock access to that port in your firewall
 ADDRESS_FOR_EXECUTORS=172.17.0.1
-DEFAULT_ADMIN_PASSWORD=               #PASS FOR ADMIN UI BITTENSOR_MINER_ADDRESS:BITTENSOR_MINER_PORT LOG ADMIN
+DEFAULT_ADMIN_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')  # PASS FOR ADMIN UI BITTENSOR_MINER_ADDRESS:BITTENSOR_MINER_PORT login "admin"
 ENDENV
 
 docker pull backenddevelopersltd/compute-horde-executor:v0-latest
