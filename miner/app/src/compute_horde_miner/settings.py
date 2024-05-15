@@ -225,6 +225,11 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         'schedule': 60,
         'options': {},
     },
+    'clear_old_receipts': {
+        'task': 'compute_horde_miner.miner.tasks.clear_old_receipts',
+        'schedule': timedelta(hours=1),
+        'options': {},
+    },
 }
 CELERY_TASK_ROUTES = ['compute_horde_miner.celery.route_task']
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())

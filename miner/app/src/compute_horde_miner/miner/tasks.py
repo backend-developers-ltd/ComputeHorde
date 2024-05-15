@@ -1,12 +1,17 @@
+import datetime
+
 from celery.utils.log import get_task_logger
 from compute_horde.utils import get_validators
 from django.conf import settings
+from django.utils.timezone import now
 
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import quasi_axon
-from compute_horde_miner.miner.models import Validator
+from compute_horde_miner.miner.models import Validator, JobReceipt
 
 logger = get_task_logger(__name__)
+
+RECEIPTS_MAX_RETENTION_PERIOD = datetime.timedelta(days=7)
 
 
 @app.task
@@ -36,3 +41,8 @@ def fetch_validators():
     Validator.objects.bulk_update(to_activate + to_deactivate, ['active'])
     logger.info(f'Fetched validators. Activated: {len(to_activate)}, deactivated: {len(to_deactivate)}, '
                 f'created: {len(to_create)}')
+
+
+@app.task
+def clear_old_receipts():
+    JobReceipt.objects.filter(time_started__lt=now()-RECEIPTS_MAX_RETENTION_PERIOD).delete()
