@@ -4,7 +4,6 @@ from compute_horde_miner.miner.models import JobReceipt
 from compute_horde_miner.miner.receipt_store.base import Receipt
 from compute_horde_miner.miner.receipt_store.current import receipts_store
 
-
 _prepare_receipts_lock = asyncio.Lock()
 
 

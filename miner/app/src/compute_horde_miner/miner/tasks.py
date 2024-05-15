@@ -7,7 +7,7 @@ from django.utils.timezone import now
 
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import quasi_axon
-from compute_horde_miner.miner.models import Validator, JobReceipt
+from compute_horde_miner.miner.models import JobReceipt, Validator
 
 logger = get_task_logger(__name__)
 
