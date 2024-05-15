@@ -221,7 +221,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 validator_hotkey=msg.payload.validator_hotkey,
                 time_started=msg.payload.time_started,
                 time_took_us=msg.payload.time_took_us,
-                score=msg.payload.score,
+                score_str=msg.payload.score_str,
             )
             await prepare_receipts()
 

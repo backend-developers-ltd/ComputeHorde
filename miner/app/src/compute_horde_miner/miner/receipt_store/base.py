@@ -21,7 +21,7 @@ class Receipt(BaseModel):
                 validator_hotkey=jr.validator_hotkey,
                 time_started=jr.time_started,
                 time_took_us=jr.time_took_us,
-                score=jr.score,
+                score_str=jr.score_str,
             ),
             validator_signature=jr.validator_signature,
             miner_signature=jr.miner_signature,

@@ -119,7 +119,7 @@ class MinerClient(AbstractMinerClient):
             validator_hotkey=self.my_hotkey,
             time_started=time_started,
             time_took_us=int(time_took_seconds * 1_000_000),
-            score=score,
+            score_str=f'{score:.6f}',
         )
         return V0ReceiptRequest(
             payload=receipt_payload,

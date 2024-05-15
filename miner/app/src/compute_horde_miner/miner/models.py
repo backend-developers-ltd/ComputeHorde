@@ -88,7 +88,7 @@ class JobReceipt(models.Model):
     validator_hotkey = models.CharField(max_length=256)
     time_started = models.DateTimeField()
     time_took_us = models.BigIntegerField()
-    score = models.FloatField()
+    score_str = models.CharField(max_length=256)
 
     def __str__(self):
         return f'uuid: {self.job_uuid}'

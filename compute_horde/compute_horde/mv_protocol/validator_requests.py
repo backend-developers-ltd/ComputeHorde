@@ -104,7 +104,7 @@ class ReceiptPayload(pydantic.BaseModel):
     validator_hotkey: str
     time_started: datetime.datetime
     time_took_us: int  # micro-seconds
-    score: float
+    score_str: str
 
     def blob_for_signing(self):
         return self.json(sort_keys=True)
@@ -116,6 +116,10 @@ class ReceiptPayload(pydantic.BaseModel):
     @property
     def time_took(self):
         return datetime.timedelta(microseconds=self.time_took_us)
+
+    @property
+    def score(self):
+        return float(self.score_str)
 
 
 class V0ReceiptRequest(BaseValidatorRequest):
