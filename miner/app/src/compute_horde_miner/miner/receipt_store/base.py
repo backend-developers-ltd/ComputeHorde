@@ -2,7 +2,6 @@ import abc
 from typing import Self
 
 from compute_horde.mv_protocol.validator_requests import ReceiptPayload
-from django.conf import settings
 from pydantic import BaseModel
 
 from compute_horde_miner.miner.models import JobReceipt
@@ -18,7 +17,7 @@ class Receipt(BaseModel):
         return cls(
             payload=ReceiptPayload(
                 job_uuid=str(jr.job_uuid),
-                miner_hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address,
+                miner_hotkey=jr.miner_hotkey,
                 validator_hotkey=jr.validator_hotkey,
                 time_started=jr.time_started,
                 time_took=jr.time_took,
