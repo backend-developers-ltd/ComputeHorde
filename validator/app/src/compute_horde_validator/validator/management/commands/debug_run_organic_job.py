@@ -13,7 +13,7 @@ from compute_horde.mv_protocol.miner_requests import (
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from compute_horde_validator.validator.models import Miner, OrganicJob
+from compute_horde_validator.validator.models import Miner, MinerBlacklist, OrganicJob
 from compute_horde_validator.validator.synthetic_jobs.generator.cli import CLIJobGenerator
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     _execute_job,
@@ -77,8 +77,15 @@ class Command(BaseCommand):
         if not neuron.axon_info.is_serving:
             raise ValueError(f'{miner_uid=} did not announce it\'s ip address')
 
+        miner=Miner.objects.get_or_create(hotkey=neuron.hotkey)[0]
+        print(f'{miner=}')
+
+        miner_blacklisted = MinerBlacklist.objects.filter(miner=miner).exists()
+        if miner_blacklisted:
+            raise ValueError(f"{miner_uid=} with hotkey {neuron.hotkey} is blacklisted")
+
         job = OrganicJob.objects.create(
-            miner=Miner.objects.get_or_create(hotkey=neuron.hotkey)[0],
+            miner=miner,
             miner_address=neuron.axon_info.ip,
             miner_address_ip_version=neuron.axon_info.ip_type,
             miner_port=neuron.axon_info.port,

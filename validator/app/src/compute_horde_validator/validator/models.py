@@ -10,6 +10,16 @@ class Miner(models.Model):
     def __str__(self):
         return f'hotkey: {self.hotkey}'
 
+class MinerBlacklist(models.Model):
+    miner = models.OneToOneField(Miner, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name = 'Blacklisted Miner'
+        verbose_name_plural = 'Blacklisted Miners'
+
+    def __str__(self):
+        return f'hotkey: {self.miner.hotkey}'
+
 
 class SyntheticJobBatch(models.Model):
     started_at = models.DateTimeField(auto_now_add=True)
