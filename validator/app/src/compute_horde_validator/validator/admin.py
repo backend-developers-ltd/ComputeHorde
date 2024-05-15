@@ -2,7 +2,7 @@ from django.contrib import admin  # noqa
 from django.contrib.admin import register  # noqa
 from django.contrib.auth.models import User  # noqa
 
-from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
+from compute_horde_validator.validator.models import Miner, MinerBlacklist, OrganicJob, SyntheticJob, MinerBlacklist  # noqa
 
 
 admin.site.site_header = "ComputeHorde Validator Administration"
@@ -25,7 +25,6 @@ class JobAddOnlyAdmin(AddOnlyAdmin):
     search_fields = ["job_uuid", "miner__hotkey"]
     ordering = ["-updated_at"]
 
-    # TODO: read only for now - remove when handling job creation is implemented
     def has_add_permission(self, *args, **kwargs):
         return False
 
@@ -41,3 +40,4 @@ class MinerReadOnlyAdmin(AddOnlyAdmin):
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobAddOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobAddOnlyAdmin)
+admin.site.register(MinerBlacklist)
