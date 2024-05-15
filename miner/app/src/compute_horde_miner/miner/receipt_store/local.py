@@ -1,4 +1,6 @@
 import pathlib
+import shutil
+import tempfile
 import zipfile
 
 from asgiref.sync import sync_to_async
@@ -17,9 +19,12 @@ def _store(receipts: list[Receipt]):
     root.mkdir(parents=True, exist_ok=True)
     filepath = root / ZIP_FILENAME
 
-    with zipfile.ZipFile(filepath, mode='w', compression=zipfile.ZIP_LZMA) as zf:
-        for receipt in receipts:
-            zf.writestr(receipt.payload.job_uuid + '.json', receipt.json())
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+        with zipfile.ZipFile(temp_file, mode='w', compression=zipfile.ZIP_LZMA) as zf:
+            for receipt in receipts:
+                zf.writestr(receipt.payload.job_uuid + '.json', receipt.json())
+
+    shutil.move(temp_file.name, filepath)
 
 
 class LocalReceiptStore(BaseReceiptStore):
