@@ -87,7 +87,7 @@ class JobReceipt(models.Model):
     miner_hotkey = models.CharField(max_length=256)
     validator_hotkey = models.CharField(max_length=256)
     time_started = models.DateTimeField()
-    time_took = models.DurationField()
+    time_took_us = models.BigIntegerField()
     score = models.FloatField()
 
     def __str__(self):

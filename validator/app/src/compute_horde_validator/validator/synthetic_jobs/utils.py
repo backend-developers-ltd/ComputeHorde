@@ -113,13 +113,12 @@ class MinerClient(AbstractMinerClient):
 
     def generate_receipt_message(self, job: JobBase, started_timestamp: float, time_took_seconds: float, score: float) -> V0ReceiptRequest:
         time_started = datetime.datetime.fromtimestamp(started_timestamp, datetime.UTC)
-        time_took = datetime.timedelta(seconds=time_took_seconds)
         receipt_payload = ReceiptPayload(
             job_uuid=str(job.job_uuid),
             miner_hotkey=job.miner.hotkey,
             validator_hotkey=self.my_hotkey,
             time_started=time_started,
-            time_took=time_took,
+            time_took_us=int(time_took_seconds * 1_000_000),
             score=score,
         )
         return V0ReceiptRequest(

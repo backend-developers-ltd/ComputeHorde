@@ -20,7 +20,7 @@ class Receipt(BaseModel):
                 miner_hotkey=jr.miner_hotkey,
                 validator_hotkey=jr.validator_hotkey,
                 time_started=jr.time_started,
-                time_took=jr.time_took,
+                time_took_us=jr.time_took_us,
                 score=jr.score,
             ),
             validator_signature=jr.validator_signature,
