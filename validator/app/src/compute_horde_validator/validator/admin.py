@@ -2,7 +2,7 @@ from django.contrib import admin  # noqa
 from django.contrib.admin import register  # noqa
 from django.contrib.auth.models import User  # noqa
 
-from compute_horde_validator.validator.models import Miner, MinerBlacklist, OrganicJob, SyntheticJob, MinerBlacklist  # noqa
+from compute_horde_validator.validator.models import Miner, MinerBlacklist, OrganicJob, SyntheticJob, MinerBlacklist, AdminJobRequest  # noqa
 
 
 admin.site.site_header = "ComputeHorde Validator Administration"
@@ -19,11 +19,14 @@ class AddOnlyAdmin(admin.ModelAdmin):
     def has_delete_permission(self, *args, **kwargs):
         return False
 
+class AddOnlyAdminJobRequestAdmin(AddOnlyAdmin):
+    list_display = ['miner', 'docker_image', 'args', 'created_at']
+    ordering = ['-created_at']
 
-class JobAddOnlyAdmin(AddOnlyAdmin):
-    list_display = ["job_uuid", "miner", "status", "updated_at"]
-    search_fields = ["job_uuid", "miner__hotkey"]
-    ordering = ["-updated_at"]
+class JobReadOnlyAdmin(AddOnlyAdmin):
+    list_display = ['job_uuid', 'miner', 'status', 'updated_at']
+    search_fields = ['job_uuid', 'miner__hotkey']
+    ordering = ['-updated_at']
 
     def has_add_permission(self, *args, **kwargs):
         return False
@@ -38,6 +41,7 @@ class MinerReadOnlyAdmin(AddOnlyAdmin):
 
 
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
-admin.site.register(SyntheticJob, admin_class=JobAddOnlyAdmin)
-admin.site.register(OrganicJob, admin_class=JobAddOnlyAdmin)
+admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
+admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(MinerBlacklist)
+admin.site.register(AdminJobRequest, admin_class=AddOnlyAdminJobRequestAdmin)

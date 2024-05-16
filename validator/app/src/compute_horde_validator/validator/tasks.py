@@ -6,17 +6,24 @@ import billiard.exceptions
 import bittensor
 import celery.exceptions
 import numpy as np
+from asgiref.sync import async_to_sync
 from bittensor.utils.weight_utils import process_weights_for_netuid
+from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.utils import get_validators
 from django.conf import settings
 from django.db import transaction
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.models import SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs, initiate_jobs
+
+from .miner_driver import run_miner_job
+from .models import AdminJobRequest
 
 logger = get_task_logger(__name__)
 
@@ -97,6 +104,25 @@ def do_set_weights(
         wait_for_finalization=wait_for_finalization,
     )
 
+
+@receiver(post_save, sender=AdminJobRequest)
+def trigger_run_admin_job_request(sender, instance, **kwargs):
+    # can't pass non-serializable objects
+    run_admin_job_request.delay(instance.id)
+
+@shared_task
+def run_admin_job_request(admin_job_request_id: int):
+    job_request: AdminJobRequest = AdminJobRequest.objects.get(id=admin_job_request_id)
+    keypair = settings.BITTENSOR_WALLET().get_hotkey()
+    async_to_sync(run_miner_job) (
+        miner=job_request.miner,
+        job_request=job_request,
+        job_description="Validator Job from Admin Panel",
+        keypair=keypair,
+        total_job_timeout=job_request.timeout,
+        wait_timeout=job_request.timeout,
+        notify_callback=None
+    )
 
 @app.task
 def set_scores():
