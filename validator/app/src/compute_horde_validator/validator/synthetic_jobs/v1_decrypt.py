@@ -11,14 +11,12 @@ from cryptography.fernet import Fernet
 
 
 def run_cmd(cmd):
-    proc = subprocess.run(cmd, shell=True, capture_output=True, check=False)
-    stdout = proc.stdout.decode()
+    proc = subprocess.run(cmd, shell=True, capture_output=True, check=False, text=True)
     if proc.returncode != 0:
-        stderr = proc.stderr.decode()
         raise RuntimeError(
-            f"[errno {proc.returncode}] {cmd}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            f"run_cmd error {cmd=!r} {proc.returncode=} {proc.stdout=!r} {proc.stderr=!r}"
         )
-    return stdout
+    return proc.stdout
 
 
 def scrape_specs() -> dict[str, any]:
