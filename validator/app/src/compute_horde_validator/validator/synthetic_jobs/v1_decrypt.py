@@ -11,10 +11,11 @@ from cryptography.fernet import Fernet
 
 
 def run_cmd(cmd):
-    try:
-        return subprocess.check_output(cmd, shell=True).decode()
-    except Exception:
-        return ""
+    proc = subprocess.run(cmd, shell=True, capture_output=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"[errno={proc.returncode}] {cmd}\n{proc.stderr.decode()}")
+    return proc.stdout.decode()
+
 
 def scrape_specs() -> dict[str, any]:
     data: dict[str, any] = {}
@@ -49,7 +50,7 @@ def scrape_specs() -> dict[str, any]:
         data["gpu_scrape_error"] = repr(exc)
     data["gpu"] = {"details": gpus, "count": len(gpus)}
 
-    data["cpu"] = {}
+    data["cpu"] = {"count": 0, "model": "", "clocks": []}
     try:
         lscpu_output = run_cmd("lscpu")
         data["cpu"]["model"] = re.search(
@@ -95,6 +96,8 @@ def scrape_specs() -> dict[str, any]:
         # print(f"Error getting disk_usage from shutil: {e}", file=sys.stderr)
         data["hard_disk_scrape_error"] = repr(exc)
 
+    data["os"] = ""
+    data["virtualization"] = ""
     try:
         data["os"] = run_cmd(
             'lsb_release -d | grep -Po "Description:\\s*\\K.*"'
