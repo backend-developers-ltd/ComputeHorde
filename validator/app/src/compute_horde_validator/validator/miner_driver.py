@@ -54,18 +54,15 @@ class JobStatusUpdate(BaseModel, extra=Extra.forbid):
 
 
 async def run_miner_job(miner, job_request, job_description: str, keypair: bittensor.Keypair, total_job_timeout: int = 300, wait_timeout:int = 300, notify_callback = None):
-
     miner_axon_info = await get_miner_axon_info(miner.hotkey)
     job = await OrganicJob.objects.acreate(
-        job_uuid=job_request.uuid,
+        job_uuid=str(job_request.uuid),
         miner=miner,
         miner_address=miner_axon_info.ip,
         miner_address_ip_version=miner_axon_info.ip_type,
         miner_port=miner_axon_info.port,
         job_description=job_description,
     )
-    logger.info(f"Created job: {job}")
-
 
     miner_client = MinerClient(
         loop=asyncio.get_event_loop(),
@@ -96,7 +93,7 @@ async def run_miner_job(miner, job_request, job_description: str, keypair: bitte
 
         job_timer = Timer(timeout=total_job_timeout)
         if job_request.input_url:
-            volume = Volume(volume_type=VolumeType.zip_url, contents=job_request.input_url)
+            volume = Volume(volume_type=VolumeType.zip_url, contents=str(job_request.input_url))
         else:
             volume = Volume(volume_type=VolumeType.inline, contents=get_dummy_inline_zip_volume())
 
@@ -158,20 +155,22 @@ async def run_miner_job(miner, job_request, job_description: str, keypair: bitte
         if job_request.output_url:
             output_upload = OutputUpload(
                 output_upload_type=OutputUploadType.zip_and_http_put,
-                url=job_request.output_url,
+                url=str(job_request.output_url),
             )
         else:
             output_upload = None
 
-        await miner_client.send_model(V0JobRequest(
-            job_uuid=job.job_uuid,
-            docker_image_name=job_request.docker_image or None,
-            raw_script=job_request.raw_script or None,
-            docker_run_options_preset=docker_run_options_preset,
-            docker_run_cmd=job_request.args,
-            volume=volume,  # TODO: raw scripts
-            output_upload=output_upload,
-        ))
+        await miner_client.send_model(
+            V0JobRequest(
+                job_uuid=job.job_uuid,
+                docker_image_name=job_request.docker_image or None,
+                raw_script=job_request.raw_script or None,
+                docker_run_options_preset=docker_run_options_preset,
+                docker_run_cmd=job_request.get_args(),
+                volume=volume,  # TODO: raw scripts
+                output_upload=output_upload,
+            )
+        )
         full_job_sent = time.time()
         try:
             msg = await asyncio.wait_for(
