@@ -75,6 +75,9 @@ class JobRequest(BaseModel, extra=Extra.forbid):
     input_url: str
     output_url: str
 
+    def get_args(self):
+        return self.args
+
     @root_validator()
     def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
         if not (bool(values.get("docker_image")) or bool(values.get("raw_script"))):

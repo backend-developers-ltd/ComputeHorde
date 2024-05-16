@@ -31,7 +31,7 @@ class AdminJobRequestForm(forms.ModelForm):
 
 class AddOnlyAdminJobRequestAdmin(AddOnlyAdmin):
     form = AdminJobRequestForm
-    list_display = ['miner', 'docker_image', 'args', 'created_at']
+    list_display = ['uuid', 'docker_image', 'use_gpu', 'miner', 'created_at']
     ordering = ['-created_at']
 
 class JobReadOnlyAdmin(AddOnlyAdmin):
