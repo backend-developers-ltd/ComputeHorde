@@ -26,8 +26,6 @@ Miners are encouraged to optimize their setup by implementing their own executor
 
 3. To use your custom executor, set the `EXECUTOR_MANAGER_CLASS_PATH` variable in the `.env` file of the miner runner.
 
-This feature is currently in early access stage and is only available on `v0-preprod` images. See the section about preprod images to set up your environment.
-
 To create a custom executor manager, follow these steps:
 
 1. Create a directory for your code, e.g., `/home/ubuntu/custom_executor`.
@@ -35,23 +33,36 @@ To create a custom executor manager, follow these steps:
 2. Inside the directory, create a file named `my_executor.py` and add the following code:
 
    ```python
-   from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager
+    from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager
 
-   class MyExecutor(BaseExecutorManager):
-       async def _reserve_executor(self, token):
-           """Start spinning up an executor with `token` or raise ExecutorUnavailable if at capacity"""
-           pass
+    class MyExecutor(BaseExecutorManager):
+        async def start_new_executor(self, token, executor_class, timeout):
+            """Start spinning up an executor with `token` for given executor_class or raise ExecutorUnavailable if at capacity
 
-       async def _kill_executor(self, executor):
-           """Kill running executor."""
-           pass
+            `timeout` is provided so manager does not need to relay on pool cleanup to stop expired executor"""
+            pass
 
-       async def _wait_for_executor(self, executor, timeout):
-           """Wait for executor to finish the job until timeout"""
-           pass
+        async def kill_executor(self, executor):
+            """Kill running executor. It might be platform specific, so leave it to Manager implementation"""
+            pass
+
+        async def wait_for_executor(self, executor, timeout):
+            """Wait for executor to finish the job for till timeout.
+
+            Have to return not None status if executor finished. If returned status is None it means that
+            executor is still running.
+            """
+            pass
+
+        async def get_manifest(self) -> dict[int, int]:
+            """Return executors manifest
+
+            Keys are executor class ids and values are number of supported executors for given executor class.
+            """
+            pass
    ```
 
-   You need to implement all three methods (`_reserve_executor`, `_kill_executor`, and `_wait_for_executor`) to make the executor work. For reference, you can check the implementation in `compute_horde_miner.miner.executor_manager.docker`.
+   You need to implement all 4 methods (`start_new_executor`, `kill_executor`, `wait_for_executor` and `get_manifest`) to make the executor work. For reference, you can check the implementation in `compute_horde_miner.miner.executor_manager.docker`.
 
 3. Update your `.env` file with the following variables:
 
