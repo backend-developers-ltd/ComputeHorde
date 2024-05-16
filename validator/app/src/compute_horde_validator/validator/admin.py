@@ -1,4 +1,5 @@
 from django.contrib import admin  # noqa
+from django import forms
 from django.contrib.admin import register  # noqa
 from django.contrib.auth.models import User  # noqa
 
@@ -18,7 +19,18 @@ class AddOnlyAdmin(admin.ModelAdmin):
     def has_delete_permission(self, *args, **kwargs):
         return False
 
+class AdminJobRequestForm(forms.ModelForm):
+    class Meta:
+        model = AdminJobRequest
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super(__class__, self).__init__(*args, **kwargs)
+        if self.fields:
+            self.fields['miner'].queryset = Miner.objects.exclude(minerblacklist__isnull=False)
+
 class AddOnlyAdminJobRequestAdmin(AddOnlyAdmin):
+    form = AdminJobRequestForm
     list_display = ['miner', 'docker_image', 'args', 'created_at']
     ordering = ['-created_at']
 
