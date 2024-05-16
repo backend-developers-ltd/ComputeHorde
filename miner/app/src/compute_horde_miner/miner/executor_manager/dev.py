@@ -5,14 +5,17 @@ import sys
 
 from django.conf import settings
 
-from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager
+from compute_horde_miner.miner.executor_manager.base import (
+    DEFAULT_EXECUTOR_CLASS,
+    BaseExecutorManager,
+)
 
 this_dir = pathlib.Path(__file__).parent
 executor_dir = this_dir / ".." / ".." / ".." / ".." / ".." / ".." / "executor"
 
 
 class DevExecutorManager(BaseExecutorManager):
-    async def _reserve_executor(self, token):
+    async def start_new_executor(self, token, executor_class, timeout):
         return subprocess.Popen(
             [sys.executable, "app/src/manage.py", "run_executor"],
             env={
@@ -23,14 +26,17 @@ class DevExecutorManager(BaseExecutorManager):
             cwd=executor_dir,
         )
 
-    async def _kill_executor(self, executor):
+    async def kill_executor(self, executor):
         try:
             executor.kill()
         except OSError:
             pass
 
-    async def _wait_for_executor(self, executor, timeout):
+    async def wait_for_executor(self, executor, timeout):
         try:
-            executor.wait(timeout)
+            return executor.wait(timeout)
         except subprocess.TimeoutExpired:
             pass
+
+    async def get_manifest(self):
+        return {DEFAULT_EXECUTOR_CLASS: 1}

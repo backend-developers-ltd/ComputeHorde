@@ -4,7 +4,11 @@ import subprocess
 
 from django.conf import settings
 
-from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager, ExecutorUnavailable
+from compute_horde_miner.miner.executor_manager.base import (
+    DEFAULT_EXECUTOR_CLASS,
+    BaseExecutorManager,
+    ExecutorUnavailable,
+)
 
 PULLING_TIMEOUT = 300
 DOCKER_STOP_TIMEOUT = 5
@@ -19,7 +23,7 @@ class DockerExecutor:
 
 
 class DockerExecutorManager(BaseExecutorManager):
-    async def _reserve_executor(self, token):
+    async def start_new_executor(self, token, executor_class, timeout):
         if settings.ADDRESS_FOR_EXECUTORS:
             address = settings.ADDRESS_FOR_EXECUTORS
         else:
@@ -75,7 +79,7 @@ class DockerExecutorManager(BaseExecutorManager):
         )
         return DockerExecutor(process_executor, token)
 
-    async def _kill_executor(self, executor):
+    async def kill_executor(self, executor):
         # kill executor container first so it would not be able to report anything - job simply timeouts
         process = await asyncio.create_subprocess_exec("docker", "stop", executor.token)
         try:
@@ -94,8 +98,11 @@ class DockerExecutorManager(BaseExecutorManager):
         except OSError:
             pass
 
-    async def _wait_for_executor(self, executor, timeout):
+    async def wait_for_executor(self, executor, timeout):
         try:
-            await asyncio.wait_for(executor.process_executor.wait(), timeout=timeout)
+            return await asyncio.wait_for(executor.process_executor.wait(), timeout=timeout)
         except TimeoutError:
             pass
+
+    async def get_manifest(self):
+        return {DEFAULT_EXECUTOR_CLASS: 1}
