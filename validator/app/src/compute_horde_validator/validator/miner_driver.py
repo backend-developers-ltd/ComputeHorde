@@ -54,10 +54,9 @@ class JobStatusUpdate(BaseModel, extra=Extra.forbid):
 
 
 async def run_miner_job(miner, job_request, job_description: str, keypair: bittensor.Keypair, total_job_timeout: int = 300, wait_timeout:int = 300, notify_callback = None):
-
     miner_axon_info = await get_miner_axon_info(miner.hotkey)
     job = await OrganicJob.objects.acreate(
-        job_uuid=job_request.uuid,
+        job_uuid=str(job_request.uuid),
         miner=miner,
         miner_address=miner_axon_info.ip,
         miner_address_ip_version=miner_axon_info.ip_type,
