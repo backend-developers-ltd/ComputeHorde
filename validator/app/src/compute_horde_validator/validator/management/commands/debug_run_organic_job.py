@@ -72,14 +72,12 @@ class Command(BaseCommand):
         metagraph = bittensor.metagraph(settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
         neurons = [n for n in metagraph.neurons if n.uid == miner_uid]
         if not neurons:
-            raise ValueError(f'{miner_uid=} not present in this subnetowrk')
+            raise ValueError(f'{miner_uid=} not present in this subnetwork')
         neuron = neurons[0]
         if not neuron.axon_info.is_serving:
             raise ValueError(f'{miner_uid=} did not announce it\'s ip address')
 
         miner=Miner.objects.get_or_create(hotkey=neuron.hotkey)[0]
-        print(f'{miner=}')
-
         miner_blacklisted = MinerBlacklist.objects.filter(miner=miner).exists()
         if miner_blacklisted:
             raise ValueError(f"{miner_uid=} with hotkey {neuron.hotkey} is blacklisted")

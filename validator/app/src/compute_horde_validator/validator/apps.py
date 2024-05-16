@@ -6,6 +6,7 @@ from django.db.models.signals import post_migrate
 
 logger = logging.getLogger(__name__)
 
+
 def maybe_create_default_admin(sender, **kwargs):
     from django.contrib.auth.models import User  # noqa
 
@@ -19,8 +20,15 @@ def maybe_create_default_admin(sender, **kwargs):
             logger.info("Creating Admin user with DEFAULT_ADMIN_PASSWORD")
             User.objects.create_superuser(username=settings.DEFAULT_ADMIN_USERNAME, email=settings.DEFAULT_ADMIN_EMAIL, password=admin_password)
 
+
 class ValidatorConfig(AppConfig):
     name = 'compute_horde_validator.validator'
 
     def ready(self):
+        from django.db.models import signals
+
+        from .models import AdminJobRequest
+        from .tasks import trigger_run_admin_job_request
+
         post_migrate.connect(maybe_create_default_admin, sender=self)
+        signals.post_save.connect(receiver=trigger_run_admin_job_request, sender=AdminJobRequest)
