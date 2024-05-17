@@ -18,6 +18,11 @@ server {
         root /srv/;
     }
 
+    location /receipts/ {
+        # root /;
+        alias /receipts/;
+    }
+
 
     location / {
           proxy_buffering off;
