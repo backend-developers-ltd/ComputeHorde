@@ -8,7 +8,7 @@ admin.site.site_header = "ComputeHorde Miner Administration"
 admin.site.site_title = "compute_horde_miner"
 admin.site.index_title = "Welcome to ComputeHorde Miner Administration"
 
-admin.site.index_template = 'admin/miner_index.html'
+admin.site.index_template = "admin/miner_index.html"
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
@@ -25,13 +25,20 @@ class ReadOnlyAdmin(admin.ModelAdmin):
 
 
 class ValidatorReadOnlyAdmin(ReadOnlyAdmin):
-    search_fields = ['public_key']
+    search_fields = ["public_key"]
 
 
 class AcceptedJobReadOnlyAdmin(ReadOnlyAdmin):
-    list_display = ['job_uuid', 'validator', 'status', 'result_reported_to_validator', 'created_at', 'updated_at']
-    search_fields = ['job_uuid', 'validator__public_key']
-    ordering = ['-created_at']
+    list_display = [
+        "job_uuid",
+        "validator",
+        "status",
+        "result_reported_to_validator",
+        "created_at",
+        "updated_at",
+    ]
+    search_fields = ["job_uuid", "validator__public_key"]
+    ordering = ["-created_at"]
 
 
 class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):

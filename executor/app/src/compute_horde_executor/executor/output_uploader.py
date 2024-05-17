@@ -22,15 +22,18 @@ class OutputUploadFailed(Exception):
 
 class OutputUploader(metaclass=abc.ABCMeta):
     """Upload the output directory to JobRequest.OutputUpload"""
+
     def __init__(self, upload_output: OutputUpload):
         self.upload_output = upload_output
 
     @classmethod
     @abc.abstractmethod
-    def handles_output_type(cls) -> OutputUploadType: ...
+    def handles_output_type(cls) -> OutputUploadType:
+        ...
 
     @abc.abstractmethod
-    async def upload(self, directory: pathlib.Path): ...
+    async def upload(self, directory: pathlib.Path):
+        ...
 
     __output_type_map: dict[OutputUploadType, type[OutputUploader]] = {}
 
@@ -45,6 +48,7 @@ class OutputUploader(metaclass=abc.ABCMeta):
 
 class ZipAndHTTPPostOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP POST the zip file to the given URL"""
+
     @classmethod
     def handles_output_type(cls) -> OutputUploadType:
         return OutputUploadType.zip_and_http_post
@@ -71,7 +75,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
                     )
                     response.raise_for_status()
                 except httpx.HTTPError as ex:
-                    raise OutputUploadFailed(f'Uploading output failed with http error {ex}')
+                    raise OutputUploadFailed(f"Uploading output failed with http error {ex}")
 
 
 class ZipAndHTTPPutOutputUploader(OutputUploader):
@@ -97,11 +101,11 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
                     )
                     response.raise_for_status()
                 except httpx.HTTPError as ex:
-                    raise OutputUploadFailed(f'Uploading output failed with http error {ex}')
+                    raise OutputUploadFailed(f"Uploading output failed with http error {ex}")
 
 
 async def make_iterator_async(it):
-    """ This is stupid. """
+    """This is stupid."""
     for x in it:
         yield x
 
@@ -114,9 +118,9 @@ def zipped_directory(directory: pathlib.Path):
 
     Returns: tuple of size and the file object of the zip file
     """
-    files = list(directory.glob('**/*'))
+    files = list(directory.glob("**/*"))
     if len(files) > MAX_NUMBER_OF_FILES:
-        raise OutputUploadFailed('Attempting to upload too many files')
+        raise OutputUploadFailed("Attempting to upload too many files")
 
     with tempfile.TemporaryFile() as fp:
         with zipfile.ZipFile(fp, mode="w") as zipf:
@@ -127,6 +131,6 @@ def zipped_directory(directory: pathlib.Path):
         fp.seek(0)
 
         if file_size > settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES:
-            raise OutputUploadFailed('Attempting to upload too large file')
+            raise OutputUploadFailed("Attempting to upload too large file")
 
         yield file_size, fp

@@ -23,34 +23,55 @@ class DockerExecutorManager(BaseExecutorManager):
         if settings.ADDRESS_FOR_EXECUTORS:
             address = settings.ADDRESS_FOR_EXECUTORS
         else:
-            address = subprocess.check_output([
-                'docker',
-                'inspect',
-                '-f',
-                '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
-                'root_app_1'
-            ]).decode().strip()
+            address = (
+                subprocess.check_output(
+                    [
+                        "docker",
+                        "inspect",
+                        "-f",
+                        "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+                        "root_app_1",
+                    ]
+                )
+                .decode()
+                .strip()
+            )
         if not settings.DEBUG_SKIP_PULLING_EXECUTOR_IMAGE:
-            process = await asyncio.create_subprocess_exec('docker', 'pull', settings.EXECUTOR_IMAGE)
+            process = await asyncio.create_subprocess_exec(
+                "docker", "pull", settings.EXECUTOR_IMAGE
+            )
             try:
                 await asyncio.wait_for(process.communicate(), timeout=PULLING_TIMEOUT)
                 if process.returncode:
-                    logger.error(f'Pulling executor container failed with returncode={process.returncode}')
-                    raise ExecutorUnavailable('Failed to pull executor image')
+                    logger.error(
+                        f"Pulling executor container failed with returncode={process.returncode}"
+                    )
+                    raise ExecutorUnavailable("Failed to pull executor image")
             except TimeoutError:
                 process.kill()
-                logger.error('Pulling executor container timed out, pulling it from shell might provide more details')
-                raise ExecutorUnavailable('Failed to pull executor image')
-        process_executor =  await asyncio.create_subprocess_exec( # noqa: S607
-            "docker", "run", "--rm",
-            "-e", f"MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS}",
-            "-e", f"EXECUTOR_TOKEN={token}",
-            "--name", token,
+                logger.error(
+                    "Pulling executor container timed out, pulling it from shell might provide more details"
+                )
+                raise ExecutorUnavailable("Failed to pull executor image")
+        process_executor = await asyncio.create_subprocess_exec(  # noqa: S607
+            "docker",
+            "run",
+            "--rm",
+            "-e",
+            f"MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS}",
+            "-e",
+            f"EXECUTOR_TOKEN={token}",
+            "--name",
+            token,
             # the executor must be able to spawn images on host
-            "-v", "/var/run/docker.sock:/var/run/docker.sock",
-            "-v", "/tmp:/tmp",
+            "-v",
+            "/var/run/docker.sock:/var/run/docker.sock",
+            "-v",
+            "/tmp:/tmp",
             settings.EXECUTOR_IMAGE,
-            "python", "manage.py", "run_executor",
+            "python",
+            "manage.py",
+            "run_executor",
         )
         return DockerExecutor(process_executor, token)
 

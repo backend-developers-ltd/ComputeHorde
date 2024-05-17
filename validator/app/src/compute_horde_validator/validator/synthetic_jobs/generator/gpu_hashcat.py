@@ -19,7 +19,6 @@ MAX_SCORE = 2
 
 
 class WeightVersionHolder:
-
     def __init__(self):
         self._time_set = 0
         self.value = None

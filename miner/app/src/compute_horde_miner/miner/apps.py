@@ -15,15 +15,20 @@ def maybe_create_default_admin(sender, **kwargs):
     if not admin_user_exists:
         admin_password = settings.DEFAULT_ADMIN_PASSWORD
         if admin_password is None:
-            logger.warning("Not creating Admin user - please set DEFAULT_ADMIN_PASSWORD env variable")
+            logger.warning(
+                "Not creating Admin user - please set DEFAULT_ADMIN_PASSWORD env variable"
+            )
         else:
             logger.info("Creating Admin user with DEFAULT_ADMIN_PASSWORD")
-            User.objects.create_superuser(username=settings.DEFAULT_ADMIN_USERNAME, email=settings.DEFAULT_ADMIN_EMAIL,
-                                          password=admin_password)
+            User.objects.create_superuser(
+                username=settings.DEFAULT_ADMIN_USERNAME,
+                email=settings.DEFAULT_ADMIN_EMAIL,
+                password=admin_password,
+            )
 
 
 class MinerConfig(AppConfig):
-    name = 'compute_horde_miner.miner'
+    name = "compute_horde_miner.miner"
 
     def ready(self):
         post_migrate.connect(maybe_create_default_admin, sender=self)

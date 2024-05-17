@@ -11,12 +11,12 @@ from ..utils import MachineSpecs
 
 
 class RequestType(enum.Enum):
-    V0AuthenticateRequest = 'V0AuthenticateRequest'
-    V0InitialJobRequest = 'V0InitialJobRequest'
-    V0MachineSpecsRequest = 'V0MachineSpecsRequest'
-    V0JobRequest = 'V0JobRequest'
-    V0ReceiptRequest = 'V0ReceiptRequest'
-    GenericError = 'GenericError'
+    V0AuthenticateRequest = "V0AuthenticateRequest"
+    V0InitialJobRequest = "V0InitialJobRequest"
+    V0MachineSpecsRequest = "V0MachineSpecsRequest"
+    V0JobRequest = "V0JobRequest"
+    V0ReceiptRequest = "V0ReceiptRequest"
+    GenericError = "GenericError"
 
 
 class BaseValidatorRequest(BaseRequest):
@@ -24,8 +24,8 @@ class BaseValidatorRequest(BaseRequest):
 
 
 class VolumeType(enum.Enum):
-    inline = 'inline'
-    zip_url = 'zip_url'
+    inline = "inline"
+    zip_url = "zip_url"
 
 
 class AuthenticationPayload(pydantic.BaseModel):
@@ -60,8 +60,8 @@ class Volume(pydantic.BaseModel):
 
 
 class OutputUploadType(enum.Enum):
-    zip_and_http_post = 'zip_and_http_post'
-    zip_and_http_put = 'zip_and_http_put'
+    zip_and_http_post = "zip_and_http_post"
+    zip_and_http_put = "zip_and_http_put"
 
 
 class OutputUpload(pydantic.BaseModel):

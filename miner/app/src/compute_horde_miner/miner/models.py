@@ -18,27 +18,27 @@ class Validator(models.Model):
     active = models.BooleanField()
 
     def __str__(self):
-        return f'hotkey: {self.public_key}'
+        return f"hotkey: {self.public_key}"
 
 
 class ValidatorBlacklist(models.Model):
     validator = models.OneToOneField(Validator, on_delete=models.CASCADE)
 
     class Meta:
-        verbose_name = 'Blacklisted Validator'
-        verbose_name_plural = 'Blacklisted Validators'
+        verbose_name = "Blacklisted Validator"
+        verbose_name_plural = "Blacklisted Validators"
 
     def __str__(self):
-        return f'hotkey: {self.validator.public_key}'
+        return f"hotkey: {self.validator.public_key}"
 
 
 class AcceptedJob(models.Model):
     class Status(models.TextChoices):
-        WAITING_FOR_EXECUTOR = 'WAITING_FOR_EXECUTOR'
-        WAITING_FOR_PAYLOAD = 'WAITING_FOR_PAYLOAD'
-        RUNNING = 'RUNNING'
-        FINISHED = 'FINISHED'
-        FAILED = 'FAILED'
+        WAITING_FOR_EXECUTOR = "WAITING_FOR_EXECUTOR"
+        WAITING_FOR_PAYLOAD = "WAITING_FOR_PAYLOAD"
+        RUNNING = "RUNNING"
+        FINISHED = "FINISHED"
+        FAILED = "FAILED"
 
     validator = models.ForeignKey(Validator, on_delete=models.CASCADE)
     job_uuid = models.UUIDField()
@@ -47,8 +47,8 @@ class AcceptedJob(models.Model):
     initial_job_details = models.JSONField(encoder=EnumEncoder)
     full_job_details = models.JSONField(encoder=EnumEncoder, null=True)
     exit_status = models.PositiveSmallIntegerField(null=True)
-    stdout = models.TextField(blank=True, default='')
-    stderr = models.TextField(blank=True, default='')
+    stdout = models.TextField(blank=True, default="")
+    stderr = models.TextField(blank=True, default="")
     result_reported_to_validator = models.DateTimeField(null=True)
     time_took = models.DurationField(null=True)
     score = models.FloatField(null=True)
@@ -56,7 +56,9 @@ class AcceptedJob(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f'uuid: {self.job_uuid} - validator hotkey: {self.validator.public_key} - {self.status}'
+        return (
+            f"uuid: {self.job_uuid} - validator hotkey: {self.validator.public_key} - {self.status}"
+        )
 
     @classmethod
     async def get_for_validator(cls, validator: Validator) -> dict[str, Self]:
@@ -64,17 +66,24 @@ class AcceptedJob(models.Model):
             str(job.job_uuid): job
             async for job in cls.objects.filter(
                 validator=validator,
-                status__in=[cls.Status.WAITING_FOR_EXECUTOR.value, cls.Status.WAITING_FOR_PAYLOAD.value, cls.Status.RUNNING.value]
+                status__in=[
+                    cls.Status.WAITING_FOR_EXECUTOR.value,
+                    cls.Status.WAITING_FOR_PAYLOAD.value,
+                    cls.Status.RUNNING.value,
+                ],
             )
         }
 
     @classmethod
     async def get_not_reported(cls, validator: Validator) -> Iterable[Self]:
-        return [job async for job in cls.objects.filter(
-            validator=validator,
-            status__in=[cls.Status.FINISHED.value, cls.Status.FAILED.value],
-            result_reported_to_validator__isnull=True,
-        )]
+        return [
+            job
+            async for job in cls.objects.filter(
+                validator=validator,
+                status__in=[cls.Status.FINISHED.value, cls.Status.FAILED.value],
+                result_reported_to_validator__isnull=True,
+            )
+        ]
 
 
 class JobReceipt(models.Model):
@@ -91,4 +100,4 @@ class JobReceipt(models.Model):
     score_str = models.CharField(max_length=256)
 
     def __str__(self):
-        return f'uuid: {self.job_uuid}'
+        return f"uuid: {self.job_uuid}"

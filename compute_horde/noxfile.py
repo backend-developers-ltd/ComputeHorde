@@ -49,27 +49,29 @@ def make_release_commit(session: nox.Session):
     else:
         session.error('Provide -- {release_version} (X.Y.Z - without leading "v")')
 
-    if not re.match(r'^\d+\.\d+\.\d+(a\d+)?$', version):
+    if not re.match(r"^\d+\.\d+\.\d+(a\d+)?$", version):
         session.error(
             f'Provided version="{version}". Version must be of the form X.Y.Z where '
-            f'X, Y and Z are integers'
+            f"X, Y and Z are integers"
         )
 
-    local_changes = subprocess.check_output(['git', 'diff', '--stat'])
+    local_changes = subprocess.check_output(["git", "diff", "--stat"])
     if local_changes:
-        session.error('Uncommitted changes detected')
+        session.error("Uncommitted changes detected")
 
-    current_branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).decode().strip()
-    if current_branch != 'master':
-        session.error(f'Release must happen from master branch (current branch: {current_branch})')
+    current_branch = (
+        subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]).decode().strip()
+    )
+    if current_branch != "master":
+        session.error(f"Release must happen from master branch (current branch: {current_branch})")
 
-    install(session, 'release')
-    session.run('towncrier', 'build', '--yes', '--version', version)
+    install(session, "release")
+    session.run("towncrier", "build", "--yes", "--version", version)
 
     session.log(
-        f'CHANGELOG updated, changes ready to commit and push\n'
+        f"CHANGELOG updated, changes ready to commit and push\n"
         f'    git commit -m "Release library version {version}"\n'
-        f'    git tag {RELEASE_TAG_PREFIX}-v{version}\n'
-        f'    git push origin master\n'
-        f'    git push origin {RELEASE_TAG_PREFIX}-v{version}'
+        f"    git tag {RELEASE_TAG_PREFIX}-v{version}\n"
+        f"    git push origin master\n"
+        f"    git push origin {RELEASE_TAG_PREFIX}-v{version}"
     )
