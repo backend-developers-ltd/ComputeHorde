@@ -34,9 +34,9 @@ class Receipt(BaseModel):
 
 class BaseReceiptStore(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    async def store(self, receipts: list[Receipt]):
+    def store(self, receipts: list[Receipt]) -> None:
         ...
 
     @abc.abstractmethod
-    async def get_url(self) -> str:
+    def get_url(self) -> str:
         ...

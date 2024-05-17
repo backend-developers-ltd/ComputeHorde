@@ -11,6 +11,6 @@ def get_version(request):
     return JsonResponse({'miner_version': miner_version, 'runner_version': runner_version})
 
 
-async def get_receipts(request):
-    url = await receipts_store.get_url()
+def get_receipts(request):
+    url = receipts_store.get_url()
     return HttpResponseRedirect(redirect_to=url)
