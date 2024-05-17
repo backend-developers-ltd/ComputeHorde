@@ -87,7 +87,7 @@ class MinerClient(AbstractMinerClient):
             logger.error(f"Unauthorized in {self.miner_name}: {msg.code}, details: {msg.details}")
             return
         if msg.job_uuid != self.job_uuid:
-            logger.info(f"Received info about another job: {msg}")
+            logger.info(f"Recevied info about another job: {msg}")
             return
         if isinstance(msg, V0AcceptJobRequest):
             logger.info(f"Miner {self.miner_name} accepted job")
