@@ -10,11 +10,11 @@ from ..utils import MachineSpecs
 
 
 class RequestType(enum.Enum):
-    V0AuthenticateRequest = 'V0AuthenticateRequest'
-    V0InitialJobRequest = 'V0InitialJobRequest'
-    V0MachineSpecsRequest = 'V0MachineSpecsRequest'
-    V0JobRequest = 'V0JobRequest'
-    GenericError = 'GenericError'
+    V0AuthenticateRequest = "V0AuthenticateRequest"
+    V0InitialJobRequest = "V0InitialJobRequest"
+    V0MachineSpecsRequest = "V0MachineSpecsRequest"
+    V0JobRequest = "V0JobRequest"
+    GenericError = "GenericError"
 
 
 class BaseValidatorRequest(BaseRequest):
@@ -22,8 +22,8 @@ class BaseValidatorRequest(BaseRequest):
 
 
 class VolumeType(enum.Enum):
-    inline = 'inline'
-    zip_url = 'zip_url'
+    inline = "inline"
+    zip_url = "zip_url"
 
 
 class AuthenticationPayload(pydantic.BaseModel):
@@ -58,8 +58,8 @@ class Volume(pydantic.BaseModel):
 
 
 class OutputUploadType(enum.Enum):
-    zip_and_http_post = 'zip_and_http_post'
-    zip_and_http_put = 'zip_and_http_put'
+    zip_and_http_post = "zip_and_http_post"
+    zip_and_http_put = "zip_and_http_put"
 
 
 class OutputUpload(pydantic.BaseModel):
@@ -85,9 +85,11 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
             raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
         return values
 
+
 class V0MachineSpecsRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0MachineSpecsRequest
     specs: MachineSpecs
+
 
 class GenericError(BaseValidatorRequest):
     message_type: RequestType = RequestType.GenericError

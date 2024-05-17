@@ -15,13 +15,14 @@ device = torch.device("cuda")
 # Load MNIST dataset
 transform = transforms.Compose([transforms.ToTensor()])
 
-train_dataset = datasets.MNIST(root='./data', train=True, download=False, transform=transform)
-test_dataset = datasets.MNIST(root='./data', train=False, download=False, transform=transform)
+train_dataset = datasets.MNIST(root="./data", train=True, download=False, transform=transform)
+test_dataset = datasets.MNIST(root="./data", train=False, download=False, transform=transform)
 
 train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
 # Initialize model and tokenizer
+
 
 class SimpleNN(nn.Module):
     def __init__(self):
@@ -37,8 +38,9 @@ class SimpleNN(nn.Module):
         x = self.fc2(x)
         return x
 
+
 model = SimpleNN()
-tokenizer = DistilBertTokenizer.from_pretrained('./distilbert-base-uncased', local_files_only=True)
+tokenizer = DistilBertTokenizer.from_pretrained("./distilbert-base-uncased", local_files_only=True)
 
 # Move model to device
 model.to(device)
@@ -77,5 +79,6 @@ for epoch in range(epochs):
 
     accuracy = correct / total
 
-    print(f'Epoch {epoch+1}/{epochs}, Test Accuracy: {accuracy}, Loop time: {time.time() - start:0.4}s')
-
+    print(
+        f"Epoch {epoch+1}/{epochs}, Test Accuracy: {accuracy}, Loop time: {time.time() - start:0.4}s"
+    )

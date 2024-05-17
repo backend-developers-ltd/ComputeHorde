@@ -1,4 +1,3 @@
-
 import glob
 import os
 
@@ -10,12 +9,13 @@ from prometheus_client import multiprocess
 
 class RecursiveMultiProcessCollector(multiprocess.MultiProcessCollector):
     """A multiprocess collector that scans the directory recursively"""
+
     def collect(self):
-        files = glob.glob(os.path.join(self._path, '**/*.db'), recursive=True)
+        files = glob.glob(os.path.join(self._path, "**/*.db"), recursive=True)
         return self.merge(files, accumulate=True)
 
 
-ENV_VAR_NAME = 'PROMETHEUS_MULTIPROC_DIR'
+ENV_VAR_NAME = "PROMETHEUS_MULTIPROC_DIR"
 
 
 def metrics_view(request):
@@ -25,7 +25,7 @@ def metrics_view(request):
         RecursiveMultiProcessCollector(registry)
         return HttpResponse(
             prometheus_client.generate_latest(registry),
-            content_type=prometheus_client.CONTENT_TYPE_LATEST
+            content_type=prometheus_client.CONTENT_TYPE_LATEST,
         )
     else:
         return ExportToDjangoView(request)

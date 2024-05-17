@@ -1,4 +1,3 @@
-
 from celery.utils.log import get_task_logger
 
 from compute_horde_executor.celery import app

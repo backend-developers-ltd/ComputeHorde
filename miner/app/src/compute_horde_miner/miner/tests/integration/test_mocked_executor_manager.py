@@ -14,30 +14,36 @@ WEBSOCKET_TIMEOUT = 10
 @pytest.mark.asyncio
 @pytest.mark.django_db
 async def test_main_loop():
-    validator_key = 'some_public_key'
+    validator_key = "some_public_key"
     await Validator.objects.acreate(public_key=validator_key, active=True)
 
     job_uuid = str(uuid.uuid4())
     fake_executor.job_uuid = job_uuid
-    communicator = WebsocketCommunicator(asgi.application, f"v0.1/validator_interface/{validator_key}")
+    communicator = WebsocketCommunicator(
+        asgi.application, f"v0.1/validator_interface/{validator_key}"
+    )
     connected, _ = await communicator.connect()
     assert connected
-    await communicator.send_json_to({
-        "message_type": "V0AuthenticateRequest",
-        "payload": {
-            'validator_hotkey': validator_key,
-            'miner_hotkey': 'some key',
-            'timestamp': int(time.time()),
-        },
-        "signature": "gibberish",
-    })
-    await communicator.send_json_to({
-        "message_type": "V0InitialJobRequest",
-        "job_uuid": job_uuid,
-        "base_docker_image_name": "it's teeeeests",
-        "timeout_seconds": 60,
-        "volume_type": "inline"
-    })
+    await communicator.send_json_to(
+        {
+            "message_type": "V0AuthenticateRequest",
+            "payload": {
+                "validator_hotkey": validator_key,
+                "miner_hotkey": "some key",
+                "timestamp": int(time.time()),
+            },
+            "signature": "gibberish",
+        }
+    )
+    await communicator.send_json_to(
+        {
+            "message_type": "V0InitialJobRequest",
+            "job_uuid": job_uuid,
+            "base_docker_image_name": "it's teeeeests",
+            "timeout_seconds": 60,
+            "volume_type": "inline",
+        }
+    )
     response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
     assert response == {
         "message_type": "V0AcceptJobRequest",
@@ -49,17 +55,16 @@ async def test_main_loop():
         "job_uuid": job_uuid,
     }
 
-    await communicator.send_json_to({
-        "message_type": "V0JobRequest",
-        "job_uuid": job_uuid,
-        "docker_image_name": "it's teeeeests again",
-        "docker_run_cmd": [],
-        "docker_run_options_preset": 'none',
-        "volume": {
-            "volume_type": "inline",
-            "contents": "nonsense"
+    await communicator.send_json_to(
+        {
+            "message_type": "V0JobRequest",
+            "job_uuid": job_uuid,
+            "docker_image_name": "it's teeeeests again",
+            "docker_run_cmd": [],
+            "docker_run_options_preset": "none",
+            "volume": {"volume_type": "inline", "contents": "nonsense"},
         }
-    })
+    )
     response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
     assert response == {
         "message_type": "V0JobFinishedRequest",

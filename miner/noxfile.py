@@ -10,14 +10,14 @@ import nox
 
 os.environ["PDM_IGNORE_SAVED_PYTHON"] = "1"
 
-CI = os.environ.get('CI') is not None
+CI = os.environ.get("CI") is not None
 
-ROOT = Path('.')
-PYTHON_VERSIONS = ['3.11']
+ROOT = Path(".")
+PYTHON_VERSIONS = ["3.11"]
 PYTHON_DEFAULT_VERSION = PYTHON_VERSIONS[-1]
-APP_ROOT = ROOT / 'app' / 'src'
+APP_ROOT = ROOT / "app" / "src"
 
-nox.options.default_venv_backend = 'venv'
+nox.options.default_venv_backend = "venv"
 nox.options.stop_on_first_error = True
 nox.options.reuse_existing_virtualenvs = not CI
 
@@ -25,8 +25,8 @@ nox.options.reuse_existing_virtualenvs = not CI
 def install(session: nox.Session, *args):
     groups = []
     for group in args:
-        groups.extend(['--group', group])
-    session.run('pdm', 'install', '--check', *groups, external=True)
+        groups.extend(["--group", group])
+    session.run("pdm", "install", "--check", *groups, external=True)
 
 
 @functools.lru_cache
@@ -52,14 +52,18 @@ def list_files(suffix: str | None = None) -> list[Path]:
 
 def run_readable(session, mode="check"):
     session.run(
-        'docker',
-        'run',
-        '--platform', 'linux/amd64',
-        '--rm',
-        '-v', f'{ROOT.absolute()}:/data',
-        '-w', '/data',
-        'ghcr.io/bobheadxi/readable:v0.5.0@sha256:423c133e7e9ca0ac20b0ab298bd5dbfa3df09b515b34cbfbbe8944310cc8d9c9',
-        mode, '![.]**/*.md',
+        "docker",
+        "run",
+        "--platform",
+        "linux/amd64",
+        "--rm",
+        "-v",
+        f"{ROOT.absolute()}:/data",
+        "-w",
+        "/data",
+        "ghcr.io/bobheadxi/readable:v0.5.0@sha256:423c133e7e9ca0ac20b0ab298bd5dbfa3df09b515b34cbfbbe8944310cc8d9c9",
+        mode,
+        "![.]**/*.md",
         external=True,
     )
 
@@ -104,11 +108,11 @@ def run_shellcheck(session, mode="check"):
     session.run(*shellcheck_cmd, external=True)
 
 
-@nox.session(name='format', python=PYTHON_DEFAULT_VERSION)
+@nox.session(name="format", python=PYTHON_DEFAULT_VERSION)
 def format_(session):
     """Lint the code and apply fixes in-place whenever possible."""
-    install(session, 'format')
-    session.run('ruff', 'check', '--fix', '.')
+    install(session, "format")
+    session.run("ruff", "check", "--fix", ".")
     run_shellcheck(session, mode="fmt")
     run_readable(session, mode="fmt")
     session.run("ruff", "format", ".")
@@ -117,9 +121,9 @@ def format_(session):
 @nox.session(python=PYTHON_DEFAULT_VERSION)
 def lint(session):
     """Run linters in readonly mode."""
-    install(session, 'lint')
-    session.run('ruff', 'check', '--diff', '.')
-    session.run('codespell', '.')
+    install(session, "lint")
+    session.run("ruff", "check", "--diff", ".")
+    session.run("codespell", ".")
     run_shellcheck(session, mode="check")
     run_readable(session, mode="check")
     session.run("ruff", "format", ".")
@@ -127,37 +131,31 @@ def lint(session):
 
 @nox.session(python=PYTHON_DEFAULT_VERSION)
 def type_check(session):
-    install(session, 'type_check')
+    install(session, "type_check")
     with session.chdir(str(APP_ROOT)):
-        session.run(
-            'mypy',
-            '--config-file', 'mypy.ini',
-            '.',
-            *session.posargs
-        )
+        session.run("mypy", "--config-file", "mypy.ini", ".", *session.posargs)
 
 
 @nox.session(python=PYTHON_DEFAULT_VERSION)
 def security_check(session):
-    install(session, 'security_check')
+    install(session, "security_check")
     with session.chdir(str(APP_ROOT)):
-        session.run(
-            'bandit',
-            '--ini', 'bandit.ini',
-            '-r',
-            '.',
-            *session.posargs
-        )
+        session.run("bandit", "--ini", "bandit.ini", "-r", ".", *session.posargs)
 
 
 @nox.session(python=PYTHON_VERSIONS)
 def test(session):
-    install(session, 'test')
+    install(session, "test")
     with session.chdir(str(APP_ROOT)):
         session.run(
-            'pytest',
-            '-W', 'ignore::DeprecationWarning', '-s', '-x', '-vv',
-            '-n', 'auto',
-            'compute_horde_miner',
+            "pytest",
+            "-W",
+            "ignore::DeprecationWarning",
+            "-s",
+            "-x",
+            "-vv",
+            "-n",
+            "auto",
+            "compute_horde_miner",
             *session.posargs,
         )

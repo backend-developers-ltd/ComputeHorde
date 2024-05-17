@@ -1,8 +1,10 @@
 import os
 
-os.environ.update({
-    "DEBUG_TOOLBAR": "False",
-})
+os.environ.update(
+    {
+        "DEBUG_TOOLBAR": "False",
+    }
+)
 
 from compute_horde_executor.settings import *  # noqa: E402,F403
 
