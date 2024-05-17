@@ -27,6 +27,7 @@ def format_(session: nox.Session):
     """Lint the code and apply fixes in-place whenever possible."""
     install(session, "format")
     session.run("ruff", "check", "--fix", ".")
+    session.run("ruff", "format", ".")
 
 
 @nox.session(python=PYTHON_VERSION)
@@ -35,6 +36,7 @@ def lint(session: nox.Session):
     install(session, "lint")
     session.run("ruff", "check", "--diff", ".")
     session.run("codespell", ".")
+    session.run("ruff", "format", ".")
 
 
 @nox.session(python=PYTHON_VERSION)
