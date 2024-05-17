@@ -32,6 +32,7 @@ class AdminJobRequestForm(forms.ModelForm):
 
 class AddOnlyAdminJobRequestAdmin(AddOnlyAdmin):
     form = AdminJobRequestForm
+    exclude = ['env'] # not used ?
     list_display = ['uuid', 'docker_image', 'use_gpu', 'miner', 'created_at']
     ordering = ['-created_at']
 
