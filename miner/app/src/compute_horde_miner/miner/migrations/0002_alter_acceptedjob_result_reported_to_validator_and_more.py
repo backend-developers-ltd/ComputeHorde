@@ -4,24 +4,32 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('miner', '0001_initial'),
+        ("miner", "0001_initial"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='acceptedjob',
-            name='result_reported_to_validator',
+            model_name="acceptedjob",
+            name="result_reported_to_validator",
         ),
         migrations.AddField(
-            model_name='acceptedjob',
-            name='result_reported_to_validator',
+            model_name="acceptedjob",
+            name="result_reported_to_validator",
             field=models.DateTimeField(null=True),
         ),
         migrations.AlterField(
-            model_name='acceptedjob',
-            name='status',
-            field=models.CharField(choices=[('WAITING_FOR_EXECUTOR', 'Waiting For Executor'), ('WAITING_FOR_PAYLOAD', 'Waiting For Payload'), ('RUNNING', 'Running'), ('FINISHED', 'Finished'), ('FAILED', 'Failed')], max_length=255),
+            model_name="acceptedjob",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("WAITING_FOR_EXECUTOR", "Waiting For Executor"),
+                    ("WAITING_FOR_PAYLOAD", "Waiting For Payload"),
+                    ("RUNNING", "Running"),
+                    ("FINISHED", "Finished"),
+                    ("FAILED", "Failed"),
+                ],
+                max_length=255,
+            ),
         ),
     ]

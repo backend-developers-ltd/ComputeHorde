@@ -5,16 +5,16 @@ from celery.signals import worker_process_shutdown
 from django.conf import settings
 from prometheus_client import multiprocess
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'compute_horde_executor.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "compute_horde_executor.settings")
 
-app = Celery('compute_horde_executor')
+app = Celery("compute_horde_executor")
 
-app.config_from_object('django.conf:settings', namespace='CELERY')
+app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
 
 def route_task(name, args, kwargs, options, task=None, **kw):
-    return {'queue': 'celery'}
+    return {"queue": "celery"}
 
 
 @worker_process_shutdown.connect

@@ -17,6 +17,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         jobs = initiate_jobs(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
         if not jobs:
-            logger.info('Nothing to do')
+            logger.info("Nothing to do")
             return
         asyncio.run(execute_jobs(jobs))

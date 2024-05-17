@@ -39,12 +39,8 @@ def scrape_specs() -> dict[str, any]:
                     "capacity": gpu_data["memory.total [MiB]"].split(" ")[0],
                     "cuda": gpu_data["compute_cap"],
                     "power_limit": gpu_data["power.limit [W]"].split(" ")[0],
-                    "graphics_speed": gpu_data["clocks.current.graphics [MHz]"].split(
-                        " "
-                    )[0],
-                    "memory_speed": gpu_data["clocks.current.memory [MHz]"].split(" ")[
-                        0
-                    ],
+                    "graphics_speed": gpu_data["clocks.current.graphics [MHz]"].split(" ")[0],
+                    "memory_speed": gpu_data["clocks.current.memory [MHz]"].split(" ")[0],
                 }
             )
     except Exception as exc:
@@ -55,12 +51,8 @@ def scrape_specs() -> dict[str, any]:
     data["cpu"] = {"count": 0, "model": "", "clocks": []}
     try:
         lscpu_output = run_cmd("lscpu")
-        data["cpu"]["model"] = re.search(
-            r"Model name:\s*(.*)$", lscpu_output, re.M
-        ).group(1)
-        data["cpu"]["count"] = int(
-            re.search(r"CPU\(s\):\s*(.*)", lscpu_output).group(1)
-        )
+        data["cpu"]["model"] = re.search(r"Model name:\s*(.*)$", lscpu_output, re.M).group(1)
+        data["cpu"]["count"] = int(re.search(r"CPU\(s\):\s*(.*)", lscpu_output).group(1))
 
         cpu_data = run_cmd('lscpu --parse=MHZ | grep -Po "^[0-9,.]*$"').splitlines()
         data["cpu"]["clocks"] = [float(x) for x in cpu_data]
@@ -78,9 +70,7 @@ def scrape_specs() -> dict[str, any]:
             ("MemFree", "free"),
             ("MemTotal", "total"),
         ]:
-            data["ram"][key] = int(
-                re.search(rf"^{name}:\s*(\d+)\s+kB$", meminfo, re.M).group(1)
-            )
+            data["ram"][key] = int(re.search(rf"^{name}:\s*(\d+)\s+kB$", meminfo, re.M).group(1))
         data["ram"]["used"] = data["ram"]["total"] - data["ram"]["free"]
     except Exception as exc:
         # print(f"Error reading /proc/meminfo; Exc: {e}", file=sys.stderr)
@@ -90,7 +80,7 @@ def scrape_specs() -> dict[str, any]:
     try:
         disk_usage = shutil.disk_usage(".")
         data["hard_disk"] = {
-            "total": disk_usage.total // 1024, # in kiB
+            "total": disk_usage.total // 1024,  # in kiB
             "used": disk_usage.used // 1024,
             "free": disk_usage.free // 1024,
         }
@@ -101,9 +91,7 @@ def scrape_specs() -> dict[str, any]:
     data["os"] = ""
     data["virtualization"] = ""
     try:
-        data["os"] = run_cmd(
-            'lsb_release -d | grep -Po "Description:\\s*\\K.*"'
-        ).strip()
+        data["os"] = run_cmd('lsb_release -d | grep -Po "Description:\\s*\\K.*"').strip()
         data["virtualization"] = run_cmd("virt-what").strip()
     except Exception as exc:
         # print(f'Error getting os specs: {e}', flush=True)
@@ -111,12 +99,15 @@ def scrape_specs() -> dict[str, any]:
 
     return data
 
+
 # json dump to file
 with open("/specs/specs.json", "w") as file:
     json.dump(scrape_specs(), file)
 
+
 def hash(s: bytes) -> bytes:
     return b64encode(hashlib.sha256(s).digest(), altchars=b"-_")
+
 
 with open("/volume/payload.txt", "rb") as file:
     data = pickle.load(file)
@@ -129,7 +120,7 @@ with open("/volume/payload.txt", "rb") as file:
 
         if i > 0:
             # decrypt payload with previous cracked passwords
-            passwords = '\n'.join(answers[-1]).encode("utf-8")
+            passwords = "\n".join(answers[-1]).encode("utf-8")
             key = b64encode(hashlib.sha256(passwords).digest(), altchars=b"-_")
             payload = Fernet(key).decrypt(payload).decode("utf-8")
 
@@ -138,10 +129,9 @@ with open("/volume/payload.txt", "rb") as file:
 
         cmd = f'hashcat --potfile-disable --restore-disable --attack-mode 3 --workload-profile 3 --optimized-kernel-enable --hash-type {algorithm} --hex-salt -1 "?l?d?u" --outfile-format 2 --quiet _payload.txt "{mask}"'
         passwords = subprocess.check_output(cmd, shell=True, text=True)
-        passwords = [p for p in sorted(passwords.split('\n')) if p != '']
+        passwords = [p for p in sorted(passwords.split("\n")) if p != ""]
         answers.append(passwords)
 
     print(
         hash("".join(["".join(passwords) for passwords in answers]).encode("utf-8")).decode("utf-8")
-        )
-
+    )

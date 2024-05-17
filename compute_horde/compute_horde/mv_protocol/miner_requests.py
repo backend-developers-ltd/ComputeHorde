@@ -5,15 +5,15 @@ from ..utils import MachineSpecs
 
 
 class RequestType(enum.Enum):
-    V0AcceptJobRequest = 'V0AcceptJobRequest'
-    V0DeclineJobRequest = 'V0DeclineJobRequest'
-    V0ExecutorReadyRequest = 'V0ExecutorReadyRequest'
-    V0ExecutorFailedRequest = 'V0ExecutorFailedRequest'
-    V0JobFailedRequest = 'V0JobFailedRequest'
-    V0JobFinishedRequest = 'V0JobFinishedRequest'
-    V0MachineSpecsRequest = 'V0MachineSpecsRequest'
-    GenericError = 'GenericError'
-    UnauthorizedError = 'UnauthorizedError'
+    V0AcceptJobRequest = "V0AcceptJobRequest"
+    V0DeclineJobRequest = "V0DeclineJobRequest"
+    V0ExecutorReadyRequest = "V0ExecutorReadyRequest"
+    V0ExecutorFailedRequest = "V0ExecutorFailedRequest"
+    V0JobFailedRequest = "V0JobFailedRequest"
+    V0JobFinishedRequest = "V0JobFinishedRequest"
+    V0MachineSpecsRequest = "V0MachineSpecsRequest"
+    GenericError = "GenericError"
+    UnauthorizedError = "UnauthorizedError"
 
 
 class BaseMinerRequest(BaseRequest):
@@ -48,9 +48,11 @@ class V0JobFinishedRequest(BaseMinerRequest, JobMixin):
     docker_process_stdout: str  # TODO: add max_length
     docker_process_stderr: str  # TODO: add max_length
 
+
 class V0MachineSpecsRequest(BaseMinerRequest, JobMixin):
     message_type: RequestType = RequestType.V0MachineSpecsRequest
     specs: MachineSpecs
+
 
 class GenericError(BaseMinerRequest):
     message_type: RequestType = RequestType.GenericError
@@ -58,10 +60,9 @@ class GenericError(BaseMinerRequest):
 
 
 class UnauthorizedErrorType(enum.Enum):
-
-    TOKEN_TOO_OLD = 'TOKEN_TOO_OLD'
-    UNKNOWN_VALIDATOR = 'UNKNOWN_VALIDATOR'
-    VALIDATOR_INACTIVE = 'VALIDATOR_INACTIVE'
+    TOKEN_TOO_OLD = "TOKEN_TOO_OLD"
+    UNKNOWN_VALIDATOR = "UNKNOWN_VALIDATOR"
+    VALIDATOR_INACTIVE = "VALIDATOR_INACTIVE"
 
 
 class UnauthorizedError(BaseMinerRequest):
