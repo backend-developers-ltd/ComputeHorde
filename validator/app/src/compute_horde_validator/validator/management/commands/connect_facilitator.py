@@ -13,8 +13,9 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from pydantic import BaseModel, Extra, Field, root_validator
 
+from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.miner_driver import run_miner_job
-from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
 from compute_horde_validator.validator.utils import (
     MACHINE_SPEC_GROUP_NAME,
@@ -236,14 +237,35 @@ class FacilitatorClient:
 
         logger.error("unsupported message received from facilitator: %s", raw_msg)
 
+    async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
+        return await get_miner_axon_info(hotkey)
+
     async def miner_driver(self, job_request: JobRequest):
         """ drive a miner client from job start to completion, then close miner connection """
         miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
-        await run_miner_job(
-            job_request=job_request,
-            miner=miner, 
-            job_description="User job from facilitator", 
-            keypair=self.keypair, 
+        miner_axon_info = await self.get_miner_axon_info(job_request.miner_hotkey)
+        job = await OrganicJob.objects.acreate(
+            job_uuid=job_request.uuid,
+            miner=miner,
+            miner_address=miner_axon_info.ip,
+            miner_address_ip_version=miner_axon_info.ip_type,
+            miner_port=miner_axon_info.port,
+            job_description="User job from facilitator",
+        )
+
+        miner_client = self.MINER_CLIENT_CLASS(
+            loop=asyncio.get_event_loop(),
+            miner_address=miner_axon_info.ip,
+            miner_port=miner_axon_info.port,
+            miner_hotkey=job_request.miner_hotkey,
+            my_hotkey=self.my_hotkey(),
+            job_uuid=job_request.uuid,
+            keypair=self.keypair,
+        )
+        async_to_sync(run_miner_job) (
+            miner_client,
+            job,
+            job_request,
             total_job_timeout=TOTAL_JOB_TIMEOUT, 
             wait_timeout=PREPARE_WAIT_TIMEOUT, 
             notify_callback=self.send_model

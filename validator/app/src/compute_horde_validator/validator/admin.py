@@ -1,10 +1,9 @@
 from django.contrib import admin  # noqa
 from django import forms
-from django.contrib.admin import register  # noqa
-from django.contrib.auth.models import User  # noqa
 
 from compute_horde_validator.validator.models import Miner, MinerBlacklist, OrganicJob, SyntheticJob, MinerBlacklist, AdminJobRequest  # noqa
 
+from compute_horde_validator.validator.tasks import trigger_run_admin_job_request  # noqa
 
 admin.site.site_header = "ComputeHorde Validator Administration"
 admin.site.site_title = "compute_horde_validator"
@@ -19,6 +18,10 @@ class AddOnlyAdmin(admin.ModelAdmin):
     def has_delete_permission(self, *args, **kwargs):
         return False
 
+class ReadOnlyAdmin(AddOnlyAdmin):
+    def has_add_permission(self, *args, **kwargs):
+        return False
+
 class AdminJobRequestForm(forms.ModelForm):
     class Meta:
         model = AdminJobRequest
@@ -29,21 +32,23 @@ class AdminJobRequestForm(forms.ModelForm):
         if self.fields:
             self.fields['miner'].queryset = Miner.objects.exclude(minerblacklist__isnull=False)
 
-class AddOnlyAdminJobRequestAdmin(AddOnlyAdmin):
+
+class AdminJobRequestAddOnlyAdmin(AddOnlyAdmin):
     form = AdminJobRequestForm
     exclude = ['env'] # not used ?
     list_display = ['uuid', 'docker_image', 'use_gpu', 'miner', 'created_at']
     ordering = ['-created_at']
 
-class JobReadOnlyAdmin(AddOnlyAdmin):
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        trigger_run_admin_job_request.delay(obj.id)
+
+class JobReadOnlyAdmin(ReadOnlyAdmin):
     list_display = ['job_uuid', 'miner', 'status', 'updated_at']
     search_fields = ['job_uuid', 'miner__hotkey']
     ordering = ['-updated_at']
 
-    def has_add_permission(self, *args, **kwargs):
-        return False
-
-class MinerReadOnlyAdmin(AddOnlyAdmin):
+class MinerReadOnlyAdmin(ReadOnlyAdmin):
     change_form_template = "admin/read_only_view.html"
     search_fields = ['hotkey']
 
@@ -54,4 +59,4 @@ admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(MinerBlacklist)
-admin.site.register(AdminJobRequest, admin_class=AddOnlyAdminJobRequestAdmin)
+admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)

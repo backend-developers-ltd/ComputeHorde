@@ -1,3 +1,4 @@
+import shlex
 import uuid
 
 from django.db import models
@@ -81,4 +82,4 @@ class AdminJobRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def get_args(self):
-        return self.args.split()
+        return shlex.split(self.args)

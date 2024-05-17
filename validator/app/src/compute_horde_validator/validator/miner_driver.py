@@ -4,7 +4,6 @@ import logging
 import time
 from typing import Literal
 
-import bittensor
 from compute_horde.miner_client.base import MinerConnectionError
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
@@ -23,9 +22,7 @@ from compute_horde.mv_protocol.validator_requests import (
 )
 from pydantic import BaseModel, Extra
 
-from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import OrganicJob
-from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
 from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_volume
 
 logger = logging.getLogger(__name__)
@@ -53,27 +50,7 @@ class JobStatusUpdate(BaseModel, extra=Extra.forbid):
     metadata: JobStatusMetadata | None = None
 
 
-async def run_miner_job(miner, job_request, job_description: str, keypair: bittensor.Keypair, total_job_timeout: int = 300, wait_timeout:int = 300, notify_callback = None):
-    miner_axon_info = await get_miner_axon_info(miner.hotkey)
-    job = await OrganicJob.objects.acreate(
-        job_uuid=str(job_request.uuid),
-        miner=miner,
-        miner_address=miner_axon_info.ip,
-        miner_address_ip_version=miner_axon_info.ip_type,
-        miner_port=miner_axon_info.port,
-        job_description=job_description,
-    )
-
-    miner_client = MinerClient(
-        loop=asyncio.get_event_loop(),
-        miner_address=miner_axon_info.ip,
-        miner_port=miner_axon_info.port,
-        miner_hotkey=miner.hotkey,
-        my_hotkey=keypair.ss58_address,
-        job_uuid=job.job_uuid,
-        keypair=keypair,
-    )
-
+async def run_miner_job(miner_client, job, job_request, total_job_timeout: int = 300, wait_timeout:int = 300, notify_callback = None):
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
             await exit_stack.enter_async_context(miner_client)
