@@ -11,15 +11,16 @@ class Miner(models.Model):
     def __str__(self):
         return f"hotkey: {self.hotkey}"
 
+
 class MinerBlacklist(models.Model):
     miner = models.OneToOneField(Miner, on_delete=models.CASCADE)
 
     class Meta:
-        verbose_name = 'Blacklisted Miner'
-        verbose_name_plural = 'Blacklisted Miners'
+        verbose_name = "Blacklisted Miner"
+        verbose_name_plural = "Blacklisted Miners"
 
     def __str__(self):
-        return f'hotkey: {self.miner.hotkey}'
+        return f"hotkey: {self.miner.hotkey}"
 
 
 class SyntheticJobBatch(models.Model):
@@ -63,6 +64,7 @@ class SyntheticJob(JobBase):
             models.UniqueConstraint(fields=["batch", "miner"], name="one_job_per_batch_per_miner"),
         ]
 
+
 class OrganicJob(JobBase):
     pass
 
@@ -79,7 +81,9 @@ class AdminJobRequest(models.Model):
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
 
     use_gpu = models.BooleanField(default=False, help_text="Whether to use GPU for the job")
-    input_url = models.URLField(blank=True, help_text="URL to the input data source", max_length=1000)
+    input_url = models.URLField(
+        blank=True, help_text="URL to the input data source", max_length=1000
+    )
     output_url = models.TextField(blank=True, help_text="URL for uploading output")
 
     created_at = models.DateTimeField(auto_now_add=True)

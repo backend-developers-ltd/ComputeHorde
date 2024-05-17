@@ -34,8 +34,7 @@ class BaseConsumer(AsyncWebsocketConsumer, abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def handle(self, msg):
-        ...
+    async def handle(self, msg): ...
 
     async def connect(self):
         await self.accept()

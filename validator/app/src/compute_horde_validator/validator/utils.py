@@ -30,10 +30,11 @@ class Timer:
             raise ValueError("timeout was not specified")
         return self.timeout - self.passed_time()
 
+
 @cache
 def get_dummy_inline_zip_volume() -> str:
     in_memory_output = io.BytesIO()
-    with zipfile.ZipFile(in_memory_output, 'w'):
+    with zipfile.ZipFile(in_memory_output, "w"):
         pass
     in_memory_output.seek(0)
     zip_contents = in_memory_output.read()

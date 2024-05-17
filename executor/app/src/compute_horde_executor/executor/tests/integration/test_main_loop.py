@@ -51,8 +51,7 @@ class MockWebsocket:
         except StopIteration:
             await asyncio.Future()
 
-    async def close(self):
-        ...
+    async def close(self): ...
 
 
 class TestMinerClient(MinerClient):

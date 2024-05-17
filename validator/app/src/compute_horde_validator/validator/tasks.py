@@ -110,10 +110,13 @@ def do_set_weights(
 
 @shared_task
 def trigger_run_admin_job_request(job_request_id: int):
-    async_to_sync(run_admin_job_request) (job_request_id)
+    async_to_sync(run_admin_job_request)(job_request_id)
+
 
 async def run_admin_job_request(job_request_id: int):
-    job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related('miner').aget(id=job_request_id)
+    job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
+        id=job_request_id
+    )
     miner = job_request.miner
     miner_axon_info = await get_miner_axon_info(miner.hotkey)
     job = await OrganicJob.objects.acreate(
@@ -141,8 +144,9 @@ async def run_admin_job_request(job_request_id: int):
         job_request,
         total_job_timeout=job_request.timeout,
         wait_timeout=job_request.timeout,
-        notify_callback=None
+        notify_callback=None,
     )
+
 
 @app.task
 def set_scores():

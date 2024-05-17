@@ -83,7 +83,7 @@ class Command(BaseCommand):
         if not neuron.axon_info.is_serving:
             raise ValueError(f"{miner_uid=} did not announce it's ip address")
 
-        miner=Miner.objects.get_or_create(hotkey=neuron.hotkey)[0]
+        miner = Miner.objects.get_or_create(hotkey=neuron.hotkey)[0]
         miner_blacklisted = MinerBlacklist.objects.filter(miner=miner).exists()
         if miner_blacklisted:
             raise ValueError(f"{miner_uid=} with hotkey {neuron.hotkey} is blacklisted")

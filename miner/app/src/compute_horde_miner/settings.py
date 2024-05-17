@@ -1,6 +1,7 @@
 """
 Django settings for compute_horde_miner project.
 """
+
 from compute_horde import base  # noqa
 
 import inspect

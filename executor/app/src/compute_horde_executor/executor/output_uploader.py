@@ -28,12 +28,10 @@ class OutputUploader(metaclass=abc.ABCMeta):
 
     @classmethod
     @abc.abstractmethod
-    def handles_output_type(cls) -> OutputUploadType:
-        ...
+    def handles_output_type(cls) -> OutputUploadType: ...
 
     @abc.abstractmethod
-    async def upload(self, directory: pathlib.Path):
-        ...
+    async def upload(self, directory: pathlib.Path): ...
 
     __output_type_map: dict[OutputUploadType, type[OutputUploader]] = {}
 

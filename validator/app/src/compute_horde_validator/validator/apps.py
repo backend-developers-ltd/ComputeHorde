@@ -27,7 +27,6 @@ def maybe_create_default_admin(sender, **kwargs):
             )
 
 
-
 class ValidatorConfig(AppConfig):
     name = "compute_horde_validator.validator"
 

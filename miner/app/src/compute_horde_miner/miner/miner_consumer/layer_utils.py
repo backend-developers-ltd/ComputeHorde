@@ -61,8 +61,7 @@ class ExecutorFailed(pydantic.BaseModel):
 class BaseMixin(AsyncWebsocketConsumer, abc.ABC):
     @classmethod
     @abc.abstractmethod
-    def group_name(cls, executor_token: str) -> str:
-        ...
+    def group_name(cls, executor_token: str) -> str: ...
 
     async def group_add(self, executor_token: str):
         group_name = self.group_name(executor_token)
@@ -91,8 +90,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
             await self._executor_ready(payload)
 
     @abc.abstractmethod
-    async def _executor_ready(self, msg: ExecutorReady):
-        ...
+    async def _executor_ready(self, msg: ExecutorReady): ...
 
     @log_errors_explicitly
     async def executor_failed_to_prepare(self, event: dict):
@@ -101,8 +99,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
             await self._executor_failed_to_prepare(payload)
 
     @abc.abstractmethod
-    async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):
-        ...
+    async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare): ...
 
     @log_errors_explicitly
     async def executor_finished(self, event: dict):
@@ -111,8 +108,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
             await self._executor_finished(payload)
 
     @abc.abstractmethod
-    async def _executor_specs(self, event: dict):
-        ...
+    async def _executor_specs(self, event: dict): ...
 
     @log_errors_explicitly
     async def executor_specs(self, event: dict):
@@ -121,8 +117,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
             await self._executor_specs(payload)
 
     @abc.abstractmethod
-    async def _executor_finished(self, msg: ExecutorFinished):
-        ...
+    async def _executor_finished(self, msg: ExecutorFinished): ...
 
     @log_errors_explicitly
     async def executor_failed(self, event: dict):
@@ -131,8 +126,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
             await self._executor_failed(payload)
 
     @abc.abstractmethod
-    async def _executor_failed(self, msg: ExecutorFailed):
-        ...
+    async def _executor_failed(self, msg: ExecutorFailed): ...
 
     async def send_job_request(self, executor_token, job_request: validator_requests.V0JobRequest):
         await self.channel_layer.group_send(
@@ -233,8 +227,7 @@ class ExecutorInterfaceMixin(BaseMixin):
         )
 
     @abc.abstractmethod
-    async def _miner_job_request(self, msg: JobRequest):
-        ...
+    async def _miner_job_request(self, msg: JobRequest): ...
 
     @log_errors_explicitly
     async def miner_job_request(self, event: dict):

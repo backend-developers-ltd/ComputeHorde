@@ -36,14 +36,17 @@ class AsyncMetagraphClient:
 
     @sync_to_async(thread_sensitive=False)
     def _get_metagraph(self):
-        return bittensor.metagraph(netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
+        return bittensor.metagraph(
+            netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK
+        )
 
 
 async_metagraph_client = AsyncMetagraphClient()
+
 
 async def get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
     metagraph = await async_metagraph_client.get_metagraph()
     neurons = [n for n in metagraph.neurons if n.hotkey == hotkey]
     if not neurons:
-        raise ValueError(f'Miner with {hotkey=} not present in this subnetwork')
+        raise ValueError(f"Miner with {hotkey=} not present in this subnetwork")
     return neurons[0].axon_info

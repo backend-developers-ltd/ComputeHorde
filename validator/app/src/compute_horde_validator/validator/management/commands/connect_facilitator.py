@@ -98,6 +98,7 @@ class MachineSpecsUpdate(BaseModel, extra=Extra.forbid):
     validator_hotkey: str
     specs: dict[str, Any]
 
+
 class FacilitatorClient:
     MINER_CLIENT_CLASS = MinerClient
     HEARTBEAT_PERIOD = 60
@@ -244,7 +245,7 @@ class FacilitatorClient:
         return await get_miner_axon_info(hotkey)
 
     async def miner_driver(self, job_request: JobRequest):
-        """ drive a miner client from job start to completion, then close miner connection """
+        """drive a miner client from job start to completion, then close miner connection"""
         miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
         miner_axon_info = await self.get_miner_axon_info(job_request.miner_hotkey)
         job = await OrganicJob.objects.acreate(
@@ -269,9 +270,9 @@ class FacilitatorClient:
             miner_client,
             job,
             job_request,
-            total_job_timeout=TOTAL_JOB_TIMEOUT, 
-            wait_timeout=PREPARE_WAIT_TIMEOUT, 
-            notify_callback=self.send_model
+            total_job_timeout=TOTAL_JOB_TIMEOUT,
+            wait_timeout=PREPARE_WAIT_TIMEOUT,
+            notify_callback=self.send_model,
         )
 
 

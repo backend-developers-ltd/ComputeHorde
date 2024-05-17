@@ -17,8 +17,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="adminjobrequest",
             name="timeout",
-            field=models.PositiveIntegerField(
-                default=300, help_text="timeout in seconds"
-            ),
+            field=models.PositiveIntegerField(default=300, help_text="timeout in seconds"),
         ),
     ]

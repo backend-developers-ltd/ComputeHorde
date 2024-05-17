@@ -8,13 +8,11 @@ from dataclasses import dataclass
 class SyntheticJob(ABC):
     @property
     @abstractmethod
-    def payload(self) -> str | bytes:
-        ...
+    def payload(self) -> str | bytes: ...
 
     @property
     @abstractmethod
-    def answer(self) -> str:
-        ...
+    def answer(self) -> str: ...
 
     def docker_run_cmd(self) -> list[str]:
         return []

@@ -27,15 +27,11 @@ class Migration(migrations.Migration):
                 ("job_uuid", models.UUIDField(default=uuid.uuid4, unique=True)),
                 (
                     "timeout",
-                    models.PositiveIntegerField(
-                        default=0, help_text="timeout in seconds"
-                    ),
+                    models.PositiveIntegerField(default=0, help_text="timeout in seconds"),
                 ),
                 (
                     "docker_image",
-                    models.CharField(
-                        help_text="docker image for job execution", max_length=255
-                    ),
+                    models.CharField(help_text="docker image for job execution", max_length=255),
                 ),
                 (
                     "raw_script",
@@ -58,9 +54,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "use_gpu",
-                    models.BooleanField(
-                        default=False, help_text="Whether to use GPU for the job"
-                    ),
+                    models.BooleanField(default=False, help_text="Whether to use GPU for the job"),
                 ),
                 (
                     "input_url",
