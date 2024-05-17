@@ -225,6 +225,11 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         'schedule': 60,
         'options': {},
     },
+    'clear_old_receipts': {
+        'task': 'compute_horde_miner.miner.tasks.clear_old_receipts',
+        'schedule': timedelta(hours=1),
+        'options': {},
+    },
 }
 CELERY_TASK_ROUTES = ['compute_horde_miner.celery.route_task']
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())
@@ -287,6 +292,10 @@ EXECUTOR_IMAGE = env.str('EXECUTOR_IMAGE', default='backenddevelopersltd/compute
 DEBUG_SKIP_PULLING_EXECUTOR_IMAGE = env.bool('DEBUG_SKIP_PULLING_EXECUTOR_IMAGE', default=False)
 ADDRESS_FOR_EXECUTORS = env.str('ADDRESS_FOR_EXECUTORS', default='')
 PORT_FOR_EXECUTORS = env.int('PORT_FOR_EXECUTORS')
+
+RECEIPT_STORE_CLASS_PATH = env.str('RECEIPT_STORE_CLASS_PATH', default='compute_horde_miner.miner.receipt_store.local:LocalReceiptStore')
+LOCAL_RECEIPTS_URL = env.str('LOCAL_RECEIPTS_URL', default='/receipts/')
+LOCAL_RECEIPTS_ROOT = env.path('LOCAL_RECEIPTS_ROOT', default=root('..', '..', 'receipts'))
 
 BITTENSOR_MINER_PORT = env.int('BITTENSOR_MINER_PORT')
 

@@ -37,12 +37,14 @@ services:
       - MINER_RUNNER_VERSION=${MINER_RUNNER_VERSION}
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
       - VENDOR_DIRECTORY=/root/vendor
+      - LOCAL_RECEIPTS_ROOT=/receipts/
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
       - ${HOST_VENDOR_DIR:-/tmp}:/root/vendor
       # mounting host docker socket to allow running executor images on host machine
       - /var/run/docker.sock:/var/run/docker.sock
       - static:/root/src/static
+      - receipts:/receipts/
     depends_on:
       - redis
       - db
@@ -64,9 +66,11 @@ services:
       - CELERY_WORKER_CONCURRENCY=2
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
       - VENDOR_DIRECTORY=/root/vendor
+      - LOCAL_RECEIPTS_ROOT=/receipts/
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
       - ${HOST_VENDOR_DIR:-/tmp}:/root/vendor
+      - receipts:/receipts/
     command: ./celery-entrypoint.sh
     tmpfs: /run
     depends_on:
@@ -84,8 +88,10 @@ services:
     env_file: ./.env
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+      - LOCAL_RECEIPTS_ROOT=/receipts/
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+      - receipts:/receipts/
     command: nice celery -A compute_horde_miner beat -l INFO --schedule /tmp/celerybeat-schedule -f /tmp/celery-beat.log
     depends_on:
       - redis
@@ -95,13 +101,14 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   nginx:
-    image: backenddevelopersltd/compute-horde-miner-nginx:v0-latest
+    image: backenddevelopersltd/compute-horde-miner-nginx:${NGINX_IMAGE_TAG:-v0-latest}
     restart: unless-stopped
     healthcheck:
       test: wget -q --spider 0.0.0.0:80/admin/login/ || exit 1
     env_file: ./.env
     volumes:
       - static:/srv/static:ro
+      - receipts:/receipts/:ro
     depends_on:
       - app
     command: nginx -g 'daemon off;'
@@ -138,4 +145,5 @@ volumes:
   redis:
   db:
   static:
+  receipts:
   docuum:

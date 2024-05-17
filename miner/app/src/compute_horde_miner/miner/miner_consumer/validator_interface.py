@@ -21,7 +21,8 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ExecutorReady,
     ValidatorInterfaceMixin,
 )
-from compute_horde_miner.miner.models import AcceptedJob, Validator, ValidatorBlacklist
+from compute_horde_miner.miner.models import AcceptedJob, JobReceipt, Validator, ValidatorBlacklist
+from compute_horde_miner.miner.tasks import prepare_receipts
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,21 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
         return False, 'Signature mismatches'
 
+    def verify_receipt_msg(self, msg: validator_requests.V0ReceiptRequest) -> bool:
+        if self.my_hotkey != DONT_CHECK and msg.payload.miner_hotkey != self.my_hotkey:
+            logger.warning(f'Miner hotkey mismatch in receipt for job_uuid {msg.payload.job_uuid} ({msg.payload.miner_hotkey!r} != {self.my_hotkey!r})')
+            return False
+        if msg.payload.validator_hotkey != self.validator_key:
+            logger.warning(f'Validator hotkey mismatch in receipt for job_uuid {msg.payload.job_uuid} ({msg.payload.validator_hotkey!r} != {self.validator_key!r})')
+            return False
+
+        keypair = bittensor.Keypair(ss58_address=self.validator_key)
+        if keypair.verify(msg.blob_for_signing(), msg.signature):
+            return True
+
+        logger.warning(f'Validator signature mismatch in receipt for job_uuid {msg.payload.job_uuid}')
+        return False
+
     async def handle_authentication(self, msg: validator_requests.V0AuthenticateRequest):
         if settings.DEBUG_TURN_AUTHENTICATION_OFF:
             logger.critical(f'Validator {self.validator_key} passed authentication without checking, because '
@@ -181,6 +197,33 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.status = AcceptedJob.Status.RUNNING
             job.full_job_details = msg.dict()
             await job.asave()
+
+        if isinstance(msg, validator_requests.V0ReceiptRequest) and self.verify_receipt_msg(msg):
+            logger.info(
+                f'Received receipt for'
+                f' job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}'
+                f' time_took={msg.payload.time_took} score={msg.payload.score}'
+            )
+            job = await AcceptedJob.objects.aget(job_uuid=msg.payload.job_uuid)
+            job.time_took = msg.payload.time_took
+            job.score = msg.payload.score
+            await job.asave()
+
+            keypair = settings.BITTENSOR_WALLET().get_hotkey()
+            miner_signature = f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
+
+            await JobReceipt.objects.acreate(
+                job=job,
+                validator_signature=msg.signature,
+                miner_signature=miner_signature,
+                job_uuid=msg.payload.job_uuid,
+                miner_hotkey=msg.payload.miner_hotkey,
+                validator_hotkey=msg.payload.validator_hotkey,
+                time_started=msg.payload.time_started,
+                time_took_us=msg.payload.time_took_us,
+                score_str=msg.payload.score_str,
+            )
+            prepare_receipts.delay()
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
