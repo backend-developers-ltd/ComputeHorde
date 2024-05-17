@@ -12,12 +12,14 @@ class EnumEncoder(DjangoJSONEncoder):
             return obj.value
         return super().default(obj)
 
+
 class Validator(models.Model):
     public_key = models.TextField(unique=True)
     active = models.BooleanField()
 
     def __str__(self):
         return f'hotkey: {self.public_key}'
+
 
 class ValidatorBlacklist(models.Model):
     validator = models.OneToOneField(Validator, on_delete=models.CASCADE)
@@ -28,6 +30,7 @@ class ValidatorBlacklist(models.Model):
 
     def __str__(self):
         return f'hotkey: {self.validator.public_key}'
+
 
 class AcceptedJob(models.Model):
     class Status(models.TextChoices):
@@ -47,6 +50,8 @@ class AcceptedJob(models.Model):
     stdout = models.TextField(blank=True, default='')
     stderr = models.TextField(blank=True, default='')
     result_reported_to_validator = models.DateTimeField(null=True)
+    time_took = models.DurationField(null=True)
+    score = models.FloatField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -70,3 +75,20 @@ class AcceptedJob(models.Model):
             status__in=[cls.Status.FINISHED.value, cls.Status.FAILED.value],
             result_reported_to_validator__isnull=True,
         )]
+
+
+class JobReceipt(models.Model):
+    job = models.ForeignKey(AcceptedJob, on_delete=models.CASCADE)
+    validator_signature = models.CharField(max_length=256)
+    miner_signature = models.CharField(max_length=256)
+
+    # payload fields
+    job_uuid = models.UUIDField()
+    miner_hotkey = models.CharField(max_length=256)
+    validator_hotkey = models.CharField(max_length=256)
+    time_started = models.DateTimeField()
+    time_took_us = models.BigIntegerField()
+    score_str = models.CharField(max_length=256)
+
+    def __str__(self):
+        return f'uuid: {self.job_uuid}'
