@@ -1,15 +1,15 @@
-import asyncio
 import datetime
 
 from celery.utils.log import get_task_logger
-from compute_horde.utils import get_validators
 from django.conf import settings
 from django.utils.timezone import now
 
+from compute_horde.utils import get_validators
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import quasi_axon
 from compute_horde_miner.miner.models import JobReceipt, Validator
-from compute_horde_miner.miner.utils import prepare_receipts as prepare_receipts_async
+from compute_horde_miner.miner.receipt_store.base import Receipt
+from compute_horde_miner.miner.receipt_store.current import receipts_store
 
 logger = get_task_logger(__name__)
 
@@ -47,7 +47,8 @@ def fetch_validators():
 
 @app.task
 def prepare_receipts():
-    asyncio.run(prepare_receipts_async())
+    receipts = [Receipt.from_job_receipt(jr) for jr in JobReceipt.objects.all()]
+    receipts_store.store(receipts)
 
 
 @app.task
