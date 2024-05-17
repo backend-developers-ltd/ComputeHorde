@@ -18,7 +18,7 @@ class ValidationError(Exception):
         return cls(json.dumps(exc.json()))
 
     def __repr__(self):
-        return f"{type(self).__name__}({self.msg})"
+        return f'{type(self).__name__}({self.msg})'
 
 
 def all_subclasses(cls: type):
@@ -34,12 +34,12 @@ class BaseRequest(pydantic.BaseModel, abc.ABC):
     message_type: enum.Enum
 
     @classmethod
-    def type_to_model(cls, type_: enum.Enum) -> type["BaseRequest"]:
+    def type_to_model(cls, type_: enum.Enum) -> type['BaseRequest']:
         mapping = base_class_to_request_type_mapping.get(cls)
         if not mapping:
             mapping = {}
             for klass in all_subclasses(cls):
-                if not (message_type := klass.__fields__.get("message_type")):
+                if not (message_type := klass.__fields__.get('message_type')):
                     continue
                 if not message_type.default:
                     continue

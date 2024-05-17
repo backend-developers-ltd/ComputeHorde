@@ -34,20 +34,18 @@ class V1SyntheticJob(SyntheticJob):
             random.choice(cls.DIGITS) for _ in range(num_digits)
         )
 
+
     @classmethod
     def generate(
         cls, algorithms: list[Algorithm], params: list[JobParams], salt_length_bytes: int = 8
     ) -> Self:
+
         # generate distinct passwords for each algorithm
         passwords = []
         for _params in params:
             _passwords = set()
             while len(_passwords) < _params.num_hashes:
-                _passwords.add(
-                    cls.random_string(
-                        num_letters=_params.num_letters, num_digits=_params.num_digits
-                    )
-                )
+                _passwords.add(cls.random_string(num_letters=_params.num_letters, num_digits=_params.num_digits))
             passwords.append(sorted(list(_passwords)))
 
         return cls(
@@ -72,7 +70,7 @@ class V1SyntheticJob(SyntheticJob):
 
     def _hash(self, s: bytes) -> bytes:
         return b64encode(hashlib.sha256(s).digest(), altchars=b"-_")
-
+        
     def _encrypt(self, key: str, payload: str) -> str:
         key_bytes = self._hash(key.encode("utf-8"))
         return Fernet(key_bytes).encrypt(payload.encode("utf-8")).decode("utf-8")
@@ -108,7 +106,7 @@ class V1SyntheticJob(SyntheticJob):
         return pickle.dumps(data)
 
     def docker_run_cmd(self) -> list[str]:
-        return ["/script.py"]
+        return [ "/script.py" ]
 
     def raw_script(self) -> str:
         with open(Path(__file__).parent / "v1_decrypt.py") as file:
@@ -116,9 +114,7 @@ class V1SyntheticJob(SyntheticJob):
 
     @property
     def answer(self) -> str:
-        return self._hash(
-            "".join(["".join(passwords) for passwords in self.passwords]).encode("utf-8")
-        ).decode("utf-8")
+        return self._hash("".join(["".join(passwords) for passwords in self.passwords]).encode("utf-8")).decode("utf-8")
 
 
 if __name__ == "__main__":

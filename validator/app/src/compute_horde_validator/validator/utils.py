@@ -3,18 +3,16 @@ import datetime as dt
 import io
 import zipfile
 
-MACHINE_SPEC_GROUP_NAME = "machine_spec_sending"
-
+MACHINE_SPEC_GROUP_NAME = 'machine_spec_sending'
 
 def single_file_zip(filename: str, contents: str) -> str:
     in_memory_output = io.BytesIO()
-    zipf = zipfile.ZipFile(in_memory_output, "w")
+    zipf = zipfile.ZipFile(in_memory_output, 'w')
     zipf.writestr(filename, contents)
     zipf.close()
     in_memory_output.seek(0)
     zip_contents = in_memory_output.read()
     return base64.b64encode(zip_contents).decode()
-
 
 class Timer:
     def __init__(self, timeout=None):
@@ -26,5 +24,5 @@ class Timer:
 
     def time_left(self):
         if self.timeout is None:
-            raise ValueError("timeout was not specified")
+            raise ValueError('timeout was not specified')
         return self.timeout - self.passed_time()

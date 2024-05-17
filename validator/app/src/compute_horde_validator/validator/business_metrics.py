@@ -2,4 +2,6 @@ from django_business_metrics.v0 import BusinessMetricsManager, active_users, use
 
 metrics_manager = BusinessMetricsManager()
 
-(metrics_manager.add(users).add(active_users))
+(metrics_manager
+    .add(users)
+    .add(active_users))

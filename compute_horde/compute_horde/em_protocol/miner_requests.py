@@ -9,9 +9,9 @@ from ..base_requests import BaseRequest, JobMixin
 
 
 class RequestType(enum.Enum):
-    V0PrepareJobRequest = "V0PrepareJobRequest"
-    V0RunJobRequest = "V0RunJobRequest"
-    GenericError = "GenericError"
+    V0PrepareJobRequest = 'V0PrepareJobRequest'
+    V0RunJobRequest = 'V0RunJobRequest'
+    GenericError = 'GenericError'
 
 
 class BaseMinerRequest(BaseRequest):
@@ -19,8 +19,8 @@ class BaseMinerRequest(BaseRequest):
 
 
 class VolumeType(enum.Enum):
-    inline = "inline"
-    zip_url = "zip_url"
+    inline = 'inline'
+    zip_url = 'zip_url'
 
 
 class V0InitialJobRequest(BaseMinerRequest, JobMixin):
@@ -37,8 +37,8 @@ class Volume(pydantic.BaseModel):
 
 
 class OutputUploadType(enum.Enum):
-    zip_and_http_post = "zip_and_http_post"
-    zip_and_http_put = "zip_and_http_put"
+    zip_and_http_post = 'zip_and_http_post'
+    zip_and_http_put = 'zip_and_http_put'
 
 
 class OutputUpload(pydantic.BaseModel):

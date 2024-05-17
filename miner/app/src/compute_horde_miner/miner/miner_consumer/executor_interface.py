@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
-        self.executor_token = ""
+        self.executor_token = ''
         self.job: AcceptedJob | None = None
 
     def accepted_request_type(self):
@@ -33,39 +33,33 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
     async def connect(self):
         # TODO using advisory locks make sure that only one consumer per executor token exists
         await super().connect()
-        self.executor_token = self.scope["url_route"]["kwargs"]["executor_token"]
+        self.executor_token = self.scope['url_route']['kwargs']['executor_token']
         try:
             # TODO maybe one day tokens will be reused, then we will have to add filtering here
             job = await AcceptedJob.objects.aget(executor_token=self.executor_token)
         except AcceptedJob.DoesNotExist:
-            await self.send(
-                miner_requests.GenericError(
-                    details=f"No job waiting for token {self.executor_token}"
-                ).json()
-            )
-            logger.error(f"No job waiting for token {self.executor_token}")
-            await self.websocket_disconnect(
-                {"code": f"No job waiting for token {self.executor_token}"}
-            )
+            await self.send(miner_requests.GenericError(
+                details=f'No job waiting for token {self.executor_token}').json())
+            logger.error(f'No job waiting for token {self.executor_token}')
+            await self.websocket_disconnect({"code": f'No job waiting for token {self.executor_token}'})
             return
         if job.status != AcceptedJob.Status.WAITING_FOR_EXECUTOR:
-            msg = f"Job with token {self.executor_token} is not waiting for an executor"
+            msg = f'Job with token {self.executor_token} is not waiting for an executor'
             await self.send(miner_requests.GenericError(details=msg).json())
             logger.error(msg)
-            await self.websocket_disconnect({"code": msg})
+            await self.websocket_disconnect(
+                {"code": msg})
             return
 
         self.job = job
         await self.group_add(self.executor_token)
         initial_job_details = validator_requests.V0InitialJobRequest(**job.initial_job_details)
-        await self.send(
-            miner_requests.V0InitialJobRequest(
-                job_uuid=initial_job_details.job_uuid,
-                base_docker_image_name=initial_job_details.base_docker_image_name,
-                timeout_seconds=initial_job_details.timeout_seconds,
-                volume_type=initial_job_details.volume_type.value,
-            ).json()
-        )
+        await self.send(miner_requests.V0InitialJobRequest(
+            job_uuid=initial_job_details.job_uuid,
+            base_docker_image_name=initial_job_details.base_docker_image_name,
+            timeout_seconds=initial_job_details.timeout_seconds,
+            volume_type=initial_job_details.volume_type.value,
+        ).json())
 
     async def handle(self, msg: BaseExecutorRequest):
         if isinstance(msg, executor_requests.V0ReadyRequest):
@@ -86,11 +80,13 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 job_uuid=msg.job_uuid,
                 executor_token=self.executor_token,
                 stdout=msg.docker_process_stdout,
-                stderr=msg.docker_process_stderr,
+                stderr=msg.docker_process_stderr
             )
         if isinstance(msg, executor_requests.V0MachineSpecsRequest):
             await self.send_executor_specs(
-                executor_token=self.executor_token, job_uuid=msg.job_uuid, specs=msg.specs
+                executor_token=self.executor_token,
+                job_uuid=msg.job_uuid,
+                specs = msg.specs
             )
         if isinstance(msg, executor_requests.V0FailedRequest):
             self.job.status = AcceptedJob.Status.FAILED
@@ -108,17 +104,15 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             )
 
     async def _miner_job_request(self, msg: JobRequest):
-        await self.send(
-            miner_requests.V0JobRequest(
-                job_uuid=msg.job_uuid,
-                docker_image_name=msg.docker_image_name,
-                raw_script=msg.raw_script,
-                docker_run_options_preset=msg.docker_run_options_preset,
-                docker_run_cmd=msg.docker_run_cmd,
-                volume=msg.volume,
-                output_upload=msg.output_upload,
-            ).json()
-        )
+        await self.send(miner_requests.V0JobRequest(
+            job_uuid=msg.job_uuid,
+            docker_image_name=msg.docker_image_name,
+            raw_script=msg.raw_script,
+            docker_run_options_preset=msg.docker_run_options_preset,
+            docker_run_cmd=msg.docker_run_cmd,
+            volume=msg.volume,
+            output_upload=msg.output_upload,
+        ).json())
 
     async def disconnect(self, close_code):
-        logger.info(f"Executor {self.executor_token} disconnected")
+        logger.info(f'Executor {self.executor_token} disconnected')

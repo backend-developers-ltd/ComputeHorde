@@ -13,7 +13,6 @@ def default(value):
 
 class ECRedisChannelLayer(RedisChannelLayer):
     """EC stands for "enum-compatible" """
-
     def serialize(self, message):
         """
         Serializes message to a byte string.

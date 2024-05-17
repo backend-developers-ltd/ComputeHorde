@@ -5,12 +5,12 @@ from ..utils import MachineSpecs
 
 
 class RequestType(enum.Enum):
-    V0ReadyRequest = "V0ReadyRequest"
-    V0FailedToPrepare = "V0FailedToPrepare"
-    V0FinishedRequest = "V0FinishedRequest"
-    V0FailedRequest = "V0FailedRequest"
-    V0MachineSpecsRequest = "V0MachineSpecsRequest"
-    GenericError = "GenericError"
+    V0ReadyRequest = 'V0ReadyRequest'
+    V0FailedToPrepare = 'V0FailedToPrepare'
+    V0FinishedRequest = 'V0FinishedRequest'
+    V0FailedRequest = 'V0FailedRequest'
+    V0MachineSpecsRequest = 'V0MachineSpecsRequest'
+    GenericError = 'GenericError'
 
 
 class BaseExecutorRequest(BaseRequest):
@@ -32,11 +32,9 @@ class V0FailedRequest(BaseExecutorRequest, JobMixin):
     docker_process_stdout: str  # TODO: add max_length
     docker_process_stderr: str  # TODO: add max_length
 
-
 class V0MachineSpecsRequest(BaseExecutorRequest, JobMixin):
     message_type: RequestType = RequestType.V0MachineSpecsRequest
     specs: MachineSpecs
-
 
 class V0FinishedRequest(BaseExecutorRequest, JobMixin):
     message_type: RequestType = RequestType.V0FinishedRequest
