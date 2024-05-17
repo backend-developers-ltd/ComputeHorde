@@ -35,7 +35,7 @@ def lint(session: nox.Session):
     """Run linters in readonly mode."""
     install(session, "lint")
     session.run("ruff", "check", "--diff", ".")
-    session.run("codespell", ".")
+    session.run("codespell", ".", "--skip='*.lock'")
     session.run("ruff", "format", ".")
 
 
