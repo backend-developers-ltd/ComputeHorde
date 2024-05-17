@@ -25,6 +25,7 @@ def _store(receipts: list[Receipt]):
                 zf.writestr(receipt.payload.job_uuid + '.json', receipt.json())
 
     shutil.move(temp_file.name, filepath)
+    filepath.chmod(0o644)
 
 
 class LocalReceiptStore(BaseReceiptStore):
