@@ -25,10 +25,4 @@ class ValidatorConfig(AppConfig):
     name = 'compute_horde_validator.validator'
 
     def ready(self):
-        from django.db.models import signals
-
-        from .models import AdminJobRequest
-        from .tasks import trigger_run_admin_job_request
-
         post_migrate.connect(maybe_create_default_admin, sender=self)
-        signals.post_save.connect(receiver=trigger_run_admin_job_request, sender=AdminJobRequest)
