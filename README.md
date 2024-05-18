@@ -56,14 +56,24 @@ for miner in miners:
 
 # Running
 
-To quickly start a validator or miner, create an Ubuntu Server and execute the following command from your local machine (where you have your wallet files).
+## Validator
 
-**Validator:**
+To quickly start a validator, create an Ubuntu Server and execute the following command from your local machine (where you have your wallet files).
+
 ```shell
 curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/install_validator.sh | bash -s - SSH_DESTINATION HOTKEY_PATH
 ```
 
-**Miner:**
+Replace `SSH_DESTINATION` with your server's connection info (i.e. `username@1.2.3.4`)
+and `HOTKEY_PATH` with the path of your hotkey (i.e. `~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey`).
+This script installs necessary tools in the server, copies the keys and starts the validator/miner with the corresponding runner and default config.
+
+If you want to change the default config, see [Validator runner README](validator/envs/runner/README.md) for details.
+
+## Miner
+
+To quickly start a miner, create an Ubuntu Server and execute the following command from your local machine (where you have your wallet files).
+
 ```shell
 curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/install_miner.sh | bash -s - SSH_DESTINATION HOTKEY_PATH
 ```
@@ -72,10 +82,10 @@ Replace `SSH_DESTINATION` with your server's connection info (i.e. `username@1.2
 and `HOTKEY_PATH` with the path of your hotkey (i.e. `~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey`).
 This script installs necessary tools in the server, copies the keys and starts the validator/miner with the corresponding runner and default config.
 
-If you want to change the default config, see [Validator runner README](validator/envs/runner/README.md) and [Miner runner README](miner/envs/runner/README.md) for details.
+If you want to change the default config, see [Miner runner README](miner/envs/runner/README.md) for details.
 
 
-# Checking that your miner works properly
+### Checking that your miner works properly
 
 1. Check if your miner is reachable from a machine different from the miner: `curl {ADDRESS}:{PORT}/admin/login/ -i`.
    Both `PORT` and `ADDRESS` can be obtained from the metagraph. If everything is ok the first line should read
