@@ -6,9 +6,9 @@ on:
       - 'deploy-miner-preprod'
 
 env:
-  TAG_VERSION: "v0-preprod"
+  TAG_VERSION: "v0-latest"
   STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-staging"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner"
+  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-preprod"
   DIST_VERSION_PREFIX: "miner-preprod"
 
 jobs:
