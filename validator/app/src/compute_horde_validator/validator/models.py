@@ -26,10 +26,15 @@ class SystemEvent(models.Model):
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
     timestamp = models.DateTimeField(auto_now_add=True)
-    long_description = models.TextField(blank=True)
+    long_description = models.TextField(
+        blank=True,
+        help_text="Verbose description of the event, not sent to the stats collector",
+    )
     data = models.JSONField(blank=True)
     sent = models.BooleanField(default=False)
 
+    def __str__(self):
+        return f'SystemEvent({self.id}, {self.type}, {self.subtype})'
 
 class Miner(models.Model):
     hotkey = models.CharField(max_length=255, unique=True)

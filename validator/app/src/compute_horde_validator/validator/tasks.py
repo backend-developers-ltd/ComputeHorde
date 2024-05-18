@@ -301,7 +301,6 @@ def set_scores():
 
     with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR):
         with transaction.atomic():
-            # dupa
             try:
                 result = do_set_weights.apply_async(
                     kwargs=dict(

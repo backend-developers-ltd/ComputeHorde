@@ -1,10 +1,9 @@
 from collections.abc import Generator
 
+import bittensor
 import pytest
 
 
-@pytest.fixture
-def some() -> Generator[int, None, None]:
-    # setup code
-    yield 1
-    # teardown code
+@pytest.fixture(scope='session', autouse=True)
+def wallet():
+    bittensor.wallet().create(coldkey_use_password=False, hotkey_use_password=False)
