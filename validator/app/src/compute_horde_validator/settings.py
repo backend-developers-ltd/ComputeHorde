@@ -1,6 +1,7 @@
 """
 Django settings for compute_horde_validator project.
 """
+
 import inspect
 import logging
 import pathlib

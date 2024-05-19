@@ -6,7 +6,9 @@ import billiard.exceptions
 import bittensor
 import celery.exceptions
 import numpy as np
+from asgiref.sync import async_to_sync
 from bittensor.utils.weight_utils import process_weights_for_netuid
+from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.utils import get_validators
@@ -15,8 +17,16 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator.models import SyntheticJobBatch
-from compute_horde_validator.validator.synthetic_jobs.utils import execute_jobs, initiate_jobs
+from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
+from compute_horde_validator.validator.models import OrganicJob, SyntheticJobBatch
+from compute_horde_validator.validator.synthetic_jobs.utils import (
+    MinerClient,
+    execute_jobs,
+    initiate_jobs,
+)
+
+from .miner_driver import run_miner_job
+from .models import AdminJobRequest
 
 logger = get_task_logger(__name__)
 
@@ -95,6 +105,46 @@ def do_set_weights(
         version_key=version_key,
         wait_for_inclusion=wait_for_inclusion,
         wait_for_finalization=wait_for_finalization,
+    )
+
+
+@shared_task
+def trigger_run_admin_job_request(job_request_id: int):
+    async_to_sync(run_admin_job_request)(job_request_id)
+
+
+async def run_admin_job_request(job_request_id: int):
+    job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
+        id=job_request_id
+    )
+    miner = job_request.miner
+    miner_axon_info = await get_miner_axon_info(miner.hotkey)
+    job = await OrganicJob.objects.acreate(
+        job_uuid=str(job_request.uuid),
+        miner=miner,
+        miner_address=miner_axon_info.ip,
+        miner_address_ip_version=miner_axon_info.ip_type,
+        miner_port=miner_axon_info.port,
+        job_description="Validator Job from Admin Panel",
+    )
+
+    keypair = settings.BITTENSOR_WALLET().get_hotkey()
+    miner_client = MinerClient(
+        loop=asyncio.get_event_loop(),
+        miner_address=miner_axon_info.ip,
+        miner_port=miner_axon_info.port,
+        miner_hotkey=miner.hotkey,
+        my_hotkey=keypair.ss58_address,
+        job_uuid=job.job_uuid,
+        keypair=keypair,
+    )
+    await run_miner_job(
+        miner_client,
+        job,
+        job_request,
+        total_job_timeout=job_request.timeout,
+        wait_timeout=job_request.timeout,
+        notify_callback=None,
     )
 
 
