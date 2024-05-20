@@ -120,6 +120,9 @@ class V1SyntheticJob(SyntheticJob):
             "".join(["".join(passwords) for passwords in self.passwords]).encode("utf-8")
         ).decode("utf-8")
 
+    def __str__(self) -> str:
+        return f"V1SyntheticJob {self.algorithms} {self.params}"
+
 
 if __name__ == "__main__":
     algorithms = Algorithm.get_all_algorithms()

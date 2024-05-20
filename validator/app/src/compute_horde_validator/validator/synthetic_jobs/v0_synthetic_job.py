@@ -73,7 +73,7 @@ class V0SyntheticJob(SyntheticJob):
         ]
 
     def __str__(self) -> str:
-        return f"{self.algorithm.value}, password length = {self.params.password_length}, timeout={self.timeout_seconds}s"
+        return f"V0SyntheticJob {self.algorithm.value}, password length = {self.params.password_length}, timeout={self.timeout_seconds}s"
 
 
 if __name__ == "__main__":
