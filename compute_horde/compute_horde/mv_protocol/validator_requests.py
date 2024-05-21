@@ -1,13 +1,19 @@
 import datetime
 import enum
+import re
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import urlparse
 
 import pydantic
 from pydantic import Field, root_validator
 
 from ..base_requests import BaseRequest, JobMixin
 from ..utils import MachineSpecs
+
+SAFE_DOMAIN_REGEX = re.compile(
+    r"raw\.githubusercontent\.com|github\.com|drive\.google\.com|huggingface\.co|.*\.s3\.amazonaws\.com"
+)
 
 
 class RequestType(enum.Enum):
@@ -57,6 +63,17 @@ class Volume(pydantic.BaseModel):
     volume_type: VolumeType
     contents: str  # TODO: this is only valid for volume_type = inline, some polymorphism like with BaseRequest is
     # required here
+
+    def is_safe(
+        self,
+    ) -> bool:
+        if self.volume_type == VolumeType.zip_url:
+            domain = urlparse(self.contents).netloc
+            if SAFE_DOMAIN_REGEX.fullmatch(domain):
+                return True
+            return False
+        else:
+            return True
 
 
 class OutputUploadType(enum.Enum):
