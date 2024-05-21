@@ -266,10 +266,8 @@ def get_machine_specs() -> MachineSpecs:
         data["hard_disk_scrape_error"] = repr(exc)
 
     data["os"] = ""
-    data["virtualization"] = ""
     try:
         data["os"] = run_cmd('lsb_release -d | grep -Po "Description:\\s*\\K.*"').strip()
-        data["virtualization"] = run_cmd("virt-what").strip()
     except Exception as exc:
         # print(f'Error getting os specs: {exc}', flush=True)
         data["os_scrape_error"] = repr(exc)
