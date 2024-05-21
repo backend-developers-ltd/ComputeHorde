@@ -126,7 +126,7 @@ def lint(session):
     session.run("codespell", ".", "--skip='*.lock'")
     run_shellcheck(session, mode="check")
     run_readable(session, mode="check")
-    session.run("ruff", "format", ".")
+    session.run("ruff", "check", "--diff", "--unsafe-fixes", ".")
 
 
 @nox.session(python=PYTHON_DEFAULT_VERSION)

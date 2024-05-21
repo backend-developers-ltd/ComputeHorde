@@ -36,7 +36,7 @@ def lint(session: nox.Session):
     install(session, "lint")
     session.run("ruff", "check", "--diff", ".")
     session.run("codespell", ".", "--skip='*.lock'")
-    session.run("ruff", "format", ".")
+    session.run("ruff", "check", "--diff", "--unsafe-fixes", ".")
 
 
 @nox.session(python=PYTHON_VERSION)
