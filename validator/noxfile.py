@@ -122,11 +122,11 @@ def format_(session):
 def lint(session):
     """Run linters in readonly mode."""
     install(session, "lint")
-    session.run("ruff", "check", "--diff", ".")
-    session.run("codespell", ".", "--skip='*.lock'")
+    session.run("ruff", "check", "--diff", "--unsafe-fixes", ".")
+    session.run("codespell", ".")
     run_shellcheck(session, mode="check")
     run_readable(session, mode="check")
-    session.run("ruff", "format", ".")
+    session.run("ruff", "format", "--diff", ".")
 
 
 @nox.session(python=PYTHON_DEFAULT_VERSION)

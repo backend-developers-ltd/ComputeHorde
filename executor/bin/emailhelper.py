@@ -32,7 +32,7 @@ class GmailSender(namedtuple("SmtpAuthData", "server port user password")):
             encoders.encode_base64(part)
             part.add_header(
                 "Content-Disposition",
-                'attachment; filename="%s"' % os.path.basename(file),
+                f'attachment; filename="{os.path.basename(file)}"',
             )
             msg.attach(part)
 
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         sys.exit(2)
 
     try:
-        email_creds = urlsplit("//%s" % email_creds)
+        email_creds = urlsplit(f"//{email_creds}")
         if not all([email_creds.username, email_creds.hostname, email_creds.port]):
             raise ValueError
     except ValueError:
