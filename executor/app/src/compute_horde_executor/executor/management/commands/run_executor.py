@@ -1,11 +1,13 @@
 import asyncio
 import base64
+import csv
 import io
-import json
 import logging
 import pathlib
+import re
 import shlex
 import shutil
+import subprocess
 import tempfile
 import time
 import zipfile
@@ -184,6 +186,97 @@ def truncate(v: str) -> str:
         return v
 
 
+def run_cmd(cmd):
+    proc = subprocess.run(cmd, shell=True, capture_output=True, check=False, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"run_cmd error {cmd=!r} {proc.returncode=} {proc.stdout=!r} {proc.stderr=!r}"
+        )
+    return proc.stdout
+
+
+def get_machine_specs() -> MachineSpecs:
+    data = {}
+
+    data["gpu"] = {"count": 0, "details": []}
+    try:
+        nvidia_cmd = run_cmd(
+            "docker run --rm --runtime=nvidia --gpus all ubuntu "
+            "nvidia-smi --query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem --format=csv"
+        )
+        csv_data = csv.reader(nvidia_cmd.splitlines())
+        header = [x.strip() for x in next(csv_data)]
+        for row in csv_data:
+            row = [x.strip() for x in row]
+            gpu_data = dict(zip(header, row))
+            data["gpu"]["details"].append(
+                {
+                    "name": gpu_data["name"],
+                    "driver": gpu_data["driver_version"],
+                    "capacity": gpu_data["memory.total [MiB]"].split(" ")[0],
+                    "cuda": gpu_data["compute_cap"],
+                    "power_limit": gpu_data["power.limit [W]"].split(" ")[0],
+                    "graphics_speed": gpu_data["clocks.current.graphics [MHz]"].split(" ")[0],
+                    "memory_speed": gpu_data["clocks.current.memory [MHz]"].split(" ")[0],
+                }
+            )
+        data["gpu"]["count"] = len(data["gpu"]["details"])
+    except Exception as exc:
+        # print(f'Error processing scraped gpu specs: {exc}', flush=True)
+        data["gpu_scrape_error"] = repr(exc)
+
+    data["cpu"] = {"count": 0, "model": "", "clocks": []}
+    try:
+        lscpu_output = run_cmd("lscpu")
+        data["cpu"]["model"] = re.search(r"Model name:\s*(.*)$", lscpu_output, re.M).group(1)
+        data["cpu"]["count"] = int(re.search(r"CPU\(s\):\s*(.*)", lscpu_output).group(1))
+
+        cpu_data = run_cmd('lscpu --parse=MHZ | grep -Po "^[0-9,.]*$"').splitlines()
+        data["cpu"]["clocks"] = [float(x) for x in cpu_data]
+    except Exception as exc:
+        # print(f'Error getting cpu specs: {exc}', flush=True)
+        data["cpu_scrape_error"] = repr(exc)
+
+    data["ram"] = {}
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = f.read()
+
+        for name, key in [
+            ("MemAvailable", "available"),
+            ("MemFree", "free"),
+            ("MemTotal", "total"),
+        ]:
+            data["ram"][key] = int(re.search(rf"^{name}:\s*(\d+)\s+kB$", meminfo, re.M).group(1))
+        data["ram"]["used"] = data["ram"]["total"] - data["ram"]["free"]
+    except Exception as exc:
+        # print(f"Error reading /proc/meminfo; Exc: {exc}", file=sys.stderr)
+        data["ram_scrape_error"] = repr(exc)
+
+    data["hard_disk"] = {}
+    try:
+        disk_usage = shutil.disk_usage(".")
+        data["hard_disk"] = {
+            "total": disk_usage.total // 1024,  # in kiB
+            "used": disk_usage.used // 1024,
+            "free": disk_usage.free // 1024,
+        }
+    except Exception as exc:
+        # print(f"Error getting disk_usage from shutil: {exc}", file=sys.stderr)
+        data["hard_disk_scrape_error"] = repr(exc)
+
+    data["os"] = ""
+    data["virtualization"] = ""
+    try:
+        data["os"] = run_cmd('lsb_release -d | grep -Po "Description:\\s*\\K.*"').strip()
+        data["virtualization"] = run_cmd("virt-what").strip()
+    except Exception as exc:
+        # print(f'Error getting os specs: {exc}', flush=True)
+        data["os_scrape_error"] = repr(exc)
+
+    return MachineSpecs(specs=data)
+
+
 class JobError(Exception):
     def __init__(self, description: str):
         self.description = description
@@ -301,11 +394,7 @@ class JobRunner:
             exit_status = process.returncode
             timeout = False
 
-        # fetch machine specs if synthetic job generated
-        specs = None
-        if (self.specs_volume_mount_dir / "specs.json").exists():
-            with open(self.specs_volume_mount_dir / "specs.json") as f:
-                specs = MachineSpecs(specs=json.load(f))
+        specs = get_machine_specs()
 
         # Save the streams in output volume and truncate them in response.
         with open(self.output_volume_mount_dir / "stdout.txt", "w") as f:
