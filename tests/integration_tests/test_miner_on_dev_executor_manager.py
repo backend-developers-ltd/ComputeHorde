@@ -149,6 +149,14 @@ class Test(ActiveSubnetworkBaseTest):
                 await asyncio.wait_for(ws.recv(), timeout=WEBSOCKET_TIMEOUT)
             )
             assert response == {
+                "message_type": "V0MachineSpecsRequest",
+                "job_uuid": job_uuid,
+                "specs": mock.ANY,
+            }
+            response = json.loads(
+                await asyncio.wait_for(ws.recv(), timeout=WEBSOCKET_TIMEOUT)
+            )
+            assert response == {
                 "message_type": "V0JobFinishedRequest",
                 "job_uuid": job_uuid,
                 "docker_process_stdout": payload,
