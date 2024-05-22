@@ -392,8 +392,6 @@ class JobRunner:
             exit_status = process.returncode
             timeout = False
 
-        specs = get_machine_specs()
-
         # Save the streams in output volume and truncate them in response.
         with open(self.output_volume_mount_dir / "stdout.txt", "w") as f:
             f.write(stdout)
@@ -436,7 +434,6 @@ class JobRunner:
             timeout=timeout,
             stdout=stdout,
             stderr=stderr,
-            specs=specs,
         )
 
     async def clean(self):
@@ -579,7 +576,8 @@ class Command(BaseCommand):
                     await self.miner_client.send_failed_to_prepare()
                     return
 
-                logger.debug(f"Prepared for job {initial_message.job_uuid}")
+                logger.debug(f"Scraping hardware specs for job {initial_message.job_uuid}")
+                specs = get_machine_specs()
 
                 await self.miner_client.send_ready()
                 logger.debug(f"Informed miner that I'm ready for job {initial_message.job_uuid}")
@@ -587,6 +585,7 @@ class Command(BaseCommand):
                 job_request = await self.miner_client.full_payload
                 logger.debug(f"Running job {initial_message.job_uuid}")
                 result = await job_runner.run_job(job_request)
+                result.specs = specs
 
                 if result.success:
                     await self.miner_client.send_finished(result)
