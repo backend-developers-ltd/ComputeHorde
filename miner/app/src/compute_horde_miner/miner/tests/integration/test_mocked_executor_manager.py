@@ -35,6 +35,11 @@ async def test_main_loop():
             "signature": "gibberish",
         }
     )
+    response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
+    assert response == {
+        "message_type": "V0ExecutorManifestRequest",
+        "manifest": {"executor_classes": [{"count": 1, "executor_class": 0}]},
+    }
     await communicator.send_json_to(
         {
             "message_type": "V0InitialJobRequest",

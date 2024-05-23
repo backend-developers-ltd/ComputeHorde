@@ -103,6 +103,13 @@ class Test(ActiveSubnetworkBaseTest):
                     }
                 )
             )
+            response = json.loads(
+                await asyncio.wait_for(ws.recv(), timeout=WEBSOCKET_TIMEOUT)
+            )
+            assert response == {
+                "message_type": "V0ExecutorManifestRequest",
+                "manifest": {"executor_classes": [{"count": 1, "executor_class": 0}]},
+            }
             await ws.send(
                 json.dumps(
                     {

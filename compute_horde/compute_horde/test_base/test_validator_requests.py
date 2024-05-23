@@ -2,9 +2,9 @@ import logging
 
 import pytest
 
-logger = logging.getLogger(__name__)
-
 from ..mv_protocol.validator_requests import Volume, VolumeType
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize(

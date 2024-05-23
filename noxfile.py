@@ -29,8 +29,6 @@ def test(session):
         "-s",
         "-x",
         "-vv",
-        "-n",
-        "auto",
         "tests",
         *session.posargs,
     )

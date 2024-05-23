@@ -173,6 +173,19 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 await self.close(1000)
                 return
         self.validator_authenticated = True
+        manifest = await current.executor_manager.get_manifest()
+        await self.send(
+            miner_requests.V0ExecutorManifestRequest(
+                manifest=miner_requests.ExecutorManifest(
+                    executor_classes=[
+                        miner_requests.ExecutorClassManifest(
+                            executor_class=executor_class, count=count
+                        )
+                        for executor_class, count in manifest.items()
+                    ]
+                )
+            ).json()
+        )
         for msg in self.msg_queue:
             await self.handle(msg)
 

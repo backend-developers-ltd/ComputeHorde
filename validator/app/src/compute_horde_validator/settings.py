@@ -317,6 +317,17 @@ DEBUG_MINER_PORT = env.int("DEBUG_MINER_PORT", default=0)
 # if you don't want to wait for your celery beat job to sleep on staging:
 DEBUG_DONT_STAGGER_VALIDATORS = env.bool("DEBUG_DONT_STAGGER_VALIDATORS", default=False)
 
+HORDE_SCORE_AVG_PARAM = 0
+HORDE_SCORE_SIZE_PARAM = 0
+# horde size for 0.5 value of sigmoid - sigmoid is evaluated for `-(1 / horde_size)`
+# so setting this value to 4 would cause sigmoid for horde size of 4 return 0.5
+# depending on a sigmoid steepnes it defines how important it is to having larger horde or how
+# much penalized it is having smaller hordes; in extreme example step can be discrete and
+# having smaller horde will result with 0 weights, having larger will not matter, and having the same value
+# as this param would result in half weights; one may setup fully discrete step by setting
+# non integer number - like 4.5 (all hordes smaller than 5 will get 0 weights)
+HORDE_SCORE_CENTRAL_SIZE_PARAM = 1
+
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
