@@ -105,6 +105,11 @@ def test_main_loop():
             "job_uuid": job_uuid,
         },
         {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+        {
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
@@ -149,6 +154,11 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
     assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
             "job_uuid": job_uuid,
         },
         {
@@ -257,6 +267,11 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
     assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
             "job_uuid": job_uuid,
         },
         {
@@ -379,6 +394,11 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
         {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+        {
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
@@ -437,6 +457,11 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
             "job_uuid": job_uuid,
         },
         {
@@ -544,6 +569,11 @@ def test_raw_script_job():
     assert [json.loads(msg) for msg in command.miner_client.ws.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
             "job_uuid": job_uuid,
         },
         {
