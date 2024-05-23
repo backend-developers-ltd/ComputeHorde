@@ -9,8 +9,9 @@ env:
   BUILD_DIRECTORY: "miner/envs/runner"
   TAG_VERSION: "v0-latest"
   DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-runner-preprod"
+  DOCKER_NGINX_REPO_NAME: "backenddevelopersltd/compute-horde-miner-nginx-preprod"
   MINER_IMAGE_REPO: "compute-horde-miner-preprod"
-  NGINX_IMAGE_TAG: "v0-latest"
+  MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-preprod"
   DIST_VERSION_PREFIX: "miner-runner-preprod"
 
 jobs:
@@ -30,7 +31,23 @@ jobs:
             -t "${IMAGE_NAME}" \
             --build-arg MINER_RUNNER_VERSION="${GITHUB_SHA}" \
             --build-arg MINER_IMAGE_REPO="${MINER_IMAGE_REPO}" \
-            --build-arg NGINX_IMAGE_TAG="${NGINX_IMAGE_TAG}" \
+            --build-arg MINER_NGINX_IMAGE_REPO="${MINER_NGINX_IMAGE_REPO}" \
+            .
+
+          docker image tag "${IMAGE_NAME}" "${SHA_IMAGE_NAME}"
+
+          echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+          docker push "${IMAGE_NAME}"
+          docker push "${SHA_IMAGE_NAME}"
+      - name: Docker build and push (nginx)
+        run: |
+          IMAGE_NAME="${DOCKER_NGINX_REPO_NAME}:${TAG_VERSION}"
+          SHA_IMAGE_NAME="${DOCKER_NGINX_REPO_NAME}:git-${GITHUB_SHA}"
+
+          cd "${BUILD_DIRECTORY}/nginx" && \
+            docker build \
+            -t "${IMAGE_NAME}" \
             .
 
           docker image tag "${IMAGE_NAME}" "${SHA_IMAGE_NAME}"
