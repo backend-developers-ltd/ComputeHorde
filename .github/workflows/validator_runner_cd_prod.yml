@@ -10,7 +10,7 @@ env:
   TAG_VERSION: "v0-latest"
   DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator-runner"
   VALIDATOR_IMAGE_REPO: "compute-horde-validator"
-  DIST_VERSION_PREFIX: "validator-runner"
+  DIST_VERSION_PREFIX: "validator-runner-prod"
 
 jobs:
   deploy:

@@ -12,7 +12,7 @@ env:
   DOCKER_NGINX_REPO_NAME: "backenddevelopersltd/compute-horde-miner-nginx"
   MINER_IMAGE_REPO: "compute-horde-miner"
   MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx"
-  DIST_VERSION_PREFIX: "miner-runner"
+  DIST_VERSION_PREFIX: "miner-runner-prod"
 
 jobs:
   deploy:
