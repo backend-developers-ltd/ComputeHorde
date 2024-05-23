@@ -192,6 +192,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 )
                 await self.send(miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).json())
                 return
+
             # TODO add rate limiting per validator key here
             token = f"{msg.job_uuid}-{uuid.uuid4()}"
             await self.group_add(token)
@@ -219,21 +220,11 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
         if isinstance(msg, validator_requests.V0JobRequest):
             job = self.pending_jobs.get(msg.job_uuid)
-            if not msg.volume.is_safe():
-                error_msg = f"Received JobRequest with unsafe volume: {msg.volume.contents}"
-                logger.error(error_msg)
-                await self.send(
-                    miner_requests.GenericError(
-                        details=error_msg,
-                    ).json()
-                )
-                return
             if job is None:
-                error_msg = f"Received JobRequest for unknown job_uuid: {msg.job_uuid}"
-                logger.error(error_msg)
+                logger.error(f"Received JobRequest for unknown job_uuid: {msg.job_uuid}")
                 await self.send(
                     miner_requests.GenericError(
-                        details=error_msg,
+                        details=f"Received JobRequest for unknown job_uuid: {msg.job_uuid}"
                     ).json()
                 )
                 return
