@@ -4,7 +4,7 @@ from unittest import mock
 from channels.testing import WebsocketCommunicator
 
 from compute_horde_miner import asgi
-from compute_horde_miner.miner.executor_manager.base import BaseExecutorManager
+from compute_horde_miner.miner.executor_manager import v1
 
 WEBSOCKET_TIMEOUT = 100000
 
@@ -52,8 +52,7 @@ async def fake_executor(token):
 fake_executor.job_uuid = None
 
 
-class TestExecutorManager(BaseExecutorManager):
-
+class TestExecutorManager(v1.BaseExecutorManager):
     async def start_new_executor(self, token, executor_class, timeout):
         asyncio.get_running_loop().create_task(fake_executor(token))
         return object()

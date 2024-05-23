@@ -1,6 +1,7 @@
 import random
 import string
 
+from asgiref.sync import sync_to_async
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
@@ -30,6 +31,7 @@ class EchoSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def docker_run_cmd(self) -> list[str]:
         return []
 
+    @sync_to_async(thread_sensitive=False)
     def volume_contents(self) -> str:
         return single_file_zip("payload.txt", self.payload)
 

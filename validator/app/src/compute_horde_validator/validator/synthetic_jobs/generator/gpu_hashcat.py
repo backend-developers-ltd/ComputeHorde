@@ -1,6 +1,7 @@
 import time
 
 import bittensor
+from asgiref.sync import sync_to_async
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
 
@@ -41,19 +42,29 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def __init__(self):
         # set synthetic_jobs based on subnet weights_version
         self.weights_version = weights_version_holder.get()
+        self.hash_job = None
+        self.expected_answer = None
+
+    async def ainit(self):
+        """Allow to initialize generator in asyncio and non blocking"""
+        self.hash_job, self.expected_answer = await self._get_hash_job()
+
+    @sync_to_async(thread_sensitive=False)
+    def _get_hash_job(self):
         if self.weights_version == 0:
             algorithm = Algorithm.get_random_algorithm()
-            self.hash_job = V0SyntheticJob.generate(
+            hash_job = V0SyntheticJob.generate(
                 algorithm, HASHJOB_PARAMS[self.weights_version][algorithm]
             )
         elif self.weights_version == 1:
             algorithms = Algorithm.get_all_algorithms()
             params = [HASHJOB_PARAMS[self.weights_version][algorithm] for algorithm in algorithms]
-            self.hash_job = V1SyntheticJob.generate(algorithms, params)
+            hash_job = V1SyntheticJob.generate(algorithms, params)
         else:
             raise RuntimeError(f"No SyntheticJob for weights_version: {self.weights_version}")
 
-        self.expected_answer = self.hash_job.answer
+        # precompute anwer when already in thread
+        return hash_job, hash_job.answer
 
     def timeout_seconds(self) -> int:
         return self.hash_job.timeout_seconds
@@ -73,6 +84,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     def raw_script(self) -> str | None:
         return self.hash_job.raw_script()
 
+    @sync_to_async(thread_sensitive=False)
     def volume_contents(self) -> str:
         return single_file_zip("payload.txt", self.hash_job.payload)
 

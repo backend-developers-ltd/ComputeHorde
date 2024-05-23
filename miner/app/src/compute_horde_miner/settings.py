@@ -308,7 +308,7 @@ LOGGING = {
 
 EXECUTOR_MANAGER_CLASS_PATH = env.str(
     "EXECUTOR_MANAGER_CLASS_PATH",
-    default="compute_horde_miner.miner.executor_manager.docker:DockerExecutorManager",
+    default="compute_horde_miner.miner.executor_manager.v1:DockerExecutorManager",
 )
 EXECUTOR_IMAGE = env.str(
     "EXECUTOR_IMAGE", default="backenddevelopersltd/compute-horde-executor:v0-latest"
