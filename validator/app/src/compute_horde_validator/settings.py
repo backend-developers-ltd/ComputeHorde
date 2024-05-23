@@ -328,6 +328,7 @@ HORDE_SCORE_SIZE_PARAM = 0
 # non integer number - like 4.5 (all hordes smaller than 5 will get 0 weights)
 HORDE_SCORE_CENTRAL_SIZE_PARAM = 1
 
+DEBUG_WEIGHTS_VERSION = env.int('DEBUG_WEIGHTS_VERSION', default=None)
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:

@@ -25,6 +25,9 @@ class WeightVersionHolder:
         self.value = None
 
     def get(self):
+        if settings.DEBUG_WEIGHTS_VERSION is not None:
+            return settings.DEBUG_WEIGHTS_VERSION
+
         if time.time() - self._time_set > 300:
             subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
             hyperparameters = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
