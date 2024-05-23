@@ -12,7 +12,7 @@ from ..base_requests import BaseRequest, JobMixin
 from ..utils import MachineSpecs
 
 SAFE_DOMAIN_REGEX = re.compile(
-    r"raw\.githubusercontent\.com|github\.com|drive\.google\.com|huggingface\.co|.*\.s3\.amazonaws\.com|.*\.r2\.cloudflarestorage\.com"
+    r"raw\.githubusercontent\.com|github\.com|drive\.google\.com|huggingface\.co|.*\.s3\.amazonaws\.com"
 )
 
 

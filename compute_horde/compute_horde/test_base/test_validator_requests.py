@@ -24,7 +24,6 @@ from ..mv_protocol.validator_requests import Volume, VolumeType
             True,
         ),
         ("https://fake.s3.amazonaws.com.fake.com/test.zip", False),
-        ("https://something.r2.cloudflarestorage.com/test.zip", True),
     ],
 )
 def test_volume_is_safe(url: str, expected: bool):
