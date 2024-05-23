@@ -1,4 +1,4 @@
-name: "Continuous Delivery: executor (pre-prod)"
+name: "CD: executor (pre-prod)"
 
 on:
   push:

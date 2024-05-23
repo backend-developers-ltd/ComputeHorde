@@ -1,4 +1,4 @@
-name: "Continuous Delivery: miner runner (prod)"
+name: "CD: miner runner (prod)"
 
 on:
   push:

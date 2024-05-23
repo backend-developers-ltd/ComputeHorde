@@ -1,4 +1,4 @@
-name: "Continuous Delivery: validator (pre-prod)"
+name: "CD: validator (pre-prod)"
 
 on:
   push:

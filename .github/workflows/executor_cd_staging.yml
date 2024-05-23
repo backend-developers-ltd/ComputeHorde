@@ -1,4 +1,4 @@
-name: "Continuous Delivery: executor (staging)"
+name: "CD: executor (staging)"
 
 on:
   push:
