@@ -59,7 +59,7 @@ class V1SyntheticJob(SyntheticJob):
 
     @property
     def timeout_seconds(self) -> int:
-        return sum([p.timeout for p in self.params])
+        return max([p.timeout for p in self.params])
 
     def hash_masks(self) -> list[str]:
         return ["?1" * params.num_letters + "?d" * params.num_digits for params in self.params]
