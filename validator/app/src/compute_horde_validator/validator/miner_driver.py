@@ -59,6 +59,7 @@ async def run_miner_job(
     wait_timeout: int = 300,
     notify_callback=None,
 ):
+    job_state = miner_client.get_job_state(job.job_uuid)
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
             await exit_stack.enter_async_context(miner_client)
@@ -95,7 +96,7 @@ async def run_miner_job(
 
         try:
             msg = await asyncio.wait_for(
-                miner_client.miner_ready_or_declining_future,
+                job_state.miner_ready_or_declining_future,
                 timeout=min(job_timer.time_left(), wait_timeout),
             )
         except TimeoutError:
@@ -171,10 +172,10 @@ async def run_miner_job(
         full_job_sent = time.time()
         try:
             msg = await asyncio.wait_for(
-                miner_client.miner_finished_or_failed_future,
+                job_state.miner_finished_or_failed_future,
                 timeout=job_timer.time_left(),
             )
-            time_took = miner_client.miner_finished_or_failed_timestamp - full_job_sent
+            time_took = job_state.miner_finished_or_failed_timestamp - full_job_sent
             logger.info(f"Miner took {time_took} seconds to finish {job.job_uuid}")
         except TimeoutError:
             logger.error(
