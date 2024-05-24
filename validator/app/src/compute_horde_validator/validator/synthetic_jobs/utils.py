@@ -2,7 +2,9 @@ import asyncio
 import datetime
 import logging
 import time
+import uuid
 from collections.abc import Iterable
+from functools import lru_cache
 
 import bittensor
 from asgiref.sync import async_to_sync
@@ -45,6 +47,11 @@ TIMEOUT_MARGIN = 60
 
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=100)
+def batch_id_to_uuid(batch_id: int) -> uuid.UUID:
+    return uuid.uuid4()
 
 
 class JobState:
@@ -364,6 +371,7 @@ async def _execute_job(
                 {
                     "type": "machine.specs",
                     "miner_hotkey": job.miner.hotkey,
+                    "batch_id": str(batch_id_to_uuid(job.batch_id)),
                     "specs": job_state.miner_machine_specs.specs,
                 },
             )

@@ -97,6 +97,7 @@ class MachineSpecsUpdate(BaseModel, extra=Extra.forbid):
     miner_hotkey: str
     validator_hotkey: str
     specs: dict[str, Any]
+    batch_id: str
 
 
 class FacilitatorClient:
@@ -189,6 +190,7 @@ class FacilitatorClient:
             specs = MachineSpecsUpdate(
                 specs=msg["specs"],
                 miner_hotkey=msg["miner_hotkey"],
+                batch_id=msg["batch_id"],
                 validator_hotkey=validator_hotkey,
             )
             logger.debug(f"sending machine specs update to facilitator: {specs}")
