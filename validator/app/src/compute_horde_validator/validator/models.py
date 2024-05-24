@@ -22,6 +22,12 @@ class MinerBlacklist(models.Model):
     def __str__(self):
         return f"hotkey: {self.miner.hotkey}"
 
+    def set_manifest(self, manifest):
+        self._manifest = manifest
+
+    def get_manifest(self):
+        return getattr(self, "_manifest", None)
+
 
 class SyntheticJobBatch(models.Model):
     started_at = models.DateTimeField(auto_now_add=True)
@@ -57,12 +63,6 @@ class SyntheticJob(JobBase):
         SyntheticJobBatch, on_delete=models.CASCADE, related_name="synthetic_jobs"
     )
     score = models.FloatField(default=0)
-
-    class Meta:
-        # unique_together = ('batch', 'miner')
-        constraints = [
-            models.UniqueConstraint(fields=["batch", "miner"], name="one_job_per_batch_per_miner"),
-        ]
 
 
 class OrganicJob(JobBase):

@@ -1,5 +1,7 @@
 import enum
 
+import pydantic
+
 from ..base_requests import BaseRequest, JobMixin
 from ..utils import MachineSpecs
 
@@ -7,6 +9,7 @@ from ..utils import MachineSpecs
 class RequestType(enum.Enum):
     V0AcceptJobRequest = "V0AcceptJobRequest"
     V0DeclineJobRequest = "V0DeclineJobRequest"
+    V0ExecutorManifestRequest = "V0ExecutorManifestRequest"
     V0ExecutorReadyRequest = "V0ExecutorReadyRequest"
     V0ExecutorFailedRequest = "V0ExecutorFailedRequest"
     V0JobFailedRequest = "V0JobFailedRequest"
@@ -14,6 +17,15 @@ class RequestType(enum.Enum):
     V0MachineSpecsRequest = "V0MachineSpecsRequest"
     GenericError = "GenericError"
     UnauthorizedError = "UnauthorizedError"
+
+
+class ExecutorClassManifest(pydantic.BaseModel):
+    executor_class: int
+    count: int
+
+
+class ExecutorManifest(pydantic.BaseModel):
+    executor_classes: list[ExecutorClassManifest]
 
 
 class BaseMinerRequest(BaseRequest):
@@ -52,6 +64,11 @@ class V0JobFinishedRequest(BaseMinerRequest, JobMixin):
 class V0MachineSpecsRequest(BaseMinerRequest, JobMixin):
     message_type: RequestType = RequestType.V0MachineSpecsRequest
     specs: MachineSpecs
+
+
+class V0ExecutorManifestRequest(BaseMinerRequest):
+    message_type: RequestType = RequestType.V0ExecutorManifestRequest
+    manifest: ExecutorManifest
 
 
 class GenericError(BaseMinerRequest):

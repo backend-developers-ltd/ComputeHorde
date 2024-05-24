@@ -4,6 +4,10 @@ from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 
 class AbstractSyntheticJobGenerator(abc.ABC):
+    async def ainit(self):
+        """Allow to initialize generator in asyncio and non blocking"""
+        pass
+
     @abc.abstractmethod
     def timeout_seconds(self) -> int: ...
 
@@ -23,7 +27,7 @@ class AbstractSyntheticJobGenerator(abc.ABC):
         return None
 
     @abc.abstractmethod
-    def volume_contents(self) -> str: ...
+    async def volume_contents(self) -> str: ...
 
     @abc.abstractmethod
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]: ...
