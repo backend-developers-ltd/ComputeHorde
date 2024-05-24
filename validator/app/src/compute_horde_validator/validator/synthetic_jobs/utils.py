@@ -373,7 +373,18 @@ async def _execute_job(
             job.status = JobBase.Status.COMPLETED
             job.comment = f"Miner finished: {msg.json()}"
             await job.asave()
-            return score, msg
+            try:
+                receipt_message = client.generate_receipt_message(
+                    job, full_job_sent, time_took, score
+                )
+                await client.send_model(receipt_message)
+                logger.info("Receipt message sent")
+            except Exception:
+                logger.exception(
+                    f"Failed to send receipt to miner {client.miner_name} for job {job.job_uuid}"
+                )
+            finally:
+                return score, msg
         else:
             logger.info(f"Miner {client.miner_name} finished but {comment}")
             job.status = JobBase.Status.FAILED
