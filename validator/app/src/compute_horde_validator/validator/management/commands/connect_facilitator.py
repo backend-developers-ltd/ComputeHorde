@@ -130,8 +130,8 @@ class FacilitatorClient:
 
             try:
                 await task
-            except Exception:
-                logger.error("Error occurred during driving a miner client", exc_info=True)
+            except Exception as exc:
+                logger.error("Error occurred during driving a miner client: %r", exc)
 
     async def __aenter__(self):
         pass
@@ -222,7 +222,7 @@ class FacilitatorClient:
     async def handle_message(self, raw_msg: str | bytes):
         """handle message received from facilitator"""
         try:
-            response = Response.parse_raw(raw_msg)
+            msg = pydantic.parse_raw_as(Response | JobRequest, raw_msg)  # type: ignore[arg-type]
         except pydantic.ValidationError:
             logger.debug("could not parse raw message as Response")
         else:
@@ -230,16 +230,12 @@ class FacilitatorClient:
                 logger.error("received error response from facilitator: %r", response)
             return
 
-        try:
-            job_request = JobRequest.parse_raw(raw_msg)
-        except pydantic.ValidationError:
-            logger.debug("could not parse raw message as JobRequest")
-        else:
-            task = asyncio.create_task(self.miner_driver(job_request))
+        if isinstance(msg, Response):
+            if msg.status != 'success':
+                logger.error("received error response from facilitator: %r", msg)
+        elif isinstance(msg, JobRequest):
+            task = asyncio.create_task(self.miner_driver(msg))
             await self.miner_drivers.put(task)
-            return
-
-        logger.error("unsupported message received from facilitator: %s", raw_msg)
 
     async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
         return await get_miner_axon_info(hotkey)
