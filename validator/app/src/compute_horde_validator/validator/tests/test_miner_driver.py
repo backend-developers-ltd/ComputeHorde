@@ -15,11 +15,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 
-# from compute_horde_validator.validator.facilitator_client import JobRequest, OrganicJob
-from compute_horde_validator.validator.management.commands.connect_facilitator import (
-    JobRequest,
-    OrganicJob,
-)
+from compute_horde_validator.validator.facilitator_client import JobRequest, OrganicJob
 from compute_horde_validator.validator.miner_driver import run_miner_job
 from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.synthetic_jobs.utils import JobState, MinerClient
@@ -128,6 +124,7 @@ async def test_miner_driver(futures_result, expected_job_status_updates, organic
         job_uuid=job_uuid,
         keypair=None,
     )
+    miner_client.mock_job_state = False
     f0, f1 = futures_result
     if f0:
         miner_client.job_states[job_uuid].miner_ready_or_declining_future.set_result(

@@ -7,10 +7,8 @@ import bittensor
 import pydantic
 import tenacity
 import websockets
-from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.core.management.base import BaseCommand
 from pydantic import BaseModel, Extra, Field, root_validator
 
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
@@ -153,15 +151,21 @@ class FacilitatorClient:
 
         # send machine specs to facilitator
         self.specs_task = asyncio.create_task(self.wait_for_specs())
-        async for ws in self.connect():
-            try:
-                await self.handle_connection(ws)
-            except websockets.ConnectionClosed as exc:
-                logger.warning(
-                    "validator connection closed with code %r and reason %r, reconnecting...",
-                    exc.code,
-                    exc.reason,
-                )
+        try:
+            async for ws in self.connect():
+                try:
+                    await self.handle_connection(ws)
+                except websockets.ConnectionClosed as exc:
+                    logger.warning(
+                        "validator connection closed with code %r and reason %r, reconnecting...",
+                        exc.code,
+                        exc.reason,
+                    )
+                except asyncio.exceptions.CancelledError:
+                    logger.warning("Facilitator client received cancel, stopping")
+
+        except asyncio.exceptions.CancelledError:
+            logger.error("Facilitator client received cancel, stopping")
 
     async def handle_connection(self, ws: websockets.WebSocketClientProtocol):
         """handle a single websocket connection"""
@@ -276,14 +280,3 @@ class FacilitatorClient:
             wait_timeout=PREPARE_WAIT_TIMEOUT,
             notify_callback=self.send_model,
         )
-
-
-class Command(BaseCommand):
-    FACILITATOR_CLIENT_CLASS = FacilitatorClient
-
-    @async_to_sync
-    async def handle(self, *args, **options):
-        keypair = settings.BITTENSOR_WALLET().get_hotkey()
-        facilitator_client = self.FACILITATOR_CLIENT_CLASS(keypair, settings.FACILITATOR_URI)
-        async with facilitator_client:
-            await facilitator_client.run_forever()
