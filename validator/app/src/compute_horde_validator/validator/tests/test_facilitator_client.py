@@ -9,7 +9,6 @@ import uuid
 import bittensor
 import pytest
 import websockets
-from django.conf import settings
 
 from compute_horde_validator.validator.facilitator_client import FacilitatorClient, Response
 from compute_horde_validator.validator.miner_driver import JobStatusUpdate
@@ -62,12 +61,18 @@ async def mock_facilitator_ws(ws):
         condition.notify()
 
 
+def mock_keypair():
+    return bittensor.Keypair.create_from_mnemonic(
+        mnemonic="arrive produce someone view end scout bargain coil slight festival excess struggle"
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.django_db
 async def test_facilitator_client():
     async with websockets.serve(mock_facilitator_ws, "127.0.0.1", 0) as server:
         host, port = server.sockets[0].getsockname()
-        keypair = settings.BITTENSOR_WALLET().get_hotkey()
+        keypair = mock_keypair()
         facilitator_uri = f"ws://{host}:{port}/"
         facilitator_client = MockFacilitatorClient(keypair, facilitator_uri)
 
