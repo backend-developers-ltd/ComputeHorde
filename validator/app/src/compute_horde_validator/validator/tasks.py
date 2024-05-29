@@ -13,6 +13,7 @@ from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.utils import get_validators
+from constance import config
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
@@ -56,6 +57,10 @@ def _run_synthetic_jobs():
 
 @app.task()
 def run_synthetic_jobs():
+    if config.SERVING:
+        logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
+        return
+
     if not settings.DEBUG_DONT_STAGGER_VALIDATORS:
         validators = get_validators(
             netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK
@@ -176,6 +181,10 @@ def horde_score(benchmarks, alpha=0, beta=0, delta=0):
 
 @app.task
 def set_scores():
+    if config.SERVING:
+        logger.warning("Not setting scores, SERVING is disabled in constance config")
+        return
+
     subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
     metagraph = subtensor.metagraph(netuid=settings.BITTENSOR_NETUID)
     neurons = metagraph.neurons

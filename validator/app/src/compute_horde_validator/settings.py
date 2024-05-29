@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django_extensions",
     "django_probes",
+    "constance",
     "compute_horde_validator.validator",
     "compute_horde_validator.validator.admin_config.ValidatorAdminConfig",
 ]
@@ -121,6 +122,11 @@ if CORS_ENABLED := env.bool("CORS_ENABLED", default=True):
     CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
+CONSTANCE_CONFIG = {
+    "SERVING": (True, "Whether this validator is serving jobs and setting weights", bool),
+}
 
 # Content Security Policy
 if CSP_ENABLED := env.bool("CSP_ENABLED", default=False):

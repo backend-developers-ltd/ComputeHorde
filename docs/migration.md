@@ -17,15 +17,17 @@ Steps:
    and `HOTKEY_PATH` with the path of your hotkey (i.e. `~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey`).
    This script installs necessary tools in the server, copies the keys and starts the validator in a migrating state.
    **NOTE:** the new server must be deployed with the same hotkey for the migration to be successful.
-2. Login to your new server and start ssh local port forwarding to your old server's `HTTP_PORT` (in `.env` file or default 80).
-   TODO: needs further explanation, or a mini-tutorial? :P
-3. In your new validator admin panel, go to the "Constance" > "Config" and fill in the "Forwarded Port To Old Validator".
-4. Wait for data to be synced?
-   TODO: how long? 2h?
-5. In your old validator admin panel, go to the "Constance" > "Config", un-tick "Serving" and save.
-6. In your new validator admin panel, go to the "Constance" > "Config", tick "Serving", un-tick "Migrating" and save.
-7. Check logs and wait for your new server to start sending jobs and setting weights.
-8. Stop old server.
+2. Wait until next weights setting:
+   - weights are set every 4 hours multiples in UTC (i.e. at 00:00, 04:00, 08:00 etc.) 
+   - check if all jobs have finished on "VALIDATOR" > "Synthetic jobs" in your admin panel.
+3. In your old validator admin panel, go to the "CONSTANCE" > "Config", un-tick `SERVING` and save.
+4. In your new validator admin panel, go to the "CONSTANCE" > "Config", tick `SERVING` and save.
+5. Check logs and admin panel to verify that:
+   1. your old server is NOT sending jobs
+   2. your old server is NOT setting weights
+   3. your new server is sending jobs
+   4. your new server is setting weights
+6. Stop old server.
 
 
 ## Migrate Miner
