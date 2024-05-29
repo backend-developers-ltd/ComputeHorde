@@ -11,7 +11,10 @@ from channels.layers import get_channel_layer
 from django.conf import settings
 from pydantic import BaseModel, Extra, Field, root_validator
 
-from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
+from compute_horde_validator.validator.metagraph_client import (
+    create_metagraph_refresh_task,
+    get_miner_axon_info,
+)
 from compute_horde_validator.validator.miner_driver import run_miner_job
 from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
@@ -109,6 +112,7 @@ class FacilitatorClient:
         self.miner_drivers = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
+        self.refresh_metagraph_task = self.create_metagraph_refresh_task()
         self.channel_layer = get_channel_layer()
         self.channel_name = None
 
@@ -214,6 +218,9 @@ class FacilitatorClient:
                 except Exception as exc:
                     logger.error("Error occurred", exc_info=exc)
             await asyncio.sleep(self.HEARTBEAT_PERIOD)
+
+    def create_metagraph_refresh_task(self, period=None):
+        return create_metagraph_refresh_task(period=period)
 
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(7),
