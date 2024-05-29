@@ -71,6 +71,10 @@ def get_receipts_from_old_miner():
     if not config.MIGRATING:
         return
 
+    if not config.OLD_MINER_IP:
+        logger.warning("OLD_MINER_IP is not configured!")
+        return
+
     logger.info("Fetching data from old miner server")
 
     hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address

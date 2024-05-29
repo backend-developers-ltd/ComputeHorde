@@ -57,7 +57,7 @@ def _run_synthetic_jobs():
 
 @app.task()
 def run_synthetic_jobs():
-    if config.SERVING:
+    if not config.SERVING:
         logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
         return
 
@@ -181,7 +181,7 @@ def horde_score(benchmarks, alpha=0, beta=0, delta=0):
 
 @app.task
 def set_scores():
-    if config.SERVING:
+    if not config.SERVING:
         logger.warning("Not setting scores, SERVING is disabled in constance config")
         return
 

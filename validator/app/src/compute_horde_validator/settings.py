@@ -125,7 +125,11 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_CONFIG = {
-    "SERVING": (True, "Whether this validator is serving jobs and setting weights", bool),
+    "SERVING": (
+        not env.bool("MIGRATING", default=False),
+        "Whether this validator is serving jobs and setting weights",
+        bool,
+    ),
 }
 
 # Content Security Policy

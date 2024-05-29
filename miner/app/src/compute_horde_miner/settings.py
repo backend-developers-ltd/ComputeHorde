@@ -129,7 +129,11 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_CONFIG = {
-    "SERVING": (True, "Whether this miner is updating axon_info", bool),
+    "SERVING": (
+        not env.bool("MIGRATING", default=False),
+        "Whether this miner is updating axon_info",
+        bool,
+    ),
     "MIGRATING": (
         env.bool("MIGRATING", default=False),
         "Whether this miner is migrating the old miner's data",
