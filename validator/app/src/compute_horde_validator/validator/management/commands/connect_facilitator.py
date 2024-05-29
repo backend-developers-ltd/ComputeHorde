@@ -13,7 +13,10 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from pydantic import BaseModel, Extra, Field, root_validator
 
-from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
+from compute_horde_validator.validator.metagraph_client import (
+    create_metagraph_refresh_task,
+    get_miner_axon_info,
+)
 from compute_horde_validator.validator.miner_driver import run_miner_job
 from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
@@ -111,6 +114,7 @@ class FacilitatorClient:
         self.miner_drivers = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
+        self.refresh_metagraph_task = self.create_metagraph_refresh_task()
         self.channel_layer = get_channel_layer()
         self.channel_name = None
 
@@ -245,6 +249,9 @@ class FacilitatorClient:
 
     async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
         return await get_miner_axon_info(hotkey)
+
+    def create_metagraph_refresh_task(self, period=None):
+        return create_metagraph_refresh_task(period=period)
 
     async def miner_driver(self, job_request: JobRequest):
         """drive a miner client from job start to completion, then close miner connection"""
