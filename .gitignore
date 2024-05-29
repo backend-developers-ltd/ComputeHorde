@@ -5,6 +5,7 @@
 /.idea/
 .env
 venv
+.hypothesis
 .envrc
 .nox/
 __pycache__

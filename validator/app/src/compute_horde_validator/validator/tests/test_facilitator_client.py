@@ -1,24 +1,46 @@
-"""
-This test file is here always to indicate that everything was installed and the CI was able to run tests.
-It should always pass as long as all dependencies are properly installed.
-"""
-
 import asyncio
 import uuid
 
 import bittensor
 import pytest
 import websockets
+from compute_horde.mv_protocol.miner_requests import (
+    V0ExecutorReadyRequest,
+    V0JobFinishedRequest,
+)
 
-from compute_horde_validator.validator.facilitator_client import FacilitatorClient, Response
+from compute_horde_validator.validator.facilitator_client import (
+    AuthenticationRequest,
+    FacilitatorClient,
+    Response,
+)
 from compute_horde_validator.validator.miner_driver import JobStatusUpdate
+from compute_horde_validator.validator.models import OrganicJob
+from compute_horde_validator.validator.synthetic_jobs.utils import JobState
 
+from . import mock_keypair
 from .test_miner_driver import MockMinerClient, get_dummy_job_request
 
 WEBSOCKET_TIMEOUT = 10
 
-condition = asyncio.Condition()
+condition = None
 facilitator_error = None
+
+
+class MockJobStateMinerClient(MockMinerClient):
+    def get_job_state(self, job_uuid):
+        job_state = JobState()
+        job_state.miner_ready_or_declining_future.set_result(
+            V0ExecutorReadyRequest(job_uuid=job_uuid)
+        )
+        job_state.miner_finished_or_failed_future.set_result(
+            V0JobFinishedRequest(
+                job_uuid=job_uuid,
+                docker_process_stdout="",
+                docker_process_stderr="",
+            )
+        )
+        return job_state
 
 
 class MockFacilitatorClient(FacilitatorClient):
@@ -33,12 +55,19 @@ class MockFacilitatorClient(FacilitatorClient):
         )
 
 
-async def mock_facilitator_ws(ws):
+async def facilitator_job_status_updates_ws(ws):
     global facilitator_error
+    facilitator_error = None
+
     job_uuid = str(uuid.uuid4())
 
     # auth
     response = await ws.recv()
+    try:
+        AuthenticationRequest.parse_raw(response)
+    except Exception as e:
+        facilitator_error = e
+
     await ws.send(Response(status="success").json())
 
     # send job request
@@ -57,27 +86,54 @@ async def mock_facilitator_ws(ws):
     except Exception as e:
         facilitator_error = e
 
+    organic_job = await OrganicJob.objects.aget(job_uuid=job_uuid)
+    if organic_job.status != OrganicJob.Status.COMPLETED:
+        facilitator_error = Exception(f"job not completed: {organic_job.status}")
+
     async with condition:
         condition.notify()
 
 
-def mock_keypair():
-    return bittensor.Keypair.create_from_mnemonic(
-        mnemonic="arrive produce someone view end scout bargain coil slight festival excess struggle"
-    )
+async def facilitator_bad_message_ws(ws):
+    global facilitator_error
+    facilitator_error = None
+
+    job_uuid = str(uuid.uuid4())
+
+    # auth
+    await ws.recv()
+    await ws.send(Response(status="success").json())
+
+    # send bad job request
+    await ws.send('{"job_request": "invalid"}')
+
+    num_jobs = await OrganicJob.objects.filter(job_uuid=job_uuid).acount()
+    if num_jobs != 0:
+        facilitator_error = Exception("should not have created job")
+
+    async with condition:
+        condition.notify()
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db
-async def test_facilitator_client():
-    async with websockets.serve(mock_facilitator_ws, "127.0.0.1", 0) as server:
+@pytest.mark.parametrize(
+    "testing_function_ws",
+    [
+        facilitator_job_status_updates_ws,
+        facilitator_bad_message_ws,
+    ],
+)
+async def test_facilitator_client(testing_function_ws):
+    global condition
+    condition = asyncio.Condition()
+    async with websockets.serve(testing_function_ws, "127.0.0.1", 0) as server:
         host, port = server.sockets[0].getsockname()
         keypair = mock_keypair()
         facilitator_uri = f"ws://{host}:{port}/"
         facilitator_client = MockFacilitatorClient(keypair, facilitator_uri)
 
-        facilitator_client.MINER_CLIENT_CLASS = MockMinerClient
-        facilitator_client.MINER_CLIENT_CLASS.mock_job_state = True
+        facilitator_client.MINER_CLIENT_CLASS = MockJobStateMinerClient
 
         async with condition:
             task = asyncio.create_task(facilitator_client.run_forever())

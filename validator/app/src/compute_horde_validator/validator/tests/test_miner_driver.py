@@ -1,8 +1,3 @@
-"""
-This test file is here always to indicate that everything was installed and the CI was able to run tests.
-It should always pass as long as all dependencies are properly installed.
-"""
-
 import asyncio
 import uuid
 
@@ -18,14 +13,14 @@ from compute_horde.mv_protocol.miner_requests import (
 from compute_horde_validator.validator.facilitator_client import JobRequest, OrganicJob
 from compute_horde_validator.validator.miner_driver import run_miner_job
 from compute_horde_validator.validator.models import Miner
-from compute_horde_validator.validator.synthetic_jobs.utils import JobState, MinerClient
+from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
+
+from . import get_miner_client
 
 WEBSOCKET_TIMEOUT = 10
 
 
 class MockMinerClient(MinerClient):
-    mock_job_state = False
-
     def __init__(self, loop: asyncio.AbstractEventLoop, **args):
         super().__init__(loop, **args)
 
@@ -50,21 +45,8 @@ class MockMinerClient(MinerClient):
     async def send_model(self, model):
         pass
 
-    def get_job_state(self, job_uuid):
-        if self.mock_job_state:
-            job_state = JobState()
-            job_state.miner_ready_or_declining_future.set_result(
-                V0ExecutorReadyRequest(job_uuid=job_uuid)
-            )
-            job_state.miner_finished_or_failed_future.set_result(
-                V0JobFinishedRequest(
-                    job_uuid=job_uuid,
-                    docker_process_stdout="",
-                    docker_process_stderr="",
-                )
-            )
-            return job_state
-        return super().get_job_state(job_uuid)
+    def get_barrier(self):
+        return asyncio.Barrier(1)
 
 
 def get_dummy_job_request(uuid: str) -> JobRequest:
@@ -115,16 +97,7 @@ async def test_miner_driver(futures_result, expected_job_status_updates, organic
         miner_port=9999,
         job_description="User job from facilitator",
     )
-    miner_client = MockMinerClient(
-        loop=asyncio.get_event_loop(),
-        miner_address="ignore",
-        my_hotkey="ignore",
-        miner_hotkey="ignore",
-        miner_port=9999,
-        job_uuid=job_uuid,
-        keypair=None,
-    )
-    miner_client.mock_job_state = False
+    miner_client = get_miner_client(MockMinerClient, job_uuid)
     f0, f1 = futures_result
     if f0:
         miner_client.job_states[job_uuid].miner_ready_or_declining_future.set_result(
