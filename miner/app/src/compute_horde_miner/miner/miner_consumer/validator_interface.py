@@ -271,7 +271,6 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             miner_signature = f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
 
             await JobReceipt.objects.acreate(
-                job=job,
                 validator_signature=msg.signature,
                 miner_signature=miner_signature,
                 job_uuid=msg.payload.job_uuid,

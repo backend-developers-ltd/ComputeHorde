@@ -28,6 +28,7 @@ REMOTE_COLDKEY_PUB_PATH=".bittensor/wallets/$WALLET_NAME/coldkeypub.txt"
 REMOTE_HOTKEY_DIR=$(dirname "$REMOTE_HOTKEY_PATH")
 
 DEFAULT_ADMIN_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')
+: "${MIGRATING:=0}"
 
 # Copy the wallet files to the server
 # shellcheck disable=SC2087
@@ -39,6 +40,7 @@ cat > tmpvars <<ENDCAT
 HOTKEY_NAME="$(basename "$REMOTE_HOTKEY_PATH")"
 WALLET_NAME="$(basename "$(dirname "$REMOTE_HOTKEY_DIR")")"
 DEFAULT_ADMIN_PASSWORD="$DEFAULT_ADMIN_PASSWORD"
+MIGRATING=$MIGRATING
 ENDCAT
 ENDSSH
 scp "$LOCAL_HOTKEY_PATH" "$SSH_DESTINATION:$REMOTE_HOTKEY_PATH"
@@ -144,6 +146,7 @@ PORT_FOR_EXECUTORS=8000
 
 ADDRESS_FOR_EXECUTORS=172.17.0.1
 DEFAULT_ADMIN_PASSWORD="$(. ~/tmpvars && echo "$DEFAULT_ADMIN_PASSWORD")"
+MIGRATING="$(. ~/tmpvars && echo "MIGRATING")"
 ENDENV
 
 rm ~/tmpvars

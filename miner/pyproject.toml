@@ -24,6 +24,7 @@ dependencies = [
     "prometheus-client~=0.17.0",
     "django-prometheus==2.3.1",
     "django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01",
+    "django-constance[database]==3.1.0",
 ]
 
 [build-system]

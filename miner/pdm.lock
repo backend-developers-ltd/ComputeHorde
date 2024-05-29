@@ -5,7 +5,7 @@
 groups = ["default", "format", "lint", "security_check", "test", "type_check"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:ee882abffab259bfd32431319b6caca5474ddf30215e0d644b6d73995f9162a5"
+content_hash = "sha256:272b52f39ded6e7ec8e8e0a675d4bcb583e570b9b5b1dbf3a0740ffd0958ab00"
 
 [[package]]
 name = "aiohttp"
@@ -789,6 +789,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "django-constance"
+version = "3.1.0"
+requires_python = ">=3.7"
+summary = "Django live settings with pluggable backends, including Redis."
+groups = ["default"]
+dependencies = [
+    "django-picklefield",
+]
+files = [
+    {file = "django-constance-3.1.0.tar.gz", hash = "sha256:2b96e51de63751ef63f8f92f74e0f6aea30fb6453f3a736c21e1f8b3f6cf0b4f"},
+    {file = "django_constance-3.1.0-py3-none-any.whl", hash = "sha256:6242486a346e396d765a9333d17f3101c8613cabc92e0b98dcb70c2a391bc53b"},
+]
+
+[[package]]
+name = "django-constance"
+version = "3.1.0"
+extras = ["database"]
+requires_python = ">=3.7"
+summary = "Django live settings with pluggable backends, including Redis."
+groups = ["default"]
+dependencies = [
+    "django-constance==3.1.0",
+]
+files = [
+    {file = "django-constance-3.1.0.tar.gz", hash = "sha256:2b96e51de63751ef63f8f92f74e0f6aea30fb6453f3a736c21e1f8b3f6cf0b4f"},
+    {file = "django_constance-3.1.0-py3-none-any.whl", hash = "sha256:6242486a346e396d765a9333d17f3101c8613cabc92e0b98dcb70c2a391bc53b"},
+]
+
+[[package]]
 name = "django-cors-headers"
 version = "4.2.0"
 requires_python = ">=3.8"
@@ -840,6 +869,20 @@ dependencies = [
 files = [
     {file = "django-extensions-3.2.3.tar.gz", hash = "sha256:44d27919d04e23b3f40231c4ab7af4e61ce832ef46d610cc650d53e68328410a"},
     {file = "django_extensions-3.2.3-py3-none-any.whl", hash = "sha256:9600b7562f79a92cbf1fde6403c04fee314608fefbb595502e34383ae8203401"},
+]
+
+[[package]]
+name = "django-picklefield"
+version = "3.2"
+requires_python = ">=3"
+summary = "Pickled object field for Django"
+groups = ["default"]
+dependencies = [
+    "Django>=3.2",
+]
+files = [
+    {file = "django-picklefield-3.2.tar.gz", hash = "sha256:aa463f5d79d497dbe789f14b45180f00a51d0d670067d0729f352a3941cdfa4d"},
+    {file = "django_picklefield-3.2-py3-none-any.whl", hash = "sha256:e9a73539d110f69825d9320db18bcb82e5189ff48dbed41821c026a20497764c"},
 ]
 
 [[package]]

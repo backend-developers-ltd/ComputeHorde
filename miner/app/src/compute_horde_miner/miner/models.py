@@ -87,7 +87,6 @@ class AcceptedJob(models.Model):
 
 
 class JobReceipt(models.Model):
-    job = models.ForeignKey(AcceptedJob, on_delete=models.CASCADE)
     validator_signature = models.CharField(max_length=256)
     miner_signature = models.CharField(max_length=256)
 
