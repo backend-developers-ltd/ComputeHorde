@@ -21,11 +21,6 @@ from compute_horde_validator.validator.synthetic_jobs.utils import JobState
 from . import mock_keypair
 from .test_miner_driver import MockMinerClient, get_dummy_job_request
 
-WEBSOCKET_TIMEOUT = 10
-
-condition = None
-facilitator_error = None
-
 
 class MockJobStateMinerClient(MockMinerClient):
     def get_job_state(self, job_uuid):
@@ -55,79 +50,84 @@ class MockFacilitatorClient(FacilitatorClient):
         )
 
 
-async def facilitator_job_status_updates_ws(ws):
-    global facilitator_error
-    facilitator_error = None
+class FacilitatorWs:
+    def __init__(self):
+        self.condition = asyncio.Condition()
+        self.facilitator_error = None
 
-    job_uuid = str(uuid.uuid4())
-
-    # auth
-    response = await ws.recv()
-    try:
-        AuthenticationRequest.parse_raw(response)
-    except Exception as e:
-        facilitator_error = e
-
-    await ws.send(Response(status="success").json())
-
-    # send job request
-    await ws.send(get_dummy_job_request(job_uuid).json())
-
-    # get job status update
-    response = await ws.recv()
-    try:
-        JobStatusUpdate.parse_raw(response)
-    except Exception as e:
-        facilitator_error = e
-
-    response = await ws.recv()
-    try:
-        JobStatusUpdate.parse_raw(response)
-    except Exception as e:
-        facilitator_error = e
-
-    organic_job = await OrganicJob.objects.aget(job_uuid=job_uuid)
-    if organic_job.status != OrganicJob.Status.COMPLETED:
-        facilitator_error = Exception(f"job not completed: {organic_job.status}")
-
-    async with condition:
-        condition.notify()
+    async def wait(self):
+        async with self.condition:
+            await self.condition.wait()
 
 
-async def facilitator_bad_message_ws(ws):
-    global facilitator_error
-    facilitator_error = None
+class FacilitatorJobStatusUpdatesWs(FacilitatorWs):
+    async def serve(self, ws):
+        job_uuid = str(uuid.uuid4())
 
-    job_uuid = str(uuid.uuid4())
+        # auth
+        response = await ws.recv()
+        try:
+            AuthenticationRequest.parse_raw(response)
+        except Exception as e:
+            self.facilitator_error = e
 
-    # auth
-    await ws.recv()
-    await ws.send(Response(status="success").json())
+        await ws.send(Response(status="success").json())
 
-    # send bad job request
-    await ws.send('{"job_request": "invalid"}')
+        # send job request
+        await ws.send(get_dummy_job_request(job_uuid).json())
 
-    num_jobs = await OrganicJob.objects.filter(job_uuid=job_uuid).acount()
-    if num_jobs != 0:
-        facilitator_error = Exception("should not have created job")
+        # get job status update
+        response = await ws.recv()
+        try:
+            JobStatusUpdate.parse_raw(response)
+        except Exception as e:
+            self.facilitator_error = e
 
-    async with condition:
-        condition.notify()
+        response = await ws.recv()
+        try:
+            JobStatusUpdate.parse_raw(response)
+        except Exception as e:
+            self.facilitator_error = e
+
+        organic_job = await OrganicJob.objects.aget(job_uuid=job_uuid)
+        if organic_job.status != OrganicJob.Status.COMPLETED:
+            self.facilitator_error = Exception(f"job not completed: {organic_job.status}")
+
+        async with self.condition:
+            self.condition.notify()
+
+
+class FacilitatorBadMessageWs(FacilitatorWs):
+    async def serve(self, ws):
+        job_uuid = str(uuid.uuid4())
+
+        # auth
+        await ws.recv()
+        await ws.send(Response(status="success").json())
+
+        # send bad job request
+        await ws.send('{"job_request": "invalid"}')
+
+        num_jobs = await OrganicJob.objects.filter(job_uuid=job_uuid).acount()
+        if num_jobs != 0:
+            self.facilitator_error = Exception("should not have created job")
+
+        async with self.condition:
+            self.condition.notify()
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    "testing_function_ws",
+    "ws_server_cls",
     [
-        facilitator_job_status_updates_ws,
-        facilitator_bad_message_ws,
+        FacilitatorJobStatusUpdatesWs,
+        FacilitatorBadMessageWs,
     ],
 )
-async def test_facilitator_client(testing_function_ws):
-    global condition
-    condition = asyncio.Condition()
-    async with websockets.serve(testing_function_ws, "127.0.0.1", 0) as server:
+async def test_facilitator_client(ws_server_cls):
+    ws_server = ws_server_cls()
+    async with websockets.serve(ws_server.serve, "127.0.0.1", 0) as server:
         host, port = server.sockets[0].getsockname()
         keypair = mock_keypair()
         facilitator_uri = f"ws://{host}:{port}/"
@@ -135,13 +135,13 @@ async def test_facilitator_client(testing_function_ws):
 
         facilitator_client.MINER_CLIENT_CLASS = MockJobStateMinerClient
 
-        async with condition:
+        async with ws_server.condition:
             task = asyncio.create_task(facilitator_client.run_forever())
-            await condition.wait()
+            await ws_server.condition.wait()
 
         facilitator_client.miner_driver_awaiter_task.cancel()
         facilitator_client.heartbeat_task.cancel()
         facilitator_client.specs_task.cancel()
         task.cancel()
-        if facilitator_error:
-            assert False, facilitator_error
+        if ws_server.facilitator_error:
+            assert False, ws_server.facilitator_error
