@@ -146,7 +146,7 @@ PORT_FOR_EXECUTORS=8000
 
 ADDRESS_FOR_EXECUTORS=172.17.0.1
 DEFAULT_ADMIN_PASSWORD="$(. ~/tmpvars && echo "$DEFAULT_ADMIN_PASSWORD")"
-MIGRATING="$(. ~/tmpvars && echo "MIGRATING")"
+MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
 ENDENV
 
 rm ~/tmpvars

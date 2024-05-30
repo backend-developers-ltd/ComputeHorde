@@ -42,7 +42,8 @@ class AcceptedJobReadOnlyAdmin(ReadOnlyAdmin):
 
 
 class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
-    pass
+    list_display = ["job_uuid", "validator_hotkey", "score", "time_started", "time_took"]
+    ordering = ["-time_started"]
 
 
 admin.site.register(AcceptedJob, admin_class=AcceptedJobReadOnlyAdmin)

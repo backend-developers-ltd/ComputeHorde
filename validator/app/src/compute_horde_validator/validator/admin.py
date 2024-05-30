@@ -69,7 +69,15 @@ class MinerReadOnlyAdmin(ReadOnlyAdmin):
 
 
 class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
-    list_display = ["job_uuid", "miner_hotkey", "validator_hotkey", "score", "time_took"]
+    list_display = [
+        "job_uuid",
+        "miner_hotkey",
+        "validator_hotkey",
+        "score",
+        "time_started",
+        "time_took",
+    ]
+    ordering = ["-time_started"]
 
 
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)

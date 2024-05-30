@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from datetime import timedelta
 from enum import Enum
 from typing import Self
 
@@ -100,3 +101,9 @@ class JobReceipt(models.Model):
 
     def __str__(self):
         return f"uuid: {self.job_uuid}"
+
+    def time_took(self):
+        return timedelta(microseconds=self.time_took_us)
+
+    def score(self):
+        return float(self.score_str)
