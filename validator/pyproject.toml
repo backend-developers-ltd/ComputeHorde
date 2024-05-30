@@ -44,6 +44,7 @@ test = [
     "pytest-httpx",
     "ipdb",
     "freezegun",
+    "pytest-mock>=3.14.0",
 ]
 format = [
     "ruff",
