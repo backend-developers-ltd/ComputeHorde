@@ -40,6 +40,21 @@ def lint(session: nox.Session):
 
 
 @nox.session(python=PYTHON_VERSION)
+def test(session):
+    install(session, "test")
+    session.run(
+        "pytest",
+        "-W",
+        "ignore::DeprecationWarning",
+        "-s",
+        "-x",
+        "-vv",
+        "tests",
+        *session.posargs,
+    )
+
+
+@nox.session(python=PYTHON_VERSION)
 def make_release_commit(session: nox.Session):
     """
     Runs `towncrier build`, commits changes, tags, all that is left to do is pushing

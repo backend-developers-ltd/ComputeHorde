@@ -70,12 +70,3 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
             receipts.append(receipt)
 
         return receipts
-
-
-def get_miner_receipts_by_hotkey(hotkey: str, netuid=12, network="finney") -> list[Receipt]:
-    """Get receipts from a given miner"""
-    metagraph = bittensor.metagraph(netuid=netuid, network=network)
-    neurons = [neuron for neuron in metagraph.neurons if neuron.hotkey == hotkey]
-    if not neurons:
-        raise ReceiptFetchError("miner not found in metagraph")
-    return get_miner_receipts(hotkey, neurons[0].axon_info.ip, neurons[0].axon_info.port)

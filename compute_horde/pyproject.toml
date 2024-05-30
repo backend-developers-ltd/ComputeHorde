@@ -44,6 +44,10 @@ type_check = [
     "types-python-dateutil",
     "types-requests",
 ]
+test = [
+    "pytest>=8.2.1",
+    "responses>=0.25.0",
+]
 
 [tool.ruff]
 line-length = 100
