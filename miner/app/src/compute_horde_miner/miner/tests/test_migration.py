@@ -65,6 +65,7 @@ def test_get_receipts_from_old_miner(mocker: MockerFixture):
         ),
     ]
     mocker.patch("compute_horde_miner.miner.tasks.get_miner_receipts", return_value=receipts)
+    mocker.patch("compute_horde_miner.miner.tasks.settings.BITTENSOR_WALLET")
 
     get_receipts_from_old_miner()
 
