@@ -12,6 +12,7 @@ from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
+from compute_horde.receipts import ReceiptFetchError, get_miner_receipts
 from compute_horde.utils import get_validators
 from constance import config
 from django.conf import settings
@@ -20,7 +21,7 @@ from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
-from compute_horde_validator.validator.models import OrganicJob, SyntheticJobBatch
+from compute_horde_validator.validator.models import JobReceipt, OrganicJob, SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
     create_and_run_sythethic_job_batch,
@@ -273,3 +274,48 @@ def set_scores():
                 break
         else:
             raise RuntimeError(f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts")
+
+
+@app.task
+def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
+    logger.debug(f"Fetching receipts from miner. {hotkey=} {ip} {port=}")
+    try:
+        receipts = get_miner_receipts(hotkey, ip, port)
+    except ReceiptFetchError:
+        logger.warning(f"Failed to fetch receipts from miner. {hotkey=} {ip} {port=}")
+        return
+
+    latest_job_receipt = (
+        JobReceipt.objects.filter(miner_hotkey=hotkey).order_by("-time_started").first()
+    )
+    tolerance = timedelta(hours=1)
+    cutoff_time = latest_job_receipt.time_started - tolerance if latest_job_receipt else None
+
+    to_create = [
+        JobReceipt(
+            job_uuid=receipt.payload.job_uuid,
+            miner_hotkey=receipt.payload.miner_hotkey,
+            validator_hotkey=receipt.payload.validator_hotkey,
+            time_started=receipt.payload.time_started,
+            time_took_us=receipt.payload.time_took_us,
+            score_str=receipt.payload.score_str,
+        )
+        for receipt in receipts
+        if cutoff_time is None or receipt.payload.time_started > cutoff_time
+    ]
+
+    JobReceipt.objects.bulk_create(to_create, ignore_conflicts=True)
+
+
+@app.task
+def fetch_receipts():
+    """Fetch job receipts from the miners."""
+    # Delete old receipts before fetching new ones
+    JobReceipt.objects.filter(time_started__lt=now() - timedelta(days=7)).delete()
+
+    metagraph = bittensor.metagraph(
+        netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK
+    )
+    miners = [neuron for neuron in metagraph.neurons if neuron.axon_info.is_serving]
+    for miner in miners:
+        fetch_receipts_from_miner.delay(miner.hotkey, miner.axon_info.ip, miner.axon_info.port)

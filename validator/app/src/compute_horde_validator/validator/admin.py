@@ -7,6 +7,7 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
     MinerBlacklist,
     AdminJobRequest,
+    JobReceipt,
 )  # noqa
 
 from compute_horde_validator.validator.tasks import trigger_run_admin_job_request  # noqa
@@ -67,8 +68,13 @@ class MinerReadOnlyAdmin(ReadOnlyAdmin):
         return False
 
 
+class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+    list_display = ["job_uuid", "miner_hotkey", "validator_hotkey", "score", "time_took"]
+
+
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
+admin.site.register(JobReceipt, admin_class=JobReceiptsReadOnlyAdmin)
 admin.site.register(MinerBlacklist)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)

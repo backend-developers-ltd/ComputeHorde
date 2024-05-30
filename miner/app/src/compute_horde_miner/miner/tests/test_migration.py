@@ -1,10 +1,10 @@
-import datetime
 import uuid
 
 import pytest
 from compute_horde.mv_protocol.validator_requests import ReceiptPayload
 from compute_horde.receipts import Receipt
 from constance.test.unittest import override_config
+from django.utils.timezone import now
 from pytest_mock import MockerFixture
 
 from compute_horde_miner.miner.models import JobReceipt
@@ -44,7 +44,7 @@ def test_get_receipts_from_old_miner(mocker: MockerFixture):
                 job_uuid=str(uuid.uuid4()),
                 miner_hotkey="m1",
                 validator_hotkey="v1",
-                time_started=datetime.datetime.now(),
+                time_started=now(),
                 time_took_us=30_000_000,
                 score_str="123.45",
             ),
@@ -56,7 +56,7 @@ def test_get_receipts_from_old_miner(mocker: MockerFixture):
                 job_uuid=str(uuid.uuid4()),
                 miner_hotkey="m1",
                 validator_hotkey="v2",
-                time_started=datetime.datetime.now(),
+                time_started=now(),
                 time_took_us=35_000_000,
                 score_str="103.45",
             ),

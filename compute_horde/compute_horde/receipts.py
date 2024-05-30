@@ -46,7 +46,12 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
         temp_file.seek(0)
 
         receipts = []
-        zip_file = exit_stack.enter_context(zipfile.ZipFile(temp_file))
+
+        try:
+            zip_file = exit_stack.enter_context(zipfile.ZipFile(temp_file))
+        except zipfile.BadZipfile as e:
+            raise ReceiptFetchError("miner returned invalid zip") from e
+
         for zip_info in zip_file.filelist:
             try:
                 raw_receipt = zip_file.read(zip_info)

@@ -250,10 +250,16 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         "schedule": crontab(minute="0", hour="*/4"),
         "options": {},
     },
+    "fetch_receipts": {
+        "task": "compute_horde_validator.validator.tasks.fetch_receipts",
+        "schedule": crontab(minute="15,45"),  # try to stay away from set_scores task :)
+        "options": {},
+    },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
     CELERY_BEAT_SCHEDULE["set_scores"]["schedule"] = crontab(minute="*/3")
+    CELERY_BEAT_SCHEDULE["fetch_receipts"]["schedule"] = crontab(minute="*/3")
 
 CELERY_TASK_ROUTES = ["compute_horde_validator.celery.route_task"]
 CELERY_TASK_TIME_LIMIT = int(timedelta(hours=2, minutes=5).total_seconds())
