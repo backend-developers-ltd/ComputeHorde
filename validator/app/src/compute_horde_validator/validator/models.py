@@ -1,7 +1,9 @@
 import shlex
 import uuid
+from datetime import timedelta
 
 from django.db import models
+from django.db.models import UniqueConstraint
 
 
 class Miner(models.Model):
@@ -90,3 +92,26 @@ class AdminJobRequest(models.Model):
 
     def get_args(self):
         return shlex.split(self.args)
+
+
+class JobReceipt(models.Model):
+    job_uuid = models.UUIDField()
+    miner_hotkey = models.CharField(max_length=256)
+    validator_hotkey = models.CharField(max_length=256)
+    time_started = models.DateTimeField()
+    time_took_us = models.BigIntegerField()
+    score_str = models.CharField(max_length=256)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["job_uuid"], name="unique_job_receipt_job_uuid"),
+        ]
+
+    def __str__(self):
+        return f"job_uuid: {self.job_uuid}"
+
+    def time_took(self):
+        return timedelta(microseconds=self.time_took_us)
+
+    def score(self):
+        return float(self.score_str)

@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django_extensions",
     "django_probes",
+    "constance",
     "compute_horde_validator.validator",
     "compute_horde_validator.validator.admin_config.ValidatorAdminConfig",
 ]
@@ -121,6 +122,15 @@ if CORS_ENABLED := env.bool("CORS_ENABLED", default=True):
     CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
+CONSTANCE_CONFIG = {
+    "SERVING": (
+        not env.bool("MIGRATING", default=False),
+        "Whether this validator is serving jobs and setting weights",
+        bool,
+    ),
+}
 
 # Content Security Policy
 if CSP_ENABLED := env.bool("CSP_ENABLED", default=False):
@@ -240,10 +250,16 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         "schedule": crontab(minute="0", hour="*/4"),
         "options": {},
     },
+    "fetch_receipts": {
+        "task": "compute_horde_validator.validator.tasks.fetch_receipts",
+        "schedule": crontab(minute="15,45"),  # try to stay away from set_scores task :)
+        "options": {},
+    },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
     CELERY_BEAT_SCHEDULE["set_scores"]["schedule"] = crontab(minute="*/3")
+    CELERY_BEAT_SCHEDULE["fetch_receipts"]["schedule"] = crontab(minute="*/3")
 
 CELERY_TASK_ROUTES = ["compute_horde_validator.celery.route_task"]
 CELERY_TASK_TIME_LIMIT = int(timedelta(hours=2, minutes=5).total_seconds())

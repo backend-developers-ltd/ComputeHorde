@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from datetime import timedelta
 from enum import Enum
 from typing import Self
 
@@ -87,7 +88,6 @@ class AcceptedJob(models.Model):
 
 
 class JobReceipt(models.Model):
-    job = models.ForeignKey(AcceptedJob, on_delete=models.CASCADE)
     validator_signature = models.CharField(max_length=256)
     miner_signature = models.CharField(max_length=256)
 
@@ -101,3 +101,9 @@ class JobReceipt(models.Model):
 
     def __str__(self):
         return f"uuid: {self.job_uuid}"
+
+    def time_took(self):
+        return timedelta(microseconds=self.time_took_us)
+
+    def score(self):
+        return float(self.score_str)

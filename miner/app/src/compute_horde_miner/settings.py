@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django_extensions",
     "django_probes",
+    "constance",
     "compute_horde_miner.miner",
     "compute_horde_miner.miner.admin_config.MinerAdminConfig",
 ]
@@ -125,6 +126,22 @@ if CORS_ENABLED := env.bool("CORS_ENABLED", default=True):
     CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
+CONSTANCE_CONFIG = {
+    "SERVING": (
+        not env.bool("MIGRATING", default=False),
+        "Whether this miner is updating axon_info",
+        bool,
+    ),
+    "MIGRATING": (
+        env.bool("MIGRATING", default=False),
+        "Whether this miner is migrating the old miner's data",
+        bool,
+    ),
+    "OLD_MINER_IP": ("", "IP address of old miner for migration", str),
+    "OLD_MINER_PORT": (8000, "PORT of old miner for migration", int),
+}
 
 # Content Security Policy
 if CSP_ENABLED := env.bool("CSP_ENABLED", default=False):
@@ -247,6 +264,11 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
     "clear_old_receipts": {
         "task": "compute_horde_miner.miner.tasks.clear_old_receipts",
         "schedule": timedelta(hours=1),
+        "options": {},
+    },
+    "get_receipts_from_old_miner": {
+        "task": "compute_horde_miner.miner.tasks.get_receipts_from_old_miner",
+        "schedule": timedelta(minutes=10),
         "options": {},
     },
 }

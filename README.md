@@ -84,3 +84,8 @@ If you want to change the default config, see [Validator runner README](validato
 2. Check if you're getting any jobs and what the outcomes are. An admin panel for that is coming but for now you
    achieve that with `docker-compose exec miner-runner docker-compose exec db psql postgres -U postgres -c 'select *
    from miner_acceptedjob order by id desc;`
+
+# Migrating servers
+
+If you need to move your miner or validator to a new server,
+see the [migration guide](/docs/migration.md).

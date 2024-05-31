@@ -27,6 +27,8 @@ REMOTE_HOTKEY_PATH=".bittensor/wallets/$WALLET_NAME/hotkeys/$HOTKEY_NAME"
 REMOTE_COLDKEY_PUB_PATH=".bittensor/wallets/$WALLET_NAME/coldkeypub.txt"
 REMOTE_HOTKEY_DIR=$(dirname "$REMOTE_HOTKEY_PATH")
 
+: "${MIGRATING:=0}"
+
 # Copy the wallet files to the server
 # shellcheck disable=SC2087
 ssh "$SSH_DESTINATION" <<ENDSSH
@@ -36,6 +38,7 @@ mkdir -p $REMOTE_HOTKEY_DIR
 cat > tmpvars <<ENDCAT
 HOTKEY_NAME="$(basename "$REMOTE_HOTKEY_PATH")"
 WALLET_NAME="$(basename "$(dirname "$REMOTE_HOTKEY_DIR")")"
+MIGRATING=$MIGRATING
 ENDCAT
 ENDSSH
 scp "$LOCAL_HOTKEY_PATH" "$SSH_DESTINATION:$REMOTE_HOTKEY_PATH"
@@ -107,6 +110,7 @@ BITTENSOR_WALLET_HOTKEY_NAME="$(. ~/tmpvars && echo "$HOTKEY_NAME")"
 HOST_WALLET_DIR=$HOME/.bittensor/wallets
 COMPOSE_PROJECT_NAME=compute_horde_validator
 FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
+MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
 ENDENV
 
 docker pull backenddevelopersltd/compute-horde-validator:v0-latest
