@@ -114,7 +114,7 @@ def trigger_run_admin_job_request(job_request_id: int):
     async_to_sync(run_admin_job_request)(job_request_id)
 
 
-async def run_admin_job_request(job_request_id: int):
+async def run_admin_job_request(job_request_id: int, callback=None):
     job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
         id=job_request_id
     )
@@ -145,7 +145,7 @@ async def run_admin_job_request(job_request_id: int):
         job_request,
         total_job_timeout=job_request.timeout,
         wait_timeout=job_request.timeout,
-        notify_callback=None,
+        notify_callback=callback,
     )
 
 
