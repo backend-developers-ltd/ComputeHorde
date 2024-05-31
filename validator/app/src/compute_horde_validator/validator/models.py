@@ -93,6 +93,9 @@ class AdminJobRequest(models.Model):
     def get_args(self):
         return shlex.split(self.args)
 
+    def __str__(self):
+        return f"uuid: {self.uuid} - miner hotkey: {self.miner.hotkey}"
+
 
 class JobReceipt(models.Model):
     job_uuid = models.UUIDField()
