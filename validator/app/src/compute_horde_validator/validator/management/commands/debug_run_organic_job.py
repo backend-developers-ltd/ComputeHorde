@@ -1,5 +1,4 @@
-import asyncio
-
+from asgiref.sync import async_to_sync
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -81,7 +80,6 @@ class Command(BaseCommand):
             created_at=timezone.now(),
         )
         print(f"Processing job request: {job_request}")
-
-        asyncio.run(run_admin_job_request(job_request.pk, callback=notify_job_status_update))
+        async_to_sync(run_admin_job_request)(job_request.pk, callback=notify_job_status_update)
         job = OrganicJob.objects.get(job_uuid=job_request.uuid)
         print(f"\nJob {job.job_uuid} done processing\nstatus: {job.status}\ncomment: {job.comment}")

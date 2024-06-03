@@ -13,6 +13,7 @@ from compute_horde_validator.validator.tasks import fetch_receipts
 class MockedAxonInfo(NamedTuple):
     is_serving: bool
     ip: str
+    ip_type: int
     port: int
 
 
