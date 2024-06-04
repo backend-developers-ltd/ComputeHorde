@@ -68,7 +68,8 @@ class SyntheticJob(JobBase):
 
 
 class OrganicJob(JobBase):
-    pass
+    stdout = models.TextField(blank=True, default="")
+    stderr = models.TextField(blank=True, default="")
 
 
 class AdminJobRequest(models.Model):

@@ -107,8 +107,8 @@ async def test_miner_driver(futures_result, expected_job_status_updates, organic
         miner_client.job_states[job_uuid].miner_finished_or_failed_future.set_result(
             f1(
                 job_uuid=job_uuid,
-                docker_process_stdout="",
-                docker_process_stderr="",
+                docker_process_stdout="mocked stdout",
+                docker_process_stderr="mocked stderr",
             )
         )
 
@@ -133,3 +133,6 @@ async def test_miner_driver(futures_result, expected_job_status_updates, organic
 
     job = await OrganicJob.objects.aget(job_uuid=job_uuid)
     assert job.status == organic_job_status
+    if organic_job_status == OrganicJob.Status.COMPLETED:
+        assert job.stdout == "mocked stdout"
+        assert job.stderr == "mocked stderr"

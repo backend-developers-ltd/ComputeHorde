@@ -213,6 +213,8 @@ async def run_miner_job(
                         ),
                     )
                 )
+            job.stdout = msg.docker_process_stdout
+            job.stderr = msg.docker_process_stderr
             job.status = OrganicJob.Status.FAILED
             job.comment = f"Miner failed: {msg.json()}"
             await job.asave()
@@ -235,6 +237,8 @@ async def run_miner_job(
                         ),
                     )
                 )
+            job.stdout = msg.docker_process_stdout
+            job.stderr = msg.docker_process_stderr
             job.status = OrganicJob.Status.COMPLETED
             job.comment = f"Miner finished: {msg.json()}"
             await job.asave()
