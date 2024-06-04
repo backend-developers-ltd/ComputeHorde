@@ -71,6 +71,9 @@ class OrganicJob(JobBase):
     stdout = models.TextField(blank=True, default="")
     stderr = models.TextField(blank=True, default="")
 
+    def get_absolute_url(self):
+        return f"/admin/validator/organicjob/{self.pk}/change/"
+
 
 class AdminJobRequest(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True)

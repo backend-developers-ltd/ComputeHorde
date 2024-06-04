@@ -144,7 +144,6 @@ async def run_admin_job_request(job_request_id: int, callback=None):
         job,
         job_request,
         total_job_timeout=job_request.timeout,
-        wait_timeout=job_request.timeout,
         notify_callback=callback,
     )
 
