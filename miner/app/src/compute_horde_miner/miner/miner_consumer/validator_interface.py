@@ -1,3 +1,4 @@
+import datetime as dt
 import logging
 import time
 import uuid
@@ -73,13 +74,31 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         for job in self.pending_jobs.values():
             await self.group_add(job.executor_token)
             if job.status != AcceptedJob.Status.WAITING_FOR_PAYLOAD:
+                # TODO: this actually works only for temporary connection issue between validator and miner;
+                #       long running jobs would need to update job in regular periods, and actually would
+                #       require complete refactor of communication scheme, so miner and validator can restart
+                #       and still rebuild the connection and handle finished job execution... but right now
+                #       losing connection between miner and executor is not recoverable, also restart of
+                #       either validator or miner is unrecoverable, so when reading this take into account that
+                #       this only handles this one particular case of broken connection between miner and validator
+                if timezone.now() - job.updated_at > dt.timedelta(days=1):
+                    job.status = AcceptedJob.Status.FAILED
+                    await job.asave()
+                    logger.debug(f"Give up on job {job.job_uuid} after no status change for a day.")
                 continue
-            await self.send(
-                miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).json()
-            )
-            logger.debug(
-                f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}"
-            )
+            if timezone.now() - job.updated_at > dt.timedelta(minutes=10):
+                job.status = AcceptedJob.Status.FAILED
+                await job.asave()
+                logger.debug(
+                    f"Give up on job {job.job_uuid} after not receiving payload after 10 minutes"
+                )
+            else:
+                await self.send(
+                    miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).json()
+                )
+                logger.debug(
+                    f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}"
+                )
 
         for job in await AcceptedJob.get_not_reported(self.validator):
             if job.status == AcceptedJob.Status.FINISHED:
