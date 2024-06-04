@@ -1,3 +1,4 @@
+import datetime as dt
 import logging
 import time
 import uuid
@@ -42,6 +43,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         self.validator: Validator | None = None
         self.validator_authenticated = False
         self.msg_queue = []
+        self.defer_saving_jobs = []
+        self.defer_executor_ready = []
         self.pending_jobs: dict[str, "AcceptedJob"] = {}
 
     @log_errors_explicitly
@@ -71,43 +74,33 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
         self.pending_jobs = await AcceptedJob.get_for_validator(self.validator)
         for job in self.pending_jobs.values():
-            await self.group_add(job.executor_token)
             if job.status != AcceptedJob.Status.WAITING_FOR_PAYLOAD:
+                # TODO: this actually works only for temporary connection issue between validator and miner;
+                #       long running jobs would need to update job in regular periods, and actually would
+                #       require complete refactor of communication scheme, so miner and validator can restart
+                #       and still rebuild the connection and handle finished job execution... but right now
+                #       losing connection between miner and executor is not recoverable, also restart of
+                #       either validator or miner is unrecoverable, so when reading this take into account that
+                #       this only handles this one particular case of broken connection between miner and validator
+                if timezone.now() - job.updated_at > dt.timedelta(days=1):
+                    job.status = AcceptedJob.Status.FAILED
+                    # we don't want to block accepting connection - we defer it until after authorized
+                    self.defer_saving_jobs.append(job)
+                    logger.debug(f"Give up on job {job.job_uuid} after no status change for a day.")
+                else:
+                    await self.group_add(job.executor_token)
                 continue
-            await self.send(
-                miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).json()
-            )
-            logger.debug(
-                f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}"
-            )
-
-        for job in await AcceptedJob.get_not_reported(self.validator):
-            if job.status == AcceptedJob.Status.FINISHED:
-                await self.send(
-                    miner_requests.V0JobFinishedRequest(
-                        job_uuid=str(job.job_uuid),
-                        docker_process_stdout=job.stdout,
-                        docker_process_stderr=job.stderr,
-                    ).json()
-                )
+            if timezone.now() - job.updated_at > dt.timedelta(minutes=10):
+                job.status = AcceptedJob.Status.FAILED
+                # we don't want to block accepting connection - we defer it until after authorized
+                self.defer_saving_jobs.append(job)
                 logger.debug(
-                    f"Job {job.job_uuid} finished reported to validator {self.validator_key}"
+                    f"Give up on job {job.job_uuid} after not receiving payload after 10 minutes"
                 )
-            else:  # job.status == AcceptedJob.Status.FAILED:
-                await self.send(
-                    miner_requests.V0JobFailedRequest(
-                        job_uuid=str(job.job_uuid),
-                        docker_process_stdout=job.stdout,
-                        docker_process_stderr=job.stderr,
-                        docker_process_exit_status=job.exit_status,
-                    ).json()
-                )
-                logger.debug(
-                    f"Failed job {job.job_uuid} reported to validator {self.validator_key}"
-                )
-            job.result_reported_to_validator = timezone.now()
-            await job.asave()
-        # TODO using advisory locks make sure that only one consumer per validator exists
+            else:
+                await self.group_add(job.executor_token)
+                # we don't send anything until we get authorization confirmation
+                self.defer_executor_ready.append(job)
 
     def accepted_request_type(self):
         return BaseValidatorRequest
@@ -188,6 +181,49 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         )
         for msg in self.msg_queue:
             await self.handle(msg)
+
+        # we should not send any messages until validator authorizes itself
+        for job in await AcceptedJob.get_not_reported(self.validator):
+            if job.status == AcceptedJob.Status.FINISHED:
+                await self.send(
+                    miner_requests.V0JobFinishedRequest(
+                        job_uuid=str(job.job_uuid),
+                        docker_process_stdout=job.stdout,
+                        docker_process_stderr=job.stderr,
+                    ).json()
+                )
+                logger.debug(
+                    f"Job {job.job_uuid} finished reported to validator {self.validator_key}"
+                )
+            else:  # job.status == AcceptedJob.Status.FAILED:
+                await self.send(
+                    miner_requests.V0JobFailedRequest(
+                        job_uuid=str(job.job_uuid),
+                        docker_process_stdout=job.stdout,
+                        docker_process_stderr=job.stderr,
+                        docker_process_exit_status=job.exit_status,
+                    ).json()
+                )
+                logger.debug(
+                    f"Failed job {job.job_uuid} reported to validator {self.validator_key}"
+                )
+            job.result_reported_to_validator = timezone.now()
+            await job.asave()
+
+        # we should not send any messages until validator authorizes itself
+        while self.defer_executor_ready:
+            job = self.defer_executor_ready.pop()
+            await self.send(
+                miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).json()
+            )
+            logger.debug(
+                f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}"
+            )
+
+        # we could do this anywhere, but this sounds like a good enough place
+        while self.defer_saving_jobs:
+            job = self.defer_saving_jobs.pop()
+            await job.asave()
 
     async def handle(self, msg: BaseValidatorRequest):
         if isinstance(msg, validator_requests.V0AuthenticateRequest):
