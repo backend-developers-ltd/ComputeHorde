@@ -114,6 +114,10 @@ def trigger_run_admin_job_request(job_request_id: int):
     async_to_sync(run_admin_job_request)(job_request_id)
 
 
+def get_keypair():
+    return settings.BITTENSOR_WALLET().get_hotkey()
+
+
 async def run_admin_job_request(job_request_id: int, callback=None):
     job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
         id=job_request_id
@@ -130,7 +134,7 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             job_description="Validator Job from Admin Panel",
         )
 
-        keypair = settings.BITTENSOR_WALLET().get_hotkey()
+        keypair = get_keypair()
         miner_client = MinerClient(
             loop=asyncio.get_event_loop(),
             miner_address=miner_axon_info.ip,

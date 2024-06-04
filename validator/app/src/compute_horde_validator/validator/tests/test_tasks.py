@@ -5,15 +5,17 @@ import pytest
 from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob
 from compute_horde_validator.validator.tasks import trigger_run_admin_job_request
 
-from . import mock_get_miner_axon_info
+from . import mock_get_miner_axon_info, mock_keypair
 from .test_miner_driver import MockMinerClient
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
+@patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
 @pytest.mark.django_db
 def test_trigger_run_admin_job__should_trigger_job():
     miner = Miner.objects.create(hotkey="miner_client_1")
+    OrganicJob.objects.all().delete()
     job_request = AdminJobRequest.objects.create(
         miner=miner,
         timeout=0,  # should timeout
@@ -39,10 +41,12 @@ async def throw_error(*args):
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", throw_error)
+@patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
 @pytest.mark.django_db
 def test_trigger_run_admin_job__should_not_trigger_job():
     miner = Miner.objects.create(hotkey="miner_client_2")
+    OrganicJob.objects.all().delete()
     job_request = AdminJobRequest.objects.create(
         miner=miner,
         timeout=0,  # should timeout
