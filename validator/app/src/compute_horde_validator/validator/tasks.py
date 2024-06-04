@@ -118,27 +118,36 @@ async def run_admin_job_request(job_request_id: int, callback=None):
     job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
         id=job_request_id
     )
-    miner = job_request.miner
-    miner_axon_info = await get_miner_axon_info(miner.hotkey)
-    job = await OrganicJob.objects.acreate(
-        job_uuid=str(job_request.uuid),
-        miner=miner,
-        miner_address=miner_axon_info.ip,
-        miner_address_ip_version=miner_axon_info.ip_type,
-        miner_port=miner_axon_info.port,
-        job_description="Validator Job from Admin Panel",
-    )
+    try:
+        miner = job_request.miner
+        miner_axon_info = await get_miner_axon_info(miner.hotkey)
+        job = await OrganicJob.objects.acreate(
+            job_uuid=str(job_request.uuid),
+            miner=miner,
+            miner_address=miner_axon_info.ip,
+            miner_address_ip_version=miner_axon_info.ip_type,
+            miner_port=miner_axon_info.port,
+            job_description="Validator Job from Admin Panel",
+        )
 
-    keypair = settings.BITTENSOR_WALLET().get_hotkey()
-    miner_client = MinerClient(
-        loop=asyncio.get_event_loop(),
-        miner_address=miner_axon_info.ip,
-        miner_port=miner_axon_info.port,
-        miner_hotkey=miner.hotkey,
-        my_hotkey=keypair.ss58_address,
-        job_uuid=job.job_uuid,
-        keypair=keypair,
-    )
+        keypair = settings.BITTENSOR_WALLET().get_hotkey()
+        miner_client = MinerClient(
+            loop=asyncio.get_event_loop(),
+            miner_address=miner_axon_info.ip,
+            miner_port=miner_axon_info.port,
+            miner_hotkey=miner.hotkey,
+            my_hotkey=keypair.ss58_address,
+            job_uuid=job.job_uuid,
+            keypair=keypair,
+        )
+
+        job_request.status_message = "job successfully triggered"
+    except Exception as e:
+        job_request.status_message = f"job failed to trigger due to: {e}"
+        return
+    finally:
+        await job_request.asave()
+
     await run_miner_job(
         miner_client,
         job,

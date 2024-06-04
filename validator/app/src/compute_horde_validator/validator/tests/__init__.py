@@ -7,9 +7,9 @@ E   ImportError: attempted relative import with no known parent package
 """
 
 import asyncio
+from typing import NamedTuple
 
 import bittensor
-import pytest
 
 
 def mock_keypair():
@@ -28,3 +28,14 @@ def get_miner_client(MINER_CLIENT, job_uuid: str):
         job_uuid=job_uuid,
         keypair=mock_keypair(),
     )
+
+
+class MockedAxonInfo(NamedTuple):
+    is_serving: bool
+    ip: str
+    ip_type: int
+    port: int
+
+
+async def mock_get_miner_axon_info(hotkey: str):
+    return MockedAxonInfo(is_serving=True, ip_type=4, ip="0000", port=8000)

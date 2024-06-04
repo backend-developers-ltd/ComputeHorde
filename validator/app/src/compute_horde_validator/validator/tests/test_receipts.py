@@ -9,12 +9,7 @@ from django.utils.timezone import now
 from compute_horde_validator.validator.models import JobReceipt
 from compute_horde_validator.validator.tasks import fetch_receipts
 
-
-class MockedAxonInfo(NamedTuple):
-    is_serving: bool
-    ip: str
-    ip_type: int
-    port: int
+from . import MockedAxonInfo
 
 
 class MockedNeuron(NamedTuple):
@@ -27,11 +22,11 @@ class MockedMetagraph:
         self.neurons = [
             MockedNeuron(
                 hotkey="5G9qWBzLPVVu2fCPPvg3QgPPK5JaJmJKaJha95TPHH9NZWuL",
-                axon_info=MockedAxonInfo(is_serving=True, ip="127.0.0.1", port=8000),
+                axon_info=MockedAxonInfo(is_serving=True, ip="127.0.0.1", ip_type=4, port=8000),
             ),
             MockedNeuron(
                 hotkey="5CPhGRp4cdEG4KSui7VQixHhvN5eBUSnMYeUF5thdxm4sKtz",
-                axon_info=MockedAxonInfo(is_serving=True, ip="127.0.0.2", port=8000),
+                axon_info=MockedAxonInfo(is_serving=True, ip="127.0.0.2", ip_type=4, port=8000),
             ),
         ]
 

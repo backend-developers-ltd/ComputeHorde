@@ -81,5 +81,10 @@ class Command(BaseCommand):
         )
         print(f"Processing job request: {job_request}")
         async_to_sync(run_admin_job_request)(job_request.pk, callback=notify_job_status_update)
-        job = OrganicJob.objects.get(job_uuid=job_request.uuid)
-        print(f"\nJob {job.job_uuid} done processing\nstatus: {job.status}\ncomment: {job.comment}")
+        try:
+            job = OrganicJob.objects.get(job_uuid=job_request.uuid)
+            print(
+                f"\nJob {job.job_uuid} done processing\nstatus: {job.status}\ncomment: {job.comment}"
+            )
+        except OrganicJob.DoesNotExist:
+            print(f"\nJob {job_request.uuid} not found in OrganicJob table")

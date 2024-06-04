@@ -94,6 +94,8 @@ class AdminJobRequest(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    status_message = models.TextField(blank=True, default="")
+
     def get_args(self):
         return shlex.split(self.args)
 

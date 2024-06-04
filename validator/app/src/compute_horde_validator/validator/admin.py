@@ -55,7 +55,7 @@ class AdminJobRequestAddOnlyAdmin(AddOnlyAdmin):
         trigger_run_admin_job_request.delay(obj.id)
 
     def response_post_save_add(self, request, obj):
-        # Redirect to the coresponding OrganicJob view
+        # Redirect to the corresponding OrganicJob view
         organic_job = OrganicJob.objects.filter(job_uuid=obj.uuid).first()
         if organic_job:
             return redirect(organic_job)
