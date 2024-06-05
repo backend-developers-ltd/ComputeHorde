@@ -44,7 +44,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--cmd_args",
             type=str,
-            default=None,
+            default="",
             help="arguments passed to the script or docker image",
         )
         parser.add_argument(
@@ -91,11 +91,9 @@ class Command(BaseCommand):
         async_to_sync(run_admin_job_request)(job_request.pk, callback=notify_job_status_update)
         try:
             job_request.refresh_from_db()
-            print(f"\n{job_request.status_message}")
             job = OrganicJob.objects.get(job_uuid=job_request.uuid)
-            print(
-                f"\nJob {job.job_uuid} done processing\nstatus: {job.status}\ncomment: {job.comment}"
-            )
+            print(f"\nJob {job.job_uuid} done processing")
         except OrganicJob.DoesNotExist:
+            print(f"\n{job_request.status_message}")
             print(f"\nJob {job_request.uuid} not found")
             sys.exit(1)
