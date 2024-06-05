@@ -44,6 +44,7 @@ from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 JOB_LENGTH = 300
 TIMEOUT_LEEWAY = 1
 TIMEOUT_MARGIN = 60
+TIMEOUT_BARRIER = JOB_LENGTH - 65
 
 
 logger = logging.getLogger(__name__)
@@ -306,13 +307,11 @@ async def _execute_job(
     volume_contents = await job_generator.volume_contents()
 
     try:
-        await asyncio.wait_for(client.get_barrier().wait(), JOB_LENGTH)
+        await asyncio.wait_for(client.get_barrier().wait(), TIMEOUT_BARRIER)
     except TimeoutError:
-        logger.info(f"Miner {client.miner_name} won't do job after timeout on executor barrier")
-        job.status = JobBase.Status.FAILED
-        job.comment = "Miner didn't accept the job - barrier time out."
-        await job.asave()
-        return None, None
+        logger.info(
+            f"Miner {client.miner_name} barrier timeout - some executors would not be tested."
+        )
 
     await client.send_model(
         V0JobRequest(
