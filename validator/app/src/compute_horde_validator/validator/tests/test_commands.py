@@ -1,6 +1,5 @@
 import io
 import logging
-import sys
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
@@ -73,12 +72,12 @@ def test_debug_run_organic_job_command__job_timeout():
 @pytest.mark.django_db
 def test_debug_run_organic_job_command__job_not_created():
     Miner.objects.create(hotkey="miner_client")
-    buf = io.StringIO()
-    sys.stdout = buf
-    with pytest.raises(BaseException):
-        management.call_command(
-            "debug_run_organic_job", docker_image="noop", timeout=4, cmd_args=""
-        )
+
+    with redirect_stdout(io.StringIO()) as buf:
+        with pytest.raises(BaseException):
+            management.call_command(
+                "debug_run_organic_job", docker_image="noop", timeout=4, cmd_args=""
+            )
 
     assert AdminJobRequest.objects.count() == 1
     assert "Job failed to trigger due to" in AdminJobRequest.objects.first().status_message

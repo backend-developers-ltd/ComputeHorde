@@ -1,5 +1,7 @@
 from django.contrib import admin  # noqa
+from django.contrib import messages  # noqa
 from django.shortcuts import redirect  # noqa
+from django.utils.safestring import mark_safe  # noqa
 from django import forms
 
 from compute_horde_validator.validator.models import (
@@ -46,6 +48,7 @@ class AdminJobRequestForm(forms.ModelForm):
             "use_gpu",
             "input_url",
             "output_url",
+            "status_message",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -57,21 +60,22 @@ class AdminJobRequestForm(forms.ModelForm):
 
 class AdminJobRequestAddOnlyAdmin(AddOnlyAdmin):
     form = AdminJobRequestForm
-    exclude = ["env", "status_message"]  # not used ?
+    exclude = ["env"]  # not used ?
     list_display = ["uuid", "docker_image", "use_gpu", "miner", "created_at"]
+    readonly_fields = ["uuid", "status_message"]
     ordering = ["-created_at"]
     autocomplete_fields = ["miner"]
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         trigger_run_admin_job_request.delay(obj.id)
-
-    def response_post_save_add(self, request, obj):
-        # Redirect to the corresponding OrganicJob view
         organic_job = OrganicJob.objects.filter(job_uuid=obj.uuid).first()
-        if organic_job:
-            return redirect(organic_job)
-        return super().response_post_save_add(request, obj)
+        msg = (
+            f"Please see <a href='/admin/validator/organicjob/{organic_job.pk}/change/'>ORGANIC JOB</a> for further details"
+            if organic_job
+            else f"Job {obj.uuid} failed to initialize"
+        )
+        messages.add_message(request, messages.INFO, mark_safe(msg))
 
 
 class JobReadOnlyAdmin(ReadOnlyAdmin):
