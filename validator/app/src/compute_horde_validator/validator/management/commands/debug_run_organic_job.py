@@ -94,6 +94,5 @@ class Command(BaseCommand):
             job = OrganicJob.objects.get(job_uuid=job_request.uuid)
             print(f"\nJob {job.job_uuid} done processing")
         except OrganicJob.DoesNotExist:
-            print(f"\n{job_request.status_message}")
             print(f"\nJob {job_request.uuid} not found")
             sys.exit(1)

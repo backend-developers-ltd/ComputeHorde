@@ -1,6 +1,7 @@
 import io
 import logging
 import sys
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 import pytest
@@ -22,9 +23,11 @@ logger = logging.getLogger(__name__)
 def test_debug_run_organic_job_command__job_completed():
     # random miner to be picked
     Miner.objects.create(hotkey="miner_client")
-    buf = io.StringIO()
-    sys.stdout = buf
-    management.call_command("debug_run_organic_job", docker_image="noop", timeout=4, cmd_args="")
+
+    with redirect_stdout(io.StringIO()) as buf:
+        management.call_command(
+            "debug_run_organic_job", docker_image="noop", timeout=4, cmd_args=""
+        )
 
     assert AdminJobRequest.objects.count() == 1
     assert AdminJobRequest.objects.first().status_message == "Job successfully triggered"
@@ -34,7 +37,7 @@ def test_debug_run_organic_job_command__job_completed():
 
     output = buf.getvalue()
     assert "done processing" in output
-    assert "status: COMPLETED" in output
+    assert "status: completed" in output
     assert "Picked miner: hotkey: miner_client to run the job" in output
 
 
@@ -45,9 +48,11 @@ def test_debug_run_organic_job_command__job_completed():
 def test_debug_run_organic_job_command__job_timeout():
     # random miner to be picked
     Miner.objects.create(hotkey="miner_client")
-    buf = io.StringIO()
-    sys.stdout = buf
-    management.call_command("debug_run_organic_job", docker_image="noop", timeout=0, cmd_args="")
+
+    with redirect_stdout(io.StringIO()) as buf:
+        management.call_command(
+            "debug_run_organic_job", docker_image="noop", timeout=0, cmd_args=""
+        )
 
     assert AdminJobRequest.objects.count() == 1
     assert AdminJobRequest.objects.first().status_message == "Job successfully triggered"
@@ -57,8 +62,8 @@ def test_debug_run_organic_job_command__job_timeout():
 
     output = buf.getvalue()
     assert "done processing" in output
-    assert "status: FAILED" in output
-    assert "comment: Miner timed out" in output
+    assert "status: failed" in output
+    assert "Miner timed out" in output
     assert "Picked miner: hotkey: miner_client to run the job" in output
 
 
@@ -70,14 +75,10 @@ def test_debug_run_organic_job_command__job_not_created():
     Miner.objects.create(hotkey="miner_client")
     buf = io.StringIO()
     sys.stdout = buf
-    try:
+    with pytest.raises(BaseException):
         management.call_command(
             "debug_run_organic_job", docker_image="noop", timeout=4, cmd_args=""
         )
-    except BaseException:
-        assert True
-    else:
-        assert False, "should raise exception"
 
     assert AdminJobRequest.objects.count() == 1
     assert "Job failed to trigger due to" in AdminJobRequest.objects.first().status_message
@@ -94,9 +95,11 @@ def test_debug_run_organic_job_command__job_not_created():
 @pytest.mark.django_db
 def test_debug_run_organic_job_command__job_created_but_not_triggered():
     Miner.objects.create(hotkey="miner_client")
-    buf = io.StringIO()
-    sys.stdout = buf
-    management.call_command("debug_run_organic_job", docker_image="noop", timeout=4, cmd_args="")
+
+    with redirect_stdout(io.StringIO()) as buf:
+        management.call_command(
+            "debug_run_organic_job", docker_image="noop", timeout=4, cmd_args=""
+        )
 
     assert AdminJobRequest.objects.count() == 1
     assert "Job failed to trigger" in AdminJobRequest.objects.first().status_message
