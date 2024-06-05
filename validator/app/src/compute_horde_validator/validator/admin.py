@@ -1,6 +1,7 @@
 from django.contrib import admin  # noqa
 from django.shortcuts import redirect  # noqa
 from django import forms
+from django.utils.translation import gettext_lazy as _
 
 from compute_horde_validator.validator.models import (
     Miner,
@@ -34,14 +35,47 @@ class ReadOnlyAdmin(AddOnlyAdmin):
 
 
 class AdminJobRequestForm(forms.ModelForm):
+    miner = forms.CharField(
+        label="Miner",
+        help_text=_("Miner Hotkey - leave blank to select random miner"),
+        required=False,
+    )
+
     class Meta:
         model = AdminJobRequest
-        fields = "__all__"
+        fields = [
+            "uuid",
+            "miner",
+            "docker_image",
+            "timeout",
+            "raw_script",
+            "args",
+            "use_gpu",
+            "input_url",
+            "output_url",
+        ]
 
     def __init__(self, *args, **kwargs):
         super(__class__, self).__init__(*args, **kwargs)
-        if self.fields:
-            self.fields["miner"].queryset = Miner.objects.exclude(minerblacklist__isnull=False)
+
+    def clean(self):
+        valid_miners = Miner.objects.exclude(minerblacklist__isnull=False)
+        valid_hotkeys = [x.hotkey for x in valid_miners]
+        miner_hotkey = self.cleaned_data.get("miner")
+        if valid_miners.count() == 0:
+            raise forms.ValidationError(
+                "No valid miners available - check the Miners and BlacklistedMiners models"
+            )
+        if miner_hotkey is None or miner_hotkey == "":
+            # set random miner
+            miner = valid_miners.order_by("?").first()
+            self.cleaned_data["miner"] = miner
+
+        elif miner_hotkey not in valid_hotkeys:
+            raise forms.ValidationError("miner_hotkey is invalid or blacklisted")
+        else:
+            self.cleaned_data["miner"] = Miner.objects.get(hotkey=miner_hotkey)
+        return self.cleaned_data
 
 
 class AdminJobRequestAddOnlyAdmin(AddOnlyAdmin):

@@ -28,7 +28,7 @@ def test_trigger_run_admin_job__should_trigger_job():
     trigger_run_admin_job_request.delay(job_request.pk)
 
     job_request.refresh_from_db()
-    assert job_request.status_message == "job successfully triggered"
+    assert job_request.status_message == "Job successfully triggered"
 
     assert OrganicJob.objects.count() == 1
     job = OrganicJob.objects.filter(job_uuid=job_request.uuid).first()
@@ -55,6 +55,6 @@ def test_trigger_run_admin_job__should_not_trigger_job():
     trigger_run_admin_job_request.delay(job_request.pk)
 
     job_request.refresh_from_db()
-    assert "job failed to trigger" in job_request.status_message
+    assert "Job failed to trigger" in job_request.status_message
 
     assert OrganicJob.objects.count() == 0
