@@ -5,7 +5,7 @@ import pytest
 from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob
 from compute_horde_validator.validator.tasks import trigger_run_admin_job_request
 
-from . import mock_get_miner_axon_info, mock_keypair
+from . import mock_get_miner_axon_info, mock_keypair, throw_error
 from .test_miner_driver import MockMinerClient
 
 
@@ -34,10 +34,6 @@ def test_trigger_run_admin_job__should_trigger_job():
     job = OrganicJob.objects.filter(job_uuid=job_request.uuid).first()
     assert job.comment == "Miner timed out while preparing executor"
     assert job.status == OrganicJob.Status.FAILED
-
-
-async def throw_error(*args):
-    raise Exception("timeout axon fetching")
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", throw_error)

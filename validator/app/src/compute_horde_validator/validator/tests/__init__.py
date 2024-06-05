@@ -12,6 +12,10 @@ from typing import NamedTuple
 import bittensor
 
 
+async def throw_error(*args):
+    raise Exception("Error thrown for testing")
+
+
 def mock_keypair():
     return bittensor.Keypair.create_from_mnemonic(
         mnemonic="arrive produce someone view end scout bargain coil slight festival excess struggle"

@@ -145,13 +145,15 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             keypair=keypair,
         )
 
-        job_request.status_message = "job successfully triggered"
+        job_request.status_message = "Job successfully triggered"
     except Exception as e:
-        job_request.status_message = f"job failed to trigger due to: {e}"
+        job_request.status_message = f"Job failed to trigger due to: {e}"
         return
     finally:
+        print(job_request.status_message)
         await job_request.asave()
 
+    print(f"\nProcessing job request: {job_request}")
     await run_miner_job(
         miner_client,
         job,
