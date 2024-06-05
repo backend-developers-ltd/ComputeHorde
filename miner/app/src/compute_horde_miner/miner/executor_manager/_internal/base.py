@@ -2,6 +2,7 @@ import abc
 import asyncio
 import datetime as dt
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -35,17 +36,26 @@ class ExecutorClassPool:
         self._count = executor_count
         self._executors = []
         self._reservation_lock = asyncio.Lock()
-        self._heartbeat_task = asyncio.create_task(self._pool_cleanup_task())
+        self._pool_cleanup_task = asyncio.create_task(self._pool_cleanup_loop())
 
     async def reserve_executor(self, token, timeout):
+        start = time.time()
         async with self._reservation_lock:
             while True:
                 if self.get_availability() == 0:
-                    await asyncio.sleep(1)
+                    if time.time() - start < MAX_EXECUTOR_TIMEOUT:
+                        await asyncio.sleep(1)
+                    else:
+                        logger.warning("Error unavailable after timeout")
+                        raise ExecutorUnavailable()
                 else:
-                    executor = await self.manager.start_new_executor(
-                        token, self.executor_class, timeout
-                    )
+                    try:
+                        executor = await self.manager.start_new_executor(
+                            token, self.executor_class, timeout
+                        )
+                    except Exception as exc:
+                        logger.error("Error occurred", exc_info=exc)
+                        raise ExecutorUnavailable()
                     self._executors.append(ReservedExecutor(executor, timeout))
                     return executor
 
@@ -55,7 +65,7 @@ class ExecutorClassPool:
     def get_availability(self):
         return max(0, self._count - len(self._executors))
 
-    async def _pool_cleanup_task(self):
+    async def _pool_cleanup_loop(self):
         # TODO: this is a basic working logic - pool cleanup should be more robust
         while True:
             try:
