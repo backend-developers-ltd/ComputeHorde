@@ -1,5 +1,6 @@
-import asyncio
+import sys
 
+from asgiref.sync import async_to_sync
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -16,7 +17,14 @@ from compute_horde_validator.validator.tasks import run_admin_job_request
 async def notify_job_status_update(msg: JobStatusUpdate):
     comment = msg.metadata.comment if msg.metadata else ""
     print(f"\njob status: {msg.status} {comment}")
-    if msg.metadata and msg.metadata.miner_response:
+    if (
+        msg.metadata
+        and msg.metadata.miner_response
+        and (
+            msg.metadata.miner_response.docker_process_stderr != ""
+            or msg.metadata.miner_response.docker_process_stdout != ""
+        )
+    ):
         print(f"stderr: {msg.metadata.miner_response.docker_process_stderr}")
         print(f"stdout: {msg.metadata.miner_response.docker_process_stdout}")
 
@@ -36,7 +44,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--cmd_args",
             type=str,
-            default=None,
+            default="",
             help="arguments passed to the script or docker image",
         )
         parser.add_argument(
@@ -67,7 +75,7 @@ class Command(BaseCommand):
                 raise ValueError(f"miner with hotkey {hotkey} is blacklisted")
         else:
             miner = Miner.objects.exclude(minerblacklist__isnull=False).first()
-            print(f"Picked miner: {miner} to run the job")
+            print(f"\nPicked miner: {miner} to run the job")
 
         job_request = AdminJobRequest.objects.create(
             miner=miner,
@@ -80,8 +88,11 @@ class Command(BaseCommand):
             output_url=options["output_url"],
             created_at=timezone.now(),
         )
-        print(f"Processing job request: {job_request}")
-
-        asyncio.run(run_admin_job_request(job_request.pk, callback=notify_job_status_update))
-        job = OrganicJob.objects.get(job_uuid=job_request.uuid)
-        print(f"\nJob {job.job_uuid} done processing\nstatus: {job.status}\ncomment: {job.comment}")
+        async_to_sync(run_admin_job_request)(job_request.pk, callback=notify_job_status_update)
+        try:
+            job_request.refresh_from_db()
+            job = OrganicJob.objects.get(job_uuid=job_request.uuid)
+            print(f"\nJob {job.job_uuid} done processing")
+        except OrganicJob.DoesNotExist:
+            print(f"\nJob {job_request.uuid} not found")
+            sys.exit(1)

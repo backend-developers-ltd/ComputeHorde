@@ -68,7 +68,11 @@ class SyntheticJob(JobBase):
 
 
 class OrganicJob(JobBase):
-    pass
+    stdout = models.TextField(blank=True, default="")
+    stderr = models.TextField(blank=True, default="")
+
+    def get_absolute_url(self):
+        return f"/admin/validator/organicjob/{self.pk}/change/"
 
 
 class AdminJobRequest(models.Model):
@@ -89,6 +93,8 @@ class AdminJobRequest(models.Model):
     output_url = models.TextField(blank=True, help_text="URL for uploading output")
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    status_message = models.TextField(blank=True, default="")
 
     def get_args(self):
         return shlex.split(self.args)

@@ -1,4 +1,7 @@
 from django.contrib import admin  # noqa
+from django.contrib import messages  # noqa
+from django.shortcuts import redirect  # noqa
+from django.utils.safestring import mark_safe  # noqa
 from django import forms
 
 from compute_horde_validator.validator.models import (
@@ -35,11 +38,23 @@ class ReadOnlyAdmin(AddOnlyAdmin):
 class AdminJobRequestForm(forms.ModelForm):
     class Meta:
         model = AdminJobRequest
-        fields = "__all__"
+        fields = [
+            "uuid",
+            "miner",
+            "docker_image",
+            "timeout",
+            "raw_script",
+            "args",
+            "use_gpu",
+            "input_url",
+            "output_url",
+            "status_message",
+        ]
 
     def __init__(self, *args, **kwargs):
         super(__class__, self).__init__(*args, **kwargs)
         if self.fields:
+            # exclude blacklisted miners from valid results
             self.fields["miner"].queryset = Miner.objects.exclude(minerblacklist__isnull=False)
 
 
@@ -47,11 +62,20 @@ class AdminJobRequestAddOnlyAdmin(AddOnlyAdmin):
     form = AdminJobRequestForm
     exclude = ["env"]  # not used ?
     list_display = ["uuid", "docker_image", "use_gpu", "miner", "created_at"]
+    readonly_fields = ["uuid", "status_message"]
     ordering = ["-created_at"]
+    autocomplete_fields = ["miner"]
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         trigger_run_admin_job_request.delay(obj.id)
+        organic_job = OrganicJob.objects.filter(job_uuid=obj.uuid).first()
+        msg = (
+            f"Please see <a href='/admin/validator/organicjob/{organic_job.pk}/change/'>ORGANIC JOB</a> for further details"
+            if organic_job
+            else f"Job {obj.uuid} failed to initialize"
+        )
+        messages.add_message(request, messages.INFO, mark_safe(msg))
 
 
 class JobReadOnlyAdmin(ReadOnlyAdmin):
@@ -66,6 +90,16 @@ class MinerReadOnlyAdmin(ReadOnlyAdmin):
 
     def has_add_permission(self, *args, **kwargs):
         return False
+
+    # exclude blacklisted miners from autocomplete results
+    def get_search_results(self, request, queryset, search_term):
+        queryset, use_distinct = super().get_search_results(
+            request,
+            queryset,
+            search_term,
+        )
+        queryset = queryset.exclude(minerblacklist__isnull=False)
+        return queryset, use_distinct
 
 
 class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
