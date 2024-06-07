@@ -44,6 +44,7 @@ from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 JOB_LENGTH = 300
 TIMEOUT_LEEWAY = 1
 TIMEOUT_MARGIN = 60
+TIMEOUT_BARRIER = JOB_LENGTH - 65
 
 
 logger = logging.getLogger(__name__)
@@ -288,6 +289,15 @@ async def _execute_job(
         msg = await asyncio.wait_for(job_state.miner_ready_or_declining_future, JOB_LENGTH)
     except TimeoutError:
         msg = None
+
+    # wait for barrier even for declined and failed requests
+    try:
+        await asyncio.wait_for(client.get_barrier().wait(), TIMEOUT_BARRIER)
+    except TimeoutError:
+        logger.info(
+            f"Miner {client.miner_name} barrier timeout - some executors would not be tested."
+        )
+
     if isinstance(msg, V0DeclineJobRequest | V0ExecutorFailedRequest) or msg is None:
         logger.info(f"Miner {client.miner_name} won't do job: {msg}")
         job.status = JobBase.Status.FAILED
@@ -304,15 +314,6 @@ async def _execute_job(
 
     # generate before locking on barrier
     volume_contents = await job_generator.volume_contents()
-
-    try:
-        await asyncio.wait_for(client.get_barrier().wait(), JOB_LENGTH)
-    except TimeoutError:
-        logger.info(f"Miner {client.miner_name} won't do job after timeout on executor barrier")
-        job.status = JobBase.Status.FAILED
-        job.comment = "Miner didn't accept the job - barrier time out."
-        await job.asave()
-        return None, None
 
     await client.send_model(
         V0JobRequest(
