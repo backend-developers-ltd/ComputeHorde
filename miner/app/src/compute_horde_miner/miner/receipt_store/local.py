@@ -22,7 +22,7 @@ class LocalReceiptStore(BaseReceiptStore):
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             with zipfile.ZipFile(temp_file, mode="w", compression=zipfile.ZIP_LZMA) as zf:
                 for receipt in receipts:
-                    zf.writestr(receipt.payload.job_uuid + ".json", receipt.json())
+                    zf.writestr(receipt.payload.job_uuid + ".json", receipt.model_dump_json())
 
         shutil.move(temp_file.name, filepath)
         filepath.chmod(0o644)

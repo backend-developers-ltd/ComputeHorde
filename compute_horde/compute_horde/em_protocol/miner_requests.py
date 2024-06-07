@@ -25,8 +25,8 @@ class VolumeType(enum.Enum):
 
 class V0InitialJobRequest(BaseMinerRequest, JobMixin):
     message_type: RequestType = RequestType.V0PrepareJobRequest
-    base_docker_image_name: str | None
-    timeout_seconds: int | None
+    base_docker_image_name: str | None = None
+    timeout_seconds: int | None = None
     volume_type: VolumeType
 
 
@@ -46,7 +46,7 @@ class OutputUpload(pydantic.BaseModel):
     # TODO: the following are only valid for output_upload_type = zip_and_http_post, some polymorphism like with
     #  BaseRequest is required here
     url: str
-    form_fields: Mapping[str, str] | None = Field(default=None)
+    form_fields: Mapping[str, str] | None = None
 
 
 class V0JobRequest(BaseMinerRequest, JobMixin):
@@ -56,7 +56,7 @@ class V0JobRequest(BaseMinerRequest, JobMixin):
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
-    output_upload: OutputUpload | None
+    output_upload: OutputUpload | None = None
 
     @model_validator(mode="after")
     def validate_at_least_docker_image_or_raw_script(self) -> Self:

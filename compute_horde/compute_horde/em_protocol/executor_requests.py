@@ -27,7 +27,7 @@ class V0FailedToPrepare(BaseExecutorRequest, JobMixin):
 
 class V0FailedRequest(BaseExecutorRequest, JobMixin):
     message_type: RequestType = RequestType.V0FailedRequest
-    docker_process_exit_status: int | None
+    docker_process_exit_status: int | None = None
     timeout: bool
     docker_process_stdout: str  # TODO: add max_length
     docker_process_stderr: str  # TODO: add max_length

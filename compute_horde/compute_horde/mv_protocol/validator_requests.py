@@ -39,7 +39,10 @@ class AuthenticationPayload(pydantic.BaseModel):
     timestamp: int
 
     def blob_for_signing(self):
-        return self.json(sort_keys=True)
+        # pydantic v2 does not support sort_keys anymore.
+        # we are serializing into json twice here to use serialization of pydantic
+        # instead of overriding json.JSONEncoder.default()
+        return json.dumps(json.loads(self.model_dump_json()), sort_keys=True)
 
 
 class V0AuthenticateRequest(BaseValidatorRequest):
@@ -53,8 +56,8 @@ class V0AuthenticateRequest(BaseValidatorRequest):
 
 class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0InitialJobRequest
-    base_docker_image_name: str | None
-    timeout_seconds: int | None
+    base_docker_image_name: str | None = None
+    timeout_seconds: int | None = None
     volume_type: VolumeType
 
 
@@ -85,7 +88,7 @@ class OutputUpload(pydantic.BaseModel):
     # TODO: the following are only valid for output_upload_type = zip_and_http_post, some polymorphism like with
     #  BaseRequest is required here
     url: str
-    form_fields: Mapping[str, str] | None = Field(default=None)
+    form_fields: Mapping[str, str] | None = None
 
 
 class V0JobRequest(BaseValidatorRequest, JobMixin):
@@ -95,7 +98,7 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
-    output_upload: OutputUpload | None
+    output_upload: OutputUpload | None = None
 
     @model_validator(mode="after")
     def validate_at_least_docker_image_or_raw_script(self) -> Self:
@@ -124,7 +127,7 @@ class ReceiptPayload(pydantic.BaseModel):
 
     def blob_for_signing(self):
         # pydantic v2 does not support sort_keys anymore.
-        # we are serializing into json twice here to use pydantic's serialization
+        # we are serializing into json twice here to use serialization of pydantic
         # instead of overriding json.JSONEncoder.default()
         return json.dumps(json.loads(self.model_dump_json()), sort_keys=True)
 

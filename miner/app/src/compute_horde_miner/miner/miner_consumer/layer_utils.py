@@ -31,7 +31,7 @@ class JobRequest(pydantic.BaseModel):
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
-    output_upload: OutputUpload | None
+    output_upload: OutputUpload | None = None
 
     @model_validator(mode="after")
     def validate_at_least_docker_image_or_raw_script(self) -> Self:
@@ -53,7 +53,7 @@ class ExecutorFinished(pydantic.BaseModel):
 
 class ExecutorFailed(pydantic.BaseModel):
     job_uuid: str
-    docker_process_exit_status: int | None
+    docker_process_exit_status: int | None = None
     docker_process_stdout: str
     docker_process_stderr: str
 
