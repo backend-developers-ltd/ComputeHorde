@@ -160,15 +160,18 @@ class FacilitatorClient:
                 try:
                     await self.handle_connection(ws)
                 except websockets.ConnectionClosed as exc:
+                    self.ws = None
                     logger.warning(
                         "validator connection closed with code %r and reason %r, reconnecting...",
                         exc.code,
                         exc.reason,
                     )
                 except asyncio.exceptions.CancelledError:
+                    self.ws = None
                     logger.warning("Facilitator client received cancel, stopping")
 
         except asyncio.exceptions.CancelledError:
+            self.ws = None
             logger.error("Facilitator client received cancel, stopping")
 
     async def handle_connection(self, ws: websockets.WebSocketClientProtocol):
@@ -194,21 +197,31 @@ class FacilitatorClient:
         specs_queue = []
         while True:
             validator_hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address
-            msg = await self.channel_layer.receive(self.channel_name)
-            specs = MachineSpecsUpdate(
-                specs=msg["specs"],
-                miner_hotkey=msg["miner_hotkey"],
-                batch_id=msg["batch_id"],
-                validator_hotkey=validator_hotkey,
-            )
-            logger.debug(f"sending machine specs update to facilitator: {specs}")
+            try:
+                msg = await asyncio.wait_for(
+                    self.channel_layer.receive(self.channel_name), timeout=20 * 60
+                )
 
-            if self.ws is None:
+                specs = MachineSpecsUpdate(
+                    specs=msg["specs"],
+                    miner_hotkey=msg["miner_hotkey"],
+                    batch_id=msg["batch_id"],
+                    validator_hotkey=validator_hotkey,
+                )
+                logger.debug(f"sending machine specs update to facilitator: {specs}")
+
                 specs_queue.append(specs)
-            else:
-                while len(specs_queue) > 0:
-                    await self.send_model(specs_queue.pop(0))
-                await self.send_model(specs)
+                if self.ws is not None:
+                    while len(specs_queue) > 0:
+                        spec_to_send = specs_queue.pop(0)
+                        try:
+                            await self.send_model(spec_to_send)
+                        except Exception as exc:
+                            logger.error("Error occurred while sending specs", exc_info=exc)
+                            specs_queue.insert(0, spec_to_send)
+                            break
+            except TimeoutError:
+                logger.debug("wait_for_specs still running")
 
     async def heartbeat(self):
         while True:
@@ -216,7 +229,7 @@ class FacilitatorClient:
                 try:
                     await self.send_model(Heartbeat())
                 except Exception as exc:
-                    logger.error("Error occurred", exc_info=exc)
+                    logger.error("Error occurred while sending heartbeat", exc_info=exc)
             await asyncio.sleep(self.HEARTBEAT_PERIOD)
 
     def create_metagraph_refresh_task(self, period=None):
