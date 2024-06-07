@@ -70,6 +70,8 @@ This script installs necessary tools in the server, copies the keys and starts t
 
 If you want to change the default config, see [Validator runner README](validator/envs/runner/README.md) for details.
 
+If you want to trigger jobs from the validator see [Validator README](validator/docs/validator.md) for details.
+
 ## Miner
 
 To quickly start a miner, create an Ubuntu Server and execute the following command from your local machine (where you have your wallet files).
