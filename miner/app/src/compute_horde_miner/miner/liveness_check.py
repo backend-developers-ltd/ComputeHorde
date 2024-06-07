@@ -182,7 +182,7 @@ async def drive_executor() -> float:
         validator=validator,
         job_uuid=job_uuid,
         executor_token=executor_token,
-        initial_job_details=initial_job_request.dict(),
+        initial_job_details=initial_job_request.model_dump(),
         status=AcceptedJob.Status.WAITING_FOR_EXECUTOR,
     )
     await job.asave()
@@ -219,7 +219,7 @@ async def drive_executor() -> float:
                 }
                 if job_request.output_upload
                 else None,
-            ).dict(),
+            ).model_dump(),
         },
     )
     full_job_sent = time.time()

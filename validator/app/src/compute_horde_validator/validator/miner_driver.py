@@ -20,7 +20,7 @@ from compute_horde.mv_protocol.validator_requests import (
     Volume,
     VolumeType,
 )
-from pydantic import BaseModel, Extra
+from pydantic import BaseModel
 
 from compute_horde_validator.validator.models import OrganicJob
 from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_volume
@@ -28,19 +28,19 @@ from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_
 logger = logging.getLogger(__name__)
 
 
-class MinerResponse(BaseModel, extra=Extra.allow):
+class MinerResponse(BaseModel, extra="allow"):
     job_uuid: str
     message_type: str
     docker_process_stderr: str
     docker_process_stdout: str
 
 
-class JobStatusMetadata(BaseModel, extra=Extra.allow):
+class JobStatusMetadata(BaseModel, extra="allow"):
     comment: str
     miner_response: MinerResponse | None = None
 
 
-class JobStatusUpdate(BaseModel, extra=Extra.forbid):
+class JobStatusUpdate(BaseModel, extra="forbid"):
     """
     Message sent from validator to facilitator in response to NewJobRequest.
     """
@@ -132,7 +132,7 @@ async def run_miner_job(
                     )
                 )
             job.status = OrganicJob.Status.FAILED
-            job.comment = f"Miner didn't accept the job saying: {msg.json()}"
+            job.comment = f"Miner didn't accept the job saying: {msg.model_dump_json()}"
             await job.asave()
             return
         elif isinstance(msg, V0ExecutorReadyRequest):
@@ -216,7 +216,7 @@ async def run_miner_job(
             job.stdout = msg.docker_process_stdout
             job.stderr = msg.docker_process_stderr
             job.status = OrganicJob.Status.FAILED
-            job.comment = f"Miner failed: {msg.json()}"
+            job.comment = f"Miner failed: {msg.model_dump_json()}"
             await job.asave()
             return
         elif isinstance(msg, V0JobFinishedRequest):
@@ -240,7 +240,7 @@ async def run_miner_job(
             job.stdout = msg.docker_process_stdout
             job.stderr = msg.docker_process_stderr
             job.status = OrganicJob.Status.COMPLETED
-            job.comment = f"Miner finished: {msg.json()}"
+            job.comment = f"Miner finished: {msg.model_dump_json()}"
             await job.asave()
             return
         else:

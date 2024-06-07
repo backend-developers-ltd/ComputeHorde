@@ -25,7 +25,7 @@ class MockSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return
 
     def timeout_seconds(self) -> int:
-        return 0.1
+        return 1
 
     def base_docker_image_name(self) -> str:
         return "mock"
