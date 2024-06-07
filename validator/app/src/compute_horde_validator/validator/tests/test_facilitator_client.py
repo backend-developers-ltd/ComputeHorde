@@ -71,10 +71,10 @@ class FacilitatorJobStatusUpdatesWs(FacilitatorWs):
         except Exception as e:
             self.facilitator_error = e
 
-        await ws.send(Response(status="success").json())
+        await ws.send(Response(status="success").model_dump_json())
 
         # send job request
-        await ws.send(get_dummy_job_request(job_uuid).json())
+        await ws.send(get_dummy_job_request(job_uuid).model_dump_json())
 
         # get job status update
         response = await ws.recv()
@@ -103,7 +103,7 @@ class FacilitatorBadMessageWs(FacilitatorWs):
 
         # auth
         await ws.recv()
-        await ws.send(Response(status="success").json())
+        await ws.send(Response(status="success").model_dump_json())
 
         # send bad job request
         await ws.send('{"job_request": "invalid"}')

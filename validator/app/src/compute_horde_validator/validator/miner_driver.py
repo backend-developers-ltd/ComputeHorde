@@ -132,7 +132,7 @@ async def run_miner_job(
                     )
                 )
             job.status = OrganicJob.Status.FAILED
-            job.comment = f"Miner didn't accept the job saying: {msg.json()}"
+            job.comment = f"Miner didn't accept the job saying: {msg.model_dump_json()}"
             await job.asave()
             return
         elif isinstance(msg, V0ExecutorReadyRequest):
@@ -216,7 +216,7 @@ async def run_miner_job(
             job.stdout = msg.docker_process_stdout
             job.stderr = msg.docker_process_stderr
             job.status = OrganicJob.Status.FAILED
-            job.comment = f"Miner failed: {msg.json()}"
+            job.comment = f"Miner failed: {msg.model_dump_json()}"
             await job.asave()
             return
         elif isinstance(msg, V0JobFinishedRequest):
@@ -240,7 +240,7 @@ async def run_miner_job(
             job.stdout = msg.docker_process_stdout
             job.stderr = msg.docker_process_stderr
             job.status = OrganicJob.Status.COMPLETED
-            job.comment = f"Miner finished: {msg.json()}"
+            job.comment = f"Miner finished: {msg.model_dump_json()}"
             await job.asave()
             return
         else:

@@ -9,7 +9,7 @@ import tenacity
 import websockets
 from channels.layers import get_channel_layer
 from django.conf import settings
-from pydantic import model_validator, BaseModel, Extra
+from pydantic import model_validator, BaseModel
 
 from compute_horde_validator.validator.metagraph_client import (
     create_metagraph_refresh_task,
@@ -28,20 +28,20 @@ PREPARE_WAIT_TIMEOUT = 300
 TOTAL_JOB_TIMEOUT = 300
 
 
-class Error(BaseModel, extra=Extra.allow):
+class Error(BaseModel, extra="allow"):
     msg: str
     type: str
     help: str = ""
 
 
-class Response(BaseModel, extra=Extra.forbid):
+class Response(BaseModel, extra="forbid"):
     """Message sent from facilitator to validator in response to AuthenticationRequest & JobStatusUpdate"""
 
     status: Literal["error", "success"]
     errors: list[Error] = []
 
 
-class AuthenticationRequest(BaseModel, extra=Extra.forbid):
+class AuthenticationRequest(BaseModel, extra="forbid"):
     """Message sent from validator to facilitator to authenticate itself"""
 
     message_type: str = "V0AuthenticationRequest"
@@ -62,7 +62,7 @@ class AuthenticationError(Exception):
         self.errors = errors
 
 
-class JobRequest(BaseModel, extra=Extra.forbid):
+class JobRequest(BaseModel, extra="forbid"):
     """Message sent from facilitator to validator to request a job execution"""
 
     # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
@@ -89,11 +89,11 @@ class JobRequest(BaseModel, extra=Extra.forbid):
         return self
 
 
-class Heartbeat(BaseModel, extra=Extra.forbid):
+class Heartbeat(BaseModel, extra="forbid"):
     message_type: str = "V0Heartbeat"
 
 
-class MachineSpecsUpdate(BaseModel, extra=Extra.forbid):
+class MachineSpecsUpdate(BaseModel, extra="forbid"):
     message_type: str = "V0MachineSpecsUpdate"
     miner_hotkey: str
     validator_hotkey: str
@@ -176,7 +176,7 @@ class FacilitatorClient:
 
     async def handle_connection(self, ws: websockets.WebSocketClientProtocol):
         """handle a single websocket connection"""
-        await ws.send(AuthenticationRequest.from_keypair(self.keypair).json())
+        await ws.send(AuthenticationRequest.from_keypair(self.keypair).model_dump_json())
 
         raw_msg = await ws.recv()
         try:
@@ -243,7 +243,7 @@ class FacilitatorClient:
     async def send_model(self, msg: BaseModel):
         if self.ws is None:
             raise websockets.ConnectionClosed
-        await self.ws.send(msg.json())
+        await self.ws.send(msg.model_dump_json())
 
     async def handle_message(self, raw_msg: str | bytes):
         """handle message received from facilitator"""

@@ -169,7 +169,7 @@ class MinerClient(AbstractMinerClient):
 
     async def _connect(self):
         ws = await super()._connect()
-        await ws.send(self.generate_authentication_message().json())
+        await ws.send(self.generate_authentication_message().model_dump_json())
         return ws
 
 
@@ -302,7 +302,7 @@ async def _execute_job(
         logger.info(f"Miner {client.miner_name} won't do job: {msg}")
         job.status = JobBase.Status.FAILED
         if msg is not None:
-            job.comment = f"Miner didn't accept the job saying: {msg.json()}"
+            job.comment = f"Miner didn't accept the job saying: {msg.model_dump_json()}"
         else:
             job.comment = "Miner didn't accept the job - times out."
         await job.asave()
@@ -355,7 +355,7 @@ async def _execute_job(
     if isinstance(msg, V0JobFailedRequest):
         logger.info(f"Miner {client.miner_name} failed: {msg}")
         job.status = job.Status.FAILED
-        job.comment = f"Miner failed: {msg.json()}"
+        job.comment = f"Miner failed: {msg.model_dump_json()}"
         await job.asave()
         return None, msg
     elif isinstance(msg, V0JobFinishedRequest):
@@ -380,7 +380,7 @@ async def _execute_job(
         if success:
             logger.info(f"Miner {client.miner_name} finished: {msg}")
             job.status = JobBase.Status.COMPLETED
-            job.comment = f"Miner finished: {msg.json()}"
+            job.comment = f"Miner finished: {msg.model_dump_json()}"
             await job.asave()
             try:
                 receipt_message = client.generate_receipt_message(
