@@ -250,7 +250,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 validator=self.validator,
                 job_uuid=msg.job_uuid,
                 executor_token=token,
-                initial_job_details=msg.dict(),
+                initial_job_details=msg.model_dump(),
                 status=AcceptedJob.Status.WAITING_FOR_EXECUTOR,
             )
             await job.asave()
@@ -289,7 +289,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await self.send_job_request(job.executor_token, msg)
             logger.debug(f"Passing job details to executor consumer job_uuid: {msg.job_uuid}")
             job.status = AcceptedJob.Status.RUNNING
-            job.full_job_details = msg.dict()
+            job.full_job_details = msg.model_dump()
             await job.asave()
 
         if isinstance(msg, validator_requests.V0ReceiptRequest) and self.verify_receipt_msg(msg):

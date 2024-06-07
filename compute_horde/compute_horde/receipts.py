@@ -55,7 +55,7 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
         for zip_info in zip_file.filelist:
             try:
                 raw_receipt = zip_file.read(zip_info)
-                receipt = Receipt.parse_raw(raw_receipt)
+                receipt = Receipt.model_validate_json(raw_receipt)
             except pydantic.ValidationError:
                 logger.warning(f"Miner sent invalid receipt {raw_receipt=}")
                 continue

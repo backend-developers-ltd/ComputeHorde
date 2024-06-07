@@ -1,12 +1,13 @@
 import datetime
 import enum
+import json
 import re
 from collections.abc import Mapping
-from typing import Any
+from typing import Self
 from urllib.parse import urlparse
 
 import pydantic
-from pydantic import Field, root_validator
+from pydantic import model_validator, Field
 
 from ..base_requests import BaseRequest, JobMixin
 from ..utils import MachineSpecs
@@ -96,11 +97,11 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
     volume: Volume
     output_upload: OutputUpload | None
 
-    @root_validator()
-    def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if not (bool(values.get("docker_image_name")) or bool(values.get("raw_script"))):
+    @model_validator(mode="after")
+    def validate_at_least_docker_image_or_raw_script(self) -> Self:
+        if not (bool(self.docker_image_name) or bool(self.raw_script)):
             raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
-        return values
+        return self
 
 
 class V0MachineSpecsRequest(BaseValidatorRequest, JobMixin):
@@ -122,11 +123,10 @@ class ReceiptPayload(pydantic.BaseModel):
     score_str: str
 
     def blob_for_signing(self):
-        return self.json(sort_keys=True)
-
-    def json(self, *args, **kwargs) -> str:
-        kwargs.setdefault("sort_keys", True)
-        return super().json(*args, **kwargs)
+        # pydantic v2 does not support sort_keys anymore.
+        # we are serializing into json twice here to use pydantic's serialization
+        # instead of overriding json.JSONEncoder.default()
+        return json.dumps(json.loads(self.model_dump_json()), sort_keys=True)
 
     @property
     def time_took(self):
@@ -144,7 +144,3 @@ class V0ReceiptRequest(BaseValidatorRequest):
 
     def blob_for_signing(self):
         return self.payload.blob_for_signing()
-
-    def json(self, *args, **kwargs) -> str:
-        kwargs.setdefault("sort_keys", True)
-        return super().json(*args, **kwargs)

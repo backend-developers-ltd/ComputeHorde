@@ -20,7 +20,7 @@ from compute_horde.mv_protocol.validator_requests import (
     Volume,
     VolumeType,
 )
-from pydantic import BaseModel, Extra
+from pydantic import BaseModel
 
 from compute_horde_validator.validator.models import OrganicJob
 from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_volume
@@ -28,19 +28,19 @@ from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_
 logger = logging.getLogger(__name__)
 
 
-class MinerResponse(BaseModel, extra=Extra.allow):
+class MinerResponse(BaseModel, extra="allow"):
     job_uuid: str
     message_type: str
     docker_process_stderr: str
     docker_process_stdout: str
 
 
-class JobStatusMetadata(BaseModel, extra=Extra.allow):
+class JobStatusMetadata(BaseModel, extra="allow"):
     comment: str
     miner_response: MinerResponse | None = None
 
 
-class JobStatusUpdate(BaseModel, extra=Extra.forbid):
+class JobStatusUpdate(BaseModel, extra="forbid"):
     """
     Message sent from validator to facilitator in response to NewJobRequest.
     """

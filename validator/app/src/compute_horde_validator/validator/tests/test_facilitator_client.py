@@ -67,7 +67,7 @@ class FacilitatorJobStatusUpdatesWs(FacilitatorWs):
         # auth
         response = await ws.recv()
         try:
-            AuthenticationRequest.parse_raw(response)
+            AuthenticationRequest.model_validate_json(response)
         except Exception as e:
             self.facilitator_error = e
 
@@ -79,13 +79,13 @@ class FacilitatorJobStatusUpdatesWs(FacilitatorWs):
         # get job status update
         response = await ws.recv()
         try:
-            JobStatusUpdate.parse_raw(response)
+            JobStatusUpdate.model_validate_json(response)
         except Exception as e:
             self.facilitator_error = e
 
         response = await ws.recv()
         try:
-            JobStatusUpdate.parse_raw(response)
+            JobStatusUpdate.model_validate_json(response)
         except Exception as e:
             self.facilitator_error = e
 

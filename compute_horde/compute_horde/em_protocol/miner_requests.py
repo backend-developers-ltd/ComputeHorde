@@ -1,9 +1,9 @@
 import enum
 from collections.abc import Mapping
-from typing import Any
+from typing import Self
 
 import pydantic
-from pydantic import Field, root_validator
+from pydantic import model_validator, Field
 
 from ..base_requests import BaseRequest, JobMixin
 
@@ -58,11 +58,11 @@ class V0JobRequest(BaseMinerRequest, JobMixin):
     volume: Volume
     output_upload: OutputUpload | None
 
-    @root_validator()
-    def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if not (bool(values.get("docker_image_name")) or bool(values.get("raw_script"))):
+    @model_validator(mode="after")
+    def validate_at_least_docker_image_or_raw_script(self) -> Self:
+        if not (bool(self.docker_image_name) or bool(self.raw_script)):
             raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
-        return values
+        return self
 
 
 class GenericError(BaseMinerRequest):

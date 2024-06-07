@@ -9,7 +9,7 @@ import tenacity
 import websockets
 from channels.layers import get_channel_layer
 from django.conf import settings
-from pydantic import BaseModel, Extra, Field, root_validator
+from pydantic import model_validator, BaseModel, Extra
 
 from compute_horde_validator.validator.metagraph_client import (
     create_metagraph_refresh_task,
@@ -66,7 +66,7 @@ class JobRequest(BaseModel, extra=Extra.forbid):
     """Message sent from facilitator to validator to request a job execution"""
 
     # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
-    type: str = Field("job.new", const=True)
+    type: Literal["job.new"] = "job.new"
     message_type: str = "V0JobRequest"
 
     uuid: str
@@ -82,11 +82,11 @@ class JobRequest(BaseModel, extra=Extra.forbid):
     def get_args(self):
         return self.args
 
-    @root_validator()
-    def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if not (bool(values.get("docker_image")) or bool(values.get("raw_script"))):
+    @model_validator(mode="after")
+    def validate_at_least_docker_image_or_raw_script(self) -> Self:
+        if not (bool(self.docker_image) or bool(self.raw_script)):
             raise ValueError("Expected at least one of `docker_image` or `raw_script`")
-        return values
+        return self
 
 
 class Heartbeat(BaseModel, extra=Extra.forbid):
@@ -180,7 +180,7 @@ class FacilitatorClient:
 
         raw_msg = await ws.recv()
         try:
-            response = Response.parse_raw(raw_msg)
+            response = Response.model_validate_json(raw_msg)
         except pydantic.ValidationError as exc:
             raise AuthenticationError(
                 "did not receive Response for AuthenticationRequest", []
@@ -248,7 +248,7 @@ class FacilitatorClient:
     async def handle_message(self, raw_msg: str | bytes):
         """handle message received from facilitator"""
         try:
-            response = Response.parse_raw(raw_msg)
+            response = Response.model_validate_json(raw_msg)
         except pydantic.ValidationError:
             logger.debug("could not parse raw message as Response")
         else:
@@ -257,7 +257,7 @@ class FacilitatorClient:
             return
 
         try:
-            job_request = JobRequest.parse_raw(raw_msg)
+            job_request = JobRequest.model_validate_json(raw_msg)
         except pydantic.ValidationError:
             logger.debug("could not parse raw message as JobRequest")
         else:

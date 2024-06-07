@@ -106,7 +106,7 @@ class AbstractMinerClient(abc.ABC):
         while True:
             await self.ensure_connected()
             try:
-                await self.ws.send(model.json())
+                await self.ws.send(model.model_dump_json())
             except websockets.WebSocketException as ex:
                 logger.error(f"Could not send to miner {self.miner_name}: {str(ex)}")
                 await asyncio.sleep(1 + random.random())
@@ -138,7 +138,7 @@ class AbstractMinerClient(abc.ABC):
             if isinstance(msg, self.incoming_generic_error_class()):
                 try:
                     raise RuntimeError(
-                        f"Received error message from miner {self.miner_name}: {msg.json()}"
+                        f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
                     )
                 except Exception:
                     logger.exception("")
@@ -162,6 +162,6 @@ class UnsupportedMessageReceived(Exception):
         self.msg = msg
 
     def __str__(self):
-        return f"{type(self).__name__}: {self.msg.json()}"
+        return f"{type(self).__name__}: {self.msg.model_dump_json()}"
 
     __repr__ = __str__

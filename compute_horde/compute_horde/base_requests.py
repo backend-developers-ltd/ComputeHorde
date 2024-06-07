@@ -39,7 +39,7 @@ class BaseRequest(pydantic.BaseModel, abc.ABC):
         if not mapping:
             mapping = {}
             for klass in all_subclasses(cls):
-                if not (message_type := klass.__fields__.get("message_type")):
+                if not (message_type := klass.model_fields.get("message_type")):
                     continue
                 if not message_type.default:
                     continue
@@ -56,14 +56,14 @@ class BaseRequest(pydantic.BaseModel, abc.ABC):
             raise ValidationError.from_json_decode_error(exc)
 
         try:
-            base_model_object = cls.parse_obj(json_)
+            base_model_object = cls.model_validate(json_)
         except pydantic.ValidationError as exc:
             raise ValidationError.from_pydantic_validation_error(exc)
 
         target_model = cls.type_to_model(base_model_object.message_type)
 
         try:
-            return target_model.parse_obj(json_)
+            return target_model.model_validate(json_)
         except pydantic.ValidationError as exc:
             raise ValidationError.from_pydantic_validation_error(exc)
 
