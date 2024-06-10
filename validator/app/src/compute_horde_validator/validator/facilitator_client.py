@@ -9,7 +9,7 @@ import tenacity
 import websockets
 from channels.layers import get_channel_layer
 from django.conf import settings
-from pydantic import model_validator, BaseModel
+from pydantic import BaseModel, model_validator
 
 from compute_horde_validator.validator.metagraph_client import (
     create_metagraph_refresh_task,

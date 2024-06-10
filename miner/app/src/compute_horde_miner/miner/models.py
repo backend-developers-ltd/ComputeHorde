@@ -3,11 +3,10 @@ from datetime import timedelta
 from enum import Enum
 from typing import Self
 
-from django.core.serializers.json import DjangoJSONEncoder
-from django.db import models
-
 from compute_horde.mv_protocol.validator_requests import ReceiptPayload
 from compute_horde.receipts import Receipt
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import models
 
 
 class EnumEncoder(DjangoJSONEncoder):
