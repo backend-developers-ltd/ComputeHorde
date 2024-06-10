@@ -1,3 +1,4 @@
+import datetime
 from typing import TYPE_CHECKING
 
 import bittensor
@@ -34,3 +35,10 @@ def get_validators(netuid=12, network="finney") -> list["NeuronInfo"]:
         neurons, key=lambda n: (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS, n.stake), reverse=True
     )
     return neurons[:VALIDATORS_LIMIT]
+
+
+def _json_dumps_default(obj):
+    if isinstance(obj, datetime.datetime):
+        return obj.isoformat()
+
+    raise TypeError

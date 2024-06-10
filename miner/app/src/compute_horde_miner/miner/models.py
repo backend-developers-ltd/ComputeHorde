@@ -6,6 +6,9 @@ from typing import Self
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
+from compute_horde.mv_protocol.validator_requests import ReceiptPayload
+from compute_horde.receipts import Receipt
+
 
 class EnumEncoder(DjangoJSONEncoder):
     def default(self, obj):
@@ -107,3 +110,17 @@ class JobReceipt(models.Model):
 
     def score(self):
         return float(self.score_str)
+
+    def to_receipt(self):
+        return Receipt(
+            payload=ReceiptPayload(
+                job_uuid=str(self.job_uuid),
+                miner_hotkey=self.miner_hotkey,
+                validator_hotkey=self.validator_hotkey,
+                time_started=self.time_started,
+                time_took_us=self.time_took_us,
+                score_str=self.score_str,
+            ),
+            validator_signature=self.validator_signature,
+            miner_signature=self.miner_signature,
+        )
