@@ -7,10 +7,10 @@ from typing import Self
 from urllib.parse import urlparse
 
 import pydantic
-from pydantic import model_validator, Field
+from pydantic import model_validator
 
 from ..base_requests import BaseRequest, JobMixin
-from ..utils import MachineSpecs
+from ..utils import MachineSpecs, _json_dumps_default
 
 SAFE_DOMAIN_REGEX = re.compile(r".*")
 
@@ -40,9 +40,7 @@ class AuthenticationPayload(pydantic.BaseModel):
 
     def blob_for_signing(self):
         # pydantic v2 does not support sort_keys anymore.
-        # we are serializing into json twice here to use serialization of pydantic
-        # instead of overriding json.JSONEncoder.default()
-        return json.dumps(json.loads(self.model_dump_json()), sort_keys=True)
+        return json.dumps(self.model_dump(), sort_keys=True)
 
 
 class V0AuthenticateRequest(BaseValidatorRequest):
@@ -127,9 +125,7 @@ class ReceiptPayload(pydantic.BaseModel):
 
     def blob_for_signing(self):
         # pydantic v2 does not support sort_keys anymore.
-        # we are serializing into json twice here to use serialization of pydantic
-        # instead of overriding json.JSONEncoder.default()
-        return json.dumps(json.loads(self.model_dump_json()), sort_keys=True)
+        return json.dumps(self.model_dump(), sort_keys=True, default=_json_dumps_default)
 
     @property
     def time_took(self):

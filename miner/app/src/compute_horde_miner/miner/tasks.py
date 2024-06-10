@@ -10,7 +10,6 @@ from django.utils.timezone import now
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import quasi_axon
 from compute_horde_miner.miner.models import JobReceipt, Validator
-from compute_horde_miner.miner.receipt_store.base import Receipt
 from compute_horde_miner.miner.receipt_store.current import receipts_store
 
 logger = get_task_logger(__name__)
@@ -57,7 +56,7 @@ def fetch_validators():
 
 @app.task
 def prepare_receipts():
-    receipts = [Receipt.from_job_receipt(jr) for jr in JobReceipt.objects.all()]
+    receipts = [jr.to_receipt() for jr in JobReceipt.objects.all()]
     receipts_store.store(receipts)
 
 
