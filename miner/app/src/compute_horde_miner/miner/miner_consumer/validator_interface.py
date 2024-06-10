@@ -45,7 +45,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         self.msg_queue = []
         self.defer_saving_jobs = []
         self.defer_executor_ready = []
-        self.pending_jobs: dict[str, "AcceptedJob"] = {}
+        self.pending_jobs: dict[str, AcceptedJob] = {}
 
     @log_errors_explicitly
     async def connect(self):
@@ -239,7 +239,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 logger.info(
                     f"Declining job {msg.job_uuid} from blacklisted validator: {self.validator_key}"
                 )
-                await self.send(miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json())
+                await self.send(
+                    miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
+                )
                 return
             # TODO add rate limiting per validator key here
             token = f"{msg.job_uuid}-{uuid.uuid4()}"
@@ -259,12 +261,16 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             try:
                 await current.executor_manager.reserve_executor(token)
             except ExecutorUnavailable:
-                await self.send(miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json())
+                await self.send(
+                    miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
+                )
                 await self.group_discard(token)
                 await job.adelete()
                 self.pending_jobs.pop(msg.job_uuid)
                 return
-            await self.send(miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json())
+            await self.send(
+                miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json()
+            )
 
         if isinstance(msg, validator_requests.V0JobRequest):
             job = self.pending_jobs.get(msg.job_uuid)
@@ -321,7 +327,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
         self.pending_jobs[job.job_uuid] = job
-        await self.send(miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).model_dump_json())
+        await self.send(
+            miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).model_dump_json()
+        )
         logger.debug(f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}")
 
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):
@@ -334,7 +342,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         self.pending_jobs = {
             k: v for k, v in self.pending_jobs.items() if v.executor_token != msg.executor_token
         }
-        await self.send(miner_requests.V0ExecutorFailedRequest(job_uuid=job.job_uuid).model_dump_json())
+        await self.send(
+            miner_requests.V0ExecutorFailedRequest(job_uuid=job.job_uuid).model_dump_json()
+        )
         logger.debug(
             f"Failure in preparation for job {job.job_uuid} reported to validator {self.validator_key}"
         )

@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from typing import Self
 
 import pydantic
-from pydantic import model_validator, Field
+from pydantic import model_validator
 
 from ..base_requests import BaseRequest, JobMixin
 

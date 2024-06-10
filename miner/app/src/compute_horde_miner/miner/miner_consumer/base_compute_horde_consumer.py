@@ -46,7 +46,9 @@ class BaseConsumer(AsyncWebsocketConsumer, abc.ABC):
         except ValidationError as ex:
             logger.error(f"Malformed message: {str(ex)}")
             await self.send(
-                self.outgoing_generic_error_class()(details=f"Malformed message: {str(ex)}").model_dump_json()
+                self.outgoing_generic_error_class()(
+                    details=f"Malformed message: {str(ex)}"
+                ).model_dump_json()
             )
             return
 
