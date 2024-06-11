@@ -14,7 +14,8 @@ from compute_horde_miner.miner.receipt_store.current import receipts_store
 
 logger = get_task_logger(__name__)
 
-RECEIPTS_MAX_RETENTION_PERIOD = datetime.timedelta(days=7)
+RECEIPTS_MAX_RETENTION_PERIOD = datetime.timedelta(days=2)
+RECEIPTS_MAX_SERVED_PERIOD = datetime.timedelta(days=1)
 
 
 @app.task
@@ -56,7 +57,10 @@ def fetch_validators():
 
 @app.task
 def prepare_receipts():
-    receipts = [jr.to_receipt() for jr in JobReceipt.objects.all()]
+    job_receipts = JobReceipt.objects.order_by("time_started").filter(
+        time_started__gt=now() - RECEIPTS_MAX_SERVED_PERIOD
+    )
+    receipts = [jr.to_receipt() for jr in job_receipts]
     receipts_store.store(receipts)
 
 
