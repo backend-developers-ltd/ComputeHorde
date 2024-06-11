@@ -1,13 +1,14 @@
+import csv
 import pathlib
 import shutil
 import tempfile
-import zipfile
 
+from compute_horde.receipts import Receipt
 from django.conf import settings
 
-from compute_horde_miner.miner.receipt_store.base import BaseReceiptStore, Receipt
+from compute_horde_miner.miner.receipt_store.base import BaseReceiptStore
 
-ZIP_FILENAME = "receipts.zip"
+FILENAME = "receipts.csv"
 
 
 class LocalReceiptStore(BaseReceiptStore):
@@ -17,15 +18,39 @@ class LocalReceiptStore(BaseReceiptStore):
 
         root = pathlib.Path(settings.LOCAL_RECEIPTS_ROOT)
         root.mkdir(parents=True, exist_ok=True)
-        filepath = root / ZIP_FILENAME
+        filepath = root / FILENAME
 
-        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-            with zipfile.ZipFile(temp_file, mode="w", compression=zipfile.ZIP_LZMA) as zf:
-                for receipt in receipts:
-                    zf.writestr(receipt.payload.job_uuid + ".json", receipt.model_dump_json())
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, newline="") as temp_file:
+            csv_writer = csv.writer(temp_file)
+            csv_writer.writerow(
+                [
+                    "job_uuid",
+                    "miner_hotkey",
+                    "validator_hotkey",
+                    "time_started",
+                    "time_took_us",
+                    "score_str",
+                    "validator_signature",
+                    "miner_signature",
+                ]
+            )
+
+            for receipt in receipts:
+                csv_writer.writerow(
+                    [
+                        receipt.payload.job_uuid,
+                        receipt.payload.miner_hotkey,
+                        receipt.payload.validator_hotkey,
+                        receipt.payload.time_started.isoformat(),
+                        receipt.payload.time_took_us,
+                        receipt.payload.score_str,
+                        receipt.validator_signature,
+                        receipt.miner_signature,
+                    ]
+                )
 
         shutil.move(temp_file.name, filepath)
         filepath.chmod(0o644)
 
     def get_url(self) -> str:
-        return settings.LOCAL_RECEIPTS_URL + ZIP_FILENAME
+        return settings.LOCAL_RECEIPTS_URL + FILENAME
