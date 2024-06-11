@@ -10,18 +10,19 @@ class SystemEvent(models.Model):
     """
     System Events that need to be reported to the stats collector
     """
+
     class EventType(models.TextChoices):
-        WEIGHT_SETTING_SUCCESS = 'WEIGHT_SETTING_SUCCESS'
-        WEIGHT_SETTING_FAILURE = 'WEIGHT_SETTING_FAILURE'
-        MINER_FAILED_SYNTHETIC_JOB = 'MINER_FAILED_SYNTHETIC_JOB'
+        WEIGHT_SETTING_SUCCESS = "WEIGHT_SETTING_SUCCESS"
+        WEIGHT_SETTING_FAILURE = "WEIGHT_SETTING_FAILURE"
+        MINER_FAILED_SYNTHETIC_JOB = "MINER_FAILED_SYNTHETIC_JOB"
 
     class EventSubType(models.TextChoices):
-        SUCCESS = 'SUCCESS'
-        SUBTENSOR_CONNECTIVITY_ERROR = 'SUBTENSOR_CONNECTIVITY_ERROR'
-        GENERIC_ERROR = 'GENERIC_ERROR'
-        WRITING_TO_CHAIN_TIMEOUT = 'WRITING_TO_CHAIN_TIMEOUT'
-        WRITING_TO_CHAIN_FAILED = 'WRITING_TO_CHAIN_FAILED'
-        WRITING_TO_CHAIN_GENERIC_ERROR = 'WRITING_TO_CHAIN_GENERIC_ERROR'
+        SUCCESS = "SUCCESS"
+        SUBTENSOR_CONNECTIVITY_ERROR = "SUBTENSOR_CONNECTIVITY_ERROR"
+        GENERIC_ERROR = "GENERIC_ERROR"
+        WRITING_TO_CHAIN_TIMEOUT = "WRITING_TO_CHAIN_TIMEOUT"
+        WRITING_TO_CHAIN_FAILED = "WRITING_TO_CHAIN_FAILED"
+        WRITING_TO_CHAIN_GENERIC_ERROR = "WRITING_TO_CHAIN_GENERIC_ERROR"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
@@ -34,7 +35,8 @@ class SystemEvent(models.Model):
     sent = models.BooleanField(default=False)
 
     def __str__(self):
-        return f'SystemEvent({self.id}, {self.type}, {self.subtype})'
+        return f"SystemEvent({self.id}, {self.type}, {self.subtype})"
+
 
 class Miner(models.Model):
     hotkey = models.CharField(max_length=255, unique=True)

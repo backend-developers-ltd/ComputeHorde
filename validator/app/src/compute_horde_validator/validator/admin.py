@@ -11,7 +11,7 @@ from compute_horde_validator.validator.models import (
     MinerBlacklist,
     AdminJobRequest,
     JobReceipt,
-    SystemEvent
+    SystemEvent,
 )  # noqa
 from rangefilter.filters import DateTimeRangeFilter
 
@@ -24,7 +24,6 @@ admin.site.index_title = "Welcome to ComputeHorde Validator Administration"
 admin.site.index_template = "admin/validator_index.html"
 
 
-
 class AddOnlyAdmin(admin.ModelAdmin):
     def has_change_permission(self, *args, **kwargs):
         return False
@@ -32,10 +31,6 @@ class AddOnlyAdmin(admin.ModelAdmin):
     def has_delete_permission(self, *args, **kwargs):
         return False
 
-class JobAddOnlyAdmin(AddOnlyAdmin):
-    list_display = ['job_uuid', 'miner', 'status', 'updated_at']
-    search_fields = ['job_uuid', 'miner__hotkey']
-    ordering = ['-updated_at']
 
 class ReadOnlyAdmin(AddOnlyAdmin):
     def has_add_permission(self, *args, **kwargs):
@@ -95,12 +90,14 @@ class MinerReadOnlyAdmin(ReadOnlyAdmin):
     change_form_template = "admin/read_only_view.html"
     search_fields = ["hotkey"]
 
+    def has_add_permission(self, *args, **kwargs):
+        return False
+
 
 class SystemEventAdmin(ReadOnlyAdmin):
-    list_display = ['type', 'subtype', 'timestamp']
-    list_filter = ['type', 'subtype', ('timestamp', DateTimeRangeFilter)]
-    ordering = ['-timestamp']
-
+    list_display = ["type", "subtype", "timestamp"]
+    list_filter = ["type", "subtype", ("timestamp", DateTimeRangeFilter)]
+    ordering = ["-timestamp"]
 
     # exclude blacklisted miners from autocomplete results
     def get_search_results(self, request, queryset, search_term):
@@ -126,8 +123,8 @@ class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
 
 
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
-admin.site.register(SyntheticJob, admin_class=JobAddOnlyAdmin)
-admin.site.register(OrganicJob, admin_class=JobAddOnlyAdmin)
+admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
+admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(JobReceipt, admin_class=JobReceiptsReadOnlyAdmin)
 admin.site.register(MinerBlacklist)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)

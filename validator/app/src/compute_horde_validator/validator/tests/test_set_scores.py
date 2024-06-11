@@ -1,9 +1,3 @@
-from unittest import mock
-
-import pytest
-
-
-
 # 0. in all of these check systemevents
 # 1. all ok - insert some jobs, check that weight setting is called with the right values
 # 2. subtensor connectivity error in first attempt
