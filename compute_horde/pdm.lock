@@ -5,7 +5,7 @@
 groups = ["default", "format", "lint", "release", "type_check", "test"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:9d61a06679b9b194bf0816c8968d85c75f0a51ad29417bdfa95008d46152c67a"
+content_hash = "sha256:0f5daa6ecdbd6a30cdcbb2817756f562c0f9fe296c58a4e9d7e313566a245d07"
 
 [[package]]
 name = "aiohttp"
@@ -170,7 +170,7 @@ files = [
 
 [[package]]
 name = "bittensor"
-version = "7.0.1"
+version = "7.1.1"
 requires_python = ">=3.9"
 summary = "bittensor"
 groups = ["default"]
@@ -214,8 +214,8 @@ dependencies = [
     "wheel",
 ]
 files = [
-    {file = "bittensor-7.0.1-py3-none-any.whl", hash = "sha256:a3c2d844dfcf6d1a72e826b96a003535931180aa7a6123180aa79611bcd2dacd"},
-    {file = "bittensor-7.0.1.tar.gz", hash = "sha256:3ba0a3dcb3e1c62e6cae892416e72d2d084ef00def8ea82de1ea265c1e40cb05"},
+    {file = "bittensor-7.1.1-py3-none-any.whl", hash = "sha256:4b285acea50e081fdd6257771aca99d0735b2aad2caf2fa183c41e461edf8bc9"},
+    {file = "bittensor-7.1.1.tar.gz", hash = "sha256:5e2a1b3d5a8561dd1dc770c7faaf7aad70ca2a5e001073a7fda0d717012e01fe"},
 ]
 
 [[package]]
@@ -608,13 +608,16 @@ files = [
 
 [[package]]
 name = "eth-typing"
-version = "4.2.3"
+version = "4.3.0"
 requires_python = "<4,>=3.8"
 summary = "eth-typing: Common type annotations for ethereum python packages"
 groups = ["default"]
+dependencies = [
+    "typing-extensions>=4.0.0",
+]
 files = [
-    {file = "eth_typing-4.2.3-py3-none-any.whl", hash = "sha256:b2df49fa89d2e85f2cc3fb1c903b0cd183d524f7a045e3db8cc720cf41adcd3d"},
-    {file = "eth_typing-4.2.3.tar.gz", hash = "sha256:8ee3ae7d4136d14fcb955c34f9dbef8e52170984d4dc68c0ab0d61621eab29d8"},
+    {file = "eth_typing-4.3.0-py3-none-any.whl", hash = "sha256:718f8ef8180ac1a15e476f072e4522e7bd4429bdabc71499e3ca79e2219d775c"},
+    {file = "eth_typing-4.3.0.tar.gz", hash = "sha256:3f4eface387eefa68761b23743baab8d413d609b4201c4086c64a006be5dbf53"},
 ]
 
 [[package]]
@@ -829,13 +832,13 @@ files = [
 
 [[package]]
 name = "more-itertools"
-version = "10.2.0"
+version = "10.3.0"
 requires_python = ">=3.8"
 summary = "More routines for operating on iterables, beyond itertools"
 groups = ["default"]
 files = [
-    {file = "more-itertools-10.2.0.tar.gz", hash = "sha256:8fccb480c43d3e99a00087634c06dd02b0d50fbf088b380de5a41a015ec239e1"},
-    {file = "more_itertools-10.2.0-py3-none-any.whl", hash = "sha256:686b06abe565edfab151cb8fd385a05651e1fdf8f0a14191e4439283421f8684"},
+    {file = "more-itertools-10.3.0.tar.gz", hash = "sha256:e5d93ef411224fbcef366a6e8ddc4c5781bc6359d43412a65dd5964e46111463"},
+    {file = "more_itertools-10.3.0-py3-none-any.whl", hash = "sha256:ea6a02e24a9161e51faad17a8782b92a0df82c12c1c8886fec7f0c3fa1a1b320"},
 ]
 
 [[package]]
@@ -988,13 +991,13 @@ files = [
 
 [[package]]
 name = "packaging"
-version = "24.0"
-requires_python = ">=3.7"
+version = "24.1"
+requires_python = ">=3.8"
 summary = "Core utilities for Python packages"
 groups = ["default", "test"]
 files = [
-    {file = "packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5"},
-    {file = "packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9"},
+    {file = "packaging-24.1-py3-none-any.whl", hash = "sha256:5b8f2217dbdbd2f7f384c41c628544e6d52f2d0f53c6d0c3ea61aa5d1d7ff124"},
+    {file = "packaging-24.1.tar.gz", hash = "sha256:026ed72c8ed3fcce5bf8950572258698927fd1dbda10a5e981cdf0ac37f4f002"},
 ]
 
 [[package]]
@@ -1675,13 +1678,13 @@ files = [
 
 [[package]]
 name = "typing-extensions"
-version = "4.12.1"
+version = "4.12.2"
 requires_python = ">=3.8"
 summary = "Backported and Experimental Type Hints for Python 3.8+"
 groups = ["default", "type_check"]
 files = [
-    {file = "typing_extensions-4.12.1-py3-none-any.whl", hash = "sha256:6024b58b69089e5a89c347397254e35f1bf02a907728ec7fee9bf0fe837d203a"},
-    {file = "typing_extensions-4.12.1.tar.gz", hash = "sha256:915f5e35ff76f56588223f15fdd5938f9a1cf9195c0de25130c627e4d597f6d1"},
+    {file = "typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d"},
+    {file = "typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8"},
 ]
 
 [[package]]

@@ -283,7 +283,7 @@ files = [
 
 [[package]]
 name = "bittensor"
-version = "7.0.1"
+version = "7.1.1"
 requires_python = ">=3.9"
 summary = "bittensor"
 groups = ["dev"]
@@ -327,8 +327,8 @@ dependencies = [
     "wheel",
 ]
 files = [
-    {file = "bittensor-7.0.1-py3-none-any.whl", hash = "sha256:a3c2d844dfcf6d1a72e826b96a003535931180aa7a6123180aa79611bcd2dacd"},
-    {file = "bittensor-7.0.1.tar.gz", hash = "sha256:3ba0a3dcb3e1c62e6cae892416e72d2d084ef00def8ea82de1ea265c1e40cb05"},
+    {file = "bittensor-7.1.1-py3-none-any.whl", hash = "sha256:4b285acea50e081fdd6257771aca99d0735b2aad2caf2fa183c41e461edf8bc9"},
+    {file = "bittensor-7.1.1.tar.gz", hash = "sha256:5e2a1b3d5a8561dd1dc770c7faaf7aad70ca2a5e001073a7fda0d717012e01fe"},
 ]
 
 [[package]]
@@ -568,14 +568,14 @@ files = [
 
 [[package]]
 name = "compute-horde"
-version = "0.0.1.dev566"
+version = "0.0.1.dev567"
 requires_python = "==3.11.*"
 editable = true
 path = "./compute_horde"
 summary = ""
 groups = ["dev"]
 dependencies = [
-    "bittensor<8.0.0,>=7.0.1",
+    "bittensor<8.0.0,>=7.1.1",
     "more-itertools>=10.2.0",
     "pydantic<3,>=2.3",
     "requests>=2.32.2",
@@ -924,13 +924,16 @@ files = [
 
 [[package]]
 name = "eth-typing"
-version = "4.2.3"
+version = "4.3.0"
 requires_python = "<4,>=3.8"
 summary = "eth-typing: Common type annotations for ethereum python packages"
 groups = ["dev"]
+dependencies = [
+    "typing-extensions>=4.0.0",
+]
 files = [
-    {file = "eth_typing-4.2.3-py3-none-any.whl", hash = "sha256:b2df49fa89d2e85f2cc3fb1c903b0cd183d524f7a045e3db8cc720cf41adcd3d"},
-    {file = "eth_typing-4.2.3.tar.gz", hash = "sha256:8ee3ae7d4136d14fcb955c34f9dbef8e52170984d4dc68c0ab0d61621eab29d8"},
+    {file = "eth_typing-4.3.0-py3-none-any.whl", hash = "sha256:718f8ef8180ac1a15e476f072e4522e7bd4429bdabc71499e3ca79e2219d775c"},
+    {file = "eth_typing-4.3.0.tar.gz", hash = "sha256:3f4eface387eefa68761b23743baab8d413d609b4201c4086c64a006be5dbf53"},
 ]
 
 [[package]]
