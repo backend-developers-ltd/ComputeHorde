@@ -45,7 +45,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         self.msg_queue = []
         self.defer_saving_jobs = []
         self.defer_executor_ready = []
-        self.pending_jobs: dict[str, "AcceptedJob"] = {}
+        self.pending_jobs: dict[str, AcceptedJob] = {}
 
     @log_errors_explicitly
     async def connect(self):
@@ -67,7 +67,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             msg = f"Inactive validator: {self.validator_key}"
             fail = True
         if fail:
-            await self.send(miner_requests.GenericError(details=msg).json())
+            await self.send(miner_requests.GenericError(details=msg).model_dump_json())
             logger.info(msg)
             await self.close(1000)
             return
@@ -162,7 +162,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                     f"Validator {self.validator_key} not authenticated due to: {error_msg}"
                 )
                 logger.info(response_msg)
-                await self.send(miner_requests.GenericError(details=response_msg).json())
+                await self.send(miner_requests.GenericError(details=response_msg).model_dump_json())
                 await self.close(1000)
                 return
         self.validator_authenticated = True
@@ -177,7 +177,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                         for executor_class, count in manifest.items()
                     ]
                 )
-            ).json()
+            ).model_dump_json()
         )
         for msg in self.msg_queue:
             await self.handle(msg)
@@ -190,7 +190,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                         job_uuid=str(job.job_uuid),
                         docker_process_stdout=job.stdout,
                         docker_process_stderr=job.stderr,
-                    ).json()
+                    ).model_dump_json()
                 )
                 logger.debug(
                     f"Job {job.job_uuid} finished reported to validator {self.validator_key}"
@@ -202,7 +202,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                         docker_process_stdout=job.stdout,
                         docker_process_stderr=job.stderr,
                         docker_process_exit_status=job.exit_status,
-                    ).json()
+                    ).model_dump_json()
                 )
                 logger.debug(
                     f"Failed job {job.job_uuid} reported to validator {self.validator_key}"
@@ -214,7 +214,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         while self.defer_executor_ready:
             job = self.defer_executor_ready.pop()
             await self.send(
-                miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).json()
+                miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).model_dump_json()
             )
             logger.debug(
                 f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}"
@@ -239,7 +239,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 logger.info(
                     f"Declining job {msg.job_uuid} from blacklisted validator: {self.validator_key}"
                 )
-                await self.send(miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).json())
+                await self.send(
+                    miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
+                )
                 return
             # TODO add rate limiting per validator key here
             token = f"{msg.job_uuid}-{uuid.uuid4()}"
@@ -250,7 +252,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 validator=self.validator,
                 job_uuid=msg.job_uuid,
                 executor_token=token,
-                initial_job_details=msg.dict(),
+                initial_job_details=msg.model_dump(),
                 status=AcceptedJob.Status.WAITING_FOR_EXECUTOR,
             )
             await job.asave()
@@ -259,12 +261,16 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             try:
                 await current.executor_manager.reserve_executor(token)
             except ExecutorUnavailable:
-                await self.send(miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).json())
+                await self.send(
+                    miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
+                )
                 await self.group_discard(token)
                 await job.adelete()
                 self.pending_jobs.pop(msg.job_uuid)
                 return
-            await self.send(miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).json())
+            await self.send(
+                miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json()
+            )
 
         if isinstance(msg, validator_requests.V0JobRequest):
             job = self.pending_jobs.get(msg.job_uuid)
@@ -274,7 +280,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 await self.send(
                     miner_requests.GenericError(
                         details=error_msg,
-                    ).json()
+                    ).model_dump_json()
                 )
                 return
             if job is None:
@@ -283,13 +289,13 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 await self.send(
                     miner_requests.GenericError(
                         details=error_msg,
-                    ).json()
+                    ).model_dump_json()
                 )
                 return
             await self.send_job_request(job.executor_token, msg)
             logger.debug(f"Passing job details to executor consumer job_uuid: {msg.job_uuid}")
             job.status = AcceptedJob.Status.RUNNING
-            job.full_job_details = msg.dict()
+            job.full_job_details = msg.model_dump()
             await job.asave()
 
         if isinstance(msg, validator_requests.V0ReceiptRequest) and self.verify_receipt_msg(msg):
@@ -321,7 +327,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
         self.pending_jobs[job.job_uuid] = job
-        await self.send(miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).json())
+        await self.send(
+            miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).model_dump_json()
+        )
         logger.debug(f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}")
 
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):
@@ -334,7 +342,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         self.pending_jobs = {
             k: v for k, v in self.pending_jobs.items() if v.executor_token != msg.executor_token
         }
-        await self.send(miner_requests.V0ExecutorFailedRequest(job_uuid=job.job_uuid).json())
+        await self.send(
+            miner_requests.V0ExecutorFailedRequest(job_uuid=job.job_uuid).model_dump_json()
+        )
         logger.debug(
             f"Failure in preparation for job {job.job_uuid} reported to validator {self.validator_key}"
         )
@@ -345,7 +355,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 job_uuid=msg.job_uuid,
                 docker_process_stdout=msg.docker_process_stdout,
                 docker_process_stderr=msg.docker_process_stderr,
-            ).json()
+            ).model_dump_json()
         )
         logger.debug(f"Finished job {msg.job_uuid} reported to validator {self.validator_key}")
         job = self.pending_jobs.pop(msg.job_uuid)
@@ -358,7 +368,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             miner_requests.V0MachineSpecsRequest(
                 job_uuid=msg.job_uuid,
                 specs=msg.specs,
-            ).json()
+            ).model_dump_json()
         )
         logger.debug(
             f"Reported specs for job {msg.job_uuid}: {msg.specs} to validator {self.validator_key}"
@@ -371,7 +381,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 docker_process_stdout=msg.docker_process_stdout,
                 docker_process_stderr=msg.docker_process_stderr,
                 docker_process_exit_status=msg.docker_process_exit_status,
-            ).json()
+            ).model_dump_json()
         )
         logger.debug(f"Failed job {msg.job_uuid} reported to validator {self.validator_key}")
         job = self.pending_jobs.pop(msg.job_uuid)

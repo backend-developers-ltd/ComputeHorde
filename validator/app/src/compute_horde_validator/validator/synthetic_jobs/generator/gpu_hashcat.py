@@ -103,7 +103,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         if str(msg.docker_process_stdout).strip() != str(self.expected_answer):
             return (
                 False,
-                f"result does not match expected answer: {self.expected_answer}, msg: {msg.json()}",
+                f"result does not match expected answer: {self.expected_answer}, msg: {msg.model_dump_json()}",
                 0,
             )
 

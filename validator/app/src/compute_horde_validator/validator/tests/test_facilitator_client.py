@@ -67,25 +67,25 @@ class FacilitatorJobStatusUpdatesWs(FacilitatorWs):
         # auth
         response = await ws.recv()
         try:
-            AuthenticationRequest.parse_raw(response)
+            AuthenticationRequest.model_validate_json(response)
         except Exception as e:
             self.facilitator_error = e
 
-        await ws.send(Response(status="success").json())
+        await ws.send(Response(status="success").model_dump_json())
 
         # send job request
-        await ws.send(get_dummy_job_request(job_uuid).json())
+        await ws.send(get_dummy_job_request(job_uuid).model_dump_json())
 
         # get job status update
         response = await ws.recv()
         try:
-            JobStatusUpdate.parse_raw(response)
+            JobStatusUpdate.model_validate_json(response)
         except Exception as e:
             self.facilitator_error = e
 
         response = await ws.recv()
         try:
-            JobStatusUpdate.parse_raw(response)
+            JobStatusUpdate.model_validate_json(response)
         except Exception as e:
             self.facilitator_error = e
 
@@ -103,7 +103,7 @@ class FacilitatorBadMessageWs(FacilitatorWs):
 
         # auth
         await ws.recv()
-        await ws.send(Response(status="success").json())
+        await ws.send(Response(status="success").model_dump_json())
 
         # send bad job request
         await ws.send('{"job_request": "invalid"}')

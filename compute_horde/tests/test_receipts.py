@@ -11,7 +11,7 @@ def receipts_helper(mocked_responses, receipts, miner_keypair):
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zip_file:
         for receipt in receipts:
-            zip_file.writestr(receipt.payload.job_uuid + ".json", receipt.json())
+            zip_file.writestr(receipt.payload.job_uuid + ".json", receipt.model_dump_json())
 
     zip_buf.seek(0)
     mocked_responses.get("http://127.0.0.1:8000/receipts/receipts.zip", body=zip_buf.read())

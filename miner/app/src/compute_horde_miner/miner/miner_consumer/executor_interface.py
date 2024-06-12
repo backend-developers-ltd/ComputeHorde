@@ -41,7 +41,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             await self.send(
                 miner_requests.GenericError(
                     details=f"No job waiting for token {self.executor_token}"
-                ).json()
+                ).model_dump_json()
             )
             logger.error(f"No job waiting for token {self.executor_token}")
             await self.websocket_disconnect(
@@ -50,7 +50,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             return
         if job.status != AcceptedJob.Status.WAITING_FOR_EXECUTOR:
             msg = f"Job with token {self.executor_token} is not waiting for an executor"
-            await self.send(miner_requests.GenericError(details=msg).json())
+            await self.send(miner_requests.GenericError(details=msg).model_dump_json())
             logger.error(msg)
             await self.websocket_disconnect({"code": msg})
             return
@@ -64,7 +64,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 base_docker_image_name=initial_job_details.base_docker_image_name,
                 timeout_seconds=initial_job_details.timeout_seconds,
                 volume_type=initial_job_details.volume_type.value,
-            ).json()
+            ).model_dump_json()
         )
 
     async def handle(self, msg: BaseExecutorRequest):
@@ -117,7 +117,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 docker_run_cmd=msg.docker_run_cmd,
                 volume=msg.volume,
                 output_upload=msg.output_upload,
-            ).json()
+            ).model_dump_json()
         )
 
     async def disconnect(self, close_code):

@@ -1,15 +1,16 @@
 import datetime
 import enum
+import json
 import re
 from collections.abc import Mapping
-from typing import Any
+from typing import Self
 from urllib.parse import urlparse
 
 import pydantic
-from pydantic import Field, root_validator
+from pydantic import model_validator
 
 from ..base_requests import BaseRequest, JobMixin
-from ..utils import MachineSpecs
+from ..utils import MachineSpecs, _json_dumps_default
 
 SAFE_DOMAIN_REGEX = re.compile(r".*")
 
@@ -38,7 +39,8 @@ class AuthenticationPayload(pydantic.BaseModel):
     timestamp: int
 
     def blob_for_signing(self):
-        return self.json(sort_keys=True)
+        # pydantic v2 does not support sort_keys anymore.
+        return json.dumps(self.model_dump(), sort_keys=True)
 
 
 class V0AuthenticateRequest(BaseValidatorRequest):
@@ -52,8 +54,8 @@ class V0AuthenticateRequest(BaseValidatorRequest):
 
 class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0InitialJobRequest
-    base_docker_image_name: str | None
-    timeout_seconds: int | None
+    base_docker_image_name: str | None = None
+    timeout_seconds: int | None = None
     volume_type: VolumeType
 
 
@@ -84,7 +86,7 @@ class OutputUpload(pydantic.BaseModel):
     # TODO: the following are only valid for output_upload_type = zip_and_http_post, some polymorphism like with
     #  BaseRequest is required here
     url: str
-    form_fields: Mapping[str, str] | None = Field(default=None)
+    form_fields: Mapping[str, str] | None = None
 
 
 class V0JobRequest(BaseValidatorRequest, JobMixin):
@@ -94,13 +96,13 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
-    output_upload: OutputUpload | None
+    output_upload: OutputUpload | None = None
 
-    @root_validator()
-    def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if not (bool(values.get("docker_image_name")) or bool(values.get("raw_script"))):
+    @model_validator(mode="after")
+    def validate_at_least_docker_image_or_raw_script(self) -> Self:
+        if not (bool(self.docker_image_name) or bool(self.raw_script)):
             raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
-        return values
+        return self
 
 
 class V0MachineSpecsRequest(BaseValidatorRequest, JobMixin):
@@ -122,11 +124,8 @@ class ReceiptPayload(pydantic.BaseModel):
     score_str: str
 
     def blob_for_signing(self):
-        return self.json(sort_keys=True)
-
-    def json(self, *args, **kwargs) -> str:
-        kwargs.setdefault("sort_keys", True)
-        return super().json(*args, **kwargs)
+        # pydantic v2 does not support sort_keys anymore.
+        return json.dumps(self.model_dump(), sort_keys=True, default=_json_dumps_default)
 
     @property
     def time_took(self):
@@ -144,7 +143,3 @@ class V0ReceiptRequest(BaseValidatorRequest):
 
     def blob_for_signing(self):
         return self.payload.blob_for_signing()
-
-    def json(self, *args, **kwargs) -> str:
-        kwargs.setdefault("sort_keys", True)
-        return super().json(*args, **kwargs)

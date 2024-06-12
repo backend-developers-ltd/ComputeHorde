@@ -1,13 +1,13 @@
 import abc
 import logging
-from typing import Any
+from typing import Self
 
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.em_protocol.miner_requests import OutputUpload, Volume
 from compute_horde.mv_protocol import validator_requests
 from compute_horde.utils import MachineSpecs
-from pydantic import root_validator
+from pydantic import model_validator
 
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
     log_errors_explicitly,
@@ -31,13 +31,13 @@ class JobRequest(pydantic.BaseModel):
     docker_run_options_preset: str
     docker_run_cmd: list[str]
     volume: Volume
-    output_upload: OutputUpload | None
+    output_upload: OutputUpload | None = None
 
-    @root_validator()
-    def validate(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if not (bool(values.get("docker_image_name")) or bool(values.get("raw_script"))):
+    @model_validator(mode="after")
+    def validate_at_least_docker_image_or_raw_script(self) -> Self:
+        if not (bool(self.docker_image_name) or bool(self.raw_script)):
             raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
-        return values
+        return self
 
 
 class ExecutorSpecs(pydantic.BaseModel):
@@ -53,7 +53,7 @@ class ExecutorFinished(pydantic.BaseModel):
 
 class ExecutorFailed(pydantic.BaseModel):
     job_uuid: str
-    docker_process_exit_status: int | None
+    docker_process_exit_status: int | None = None
     docker_process_stdout: str
     docker_process_stderr: str
 
@@ -150,7 +150,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
                     }
                     if job_request.output_upload
                     else None,
-                ).dict(),
+                ).model_dump(),
             },
         )
 
@@ -166,7 +166,7 @@ class ExecutorInterfaceMixin(BaseMixin):
             group_name,
             {
                 "type": "executor.ready",
-                **ExecutorReady(executor_token=executor_token).dict(),
+                **ExecutorReady(executor_token=executor_token).model_dump(),
             },
         )
 
@@ -176,7 +176,7 @@ class ExecutorInterfaceMixin(BaseMixin):
             group_name,
             {
                 "type": "executor.failed_to_prepare",
-                **ExecutorFailedToPrepare(executor_token=executor_token).dict(),
+                **ExecutorFailedToPrepare(executor_token=executor_token).model_dump(),
             },
         )
 
@@ -189,7 +189,7 @@ class ExecutorInterfaceMixin(BaseMixin):
                 **ExecutorSpecs(
                     job_uuid=job_uuid,
                     specs=specs,
-                ).dict(),
+                ).model_dump(),
             },
         )
 
@@ -205,7 +205,7 @@ class ExecutorInterfaceMixin(BaseMixin):
                     job_uuid=job_uuid,
                     docker_process_stdout=stdout,
                     docker_process_stderr=stderr,
-                ).dict(),
+                ).model_dump(),
             },
         )
 
@@ -222,7 +222,7 @@ class ExecutorInterfaceMixin(BaseMixin):
                     docker_process_stdout=stdout,
                     docker_process_stderr=stderr,
                     docker_process_exit_status=exit_status,
-                ).dict(),
+                ).model_dump(),
             },
         )
 
