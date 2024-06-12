@@ -242,7 +242,10 @@ CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
     "run_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.run_synthetic_jobs",
-        "schedule": crontab(minute="0", hour="*/2"),
+        "schedule": crontab(
+            minute=env("DEBUG_RUN_SYNTHETIC_JOBS_MINUTE", default="0"),
+            hour=env("DEBUG_RUN_SYNTHETIC_JOBS_HOUR", default="*/2"),
+        ),
         "options": {},
     },
     "set_scores": {
