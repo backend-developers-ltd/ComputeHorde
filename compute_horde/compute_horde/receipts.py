@@ -1,8 +1,10 @@
 import contextlib
+import csv
+import datetime
+import io
 import logging
 import shutil
 import tempfile
-import zipfile
 
 import bittensor
 import pydantic
@@ -35,7 +37,7 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
     """Get receipts from a given miner"""
     with contextlib.ExitStack() as exit_stack:
         try:
-            receipts_url = f"http://{ip}:{port}/receipts/receipts.zip"
+            receipts_url = f"http://{ip}:{port}/receipts/receipts.csv"
             response = exit_stack.enter_context(requests.get(receipts_url, stream=True, timeout=5))
             response.raise_for_status()
         except requests.RequestException as e:
@@ -46,17 +48,23 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
         temp_file.seek(0)
 
         receipts = []
-
-        try:
-            zip_file = exit_stack.enter_context(zipfile.ZipFile(temp_file))
-        except zipfile.BadZipfile as e:
-            raise ReceiptFetchError("miner returned invalid zip") from e
-
-        for zip_info in zip_file.filelist:
+        wrapper = io.TextIOWrapper(temp_file)
+        csv_reader = csv.DictReader(wrapper)
+        for raw_receipt in csv_reader:
             try:
-                raw_receipt = zip_file.read(zip_info)
-                receipt = Receipt.model_validate_json(raw_receipt)
-            except pydantic.ValidationError:
+                receipt = Receipt(
+                    payload=ReceiptPayload(
+                        job_uuid=raw_receipt["job_uuid"],
+                        miner_hotkey=raw_receipt["miner_hotkey"],
+                        validator_hotkey=raw_receipt["validator_hotkey"],
+                        time_started=datetime.datetime.fromisoformat(raw_receipt["time_started"]),
+                        time_took_us=int(raw_receipt["time_took_us"]),
+                        score_str=raw_receipt["score_str"],
+                    ),
+                    validator_signature=raw_receipt["validator_signature"],
+                    miner_signature=raw_receipt["miner_signature"],
+                )
+            except (ValueError, pydantic.ValidationError):
                 logger.warning(f"Miner sent invalid receipt {raw_receipt=}")
                 continue
 

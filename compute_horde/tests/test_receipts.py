@@ -1,20 +1,42 @@
+import csv
 import io
-import zipfile
 
-import pydantic
 import pytest
 
 from compute_horde.receipts import ReceiptFetchError, get_miner_receipts
 
 
 def receipts_helper(mocked_responses, receipts, miner_keypair):
-    zip_buf = io.BytesIO()
-    with zipfile.ZipFile(zip_buf, "w") as zip_file:
-        for receipt in receipts:
-            zip_file.writestr(receipt.payload.job_uuid + ".json", receipt.model_dump_json())
+    buf = io.StringIO()
+    csv_writer = csv.writer(buf)
+    csv_writer.writerow(
+        [
+            "job_uuid",
+            "miner_hotkey",
+            "validator_hotkey",
+            "time_started",
+            "time_took_us",
+            "score_str",
+            "validator_signature",
+            "miner_signature",
+        ]
+    )
+    for receipt in receipts:
+        csv_writer.writerow(
+            [
+                receipt.payload.job_uuid,
+                receipt.payload.miner_hotkey,
+                receipt.payload.validator_hotkey,
+                receipt.payload.time_started.isoformat(),
+                receipt.payload.time_took_us,
+                receipt.payload.score_str,
+                receipt.validator_signature,
+                receipt.miner_signature,
+            ]
+        )
 
-    zip_buf.seek(0)
-    mocked_responses.get("http://127.0.0.1:8000/receipts/receipts.zip", body=zip_buf.read())
+    buf.seek(0)
+    mocked_responses.get("http://127.0.0.1:8000/receipts/receipts.csv", body=buf.read())
     return get_miner_receipts(miner_keypair.ss58_address, "127.0.0.1", 8000)
 
 
@@ -34,13 +56,19 @@ def test__get_miner_receipts__happy_path(mocked_responses, receipts, miner_keypa
 
 
 def test__get_miner_receipts__invalid_receipt_skipped(mocked_responses, receipts, miner_keypair):
-    class InvalidReceiptPayload(pydantic.BaseModel):
-        job_uuid: str
+    """
+    Populate all the fields of one csv row with "invalid" :D
+    """
+    class Mock:
+        def __str__(self):
+            return "invalid"
 
-    class InvalidReceipt(pydantic.BaseModel):
-        payload: InvalidReceiptPayload
+        isoformat = __str__
 
-    receipts[1] = InvalidReceipt(payload=InvalidReceiptPayload(job_uuid="invalid"))
+        def __getattr__(self, item):
+            return Mock()
+
+    receipts[1] = Mock()
     receipts_one_skipped_helper(mocked_responses, receipts, miner_keypair)
 
 
@@ -66,7 +94,7 @@ def test__get_miner_receipts__invalid_validator_signature_skipped(
 
 
 def test__get_miner_receipts__no_receipts(mocked_responses, miner_keypair):
-    mocked_responses.get("http://127.0.0.1:8000/receipts/receipts.zip", status=404)
+    mocked_responses.get("http://127.0.0.1:8000/receipts/receipts.csv", status=404)
     with pytest.raises(ReceiptFetchError):
         get_miner_receipts(miner_keypair.ss58_address, "127.0.0.1", 8000)
 
