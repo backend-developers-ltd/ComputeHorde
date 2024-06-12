@@ -51,6 +51,3 @@ class LocalReceiptStore(BaseReceiptStore):
 
         shutil.move(temp_file.name, filepath)
         filepath.chmod(0o644)
-
-    def get_url(self) -> str:
-        return settings.LOCAL_RECEIPTS_URL + FILENAME
