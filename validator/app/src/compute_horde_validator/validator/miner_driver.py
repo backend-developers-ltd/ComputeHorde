@@ -5,6 +5,8 @@ import time
 from functools import partial
 from typing import Literal
 
+from compute_horde.base.output_upload import ZipAndHttpPutUpload
+from compute_horde.base.volume import InlineVolume, ZipUrlVolume
 from compute_horde.miner_client.base import MinerConnectionError
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
@@ -14,12 +16,8 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
-    OutputUpload,
-    OutputUploadType,
     V0InitialJobRequest,
     V0JobRequest,
-    Volume,
-    VolumeType,
 )
 from django.conf import settings
 from pydantic import BaseModel
@@ -114,10 +112,11 @@ async def execute_organic_job(
             return
 
         job_timer = Timer(timeout=total_job_timeout)
+
         if job_request.input_url:
-            volume = Volume(volume_type=VolumeType.zip_url, contents=str(job_request.input_url))
+            volume = ZipUrlVolume(contents=str(job_request.input_url))
         else:
-            volume = Volume(volume_type=VolumeType.inline, contents=get_dummy_inline_zip_volume())
+            volume = InlineVolume(contents=get_dummy_inline_zip_volume())
 
         await miner_client.send_model(
             V0InitialJobRequest(
@@ -171,8 +170,7 @@ async def execute_organic_job(
         docker_run_options_preset = "nvidia_all" if job_request.use_gpu else "none"
 
         if job_request.output_url:
-            output_upload = OutputUpload(
-                output_upload_type=OutputUploadType.zip_and_http_put,
+            output_upload = ZipAndHttpPutUpload(
                 url=str(job_request.output_url),
             )
         else:

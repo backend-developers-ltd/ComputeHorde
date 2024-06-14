@@ -11,6 +11,7 @@ import zipfile
 import bittensor
 import websockets
 from channels.layers import get_channel_layer
+from compute_horde.base.volume import InlineVolume
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol import validator_requests
 from django.conf import settings
@@ -162,8 +163,7 @@ async def drive_executor() -> float:
         docker_run_options_preset="nvidia_all",
         docker_run_cmd=JOB_RUN_CMD,
         raw_script=None,
-        volume=validator_requests.Volume(
-            volume_type=validator_requests.VolumeType.inline.value,
+        volume=InlineVolume(
             contents=get_dummy_inline_zip_volume(),
         ),
         output_upload=None,

@@ -2,13 +2,13 @@ import datetime
 import enum
 import json
 import re
-from collections.abc import Mapping
 from typing import Self
-from urllib.parse import urlparse
 
 import pydantic
 from pydantic import model_validator
 
+from ..base.output_upload import OutputUpload, OutputUploadType  # noqa
+from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
 from ..utils import MachineSpecs, _json_dumps_default
 
@@ -26,11 +26,6 @@ class RequestType(enum.Enum):
 
 class BaseValidatorRequest(BaseRequest):
     message_type: RequestType
-
-
-class VolumeType(enum.Enum):
-    inline = "inline"
-    zip_url = "zip_url"
 
 
 class AuthenticationPayload(pydantic.BaseModel):
@@ -58,36 +53,6 @@ class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     base_docker_image_name: str | None = None
     timeout_seconds: int | None = None
     volume_type: VolumeType
-
-
-class Volume(pydantic.BaseModel):
-    volume_type: VolumeType
-    contents: str  # TODO: this is only valid for volume_type = inline, some polymorphism like with BaseRequest is
-    # required here
-
-    def is_safe(
-        self,
-    ) -> bool:
-        if self.volume_type == VolumeType.zip_url:
-            domain = urlparse(self.contents).netloc
-            if SAFE_DOMAIN_REGEX.fullmatch(domain):
-                return True
-            return False
-        else:
-            return True
-
-
-class OutputUploadType(enum.Enum):
-    zip_and_http_post = "zip_and_http_post"
-    zip_and_http_put = "zip_and_http_put"
-
-
-class OutputUpload(pydantic.BaseModel):
-    output_upload_type: OutputUploadType
-    # TODO: the following are only valid for output_upload_type = zip_and_http_post, some polymorphism like with
-    #  BaseRequest is required here
-    url: str
-    form_fields: Mapping[str, str] | None = None
 
 
 class V0JobRequest(BaseValidatorRequest, JobMixin):
