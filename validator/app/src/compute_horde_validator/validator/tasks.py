@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import json
 import time
 import traceback
 from collections import defaultdict
@@ -9,6 +10,7 @@ import billiard.exceptions
 import bittensor
 import celery.exceptions
 import numpy as np
+import requests
 from asgiref.sync import async_to_sync
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
@@ -416,3 +418,40 @@ def fetch_receipts():
     miners = [neuron for neuron in metagraph.neurons if neuron.axon_info.is_serving]
     for miner in miners:
         fetch_receipts_from_miner.delay(miner.hotkey, miner.axon_info.ip, miner.axon_info.port)
+
+
+@shared_task
+def send_events_to_facilitator():
+    events = SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(sent=False)
+    if events.count() == 0:
+        return
+
+    if settings.STATS_COLLECTOR_URL == "":
+        logger.warning("STATS_COLLECTOR_URL is not set, not sending system events")
+        return
+
+    keypair = get_keypair()
+    hotkey = keypair.ss58_address
+    signing_timestamp = int(time.time())
+    to_sign = json.dumps(
+        {"signing_timestamp": signing_timestamp, "validator_ss58_address": hotkey},
+        sort_keys=True,
+    )
+    signature = f"0x{keypair.sign(to_sign).hex()}"
+
+    data = [event.to_dict() for event in events]
+    url = settings.STATS_COLLECTOR_URL + f"validator/{hotkey}/system_events"
+    response = requests.post(
+        url,
+        json=data,
+        headers={
+            "Validator-Signature": signature,
+            "Validator-Signing-Timestamp": str(signing_timestamp),
+        },
+    )
+
+    if response.status_code == 201:
+        logger.info(f"Sent {len(data)} system events to facilitator")
+        events.update(sent=True)
+    else:
+        logger.error(f"Failed to send system events to facilitator: {response}")

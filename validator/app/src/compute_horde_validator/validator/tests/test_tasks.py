@@ -1,9 +1,14 @@
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
+from requests import Response
 
-from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob
-from compute_horde_validator.validator.tasks import trigger_run_admin_job_request
+from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob, SystemEvent
+from compute_horde_validator.validator.tasks import (
+    send_events_to_facilitator,
+    trigger_run_admin_job_request,
+)
 
 from . import mock_get_miner_axon_info, mock_keypair, throw_error
 from .test_miner_driver import MockMinerClient
@@ -58,3 +63,49 @@ def test_trigger_run_admin_job__should_not_trigger_job():
     assert "Job failed to trigger" in job_request.status_message
 
     assert OrganicJob.objects.count() == 0
+
+
+def add_system_events():
+    events = SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
+    events.create(
+        type=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        subtype=SystemEvent.EventSubType.SUCCESS,
+        data={},
+        sent=False,
+    )
+    events.create(
+        type=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+        data={},
+        sent=False,
+    )
+    events.create(
+        type=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+        data={},
+        sent=True,
+    )
+
+
+def get_response(status):
+    response = Response()
+    response.status_code = status
+    return response
+
+
+@patch("compute_horde_validator.validator.tasks.requests.post", lambda url, json: get_response(201))
+@patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test_send_events_to_facilitator__success():
+    add_system_events()
+    send_events_to_facilitator()
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(sent=True).count() == 3
+
+
+@patch("compute_horde_validator.validator.tasks.requests.post", lambda url, json: get_response(400))
+@patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test_send_events_to_facilitator__failure():
+    add_system_events()
+    send_events_to_facilitator()
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(sent=False).count() == 2

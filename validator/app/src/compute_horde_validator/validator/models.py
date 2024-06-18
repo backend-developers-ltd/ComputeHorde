@@ -34,6 +34,14 @@ class SystemEvent(models.Model):
     data = models.JSONField(blank=True)
     sent = models.BooleanField(default=False)
 
+    def to_dict(self):
+        return {
+            "type": self.type,
+            "subtype": self.subtype,
+            "timestamp": self.timestamp.isoformat(),
+            "data": self.data,
+        }
+
     def __str__(self):
         return f"SystemEvent({self.id}, {self.type}, {self.subtype})"
 

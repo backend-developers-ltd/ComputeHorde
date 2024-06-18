@@ -265,6 +265,11 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         "schedule": crontab(minute="15,45"),  # try to stay away from set_scores task :)
         "options": {},
     },
+    "send_events_to_facilitator": {
+        "task": "compute_horde_validator.validator.tasks.send_events_to_facilitator",
+        "schedule": timedelta(minutes=60),
+        "options": {},
+    },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
@@ -336,6 +341,7 @@ SYNTHETIC_JOB_GENERATOR = env.str(
     default="compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatSyntheticJobGenerator",
 )
 FACILITATOR_URI = env.str("FACILITATOR_URI", default="wss://facilitator.computehorde.io/ws/v0/")
+STATS_COLLECTOR_URL = env.str("STATS_COLLECTOR_URL", default="")
 # if you need to hit a particular miner, without fetching their key, address or port from the blockchain
 DEBUG_MINER_KEY = env.str("DEBUG_MINER_KEY", default="")
 DEBUG_MINER_ADDRESS = env.str("DEBUG_MINER_ADDRESS", default="")
