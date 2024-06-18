@@ -74,6 +74,8 @@ class Command(BaseCommand):
         hotkey = options["miner_hotkey"]
         if hotkey:
             miner = Miner.objects.filter(hotkey=hotkey).first()
+            if miner is None:
+                raise ValueError(f"miner with hotkey {hotkey} does not exist")
             miner_blacklisted = MinerBlacklist.objects.filter(miner=miner).exists()
             if miner_blacklisted:
                 raise ValueError(f"miner with hotkey {hotkey} is blacklisted")
@@ -106,4 +108,8 @@ class Command(BaseCommand):
             print(f"\nJob {job.job_uuid} done processing")
         except OrganicJob.DoesNotExist:
             print(f"\nJob {job_request.uuid} not found")
+            sys.exit(1)
+
+        if job.status != OrganicJob.Status.COMPLETED:
+            print(f"\nJob {job_request.uuid} was unsuccessful, status = {job.status}")
             sys.exit(1)

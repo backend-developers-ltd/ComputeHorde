@@ -38,7 +38,7 @@ services:
     volumes:
       - static:/root/src/static
       # Add this mount to each container that should dump Prometheus metrics.
-      - ./prometheus-metrics:/prometheus-multiproc-dir
+      - ${HOST_PROMETHEUS_METRICS_DIR:-./prometheus-metrics}:/prometheus-multiproc-dir
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     depends_on:
       - redis
