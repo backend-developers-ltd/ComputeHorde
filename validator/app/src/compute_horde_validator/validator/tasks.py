@@ -332,8 +332,8 @@ def set_scores():
                     logger.info(f"Setting weights task id: {result.id}")
                     try:
                         with allow_join_result():
-                            success = result.get(timeout=WEIGHT_SETTING_TTL)
-                            message = "bittensor lib error"
+                            success, msg = result.get(timeout=WEIGHT_SETTING_TTL)
+                            message = f"bittensor lib error: {msg}"
                     except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
                         result.revoke(terminate=True)
                         logger.info(f"Setting weights timed out (attempt #{try_number})")
@@ -343,6 +343,7 @@ def set_scores():
                             long_description=traceback.format_exc(),
                             data={"try_number": try_number},
                         )
+                        continue
                 except Exception:
                     logger.exception("Encountered when setting weights: ")
                     save_weight_setting_failure(
@@ -350,6 +351,7 @@ def set_scores():
                         long_description=traceback.format_exc(),
                         data={"try_number": try_number},
                     )
+                    continue
                 if not success:
                     logger.info(f"Failed to set weights due to {message=} (attempt #{try_number})")
                     save_weight_setting_failure(
@@ -368,9 +370,7 @@ def set_scores():
                     break
                 time.sleep(WEIGHT_SETTING_FAILURE_BACKOFF)
             else:
-                raise RuntimeError(
-                    f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts"
-                )
+                logger.error(f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts")
 
 
 @app.task

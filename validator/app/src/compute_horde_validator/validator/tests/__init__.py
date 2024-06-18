@@ -22,6 +22,14 @@ def mock_keypair():
     )
 
 
+class MockWallet:
+    def __init__(self, *args):
+        pass
+
+    def get_hotkey(self):
+        return mock_keypair()
+
+
 def get_miner_client(MINER_CLIENT, job_uuid: str):
     return MINER_CLIENT(
         loop=asyncio.get_event_loop(),
