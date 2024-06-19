@@ -106,7 +106,7 @@ def do_set_weights(
     Set weights. To be used in other celery tasks in order to facilitate a timeout,
      since the multiprocessing version of this doesn't work in celery.
     """
-    subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
 
     bittensor.turn_console_off()
     return subtensor.set_weights(
@@ -254,8 +254,8 @@ def set_scores():
                 logger.warning("Not setting scores, SERVING is disabled in constance config")
                 return
 
-            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-            metagraph = subtensor.metagraph(netuid=settings.BITTENSOR_NETUID)
+            subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+            metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
             neurons = metagraph.neurons
             hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
             score_per_uid = {}
