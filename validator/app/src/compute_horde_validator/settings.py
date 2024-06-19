@@ -257,7 +257,7 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
     },
     "set_scores": {
         "task": "compute_horde_validator.validator.tasks.set_scores",
-        "schedule": crontab(minute="0", hour="*/4"),
+        "schedule": crontab(minute="*/1"),
         "options": {},
     },
     "fetch_receipts": {
