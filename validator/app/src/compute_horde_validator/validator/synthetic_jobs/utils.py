@@ -345,8 +345,13 @@ async def _execute_job(
                 f"{job_state.miner_finished_or_failed_timestamp} {full_job_sent}"
             )
             raise TimeoutError
+        if time_took < 10:
+            logger.warning(
+                f"Miner {client.miner_name} finished job too quickly: {time_took} - will default to 10s"
+            )
+            time_took = 10
     except TimeoutError:
-        logger.info(f"Miner {client.miner_name} timed out out")
+        logger.info(f"Miner {client.miner_name} timed out")
         job.status = SyntheticJob.Status.FAILED
         job.comment = "Miner timed out"
         await job.asave()
