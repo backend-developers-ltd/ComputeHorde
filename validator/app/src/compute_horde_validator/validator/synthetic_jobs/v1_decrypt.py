@@ -25,7 +25,7 @@ def scrape_specs() -> dict[str, any]:
     gpus = []
     try:
         nvidia_cmd = run_cmd(
-            "nvidia-smi --query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem --format=csv"
+            "nvidia-smi --query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem,uuid,serial --format=csv"
         ).splitlines()
         csv_data = csv.reader(nvidia_cmd)
         header = [x.strip() for x in next(csv_data)]
@@ -41,6 +41,8 @@ def scrape_specs() -> dict[str, any]:
                     "power_limit": gpu_data["power.limit [W]"].split(" ")[0],
                     "graphics_speed": gpu_data["clocks.current.graphics [MHz]"].split(" ")[0],
                     "memory_speed": gpu_data["clocks.current.memory [MHz]"].split(" ")[0],
+                    "uuid": gpu_data["uuid"].split(" ")[0],
+                    "serial": gpu_data["serial"].split(" ")[0],
                 }
             )
     except Exception as exc:
