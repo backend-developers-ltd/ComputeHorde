@@ -93,7 +93,10 @@ def get_response(status):
     return response
 
 
-@patch("compute_horde_validator.validator.tasks.requests.post", lambda url, json: get_response(201))
+@patch(
+    "compute_horde_validator.validator.tasks.requests.post",
+    lambda url, json, headers: get_response(201),
+)
 @patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test_send_events_to_facilitator__success():
@@ -102,7 +105,10 @@ def test_send_events_to_facilitator__success():
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(sent=True).count() == 3
 
 
-@patch("compute_horde_validator.validator.tasks.requests.post", lambda url, json: get_response(400))
+@patch(
+    "compute_horde_validator.validator.tasks.requests.post",
+    lambda url, json, headers: get_response(400),
+)
 @patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test_send_events_to_facilitator__failure():

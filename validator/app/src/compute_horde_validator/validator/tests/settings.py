@@ -21,6 +21,8 @@ BITTENSOR_WALLET_DIRECTORY = (pathlib.Path("~").expanduser() / ".bittensor_test"
 BITTENSOR_WALLET_NAME = "test_validator"
 BITTENSOR_WALLET_HOTKEY_NAME = "test_validator_hotkey"
 
+STATS_COLLECTOR_URL = "http://fakehost:8000"
+
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:

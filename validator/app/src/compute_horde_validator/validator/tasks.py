@@ -306,7 +306,6 @@ def set_scores():
                 metagraph,
             )
 
-            # with transaction.atomic():
             for batch in batches:
                 batch.scored = True
                 batch.save()
