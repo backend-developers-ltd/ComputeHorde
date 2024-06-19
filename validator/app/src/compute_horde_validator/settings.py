@@ -267,7 +267,7 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
     },
     "send_events_to_facilitator": {
         "task": "compute_horde_validator.validator.tasks.send_events_to_facilitator",
-        "schedule": timedelta(minutes=60),
+        "schedule": timedelta(minutes=5),
         "options": {},
     },
 }
