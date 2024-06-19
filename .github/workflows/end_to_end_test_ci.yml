@@ -10,6 +10,7 @@ env:
   PYTHON_DEFAULT_VERSION: "3.11"
   BITTENSOR_NETWORK: "ws://3.91.62.249:9946"
   BITTENSOR_NETUID: "1"
+  HOST_WALLET_DIR: "/home/user/.bittensor/wallets"
   MNEMONIC_MINER_COLDKEY: "cousin gate anger oak common vacuum bonus rice buyer smooth evidence coast"
   MNEMONIC_MINER_HOTKEY: "provide lyrics civil afford orange marine letter dash parrot secret eternal decrease"
   MNEMONIC_VALIDATOR_COLDKEY: "chief wood gorilla arm that vault useful aware chair giant coconut plug"
@@ -78,17 +79,18 @@ jobs:
         working-directory: ./.bittensor
 
       - name: Validator - Prepare environment
-        run: ./setup-dev.sh
+        run: ./setup-prod.sh
         working-directory: ./validator
 
       - name: Miner - Prepare environment
-        run: ./setup-dev.sh
+        run: ./setup-prod.sh
         working-directory: ./miner
 
       - name: Validator - Update .env
         run: |
           sed -i "s|SECRET_KEY=.*|SECRET_KEY=123456|g" .env
           sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=123456|g" .env
+          sed -i "s|HOST_WALLET_DIR=.*|HOST_WALLET_DIR=${HOST_WALLET_DIR}|g" .env
           sed -i "s|BITTENSOR_NETWORK=.*|BITTENSOR_NETWORK=${BITTENSOR_NETWORK}|g" .env
           sed -i "s|BITTENSOR_NETUID=.*|BITTENSOR_NETUID=${BITTENSOR_NETUID}|g" .env
         working-directory: ./validator
@@ -97,6 +99,7 @@ jobs:
         run: |
           sed -i "s|SECRET_KEY=.*|SECRET_KEY=123456|g" .env
           sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=123456|g" .env
+          sed -i "s|HOST_WALLET_DIR=.*|HOST_WALLET_DIR=${HOST_WALLET_DIR}|g" .env
           sed -i "s|BITTENSOR_NETWORK=.*|BITTENSOR_NETWORK=${BITTENSOR_NETWORK}|g" .env
           sed -i "s|BITTENSOR_NETUID=.*|BITTENSOR_NETUID=${BITTENSOR_NETUID}|g" .env
         working-directory: ./miner
@@ -128,6 +131,9 @@ jobs:
       - name: Miner - Fetch validators
         run: pdm run python manage.py fetch_validators
         working-directory: ./miner/app/src
+
+      - name: Wait for tests to run
+        run: sleep 300
 
       - name: Validator - Stop server
         if: success() || failure()

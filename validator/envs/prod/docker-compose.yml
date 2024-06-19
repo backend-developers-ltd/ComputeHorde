@@ -52,6 +52,7 @@ services:
       - ./media:/root/src/media
       # Add this mount to each container that should dump Prometheus metrics.
       - ./prometheus-metrics:/prometheus-multiproc-dir
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     depends_on:
       - redis
       - db
@@ -73,6 +74,7 @@ services:
       - ./prometheus-metrics:/prometheus-multiproc-dir
     tmpfs: /run
     depends_on:
+      - app
       - redis
     logging:
       <<: *logging
@@ -88,6 +90,7 @@ services:
     volumes:
       - ./logs:/tmp/logs
     depends_on:
+      - app
       - redis
     logging:
       <<: *logging
@@ -103,6 +106,7 @@ services:
       - DEBUG=off
     command: celery --app=compute_horde_validator --broker="${CELERY_BROKER_URL}" flower --basic_auth="${CELERY_FLOWER_USER}:${CELERY_FLOWER_PASSWORD}"
     depends_on:
+      - app
       - celery-worker
     ports:
       - 5555:5555
@@ -120,6 +124,7 @@ services:
     volumes:
       - ./logs:/tmp/logs
     depends_on:
+      - app
       - redis
     logging:
       <<: *logging
