@@ -11,7 +11,9 @@ from compute_horde_validator.validator.models import (
     MinerBlacklist,
     AdminJobRequest,
     JobReceipt,
+    SystemEvent,
 )  # noqa
+from rangefilter.filters import DateTimeRangeFilter
 
 from compute_horde_validator.validator.tasks import trigger_run_admin_job_request  # noqa
 
@@ -102,6 +104,12 @@ class MinerReadOnlyAdmin(ReadOnlyAdmin):
         return queryset, use_distinct
 
 
+class SystemEventAdmin(ReadOnlyAdmin):
+    list_display = ["type", "subtype", "timestamp"]
+    list_filter = ["type", "subtype", ("timestamp", DateTimeRangeFilter)]
+    ordering = ["-timestamp"]
+
+
 class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
     list_display = [
         "job_uuid",
@@ -120,3 +128,4 @@ admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(JobReceipt, admin_class=JobReceiptsReadOnlyAdmin)
 admin.site.register(MinerBlacklist)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)
+admin.site.register(SystemEvent, admin_class=SystemEventAdmin)

@@ -59,6 +59,7 @@ def test__get_miner_receipts__invalid_receipt_skipped(mocked_responses, receipts
     """
     Populate all the fields of one csv row with "invalid" :D
     """
+
     class Mock:
         def __str__(self):
             return "invalid"

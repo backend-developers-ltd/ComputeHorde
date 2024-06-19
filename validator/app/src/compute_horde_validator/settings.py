@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "constance",
     "compute_horde_validator.validator",
     "compute_horde_validator.validator.admin_config.ValidatorAdminConfig",
+    "rangefilter",
 ]
 PROMETHEUS_EXPORT_MIGRATIONS = True
 PROMETHEUS_LATENCY_BUCKETS = (
@@ -193,6 +194,12 @@ if "default" in DATABASES:
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+DEFAULT_DB_ALIAS = (
+    "default_alias"  # useful for bypassing transaction while connecting to the same db
+)
+DATABASES[DEFAULT_DB_ALIAS] = DATABASES["default"]
+
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -250,12 +257,17 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
     },
     "set_scores": {
         "task": "compute_horde_validator.validator.tasks.set_scores",
-        "schedule": crontab(minute="0", hour="*/4"),
+        "schedule": crontab(minute="*/1"),
         "options": {},
     },
     "fetch_receipts": {
         "task": "compute_horde_validator.validator.tasks.fetch_receipts",
         "schedule": crontab(minute="15,45"),  # try to stay away from set_scores task :)
+        "options": {},
+    },
+    "send_events_to_facilitator": {
+        "task": "compute_horde_validator.validator.tasks.send_events_to_facilitator",
+        "schedule": timedelta(minutes=5),
         "options": {},
     },
 }
@@ -329,6 +341,7 @@ SYNTHETIC_JOB_GENERATOR = env.str(
     default="compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatSyntheticJobGenerator",
 )
 FACILITATOR_URI = env.str("FACILITATOR_URI", default="wss://facilitator.computehorde.io/ws/v0/")
+STATS_COLLECTOR_URL = env.str("STATS_COLLECTOR_URL", default="")
 # if you need to hit a particular miner, without fetching their key, address or port from the blockchain
 DEBUG_MINER_KEY = env.str("DEBUG_MINER_KEY", default="")
 DEBUG_MINER_ADDRESS = env.str("DEBUG_MINER_ADDRESS", default="")

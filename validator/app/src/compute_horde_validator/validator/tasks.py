@@ -1,5 +1,8 @@
 import asyncio
+import contextlib
+import json
 import time
+import traceback
 from collections import defaultdict
 from datetime import timedelta
 
@@ -7,6 +10,7 @@ import billiard.exceptions
 import bittensor
 import celery.exceptions
 import numpy as np
+import requests
 from asgiref.sync import async_to_sync
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
@@ -20,8 +24,14 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.locks import Locked, get_weight_setting_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
-from compute_horde_validator.validator.models import JobReceipt, OrganicJob, SyntheticJobBatch
+from compute_horde_validator.validator.models import (
+    JobReceipt,
+    OrganicJob,
+    SyntheticJobBatch,
+    SystemEvent,
+)
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
     create_and_run_sythethic_job_batch,
@@ -41,6 +51,7 @@ SCORING_ALGO_VERSION = 2
 WEIGHT_SETTING_TTL = 60
 WEIGHT_SETTING_HARD_TTL = 65
 WEIGHT_SETTING_ATTEMPTS = 100
+WEIGHT_SETTING_FAILURE_BACKOFF = 5
 
 
 @app.task(
@@ -90,12 +101,12 @@ def do_set_weights(
     wait_for_inclusion: bool,
     wait_for_finalization: bool,
     version_key: int,
-) -> bool:
+) -> tuple[bool, str]:
     """
     Set weights. To be used in other celery tasks in order to facilitate a timeout,
      since the multiprocessing version of this doesn't work in celery.
     """
-    subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
 
     bittensor.turn_console_off()
     return subtensor.set_weights(
@@ -163,6 +174,42 @@ async def run_admin_job_request(job_request_id: int, callback=None):
     )
 
 
+def save_weight_setting_event(type_: str, subtype: str, long_description: str, data: dict):
+    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        type=type_,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
+    )
+
+
+def save_weight_setting_failure(subtype: str, long_description: str, data: dict):
+    save_weight_setting_event(
+        type_=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
+    )
+
+
+@contextlib.contextmanager
+def save_event_on_error(subtype):
+    try:
+        yield
+    except Exception:
+        save_weight_setting_failure(subtype, traceback.format_exc(), {})
+
+
+def get_subtensor(network):
+    with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
+        return bittensor.subtensor(network=network)
+
+
+def get_metagraph(subtensor, netuid):
+    with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
+        return subtensor.metagraph(netuid=netuid)
+
+
 def sigmoid(x, beta, delta):
     return 1 / (1 + np.exp(beta * (-x + delta)))
 
@@ -196,98 +243,141 @@ def horde_score(benchmarks, alpha=0, beta=0, delta=0):
 
 @app.task
 def set_scores():
-    if not config.SERVING:
-        logger.warning("Not setting scores, SERVING is disabled in constance config")
-        return
-
-    subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-    metagraph = subtensor.metagraph(netuid=settings.BITTENSOR_NETUID)
-    neurons = metagraph.neurons
-    hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
-    score_per_uid = {}
-    batches = list(
-        SyntheticJobBatch.objects.prefetch_related("synthetic_jobs").filter(
-            scored=False,
-            started_at__gte=now() - timedelta(days=1),
-            accepting_results_until__lt=now(),
-        )
-    )
-    if not batches:
-        logger.info("No batches - nothing to score")
-        return
-
-    # scaling factor for avg_score of a horde - best in range [0, 1] (0 means no effect on score)
-    alpha = settings.HORDE_SCORE_AVG_PARAM
-    # sigmoid steepnes param - best in range [0, 5] (0 means no effect on score)
-    beta = settings.HORDE_SCORE_SIZE_PARAM
-    # horde size for 0.5 value of sigmoid - sigmoid is for 1 / horde_size
-    central_horde_size = settings.HORDE_SCORE_CENTRAL_SIZE_PARAM
-    delta = 1 / central_horde_size
-    for batch in batches:
-        batch_scores = defaultdict(list)
-        for job in batch.synthetic_jobs.all():
-            uid = hotkey_to_uid.get(job.miner.hotkey)
-            if uid is None:
-                continue
-            batch_scores[uid].append(job.score)
-        for uid, uid_batch_scores in batch_scores.items():
-            uid_horde_score = horde_score(uid_batch_scores, alpha=alpha, beta=beta, delta=delta)
-            score_per_uid[uid] = score_per_uid.get(uid, 0) + uid_horde_score
-    if not score_per_uid:
-        logger.info("No miners on the subnet to score")
-        return
-    uids = np.zeros(len(neurons), dtype=np.int64)
-    weights = np.zeros(len(neurons), dtype=np.float32)
-    for ind, n in enumerate(neurons):
-        uids[ind] = n.uid
-        weights[ind] = score_per_uid.get(n.uid, 0)
-
-    uids, weights = process_weights_for_netuid(
-        uids,
-        weights,
-        settings.BITTENSOR_NETUID,
-        subtensor,
-        metagraph,
-    )
-    with transaction.atomic():
-        for batch in batches:
-            batch.scored = True
-            batch.save()
-        for try_number in range(WEIGHT_SETTING_ATTEMPTS):
-            logger.debug(f"Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}")
-            success = False
-            message = "unknown error"
+    with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR):
+        with transaction.atomic():
             try:
-                result = do_set_weights.apply_async(
-                    kwargs=dict(
-                        netuid=settings.BITTENSOR_NETUID,
-                        uids=uids.tolist(),
-                        weights=weights.tolist(),
-                        wait_for_inclusion=True,
-                        wait_for_finalization=False,
-                        version_key=SCORING_ALGO_VERSION,
-                    ),
-                    soft_time_limit=WEIGHT_SETTING_TTL,
-                    time_limit=WEIGHT_SETTING_HARD_TTL,
+                get_weight_setting_lock()
+            except Locked:
+                logger.debug("Another thread already setting weights")
+                return
+            if not config.SERVING:
+                logger.warning("Not setting scores, SERVING is disabled in constance config")
+                return
+
+            subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+            metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
+            neurons = metagraph.neurons
+            hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
+            score_per_uid = {}
+            batches = list(
+                SyntheticJobBatch.objects.prefetch_related("synthetic_jobs").filter(
+                    scored=False,
+                    started_at__gte=now() - timedelta(days=1),
+                    accepting_results_until__lt=now(),
                 )
-                logger.info(f"Setting weights task id: {result.id}")
+            )
+            if not batches:
+                logger.info("No batches - nothing to score")
+                return
+
+            # scaling factor for avg_score of a horde - best in range [0, 1] (0 means no effect on score)
+            alpha = settings.HORDE_SCORE_AVG_PARAM
+            # sigmoid steepnes param - best in range [0, 5] (0 means no effect on score)
+            beta = settings.HORDE_SCORE_SIZE_PARAM
+            # horde size for 0.5 value of sigmoid - sigmoid is for 1 / horde_size
+            central_horde_size = settings.HORDE_SCORE_CENTRAL_SIZE_PARAM
+            delta = 1 / central_horde_size
+            for batch in batches:
+                batch_scores = defaultdict(list)
+                for job in batch.synthetic_jobs.all():
+                    uid = hotkey_to_uid.get(job.miner.hotkey)
+                    if uid is None:
+                        continue
+                    batch_scores[uid].append(job.score)
+                for uid, uid_batch_scores in batch_scores.items():
+                    uid_horde_score = horde_score(
+                        uid_batch_scores, alpha=alpha, beta=beta, delta=delta
+                    )
+                    score_per_uid[uid] = score_per_uid.get(uid, 0) + uid_horde_score
+            if not score_per_uid:
+                logger.info("No miners on the subnet to score")
+                return
+            uids = np.zeros(len(neurons), dtype=np.int64)
+            weights = np.zeros(len(neurons), dtype=np.float32)
+            for ind, n in enumerate(neurons):
+                uids[ind] = n.uid
+                weights[ind] = score_per_uid.get(n.uid, 0)
+
+            uids, weights = process_weights_for_netuid(
+                uids,
+                weights,
+                settings.BITTENSOR_NETUID,
+                subtensor,
+                metagraph,
+            )
+
+            for batch in batches:
+                batch.scored = True
+                batch.save()
+
+            for try_number in range(WEIGHT_SETTING_ATTEMPTS):
+                logger.debug(
+                    f"Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}"
+                )
+                success = False
+                message = "unknown error"
+
                 try:
-                    with allow_join_result():
-                        success = result.get(timeout=WEIGHT_SETTING_TTL)
-                        message = "bittensor lib error"
-                except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
-                    result.revoke(terminate=True)
-                    logger.info(f"Setting weights timed out (attempt #{try_number})")
-                    message = "timeout"
-            except Exception:
-                logger.exception("Encountered when setting weights: ")
-            if not success:
-                logger.info(f"Failed to set weights due to {message=} (attempt #{try_number})")
+                    result = do_set_weights.apply_async(
+                        kwargs=dict(
+                            netuid=settings.BITTENSOR_NETUID,
+                            uids=uids.tolist(),
+                            weights=weights.tolist(),
+                            wait_for_inclusion=True,
+                            wait_for_finalization=False,
+                            version_key=SCORING_ALGO_VERSION,
+                        ),
+                        soft_time_limit=WEIGHT_SETTING_TTL,
+                        time_limit=WEIGHT_SETTING_HARD_TTL,
+                    )
+                    logger.info(f"Setting weights task id: {result.id}")
+                    try:
+                        with allow_join_result():
+                            success, msg = result.get(timeout=WEIGHT_SETTING_TTL)
+                            message = f"bittensor lib error: {msg}"
+                    except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
+                        result.revoke(terminate=True)
+                        logger.info(f"Setting weights timed out (attempt #{try_number})")
+                        message = "timeout"
+                        save_weight_setting_failure(
+                            subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
+                            long_description=traceback.format_exc(),
+                            data={"try_number": try_number},
+                        )
+                        continue
+                except Exception:
+                    logger.warning("Encountered when setting weights: ")
+                    save_weight_setting_failure(
+                        subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+                        long_description=traceback.format_exc(),
+                        data={"try_number": try_number},
+                    )
+                    continue
+                if not success:
+                    logger.info(f"Failed to set weights due to {message=} (attempt #{try_number})")
+                    save_weight_setting_failure(
+                        subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_FAILED,
+                        long_description=f"message from chain: {message}",
+                        data={"try_number": try_number},
+                    )
+                else:
+                    logger.info(f"Successfully set weights!!! (attempt #{try_number})")
+                    save_weight_setting_event(
+                        type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+                        subtype=SystemEvent.EventSubType.SUCCESS,
+                        long_description=f"message from chain: {message}",
+                        data={"try_number": try_number},
+                    )
+                    break
+                time.sleep(WEIGHT_SETTING_FAILURE_BACKOFF)
             else:
-                logger.info(f"Successfully set weights!!! (attempt #{try_number})")
-                break
-        else:
-            raise RuntimeError(f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts")
+                msg = f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts"
+                logger.warning(msg)
+                save_weight_setting_failure(
+                    subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+                    long_description=msg,
+                    data={"try_number": WEIGHT_SETTING_ATTEMPTS},
+                )
 
 
 @app.task
@@ -333,3 +423,40 @@ def fetch_receipts():
     miners = [neuron for neuron in metagraph.neurons if neuron.axon_info.is_serving]
     for miner in miners:
         fetch_receipts_from_miner.delay(miner.hotkey, miner.axon_info.ip, miner.axon_info.port)
+
+
+@shared_task
+def send_events_to_facilitator():
+    events = SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(sent=False)
+    if events.count() == 0:
+        return
+
+    if settings.STATS_COLLECTOR_URL == "":
+        logger.warning("STATS_COLLECTOR_URL is not set, not sending system events")
+        return
+
+    keypair = get_keypair()
+    hotkey = keypair.ss58_address
+    signing_timestamp = int(time.time())
+    to_sign = json.dumps(
+        {"signing_timestamp": signing_timestamp, "validator_ss58_address": hotkey},
+        sort_keys=True,
+    )
+    signature = f"0x{keypair.sign(to_sign).hex()}"
+
+    data = [event.to_dict() for event in events]
+    url = settings.STATS_COLLECTOR_URL + f"validator/{hotkey}/system_events"
+    response = requests.post(
+        url,
+        json=data,
+        headers={
+            "Validator-Signature": signature,
+            "Validator-Signing-Timestamp": str(signing_timestamp),
+        },
+    )
+
+    if response.status_code == 201:
+        logger.info(f"Sent {len(data)} system events to facilitator")
+        events.update(sent=True)
+    else:
+        logger.error(f"Failed to send system events to facilitator: {response}")
