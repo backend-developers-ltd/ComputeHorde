@@ -347,7 +347,7 @@ def set_scores():
                         )
                         continue
                 except Exception:
-                    logger.exception("Encountered when setting weights: ")
+                    logger.warning("Encountered when setting weights: ")
                     save_weight_setting_failure(
                         subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
                         long_description=traceback.format_exc(),
@@ -372,7 +372,13 @@ def set_scores():
                     break
                 time.sleep(WEIGHT_SETTING_FAILURE_BACKOFF)
             else:
-                logger.error(f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts")
+                msg = f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts"
+                logger.warning(msg)
+                save_weight_setting_failure(
+                    subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+                    long_description=msg,
+                    data={"try_number": WEIGHT_SETTING_ATTEMPTS},
+                )
 
 
 @app.task

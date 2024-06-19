@@ -126,11 +126,19 @@ def test_set_scores__set_weight_failure():
     setup_db()
     set_scores()
     system_events = SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
-    assert system_events.count() == 1
+    assert system_events.count() == 2
     assert (
         system_events.filter(
             type=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
             subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_FAILED,
+        ).count()
+        == 1
+    )
+    # end of retries system event
+    assert (
+        system_events.filter(
+            type=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+            subtype=SystemEvent.EventSubType.GENERIC_ERROR,
         ).count()
         == 1
     )
@@ -182,11 +190,19 @@ def test_set_scores__set_weight_exception():
     setup_db()
     set_scores()
     system_events = SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
-    assert system_events.count() == 1
+    assert system_events.count() == 2
     assert (
         system_events.filter(
             type=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
             subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+        ).count()
+        == 1
+    )
+    # end of retries system event
+    assert (
+        system_events.filter(
+            type=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+            subtype=SystemEvent.EventSubType.GENERIC_ERROR,
         ).count()
         == 1
     )
@@ -204,11 +220,19 @@ def test_set_scores__set_weight_timeout():
     setup_db()
     set_scores()
     system_events = SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
-    assert system_events.count() == 1
+    assert system_events.count() == 2
     assert (
         system_events.filter(
             type=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
             subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
+        ).count()
+        == 1
+    )
+    # end of retries system event
+    assert (
+        system_events.filter(
+            type=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+            subtype=SystemEvent.EventSubType.GENERIC_ERROR,
         ).count()
         == 1
     )

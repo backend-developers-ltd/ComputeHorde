@@ -93,12 +93,6 @@ class MinerReadOnlyAdmin(ReadOnlyAdmin):
     def has_add_permission(self, *args, **kwargs):
         return False
 
-
-class SystemEventAdmin(ReadOnlyAdmin):
-    list_display = ["type", "subtype", "timestamp"]
-    list_filter = ["type", "subtype", ("timestamp", DateTimeRangeFilter)]
-    ordering = ["-timestamp"]
-
     # exclude blacklisted miners from autocomplete results
     def get_search_results(self, request, queryset, search_term):
         queryset, use_distinct = super().get_search_results(
@@ -108,6 +102,12 @@ class SystemEventAdmin(ReadOnlyAdmin):
         )
         queryset = queryset.exclude(minerblacklist__isnull=False)
         return queryset, use_distinct
+
+
+class SystemEventAdmin(ReadOnlyAdmin):
+    list_display = ["type", "subtype", "timestamp"]
+    list_filter = ["type", "subtype", ("timestamp", DateTimeRangeFilter)]
+    ordering = ["-timestamp"]
 
 
 class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
