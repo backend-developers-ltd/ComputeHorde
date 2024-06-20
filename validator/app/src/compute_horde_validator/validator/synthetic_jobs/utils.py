@@ -375,8 +375,8 @@ async def _execute_job(
             comment = f"Miner {client.miner_name} sent a job result but too late: {msg}"
             logger.info(
                 comment
-                + f"{time_took} {job_generator.timeout_seconds() + TIMEOUT_LEEWAY} "
-                + f"{job_state.miner_finished_or_failed_timestamp} {full_job_sent}"
+                + f"{time_took=} {job_generator.timeout_seconds() + TIMEOUT_LEEWAY=} "
+                + f"{job_state.miner_finished_or_failed_timestamp=} {full_job_sent=}"
             )
             await save_event(
                 subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=comment
