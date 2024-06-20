@@ -29,7 +29,7 @@ def test_trigger_run_admin_job__should_trigger_job():
     )
 
     assert AdminJobRequest.objects.count() == 1
-    trigger_run_admin_job_request.delay(job_request.pk)
+    trigger_run_admin_job_request.apply(args=(job_request.pk,))
 
     job_request.refresh_from_db()
     assert job_request.status_message == "Job successfully triggered"
@@ -56,7 +56,7 @@ def test_trigger_run_admin_job__should_not_trigger_job():
     )
 
     assert AdminJobRequest.objects.count() == 1
-    trigger_run_admin_job_request.delay(job_request.pk)
+    trigger_run_admin_job_request.apply(args=(job_request.pk,))
 
     job_request.refresh_from_db()
     assert "Job failed to trigger" in job_request.status_message
