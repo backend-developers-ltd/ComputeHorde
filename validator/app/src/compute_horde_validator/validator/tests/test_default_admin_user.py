@@ -5,7 +5,6 @@ from django.contrib.auth.models import User
 from compute_horde_validator.validator.apps import maybe_create_default_admin
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db
 def test__maybe_create_default_admin__missing_envvar():
     settings.DEFAULT_ADMIN_PASSWORD = None
@@ -16,7 +15,6 @@ def test__maybe_create_default_admin__missing_envvar():
     assert not User.objects.filter(is_superuser=True).exists()
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db
 def test__maybe_create_default_admin__create_superuser():
     settings.DEFAULT_ADMIN_PASSWORD = "test"
@@ -28,7 +26,6 @@ def test__maybe_create_default_admin__create_superuser():
     assert User.objects.filter(is_superuser=True).count() == 1
 
 
-@pytest.mark.asyncio
 @pytest.mark.django_db
 def test__maybe_create_default_admin__user_exists():
     created_user = User.objects.create_superuser(

@@ -20,9 +20,10 @@ from compute_horde.mv_protocol.validator_requests import (
     Volume,
     VolumeType,
 )
+from django.conf import settings
 from pydantic import BaseModel
 
-from compute_horde_validator.validator.models import OrganicJob
+from compute_horde_validator.validator.models import OrganicJob, SystemEvent
 from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_volume
 
 logger = logging.getLogger(__name__)
@@ -59,13 +60,26 @@ async def run_miner_job(
     wait_timeout: int = 300,
     notify_callback=None,
 ):
+    async def save_job_execution_event(subtype: str, long_description: str, success=False):
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS
+            if success
+            else SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
+            subtype=subtype,
+            long_description=long_description,
+            data={"miner_hotkey": miner_client.my_hotkey, "job_uuid": str(job.job_uuid)},
+        )
+
     job_state = miner_client.get_job_state(job.job_uuid)
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
             await exit_stack.enter_async_context(miner_client)
         except MinerConnectionError as exc:
             comment = f"Miner connection error: {exc}"
-            logger.error(comment)
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR, long_description=comment
+            )
+            logger.warning(comment)
             if notify_callback:
                 await notify_callback(
                     JobStatusUpdate(
@@ -100,10 +114,12 @@ async def run_miner_job(
                 timeout=min(job_timer.time_left(), wait_timeout),
             )
         except TimeoutError:
-            logger.error(
-                f"Miner {miner_client.miner_name} timed out out while preparing executor for job {job.job_uuid}"
-                f" after {wait_timeout} seconds"
+            comment = f"Miner {miner_client.miner_name} timed out out while preparing executor for job {job.job_uuid} after {wait_timeout} seconds"
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
+                long_description=comment,
             )
+            logger.warning(comment)
             if notify_callback:
                 await notify_callback(
                     JobStatusUpdate(
@@ -178,8 +194,10 @@ async def run_miner_job(
             time_took = job_state.miner_finished_or_failed_timestamp - full_job_sent
             logger.info(f"Miner took {time_took} seconds to finish {job.job_uuid}")
         except TimeoutError:
-            logger.error(
-                f"Miner {miner_client.miner_name} timed out after {total_job_timeout} seconds"
+            comment = f"Miner {miner_client.miner_name} timed out after {total_job_timeout} seconds"
+            logger.warning(comment)
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=comment
             )
             if notify_callback:
                 await notify_callback(
@@ -196,7 +214,11 @@ async def run_miner_job(
             await job.asave()
             return
         if isinstance(msg, V0JobFailedRequest):
-            logger.info(f"Miner {miner_client.miner_name} failed: {msg}")
+            comment = f"Miner {miner_client.miner_name} failed: {msg}"
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.FAILURE, long_description=comment
+            )
+            logger.info(comment)
             if notify_callback:
                 await notify_callback(
                     JobStatusUpdate(
@@ -220,7 +242,11 @@ async def run_miner_job(
             await job.asave()
             return
         elif isinstance(msg, V0JobFinishedRequest):
-            logger.info(f"Miner {miner_client.miner_name} finished: {msg}")
+            comment = f"Miner {miner_client.miner_name} finished: {msg}"
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
+            )
+            logger.info(comment)
             if notify_callback:
                 await notify_callback(
                     JobStatusUpdate(
@@ -244,4 +270,8 @@ async def run_miner_job(
             await job.asave()
             return
         else:
-            raise ValueError(f"Unexpected msg: {msg}")
+            comment = f"Unexpected msg: {msg}"
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.FAILURE, long_description=comment
+            )
+            raise ValueError(comment)

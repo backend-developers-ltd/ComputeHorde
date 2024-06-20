@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from unittest.mock import patch
 
 import bittensor
 import pytest
@@ -20,6 +21,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import JobState
 
 from . import mock_keypair
 from .test_miner_driver import MockMinerClient, get_dummy_job_request
+from .test_set_scores import MockMetagraph, MockSubtensor
 
 
 class MockJobStateMinerClient(MockMinerClient):
@@ -117,7 +119,9 @@ class FacilitatorBadMessageWs(FacilitatorWs):
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch("bittensor.metagraph", lambda *args, **kwargs: MockMetagraph())
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
     "ws_server_cls",
     [

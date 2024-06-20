@@ -17,7 +17,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.tasks import set_scores
 
-from . import MockWallet
+from . import MockWallet, throw_error
 
 NUM_NEURONS = 5
 
@@ -89,11 +89,9 @@ def setup_db():
         )
 
 
-def throw_error(*args):
-    raise Exception("Error thrown for testing")
-
-
-def check_system_events(type: SystemEvent.EventType, subtype: SystemEvent.EventSubType, count: int):
+def check_system_events(
+    type: SystemEvent.EventType, subtype: SystemEvent.EventSubType, count: int = 1
+):
     assert (
         SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
         .filter(

@@ -2,6 +2,7 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
+from asgiref.sync import sync_to_async
 from compute_horde.miner_client.base import BaseRequest
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
@@ -11,13 +12,19 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 
-from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
+from compute_horde_validator.validator.models import (
+    Miner,
+    SyntheticJob,
+    SyntheticJobBatch,
+    SystemEvent,
+)
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     AbstractSyntheticJobGenerator,
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient, execute_job
 
 from .test_miner_driver import MockMinerClient, get_miner_client
+from .test_set_scores import check_system_events
 
 
 class MockSyntheticJobGenerator(AbstractSyntheticJobGenerator):
@@ -60,24 +67,58 @@ mock_synthetic_job_generator = MagicMock(name="MockSyntheticJobGenerator")
     MockSyntheticJobGenerator,
 )
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
-    "futures_result,expected_job_status",
+    "futures_result,expected_job_status,expected_system_event",
     [
-        ((None, None), SyntheticJob.Status.FAILED),
-        ((V0DeclineJobRequest, None), SyntheticJob.Status.FAILED),
-        ((V0ExecutorReadyRequest, None), SyntheticJob.Status.FAILED),
+        (
+            (None, None),
+            SyntheticJob.Status.FAILED,
+            (
+                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                SystemEvent.EventSubType.JOB_NOT_STARTED,
+                1,
+            ),
+        ),
+        (
+            (V0DeclineJobRequest, None),
+            SyntheticJob.Status.FAILED,
+            (
+                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                SystemEvent.EventSubType.JOB_NOT_STARTED,
+                1,
+            ),
+        ),
+        (
+            (V0ExecutorReadyRequest, None),
+            SyntheticJob.Status.FAILED,
+            (
+                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
+                1,
+            ),
+        ),
         (
             (V0ExecutorReadyRequest, V0JobFailedRequest),
             SyntheticJob.Status.FAILED,
+            (
+                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                SystemEvent.EventSubType.FAILURE,
+                1,
+            ),
         ),
         (
             (V0ExecutorReadyRequest, V0JobFinishedRequest),
             SyntheticJob.Status.COMPLETED,
+            (
+                SystemEvent.EventType.MINER_SYNTHETIC_JOB_SUCCESS,
+                SystemEvent.EventSubType.SUCCESS,
+                1,
+            ),
         ),
     ],
 )
-async def test_execute_synthetic_job(futures_result, expected_job_status):
+async def test_execute_synthetic_job(futures_result, expected_job_status, expected_system_event):
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_client")
 
     batch = await SyntheticJobBatch.objects.acreate(
@@ -114,9 +155,14 @@ async def test_execute_synthetic_job(futures_result, expected_job_status):
     assert job.score == 0.0
     assert job.status == expected_job_status
 
+    if expected_system_event:
+        await sync_to_async(check_system_events)(*expected_system_event)
+    else:
+        assert await SystemEvent.objects.get() == 0
+
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
     "msg",
     [
@@ -133,7 +179,7 @@ async def test_miner_client__handle_message__set_ready_or_declining_future(msg: 
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
     "msg",
     [

@@ -157,12 +157,13 @@ async def run_admin_job_request(job_request_id: int, callback=None):
         )
 
         job_request.status_message = "Job successfully triggered"
-    except Exception as e:
-        job_request.status_message = f"Job failed to trigger due to: {e}"
-        return
-    finally:
         print(job_request.status_message)
         await job_request.asave()
+    except Exception as e:
+        job_request.status_message = f"Job failed to trigger due to: {e}"
+        print(job_request.status_message)
+        await job_request.asave()
+        return
 
     print(f"\nProcessing job request: {job_request}")
     await run_miner_job(

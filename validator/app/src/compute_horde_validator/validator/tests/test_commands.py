@@ -6,11 +6,12 @@ from unittest.mock import patch
 import pytest
 from django.core import management
 
-from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob
+from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob, SystemEvent
 
 from . import mock_get_miner_axon_info, mock_keypair, throw_error
 from .test_facilitator_client import MockJobStateMinerClient
 from .test_miner_driver import MockMinerClient
+from .test_set_scores import check_system_events
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 @patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockJobStateMinerClient)
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_completed():
     # random miner to be picked
     Miner.objects.create(hotkey="miner_client")
@@ -39,11 +40,15 @@ def test_debug_run_organic_job_command__job_completed():
     assert "status: completed" in output
     assert "Picked miner: hotkey: miner_client to run the job" in output
 
+    check_system_events(
+        SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS, SystemEvent.EventSubType.SUCCESS, 1
+    )
+
 
 @patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_timeout():
     # random miner to be picked
     Miner.objects.create(hotkey="miner_client")
@@ -62,14 +67,20 @@ def test_debug_run_organic_job_command__job_timeout():
     output = buf.getvalue()
     assert "done processing" in output
     assert "status: failed" in output
-    assert "Miner timed out" in output
+    assert "timed out" in output
     assert "Picked miner: hotkey: miner_client to run the job" in output
+
+    check_system_events(
+        SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
+        SystemEvent.EventSubType.JOB_NOT_STARTED,
+        1,
+    )
 
 
 @patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", throw_error)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockJobStateMinerClient)
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_not_created():
     Miner.objects.create(hotkey="miner_client")
 
@@ -86,12 +97,13 @@ def test_debug_run_organic_job_command__job_not_created():
 
     output = buf.getvalue()
     assert "not found" in output
+    assert SystemEvent.objects.count() == 0
 
 
 @patch("compute_horde_validator.validator.tasks.get_keypair", throw_error)
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockJobStateMinerClient)
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_created_but_not_triggered():
     Miner.objects.create(hotkey="miner_client")
 
@@ -108,3 +120,4 @@ def test_debug_run_organic_job_command__job_created_but_not_triggered():
 
     output = buf.getvalue()
     assert "done processing" in output
+    assert SystemEvent.objects.count() == 0

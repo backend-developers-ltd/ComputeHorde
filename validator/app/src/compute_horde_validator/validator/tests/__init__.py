@@ -10,9 +10,11 @@ import asyncio
 from typing import NamedTuple
 
 import bittensor
+from asgiref.sync import sync_to_async
+from django.conf import settings
 
 
-async def throw_error(*args):
+def throw_error(*args):
     raise Exception("Error thrown for testing")
 
 

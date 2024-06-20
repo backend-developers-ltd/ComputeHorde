@@ -65,7 +65,7 @@ def get_dummy_job_request(uuid: str) -> JobRequest:
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
     "futures_result,expected_job_status_updates,organic_job_status",
     [
