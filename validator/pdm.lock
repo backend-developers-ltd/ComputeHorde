@@ -5,7 +5,7 @@
 groups = ["default", "format", "lint", "security_check", "test", "type_check"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:31b6779a8d5eee5ea7f109e687803ab7873f9e49b8e8961b033ad1755a64f4e4"
+content_hash = "sha256:11a3cbfc058b98f459eb3ce578437c0dc043580f0cc813641f426c72f5fd3612"
 
 [[package]]
 name = "aiohttp"
@@ -585,7 +585,7 @@ files = [
 
 [[package]]
 name = "compute-horde"
-version = "0.0.1.dev580"
+version = "0.0.1.dev592"
 requires_python = "==3.11.*"
 path = "../compute_horde"
 summary = ""
@@ -1035,16 +1035,16 @@ files = [
 
 [[package]]
 name = "eth-typing"
-version = "4.3.0"
+version = "4.3.1"
 requires_python = "<4,>=3.8"
 summary = "eth-typing: Common type annotations for ethereum python packages"
 groups = ["default"]
 dependencies = [
-    "typing-extensions>=4.0.0",
+    "typing-extensions>=4.5.0",
 ]
 files = [
-    {file = "eth_typing-4.3.0-py3-none-any.whl", hash = "sha256:718f8ef8180ac1a15e476f072e4522e7bd4429bdabc71499e3ca79e2219d775c"},
-    {file = "eth_typing-4.3.0.tar.gz", hash = "sha256:3f4eface387eefa68761b23743baab8d413d609b4201c4086c64a006be5dbf53"},
+    {file = "eth_typing-4.3.1-py3-none-any.whl", hash = "sha256:b4d7cee912c7779da75da4b42fa61475c1089d35a4df5081a786eaa29d5f6865"},
+    {file = "eth_typing-4.3.1.tar.gz", hash = "sha256:4504559c87a9f71f4b99aa5a1e0549adaa7f192cbf8e37a295acfcddb1b5412d"},
 ]
 
 [[package]]
@@ -1104,13 +1104,13 @@ files = [
 
 [[package]]
 name = "filelock"
-version = "3.15.1"
+version = "3.15.3"
 requires_python = ">=3.8"
 summary = "A platform independent file lock."
 groups = ["default"]
 files = [
-    {file = "filelock-3.15.1-py3-none-any.whl", hash = "sha256:71b3102950e91dfc1bb4209b64be4dc8854f40e5f534428d8684f953ac847fac"},
-    {file = "filelock-3.15.1.tar.gz", hash = "sha256:58a2549afdf9e02e10720eaa4d4470f56386d7a6f72edd7d0596337af8ed7ad8"},
+    {file = "filelock-3.15.3-py3-none-any.whl", hash = "sha256:0151273e5b5d6cf753a61ec83b3a9b7d8821c39ae9af9d7ecf2f9e2f17404103"},
+    {file = "filelock-3.15.3.tar.gz", hash = "sha256:e1199bf5194a2277273dacd50269f0d87d0682088a3c561c15674ea9005d8635"},
 ]
 
 [[package]]
@@ -2076,6 +2076,20 @@ files = [
 ]
 
 [[package]]
+name = "pytest-asyncio"
+version = "0.23.7"
+requires_python = ">=3.8"
+summary = "Pytest support for asyncio"
+groups = ["test"]
+dependencies = [
+    "pytest<9,>=7.0.0",
+]
+files = [
+    {file = "pytest_asyncio-0.23.7-py3-none-any.whl", hash = "sha256:009b48127fbe44518a547bddd25611551b0e43ccdbf1e67d12479f569832c20b"},
+    {file = "pytest_asyncio-0.23.7.tar.gz", hash = "sha256:5f5c72948f4c49e7db4f29f2521d4031f1c27f86e57b046126654083d4770268"},
+]
+
+[[package]]
 name = "pytest-django"
 version = "4.8.0"
 requires_python = ">=3.8"
@@ -2388,13 +2402,13 @@ files = [
 
 [[package]]
 name = "setuptools"
-version = "70.0.0"
+version = "70.1.0"
 requires_python = ">=3.8"
 summary = "Easily download, build, install, upgrade, and uninstall Python packages"
 groups = ["default"]
 files = [
-    {file = "setuptools-70.0.0-py3-none-any.whl", hash = "sha256:54faa7f2e8d2d11bcd2c07bed282eef1046b5c080d1c32add737d7b5817b1ad4"},
-    {file = "setuptools-70.0.0.tar.gz", hash = "sha256:f211a66637b8fa059bb28183da127d4e86396c991a942b028c6650d4319c3fd0"},
+    {file = "setuptools-70.1.0-py3-none-any.whl", hash = "sha256:d9b8b771455a97c8a9f3ab3448ebe0b29b5e105f1228bba41028be116985a267"},
+    {file = "setuptools-70.1.0.tar.gz", hash = "sha256:01a1e793faa5bd89abc851fa15d0a0db26f160890c7102cd8dce643e886b47f5"},
 ]
 
 [[package]]
@@ -2727,13 +2741,13 @@ files = [
 
 [[package]]
 name = "urllib3"
-version = "2.2.1"
+version = "2.2.2"
 requires_python = ">=3.8"
 summary = "HTTP library with thread-safe connection pooling, file post, and more."
 groups = ["default", "type_check"]
 files = [
-    {file = "urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d"},
-    {file = "urllib3-2.2.1.tar.gz", hash = "sha256:d0570876c61ab9e520d776c38acbbb5b05a776d3f9ff98a5c8fd5162a444cf19"},
+    {file = "urllib3-2.2.2-py3-none-any.whl", hash = "sha256:a448b2f64d686155468037e1ace9f2d2199776e17f0a46610480d311f73e3472"},
+    {file = "urllib3-2.2.2.tar.gz", hash = "sha256:dd505485549a7a552833da5e6063639d0d177c04f23bc3864e41e5dc5f612168"},
 ]
 
 [[package]]
