@@ -5,10 +5,6 @@ from unittest.mock import patch
 import bittensor
 import pytest
 import websockets
-from compute_horde.mv_protocol.miner_requests import (
-    V0ExecutorReadyRequest,
-    V0JobFinishedRequest,
-)
 
 from compute_horde_validator.validator.facilitator_client import (
     AuthenticationRequest,
@@ -17,27 +13,14 @@ from compute_horde_validator.validator.facilitator_client import (
 )
 from compute_horde_validator.validator.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.models import OrganicJob
-from compute_horde_validator.validator.synthetic_jobs.utils import JobState
 
-from . import mock_keypair
-from .test_miner_driver import MockMinerClient, get_dummy_job_request
-from .test_set_scores import MockMetagraph, MockSubtensor
-
-
-class MockJobStateMinerClient(MockMinerClient):
-    def get_job_state(self, job_uuid):
-        job_state = JobState()
-        job_state.miner_ready_or_declining_future.set_result(
-            V0ExecutorReadyRequest(job_uuid=job_uuid)
-        )
-        job_state.miner_finished_or_failed_future.set_result(
-            V0JobFinishedRequest(
-                job_uuid=job_uuid,
-                docker_process_stdout="",
-                docker_process_stderr="",
-            )
-        )
-        return job_state
+from .conftest import (
+    MockJobStateMinerClient,
+    MockMetagraph,
+    MockSubtensor,
+    get_dummy_job_request,
+    mock_keypair,
+)
 
 
 class MockFacilitatorClient(FacilitatorClient):

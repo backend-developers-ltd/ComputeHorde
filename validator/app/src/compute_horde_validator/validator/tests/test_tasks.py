@@ -10,8 +10,7 @@ from compute_horde_validator.validator.tasks import (
     trigger_run_admin_job_request,
 )
 
-from . import mock_get_miner_axon_info, mock_keypair, throw_error
-from .test_miner_driver import MockMinerClient
+from .conftest import MockMinerClient, mock_get_miner_axon_info, mock_keypair, throw_error
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)

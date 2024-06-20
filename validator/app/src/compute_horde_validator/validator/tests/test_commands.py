@@ -8,10 +8,14 @@ from django.core import management
 
 from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob, SystemEvent
 
-from . import mock_get_miner_axon_info, mock_keypair, throw_error
+from .conftest import (
+    MockMinerClient,
+    check_system_events,
+    mock_get_miner_axon_info,
+    mock_keypair,
+    throw_error,
+)
 from .test_facilitator_client import MockJobStateMinerClient
-from .test_miner_driver import MockMinerClient
-from .test_set_scores import check_system_events
 
 logger = logging.getLogger(__name__)
 

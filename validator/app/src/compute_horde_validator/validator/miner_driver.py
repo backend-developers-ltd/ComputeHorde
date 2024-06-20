@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from functools import partial
 from typing import Literal
 
 from compute_horde.miner_client.base import MinerConnectionError
@@ -52,6 +53,17 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
     metadata: JobStatusMetadata | None = None
 
 
+async def save_job_execution_event(subtype: str, long_description: str, data={}, success=False):
+    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+        type=SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS
+        if success
+        else SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
+    )
+
+
 async def run_miner_job(
     miner_client,
     job,
@@ -60,15 +72,10 @@ async def run_miner_job(
     wait_timeout: int = 300,
     notify_callback=None,
 ):
-    async def save_job_execution_event(subtype: str, long_description: str, success=False):
-        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-            type=SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS
-            if success
-            else SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
-            subtype=subtype,
-            long_description=long_description,
-            data={"miner_hotkey": miner_client.my_hotkey, "job_uuid": str(job.job_uuid)},
-        )
+    save_event = partial(
+        save_job_execution_event,
+        data={"miner_hotkey": miner_client.my_hotkey, "job_uuid": str(job.job_uuid)},
+    )
 
     job_state = miner_client.get_job_state(job.job_uuid)
     async with contextlib.AsyncExitStack() as exit_stack:
@@ -76,7 +83,7 @@ async def run_miner_job(
             await exit_stack.enter_async_context(miner_client)
         except MinerConnectionError as exc:
             comment = f"Miner connection error: {exc}"
-            await save_job_execution_event(
+            await save_event(
                 subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR, long_description=comment
             )
             logger.warning(comment)
@@ -115,7 +122,7 @@ async def run_miner_job(
             )
         except TimeoutError:
             comment = f"Miner {miner_client.miner_name} timed out out while preparing executor for job {job.job_uuid} after {wait_timeout} seconds"
-            await save_job_execution_event(
+            await save_event(
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 long_description=comment,
             )
@@ -196,7 +203,7 @@ async def run_miner_job(
         except TimeoutError:
             comment = f"Miner {miner_client.miner_name} timed out after {total_job_timeout} seconds"
             logger.warning(comment)
-            await save_job_execution_event(
+            await save_event(
                 subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=comment
             )
             if notify_callback:
@@ -215,9 +222,7 @@ async def run_miner_job(
             return
         if isinstance(msg, V0JobFailedRequest):
             comment = f"Miner {miner_client.miner_name} failed: {msg}"
-            await save_job_execution_event(
-                subtype=SystemEvent.EventSubType.FAILURE, long_description=comment
-            )
+            await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
             logger.info(comment)
             if notify_callback:
                 await notify_callback(
@@ -243,7 +248,7 @@ async def run_miner_job(
             return
         elif isinstance(msg, V0JobFinishedRequest):
             comment = f"Miner {miner_client.miner_name} finished: {msg}"
-            await save_job_execution_event(
+            await save_event(
                 subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
             )
             logger.info(comment)
@@ -271,7 +276,5 @@ async def run_miner_job(
             return
         else:
             comment = f"Unexpected msg: {msg}"
-            await save_job_execution_event(
-                subtype=SystemEvent.EventSubType.FAILURE, long_description=comment
-            )
+            await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
             raise ValueError(comment)

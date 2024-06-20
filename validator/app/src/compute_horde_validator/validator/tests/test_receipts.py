@@ -9,7 +9,7 @@ from django.utils.timezone import now
 from compute_horde_validator.validator.models import JobReceipt
 from compute_horde_validator.validator.tasks import fetch_receipts
 
-from . import MockedAxonInfo
+from .conftest import MockedAxonInfo
 
 
 class MockedNeuron(NamedTuple):

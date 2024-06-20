@@ -2,7 +2,6 @@ import asyncio
 import uuid
 from unittest.mock import patch
 
-import numpy as np
 import pytest
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -17,54 +16,13 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.tasks import set_scores
 
-from . import MockWallet, throw_error
-
-NUM_NEURONS = 5
-
-
-class MockSubtensor:
-    def __init__(
-        self,
-        *args,
-        mocked_set_weights=lambda: (True, ""),
-        mocked_metagraph=lambda: MockMetagraph(),
-    ):
-        self.mocked_set_weights = mocked_set_weights
-        self.mocked_metagraph = mocked_metagraph
-
-    def min_allowed_weights(self, netuid):
-        return 0
-
-    def max_weight_limit(self, netuid):
-        return 99999
-
-    def get_subnet_hyperparameters(self, *args):
-        return None
-
-    def metagraph(self, netuid):
-        return self.mocked_metagraph()
-
-    def set_weights(
-        self, wallet, netuid, uids, weights, version_key, wait_for_inclusion, wait_for_finalization
-    ) -> tuple[bool, str]:
-        return self.mocked_set_weights()
-
-
-class MockNeuron:
-    def __init__(self, hotkey, uid):
-        self.hotkey = hotkey
-        self.uid = uid
-
-
-class MockMetagraph:
-    def __init__(self, netuid=1, num_neurons=NUM_NEURONS):
-        self.n = num_neurons
-        self.netuid = netuid
-        self.num_neurons = num_neurons
-        self.W = np.ones((num_neurons, num_neurons))
-        self.hotkeys = [f"hotkey_{i}" for i in range(num_neurons)]
-        self.uids = np.array(list(range(num_neurons)))
-        self.neurons = [MockNeuron(f"hotkey_{i}", i) for i in range(NUM_NEURONS)]
+from .conftest import (
+    NUM_NEURONS,
+    MockSubtensor,
+    MockWallet,
+    check_system_events,
+    throw_error,
+)
 
 
 def setup_db():
@@ -87,20 +45,6 @@ def setup_db():
             miner_port=9999,
             status=OrganicJob.Status.COMPLETED,
         )
-
-
-def check_system_events(
-    type: SystemEvent.EventType, subtype: SystemEvent.EventSubType, count: int = 1
-):
-    assert (
-        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
-        .filter(
-            type=type,
-            subtype=subtype,
-        )
-        .count()
-        == count
-    )
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())

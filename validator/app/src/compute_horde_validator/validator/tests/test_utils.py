@@ -23,8 +23,8 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient, execute_job
 
+from .conftest import check_system_events
 from .test_miner_driver import MockMinerClient, get_miner_client
-from .test_set_scores import check_system_events
 
 
 class MockSyntheticJobGenerator(AbstractSyntheticJobGenerator):
