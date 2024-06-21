@@ -41,9 +41,9 @@ from compute_horde_validator.validator.models import JobBase, Miner, SyntheticJo
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
-JOB_LENGTH = 300
+JOB_LENGTH = 3600
 TIMEOUT_LEEWAY = 1
-TIMEOUT_MARGIN = 60
+TIMEOUT_MARGIN = 3600
 TIMEOUT_BARRIER = JOB_LENGTH - 65
 
 
@@ -315,20 +315,20 @@ async def _execute_job(
     # generate before locking on barrier
     volume_contents = await job_generator.volume_contents()
 
-    await client.send_model(
-        V0JobRequest(
-            job_uuid=str(job.job_uuid),
-            docker_image_name=job_generator.docker_image_name(),
-            docker_run_options_preset=job_generator.docker_run_options_preset(),
-            docker_run_cmd=job_generator.docker_run_cmd(),
-            raw_script=job_generator.raw_script(),
-            volume={
-                "volume_type": VolumeType.inline.value,
-                "contents": volume_contents,
-            },
-            output_upload=None,
-        )
+    request = V0JobRequest(
+        job_uuid=str(job.job_uuid),
+        docker_image_name=job_generator.docker_image_name(),
+        docker_run_options_preset=job_generator.docker_run_options_preset(),
+        docker_run_cmd=job_generator.docker_run_cmd(),
+        raw_script=job_generator.raw_script(),
+        volume={
+            "volume_type": VolumeType.inline.value,
+            "contents": volume_contents,
+        },
+        output_upload=None,
     )
+    logger.debug(f"Miner {client.miner_name} REQUEST: {request}")
+    await client.send_model(request)
     full_job_sent = time.time()
     msg = None
     try:

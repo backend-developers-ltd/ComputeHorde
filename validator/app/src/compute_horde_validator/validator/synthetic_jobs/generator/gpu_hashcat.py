@@ -70,26 +70,34 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return hash_job, hash_job.answer
 
     def timeout_seconds(self) -> int:
-        return self.hash_job.timeout_seconds
+        return 240
 
     def base_docker_image_name(self) -> str:
-        return f"backenddevelopersltd/compute-horde-job:v{self.weights_version}-latest"
+        return "ubuntu"
 
     def docker_image_name(self) -> str:
-        return f"backenddevelopersltd/compute-horde-job:v{self.weights_version}-latest"
+        return "ubuntu"
 
     def docker_run_options_preset(self) -> str:
         return "nvidia_all"
 
     def docker_run_cmd(self) -> list[str]:
-        return self.hash_job.docker_run_cmd()
+        return [
+            "bash",
+            "-c",
+            r"date -u +%s"
+            " && "
+            "cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1"
+            " && "
+            "nvidia-smi --query-gpu=name,memory.total,compute_cap,driver_version,vbios_version,inforom.img,index,count,pci.bus_id,serial,uuid --format=csv"
+        ]
 
     def raw_script(self) -> str | None:
-        return self.hash_job.raw_script()
+        return None
 
     @sync_to_async(thread_sensitive=False)
     def volume_contents(self) -> str:
-        return single_file_zip("payload.txt", self.hash_job.payload)
+        return single_file_zip("empty.txt", "empty")
 
     def score(self, time_took: float) -> float:
         if self.weights_version == 0:
@@ -100,6 +108,7 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
             raise RuntimeError(f"No score function for weights_version: {self.weights_version}")
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
+        return True, "", 0.0
         if str(msg.docker_process_stdout).strip() != str(self.expected_answer):
             return (
                 False,
@@ -110,4 +119,4 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return True, "", self.score(time_took)
 
     def job_description(self) -> str:
-        return f"Hashcat {self.hash_job}"
+        return f"GPU Profile {self.hash_job}"
