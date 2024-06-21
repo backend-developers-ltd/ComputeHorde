@@ -9,7 +9,7 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 
 from compute_horde_validator.validator.facilitator_client import OrganicJob
-from compute_horde_validator.validator.miner_driver import run_miner_job
+from compute_horde_validator.validator.miner_driver import execute_organic_job
 from compute_horde_validator.validator.models import Miner
 
 from .conftest import MockMinerClient, get_dummy_job_request, get_miner_client
@@ -70,7 +70,7 @@ async def test_miner_driver(futures_result, expected_job_status_updates, organic
     async def track_job_status_updates(x):
         job_status_updates.append(x)
 
-    await run_miner_job(
+    await execute_organic_job(
         miner_client,
         job,
         job_request,

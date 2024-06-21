@@ -15,7 +15,7 @@ from compute_horde_validator.validator.metagraph_client import (
     create_metagraph_refresh_task,
     get_miner_axon_info,
 )
-from compute_horde_validator.validator.miner_driver import run_miner_job
+from compute_horde_validator.validator.miner_driver import execute_organic_job
 from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
 from compute_horde_validator.validator.utils import (
@@ -292,7 +292,7 @@ class FacilitatorClient:
             job_uuid=job_request.uuid,
             keypair=self.keypair,
         )
-        await run_miner_job(
+        await execute_organic_job(
             miner_client,
             job,
             job_request,

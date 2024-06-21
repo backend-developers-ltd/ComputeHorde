@@ -64,7 +64,7 @@ async def save_job_execution_event(subtype: str, long_description: str, data={},
     )
 
 
-async def run_miner_job(
+async def execute_organic_job(
     miner_client,
     job,
     job_request,

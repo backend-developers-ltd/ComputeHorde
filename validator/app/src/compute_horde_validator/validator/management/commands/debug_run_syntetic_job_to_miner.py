@@ -10,7 +10,7 @@ from compute_horde_validator.validator.models import Miner, SyntheticJob, Synthe
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     JOB_LENGTH,
     MinerClient,
-    execute_jobs,
+    execute_synthetic_jobs,
 )
 
 
@@ -58,4 +58,4 @@ async def _execute_jobs(client, synthetic_jobs: Iterable[SyntheticJob]):
     async with client:
         for job in synthetic_jobs:
             client.add_job(str(job.job_uuid))
-        await execute_jobs(client, synthetic_jobs)
+        await execute_synthetic_jobs(client, synthetic_jobs)

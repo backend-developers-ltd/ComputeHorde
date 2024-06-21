@@ -283,7 +283,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
         for job in jobs:
             client.add_job(str(job.job_uuid))
         try:
-            await execute_jobs(client, jobs)
+            await execute_synthetic_jobs(client, jobs)
         except Exception as e:
             msg = f"Failed to execute jobs for miner {miner_hotkey}: {e}"
             logger.warning(msg)
@@ -292,7 +292,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
             )
 
 
-async def _execute_job(
+async def _execute_synthetic_job(
     client, job: JobBase
 ) -> tuple[
     float | None,
@@ -456,19 +456,21 @@ async def _execute_job(
         raise ValueError(f"Unexpected msg: {msg}")
 
 
-async def execute_job(client, synthetic_job_id):
+async def execute_synthetic_job(client, synthetic_job_id):
     synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related("miner").aget(
         id=synthetic_job_id
     )
-    score, msg = await _execute_job(client, synthetic_job)
+    score, msg = await _execute_synthetic_job(client, synthetic_job)
     if score is not None:
         synthetic_job.score = score
         await synthetic_job.asave()
 
 
-async def execute_jobs(client, synthetic_jobs: Iterable[SyntheticJob]):
+async def execute_synthetic_jobs(client, synthetic_jobs: Iterable[SyntheticJob]):
     tasks = [
-        asyncio.create_task(asyncio.wait_for(execute_job(client, synthetic_job.id), JOB_LENGTH))
+        asyncio.create_task(
+            asyncio.wait_for(execute_synthetic_job(client, synthetic_job.id), JOB_LENGTH)
+        )
         for synthetic_job in synthetic_jobs
     ]
     await asyncio.gather(*tasks, return_exceptions=True)
