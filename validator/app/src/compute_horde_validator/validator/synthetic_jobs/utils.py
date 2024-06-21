@@ -299,7 +299,7 @@ async def _execute_job(
         )
 
     if isinstance(msg, V0DeclineJobRequest | V0ExecutorFailedRequest) or msg is None:
-        logger.info(f"Miner {client.miner_name} won't do job: {msg}")
+        logger.info(f"Miner {client.miner_name} won't do job: {msg} [{job.job_description}]")
         job.status = JobBase.Status.FAILED
         if msg is not None:
             job.comment = f"Miner didn't accept the job saying: {msg.model_dump_json()}"
@@ -308,7 +308,7 @@ async def _execute_job(
         await job.asave()
         return None, msg
     elif isinstance(msg, V0ExecutorReadyRequest):
-        logger.debug(f"Miner {client.miner_name} ready for job: {msg}")
+        logger.debug(f"Miner {client.miner_name} ready for job: {msg} [{job.job_description}]")
     else:
         raise ValueError(f"Unexpected msg: {msg}")
 
@@ -383,7 +383,7 @@ async def _execute_job(
             )
 
         if success:
-            logger.info(f"Miner {client.miner_name} finished: {msg}")
+            logger.info(f"Miner {client.miner_name} finished: {time_took=} {score=} {msg}")
             job.status = JobBase.Status.COMPLETED
             job.comment = f"Miner finished: {msg.model_dump_json()}"
             await job.asave()
