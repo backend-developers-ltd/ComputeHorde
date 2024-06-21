@@ -6,7 +6,6 @@ from urllib.parse import urlparse
 import pydantic
 from pydantic import Field
 
-
 SAFE_DOMAIN_REGEX = re.compile(r".*")
 
 
@@ -55,7 +54,11 @@ class SingleFileVolume(pydantic.BaseModel):
 
 class MultiVolume(pydantic.BaseModel):
     volume_type: Literal[VolumeType.multi_volume] = VolumeType.multi_volume
-    volumes: list[Annotated[InlineVolume | ZipUrlVolume | SingleFileVolume, Field(discriminator='volume_type')]]
+    volumes: list[
+        Annotated[
+            InlineVolume | ZipUrlVolume | SingleFileVolume, Field(discriminator="volume_type")
+        ]
+    ]
 
     def is_safe(self) -> bool:
         return all(volume.is_safe() for volume in self.volumes)
@@ -63,7 +66,5 @@ class MultiVolume(pydantic.BaseModel):
 
 Volume = Annotated[
     InlineVolume | ZipUrlVolume | SingleFileVolume | MultiVolume,
-    Field(discriminator='volume_type'),
+    Field(discriminator="volume_type"),
 ]
-
-

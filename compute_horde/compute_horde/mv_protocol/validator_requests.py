@@ -52,7 +52,7 @@ class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     executor_class: str | None = None
     base_docker_image_name: str | None = None
     timeout_seconds: int | None = None
-    volume_type: VolumeType
+    volume_type: VolumeType | None = None
 
 
 class V0JobRequest(BaseValidatorRequest, JobMixin):
@@ -62,7 +62,7 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
     raw_script: str | None = None
     docker_run_options_preset: str
     docker_run_cmd: list[str]
-    volume: Volume
+    volume: Volume | None = None
     output_upload: OutputUpload | None = None
 
     @model_validator(mode="after")

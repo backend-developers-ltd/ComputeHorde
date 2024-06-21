@@ -22,7 +22,7 @@ from compute_horde.mv_protocol.validator_requests import (
 from django.conf import settings
 from pydantic import BaseModel
 
-from compute_horde_validator.validator.models import JobBase, OrganicJob, SystemEvent
+from compute_horde_validator.validator.models import AdminJobRequest, JobBase, OrganicJob, SystemEvent
 from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_volume
 
 logger = logging.getLogger(__name__)
@@ -113,10 +113,15 @@ async def execute_organic_job(
 
         job_timer = Timer(timeout=total_job_timeout)
 
-        if job_request.input_url:
-            volume = ZipUrlVolume(contents=str(job_request.input_url))
+        if isinstance(job_request, V0FacilitatorJobRequest | AdminJobRequest):
+            if job_request.input_url:
+                volume = ZipUrlVolume(contents=str(job_request.input_url))
+            else:
+                # TODO: after release it can be changed to None - with this line new protocol
+                #       can be released in any order
+                volume = InlineVolume(contents=get_dummy_inline_zip_volume())
         else:
-            volume = InlineVolume(contents=get_dummy_inline_zip_volume())
+            volume = job_request.volume
 
         await miner_client.send_model(
             V0InitialJobRequest(
@@ -124,7 +129,7 @@ async def execute_organic_job(
                 executor_class=job_request.executor_class,
                 base_docker_image_name=job_request.docker_image or None,
                 timeout_seconds=total_job_timeout,
-                volume_type=volume.volume_type.value,
+                volume_type=volume.volume_type.value if volume else None,
             )
         )
 
@@ -169,12 +174,15 @@ async def execute_organic_job(
 
         docker_run_options_preset = "nvidia_all" if job_request.use_gpu else "none"
 
-        if job_request.output_url:
-            output_upload = ZipAndHttpPutUpload(
-                url=str(job_request.output_url),
-            )
+        if isinstance(job_request, V0FacilitatorJobRequest | AdminJobRequest):
+            if job_request.output_url:
+                output_upload = ZipAndHttpPutUpload(
+                    url=str(job_request.output_url),
+                )
+            else:
+                output_upload = None
         else:
-            output_upload = None
+            output_upload = job_request.output_upload
 
         await miner_client.send_model(
             V0JobRequest(

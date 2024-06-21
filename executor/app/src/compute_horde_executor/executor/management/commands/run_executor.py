@@ -533,16 +533,19 @@ class JobRunner:
             elif path.is_dir():
                 shutil.rmtree(path)
 
-        if isinstance(job_request.volume, InlineVolume):
-            await self._unpack_inline_volume(job_request.volume)
-        elif isinstance(job_request.volume, ZipUrlVolume):
-            await self._unpack_zip_url_volume(job_request.volume)
-        elif isinstance(job_request.volume, SingleFileVolume):
-            await self._unpack_single_file_volume(job_request.volume)
-        elif isinstance(job_request.volume, MultiVolume):
-            await self._unpack_multi_volume(job_request.volume)
-        else:
-            raise NotImplementedError(f"Unsupported volume_type: {job_request.volume.volume_type}")
+        if job_request.volume is not None:
+            if isinstance(job_request.volume, InlineVolume):
+                await self._unpack_inline_volume(job_request.volume)
+            elif isinstance(job_request.volume, ZipUrlVolume):
+                await self._unpack_zip_url_volume(job_request.volume)
+            elif isinstance(job_request.volume, SingleFileVolume):
+                await self._unpack_single_file_volume(job_request.volume)
+            elif isinstance(job_request.volume, MultiVolume):
+                await self._unpack_multi_volume(job_request.volume)
+            else:
+                raise NotImplementedError(
+                    f"Unsupported volume_type: {job_request.volume.volume_type}"
+                )
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()

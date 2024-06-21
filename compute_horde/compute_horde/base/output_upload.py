@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 import pydantic
 from pydantic import Field
 
-
 SAFE_DOMAIN_REGEX = re.compile(r".*")
 
 
@@ -23,20 +22,26 @@ class OutputUploadType(str, enum.Enum):
 
 
 class ZipAndHttpPostUpload(pydantic.BaseModel):
-    output_upload_type: Literal[OutputUploadType.zip_and_http_post] = OutputUploadType.zip_and_http_post
+    output_upload_type: Literal[OutputUploadType.zip_and_http_post] = (
+        OutputUploadType.zip_and_http_post
+    )
     url: str
     form_fields: Mapping[str, str] | None = None
 
 
 class ZipAndHttpPutUpload(pydantic.BaseModel):
-    output_upload_type: Literal[OutputUploadType.zip_and_http_put] = OutputUploadType.zip_and_http_put
+    output_upload_type: Literal[OutputUploadType.zip_and_http_put] = (
+        OutputUploadType.zip_and_http_put
+    )
     url: str
     # TODO: PUT implementation does not support it - find out why and clean up
     # form_fields: Mapping[str, str] | None = None
 
 
 class SingleFilePostUpload(pydantic.BaseModel):
-    output_upload_type: Literal[OutputUploadType.single_file_post] = OutputUploadType.single_file_post
+    output_upload_type: Literal[OutputUploadType.single_file_post] = (
+        OutputUploadType.single_file_post
+    )
     url: str
     form_fields: Mapping[str, str] | None = None
     relative_path: str
@@ -64,7 +69,7 @@ class SingleFilePutUpload(pydantic.BaseModel):
 
 SingleFileUpload = Annotated[
     SingleFilePostUpload | SingleFilePutUpload,
-    Field(discriminator='output_upload_type'),
+    Field(discriminator="output_upload_type"),
 ]
 
 
@@ -77,5 +82,5 @@ class MultiUpload(pydantic.BaseModel):
 
 OutputUpload = Annotated[
     ZipAndHttpPostUpload | ZipAndHttpPutUpload | MultiUpload,
-    Field(discriminator='output_upload_type'),
+    Field(discriminator="output_upload_type"),
 ]

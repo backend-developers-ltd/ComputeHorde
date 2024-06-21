@@ -10,7 +10,10 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from django.conf import settings
 
-from compute_horde_validator.validator.facilitator_client import JobRequest
+from compute_horde_validator.validator.facilitator_api import (
+    V0FacilitatorJobRequest,
+    V1FacilitatorJobRequest,
+)
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.utils import JobState, MinerClient
 
@@ -101,8 +104,8 @@ class MockJobStateMinerClient(MockMinerClient):
         return job_state
 
 
-def get_dummy_job_request(uuid: str) -> JobRequest:
-    return JobRequest(
+def get_dummy_job_request_v0(uuid: str) -> V0FacilitatorJobRequest:
+    return V0FacilitatorJobRequest(
         type="job.new",
         uuid=uuid,
         miner_hotkey="miner_hotkey",
@@ -115,6 +118,55 @@ def get_dummy_job_request(uuid: str) -> JobRequest:
         input_url="fake.com/input",
         output_url="fake.com/output",
     )
+
+
+def get_dummy_job_request_v1(uuid: str) -> V1FacilitatorJobRequest:
+    return V1FacilitatorJobRequest(
+        type="job.new",
+        uuid=uuid,
+        miner_hotkey="miner_hotkey",
+        docker_image="nvidia",
+        raw_script="print('hello world')",
+        args=[],
+        env={},
+        use_gpu=False,
+        volume={
+            "volume_type": "multi_volume",
+            "volumes": [
+                {
+                    "volume_type": "single_file",
+                    "url": "fake.com/input.txt",
+                    "relative_path": "input.txt",
+                },
+                {
+                    "volume_type": "zip_url",
+                    "contents": "fake.com/input.zip",
+                    "relative_path": "zip/",
+                },
+            ],
+        },
+        output_upload={
+            "output_upload_type": "multi_upload",
+            "uploads": [
+                {
+                    "output_upload_type": "single_file_post",
+                    "url": "http://s3.bucket.com/output1.txt",
+                    "relative_path": "output1.txt",
+                },
+                {
+                    "output_upload_type": "single_file_put",
+                    "url": "http://s3.bucket.com/output2.zip",
+                    "relative_path": "zip/output2.zip",
+                },
+            ],
+            "system_output": {
+                "output_upload_type": "zip_and_http_put",
+                "url": "http://r2.bucket.com/output.zip",
+            },
+        },
+    )
+
+
 
 
 class MockSubtensor:
