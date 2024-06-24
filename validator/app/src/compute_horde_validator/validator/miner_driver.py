@@ -24,7 +24,7 @@ from compute_horde.mv_protocol.validator_requests import (
 from django.conf import settings
 from pydantic import BaseModel
 
-from compute_horde_validator.validator.models import OrganicJob, SystemEvent
+from compute_horde_validator.validator.models import JobBase, OrganicJob, SystemEvent
 from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_volume
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 class MinerResponse(BaseModel, extra="allow"):
     job_uuid: str
-    message_type: str
+    message_type: None | str
     docker_process_stderr: str
     docker_process_stdout: str
 
@@ -51,6 +51,24 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
     uuid: str
     status: Literal["failed", "rejected", "accepted", "completed"]
     metadata: JobStatusMetadata | None = None
+
+    @staticmethod
+    def from_job(job: JobBase, status, message_type=None) -> "JobStatusUpdate":
+        job_status = JobStatusUpdate(
+            uuid=str(job.job_uuid),
+            status=status,
+            metadata=JobStatusMetadata(
+                comment=job.comment,
+            ),
+        )
+        if isinstance(job, OrganicJob):
+            job_status.metadata.miner_response = MinerResponse(
+                job_uuid=str(job.job_uuid),
+                message_type=message_type,
+                docker_process_stdout=job.stdout,
+                docker_process_stderr=job.stderr,
+            )
+        return job_status
 
 
 async def save_job_execution_event(subtype: str, long_description: str, data={}, success=False):
@@ -83,21 +101,14 @@ async def execute_organic_job(
             await exit_stack.enter_async_context(miner_client)
         except MinerConnectionError as exc:
             comment = f"Miner connection error: {exc}"
+            await job.update_state(OrganicJob.Status.FAILED, comment)
+            logger.warning(comment)
+
             await save_event(
                 subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR, long_description=comment
             )
-            logger.warning(comment)
             if notify_callback:
-                await notify_callback(
-                    JobStatusUpdate(
-                        uuid=job.job_uuid,
-                        status="failed",
-                        metadata=JobStatusMetadata(comment=comment),
-                    )
-                )
-            job.status = OrganicJob.Status.FAILED
-            job.comment = comment
-            await job.asave()
+                await notify_callback(JobStatusUpdate.from_job(job, status="failed"))
             return
 
         job_timer = Timer(timeout=total_job_timeout)
@@ -121,55 +132,34 @@ async def execute_organic_job(
                 timeout=min(job_timer.time_left(), wait_timeout),
             )
         except TimeoutError:
-            comment = f"Miner {miner_client.miner_name} timed out out while preparing executor for job {job.job_uuid} after {wait_timeout} seconds"
+            comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid} after {wait_timeout} seconds"
+            await job.update_state(OrganicJob.Status.FAILED, comment)
+            logger.warning(comment)
+
             await save_event(
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 long_description=comment,
             )
-            logger.warning(comment)
             if notify_callback:
-                await notify_callback(
-                    JobStatusUpdate(
-                        uuid=job.job_uuid,
-                        status="failed",
-                        metadata=JobStatusMetadata(
-                            comment=f"Miner timed out while preparing executor after {wait_timeout} seconds",
-                        ),
-                    )
-                )
-            job.status = OrganicJob.Status.FAILED
-            job.comment = "Miner timed out while preparing executor"
-            await job.asave()
+                await notify_callback(JobStatusUpdate.from_job(job, "failed"))
             return
 
         if isinstance(msg, V0DeclineJobRequest | V0ExecutorFailedRequest):
-            logger.info(f"Miner {miner_client.miner_name} won't do job: {msg}")
+            comment = f"Miner {miner_client.miner_name} won't do job: {msg.model_dump_json()}"
+            await job.update_state(OrganicJob.Status.FAILED, comment)
+            logger.info(comment)
+
             if notify_callback:
-                await notify_callback(
-                    JobStatusUpdate(
-                        uuid=job.job_uuid,
-                        status="rejected",
-                        metadata=JobStatusMetadata(
-                            comment=f"Miner didn't accept the job. Miner sent {msg.message_type}"
-                        ),
-                    )
-                )
-            job.status = OrganicJob.Status.FAILED
-            job.comment = f"Miner didn't accept the job saying: {msg.model_dump_json()}"
-            await job.asave()
+                await notify_callback(JobStatusUpdate.from_job(job, "rejected"))
             return
         elif isinstance(msg, V0ExecutorReadyRequest):
             logger.debug(f"Miner {miner_client.miner_name} ready for job: {msg}")
             if notify_callback:
                 await notify_callback(
-                    JobStatusUpdate(
-                        uuid=job.job_uuid,
-                        status="accepted",
-                        metadata=JobStatusMetadata(comment="Miner accepted job"),
-                    )
+                    JobStatusUpdate.from_job(job, "accepted", msg.message_type.value)
                 )
         else:
-            raise ValueError(f"Unexpected msg: {msg}")
+            raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
 
         docker_run_options_preset = "nvidia_all" if job_request.use_gpu else "none"
 
@@ -202,79 +192,45 @@ async def execute_organic_job(
             logger.info(f"Miner took {time_took} seconds to finish {job.job_uuid}")
         except TimeoutError:
             comment = f"Miner {miner_client.miner_name} timed out after {total_job_timeout} seconds"
+            await job.update_state(OrganicJob.Status.FAILED, comment)
             logger.warning(comment)
+
             await save_event(
                 subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=comment
             )
             if notify_callback:
-                await notify_callback(
-                    JobStatusUpdate(
-                        uuid=job.job_uuid,
-                        status="failed",
-                        metadata=JobStatusMetadata(
-                            comment=f"Miner timed out after {total_job_timeout} seconds"
-                        ),
-                    )
-                )
-            job.status = OrganicJob.Status.FAILED
-            job.comment = "Miner timed out"
-            await job.asave()
+                await notify_callback(JobStatusUpdate.from_job(job, "failed"))
             return
         if isinstance(msg, V0JobFailedRequest):
-            comment = f"Miner {miner_client.miner_name} failed: {msg}"
-            await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
-            logger.info(comment)
-            if notify_callback:
-                await notify_callback(
-                    JobStatusUpdate(
-                        uuid=job.job_uuid,
-                        status="failed",
-                        metadata=JobStatusMetadata(
-                            comment="Miner failed",
-                            miner_response=MinerResponse(
-                                job_uuid=msg.job_uuid,
-                                message_type=msg.message_type.value,
-                                docker_process_stderr=msg.docker_process_stderr,
-                                docker_process_stdout=msg.docker_process_stdout,
-                            ),
-                        ),
-                    )
-                )
+            comment = f"Miner {miner_client.miner_name} failed: {msg.model_dump_json()}"
             job.stdout = msg.docker_process_stdout
             job.stderr = msg.docker_process_stderr
-            job.status = OrganicJob.Status.FAILED
-            job.comment = f"Miner failed: {msg.model_dump_json()}"
-            await job.asave()
+            await job.update_state(OrganicJob.Status.FAILED, comment)
+            logger.info(comment)
+
+            await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
+            if notify_callback:
+                await notify_callback(
+                    JobStatusUpdate.from_job(job, "failed", msg.message_type.value)
+                )
             return
         elif isinstance(msg, V0JobFinishedRequest):
-            comment = f"Miner {miner_client.miner_name} finished: {msg}"
+            comment = f"Miner {miner_client.miner_name} finished: {msg.model_dump_json()}"
+            job.stdout = msg.docker_process_stdout
+            job.stderr = msg.docker_process_stderr
+            await job.update_state(OrganicJob.Status.COMPLETED, comment)
+            logger.info(comment)
+
             await save_event(
                 subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
             )
-            logger.info(comment)
             if notify_callback:
                 await notify_callback(
-                    JobStatusUpdate(
-                        uuid=job.job_uuid,
-                        status="completed",
-                        metadata=JobStatusMetadata(
-                            comment="Miner finished",
-                            miner_response=MinerResponse(
-                                job_uuid=msg.job_uuid,
-                                message_type=msg.message_type.value,
-                                docker_process_stderr=msg.docker_process_stderr,
-                                docker_process_stdout=msg.docker_process_stdout,
-                            ),
-                        ),
-                    )
+                    JobStatusUpdate.from_job(job, "completed", msg.message_type.value)
                 )
-            job.stdout = msg.docker_process_stdout
-            job.stderr = msg.docker_process_stderr
-            job.status = OrganicJob.Status.COMPLETED
-            job.comment = f"Miner finished: {msg.model_dump_json()}"
-            await job.asave()
             return
         else:
-            comment = f"Unexpected msg: {msg}"
+            comment = f"Unexpected msg from miner {miner_client.miner_name}: {msg}"
+            logger.warning(comment)
             await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
             raise ValueError(comment)

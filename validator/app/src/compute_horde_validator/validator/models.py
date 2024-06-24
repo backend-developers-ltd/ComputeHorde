@@ -1,9 +1,12 @@
+import logging
 import shlex
 import uuid
 from datetime import timedelta
 
 from django.db import models
 from django.db.models import UniqueConstraint
+
+logger = logging.getLogger(__name__)
 
 
 class SystemEvent(models.Model):
@@ -106,6 +109,11 @@ class JobBase(models.Model):
 
     def __str__(self):
         return f"uuid: {self.job_uuid} - miner hotkey: {self.miner.hotkey} - {self.status}"
+
+    async def update_state(self, status, comment):
+        self.status = status
+        self.comment = comment
+        await self.asave()
 
 
 class SyntheticJob(JobBase):
