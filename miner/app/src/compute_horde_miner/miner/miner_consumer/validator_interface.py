@@ -274,7 +274,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
         if isinstance(msg, validator_requests.V0JobRequest):
             job = self.pending_jobs.get(msg.job_uuid)
-            if not msg.volume.is_safe():
+            if msg.volume and not msg.volume.is_safe():
                 error_msg = f"Received JobRequest with unsafe volume: {msg.volume.contents}"
                 logger.error(error_msg)
                 await self.send(

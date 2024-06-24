@@ -110,7 +110,7 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
 
     async def upload(self, directory: pathlib.Path):
         with zipped_directory(directory) as (file_size, fp):
-            await upload_put(fp, file_size, self.upload_output.url, content_type="application/zip")
+            await upload_put(fp, file_size, self.upload_output.url)
 
 
 class MultiUploadOutputUploader(OutputUploader):
@@ -189,7 +189,6 @@ class MultiUploadOutputUploader(OutputUploader):
                             fp,
                             file_size,
                             self.upload_output.system_output.url,
-                            content_type="application/zip",
                         )
 
                 tasks.append(limiter.wrap_task(_task()))
@@ -216,6 +215,7 @@ async def upload_post(
     form_fields=None,
     headers=None,
 ):
+    fp.seek(0)
     async with httpx.AsyncClient() as client:
         form_fields = {
             "Content-Type": content_type,
@@ -224,7 +224,6 @@ async def upload_post(
         files = {"file": (file_name, fp, content_type)}
         headers = {
             "Content-Length": str(file_size),
-            # "Content-Type": content_type,
             **(headers or {}),
         }
         try:
@@ -242,11 +241,11 @@ async def upload_post(
 
 
 @retry(max_retries=3, exceptions=OutputUploadFailed)
-async def upload_put(fp, file_size, url, content_type="application/octet-stream", headers=None):
+async def upload_put(fp, file_size, url, headers=None):
+    fp.seek(0)
     async with httpx.AsyncClient() as client:
         headers = {
             "Content-Length": str(file_size),
-            "Content-Type": content_type,
             **(headers or {}),
         }
         try:
