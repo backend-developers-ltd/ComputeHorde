@@ -29,6 +29,9 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 from .conftest import check_system_events
 from .test_miner_driver import MockMinerClient, get_miner_client
 
+MOCK_SCORE = 0.8
+NOT_SCORED = 0.0
+
 
 class MockSyntheticJobGenerator(AbstractSyntheticJobGenerator):
     async def ainit(self):
@@ -53,7 +56,7 @@ class MockSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return "mock"
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
-        return True, "mock", 0.0
+        return True, "mock", MOCK_SCORE
 
     def job_description(self) -> str:
         return "mock"
@@ -72,11 +75,12 @@ mock_synthetic_job_generator = MagicMock(name="MockSyntheticJobGenerator")
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
-    "futures_result,expected_job_status,expected_system_event",
+    "futures_result,expected_job_status,expected_score,expected_system_event",
     [
         (
             (None, None),
             SyntheticJob.Status.FAILED,
+            NOT_SCORED,
             (
                 SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 SystemEvent.EventSubType.JOB_NOT_STARTED,
@@ -86,6 +90,7 @@ mock_synthetic_job_generator = MagicMock(name="MockSyntheticJobGenerator")
         (
             (V0DeclineJobRequest, None),
             SyntheticJob.Status.FAILED,
+            NOT_SCORED,
             (
                 SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 SystemEvent.EventSubType.JOB_NOT_STARTED,
@@ -95,6 +100,7 @@ mock_synthetic_job_generator = MagicMock(name="MockSyntheticJobGenerator")
         (
             (V0ExecutorReadyRequest, None),
             SyntheticJob.Status.FAILED,
+            NOT_SCORED,
             (
                 SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
@@ -104,6 +110,7 @@ mock_synthetic_job_generator = MagicMock(name="MockSyntheticJobGenerator")
         (
             (V0ExecutorReadyRequest, V0JobFailedRequest),
             SyntheticJob.Status.FAILED,
+            NOT_SCORED,
             (
                 SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 SystemEvent.EventSubType.FAILURE,
@@ -113,6 +120,7 @@ mock_synthetic_job_generator = MagicMock(name="MockSyntheticJobGenerator")
         (
             (V0ExecutorReadyRequest, V0JobFinishedRequest),
             SyntheticJob.Status.COMPLETED,
+            MOCK_SCORE,
             (
                 SystemEvent.EventType.MINER_SYNTHETIC_JOB_SUCCESS,
                 SystemEvent.EventSubType.SUCCESS,
@@ -121,7 +129,9 @@ mock_synthetic_job_generator = MagicMock(name="MockSyntheticJobGenerator")
         ),
     ],
 )
-async def test_execute_synthetic_job(futures_result, expected_job_status, expected_system_event):
+async def test_execute_synthetic_job(
+    futures_result, expected_job_status, expected_score, expected_system_event
+):
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_client")
 
     batch = await SyntheticJobBatch.objects.acreate(
@@ -155,7 +165,7 @@ async def test_execute_synthetic_job(futures_result, expected_job_status, expect
 
     await execute_synthetic_job(miner_client, job.pk)
     job = await SyntheticJob.objects.aget(pk=job.pk)
-    assert job.score == 0.0
+    assert job.score == expected_score
     assert job.status == expected_job_status
 
     if expected_system_event:

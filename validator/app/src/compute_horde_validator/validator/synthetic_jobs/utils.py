@@ -292,12 +292,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
             )
 
 
-async def _execute_synthetic_job(
-    miner_client, job: JobBase
-) -> tuple[
-    float | None,
-    V0DeclineJobRequest | V0ExecutorFailedRequest | V0JobFailedRequest | V0JobFinishedRequest,
-]:
+async def _execute_synthetic_job(miner_client, job: SyntheticJob):
     save_event = partial(save_job_execution_event, data={"job_uuid": str(job.job_uuid)})
 
     job_state = miner_client.get_job_state(str(job.job_uuid))
@@ -337,7 +332,7 @@ async def _execute_synthetic_job(
             subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
             long_description=job.comment,
         )
-        return None, msg
+        return
     elif isinstance(msg, V0ExecutorReadyRequest):
         logger.debug(f"Miner {miner_client.miner_name} ready for job: {msg}")
     else:
@@ -381,11 +376,13 @@ async def _execute_synthetic_job(
                 subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=comment
             )
             raise TimeoutError
+
         if time_took < 10:
             logger.warning(
                 f"Miner {miner_client.miner_name} finished job too quickly: {time_took} - will default to 10s"
             )
             time_took = 10
+
     except TimeoutError:
         comment = f"Miner {miner_client.miner_name} timed out"
         await job.update_state(SyntheticJob.Status.FAILED, comment)
@@ -393,14 +390,15 @@ async def _execute_synthetic_job(
         await save_event(
             subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=job.comment
         )
-        return None, msg
+        return
 
     if isinstance(msg, V0JobFailedRequest):
         comment = f"Miner {miner_client.miner_name} failed: {msg.model_dump_json()}"
         await job.update_state(SyntheticJob.Status.FAILED, comment)
         logger.info(comment)
         await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
-        return None, msg
+        return
+
     elif isinstance(msg, V0JobFinishedRequest):
         success, comment, score = job_generator.verify(msg, time_took)
 
@@ -428,6 +426,12 @@ async def _execute_synthetic_job(
             await save_event(
                 subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
             )
+
+            # if job passed, save synthetic job score
+            job.score = score
+            await job.asave()
+
+            # Send receipt to miner
             try:
                 receipt_message = miner_client.generate_receipt_message(
                     job, full_job_sent, time_took, score
@@ -438,8 +442,7 @@ async def _execute_synthetic_job(
                 logger.exception(
                     f"Failed to send receipt to miner {miner_client.miner_name} for job {job.job_uuid}"
                 )
-            finally:
-                return score, msg
+
         else:
             comment = f"Miner {miner_client.miner_name} finished but {comment}"
             await job.update_state(SyntheticJob.Status.FAILED, comment)
@@ -448,7 +451,7 @@ async def _execute_synthetic_job(
             await save_job_execution_event(
                 subtype=SystemEvent.EventSubType.FAILURE, long_description=comment
             )
-            return None, msg
+            return
     else:
         raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
 
@@ -457,10 +460,7 @@ async def execute_synthetic_job(miner_client, synthetic_job_id):
     synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related("miner").aget(
         id=synthetic_job_id
     )
-    score, msg = await _execute_synthetic_job(miner_client, synthetic_job)
-    if score is not None:
-        synthetic_job.score = score
-        await synthetic_job.asave()
+    await _execute_synthetic_job(miner_client, synthetic_job)
 
 
 async def execute_synthetic_jobs(miner_client, synthetic_jobs: Iterable[SyntheticJob]):
