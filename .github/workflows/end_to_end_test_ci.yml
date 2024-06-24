@@ -10,7 +10,7 @@ env:
   PYTHON_DEFAULT_VERSION: "3.11"
   BITTENSOR_NETWORK: "ws://3.91.62.249:9946"
   BITTENSOR_NETUID: "1"
-  HOST_WALLET_DIR: "/home/user/.bittensor/wallets"
+  MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-staging"  # TODO: need to build image in this workflow
   MNEMONIC_MINER_COLDKEY: "cousin gate anger oak common vacuum bonus rice buyer smooth evidence coast"
   MNEMONIC_MINER_HOTKEY: "provide lyrics civil afford orange marine letter dash parrot secret eternal decrease"
   MNEMONIC_VALIDATOR_COLDKEY: "chief wood gorilla arm that vault useful aware chair giant coconut plug"
@@ -25,36 +25,31 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set dynamic environment variables
+        run: echo "HOST_WALLET_DIR=$PWD/wallets" >> $GITHUB_ENV
+
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
           cache: "pip"
 
-      - name: Install dependencies
-        run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
-
-      - name: Setup common virtual env
-        # In order not to exhaust disk on GitHub runner, we use one single
-        # virtualenv for all pdm projects: miner, executor, validator.
+      - name: Create wallet files
         run: |
-          pdm config venv.backend venv
-          python -m venv .venv
-          echo "$.venv/bin" >> $GITHUB_PATH
-          echo "VIRTUAL_ENV=${{ github.workspace }}/.venv" >> $GITHUB_ENV
-          echo "PDM_IGNORE_SAVED_PYTHON=1" >> $GITHUB_ENV
+          set -euxo pipefail
+          CONTAINER_NAME=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          docker run \
+            --rm \
+            --detach \
+            --name "$CONTAINER_NAME" \
+            --volume "$HOST_WALLET_DIR:/root/.bittensor/wallets/" \
+            python:3.11-slim \
+            tail -f /dev/null
 
-      - name: Bittensor - Install
-        run: |
-          mkdir .bittensor
-          cd .bittensor
-          python -m venv .venv
-          source .venv/bin/activate
+          # generate the wallet files in "host", so that mounting works
+          cat <<EOF | docker exec --interactive "$CONTAINER_NAME" bash
+          set -euxo pipefail
           pip install bittensor
-
-      - name: Bittensor - Create wallets & register
-        run: |
-          source .venv/bin/activate
           btcli wallet regen_coldkey \
             --wallet.name compute_horde_validator \
             --wallet.hotkey default \
@@ -76,81 +71,191 @@ jobs:
             --mnemonic ${MNEMONIC_MINER_HOTKEY} \
             --no_password --no_prompt
           btcli wallet list
-        working-directory: ./.bittensor
+          EOF
+          docker rm -f "$CONTAINER_NAME"
 
-      - name: Validator - Prepare environment
-        run: ./setup-prod.sh
-        working-directory: ./validator
+      # TODO: run facilitator
+#      - name: Check out repo A
+#        uses: actions/checkout@v3
+#        with:
+#          repository: backend-developers-ltd/ComputeHorde-facilitator
+#          path: facilitator
+#          ssh-key: ${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}
+      # TODO: export $FACILITATOR_URI
 
-      - name: Miner - Prepare environment
-        run: ./setup-prod.sh
-        working-directory: ./miner
+      # TODO: remove the below temporary thing :/
+      - run: echo "FACILITATOR_URI=ws://localhost:8090/ws/v0/" >> $GITHUB_ENV
 
-      - name: Validator - Update .env
+      - name: Build executor image
         run: |
-          sed -i "s|SECRET_KEY=.*|SECRET_KEY=123456|g" .env
-          sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=123456|g" .env
-          sed -i "s|HOST_WALLET_DIR=.*|HOST_WALLET_DIR=${HOST_WALLET_DIR}|g" .env
-          sed -i "s|BITTENSOR_NETWORK=.*|BITTENSOR_NETWORK=${BITTENSOR_NETWORK}|g" .env
-          sed -i "s|BITTENSOR_NETUID=.*|BITTENSOR_NETUID=${BITTENSOR_NETUID}|g" .env
-        working-directory: ./validator
+          cd executor
+          docker build \
+            --build-context compute-horde=../compute_horde \
+            -t backenddevelopersltd/executor-e2e:v0-latest \
+            -f app/envs/prod/Dockerfile \
+            .
 
-      - name: Miner - Update .env
+      - name: Build miner nginx image
         run: |
-          sed -i "s|SECRET_KEY=.*|SECRET_KEY=123456|g" .env
-          sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=123456|g" .env
-          sed -i "s|HOST_WALLET_DIR=.*|HOST_WALLET_DIR=${HOST_WALLET_DIR}|g" .env
-          sed -i "s|BITTENSOR_NETWORK=.*|BITTENSOR_NETWORK=${BITTENSOR_NETWORK}|g" .env
-          sed -i "s|BITTENSOR_NETUID=.*|BITTENSOR_NETUID=${BITTENSOR_NETUID}|g" .env
-        working-directory: ./miner
+          cd miner/envs/runner/nginx
+          docker build -t "backenddevelopersltd/compute-horde-miner-nginx:e2e-latest" .
 
-      - name: Validator - Run dockerized services
-        run: docker compose up -d --wait
-        working-directory: ./validator
+      - name: Run miner
+        run: |
+          set -euxo pipefail
+          
+          # build miner image
+          cd miner
+          docker build \
+            --build-context compute-horde=../compute_horde \
+            -t backenddevelopersltd/miner-e2e:v0-latest \
+            --build-arg MINER_VERSION="$GITHUB_SHA" \
+            -f app/envs/prod/Dockerfile .
+          
+          # build miner-runner image
+          cd envs/runner
+          sed -i.bak '/pull_policy/d' ./data/docker-compose.yml
+          docker build \
+            -t backenddevelopersltd/miner-runner-e2e:v0-latest \
+            --build-arg MINER_RUNNER_VERSION="$GITHUB_SHA" \
+            --build-arg MINER_IMAGE_REPO=miner-e2e \
+            --build-arg MINER_NGINX_IMAGE_REPO="$MINER_NGINX_IMAGE_REPO" \
+            .
 
-      - name: Miner - Run dockerized services
-        run: docker compose up -d --wait
-        working-directory: ./miner
+          # prepare files
+          cat > compose.yaml <<ENDDOCKERCOMPOSE
+          services:
+            miner-runner:
+              image: backenddevelopersltd/miner-runner-e2e:v0-latest
+              volumes:
+                - /var/run/docker.sock:/var/run/docker.sock
+                - ./.env:/root/.env
+          ENDDOCKERCOMPOSE
+          
+          cat > .env <<ENDENV
+          SECRET_KEY=12345
+          POSTGRES_PASSWORD=12345
+          BITTENSOR_NETUID=$BITTENSOR_NETUID
+          BITTENSOR_NETWORK=$BITTENSOR_NETWORK
+          BITTENSOR_WALLET_NAME=compute_horde_miner
+          BITTENSOR_WALLET_HOTKEY_NAME=default
+          HOST_WALLET_DIR=$HOST_WALLET_DIR
+          BITTENSOR_MINER_PORT=8000
+          BITTENSOR_MINER_ADDRESS=auto
+          COMPOSE_PROJECT_NAME=compute_horde_miner
+          PORT_FOR_EXECUTORS=8000
+          ADDRESS_FOR_EXECUTORS=172.17.0.1
+          EXECUTOR_IMAGE=backenddevelopersltd/executor-e2e:v0-latest
+          ENDENV
+          
+          # copy .env to "host", so that mounting works -_-
+          CONTAINER_NAME=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          docker run \
+            --rm \
+            --detach \
+            --name "$CONTAINER_NAME" \
+            --volume "$PWD:/root/pwd" \
+            alpine \
+            tail -f /dev/null
+          docker cp $PWD/.env "$CONTAINER_NAME:/root/pwd/.env"
+          docker rm -f "$CONTAINER_NAME"
+          
+          docker compose up -d
 
-      - name: Validator - Run migrations
-        run: pdm run python manage.py wait_for_database --timeout 120 && pdm run python manage.py migrate
-        working-directory: ./validator/app/src
+      - name: Run validator
+        run: |
+          set -euxo pipefail
+          
+          # build validator image
+          cd validator
+          docker build \
+            --build-context compute-horde=../compute_horde \
+            -t backenddevelopersltd/validator-e2e:v0-latest \
+            --build-arg VALIDATOR_VERSION="$GITHUB_SHA" \
+            -f app/envs/prod/Dockerfile .
+          
+          # build validator-runner image
+          cd envs/runner
+          sed -i.bak '/pull_policy/d' ./data/docker-compose.yml
+          docker build \
+            -t backenddevelopersltd/validator-runner-e2e:v0-latest \
+            --build-arg VALIDATOR_RUNNER_VERSION="${GITHUB_SHA}" \
+            --build-arg VALIDATOR_IMAGE_REPO=validator-e2e \
+            .
 
-      - name: Miner - Run migrations
-        run: pdm run python manage.py wait_for_database --timeout 120 && pdm run python manage.py migrate
-        working-directory: ./miner/app/src
+          # prepare files
+          cat > compose.yaml <<ENDDOCKERCOMPOSE
+          services:
+            validator-runner:
+              image: backenddevelopersltd/validator-runner-e2e:v0-latest
+              volumes:
+                - /var/run/docker.sock:/var/run/docker.sock
+                - ./.env:/root/validator/.env
+          ENDDOCKERCOMPOSE
+          
+          cat > .env <<ENDENV
+          SECRET_KEY=12345
+          POSTGRES_PASSWORD=12345
+          BITTENSOR_NETUID=$BITTENSOR_NETUID
+          BITTENSOR_NETWORK=$BITTENSOR_NETWORK
+          BITTENSOR_WALLET_NAME=compute_horde_miner
+          BITTENSOR_WALLET_HOTKEY_NAME=default
+          HOST_WALLET_DIR=$HOST_WALLET_DIR
+          COMPOSE_PROJECT_NAME=compute_horde_validator
+          FACILITATOR_URI=$FACILITATOR_URI
+          HOST_PROMETHEUS_METRICS_DIR=$PWD/prometheus-metrics
+          ENDENV
+          
+          # copy .env to "host", so that mounting works -_-
+          CONTAINER_NAME=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          docker run \
+            --rm \
+            --detach \
+            --name "$CONTAINER_NAME" \
+            --volume "$PWD:/root/pwd" \
+            alpine \
+            tail -f /dev/null
+          docker cp $PWD/.env "$CONTAINER_NAME:/root/pwd/.env"
+          docker rm -f "$CONTAINER_NAME"
+          
+          docker compose up -d
 
-      - name: Validator - Run server
-        run: pdm run python manage.py runserver & echo $! > server.pid
-        working-directory: ./validator/app/src
+      # wait until facilitator, miner and validator have started
+      - name: Wait for all the services
+        run: |
+          sleep 300
 
-      - name: Miner - Run server
-        run: pdm run python manage.py runserver & echo $! > server.pid
-        working-directory: ./miner/app/src
+      - name: Running containers
+        run: docker ps
 
-      - name: Miner - Fetch validators
-        run: pdm run python manage.py fetch_validators
-        working-directory: ./miner/app/src
+      - name: Stop miner
+        run: docker compose down --remove-orphans --volumes
+        working-directory: miner/envs/runner
 
-      - name: Wait for tests to run
-        run: sleep 300
+      - name: Stop validator
+        run: docker compose down --remove-orphans --volumes
+        working-directory: validator/envs/runner
 
-      - name: Validator - Stop server
-        if: success() || failure()
-        run: kill $(cat server.pid)
-        working-directory: ./validator/app/src
+      # TODO: run the tests
 
-      - name: Miner - Stop server
-        if: success() || failure()
-        run: kill $(cat server.pid)
-        working-directory: ./miner/app/src
+      # TODO: remove everything below
 
-      - name: Validator - Stop dockerized services
-        if: success() || failure()
-        run: docker compose down -v
-        working-directory: ./validator
-
-      - name: Miner - Stop dockerized services
-        if: success() || failure()
-        run: docker compose down -v
-        working-directory: ./miner
+#      - name: Validator - Run migrations
+#        run: pdm run python manage.py wait_for_database --timeout 120 && pdm run python manage.py migrate
+#        working-directory: ./validator/app/src
+#
+#      - name: Miner - Run migrations
+#        run: pdm run python manage.py wait_for_database --timeout 120 && pdm run python manage.py migrate
+#        working-directory: ./miner/app/src
+#
+#      - name: Validator - Run server
+#        run: pdm run python manage.py runserver & echo $! > server.pid
+#        working-directory: ./validator/app/src
+#
+#      - name: Miner - Run server
+#        run: pdm run python manage.py runserver & echo $! > server.pid
+#        working-directory: ./miner/app/src
+#
+#      - name: Miner - Fetch validators
+#        run: pdm run python manage.py fetch_validators
+#        working-directory: ./miner/app/src
