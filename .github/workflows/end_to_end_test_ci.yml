@@ -267,26 +267,8 @@ jobs:
         run: docker compose down --remove-orphans --volumes
         working-directory: facilitator
 
+      # TODO: in miner: fetch validators, announce axon
+
       # TODO: run the tests
 
       # TODO: remove everything below
-
-#      - name: Validator - Run migrations
-#        run: pdm run python manage.py wait_for_database --timeout 120 && pdm run python manage.py migrate
-#        working-directory: ./validator/app/src
-#
-#      - name: Miner - Run migrations
-#        run: pdm run python manage.py wait_for_database --timeout 120 && pdm run python manage.py migrate
-#        working-directory: ./miner/app/src
-#
-#      - name: Validator - Run server
-#        run: pdm run python manage.py runserver & echo $! > server.pid
-#        working-directory: ./validator/app/src
-#
-#      - name: Miner - Run server
-#        run: pdm run python manage.py runserver & echo $! > server.pid
-#        working-directory: ./miner/app/src
-#
-#      - name: Miner - Fetch validators
-#        run: pdm run python manage.py fetch_validators
-#        working-directory: ./miner/app/src
