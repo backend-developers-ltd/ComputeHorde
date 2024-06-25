@@ -87,16 +87,21 @@ jobs:
       - name: Run facilitator
         working-directory: facilitator
         run: |
+          set -euxo pipefail
           ./setup-prod.sh
           sed -i.bak \
+            -e '/SECRET_KEY/d' \
             -e '/BITTENSOR_NETUID/d' \
             -e '/BITTENSOR_NETWORK/d' \
             -e '/POSTGRES_PASSWORD/d' \
+            -e '/DATABASE_URL/d' \
             ./envs/prod/.env
-
+          
+          echo "SECRET_KEY=12345" >> .env
           echo "BITTENSOR_NETUID=$BITTENSOR_NETUID" >> .env
           echo "BITTENSOR_NETWORK=$BITTENSOR_NETWORK" >> .env
           echo "POSTGRES_PASSWORD=12345" >> .env
+          echo "DATABASE_URL=postgres://postgres:12345@db:5432/project" >> .env
 
           docker compose pull db redis
           # docker compose build app
