@@ -16,7 +16,7 @@ from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
-from compute_horde.receipts import ReceiptFetchError, get_miner_receipts
+from compute_horde.receipts import get_miner_receipts
 from compute_horde.utils import get_validators
 from constance import config
 from django.conf import settings
@@ -35,6 +35,7 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
     create_and_run_sythethic_job_batch,
+    save_receipt_event,
 )
 
 from .miner_driver import execute_organic_job
@@ -375,7 +376,7 @@ def set_scores():
                 msg = f"Failed to set weights after {WEIGHT_SETTING_ATTEMPTS} attempts"
                 logger.warning(msg)
                 save_weight_setting_failure(
-                    subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+                    subtype=SystemEvent.EventSubType.GIVING_UP,
                     long_description=msg,
                     data={"try_number": WEIGHT_SETTING_ATTEMPTS},
                 )
@@ -386,8 +387,14 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
     logger.debug(f"Fetching receipts from miner. {hotkey=} {ip} {port=}")
     try:
         receipts = get_miner_receipts(hotkey, ip, port)
-    except ReceiptFetchError:
-        logger.warning(f"Failed to fetch receipts from miner. {hotkey=} {ip} {port=}")
+    except Exception as e:
+        comment = f"Failed to fetch receipts from miner {hotkey} {ip}:{port}: {e}"
+        logger.warning(comment)
+        save_receipt_event(
+            subtype=SystemEvent.EventSubType.RECEIPT_FETCH_ERROR,
+            long_description=comment,
+            data={"miner_hotkey": hotkey, "miner_ip": ip, "miner_port": port},
+        )
         return
 
     latest_job_receipt = (

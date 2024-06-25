@@ -85,7 +85,7 @@ def test_set_scores__set_weight_failure():
     )
     # end of retries system event
     check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GENERIC_ERROR, 1
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 1
     )
 
 
@@ -135,7 +135,7 @@ def test_set_scores__set_weight_exception():
     )
     # end of retries system event
     check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GENERIC_ERROR, 1
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 1
     )
 
 
@@ -158,7 +158,7 @@ def test_set_scores__set_weight_timeout():
     )
     # end of retries system event
     check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GENERIC_ERROR, 1
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 1
     )
 
 
@@ -176,9 +176,12 @@ def test_set_scores__metagraph_fetch_exception():
         SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
         1,
     )
-    # end of retries system event
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GENERIC_ERROR, 1
+    )
+    # did not retry
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 0
     )
 
 
@@ -206,5 +209,5 @@ async def test_set_scores__multiple_starts():
     )
     # end of retries system event
     await sync_to_async(check_system_events)(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GENERIC_ERROR, 1
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 1
     )

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import datetime
 import logging
 import time
@@ -7,10 +8,14 @@ from collections.abc import Iterable
 from functools import lru_cache, partial
 
 import bittensor
-from asgiref.sync import async_to_sync
+from asgiref.sync import async_to_sync, sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.base_requests import BaseRequest
-from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
+from compute_horde.miner_client.base import (
+    AbstractMinerClient,
+    MinerConnectionError,
+    UnsupportedMessageReceived,
+)
 from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.miner_requests import (
     BaseMinerRequest,
@@ -236,6 +241,15 @@ async def save_job_execution_event(subtype: str, long_description: str, data={},
     )
 
 
+def save_receipt_event(subtype: str, long_description: str, data: dict):
+    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        type=SystemEvent.EventType.RECEIPT_FAILURE,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
+    )
+
+
 async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_info):
     loop = asyncio.get_event_loop()
     key = settings.BITTENSOR_WALLET().get_hotkey()
@@ -248,14 +262,26 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
         job_uuid=None,
         keypair=key,
     )
-    async with miner_client:
+    data = {"miner_hotkey": miner_client.miner_hotkey}
+    async with contextlib.AsyncExitStack() as exit_stack:
+        try:
+            await exit_stack.enter_async_context(miner_client)
+        except MinerConnectionError as exc:
+            msg = f"Miner connection error: {exc}"
+            logger.warning(msg)
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR,
+                long_description=msg,
+                data=data,
+            )
+            return
         try:
             manifest = await asyncio.wait_for(miner_client.miner_manifest, 30)
         except TimeoutError:
             msg = f"Cannot send synthetic jobs to miner {miner_hotkey}: manifest future timed out"
             logger.warning(msg)
             await save_job_execution_event(
-                subtype=SystemEvent.EventSubType.FAILURE, long_description=msg
+                subtype=SystemEvent.EventSubType.FAILURE, long_description=msg, data=data
             )
             return
         executor_count = 0
@@ -293,7 +319,8 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
 
 
 async def _execute_synthetic_job(miner_client, job: SyntheticJob):
-    save_event = partial(save_job_execution_event, data={"job_uuid": str(job.job_uuid)})
+    data = {"job_uuid": str(job.job_uuid), "miner_hotkey": job.miner.hotkey}
+    save_event = partial(save_job_execution_event, data=data)
 
     job_state = miner_client.get_job_state(str(job.job_uuid))
     job_generator = current.SyntheticJobGenerator()
@@ -448,9 +475,13 @@ async def _execute_synthetic_job(miner_client, job: SyntheticJob):
                 )
                 await miner_client.send_model(receipt_message)
                 logger.info("Receipt message sent")
-            except Exception:
-                logger.exception(
-                    f"Failed to send receipt to miner {miner_client.miner_name} for job {job.job_uuid}"
+            except Exception as e:
+                comment = f"Failed to send receipt to miner {miner_client.miner_name} for job {job.job_uuid}: {e}"
+                logger.warning(comment)
+                await sync_to_async(save_receipt_event)(
+                    subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
+                    long_description=comment,
+                    data=data,
                 )
 
         else:
