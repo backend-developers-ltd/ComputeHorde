@@ -252,13 +252,13 @@ jobs:
           docker compose pull
           docker compose up -d
 
-      # wait until facilitator, miner and validator have started
-      - name: Wait for all the services
+      - name: wait until facilitator, miner and validator have started
         run: |
           sleep 300
 
-      - name: Running containers
-        run: docker ps
+      # TODO: in miner: fetch validators, announce axon
+
+      # TODO: run the tests
 
       - name: Stop validator
         run: docker compose down --remove-orphans --volumes
@@ -271,9 +271,3 @@ jobs:
       - name: Stop facilitator
         run: docker compose down --remove-orphans --volumes
         working-directory: facilitator
-
-      # TODO: in miner: fetch validators, announce axon
-
-      # TODO: run the tests
-
-      # TODO: remove everything below
