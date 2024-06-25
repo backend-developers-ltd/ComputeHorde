@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 from channels.testing import WebsocketCommunicator
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 
 from compute_horde_miner import asgi
 from compute_horde_miner.miner.models import Validator
@@ -38,7 +39,7 @@ async def test_main_loop():
     response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
     assert response == {
         "message_type": "V0ExecutorManifestRequest",
-        "manifest": {"executor_classes": [{"count": 1, "executor_class": 0}]},
+        "manifest": {"executor_classes": [{"count": 1, "executor_class": DEFAULT_EXECUTOR_CLASS}]},
     }
     await communicator.send_json_to(
         {

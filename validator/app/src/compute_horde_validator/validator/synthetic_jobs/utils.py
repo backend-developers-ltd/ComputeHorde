@@ -11,6 +11,7 @@ import bittensor
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.base_requests import BaseRequest
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     MinerConnectionError,
@@ -286,8 +287,13 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
             return
         executor_count = 0
         for executor_class_manifest in manifest.executor_classes:
-            if executor_class_manifest.executor_class != 0:
-                logger.warning("Executor classed other than 0 are not supported yet")
+            # convert deprecated executor class 0 to default executor class
+            if executor_class_manifest.executor_class == 0:
+                executor_class_manifest.executor_class = DEFAULT_EXECUTOR_CLASS
+            if executor_class_manifest.executor_class != DEFAULT_EXECUTOR_CLASS:
+                logger.warning(
+                    f"Executor classed other than {DEFAULT_EXECUTOR_CLASS} are not supported yet"
+                )
                 continue
             executor_count = executor_class_manifest.count
             break

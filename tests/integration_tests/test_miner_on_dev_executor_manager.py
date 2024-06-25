@@ -15,6 +15,7 @@ import pytest
 import requests
 import websockets
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.test_base import ActiveSubnetworkBaseTest
 
 MINER_PORT = 8045
@@ -108,7 +109,7 @@ class Test(ActiveSubnetworkBaseTest):
             )
             assert response == {
                 "message_type": "V0ExecutorManifestRequest",
-                "manifest": {"executor_classes": [{"count": 1, "executor_class": 0}]},
+                "manifest": {"executor_classes": [{"count": 1, "executor_class": DEFAULT_EXECUTOR_CLASS}]},
             }
             await ws.send(
                 json.dumps(

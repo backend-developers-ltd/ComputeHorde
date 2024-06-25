@@ -2,6 +2,7 @@ import asyncio
 from unittest import mock
 
 from channels.testing import WebsocketCommunicator
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 
 from compute_horde_miner import asgi
 from compute_horde_miner.miner.executor_manager import v1
@@ -64,4 +65,4 @@ class TestExecutorManager(v1.BaseExecutorManager):
         pass
 
     async def get_manifest(self):
-        return {0: 1}
+        return {DEFAULT_EXECUTOR_CLASS: 1}
