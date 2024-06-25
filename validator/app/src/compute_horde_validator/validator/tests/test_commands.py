@@ -8,7 +8,7 @@ from django.core import management
 
 from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob, SystemEvent
 
-from .conftest import (
+from .helpers import (
     MockMinerClient,
     check_system_events,
     mock_get_miner_axon_info,

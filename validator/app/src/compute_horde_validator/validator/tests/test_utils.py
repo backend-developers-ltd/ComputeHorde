@@ -26,7 +26,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
     execute_synthetic_job,
 )
 
-from .conftest import check_system_events
+from .helpers import check_system_events
 from .test_miner_driver import MockMinerClient, get_miner_client
 
 MOCK_SCORE = 0.8

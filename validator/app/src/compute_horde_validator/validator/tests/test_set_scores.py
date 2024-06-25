@@ -16,7 +16,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.tasks import set_scores
 
-from .conftest import (
+from .helpers import (
     NUM_NEURONS,
     MockSubtensor,
     MockWallet,
