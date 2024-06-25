@@ -17,7 +17,7 @@ env:
   MNEMONIC_VALIDATOR_HOTKEY: "syrup ill organ rigid supreme pen menu range tonight letter pear blind"
 
 jobs:
-  validator:
+  e2e:
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
@@ -33,6 +33,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
           cache: "pip"
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
 
       - name: Create wallet files
         run: |
@@ -74,17 +77,32 @@ jobs:
           EOF
           docker rm -f "$CONTAINER_NAME"
 
-      # TODO: run facilitator
-#      - name: Check out repo A
-#        uses: actions/checkout@v3
-#        with:
-#          repository: backend-developers-ltd/ComputeHorde-facilitator
-#          path: facilitator
-#          ssh-key: ${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}
-      # TODO: export $FACILITATOR_URI
+      - name: Check out facilitator
+        run: |
+          eval "$(ssh-agent -s)"
+          ssh-add - <<< "${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}"
+          rm -rf facilitator
+          git clone git@github.com:backend-developers-ltd/ComputeHorde-facilitator.git facilitator
 
-      # TODO: remove the below temporary thing :/
-      - run: echo "FACILITATOR_URI=ws://localhost:8090/ws/v0/" >> $GITHUB_ENV
+      - name: Run facilitator
+        working-directory: facilitator
+        run: |
+          ./setup-prod.sh
+          sed -i.bak \
+            -e '/BITTENSOR_NETUID/d' \
+            -e '/BITTENSOR_NETWORK/d' \
+            -e '/POSTGRES_PASSWORD/d' \
+            ./envs/prod/.env
+
+          echo "BITTENSOR_NETUID=$BITTENSOR_NETUID" >> .env
+          echo "BITTENSOR_NETWORK=$BITTENSOR_NETWORK" >> .env
+          echo "POSTGRES_PASSWORD=12345" >> .env
+
+          docker compose pull db redis
+          # docker compose build app
+          docker compose up -d db redis app
+          FACILITATOR_IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' facilitator-app-1)
+          echo "FACILITATOR_URI=ws://FACILITATOR_IP_ADDRESS:8000/ws/v0/" >> $GITHUB_ENV
 
       - name: Build executor image
         run: |
@@ -98,7 +116,7 @@ jobs:
       - name: Build miner nginx image
         run: |
           cd miner/envs/runner/nginx
-          docker build -t "backenddevelopersltd/compute-horde-miner-nginx:e2e-latest" .
+          docker build --platform linux/amd64 -t "backenddevelopersltd/compute-horde-miner-nginx:e2e-latest" .
 
       - name: Run miner
         run: |
@@ -228,13 +246,17 @@ jobs:
       - name: Running containers
         run: docker ps
 
+      - name: Stop validator
+        run: docker compose down --remove-orphans --volumes
+        working-directory: validator/envs/runner
+
       - name: Stop miner
         run: docker compose down --remove-orphans --volumes
         working-directory: miner/envs/runner
 
-      - name: Stop validator
+      - name: Stop facilitator
         run: docker compose down --remove-orphans --volumes
-        working-directory: validator/envs/runner
+        working-directory: facilitator
 
       # TODO: run the tests
 
