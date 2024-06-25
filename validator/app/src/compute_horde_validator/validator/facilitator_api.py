@@ -2,10 +2,9 @@ from typing import Annotated, Any, Literal, Self
 
 import bittensor
 import pydantic
-
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from pydantic import BaseModel, model_validator
 
 

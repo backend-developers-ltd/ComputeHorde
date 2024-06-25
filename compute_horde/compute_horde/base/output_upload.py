@@ -45,6 +45,7 @@ class SingleFilePostUpload(pydantic.BaseModel):
     url: str
     form_fields: Mapping[str, str] | None = None
     relative_path: str
+    signed_headers: Mapping[str, str] | None = None
 
     def is_safe(self) -> bool:
         domain = urlparse(self.url).netloc
@@ -59,6 +60,7 @@ class SingleFilePutUpload(pydantic.BaseModel):
     # TODO: PUT implementation does not support it - find out why and clean up
     # form_fields: Mapping[str, str] | None = None
     relative_path: str
+    signed_headers: Mapping[str, str] | None = None
 
     def is_safe(self) -> bool:
         domain = urlparse(self.url).netloc

@@ -109,7 +109,11 @@ class Test(ActiveSubnetworkBaseTest):
             )
             assert response == {
                 "message_type": "V0ExecutorManifestRequest",
-                "manifest": {"executor_classes": [{"count": 1, "executor_class": DEFAULT_EXECUTOR_CLASS}]},
+                "manifest": {
+                    "executor_classes": [
+                        {"count": 1, "executor_class": DEFAULT_EXECUTOR_CLASS}
+                    ]
+                },
             }
             await ws.send(
                 json.dumps(

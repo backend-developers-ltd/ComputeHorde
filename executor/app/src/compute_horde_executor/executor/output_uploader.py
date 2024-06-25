@@ -40,7 +40,7 @@ def retry(max_retries=3, initial_delay=1, backoff_factor=2, exceptions=Exception
                     return await func(*args, **kwargs)
                 except exceptions as exc:
                     if i == max_retries - 1:
-                        logger.debug(f"Got exception {exc} but no retry - max reetries reached")
+                        logger.debug(f"Got exception {exc} - but max number of retries reached")
                         raise
                     logger.debug(
                         f"Got exception {exc} but will retry because it is {i + 1} attempt"
@@ -139,6 +139,7 @@ class MultiUploadOutputUploader(OutputUploader):
                             file_path.stat().st_size,
                             upload.url,
                             form_fields=upload.form_fields,
+                            headers=upload.signed_headers,
                         )
 
                 tasks.append(limiter.wrap_task(_task(file_path, upload)))
@@ -147,7 +148,9 @@ class MultiUploadOutputUploader(OutputUploader):
                 # we run those concurrently but for loop changes slots - we need to bind
                 async def _task(file_path, upload):
                     with file_path.open("rb") as fp:
-                        await upload_put(fp, file_path.stat().st_size, upload.url)
+                        await upload_put(
+                            fp, file_path.stat().st_size, upload.url, headers=upload.signed_headers
+                        )
 
                 tasks.append(limiter.wrap_task(_task(file_path, upload)))
                 single_file_uploads.append(upload.relative_path)

@@ -13,7 +13,12 @@ from compute_horde_validator.validator.facilitator_client import OrganicJob
 from compute_horde_validator.validator.miner_driver import execute_organic_job
 from compute_horde_validator.validator.models import Miner
 
-from .helpers import MockMinerClient, get_dummy_job_request_v0, get_dummy_job_request_v1, get_miner_client
+from .helpers import (
+    MockMinerClient,
+    get_dummy_job_request_v0,
+    get_dummy_job_request_v1,
+    get_miner_client,
+)
 
 WEBSOCKET_TIMEOUT = 10
 

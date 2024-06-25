@@ -167,8 +167,6 @@ def get_dummy_job_request_v1(uuid: str) -> V1FacilitatorJobRequest:
     )
 
 
-
-
 class MockSubtensor:
     def __init__(
         self,

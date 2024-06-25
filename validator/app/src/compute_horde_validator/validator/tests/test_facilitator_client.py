@@ -19,7 +19,7 @@ from .helpers import (
     MockMetagraph,
     MockSubtensor,
     get_dummy_job_request_v0,
-    get_dummy_job_request_v1
+    get_dummy_job_request_v1,
     get_keypair,
 )
 
