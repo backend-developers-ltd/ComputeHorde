@@ -2,10 +2,10 @@ import asyncio
 import logging
 import subprocess
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
-    DEFAULT_EXECUTOR_CLASS,
     BaseExecutorManager,
     ExecutorUnavailable,
 )

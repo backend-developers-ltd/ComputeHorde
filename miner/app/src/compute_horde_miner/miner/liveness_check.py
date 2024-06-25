@@ -11,6 +11,7 @@ import zipfile
 import bittensor
 import websockets
 from channels.layers import get_channel_layer
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol import validator_requests
 from django.conf import settings
 
@@ -29,7 +30,6 @@ if vendor_dir := os.getenv("VENDOR_DIRECTORY"):
 from compute_horde_miner.miner.executor_manager import current  # noqa
 
 
-DEFAULT_EXECUTOR_CLASS = 0
 JOB_TIMEOUT_SECONDS = 60
 PREPARATION_TIMEOUT_SECONDS = 60
 JOB_IMAGE_NAME = "backenddevelopersltd/compute-horde-job:v0-latest"

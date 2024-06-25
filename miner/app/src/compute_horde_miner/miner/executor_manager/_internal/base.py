@@ -4,13 +4,13 @@ import datetime as dt
 import logging
 import time
 
+from compute_horde.executor_class import (
+    DEFAULT_EXECUTOR_CLASS,
+    DEFAULT_EXECUTOR_TIMEOUT,
+    MAX_EXECUTOR_TIMEOUT,
+)
+
 logger = logging.getLogger(__name__)
-
-
-# this leaves around 1 min for synthetic job to complete
-MAX_EXECUTOR_TIMEOUT = dt.timedelta(minutes=4).total_seconds()
-DEFAULT_EXECUTOR_CLASS = 0
-DEFAULT_EXECUTOR_TIMEOUT = dt.timedelta(minutes=4).total_seconds()
 
 
 class ExecutorUnavailable(Exception):

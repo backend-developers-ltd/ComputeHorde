@@ -3,12 +3,10 @@ import pathlib
 import subprocess
 import sys
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 
-from compute_horde_miner.miner.executor_manager._internal.base import (
-    DEFAULT_EXECUTOR_CLASS,
-    BaseExecutorManager,
-)
+from compute_horde_miner.miner.executor_manager._internal.base import BaseExecutorManager
 
 this_dir = pathlib.Path(__file__).parent
 executor_dir = this_dir / ".." / ".." / ".." / ".." / ".." / ".." / ".." / "executor"

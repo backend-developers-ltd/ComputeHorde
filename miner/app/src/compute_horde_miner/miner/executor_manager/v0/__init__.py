@@ -1,8 +1,14 @@
 import abc
 
+from compute_horde.executor_class import (
+    DEFAULT_EXECUTOR_CLASS,
+    DEFAULT_EXECUTOR_TIMEOUT,
+    MAX_EXECUTOR_TIMEOUT,  # unused, but re-exported
+)
+
 from compute_horde_miner.miner.executor_manager import v1
 
-EXECUTOR_TIMEOUT = v1.DEFAULT_EXECUTOR_TIMEOUT
+EXECUTOR_TIMEOUT = DEFAULT_EXECUTOR_TIMEOUT
 DockerExecutor = v1.DockerExecutor
 PULLING_TIMEOUT = v1.PULLING_TIMEOUT
 DOCKER_STOP_TIMEOUT = v1.DOCKER_STOP_TIMEOUT
@@ -35,7 +41,7 @@ class BaseExecutorManager(v1.BaseExecutorManager):
 class DevExecutorManager(v1.DevExecutorManager):
     async def _reserve_executor(self, token):
         return await super().start_new_executor(
-            token, v1.DEFAULT_EXECUTOR_CLASS, v1.DEFAULT_EXECUTOR_TIMEOUT
+            token, DEFAULT_EXECUTOR_CLASS, DEFAULT_EXECUTOR_TIMEOUT
         )
 
     async def _kill_executor(self, executor):
@@ -57,7 +63,7 @@ class DevExecutorManager(v1.DevExecutorManager):
 class DockerExecutorManager(v1.DockerExecutorManager):
     async def _reserve_executor(self, token):
         return await super().start_new_executor(
-            token, v1.DEFAULT_EXECUTOR_CLASS, v1.DEFAULT_EXECUTOR_TIMEOUT
+            token, DEFAULT_EXECUTOR_CLASS, DEFAULT_EXECUTOR_TIMEOUT
         )
 
     async def _kill_executor(self, executor):
