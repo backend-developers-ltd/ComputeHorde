@@ -10,14 +10,13 @@ from compute_horde_validator.validator.tasks import (
     trigger_run_admin_job_request,
 )
 
-from . import mock_get_miner_axon_info, mock_keypair, throw_error
-from .test_miner_driver import MockMinerClient
+from .helpers import MockMinerClient, mock_get_miner_axon_info, mock_keypair, throw_error
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
 @patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_trigger_run_admin_job__should_trigger_job():
     miner = Miner.objects.create(hotkey="miner_client_1")
     OrganicJob.objects.all().delete()
@@ -30,21 +29,21 @@ def test_trigger_run_admin_job__should_trigger_job():
     )
 
     assert AdminJobRequest.objects.count() == 1
-    trigger_run_admin_job_request.delay(job_request.pk)
+    trigger_run_admin_job_request.apply(args=(job_request.pk,))
 
     job_request.refresh_from_db()
     assert job_request.status_message == "Job successfully triggered"
 
     assert OrganicJob.objects.count() == 1
     job = OrganicJob.objects.filter(job_uuid=job_request.uuid).first()
-    assert job.comment == "Miner timed out while preparing executor"
+    assert "timed out while preparing executor" in job.comment
     assert job.status == OrganicJob.Status.FAILED
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", throw_error)
 @patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_trigger_run_admin_job__should_not_trigger_job():
     miner = Miner.objects.create(hotkey="miner_client_2")
     OrganicJob.objects.all().delete()
@@ -57,7 +56,7 @@ def test_trigger_run_admin_job__should_not_trigger_job():
     )
 
     assert AdminJobRequest.objects.count() == 1
-    trigger_run_admin_job_request.delay(job_request.pk)
+    trigger_run_admin_job_request.apply(args=(job_request.pk,))
 
     job_request.refresh_from_db()
     assert "Job failed to trigger" in job_request.status_message

@@ -1,9 +1,12 @@
+import logging
 import shlex
 import uuid
 from datetime import timedelta
 
 from django.db import models
 from django.db.models import UniqueConstraint
+
+logger = logging.getLogger(__name__)
 
 
 class SystemEvent(models.Model):
@@ -14,15 +17,23 @@ class SystemEvent(models.Model):
     class EventType(models.TextChoices):
         WEIGHT_SETTING_SUCCESS = "WEIGHT_SETTING_SUCCESS"
         WEIGHT_SETTING_FAILURE = "WEIGHT_SETTING_FAILURE"
-        MINER_FAILED_SYNTHETIC_JOB = "MINER_FAILED_SYNTHETIC_JOB"
+        MINER_ORGANIC_JOB_FAILURE = "MINER_ORGANIC_JOB_FAILURE"
+        MINER_ORGANIC_JOB_SUCCESS = "MINER_ORGANIC_JOB_SUCCESS"
+        MINER_SYNTHETIC_JOB_SUCCESS = "MINER_SYNTHETIC_JOB_SUCCESS"
+        MINER_SYNTHETIC_JOB_FAILURE = "MINER_SYNTHETIC_JOB_FAILURE"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
+        FAILURE = "FAILURE"
         SUBTENSOR_CONNECTIVITY_ERROR = "SUBTENSOR_CONNECTIVITY_ERROR"
         GENERIC_ERROR = "GENERIC_ERROR"
         WRITING_TO_CHAIN_TIMEOUT = "WRITING_TO_CHAIN_TIMEOUT"
         WRITING_TO_CHAIN_FAILED = "WRITING_TO_CHAIN_FAILED"
         WRITING_TO_CHAIN_GENERIC_ERROR = "WRITING_TO_CHAIN_GENERIC_ERROR"
+        MANIFEST_ERROR = "MANIFEST_ERROR"
+        MINER_CONNECTION_ERROR = "MINER_CONNECTION_ERROR"
+        JOB_NOT_STARTED = "JOB_NOT_STARTED"
+        JOB_EXECUTION_TIMEOUT = "JOB_EXECUTION_TIMEOUT"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)

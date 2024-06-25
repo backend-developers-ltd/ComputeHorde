@@ -43,6 +43,7 @@ test = [
     "pytest-django",
     "pytest-xdist",
     "pytest-httpx",
+    "pytest-asyncio",
     "ipdb",
     "freezegun",
     "pytest-mock>=3.14.0",

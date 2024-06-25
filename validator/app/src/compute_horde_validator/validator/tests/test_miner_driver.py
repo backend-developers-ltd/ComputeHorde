@@ -1,8 +1,6 @@
-import asyncio
 import uuid
 
 import pytest
-from compute_horde.miner_client.base import BaseRequest
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
     V0ExecutorReadyRequest,
@@ -10,62 +8,17 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 
-from compute_horde_validator.validator.facilitator_client import JobRequest, OrganicJob
-from compute_horde_validator.validator.miner_driver import run_miner_job
+from compute_horde_validator.validator.facilitator_client import OrganicJob
+from compute_horde_validator.validator.miner_driver import execute_organic_job
 from compute_horde_validator.validator.models import Miner
-from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
 
-from . import get_miner_client
+from .helpers import MockMinerClient, get_dummy_job_request, get_miner_client
 
 WEBSOCKET_TIMEOUT = 10
 
 
-class MockMinerClient(MinerClient):
-    def __init__(self, loop: asyncio.AbstractEventLoop, **args):
-        super().__init__(loop, **args)
-
-    def miner_url(self) -> str:
-        return "ws://miner"
-
-    async def await_connect(self):
-        return
-
-    def accepted_request_type(self) -> type[BaseRequest]:
-        return BaseRequest
-
-    def incoming_generic_error_class(self) -> type[BaseRequest]:
-        return BaseRequest
-
-    def outgoing_generic_error_class(self) -> type[BaseRequest]:
-        return BaseRequest
-
-    async def handle_message(self, msg):
-        pass
-
-    async def send_model(self, model):
-        pass
-
-    def get_barrier(self):
-        return asyncio.Barrier(1)
-
-
-def get_dummy_job_request(uuid: str) -> JobRequest:
-    return JobRequest(
-        type="job.new",
-        uuid=uuid,
-        miner_hotkey="miner_hotkey",
-        docker_image="nvidia",
-        raw_script="print('hello world')",
-        args=[],
-        env={},
-        use_gpu=False,
-        input_url="fake.com/input",
-        output_url="fake.com/output",
-    )
-
-
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
     "futures_result,expected_job_status_updates,organic_job_status",
     [
@@ -117,7 +70,7 @@ async def test_miner_driver(futures_result, expected_job_status_updates, organic
     async def track_job_status_updates(x):
         job_status_updates.append(x)
 
-    await run_miner_job(
+    await execute_organic_job(
         miner_client,
         job,
         job_request,
