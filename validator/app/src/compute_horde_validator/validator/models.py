@@ -110,11 +110,6 @@ class JobBase(models.Model):
     def __str__(self):
         return f"uuid: {self.job_uuid} - miner hotkey: {self.miner.hotkey} - {self.status}"
 
-    async def update_state(self, status, comment):
-        self.status = status
-        self.comment = comment
-        await self.asave()
-
 
 class SyntheticJob(JobBase):
     batch = models.ForeignKey(

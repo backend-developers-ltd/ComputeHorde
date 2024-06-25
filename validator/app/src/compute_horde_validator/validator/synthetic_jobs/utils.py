@@ -325,7 +325,9 @@ async def _execute_synthetic_job(miner_client, job: SyntheticJob):
         comment = f"Miner {miner_client.miner_name} didn't accept job:" + (
             "timeout" if msg is None else str(msg.model_dump_json())
         )
-        await job.update_state(SyntheticJob.Status.FAILED, comment)
+        job.status = SyntheticJob.Status.FAILED
+        job.comment = comment
+        await job.asave()
 
         logger.info(comment)
         await save_event(
@@ -385,7 +387,10 @@ async def _execute_synthetic_job(miner_client, job: SyntheticJob):
 
     except TimeoutError:
         comment = f"Miner {miner_client.miner_name} timed out"
-        await job.update_state(SyntheticJob.Status.FAILED, comment)
+        job.status = SyntheticJob.Status.FAILED
+        job.comment = comment
+        await job.asave()
+
         logger.info(job.comment)
         await save_event(
             subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=job.comment
@@ -394,7 +399,10 @@ async def _execute_synthetic_job(miner_client, job: SyntheticJob):
 
     if isinstance(msg, V0JobFailedRequest):
         comment = f"Miner {miner_client.miner_name} failed: {msg.model_dump_json()}"
-        await job.update_state(SyntheticJob.Status.FAILED, comment)
+        job.status = SyntheticJob.Status.FAILED
+        job.comment = comment
+        await job.asave()
+
         logger.info(comment)
         await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
         return
@@ -420,7 +428,9 @@ async def _execute_synthetic_job(miner_client, job: SyntheticJob):
 
         if success:
             comment = f"Miner {miner_client.miner_name} finished: {msg.model_dump_json()}"
-            await job.update_state(SyntheticJob.Status.COMPLETED, comment)
+            job.status = SyntheticJob.Status.COMPLETED
+            job.comment = comment
+            await job.asave()
 
             logger.info(comment)
             await save_event(
@@ -445,7 +455,9 @@ async def _execute_synthetic_job(miner_client, job: SyntheticJob):
 
         else:
             comment = f"Miner {miner_client.miner_name} finished but {comment}"
-            await job.update_state(SyntheticJob.Status.FAILED, comment)
+            job.status = SyntheticJob.Status.FAILED
+            job.comment = comment
+            await job.asave()
 
             logger.info(comment)
             await save_job_execution_event(

@@ -101,9 +101,11 @@ async def execute_organic_job(
             await exit_stack.enter_async_context(miner_client)
         except MinerConnectionError as exc:
             comment = f"Miner connection error: {exc}"
-            await job.update_state(OrganicJob.Status.FAILED, comment)
-            logger.warning(comment)
+            job.status = OrganicJob.Status.FAILED
+            job.comment = comment
+            await job.asave()
 
+            logger.warning(comment)
             await save_event(
                 subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR, long_description=comment
             )
@@ -133,9 +135,11 @@ async def execute_organic_job(
             )
         except TimeoutError:
             comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid} after {wait_timeout} seconds"
-            await job.update_state(OrganicJob.Status.FAILED, comment)
-            logger.warning(comment)
+            job.status = OrganicJob.Status.FAILED
+            job.comment = comment
+            await job.asave()
 
+            logger.warning(comment)
             await save_event(
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 long_description=comment,
@@ -146,9 +150,11 @@ async def execute_organic_job(
 
         if isinstance(msg, V0DeclineJobRequest | V0ExecutorFailedRequest):
             comment = f"Miner {miner_client.miner_name} won't do job: {msg.model_dump_json()}"
-            await job.update_state(OrganicJob.Status.FAILED, comment)
-            logger.info(comment)
+            job.status = OrganicJob.Status.FAILED
+            job.comment = comment
+            await job.asave()
 
+            logger.info(comment)
             if notify_callback:
                 await notify_callback(JobStatusUpdate.from_job(job, "rejected"))
             return
@@ -192,9 +198,11 @@ async def execute_organic_job(
             logger.info(f"Miner took {time_took} seconds to finish {job.job_uuid}")
         except TimeoutError:
             comment = f"Miner {miner_client.miner_name} timed out after {total_job_timeout} seconds"
-            await job.update_state(OrganicJob.Status.FAILED, comment)
-            logger.warning(comment)
+            job.status = OrganicJob.Status.FAILED
+            job.comment = comment
+            await job.asave()
 
+            logger.warning(comment)
             await save_event(
                 subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=comment
             )
@@ -205,9 +213,11 @@ async def execute_organic_job(
             comment = f"Miner {miner_client.miner_name} failed: {msg.model_dump_json()}"
             job.stdout = msg.docker_process_stdout
             job.stderr = msg.docker_process_stderr
-            await job.update_state(OrganicJob.Status.FAILED, comment)
-            logger.info(comment)
+            job.status = OrganicJob.Status.FAILED
+            job.comment = comment
+            await job.asave()
 
+            logger.info(comment)
             await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
             if notify_callback:
                 await notify_callback(
@@ -218,9 +228,11 @@ async def execute_organic_job(
             comment = f"Miner {miner_client.miner_name} finished: {msg.model_dump_json()}"
             job.stdout = msg.docker_process_stdout
             job.stderr = msg.docker_process_stderr
-            await job.update_state(OrganicJob.Status.COMPLETED, comment)
-            logger.info(comment)
+            job.status = OrganicJob.Status.COMPLETED
+            job.comment = comment
+            await job.asave()
 
+            logger.info(comment)
             await save_event(
                 subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
             )
