@@ -164,6 +164,8 @@ jobs:
           PORT_FOR_EXECUTORS=8000
           ADDRESS_FOR_EXECUTORS=172.17.0.1
           EXECUTOR_IMAGE=backenddevelopersltd/executor-e2e:v0-latest
+          DEBUG_SKIP_PULLING_EXECUTOR_IMAGE=1
+          DEBUG_USE_DOCKER_IP_AS_EXTERNAL=1
           ENDENV
           
           # copy .env to "host", so that mounting works -_-
@@ -178,7 +180,11 @@ jobs:
           docker cp $PWD/.env "$CONTAINER_NAME:/root/pwd/.env"
           docker rm -f "$CONTAINER_NAME"
           
+          docker compose pull
           docker compose up -d
+          
+          MINER_IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' compute_horde_miner-app-1)
+          echo "MINER_IP_ADDRESS=$MINER_IP_ADDRESS" >> $GITHUB_ENV
 
       - name: Run validator
         run: |
@@ -222,6 +228,8 @@ jobs:
           COMPOSE_PROJECT_NAME=compute_horde_validator
           FACILITATOR_URI=$FACILITATOR_URI
           HOST_PROMETHEUS_METRICS_DIR=$PWD/prometheus-metrics
+          DEBUG_RUN_SYNTHETIC_JOBS_MINUTE=*
+          DEBUG_DONT_STAGGER_VALIDATORS=1
           ENDENV
           
           # copy .env to "host", so that mounting works -_-
@@ -236,6 +244,7 @@ jobs:
           docker cp $PWD/.env "$CONTAINER_NAME:/root/pwd/.env"
           docker rm -f "$CONTAINER_NAME"
           
+          docker compose pull
           docker compose up -d
 
       # wait until facilitator, miner and validator have started
