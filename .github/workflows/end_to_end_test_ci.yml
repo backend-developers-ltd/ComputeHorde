@@ -10,7 +10,7 @@ env:
   PYTHON_DEFAULT_VERSION: "3.11"
   BITTENSOR_NETWORK: "ws://3.91.62.249:9946"
   BITTENSOR_NETUID: "1"
-  MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-e2e"  # TODO: need to build image in this workflow
+  MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-e2e"
   MNEMONIC_MINER_COLDKEY: "cousin gate anger oak common vacuum bonus rice buyer smooth evidence coast"
   MNEMONIC_MINER_HOTKEY: "provide lyrics civil afford orange marine letter dash parrot secret eternal decrease"
   MNEMONIC_VALIDATOR_COLDKEY: "chief wood gorilla arm that vault useful aware chair giant coconut plug"
@@ -100,7 +100,7 @@ jobs:
             ./envs/prod/.env
           
           # journald logging driver is not supported on macos :(
-          if [ "$ACT" = "true" ]; then
+          if [ "${ACT:-false}" = "true" ]; then
             sed -i.bak \
               -e '/logging/d' \
               -e '/driver:/d' \
@@ -132,7 +132,7 @@ jobs:
       - name: Build miner nginx image
         run: |
           cd miner/envs/runner/nginx
-          docker build --platform linux/amd64 -t "$MINER_NGINX_IMAGE_REPO:v0-latest" .
+          docker build --platform linux/amd64 -t "backenddevelopersltd/$MINER_NGINX_IMAGE_REPO:v0-latest" .
 
       - name: Run miner
         run: |
