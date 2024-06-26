@@ -10,7 +10,7 @@ env:
   PYTHON_DEFAULT_VERSION: "3.11"
   BITTENSOR_NETWORK: "ws://3.91.62.249:9946"
   BITTENSOR_NETUID: "1"
-  MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-staging"  # TODO: need to build image in this workflow
+  MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-e2e"  # TODO: need to build image in this workflow
   MNEMONIC_MINER_COLDKEY: "cousin gate anger oak common vacuum bonus rice buyer smooth evidence coast"
   MNEMONIC_MINER_HOTKEY: "provide lyrics civil afford orange marine letter dash parrot secret eternal decrease"
   MNEMONIC_VALIDATOR_COLDKEY: "chief wood gorilla arm that vault useful aware chair giant coconut plug"
@@ -106,7 +106,7 @@ jobs:
           # docker compose build app
           docker compose up --detach --wait db redis app
           FACILITATOR_IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' facilitator-app-1)
-          echo "FACILITATOR_URI=ws://FACILITATOR_IP_ADDRESS:8000/ws/v0/" >> $GITHUB_ENV
+          echo "FACILITATOR_URI=ws://$FACILITATOR_IP_ADDRESS:8000/ws/v0/" >> $GITHUB_ENV
 
       - name: Build executor image
         run: |
@@ -120,7 +120,7 @@ jobs:
       - name: Build miner nginx image
         run: |
           cd miner/envs/runner/nginx
-          docker build --platform linux/amd64 -t "backenddevelopersltd/compute-horde-miner-nginx:e2e-latest" .
+          docker build --platform linux/amd64 -t "$MINER_NGINX_IMAGE_REPO:v0-latest" .
 
       - name: Run miner
         run: |
@@ -261,14 +261,20 @@ jobs:
 
       # TODO: run the tests
 
-      - name: Stop validator
-        run: docker compose down --remove-orphans --volumes
+      - name: Print all logs and stop validator
         working-directory: validator/envs/runner
+        run: |
+          docker compose logs
+          docker compose down --remove-orphans --volumes
 
-      - name: Stop miner
-        run: docker compose down --remove-orphans --volumes
+      - name: Print all logs and stop miner
         working-directory: miner/envs/runner
+        run: |
+          docker compose logs
+          docker compose down --remove-orphans --volumes
 
-      - name: Stop facilitator
-        run: docker compose down --remove-orphans --volumes
+      - name: Print all logs and stop facilitator
         working-directory: facilitator
+        run: |
+          docker compose logs
+          docker compose down --remove-orphans --volumes
