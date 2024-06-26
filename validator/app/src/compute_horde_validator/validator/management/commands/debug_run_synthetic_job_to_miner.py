@@ -56,6 +56,7 @@ class Command(BaseCommand):
             miner_hotkey=miner_hotkey,
             my_hotkey=key.ss58_address,
             job_uuid=None,
+            batch_id=None,
             keypair=key,
         )
 

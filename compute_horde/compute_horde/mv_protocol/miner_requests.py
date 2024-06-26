@@ -28,6 +28,10 @@ class ExecutorClassManifest(pydantic.BaseModel):
 class ExecutorManifest(pydantic.BaseModel):
     executor_classes: list[ExecutorClassManifest]
 
+    @property
+    def count(self) -> int:
+        return sum([x.count for x in self.executor_classes])
+
 
 class BaseMinerRequest(BaseRequest):
     message_type: RequestType
