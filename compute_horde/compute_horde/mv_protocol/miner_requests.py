@@ -20,7 +20,8 @@ class RequestType(enum.Enum):
 
 
 class ExecutorClassManifest(pydantic.BaseModel):
-    executor_class: int
+    # TODO: remove support for deprecated `int` executor class
+    executor_class: str | int
     count: int
 
 

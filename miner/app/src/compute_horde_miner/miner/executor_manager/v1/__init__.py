@@ -1,7 +1,10 @@
-from compute_horde_miner.miner.executor_manager._internal.base import (
+from compute_horde.executor_class import (
     DEFAULT_EXECUTOR_CLASS,
     DEFAULT_EXECUTOR_TIMEOUT,
     MAX_EXECUTOR_TIMEOUT,
+)
+
+from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
     ExecutorClassPool,
     ExecutorUnavailable,

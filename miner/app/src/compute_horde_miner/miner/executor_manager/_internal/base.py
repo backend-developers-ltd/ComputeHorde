@@ -4,13 +4,13 @@ import datetime as dt
 import logging
 import time
 
+from compute_horde.executor_class import (
+    DEFAULT_EXECUTOR_CLASS,
+    DEFAULT_EXECUTOR_TIMEOUT,
+    MAX_EXECUTOR_TIMEOUT,
+)
+
 logger = logging.getLogger(__name__)
-
-
-# this leaves around 1 min for synthetic job to complete
-MAX_EXECUTOR_TIMEOUT = dt.timedelta(minutes=4).total_seconds()
-DEFAULT_EXECUTOR_CLASS = 0
-DEFAULT_EXECUTOR_TIMEOUT = dt.timedelta(minutes=4).total_seconds()
 
 
 class ExecutorUnavailable(Exception):
@@ -30,7 +30,7 @@ class ReservedExecutor:
 
 
 class ExecutorClassPool:
-    def __init__(self, manager, executor_class: int, executor_count: int):
+    def __init__(self, manager, executor_class: str, executor_count: int):
         self.manager = manager
         self.executor_class = executor_class
         self._count = executor_count
@@ -114,7 +114,7 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    async def get_manifest(self) -> dict[int, int]:
+    async def get_manifest(self) -> dict[str, int]:
         """Return executors manifest
 
         Keys are executor class ids and values are number of supported executors for given executor class.

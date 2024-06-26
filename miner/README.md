@@ -54,7 +54,7 @@ To create a custom executor manager, follow these steps:
             """
             pass
 
-        async def get_manifest(self) -> dict[int, int]:
+        async def get_manifest(self) -> dict[str, int]:
             """Return executors manifest
 
             Keys are executor class ids and values are number of supported executors for given executor class.
