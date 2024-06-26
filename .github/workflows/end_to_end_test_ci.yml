@@ -318,7 +318,8 @@ jobs:
                 --miner_hotkey "$MINER_HOTKEY_SS58" \
                 --timeout 60 \
                 --docker_image alpine \
-                --cmd_args "echo 1"
+                --cmd_args "echo 1" \
+                --nonzero_if_not_complete
 
       - name: test synthetic job
         run: |
