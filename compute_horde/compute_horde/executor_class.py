@@ -4,6 +4,8 @@ from datetime import timedelta
 
 @dataclass
 class ExecutorClass:
+    # mostly for user consumption, intended usage, ...
+    description: str | None = None
     has_gpu: bool | None = None
     cpu_cores: int | None = None
     ram_gb: int | None = None
@@ -11,10 +13,13 @@ class ExecutorClass:
     gpu_vram_gb: int | None = None
     spin_up_time: int | None = None  # seconds
     docker_cached_images: list[str] | None = None
+    # requirements which can't be easily standardized
+    additional_requirements: str | None = None
 
 
 EXECUTOR_CLASS = {
     "spin_up-4min.gpu-24gb": ExecutorClass(
+        description="cost effective (started on demand), generic GPU machine",
         has_gpu=True,
         gpu_vram_gb=24,
         spin_up_time=int(timedelta(minutes=4).total_seconds()),
