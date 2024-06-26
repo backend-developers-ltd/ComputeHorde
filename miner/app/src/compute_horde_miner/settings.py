@@ -1,7 +1,6 @@
 """
 Django settings for compute_horde_miner project.
 """
-import subprocess
 
 from compute_horde import base  # noqa
 
