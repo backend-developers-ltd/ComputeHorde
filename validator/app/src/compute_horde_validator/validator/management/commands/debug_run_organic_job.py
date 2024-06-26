@@ -93,6 +93,10 @@ class Command(BaseCommand):
             job_request.refresh_from_db()
             job = OrganicJob.objects.get(job_uuid=job_request.uuid)
             print(f"\nJob {job.job_uuid} done processing")
+
+            if job.status != OrganicJob.Status.COMPLETED:
+                print(f"\nJob {job_request.uuid} status = {job.status}")
+                sys.exit(1)
         except OrganicJob.DoesNotExist:
             print(f"\nJob {job_request.uuid} not found")
             sys.exit(1)
