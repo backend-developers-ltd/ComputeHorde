@@ -357,12 +357,6 @@ if not BITTENSOR_MINER_ADDRESS_IS_AUTO:
     except ValueError:
         raise RuntimeError("The BITTENSOR_MINER_ADDRESS is not a valid IP address")
 
-DEBUG_USE_DOCKER_IP_AS_EXTERNAL = env.bool("DEBUG_USE_DOCKER_IP_AS_EXTERNAL", default=False)
-if DEBUG_USE_DOCKER_IP_AS_EXTERNAL:
-    docker_ip = subprocess.check_output(['hostname', '-i']).decode().strip()
-    ADDRESS_FOR_EXECUTORS = BITTENSOR_MINER_ADDRESS = docker_ip
-    BITTENSOR_MINER_ADDRESS_IS_AUTO = False
-
 BITTENSOR_NETUID = env.int("BITTENSOR_NETUID")
 BITTENSOR_NETWORK = env.str("BITTENSOR_NETWORK")
 
