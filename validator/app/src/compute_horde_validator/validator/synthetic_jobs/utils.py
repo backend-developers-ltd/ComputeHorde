@@ -324,7 +324,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
             )
 
 
-async def _execute_synthetic_job(miner_client, job: SyntheticJob):
+async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
     data = {"job_uuid": str(job.job_uuid), "miner_hotkey": job.miner.hotkey}
     save_event = partial(save_job_execution_event, data=data)
 
@@ -505,14 +505,14 @@ async def _execute_synthetic_job(miner_client, job: SyntheticJob):
         raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
 
 
-async def execute_synthetic_job(miner_client, synthetic_job_id):
+async def execute_synthetic_job(miner_client: MinerClient, synthetic_job_id):
     synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related("miner").aget(
         id=synthetic_job_id
     )
     await _execute_synthetic_job(miner_client, synthetic_job)
 
 
-async def execute_synthetic_jobs(miner_client, synthetic_jobs: Iterable[SyntheticJob]):
+async def execute_synthetic_jobs(miner_client: MinerClient, synthetic_jobs: Iterable[SyntheticJob]):
     tasks = [
         asyncio.create_task(
             asyncio.wait_for(execute_synthetic_job(miner_client, synthetic_job.id), JOB_LENGTH)
