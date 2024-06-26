@@ -135,11 +135,12 @@ class MinerClient(AbstractMinerClient):
             return
         if isinstance(msg, V0ExecutorManifestRequest):
             self.miner_manifest.set_result(msg.manifest)
+            miner = await Miner.objects.aget(hotkey=self.miner_hotkey)
             if self.batch_id:
                 await MinerManifest.objects.acreate(
-                    miner=Miner.objects.get(hotkey=self.miner_hotkey),
-                    batch=SyntheticJobBatch.objects.get(id=self.batch_id),
-                    executor_count=msg.manifest.count,
+                    miner=miner,
+                    batch_id=self.batch_id,
+                    executor_count=msg.manifest.total_count,
                 )
             return
         job_state = self.get_job_state(msg.job_uuid)
@@ -530,7 +531,7 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
             # Send receipt to miner
             try:
                 receipt_message = miner_client.generate_receipt_message(
-                    job, full_job_sent, time_took, score
+                    job, full_job_sent, time_took, job.score
                 )
                 await miner_client.send_model(receipt_message)
                 logger.info("Receipt message sent")
