@@ -185,7 +185,7 @@ class MinerClient(AbstractMinerClient):
         return ws
 
 
-def create_and_run_sythethic_job_batch(netuid, network) -> list[SyntheticJob]:
+def create_and_run_sythethic_job_batch(netuid, network):
     batch = SyntheticJobBatch.objects.create(
         accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
     )
