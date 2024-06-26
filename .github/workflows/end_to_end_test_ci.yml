@@ -288,11 +288,13 @@ jobs:
       - name: validator preparations
         working-directory: validator/envs/runner
         run: |
+          sleep 60 # wait for migrations to complete
           docker compose exec validator-runner docker compose exec app python manage.py fetch_miners
 
       - name: facilitator preparations
         working-directory: facilitator
-        run: docker compose exec app python manage.py sync_metagraph
+        run: |
+          docker compose exec app python manage.py sync_metagraph
 
       - name: test organic job
         run: |
