@@ -15,6 +15,8 @@ env:
   MNEMONIC_MINER_HOTKEY: "provide lyrics civil afford orange marine letter dash parrot secret eternal decrease"
   MNEMONIC_VALIDATOR_COLDKEY: "chief wood gorilla arm that vault useful aware chair giant coconut plug"
   MNEMONIC_VALIDATOR_HOTKEY: "syrup ill organ rigid supreme pen menu range tonight letter pear blind"
+  MINER_HOTKEY_SS58: "5FqSEa5kHZgwKMMuC7WsHLoXcf3UN9gCpDZ7iDifa2sTLBSB"
+  VALIDATOR_HOTKEY_SS58: "5GHikjqiHD1pUyCf3mzrjbEJgJvGnCp5FNKTXTtGkzhaJ37R"
 
 jobs:
   e2e:
@@ -96,6 +98,16 @@ jobs:
             -e '/POSTGRES_PASSWORD/d' \
             -e '/DATABASE_URL/d' \
             ./envs/prod/.env
+          
+          # journald logging driver is not supported on macos :(
+          if [ "$ACT" = "true" ]; then
+            sed -i.bak \
+              -e '/logging/d' \
+              -e '/driver:/d' \
+              -e '/options:/d' \
+              -e '/tag:/d' \
+              ./envs/prod/docker-compose.yml
+          fi
           
           echo "SECRET_KEY=12345" >> .env
           echo "BITTENSOR_NETUID=$BITTENSOR_NETUID" >> .env
@@ -258,6 +270,26 @@ jobs:
       - name: facilitator preparations
         working-directory: facilitator
         run: docker compose exec app python manage.py sync_metagraph
+
+      - name: test organic job
+        run: |
+          cd validator/envs/runner
+          docker compose exec validator-runner \
+            docker compose exec app \
+              python manage.py debug_run_organic_job \
+                --miner_hotkey "$MINER_HOTKEY_SS58" \
+                --timeout 60 \
+                --docker_image alpine \
+                --cmd_args "echo 1"
+      # TODO: check in db the organic job is completed properly
+
+      - name: test synthetic job
+        run: |
+          echo TODO!!
+
+      - name: test weight setting
+        run: |
+          echo TODO!!
 
       # TODO: run the tests
 
