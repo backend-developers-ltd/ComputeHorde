@@ -79,17 +79,23 @@ class MinerBlacklist(models.Model):
     def __str__(self):
         return f"hotkey: {self.miner.hotkey}"
 
-    def set_manifest(self, manifest):
-        self._manifest = manifest
-
-    def get_manifest(self):
-        return getattr(self, "_manifest", None)
-
 
 class SyntheticJobBatch(models.Model):
     started_at = models.DateTimeField(auto_now_add=True)
     accepting_results_until = models.DateTimeField()
     scored = models.BooleanField(default=False)
+
+
+class MinerManifest(models.Model):
+    miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
+    batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    executor_count = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["miner", "batch"], name="unique_miner_manifest"),
+        ]
 
 
 class JobBase(models.Model):

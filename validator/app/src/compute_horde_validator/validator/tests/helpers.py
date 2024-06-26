@@ -39,10 +39,11 @@ def get_miner_client(MINER_CLIENT, job_uuid: str):
     return MINER_CLIENT(
         loop=asyncio.get_event_loop(),
         miner_address="ignore",
-        my_hotkey="ignore",
-        miner_hotkey="ignore",
+        my_hotkey="validator_hotkey",
+        miner_hotkey="miner_hotkey",
         miner_port=9999,
         job_uuid=job_uuid,
+        batch_id=None,
         keypair=mock_keypair(),
     )
 

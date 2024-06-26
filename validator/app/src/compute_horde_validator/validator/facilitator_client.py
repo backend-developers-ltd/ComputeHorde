@@ -290,6 +290,7 @@ class FacilitatorClient:
             miner_hotkey=job_request.miner_hotkey,
             my_hotkey=self.my_hotkey(),
             job_uuid=job_request.uuid,
+            batch_id=None,
             keypair=self.keypair,
         )
         await execute_organic_job(

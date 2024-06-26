@@ -154,6 +154,7 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             miner_hotkey=miner.hotkey,
             my_hotkey=keypair.ss58_address,
             job_uuid=job.job_uuid,
+            batch_id=None,
             keypair=keypair,
         )
 
