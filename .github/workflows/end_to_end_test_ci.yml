@@ -2,9 +2,9 @@ name: Run end to end tests
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, ci-e2e]
   pull_request:
-    branches: [master, main]
+    branches: [master, main, ci-e2e]
 
 env:
   PYTHON_DEFAULT_VERSION: "3.11"
