@@ -1,6 +1,7 @@
 import sys
 
 from asgiref.sync import async_to_sync
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -36,6 +37,9 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--miner_hotkey", default=None, type=str, help="Miner Hotkey")
+        parser.add_argument(
+            "--executor_class", type=str, help="Executor class", default=DEFAULT_EXECUTOR_CLASS
+        )
         parser.add_argument("--timeout", type=int, help="Timeout value", required=True)
         parser.add_argument(
             "--docker_image", type=str, help="docker image for job execution", required=True
@@ -80,6 +84,7 @@ class Command(BaseCommand):
         job_request = AdminJobRequest.objects.create(
             miner=miner,
             timeout=options["timeout"],
+            executor_class=options["executor_class"],
             docker_image=options["docker_image"],
             raw_script=options["raw_script"],
             args=options["cmd_args"],
