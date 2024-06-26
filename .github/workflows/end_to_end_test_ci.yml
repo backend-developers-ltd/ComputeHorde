@@ -255,7 +255,7 @@ jobs:
           POSTGRES_PASSWORD=12345
           BITTENSOR_NETUID=$BITTENSOR_NETUID
           BITTENSOR_NETWORK=$BITTENSOR_NETWORK
-          BITTENSOR_WALLET_NAME=compute_horde_miner
+          BITTENSOR_WALLET_NAME=compute_horde_validator
           BITTENSOR_WALLET_HOTKEY_NAME=default
           HOST_WALLET_DIR=$HOST_WALLET_DIR
           COMPOSE_PROJECT_NAME=compute_horde_validator
@@ -318,18 +318,21 @@ jobs:
       # TODO: run the tests
 
       - name: Print all logs and stop validator
+        if: always()
         working-directory: validator/envs/runner
         run: |
           docker compose logs
           docker compose down --remove-orphans --volumes
 
       - name: Print all logs and stop miner
+        if: always()
         working-directory: miner/envs/runner
         run: |
           docker compose logs
           docker compose down --remove-orphans --volumes
 
       - name: Print all logs and stop facilitator
+        if: always()
         working-directory: facilitator
         run: |
           docker compose logs
