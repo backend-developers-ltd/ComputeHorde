@@ -270,6 +270,11 @@ jobs:
           docker compose exec miner-runner docker compose exec app python manage.py fetch_validators
           docker compose exec miner-runner docker compose exec app python manage.py announce_address_and_port
 
+      - name: validator preparations
+        working-directory: validator/envs/runner
+        run: |
+          docker compose exec miner-runner docker compose exec app python manage.py fetch_miners
+
       - name: facilitator preparations
         working-directory: facilitator
         run: docker compose exec app python manage.py sync_metagraph
