@@ -273,7 +273,7 @@ jobs:
       - name: validator preparations
         working-directory: validator/envs/runner
         run: |
-          docker compose exec miner-runner docker compose exec app python manage.py fetch_miners
+          docker compose exec validator-runner docker compose exec app python manage.py fetch_miners
 
       - name: facilitator preparations
         working-directory: facilitator
@@ -289,7 +289,6 @@ jobs:
                 --timeout 60 \
                 --docker_image alpine \
                 --cmd_args "echo 1"
-      # TODO: check in db the organic job is completed properly
 
       - name: test synthetic job
         run: |
