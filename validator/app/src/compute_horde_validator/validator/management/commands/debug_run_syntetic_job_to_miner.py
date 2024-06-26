@@ -54,7 +54,7 @@ class Command(BaseCommand):
         asyncio.run(_execute_jobs(client, jobs))
 
 
-async def _execute_jobs(client, synthetic_jobs: Iterable[SyntheticJob]):
+async def _execute_jobs(client: MinerClient, synthetic_jobs: Iterable[SyntheticJob]):
     async with client:
         for job in synthetic_jobs:
             client.add_job(str(job.job_uuid))
