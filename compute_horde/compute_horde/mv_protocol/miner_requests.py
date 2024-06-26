@@ -29,7 +29,7 @@ class ExecutorManifest(pydantic.BaseModel):
     executor_classes: list[ExecutorClassManifest]
 
     @property
-    def count(self) -> int:
+    def total_count(self) -> int:
         return sum([x.count for x in self.executor_classes])
 
 
