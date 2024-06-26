@@ -46,6 +46,7 @@ from django.utils.timezone import now
 from compute_horde_validator.validator.models import (
     JobBase,
     Miner,
+    MinerManifest,
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
@@ -84,7 +85,8 @@ class MinerClient(AbstractMinerClient):
         my_hotkey: str,
         miner_hotkey: str,
         miner_port: int,
-        job_uuid: str,
+        job_uuid: None | str,
+        batch_id: None | int,
         keypair: bittensor.Keypair,
     ):
         super().__init__(loop, f"{miner_hotkey}({miner_address}:{miner_port})")
@@ -95,6 +97,7 @@ class MinerClient(AbstractMinerClient):
         self.job_states = {}
         if job_uuid is not None:
             self.add_job(job_uuid)
+        self.batch_id = batch_id
         self.keypair = keypair
         self._barrier = None
         self.miner_manifest = asyncio.Future()
@@ -132,6 +135,12 @@ class MinerClient(AbstractMinerClient):
             return
         if isinstance(msg, V0ExecutorManifestRequest):
             self.miner_manifest.set_result(msg.manifest)
+            if self.batch_id:
+                await MinerManifest.objects.acreate(
+                    miner=Miner.objects.get(hotkey=self.miner_hotkey),
+                    batch=SyntheticJobBatch.objects.get(id=self.batch_id),
+                    executor_count=msg.manifest.count,
+                )
             return
         job_state = self.get_job_state(msg.job_uuid)
         if job_state is None:
@@ -261,6 +270,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
         miner_hotkey=miner_hotkey,
         my_hotkey=key.ss58_address,
         job_uuid=None,
+        batch_id=batch_id,
         keypair=key,
     )
     data = {"miner_hotkey": miner_client.miner_hotkey}
@@ -323,6 +333,47 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
             await save_job_execution_event(
                 subtype=SystemEvent.EventSubType.GENERIC_ERROR, long_description=msg
             )
+
+
+async def apply_manifest_incentive(miner_hotkey: str, batch_id: int, score: float) -> float:
+    miner = await Miner.objects.aget(hotkey=miner_hotkey)
+
+    # get last 3 batches and manifests
+    batches = [
+        batch
+        async for batch in SyntheticJobBatch.objects.filter(id__lte=batch_id).order_by("-id")[:3]
+    ]
+    manifests = [
+        manifest
+        async for manifest in MinerManifest.objects.filter(miner=miner, batch__in=batches).order_by(
+            "-batch__id"
+        )
+    ]
+
+    if len(manifests) > 0 and manifests[0].executor_count <= 3:
+        logger.debug(
+            f"Applied manifest incentive for {miner_hotkey} - last manifest has 3 or less executors"
+        )
+    elif (
+        len(manifests) == 3
+        and manifests[0].executor_count - manifests[1].executor_count
+        > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
+        and manifests[0].executor_count - manifests[2].executor_count
+        > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
+    ):
+        logger.debug(
+            f"Applied manifest incentive for {miner_hotkey} - miner has increased number of executors significantly"
+        )
+    elif len(manifests) < 3:
+        logger.debug(
+            f"Applied manifest incentive for {miner_hotkey} - validator has missed one of the previous 2 synthetic jobs windows"
+        )
+    else:
+        # do not apply manifest incentive - return original score
+        return score
+
+    # apply manifest incentive
+    return score * settings.MANIFEST_SCORE_MULTIPLIER
 
 
 async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
@@ -474,7 +525,9 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
             )
 
             # if job passed, save synthetic job score
-            job.score = score
+            job.score = await apply_manifest_incentive(
+                miner_client.miner_hotkey, job.batch_id, score
+            )
             await job.asave()
 
             # Send receipt to miner

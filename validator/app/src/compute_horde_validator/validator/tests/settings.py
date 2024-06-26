@@ -22,6 +22,7 @@ BITTENSOR_WALLET_NAME = "test_validator"
 BITTENSOR_WALLET_HOTKEY_NAME = "test_validator_hotkey"
 
 STATS_COLLECTOR_URL = "http://fakehost:8000"
+MANIFEST_INCENTIVE_MULTIPLIER = 1.05
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
