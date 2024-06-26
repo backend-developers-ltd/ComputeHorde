@@ -28,7 +28,11 @@ jobs:
           fetch-depth: 0
 
       - name: Set dynamic environment variables
-        run: echo "HOST_WALLET_DIR=$PWD/wallets" >> $GITHUB_ENV
+        run: |
+          set -euxo pipefail
+          echo "HOST_WALLET_DIR=$PWD/wallets" >> $GITHUB_ENV
+          # echo "HOST_IP=$(hostname -I | cut -d' ' -f1)" >> $GITHUB_ENV
+          echo "HOST_IP=$(ip -o route get to 8.8.8.8 | sed -n 's/.*src \([0-9.]\+\).*/\1/p')" >> $GITHUB_ENV
 
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
         uses: actions/setup-python@v4
@@ -114,12 +118,24 @@ jobs:
           echo "BITTENSOR_NETWORK=$BITTENSOR_NETWORK" >> .env
           echo "POSTGRES_PASSWORD=12345" >> .env
           echo "DATABASE_URL=postgres://postgres:12345@db:5432/project" >> .env
-
-          docker compose up --detach --wait db redis app
           
-          sleep 10 # wait for containers to start
-          FACILITATOR_IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' facilitator-app-1)
-          echo "FACILITATOR_URI=ws://$FACILITATOR_IP_ADDRESS:8000/ws/v0/" >> $GITHUB_ENV
+          cat <<EOF > docker-compose.override.yml
+          services:
+            app:
+              ports:
+                - 8090:8000
+          EOF
+
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.override.yml \
+            up --detach --wait \
+            db redis app celery-worker
+          
+          # sleep 10 # wait for containers to start
+          # FACILITATOR_IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' facilitator-app-1)
+          # echo "FACILITATOR_URI=ws://$FACILITATOR_IP_ADDRESS:8000/ws/v0/" >> $GITHUB_ENV
+          echo "FACILITATOR_URI=ws://$HOST_IP:8090/ws/v0/" >> $GITHUB_ENV
 
       - name: Build executor image
         run: |
@@ -158,7 +174,7 @@ jobs:
             .
 
           # prepare files
-          cat > compose.yaml <<ENDDOCKERCOMPOSE
+          cat > docker-compose.yml <<ENDDOCKERCOMPOSE
           services:
             miner-runner:
               image: backenddevelopersltd/miner-runner-e2e:v0-latest
@@ -176,13 +192,12 @@ jobs:
           BITTENSOR_WALLET_HOTKEY_NAME=default
           HOST_WALLET_DIR=$HOST_WALLET_DIR
           BITTENSOR_MINER_PORT=8000
-          BITTENSOR_MINER_ADDRESS=auto
+          BITTENSOR_MINER_ADDRESS=$HOST_IP
           COMPOSE_PROJECT_NAME=compute_horde_miner
           PORT_FOR_EXECUTORS=8000
-          ADDRESS_FOR_EXECUTORS=172.17.0.1
+          ADDRESS_FOR_EXECUTORS=$HOST_IP
           EXECUTOR_IMAGE=backenddevelopersltd/executor-e2e:v0-latest
           DEBUG_SKIP_PULLING_EXECUTOR_IMAGE=1
-          DEBUG_USE_DOCKER_IP_AS_EXTERNAL=1
           ENDENV
           
           # copy .env to "host", so that mounting works -_-
@@ -201,8 +216,8 @@ jobs:
           
           sleep 10 # wait for containers to start
           docker ps
-          MINER_IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' /compute_horde_miner-app-1)
-          echo "MINER_IP_ADDRESS=$MINER_IP_ADDRESS" >> $GITHUB_ENV
+          # MINER_IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' /compute_horde_miner-app-1)
+          # echo "MINER_IP_ADDRESS=$MINER_IP_ADDRESS" >> $GITHUB_ENV
 
       - name: Run validator
         run: |
@@ -226,7 +241,7 @@ jobs:
             .
 
           # prepare files
-          cat > compose.yaml <<ENDDOCKERCOMPOSE
+          cat > docker-compose.yml <<ENDDOCKERCOMPOSE
           services:
             validator-runner:
               image: backenddevelopersltd/validator-runner-e2e:v0-latest
