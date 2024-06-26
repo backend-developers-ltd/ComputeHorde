@@ -5,6 +5,7 @@ import time
 from functools import partial
 from typing import Literal
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import MinerConnectionError
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
@@ -122,6 +123,7 @@ async def execute_organic_job(
         await miner_client.send_model(
             V0InitialJobRequest(
                 job_uuid=job.job_uuid,
+                executor_class=DEFAULT_EXECUTOR_CLASS,
                 base_docker_image_name=job_request.docker_image or None,
                 timeout_seconds=total_job_timeout,
                 volume_type=volume.volume_type.value,
@@ -180,6 +182,7 @@ async def execute_organic_job(
         await miner_client.send_model(
             V0JobRequest(
                 job_uuid=job.job_uuid,
+                executor_class=DEFAULT_EXECUTOR_CLASS,
                 docker_image_name=job_request.docker_image or None,
                 raw_script=job_request.raw_script or None,
                 docker_run_options_preset=docker_run_options_preset,

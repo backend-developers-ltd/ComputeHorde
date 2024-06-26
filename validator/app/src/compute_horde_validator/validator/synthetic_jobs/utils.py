@@ -337,6 +337,7 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
     await miner_client.send_model(
         V0InitialJobRequest(
             job_uuid=str(job.job_uuid),
+            executor_class=job.executor_class,
             base_docker_image_name=job_generator.base_docker_image_name(),
             timeout_seconds=job_generator.timeout_seconds(),
             volume_type=VolumeType.inline.value,
@@ -382,6 +383,7 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
     await miner_client.send_model(
         V0JobRequest(
             job_uuid=str(job.job_uuid),
+            executor_class=job.executor_class,
             docker_image_name=job_generator.docker_image_name(),
             docker_run_options_preset=job_generator.docker_run_options_preset(),
             docker_run_cmd=job_generator.docker_run_cmd(),

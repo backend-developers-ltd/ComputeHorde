@@ -54,6 +54,7 @@ class V0AuthenticateRequest(BaseValidatorRequest):
 
 class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0InitialJobRequest
+    executor_class: str | None = None
     base_docker_image_name: str | None = None
     timeout_seconds: int | None = None
     volume_type: VolumeType
@@ -91,6 +92,7 @@ class OutputUpload(pydantic.BaseModel):
 
 class V0JobRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0JobRequest
+    executor_class: str | None = None
     docker_image_name: str | None = None
     raw_script: str | None = None
     docker_run_options_preset: str
