@@ -50,7 +50,6 @@ class Command(BaseCommand):
         parser.add_argument(
             "--use_gpu",
             action="store_true",
-            default=True,
             help="use gpu for job execution",
         )
         parser.add_argument(
