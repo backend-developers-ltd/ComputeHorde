@@ -15,6 +15,7 @@ from compute_horde_validator.validator.models import (
 )  # noqa
 from rangefilter.filters import DateTimeRangeFilter
 
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_validator.validator.tasks import trigger_run_admin_job_request  # noqa
 
 admin.site.site_header = "ComputeHorde Validator Administration"
@@ -38,11 +39,14 @@ class ReadOnlyAdmin(AddOnlyAdmin):
 
 
 class AdminJobRequestForm(forms.ModelForm):
+    executor_class = forms.ChoiceField()
+
     class Meta:
         model = AdminJobRequest
         fields = [
             "uuid",
             "miner",
+            "executor_class",
             "docker_image",
             "timeout",
             "raw_script",
@@ -58,12 +62,13 @@ class AdminJobRequestForm(forms.ModelForm):
         if self.fields:
             # exclude blacklisted miners from valid results
             self.fields["miner"].queryset = Miner.objects.exclude(minerblacklist__isnull=False)
+            self.fields["executor_class"].choices = [(name, name) for name in EXECUTOR_CLASS]
 
 
 class AdminJobRequestAddOnlyAdmin(AddOnlyAdmin):
     form = AdminJobRequestForm
     exclude = ["env"]  # not used ?
-    list_display = ["uuid", "docker_image", "use_gpu", "miner", "created_at"]
+    list_display = ["uuid", "executor_class", "docker_image", "use_gpu", "miner", "created_at"]
     readonly_fields = ["uuid", "status_message"]
     ordering = ["-created_at"]
     autocomplete_fields = ["miner"]
