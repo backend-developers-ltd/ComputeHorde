@@ -196,7 +196,7 @@ jobs:
           docker cp $PWD/.env "$CONTAINER_NAME:/root/pwd/.env"
           docker rm -f "$CONTAINER_NAME"
           
-          docker compose up --detach --wait
+          docker compose up
           
           MINER_IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' /compute_horde_miner-app-1)
           echo "MINER_IP_ADDRESS=$MINER_IP_ADDRESS" >> $GITHUB_ENV
