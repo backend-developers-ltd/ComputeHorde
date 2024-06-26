@@ -81,7 +81,7 @@ class AdminJobRequestAddOnlyAdmin(AddOnlyAdmin):
 
 
 class JobReadOnlyAdmin(ReadOnlyAdmin):
-    list_display = ["job_uuid", "miner", "status", "updated_at"]
+    list_display = ["job_uuid", "miner", "executor_class", "status", "updated_at"]
     search_fields = ["job_uuid", "miner__hotkey"]
     ordering = ["-updated_at"]
 

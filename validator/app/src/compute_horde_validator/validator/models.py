@@ -3,6 +3,7 @@ import shlex
 import uuid
 from datetime import timedelta
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.db import models
 from django.db.models import UniqueConstraint
 
@@ -106,6 +107,7 @@ class JobBase(models.Model):
     miner_address = models.CharField(max_length=255)
     miner_address_ip_version = models.IntegerField()
     miner_port = models.IntegerField()
+    executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
     status = models.TextField(choices=Status.choices, default=Status.PENDING)
     updated_at = models.DateTimeField(auto_now=True)
     comment = models.TextField(blank=True, default="")

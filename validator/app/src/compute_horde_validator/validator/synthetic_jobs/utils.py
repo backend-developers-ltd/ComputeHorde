@@ -306,6 +306,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
                         miner_address=axon_info.ip,
                         miner_address_ip_version=axon_info.ip_type,
                         miner_port=axon_info.port,
+                        executor_class=DEFAULT_EXECUTOR_CLASS,
                         status=SyntheticJob.Status.PENDING,
                     )
                     for i in range(executor_count)

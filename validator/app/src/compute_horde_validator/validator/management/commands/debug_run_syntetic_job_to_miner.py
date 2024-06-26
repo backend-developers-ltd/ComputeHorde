@@ -2,6 +2,7 @@ import asyncio
 import datetime
 from collections.abc import Iterable
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils.timezone import now
@@ -36,6 +37,7 @@ class Command(BaseCommand):
                 miner_address=miner_address,
                 miner_address_ip_version=4,
                 miner_port=miner_port,
+                executor_class=DEFAULT_EXECUTOR_CLASS,
                 status=SyntheticJob.Status.PENDING,
             )
         ]
