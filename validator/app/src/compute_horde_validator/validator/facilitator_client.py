@@ -72,6 +72,8 @@ class JobRequest(BaseModel, extra="forbid"):
 
     uuid: str
     miner_hotkey: str
+    # TODO: remove default after we add executor class support to facilitator
+    executor_class: str = DEFAULT_EXECUTOR_CLASS
     docker_image: str
     raw_script: str
     args: list[str]
@@ -281,7 +283,7 @@ class FacilitatorClient:
             miner_address=miner_axon_info.ip,
             miner_address_ip_version=miner_axon_info.ip_type,
             miner_port=miner_axon_info.port,
-            executor_class=DEFAULT_EXECUTOR_CLASS,
+            executor_class=job_request.executor_class,
             job_description="User job from facilitator",
         )
 

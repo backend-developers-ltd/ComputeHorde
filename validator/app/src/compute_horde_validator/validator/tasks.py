@@ -16,7 +16,6 @@ from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts import get_miner_receipts
 from compute_horde.utils import get_validators
 from constance import config
@@ -144,7 +143,7 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             miner_address=miner_axon_info.ip,
             miner_address_ip_version=miner_axon_info.ip_type,
             miner_port=miner_axon_info.port,
-            executor_class=DEFAULT_EXECUTOR_CLASS,
+            executor_class=job_request.executor_class,
             job_description="Validator Job from Admin Panel",
         )
 

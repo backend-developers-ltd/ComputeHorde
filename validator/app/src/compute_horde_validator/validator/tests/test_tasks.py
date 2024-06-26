@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 from requests import Response
 
@@ -23,6 +24,7 @@ def test_trigger_run_admin_job__should_trigger_job():
     job_request = AdminJobRequest.objects.create(
         miner=miner,
         timeout=0,  # should timeout
+        executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="python:3.11-slim",
         raw_script="print('hello world')",
         args="",
@@ -50,6 +52,7 @@ def test_trigger_run_admin_job__should_not_trigger_job():
     job_request = AdminJobRequest.objects.create(
         miner=miner,
         timeout=0,  # should timeout
+        executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="python:3.11-slim",
         raw_script="print('hello world')",
         args="",

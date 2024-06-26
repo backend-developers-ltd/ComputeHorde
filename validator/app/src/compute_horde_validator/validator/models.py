@@ -135,6 +135,9 @@ class OrganicJob(JobBase):
 class AdminJobRequest(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True)
     miner = models.ForeignKey(Miner, on_delete=models.PROTECT)
+    executor_class = models.CharField(
+        max_length=255, default=DEFAULT_EXECUTOR_CLASS, help_text="executor hardware class"
+    )
     timeout = models.PositiveIntegerField(default=300, help_text="timeout in seconds")
 
     docker_image = models.CharField(max_length=255, help_text="docker image for job execution")
