@@ -9,7 +9,6 @@ from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
     Miner,
-    OrganicJob,
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
@@ -43,7 +42,7 @@ def setup_db():
             miner_address="ignore",
             miner_address_ip_version=4,
             miner_port=9999,
-            status=OrganicJob.Status.COMPLETED,
+            status=SyntheticJob.Status.COMPLETED,
         )
 
 
