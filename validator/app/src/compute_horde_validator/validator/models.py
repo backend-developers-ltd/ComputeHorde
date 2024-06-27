@@ -23,6 +23,7 @@ class SystemEvent(models.Model):
         MINER_SYNTHETIC_JOB_SUCCESS = "MINER_SYNTHETIC_JOB_SUCCESS"
         MINER_SYNTHETIC_JOB_FAILURE = "MINER_SYNTHETIC_JOB_FAILURE"
         RECEIPT_FAILURE = "RECEIPT_FAILURE"
+        FACILITATOR_CLIENT_ERROR = "FACILITATOR_CLIENT_ERROR"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -39,6 +40,8 @@ class SystemEvent(models.Model):
         JOB_EXECUTION_TIMEOUT = "JOB_EXECUTION_TIMEOUT"
         RECEIPT_FETCH_ERROR = "RECEIPT_FETCH_ERROR"
         RECEIPT_SEND_ERROR = "RECEIPT_SEND_ERROR"
+        SPECS_SEND_ERROR = "SPECS_SENDING_ERROR"
+        HEARTBEAT_ERROR = "HEARTBEAT_ERROR"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
@@ -55,7 +58,10 @@ class SystemEvent(models.Model):
             "type": self.type,
             "subtype": self.subtype,
             "timestamp": self.timestamp.isoformat(),
-            "data": self.data,
+            "data": {
+                "description": self.long_description,
+                **self.data,
+            },
         }
 
     def __str__(self):

@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import sys
 from collections.abc import Iterable
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
@@ -57,7 +58,12 @@ class Command(BaseCommand):
             job_uuid=None,
             keypair=key,
         )
-        asyncio.run(_execute_jobs(client, jobs))
+
+        try:
+            asyncio.run(_execute_jobs(client, jobs))
+        except KeyboardInterrupt:
+            print("Interrupted by user")
+            sys.exit(1)
 
 
 async def _execute_jobs(client: MinerClient, synthetic_jobs: Iterable[SyntheticJob]):

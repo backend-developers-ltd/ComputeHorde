@@ -17,7 +17,7 @@ from compute_horde_validator.validator.metagraph_client import (
     get_miner_axon_info,
 )
 from compute_horde_validator.validator.miner_driver import execute_organic_job
-from compute_horde_validator.validator.models import Miner, OrganicJob
+from compute_horde_validator.validator.models import Miner, OrganicJob, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
 from compute_horde_validator.validator.utils import (
     MACHINE_SPEC_GROUP_NAME,
@@ -102,6 +102,15 @@ class MachineSpecsUpdate(BaseModel, extra="forbid"):
     validator_hotkey: str
     specs: dict[str, Any]
     batch_id: str
+
+
+async def save_facilitator_event(subtype: str, long_description: str, data={}, success=False):
+    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+        type=SystemEvent.EventType.FACILITATOR_CLIENT_ERROR,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
+    )
 
 
 class FacilitatorClient:
@@ -220,8 +229,17 @@ class FacilitatorClient:
                         try:
                             await self.send_model(spec_to_send)
                         except Exception as exc:
-                            logger.error("Error occurred while sending specs", exc_info=exc)
                             specs_queue.insert(0, spec_to_send)
+                            msg = f"Error occurred while sending specs: {exc}"
+                            await save_facilitator_event(
+                                subtype=SystemEvent.Subtype.SPECS_SEND_ERROR,
+                                long_description=msg,
+                                data={
+                                    "miner_hotkey": spec_to_send.miner_hotkey,
+                                    "batch_id": spec_to_send.batch_id,
+                                },
+                            )
+                            logger.warning(msg)
                             break
             except TimeoutError:
                 logger.debug("wait_for_specs still running")
@@ -232,7 +250,12 @@ class FacilitatorClient:
                 try:
                     await self.send_model(Heartbeat())
                 except Exception as exc:
-                    logger.error("Error occurred while sending heartbeat", exc_info=exc)
+                    msg = f"Error occurred while sending heartbeat: {exc}"
+                    logger.warning(msg)
+                    await save_facilitator_event(
+                        subtype=SystemEvent.Subtype.HEARTBEAT_ERROR,
+                        long_description=msg,
+                    )
             await asyncio.sleep(self.HEARTBEAT_PERIOD)
 
     def create_metagraph_refresh_task(self, period=None):

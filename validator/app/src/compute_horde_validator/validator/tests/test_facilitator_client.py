@@ -19,7 +19,7 @@ from .helpers import (
     MockMetagraph,
     MockSubtensor,
     get_dummy_job_request,
-    mock_keypair,
+    get_keypair,
 )
 
 
@@ -116,9 +116,8 @@ async def test_facilitator_client(ws_server_cls):
     ws_server = ws_server_cls()
     async with websockets.serve(ws_server.serve, "127.0.0.1", 0) as server:
         host, port = server.sockets[0].getsockname()
-        keypair = mock_keypair()
         facilitator_uri = f"ws://{host}:{port}/"
-        facilitator_client = MockFacilitatorClient(keypair, facilitator_uri)
+        facilitator_client = MockFacilitatorClient(get_keypair(), facilitator_uri)
 
         facilitator_client.MINER_CLIENT_CLASS = MockJobStateMinerClient
 

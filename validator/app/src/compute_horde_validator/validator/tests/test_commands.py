@@ -12,7 +12,6 @@ from .helpers import (
     MockMinerClient,
     check_system_events,
     mock_get_miner_axon_info,
-    mock_keypair,
     throw_error,
 )
 from .test_facilitator_client import MockJobStateMinerClient
@@ -20,7 +19,6 @@ from .test_facilitator_client import MockJobStateMinerClient
 logger = logging.getLogger(__name__)
 
 
-@patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockJobStateMinerClient)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -49,7 +47,6 @@ def test_debug_run_organic_job_command__job_completed():
     )
 
 
-@patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -81,7 +78,6 @@ def test_debug_run_organic_job_command__job_timeout():
     )
 
 
-@patch("compute_horde_validator.validator.tasks.get_keypair", mock_keypair)
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", throw_error)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockJobStateMinerClient)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
