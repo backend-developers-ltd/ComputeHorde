@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
     V0ExecutorReadyRequest,
@@ -48,6 +49,7 @@ async def test_miner_driver(futures_result, expected_job_status_updates, organic
         miner_address="irrelevant",
         miner_address_ip_version=4,
         miner_port=9999,
+        executor_class=DEFAULT_EXECUTOR_CLASS,
         job_description="User job from facilitator",
     )
     miner_client = get_miner_client(MockMinerClient, job_uuid)

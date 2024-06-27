@@ -150,12 +150,14 @@ async def drive_executor() -> float:
 
     initial_job_request = validator_requests.V0InitialJobRequest(
         job_uuid=job_uuid,
+        executor_class=DEFAULT_EXECUTOR_CLASS,
         base_docker_image_name=JOB_IMAGE_NAME,
         timeout_seconds=JOB_TIMEOUT_SECONDS,
         volume_type=validator_requests.VolumeType.inline,
     )
     job_request = validator_requests.V0JobRequest(
         job_uuid=job_uuid,
+        executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image_name=JOB_IMAGE_NAME,
         docker_run_options_preset="nvidia_all",
         docker_run_cmd=JOB_RUN_CMD,

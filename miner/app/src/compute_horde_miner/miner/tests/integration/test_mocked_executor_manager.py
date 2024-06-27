@@ -45,6 +45,7 @@ async def test_main_loop():
         {
             "message_type": "V0InitialJobRequest",
             "job_uuid": job_uuid,
+            "executor_class": DEFAULT_EXECUTOR_CLASS,
             "base_docker_image_name": "it's teeeeests",
             "timeout_seconds": 60,
             "volume_type": "inline",
@@ -65,6 +66,7 @@ async def test_main_loop():
         {
             "message_type": "V0JobRequest",
             "job_uuid": job_uuid,
+            "executor_class": DEFAULT_EXECUTOR_CLASS,
             "docker_image_name": "it's teeeeests again",
             "docker_run_cmd": [],
             "docker_run_options_preset": "none",

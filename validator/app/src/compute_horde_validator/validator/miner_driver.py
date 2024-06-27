@@ -122,6 +122,7 @@ async def execute_organic_job(
         await miner_client.send_model(
             V0InitialJobRequest(
                 job_uuid=job.job_uuid,
+                executor_class=job_request.executor_class,
                 base_docker_image_name=job_request.docker_image or None,
                 timeout_seconds=total_job_timeout,
                 volume_type=volume.volume_type.value,
@@ -180,6 +181,7 @@ async def execute_organic_job(
         await miner_client.send_model(
             V0JobRequest(
                 job_uuid=job.job_uuid,
+                executor_class=job_request.executor_class,
                 docker_image_name=job_request.docker_image or None,
                 raw_script=job_request.raw_script or None,
                 docker_run_options_preset=docker_run_options_preset,

@@ -306,6 +306,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
                         miner_address=axon_info.ip,
                         miner_address_ip_version=axon_info.ip_type,
                         miner_port=axon_info.port,
+                        executor_class=DEFAULT_EXECUTOR_CLASS,
                         status=SyntheticJob.Status.PENDING,
                     )
                     for i in range(executor_count)
@@ -336,6 +337,7 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
     await miner_client.send_model(
         V0InitialJobRequest(
             job_uuid=str(job.job_uuid),
+            executor_class=job.executor_class,
             base_docker_image_name=job_generator.base_docker_image_name(),
             timeout_seconds=job_generator.timeout_seconds(),
             volume_type=VolumeType.inline.value,
@@ -381,6 +383,7 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
     await miner_client.send_model(
         V0JobRequest(
             job_uuid=str(job.job_uuid),
+            executor_class=job.executor_class,
             docker_image_name=job_generator.docker_image_name(),
             docker_run_options_preset=job_generator.docker_run_options_preset(),
             docker_run_cmd=job_generator.docker_run_cmd(),

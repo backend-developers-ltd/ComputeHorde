@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from asgiref.sync import sync_to_async
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import BaseRequest
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
@@ -145,6 +146,7 @@ async def test_execute_synthetic_job(
         miner_address="ignore",
         miner_address_ip_version=4,
         miner_port=9999,
+        executor_class=DEFAULT_EXECUTOR_CLASS,
         status=SyntheticJob.Status.PENDING,
     )
     job_uuid = str(job.job_uuid)

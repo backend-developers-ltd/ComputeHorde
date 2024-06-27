@@ -143,6 +143,7 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             miner_address=miner_axon_info.ip,
             miner_address_ip_version=miner_axon_info.ip_type,
             miner_port=miner_axon_info.port,
+            executor_class=job_request.executor_class,
             job_description="Validator Job from Admin Panel",
         )
 

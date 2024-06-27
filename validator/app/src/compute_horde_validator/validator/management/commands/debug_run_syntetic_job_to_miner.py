@@ -2,6 +2,7 @@ import asyncio
 import datetime
 from collections.abc import Iterable
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils.timezone import now
@@ -21,11 +22,15 @@ class Command(BaseCommand):
             "--miner_address", type=str, help="Miner IPv4 address", default="127.0.0.1"
         )
         parser.add_argument("--miner_port", type=int, help="Miner port", default=8000)
+        parser.add_argument(
+            "--executor_class", type=str, help="Executor class", default=DEFAULT_EXECUTOR_CLASS
+        )
 
     def handle(self, *args, **options):
         miner_hotkey = options["miner_hotkey"]
         miner_address = options["miner_address"]
         miner_port = options["miner_port"]
+        executor_class = options["executor_class"]
         batch = SyntheticJobBatch.objects.create(
             accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
         )
@@ -36,6 +41,7 @@ class Command(BaseCommand):
                 miner_address=miner_address,
                 miner_address_ip_version=4,
                 miner_port=miner_port,
+                executor_class=executor_class,
                 status=SyntheticJob.Status.PENDING,
             )
         ]

@@ -8,6 +8,7 @@ import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 from pydantic import BaseModel, model_validator
 
@@ -71,6 +72,8 @@ class JobRequest(BaseModel, extra="forbid"):
 
     uuid: str
     miner_hotkey: str
+    # TODO: remove default after we add executor class support to facilitator
+    executor_class: str = DEFAULT_EXECUTOR_CLASS
     docker_image: str
     raw_script: str
     args: list[str]
@@ -280,6 +283,7 @@ class FacilitatorClient:
             miner_address=miner_axon_info.ip,
             miner_address_ip_version=miner_axon_info.ip_type,
             miner_port=miner_axon_info.port,
+            executor_class=job_request.executor_class,
             job_description="User job from facilitator",
         )
 
