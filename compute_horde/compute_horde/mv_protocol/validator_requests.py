@@ -10,6 +10,7 @@ from pydantic import model_validator
 from ..base.output_upload import OutputUpload, OutputUploadType  # noqa
 from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
+from ..executor_class import ExecutorClass
 from ..utils import MachineSpecs, _json_dumps_default
 
 SAFE_DOMAIN_REGEX = re.compile(r".*")
@@ -49,7 +50,7 @@ class V0AuthenticateRequest(BaseValidatorRequest):
 
 class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0InitialJobRequest
-    executor_class: str | None = None
+    executor_class: ExecutorClass | None = None
     base_docker_image_name: str | None = None
     timeout_seconds: int | None = None
     volume_type: VolumeType | None = None
@@ -57,7 +58,7 @@ class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
 
 class V0JobRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0JobRequest
-    executor_class: str | None = None
+    executor_class: ExecutorClass | None = None
     docker_image_name: str | None = None
     raw_script: str | None = None
     docker_run_options_preset: str
