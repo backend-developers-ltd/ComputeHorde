@@ -93,7 +93,13 @@ class Command(BaseCommand):
             output_url=options["output_url"],
             created_at=timezone.now(),
         )
-        async_to_sync(run_admin_job_request)(job_request.pk, callback=notify_job_status_update)
+
+        try:
+            async_to_sync(run_admin_job_request)(job_request.pk, callback=notify_job_status_update)
+        except KeyboardInterrupt:
+            print("Interrupted by user")
+            sys.exit(1)
+
         try:
             job_request.refresh_from_db()
             job = OrganicJob.objects.get(job_uuid=job_request.uuid)
