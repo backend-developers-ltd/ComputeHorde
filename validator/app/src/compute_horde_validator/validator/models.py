@@ -58,7 +58,10 @@ class SystemEvent(models.Model):
             "type": self.type,
             "subtype": self.subtype,
             "timestamp": self.timestamp.isoformat(),
-            "data": self.data,
+            "data": {
+                "description": self.long_description,
+                **self.data,
+            },
         }
 
     def __str__(self):
