@@ -17,9 +17,9 @@ PROMETHEUS_EXPORT_MIGRATIONS = False
 BITTENSOR_NETUID = 12
 BITTENSOR_NETWORK = "local"
 
-BITTENSOR_WALLET_DIRECTORY = (pathlib.Path("~").expanduser() / ".bittensor_test" / "wallets",)
+BITTENSOR_WALLET_DIRECTORY = pathlib.Path("~").expanduser() / ".bittensor" / "wallets"
 BITTENSOR_WALLET_NAME = "test_validator"
-BITTENSOR_WALLET_HOTKEY_NAME = "test_validator_hotkey"
+BITTENSOR_WALLET_HOTKEY_NAME = "default"
 
 STATS_COLLECTOR_URL = "http://fakehost:8000"
 MANIFEST_INCENTIVE_MULTIPLIER = 1.05

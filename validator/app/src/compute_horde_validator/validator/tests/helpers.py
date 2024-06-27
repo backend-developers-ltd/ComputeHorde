@@ -1,7 +1,6 @@
 import asyncio
 from typing import NamedTuple
 
-import bittensor
 import numpy as np
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import BaseRequest
@@ -22,10 +21,8 @@ def throw_error(*args):
     raise Exception("Error thrown for testing")
 
 
-def mock_keypair():
-    return bittensor.Keypair.create_from_mnemonic(
-        mnemonic="arrive produce someone view end scout bargain coil slight festival excess struggle"
-    )
+def get_keypair():
+    return settings.BITTENSOR_WALLET().get_hotkey()
 
 
 class MockWallet:
@@ -33,7 +30,7 @@ class MockWallet:
         pass
 
     def get_hotkey(self):
-        return mock_keypair()
+        return get_keypair()
 
 
 def get_miner_client(MINER_CLIENT, job_uuid: str):
@@ -45,7 +42,7 @@ def get_miner_client(MINER_CLIENT, job_uuid: str):
         miner_port=9999,
         job_uuid=job_uuid,
         batch_id=None,
-        keypair=mock_keypair(),
+        keypair=get_keypair(),
     )
 
 
