@@ -31,12 +31,12 @@ jobs:
       - name: Get version from tag
         id: get-version
         run: echo "version=${GITHUB_REF#refs/tags/library-v}" >> "$GITHUB_OUTPUT"
-      - name: Read the Changelog
-        id: read-changelog
-        uses: mindsers/changelog-reader-action@v2
-        with:
-          version: ${{ steps.get-version.outputs.version }}
-          path: ./compute_horde/CHANGELOG.md
+      # - name: Read the Changelog
+      #   id: read-changelog
+      #   uses: mindsers/changelog-reader-action@v2
+      #   with:
+      #     version: ${{ steps.get-version.outputs.version }}
+      #     path: ./compute_horde/CHANGELOG.md
       - name: Build
         run: pdm build
       - name: Create GitHub release and upload the distribution
