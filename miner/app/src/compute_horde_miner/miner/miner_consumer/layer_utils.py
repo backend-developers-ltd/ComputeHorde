@@ -30,7 +30,7 @@ class JobRequest(pydantic.BaseModel):
     raw_script: str | None = None
     docker_run_options_preset: str
     docker_run_cmd: list[str]
-    volume: Volume
+    volume: Volume | None = None
     output_upload: OutputUpload | None = None
 
     @model_validator(mode="after")
@@ -139,17 +139,8 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
                     raw_script=job_request.raw_script,
                     docker_run_options_preset=job_request.docker_run_options_preset,
                     docker_run_cmd=job_request.docker_run_cmd,
-                    volume={
-                        "volume_type": job_request.volume.volume_type.value,
-                        "contents": job_request.volume.contents,
-                    },
-                    output_upload={
-                        "output_upload_type": job_request.output_upload.output_upload_type.value,
-                        "url": job_request.output_upload.url,
-                        "form_fields": job_request.output_upload.form_fields,
-                    }
-                    if job_request.output_upload
-                    else None,
+                    volume=job_request.volume,
+                    output_upload=job_request.output_upload,
                 ).model_dump(),
             },
         )

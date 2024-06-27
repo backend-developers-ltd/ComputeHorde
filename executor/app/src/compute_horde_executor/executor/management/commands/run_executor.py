@@ -4,6 +4,7 @@ import csv
 import io
 import logging
 import pathlib
+import random
 import re
 import shlex
 import shutil
@@ -14,6 +15,12 @@ import zipfile
 
 import httpx
 import pydantic
+from compute_horde.base.volume import (
+    InlineVolume,
+    MultiVolume,
+    SingleFileVolume,
+    ZipUrlVolume,
+)
 from compute_horde.base_requests import BaseRequest
 from compute_horde.em_protocol import executor_requests, miner_requests
 from compute_horde.em_protocol.executor_requests import (
@@ -28,7 +35,6 @@ from compute_horde.em_protocol.miner_requests import (
     BaseMinerRequest,
     V0InitialJobRequest,
     V0JobRequest,
-    VolumeType,
 )
 from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
 from compute_horde.utils import MachineSpecs
@@ -280,6 +286,69 @@ class JobError(Exception):
         self.description = description
 
 
+class DownloadManager:
+    def __init__(self, concurrency=3, max_retries=3):
+        self.semaphore = asyncio.Semaphore(concurrency)
+        self.max_retries = max_retries
+
+    async def download(self, fp, url):
+        async with self.semaphore:
+            retries = 0
+            bytes_received = 0
+            backoff_factor = 1
+
+            while retries < self.max_retries:
+                headers = {}
+                if bytes_received > 0:
+                    headers["Range"] = f"bytes={bytes_received}-"
+
+                async with httpx.AsyncClient() as client:
+                    async with client.stream("GET", url, headers=headers) as response:
+                        if response.status_code == 416:  # Requested Range Not Satisfiable
+                            # Server doesn't support resume, start from the beginning
+                            fp.seek(0)
+                            bytes_received = 0
+                            continue
+                        elif response.status_code != 206 and bytes_received > 0:  # Partial Content
+                            # Server doesn't support resume, start from the beginning
+                            fp.seek(0)
+                            bytes_received = 0
+                            continue
+
+                        if (
+                            bytes_received == 0
+                            and (content_length := response.headers.get("Content-Length"))
+                            is not None
+                        ):
+                            # check size early if Content-Length is present
+                            if 0 < settings.VOLUME_MAX_SIZE_BYTES < int(content_length):
+                                raise JobError("Input volume too large")
+
+                        try:
+                            async for chunk in response.aiter_bytes():
+                                bytes_received += len(chunk)
+                                if 0 < settings.VOLUME_MAX_SIZE_BYTES < bytes_received:
+                                    raise JobError("Input volume too large")
+                                fp.write(chunk)
+                            return  # Download completed successfully
+                        except (httpx.HTTPError, OSError) as e:
+                            retries += 1
+                            if retries >= self.max_retries:
+                                raise e
+
+                            # Exponential backoff with jitter
+                            backoff_time = backoff_factor * (2 ** (retries - 1))
+                            jitter = random.uniform(
+                                0, 0.1
+                            )  # Add jitter to avoid synchronization issues
+                            backoff_time *= 1 + jitter
+                            await asyncio.sleep(backoff_time)
+
+                            backoff_factor *= 2  # Double the backoff factor for the next retry
+
+            raise JobError(f"Download failed after {self.max_retries} retries")
+
+
 class JobRunner:
     def __init__(self, initial_job_request: V0InitialJobRequest):
         self.initial_job_request = initial_job_request
@@ -288,6 +357,7 @@ class JobRunner:
         self.volume_mount_dir = self.temp_dir / "volume"
         self.output_volume_mount_dir = self.temp_dir / "output"
         self.specs_volume_mount_dir = self.temp_dir / "specs"
+        self.download_manager = DownloadManager()
 
     async def prepare(self):
         self.volume_mount_dir.mkdir(exist_ok=True)
@@ -463,36 +533,60 @@ class JobRunner:
             elif path.is_dir():
                 shutil.rmtree(path)
 
-        if job_request.volume.volume_type == VolumeType.inline:
-            decoded_contents = base64.b64decode(job_request.volume.contents)
-            bytes_io = io.BytesIO(decoded_contents)
-            zip_file = zipfile.ZipFile(bytes_io)
-            zip_file.extractall(self.volume_mount_dir.as_posix())
-        elif job_request.volume.volume_type == VolumeType.zip_url:
-            with tempfile.NamedTemporaryFile() as download_file:
-                async with httpx.AsyncClient() as client:
-                    async with client.stream("GET", job_request.volume.contents) as response:
-                        if (content_length := response.headers.get("Content-Length")) is not None:
-                            # check size early if Content-Length is present
-                            if 0 < settings.VOLUME_MAX_SIZE_BYTES < int(content_length):
-                                raise JobError("Input volume too large")
-
-                        bytes_received = 0
-                        async for chunk in response.aiter_bytes():
-                            bytes_received += len(chunk)
-                            if 0 < settings.VOLUME_MAX_SIZE_BYTES < bytes_received:
-                                raise JobError("Input volume too large")
-                            download_file.write(chunk)
-                download_file.seek(0)
-                zip_file = zipfile.ZipFile(download_file)
-                zip_file.extractall(self.volume_mount_dir.as_posix())
-        else:
-            raise NotImplementedError(f"Unsupported volume_type: {job_request.volume.volume_type}")
+        if job_request.volume is not None:
+            if isinstance(job_request.volume, InlineVolume):
+                await self._unpack_inline_volume(job_request.volume)
+            elif isinstance(job_request.volume, ZipUrlVolume):
+                await self._unpack_zip_url_volume(job_request.volume)
+            elif isinstance(job_request.volume, SingleFileVolume):
+                await self._unpack_single_file_volume(job_request.volume)
+            elif isinstance(job_request.volume, MultiVolume):
+                await self._unpack_multi_volume(job_request.volume)
+            else:
+                raise NotImplementedError(
+                    f"Unsupported volume_type: {job_request.volume.volume_type}"
+                )
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()
         )
         assert 0 == await chmod_proc.wait()
+
+    async def _unpack_inline_volume(self, volume: InlineVolume):
+        decoded_contents = base64.b64decode(volume.contents)
+        bytes_io = io.BytesIO(decoded_contents)
+        zip_file = zipfile.ZipFile(bytes_io)
+        extraction_path = self.volume_mount_dir
+        if volume.relative_path:
+            extraction_path /= volume.relative_path
+        zip_file.extractall(extraction_path.as_posix())
+
+    async def _unpack_zip_url_volume(self, volume: ZipUrlVolume):
+        with tempfile.NamedTemporaryFile() as download_file:
+            await self.download_manager.download(download_file, volume.contents)
+            download_file.seek(0)
+            zip_file = zipfile.ZipFile(download_file)
+            extraction_path = self.volume_mount_dir
+            if volume.relative_path:
+                extraction_path /= volume.relative_path
+            zip_file.extractall(extraction_path.as_posix())
+
+    async def _unpack_single_file_volume(self, volume: SingleFileVolume):
+        file_path = self.volume_mount_dir / volume.relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with file_path.open("wb") as file:
+            await self.download_manager.download(file, volume.url)
+
+    async def _unpack_multi_volume(self, volume: MultiVolume):
+        for sub_volume in volume.volumes:
+            if isinstance(sub_volume, InlineVolume):
+                await self._unpack_inline_volume(sub_volume)
+            elif isinstance(sub_volume, ZipUrlVolume):
+                await self._unpack_zip_url_volume(sub_volume)
+            elif isinstance(sub_volume, SingleFileVolume):
+                await self._unpack_single_file_volume(sub_volume)
+            else:
+                raise NotImplementedError(f"Unsupported sub-volume type: {type(sub_volume)}")
 
     async def unpack_volume(self, job_request: V0JobRequest):
         try:

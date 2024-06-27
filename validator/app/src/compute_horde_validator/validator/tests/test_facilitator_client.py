@@ -18,7 +18,8 @@ from .helpers import (
     MockJobStateMinerClient,
     MockMetagraph,
     MockSubtensor,
-    get_dummy_job_request,
+    get_dummy_job_request_v0,
+    get_dummy_job_request_v1,
     get_keypair,
 )
 
@@ -45,41 +46,56 @@ class FacilitatorWs:
             await self.condition.wait()
 
 
-class FacilitatorJobStatusUpdatesWs(FacilitatorWs):
+class FacilitatorJobStatusUpdatesWsV0(FacilitatorWs):
+    def get_dummy_job(self, job_uuid):
+        return get_dummy_job_request_v0(job_uuid)
+
     async def serve(self, ws):
-        job_uuid = str(uuid.uuid4())
-
-        # auth
-        response = await ws.recv()
         try:
-            AuthenticationRequest.model_validate_json(response)
+            job_uuid = str(uuid.uuid4())
+
+            # auth
+            response = await asyncio.wait_for(ws.recv(), timeout=5)
+            try:
+                AuthenticationRequest.model_validate_json(response)
+            except Exception as e:
+                self.facilitator_error = e
+
+            await asyncio.wait_for(ws.send(Response(status="success").model_dump_json()), timeout=5)
+
+            # send job request
+            await asyncio.wait_for(
+                ws.send(self.get_dummy_job(job_uuid).model_dump_json()), timeout=5
+            )
+
+            # get job status update
+            response = await asyncio.wait_for(ws.recv(), timeout=5)
+            try:
+                JobStatusUpdate.model_validate_json(response)
+            except Exception as e:
+                self.facilitator_error = e
+
+            response = await asyncio.wait_for(ws.recv(), timeout=5)
+            try:
+                JobStatusUpdate.model_validate_json(response)
+            except Exception as e:
+                self.facilitator_error = e
+
+            organic_job = await asyncio.wait_for(
+                OrganicJob.objects.aget(job_uuid=job_uuid), timeout=5
+            )
+            if organic_job.status != OrganicJob.Status.COMPLETED:
+                self.facilitator_error = Exception(f"job not completed: {organic_job.status}")
         except Exception as e:
             self.facilitator_error = e
+        finally:
+            async with self.condition:
+                self.condition.notify()
 
-        await ws.send(Response(status="success").model_dump_json())
 
-        # send job request
-        await ws.send(get_dummy_job_request(job_uuid).model_dump_json())
-
-        # get job status update
-        response = await ws.recv()
-        try:
-            JobStatusUpdate.model_validate_json(response)
-        except Exception as e:
-            self.facilitator_error = e
-
-        response = await ws.recv()
-        try:
-            JobStatusUpdate.model_validate_json(response)
-        except Exception as e:
-            self.facilitator_error = e
-
-        organic_job = await OrganicJob.objects.aget(job_uuid=job_uuid)
-        if organic_job.status != OrganicJob.Status.COMPLETED:
-            self.facilitator_error = Exception(f"job not completed: {organic_job.status}")
-
-        async with self.condition:
-            self.condition.notify()
+class FacilitatorJobStatusUpdatesWsV1(FacilitatorJobStatusUpdatesWsV0):
+    def get_dummy_job(self, job_uuid):
+        return get_dummy_job_request_v1(job_uuid)
 
 
 class FacilitatorBadMessageWs(FacilitatorWs):
@@ -108,7 +124,8 @@ class FacilitatorBadMessageWs(FacilitatorWs):
 @pytest.mark.parametrize(
     "ws_server_cls",
     [
-        FacilitatorJobStatusUpdatesWs,
+        FacilitatorJobStatusUpdatesWsV0,
+        FacilitatorJobStatusUpdatesWsV1,
         FacilitatorBadMessageWs,
     ],
 )

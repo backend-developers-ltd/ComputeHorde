@@ -36,7 +36,7 @@ async def fake_executor(token):
         "raw_script": None,
         "docker_run_options_preset": "none",
         "docker_run_cmd": [],
-        "volume": {"volume_type": "inline", "contents": "nonsense"},
+        "volume": {"volume_type": "inline", "contents": "nonsense", "relative_path": None},
         "output_upload": mock.ANY,
     }, response
     await communicator.send_json_to(

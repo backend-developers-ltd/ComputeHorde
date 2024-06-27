@@ -13,7 +13,12 @@ from compute_horde_validator.validator.facilitator_client import OrganicJob
 from compute_horde_validator.validator.miner_driver import execute_organic_job
 from compute_horde_validator.validator.models import Miner
 
-from .helpers import MockMinerClient, get_dummy_job_request, get_miner_client
+from .helpers import (
+    MockMinerClient,
+    get_dummy_job_request_v0,
+    get_dummy_job_request_v1,
+    get_miner_client,
+)
 
 WEBSOCKET_TIMEOUT = 10
 
@@ -21,27 +26,47 @@ WEBSOCKET_TIMEOUT = 10
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
-    "futures_result,expected_job_status_updates,organic_job_status",
+    "futures_result,expected_job_status_updates,organic_job_status,dummy_job_factory",
     [
-        ((None, None), ["failed"], OrganicJob.Status.FAILED),
-        ((V0DeclineJobRequest, None), ["rejected"], OrganicJob.Status.FAILED),
-        ((V0ExecutorReadyRequest, None), ["accepted", "failed"], OrganicJob.Status.FAILED),
+        ((None, None), ["failed"], OrganicJob.Status.FAILED, get_dummy_job_request_v0),
+        (
+            (V0DeclineJobRequest, None),
+            ["rejected"],
+            OrganicJob.Status.FAILED,
+            get_dummy_job_request_v0,
+        ),
+        (
+            (V0ExecutorReadyRequest, None),
+            ["accepted", "failed"],
+            OrganicJob.Status.FAILED,
+            get_dummy_job_request_v0,
+        ),
         (
             (V0ExecutorReadyRequest, V0JobFailedRequest),
             ["accepted", "failed"],
             OrganicJob.Status.FAILED,
+            get_dummy_job_request_v0,
         ),
         (
             (V0ExecutorReadyRequest, V0JobFinishedRequest),
             ["accepted", "completed"],
             OrganicJob.Status.COMPLETED,
+            get_dummy_job_request_v0,
+        ),
+        (
+            (V0ExecutorReadyRequest, V0JobFinishedRequest),
+            ["accepted", "completed"],
+            OrganicJob.Status.COMPLETED,
+            get_dummy_job_request_v1,
         ),
     ],
 )
-async def test_miner_driver(futures_result, expected_job_status_updates, organic_job_status):
+async def test_miner_driver(
+    futures_result, expected_job_status_updates, organic_job_status, dummy_job_factory
+):
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_client")
     job_uuid = str(uuid.uuid4())
-    job_request = get_dummy_job_request(job_uuid)
+    job_request = dummy_job_factory(job_uuid)
 
     job = await OrganicJob.objects.acreate(
         job_uuid=job_uuid,

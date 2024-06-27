@@ -1,17 +1,24 @@
 import asyncio
 import logging
 import os
-from typing import Any, Literal, NoReturn, Self
+from typing import NoReturn
 
 import bittensor
 import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 
+from compute_horde_validator.validator.facilitator_api import (
+    AuthenticationRequest,
+    Error,
+    Heartbeat,
+    JobRequest,
+    MachineSpecsUpdate,
+    Response,
+)
 from compute_horde_validator.validator.metagraph_client import (
     create_metagraph_refresh_task,
     get_miner_axon_info,
@@ -29,79 +36,10 @@ PREPARE_WAIT_TIMEOUT = 300
 TOTAL_JOB_TIMEOUT = 300
 
 
-class Error(BaseModel, extra="allow"):
-    msg: str
-    type: str
-    help: str = ""
-
-
-class Response(BaseModel, extra="forbid"):
-    """Message sent from facilitator to validator in response to AuthenticationRequest & JobStatusUpdate"""
-
-    status: Literal["error", "success"]
-    errors: list[Error] = []
-
-
-class AuthenticationRequest(BaseModel, extra="forbid"):
-    """Message sent from validator to facilitator to authenticate itself"""
-
-    message_type: str = "V0AuthenticationRequest"
-    public_key: str
-    signature: str
-
-    @classmethod
-    def from_keypair(cls, keypair: bittensor.Keypair) -> Self:
-        return cls(
-            public_key=keypair.public_key.hex(),
-            signature=f"0x{keypair.sign(keypair.public_key).hex()}",
-        )
-
-
 class AuthenticationError(Exception):
     def __init__(self, reason: str, errors: list[Error]):
         self.reason = reason
         self.errors = errors
-
-
-class JobRequest(BaseModel, extra="forbid"):
-    """Message sent from facilitator to validator to request a job execution"""
-
-    # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
-    type: Literal["job.new"] = "job.new"
-    message_type: str = "V0JobRequest"
-
-    uuid: str
-    miner_hotkey: str
-    # TODO: remove default after we add executor class support to facilitator
-    executor_class: str = DEFAULT_EXECUTOR_CLASS
-    docker_image: str
-    raw_script: str
-    args: list[str]
-    env: dict[str, str]
-    use_gpu: bool
-    input_url: str
-    output_url: str
-
-    def get_args(self):
-        return self.args
-
-    @model_validator(mode="after")
-    def validate_at_least_docker_image_or_raw_script(self) -> Self:
-        if not (bool(self.docker_image) or bool(self.raw_script)):
-            raise ValueError("Expected at least one of `docker_image` or `raw_script`")
-        return self
-
-
-class Heartbeat(BaseModel, extra="forbid"):
-    message_type: str = "V0Heartbeat"
-
-
-class MachineSpecsUpdate(BaseModel, extra="forbid"):
-    message_type: str = "V0MachineSpecsUpdate"
-    miner_hotkey: str
-    validator_hotkey: str
-    specs: dict[str, Any]
-    batch_id: str
 
 
 async def save_facilitator_event(subtype: str, long_description: str, data={}, success=False):
@@ -181,6 +119,9 @@ class FacilitatorClient:
                 except asyncio.exceptions.CancelledError:
                     self.ws = None
                     logger.warning("Facilitator client received cancel, stopping")
+                except Exception as exc:
+                    self.ws = None
+                    logger.error(str(exc), exc_info=exc)
 
         except asyncio.exceptions.CancelledError:
             self.ws = None
@@ -283,9 +224,9 @@ class FacilitatorClient:
             return
 
         try:
-            job_request = JobRequest.model_validate_json(raw_msg)
-        except pydantic.ValidationError:
-            logger.debug("could not parse raw message as JobRequest")
+            job_request = pydantic.TypeAdapter(JobRequest).validate_json(raw_msg)
+        except pydantic.ValidationError as exc:
+            logger.debug("could not parse raw message as JobRequest: %s", exc)
         else:
             task = asyncio.create_task(self.miner_driver(job_request))
             await self.miner_drivers.put(task)

@@ -42,6 +42,7 @@ test = [
     "pytest-httpx",
     "ipdb",
     "freezegun",
+    "requests-toolbelt>=1.0.0",
 ]
 format = [
     "ruff",

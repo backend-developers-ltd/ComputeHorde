@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from ..mv_protocol.validator_requests import Volume, VolumeType
+from ..base.volume import ZipUrlVolume
 
 logger = logging.getLogger(__name__)
 
@@ -28,5 +28,5 @@ logger = logging.getLogger(__name__)
     ],
 )
 def test_volume_is_safe(url: str, expected: bool):
-    volume = Volume(volume_type=VolumeType.zip_url, contents=url)
+    volume = ZipUrlVolume(contents=url)
     assert volume.is_safe() == expected
