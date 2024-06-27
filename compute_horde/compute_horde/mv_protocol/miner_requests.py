@@ -3,6 +3,7 @@ import enum
 import pydantic
 
 from ..base_requests import BaseRequest, JobMixin
+from ..executor_class import ExecutorClass
 from ..utils import MachineSpecs
 
 
@@ -21,7 +22,7 @@ class RequestType(enum.Enum):
 
 class ExecutorClassManifest(pydantic.BaseModel):
     # TODO: remove support for deprecated `int` executor class
-    executor_class: str | int
+    executor_class: ExecutorClass | int
     count: int
 
 

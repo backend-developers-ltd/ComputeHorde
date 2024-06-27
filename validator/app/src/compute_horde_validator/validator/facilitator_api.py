@@ -4,7 +4,7 @@ import bittensor
 import pydantic
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from pydantic import BaseModel, model_validator
 
 
@@ -46,7 +46,7 @@ class V0FacilitatorJobRequest(BaseModel, extra="forbid"):
     uuid: str
     miner_hotkey: str
     # TODO: remove default after we add executor class support to facilitator
-    executor_class: str = DEFAULT_EXECUTOR_CLASS
+    executor_class: ExecutorClass = DEFAULT_EXECUTOR_CLASS
     docker_image: str
     raw_script: str
     args: list[str]
@@ -74,7 +74,7 @@ class V1FacilitatorJobRequest(BaseModel, extra="forbid"):
     uuid: str
     miner_hotkey: str
     # TODO: remove default after we add executor class support to facilitator
-    executor_class: str = DEFAULT_EXECUTOR_CLASS
+    executor_class: ExecutorClass = DEFAULT_EXECUTOR_CLASS
     docker_image: str
     raw_script: str
     args: list[str]

@@ -8,6 +8,7 @@ from compute_horde.executor_class import (
     DEFAULT_EXECUTOR_CLASS,
     DEFAULT_EXECUTOR_TIMEOUT,
     MAX_EXECUTOR_TIMEOUT,
+    ExecutorClass,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ class ReservedExecutor:
 
 
 class ExecutorClassPool:
-    def __init__(self, manager, executor_class: str, executor_count: int):
+    def __init__(self, manager, executor_class: ExecutorClass, executor_count: int):
         self.manager = manager
         self.executor_class = executor_class
         self._count = executor_count
@@ -114,7 +115,7 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    async def get_manifest(self) -> dict[str, int]:
+    async def get_manifest(self) -> dict[ExecutorClass, int]:
         """Return executors manifest
 
         Keys are executor class ids and values are number of supported executors for given executor class.
