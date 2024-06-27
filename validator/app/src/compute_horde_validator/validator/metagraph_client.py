@@ -6,6 +6,8 @@ import bittensor
 from asgiref.sync import sync_to_async
 from django.conf import settings
 
+from .models import SystemEvent
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,7 +61,14 @@ class AsyncMetagraphClient:
             try:
                 await self.get_metagraph(ignore_cache=True)
             except Exception as exc:
-                logger.error("Error occurred", exc_info=exc)
+                msg = f"Failed to refresh metagraph: {exc}"
+                await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+                    type=SystemEvent.EventType.FACILITATOR_CLIENT_ERROR,
+                    subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+                    long_description=msg,
+                )
+                logger.warning(msg)
+
             await asyncio.sleep(period)
 
 
