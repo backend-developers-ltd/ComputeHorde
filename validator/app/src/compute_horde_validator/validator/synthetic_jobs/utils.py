@@ -213,7 +213,17 @@ def create_and_run_sythethic_job_batch(netuid, network):
             )
         }
     else:
-        metagraph = bittensor.metagraph(netuid, network=network)
+        try:
+            metagraph = bittensor.metagraph(netuid, network=network)
+        except Exception as e:
+            msg = f"Failed to get metagraph - will not run synthetic jobs: {e}"
+            logger.warning(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type_=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+                long_description=msg,
+            )
+            return
         axons_by_key = {n.hotkey: n.axon_info for n in metagraph.neurons}
         miners = get_miners(metagraph)
     miners = [(miner.id, miner.hotkey) for miner in miners]
