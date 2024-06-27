@@ -43,6 +43,7 @@ from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.utils.timezone import now
 
+from compute_horde_validator.validator.metagraph_client import get_weights_version
 from compute_horde_validator.validator.models import (
     JobBase,
     Miner,
@@ -337,44 +338,52 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
 
 
 async def apply_manifest_incentive(miner_hotkey: str, batch_id: int, score: float) -> float:
-    miner = await Miner.objects.aget(hotkey=miner_hotkey)
-
-    # get last 3 batches and manifests
-    batches = [
-        batch
-        async for batch in SyntheticJobBatch.objects.filter(id__lte=batch_id).order_by("-id")[:3]
-    ]
-    manifests = [
-        manifest
-        async for manifest in MinerManifest.objects.filter(miner=miner, batch__in=batches).order_by(
-            "-batch__id"
-        )
-    ]
-
-    if len(manifests) > 0 and manifests[0].executor_count <= 3:
-        logger.debug(
-            f"Applied manifest incentive for {miner_hotkey} - last manifest has 3 or less executors"
-        )
-    elif (
-        len(manifests) == 3
-        and manifests[0].executor_count - manifests[1].executor_count
-        > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
-        and manifests[0].executor_count - manifests[2].executor_count
-        > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
-    ):
-        logger.debug(
-            f"Applied manifest incentive for {miner_hotkey} - miner has increased number of executors significantly"
-        )
-    elif len(manifests) < 3:
-        logger.debug(
-            f"Applied manifest incentive for {miner_hotkey} - validator has missed one of the previous 2 synthetic jobs windows"
-        )
-    else:
-        # do not apply manifest incentive - return original score
+    weights_version = get_weights_version()
+    if weights_version in [0, 1]:
         return score
+    elif weights_version == 2:
+        miner = await Miner.objects.aget(hotkey=miner_hotkey)
 
-    # apply manifest incentive
-    return score * settings.MANIFEST_SCORE_MULTIPLIER
+        # get last 3 batches and manifests
+        batches = [
+            batch
+            async for batch in SyntheticJobBatch.objects.filter(id__lte=batch_id).order_by("-id")[
+                :3
+            ]
+        ]
+        manifests = [
+            manifest
+            async for manifest in MinerManifest.objects.filter(
+                miner=miner, batch__in=batches
+            ).order_by("-batch__id")
+        ]
+
+        if len(manifests) > 0 and manifests[0].executor_count <= 3:
+            logger.debug(
+                f"Applied manifest incentive for {miner_hotkey} - last manifest has 3 or less executors"
+            )
+        elif (
+            len(manifests) == 3
+            and manifests[0].executor_count - manifests[1].executor_count
+            > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
+            and manifests[0].executor_count - manifests[2].executor_count
+            > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
+        ):
+            logger.debug(
+                f"Applied manifest incentive for {miner_hotkey} - miner has increased number of executors significantly"
+            )
+        elif len(manifests) < 3:
+            logger.debug(
+                f"Applied manifest incentive for {miner_hotkey} - validator has missed one of the previous 2 synthetic jobs windows"
+            )
+        else:
+            # do not apply manifest incentive - return original score
+            return score
+
+        # apply manifest incentive
+        return score * settings.MANIFEST_SCORE_MULTIPLIER
+    else:
+        raise RuntimeError(f"Scoring undefined for {weights_version=}")
 
 
 async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):

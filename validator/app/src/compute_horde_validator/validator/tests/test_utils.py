@@ -78,6 +78,7 @@ mock_synthetic_job_generator = MagicMock(name="MockSyntheticJobGenerator")
     MockSyntheticJobGenerator,
 )
 @pytest.mark.asyncio
+@patch("compute_horde_validator.validator.synthetic_jobs.utils.get_weights_version", lambda: 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
     "futures_result,expected_job_status,expected_score,expected_system_event",
@@ -125,7 +126,7 @@ mock_synthetic_job_generator = MagicMock(name="MockSyntheticJobGenerator")
         (
             (V0ExecutorReadyRequest, V0JobFinishedRequest),
             SyntheticJob.Status.COMPLETED,
-            MANIFEST_INCENTIVE_APPLIED_SCORE,
+            MOCK_SCORE,
             (
                 SystemEvent.EventType.MINER_SYNTHETIC_JOB_SUCCESS,
                 SystemEvent.EventSubType.SUCCESS,
@@ -234,6 +235,7 @@ async def create_mock_job_batches(miner):
 
 
 @pytest.mark.asyncio
+@patch("compute_horde_validator.validator.synthetic_jobs.utils.get_weights_version", lambda: 2)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_manifest_incentive__no_recent_manifests():
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_hotkey")
@@ -249,6 +251,7 @@ async def test_manifest_incentive__no_recent_manifests():
 
 
 @pytest.mark.asyncio
+@patch("compute_horde_validator.validator.synthetic_jobs.utils.get_weights_version", lambda: 2)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_manifest_incentive__num_executors_increased():
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_hotkey")
@@ -266,6 +269,7 @@ async def test_manifest_incentive__num_executors_increased():
 
 
 @pytest.mark.asyncio
+@patch("compute_horde_validator.validator.synthetic_jobs.utils.get_weights_version", lambda: 2)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_manifest_incentive__not_applying():
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_hotkey")
@@ -282,6 +286,7 @@ async def test_manifest_incentive__not_applying():
 
 
 @pytest.mark.asyncio
+@patch("compute_horde_validator.validator.synthetic_jobs.utils.get_weights_version", lambda: 2)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_manifest_incentive__recently_registered():
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_hotkey")
@@ -298,6 +303,7 @@ async def test_manifest_incentive__recently_registered():
 
 
 @pytest.mark.asyncio
+@patch("compute_horde_validator.validator.synthetic_jobs.utils.get_weights_version", lambda: 2)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_manifest_incentive__few_executors():
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_hotkey")
