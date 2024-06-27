@@ -2,9 +2,10 @@ name: Run end to end tests
 
 on:
   push:
-    branches: [master, main, ci-e2e]
+    branches: [master, main]
   pull_request:
-    branches: [master, main, ci-e2e]
+    branches: [master, main]
+  workflow_dispatch:
 
 env:
   PYTHON_DEFAULT_VERSION: "3.11"
@@ -309,6 +310,14 @@ jobs:
                 --nonzero_if_not_complete
 
       - name: test synthetic job
+        run: |
+          echo TODO!!
+
+      - name: check receipts in miner
+        run: |
+          echo TODO!!
+
+      - name: check receipts in facilitator
         run: |
           echo TODO!!
 
