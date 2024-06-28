@@ -11,7 +11,7 @@ import bittensor
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.base_requests import BaseRequest
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     MinerConnectionError,
@@ -416,14 +416,15 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
     save_event = partial(save_job_execution_event, data=data)
 
     job_state = miner_client.get_job_state(str(job.job_uuid))
-    job_generator = current.SyntheticJobGenerator()
+    job_executor_class = ExecutorClass(job.executor_class)
+    job_generator = await current.synthetic_job_generator_factory.create(job_executor_class)
     await job_generator.ainit()
     job.job_description = job_generator.job_description()
     await job.asave()
     await miner_client.send_model(
         V0InitialJobRequest(
             job_uuid=str(job.job_uuid),
-            executor_class=job.executor_class,
+            executor_class=job_executor_class,
             base_docker_image_name=job_generator.base_docker_image_name(),
             timeout_seconds=job_generator.timeout_seconds(),
             volume_type=VolumeType.inline.value,
@@ -469,7 +470,7 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
     await miner_client.send_model(
         V0JobRequest(
             job_uuid=str(job.job_uuid),
-            executor_class=job.executor_class,
+            executor_class=job_executor_class,
             docker_image_name=job_generator.docker_image_name(),
             docker_run_options_preset=job_generator.docker_run_options_preset(),
             docker_run_cmd=job_generator.docker_run_cmd(),
