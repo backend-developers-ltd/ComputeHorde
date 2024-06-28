@@ -13,9 +13,6 @@ import environ
 from celery.schedules import crontab
 from compute_horde import base  # noqa
 
-# from celery.schedules import crontab
-
-
 root = environ.Path(__file__) - 2
 
 env = environ.Env(DEBUG=(bool, False))
@@ -363,6 +360,9 @@ HORDE_SCORE_SIZE_PARAM = 0
 HORDE_SCORE_CENTRAL_SIZE_PARAM = 1
 
 DEBUG_OVERRIDE_WEIGHTS_VERSION = env.int("DEBUG_OVERRIDE_WEIGHTS_VERSION", default=None)
+
+MANIFEST_SCORE_MULTIPLIER = 1.05
+EXECUTOR_COUNT_INCREASE_THRESHOLD = 3
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:

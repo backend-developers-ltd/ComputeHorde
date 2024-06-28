@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 import logging
+import time
 
 import bittensor
 from asgiref.sync import sync_to_async
@@ -9,6 +10,32 @@ from django.conf import settings
 from .models import SystemEvent
 
 logger = logging.getLogger(__name__)
+
+
+class WeightVersionHolder:
+    def __init__(self):
+        self._time_set = 0
+        self.value = None
+
+    def get(self):
+        if settings.DEBUG_OVERRIDE_WEIGHTS_VERSION is not None:
+            return settings.DEBUG_OVERRIDE_WEIGHTS_VERSION
+
+        if time.time() - self._time_set > 300:
+            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+            hyperparameters = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
+            if hyperparameters is None:
+                raise RuntimeError("Network hyperparameters are None")
+            self.value = hyperparameters.weights_version
+            self._time_set = time.time()
+        return self.value
+
+
+weights_version_holder = WeightVersionHolder()
+
+
+def get_weights_version():
+    return weights_version_holder.get()
 
 
 class AsyncMetagraphClient:

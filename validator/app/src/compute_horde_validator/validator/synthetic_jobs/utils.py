@@ -43,9 +43,11 @@ from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.utils.timezone import now
 
+from compute_horde_validator.validator.metagraph_client import get_weights_version
 from compute_horde_validator.validator.models import (
     JobBase,
     Miner,
+    MinerManifest,
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
@@ -84,7 +86,8 @@ class MinerClient(AbstractMinerClient):
         my_hotkey: str,
         miner_hotkey: str,
         miner_port: int,
-        job_uuid: str,
+        job_uuid: None | str,
+        batch_id: None | int,
         keypair: bittensor.Keypair,
     ):
         super().__init__(loop, f"{miner_hotkey}({miner_address}:{miner_port})")
@@ -95,6 +98,7 @@ class MinerClient(AbstractMinerClient):
         self.job_states = {}
         if job_uuid is not None:
             self.add_job(job_uuid)
+        self.batch_id = batch_id
         self.keypair = keypair
         self._barrier = None
         self.miner_manifest = asyncio.Future()
@@ -132,6 +136,13 @@ class MinerClient(AbstractMinerClient):
             return
         if isinstance(msg, V0ExecutorManifestRequest):
             self.miner_manifest.set_result(msg.manifest)
+            miner = await Miner.objects.aget(hotkey=self.miner_hotkey)
+            if self.batch_id:
+                await MinerManifest.objects.acreate(
+                    miner=miner,
+                    batch_id=self.batch_id,
+                    executor_count=msg.manifest.total_count,
+                )
             return
         job_state = self.get_job_state(msg.job_uuid)
         if job_state is None:
@@ -202,7 +213,17 @@ def create_and_run_sythethic_job_batch(netuid, network):
             )
         }
     else:
-        metagraph = bittensor.metagraph(netuid, network=network)
+        try:
+            metagraph = bittensor.metagraph(netuid, network=network)
+        except Exception as e:
+            msg = f"Failed to get metagraph - will not run synthetic jobs: {e}"
+            logger.warning(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type_=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+                long_description=msg,
+            )
+            return
         axons_by_key = {n.hotkey: n.axon_info for n in metagraph.neurons}
         miners = get_miners(metagraph)
     miners = [(miner.id, miner.hotkey) for miner in miners]
@@ -261,6 +282,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
         miner_hotkey=miner_hotkey,
         my_hotkey=key.ss58_address,
         job_uuid=None,
+        batch_id=batch_id,
         keypair=key,
     )
     data = {"miner_hotkey": miner_client.miner_hotkey}
@@ -323,6 +345,55 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
             await save_job_execution_event(
                 subtype=SystemEvent.EventSubType.GENERIC_ERROR, long_description=msg
             )
+
+
+async def apply_manifest_incentive(miner_hotkey: str, batch_id: int, score: float) -> float:
+    weights_version = get_weights_version()
+    if weights_version in [0, 1]:
+        return score
+    elif weights_version == 2:
+        miner = await Miner.objects.aget(hotkey=miner_hotkey)
+
+        # get last 3 batches and manifests
+        batches = [
+            batch
+            async for batch in SyntheticJobBatch.objects.filter(id__lte=batch_id).order_by("-id")[
+                :3
+            ]
+        ]
+        manifests = [
+            manifest
+            async for manifest in MinerManifest.objects.filter(
+                miner=miner, batch__in=batches
+            ).order_by("-batch__id")
+        ]
+
+        if len(manifests) > 0 and manifests[0].executor_count <= 3:
+            logger.debug(
+                f"Applied manifest incentive for {miner_hotkey} - last manifest has 3 or less executors"
+            )
+        elif (
+            len(manifests) == 3
+            and manifests[0].executor_count - manifests[1].executor_count
+            > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
+            and manifests[0].executor_count - manifests[2].executor_count
+            > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
+        ):
+            logger.debug(
+                f"Applied manifest incentive for {miner_hotkey} - miner has increased number of executors significantly"
+            )
+        elif len(manifests) < 3:
+            logger.debug(
+                f"Applied manifest incentive for {miner_hotkey} - validator has missed one of the previous 2 synthetic jobs windows"
+            )
+        else:
+            # do not apply manifest incentive - return original score
+            return score
+
+        # apply manifest incentive
+        return score * settings.MANIFEST_SCORE_MULTIPLIER
+    else:
+        raise RuntimeError(f"Scoring undefined for {weights_version=}")
 
 
 async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
@@ -474,13 +545,15 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
             )
 
             # if job passed, save synthetic job score
-            job.score = score
+            job.score = await apply_manifest_incentive(
+                miner_client.miner_hotkey, job.batch_id, score
+            )
             await job.asave()
 
             # Send receipt to miner
             try:
                 receipt_message = miner_client.generate_receipt_message(
-                    job, full_job_sent, time_took, score
+                    job, full_job_sent, time_took, job.score
                 )
                 await miner_client.send_model(receipt_message)
                 logger.info("Receipt message sent")
