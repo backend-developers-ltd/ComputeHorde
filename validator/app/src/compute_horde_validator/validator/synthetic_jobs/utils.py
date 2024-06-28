@@ -86,7 +86,7 @@ class MinerClient(AbstractMinerClient):
         my_hotkey: str,
         miner_hotkey: str,
         miner_port: int,
-        job_uuid: None | str,
+        job_uuid: None | str | uuid.UUID,
         batch_id: None | int,
         keypair: bittensor.Keypair,
     ):
@@ -103,12 +103,12 @@ class MinerClient(AbstractMinerClient):
         self._barrier = None
         self.miner_manifest = asyncio.Future()
 
-    def add_job(self, job_uuid: str):
+    def add_job(self, job_uuid: str | uuid.UUID):
         job_state = JobState()
         self.job_states[str(job_uuid)] = job_state
         return job_state
 
-    def get_job_state(self, job_uuid: str):
+    def get_job_state(self, job_uuid: str | uuid.UUID):
         return self.job_states.get(str(job_uuid))
 
     def get_barrier(self):
@@ -313,7 +313,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
             # convert deprecated executor class 0 to default executor class
             if executor_class_manifest.executor_class == 0:
                 executor_class_manifest.executor_class = DEFAULT_EXECUTOR_CLASS
-            for _ in range(executor_class_manifest.executor_count):
+            for _ in range(executor_class_manifest.count):
                 job = SyntheticJob(
                     batch_id=batch_id,
                     miner_id=miner_id,
@@ -323,7 +323,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
                     executor_class=executor_class_manifest.executor_class,
                     status=SyntheticJob.Status.PENDING,
                 )
-                miner_client.add_job(str(job.job_uuid))
+                miner_client.add_job(job.job_uuid)
                 jobs.append(job)
 
         jobs = await SyntheticJob.objects.abulk_create(jobs)
