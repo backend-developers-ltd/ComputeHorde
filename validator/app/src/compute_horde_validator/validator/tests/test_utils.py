@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from asgiref.sync import sync_to_async
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import BaseRequest
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
@@ -23,6 +23,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
+    BaseSyntheticJobGeneratorFactory,
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
@@ -70,12 +71,20 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
 mock_synthetic_job_generator = MagicMock(name="MockSyntheticJobGenerator")
 
 
+class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
+    async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
+        return MockSyntheticJobGenerator()
+
+
+mock_synthetic_job_generator_factory = MagicMock(name="MockSyntheticJobGeneratorFactory")
+
+
 @patch("compute_horde_validator.validator.synthetic_jobs.utils.JOB_LENGTH", 0.1)
 @patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_LEEWAY", 0.1)
 @patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_MARGIN", 0.1)
 @patch(
-    "compute_horde_validator.validator.synthetic_jobs.generator.current.SyntheticJobGenerator",
-    MockSyntheticJobGenerator,
+    "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
+    MockSyntheticJobGeneratorFactory(),
 )
 @pytest.mark.asyncio
 @patch("compute_horde_validator.validator.synthetic_jobs.utils.get_weights_version", lambda: 1)

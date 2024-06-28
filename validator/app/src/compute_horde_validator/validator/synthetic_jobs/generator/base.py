@@ -1,5 +1,6 @@
 import abc
 
+from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 
@@ -33,3 +34,8 @@ class BaseSyntheticJobGenerator(abc.ABC):
 
     @abc.abstractmethod
     def job_description(self) -> str: ...
+
+
+class BaseSyntheticJobGeneratorFactory(abc.ABC):
+    @abc.abstractmethod
+    async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator: ...
