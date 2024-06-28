@@ -22,7 +22,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
-    AbstractSyntheticJobGenerator,
+    BaseSyntheticJobGenerator,
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
@@ -38,7 +38,7 @@ MANIFEST_INCENTIVE_APPLIED_SCORE = MOCK_SCORE * settings.MANIFEST_INCENTIVE_MULT
 NOT_SCORED = 0.0
 
 
-class MockSyntheticJobGenerator(AbstractSyntheticJobGenerator):
+class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
     async def ainit(self):
         return
 
