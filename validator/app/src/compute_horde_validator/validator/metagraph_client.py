@@ -35,7 +35,8 @@ weights_version_holder = WeightVersionHolder()
 
 
 def get_weights_version():
-    return weights_version_holder.get()
+    return 2
+    # return weights_version_holder.get()
 
 
 class AsyncMetagraphClient:
