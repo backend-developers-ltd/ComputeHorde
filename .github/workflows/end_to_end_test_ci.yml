@@ -29,6 +29,50 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Docker login
+        run: echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Build executor image
+        run: |
+          cd executor
+          IMAGE_NAME=backenddevelopersltd/compute-horde-executor-e2e:v0-latest
+          docker build \
+            --build-context compute-horde=../compute_horde \
+            -t "$IMAGE_NAME" \
+            -f app/envs/prod/Dockerfile \
+            .
+          docker push "$IMAGE_NAME"
+
+      - name: Build miner nginx image
+        run: |
+          cd miner/envs/runner/nginx
+          IMAGE_NAME="backenddevelopersltd/$MINER_NGINX_IMAGE_REPO:v0-latest"
+          docker build --platform linux/amd64 -t "$IMAGE_NAME" .
+          docker push "$IMAGE_NAME"
+
+      - name: Build miner image
+        run: |
+          cd miner
+          IMAGE_NAME="backenddevelopersltd/$MINER_IMAGE_REPO:v0-latest"
+          docker build \
+            --build-context compute-horde=../compute_horde \
+            -t "$IMAGE_NAME" \
+            --build-arg MINER_VERSION="$GITHUB_SHA" \
+            -f app/envs/prod/Dockerfile .
+          docker push "$IMAGE_NAME"
+
+      - name: Build miner runner image
+        run: |
+          cd envs/runner
+          IMAGE_NAME=backenddevelopersltd/compute-horde-miner-runner-e2e:v0-latest
+          docker build \
+            -t "$IMAGE_NAME" \
+            --build-arg MINER_RUNNER_VERSION="$GITHUB_SHA" \
+            --build-arg MINER_IMAGE_REPO="$MINER_IMAGE_REPO" \
+            --build-arg MINER_NGINX_IMAGE_REPO="$MINER_NGINX_IMAGE_REPO" \
+            .
+          docker push "$IMAGE_NAME"
+
       - name: Set dynamic environment variables
         run: |
           set -euxo pipefail
@@ -135,47 +179,6 @@ jobs:
             db redis app celery-worker
           
           echo "FACILITATOR_URI=ws://$HOST_IP:8090/ws/v0/" >> $GITHUB_ENV
-
-      - name: Build executor image
-        run: |
-          cd executor
-          IMAGE_NAME=backenddevelopersltd/compute-horde-executor-e2e:v0-latest
-          docker build \
-            --build-context compute-horde=../compute_horde \
-            -t "$IMAGE_NAME" \
-            -f app/envs/prod/Dockerfile \
-            .
-          docker push "$IMAGE_NAME"
-
-      - name: Build miner nginx image
-        run: |
-          cd miner/envs/runner/nginx
-          IMAGE_NAME="backenddevelopersltd/$MINER_NGINX_IMAGE_REPO:v0-latest"
-          docker build --platform linux/amd64 -t "$IMAGE_NAME" .
-          docker push "$IMAGE_NAME"
-
-      - name: Build miner image
-        run: |
-          cd miner
-          IMAGE_NAME="backenddevelopersltd/$MINER_IMAGE_REPO:v0-latest"
-          docker build \
-            --build-context compute-horde=../compute_horde \
-            -t "$IMAGE_NAME" \
-            --build-arg MINER_VERSION="$GITHUB_SHA" \
-            -f app/envs/prod/Dockerfile .
-          docker push "$IMAGE_NAME"
-
-      - name: Build miner runner image
-        run: |
-          cd envs/runner
-          IMAGE_NAME=backenddevelopersltd/compute-horde-miner-runner-e2e:v0-latest
-          docker build \
-            -t "$IMAGE_NAME" \
-            --build-arg MINER_RUNNER_VERSION="$GITHUB_SHA" \
-            --build-arg MINER_IMAGE_REPO="$MINER_IMAGE_REPO" \
-            --build-arg MINER_NGINX_IMAGE_REPO="$MINER_NGINX_IMAGE_REPO" \
-            .
-          docker push "$IMAGE_NAME"
 
       - name: Run miner
         run: |
