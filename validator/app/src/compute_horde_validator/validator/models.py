@@ -184,6 +184,7 @@ class JobReceipt(models.Model):
     time_started = models.DateTimeField()
     time_took_us = models.BigIntegerField()
     score_str = models.CharField(max_length=256)
+    executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
 
     class Meta:
         constraints = [

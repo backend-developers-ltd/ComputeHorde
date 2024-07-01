@@ -321,6 +321,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 time_started=msg.payload.time_started,
                 time_took_us=msg.payload.time_took_us,
                 score_str=msg.payload.score_str,
+                executor_class=msg.payload.executor_class,
             )
             prepare_receipts.delay()
 

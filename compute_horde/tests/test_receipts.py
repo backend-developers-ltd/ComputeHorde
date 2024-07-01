@@ -17,6 +17,7 @@ def receipts_helper(mocked_responses, receipts, miner_keypair):
             "time_started",
             "time_took_us",
             "score_str",
+            "executor_class",
             "validator_signature",
             "miner_signature",
         ]
@@ -30,6 +31,7 @@ def receipts_helper(mocked_responses, receipts, miner_keypair):
                 receipt.payload.time_started.isoformat(),
                 receipt.payload.time_took_us,
                 receipt.payload.score_str,
+                receipt.payload.executor_class,
                 receipt.validator_signature,
                 receipt.miner_signature,
             ]
