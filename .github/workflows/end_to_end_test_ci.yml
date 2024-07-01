@@ -11,6 +11,7 @@ env:
   PYTHON_DEFAULT_VERSION: "3.11"
   BITTENSOR_NETWORK: "ws://3.91.62.249:9946"
   BITTENSOR_NETUID: "1"
+  MINER_IMAGE_REPO: "compute-horde-miner-e2e"
   MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-e2e"
   MNEMONIC_MINER_COLDKEY: "cousin gate anger oak common vacuum bonus rice buyer smooth evidence coast"
   MNEMONIC_MINER_HOTKEY: "provide lyrics civil afford orange marine letter dash parrot secret eternal decrease"
@@ -133,52 +134,57 @@ jobs:
             up --detach --wait \
             db redis app celery-worker
           
-          # sleep 10 # wait for containers to start
-          # FACILITATOR_IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' facilitator-app-1)
-          # echo "FACILITATOR_URI=ws://$FACILITATOR_IP_ADDRESS:8000/ws/v0/" >> $GITHUB_ENV
           echo "FACILITATOR_URI=ws://$HOST_IP:8090/ws/v0/" >> $GITHUB_ENV
 
       - name: Build executor image
         run: |
           cd executor
+          IMAGE_NAME=backenddevelopersltd/compute-horde-executor-e2e:v0-latest
           docker build \
             --build-context compute-horde=../compute_horde \
-            -t backenddevelopersltd/executor-e2e:v0-latest \
+            -t "$IMAGE_NAME" \
             -f app/envs/prod/Dockerfile \
             .
+          docker push "$IMAGE_NAME"
 
       - name: Build miner nginx image
         run: |
           cd miner/envs/runner/nginx
-          docker build --platform linux/amd64 -t "backenddevelopersltd/$MINER_NGINX_IMAGE_REPO:v0-latest" .
+          IMAGE_NAME="backenddevelopersltd/$MINER_NGINX_IMAGE_REPO:v0-latest"
+          docker build --platform linux/amd64 -t "$IMAGE_NAME" .
+          docker push "$IMAGE_NAME"
+
+      - name: Build miner image
+        run: |
+          cd miner
+          IMAGE_NAME="backenddevelopersltd/$MINER_IMAGE_REPO:v0-latest"
+          docker build \
+            --build-context compute-horde=../compute_horde \
+            -t "$IMAGE_NAME" \
+            --build-arg MINER_VERSION="$GITHUB_SHA" \
+            -f app/envs/prod/Dockerfile .
+          docker push "$IMAGE_NAME"
+
+      - name: Build miner runner image
+        run: |
+          cd envs/runner
+          IMAGE_NAME=backenddevelopersltd/compute-horde-miner-runner-e2e:v0-latest
+          docker build \
+            -t "$IMAGE_NAME" \
+            --build-arg MINER_RUNNER_VERSION="$GITHUB_SHA" \
+            --build-arg MINER_IMAGE_REPO="$MINER_IMAGE_REPO" \
+            --build-arg MINER_NGINX_IMAGE_REPO="$MINER_NGINX_IMAGE_REPO" \
+            .
+          docker push "$IMAGE_NAME"
 
       - name: Run miner
         run: |
           set -euxo pipefail
-          
-          # build miner image
-          cd miner
-          docker build \
-            --build-context compute-horde=../compute_horde \
-            -t backenddevelopersltd/miner-e2e:v0-latest \
-            --build-arg MINER_VERSION="$GITHUB_SHA" \
-            -f app/envs/prod/Dockerfile .
-          
-          # build miner-runner image
-          cd envs/runner
-          sed -i.bak '/pull_policy/d' ./data/docker-compose.yml
-          docker build \
-            -t backenddevelopersltd/miner-runner-e2e:v0-latest \
-            --build-arg MINER_RUNNER_VERSION="$GITHUB_SHA" \
-            --build-arg MINER_IMAGE_REPO=miner-e2e \
-            --build-arg MINER_NGINX_IMAGE_REPO="$MINER_NGINX_IMAGE_REPO" \
-            .
-
           # prepare files
           cat > docker-compose.yml <<ENDDOCKERCOMPOSE
           services:
             miner-runner:
-              image: backenddevelopersltd/miner-runner-e2e:v0-latest
+              image: backenddevelopersltd/$MINER_IMAGE_REPO:v0-latest
               volumes:
                 - /var/run/docker.sock:/var/run/docker.sock
                 - ./.env:/root/.env
@@ -324,8 +330,6 @@ jobs:
       - name: test weight setting
         run: |
           echo TODO!!
-
-      # TODO: run the tests
 
       - name: Print all logs and stop validator
         if: always()
