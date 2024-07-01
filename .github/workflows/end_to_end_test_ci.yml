@@ -63,7 +63,7 @@ jobs:
 
       - name: Build miner runner image
         run: |
-          cd envs/runner
+          cd miner/envs/runner
           IMAGE_NAME=backenddevelopersltd/compute-horde-miner-runner-e2e:v0-latest
           docker build \
             -t "$IMAGE_NAME" \
