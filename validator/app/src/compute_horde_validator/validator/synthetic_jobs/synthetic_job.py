@@ -87,3 +87,4 @@ HASHJOB_PARAMS = {
         Algorithm.SHA512: JobParams(timeout=53, num_letters=5, num_digits=1, num_hashes=500),
     },
 }
+HASHJOB_PARAMS[2] = HASHJOB_PARAMS[1]

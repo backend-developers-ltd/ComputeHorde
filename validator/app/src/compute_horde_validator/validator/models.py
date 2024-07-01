@@ -98,6 +98,7 @@ class MinerManifest(models.Model):
     batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     executor_count = models.IntegerField(default=0)
+    online_executor_count = models.IntegerField(default=0)
 
     class Meta:
         constraints = [
