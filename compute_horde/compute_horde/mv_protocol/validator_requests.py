@@ -10,7 +10,7 @@ from pydantic import model_validator
 from ..base.output_upload import OutputUpload, OutputUploadType  # noqa
 from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
-from ..executor_class import ExecutorClass
+from ..executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from ..utils import MachineSpecs, _json_dumps_default
 
 SAFE_DOMAIN_REGEX = re.compile(r".*")
@@ -90,6 +90,7 @@ class ReceiptPayload(pydantic.BaseModel):
     time_started: datetime.datetime
     time_took_us: int  # micro-seconds
     score_str: str
+    executor_class: ExecutorClass = DEFAULT_EXECUTOR_CLASS
 
     def blob_for_signing(self):
         # pydantic v2 does not support sort_keys anymore.

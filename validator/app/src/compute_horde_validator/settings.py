@@ -333,9 +333,9 @@ BITTENSOR_WALLET_DIRECTORY = env.path(
 )
 BITTENSOR_WALLET_NAME = env.str("BITTENSOR_WALLET_NAME")
 BITTENSOR_WALLET_HOTKEY_NAME = env.str("BITTENSOR_WALLET_HOTKEY_NAME")
-SYNTHETIC_JOB_GENERATOR = env.str(
-    "SYNTHETIC_JOB_GENERATOR",
-    default="compute_horde_validator.validator.synthetic_jobs.generator.gpu_hashcat:GPUHashcatSyntheticJobGenerator",
+SYNTHETIC_JOB_GENERATOR_FACTORY = env.str(
+    "SYNTHETIC_JOB_GENERATOR_FACTORY",
+    default="compute_horde_validator.validator.synthetic_jobs.generator.factory:DefaultSyntheticJobGeneratorFactory",
 )
 FACILITATOR_URI = env.str("FACILITATOR_URI", default="wss://facilitator.computehorde.io/ws/v0/")
 STATS_COLLECTOR_URL = env.str(

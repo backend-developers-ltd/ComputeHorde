@@ -2,6 +2,7 @@ import uuid
 from typing import NamedTuple
 
 import pytest
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol.validator_requests import ReceiptPayload
 from compute_horde.receipts import Receipt
 from django.utils.timezone import now
@@ -42,6 +43,7 @@ def mocked_get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                     time_started=now(),
                     time_took_us=30_000_000,
                     score_str="123.45",
+                    executor_class=DEFAULT_EXECUTOR_CLASS,
                 ),
                 validator_signature="0xv1",
                 miner_signature="0xm1",
@@ -57,6 +59,7 @@ def mocked_get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                     time_started=now(),
                     time_took_us=30_000_000,
                     score_str="123.45",
+                    executor_class=DEFAULT_EXECUTOR_CLASS,
                 ),
                 validator_signature="0xv1",
                 miner_signature="0xm1",
