@@ -65,6 +65,12 @@ TIMEOUT_BARRIER = JOB_LENGTH - 65
 logger = logging.getLogger(__name__)
 
 
+class MultiException(Exception):
+    def __init__(self, msg, excs):
+        self.msg = msg
+        self.excs = excs
+
+
 @lru_cache(maxsize=100)
 def batch_id_to_uuid(batch_id: int) -> uuid.UUID:
     return uuid.uuid4()
@@ -254,7 +260,12 @@ async def execute_synthetic_batch(axons_by_key, batch_id, miners):
         )
         for miner_id, miner_key in serving_miners
     ]
-    await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    exceptions = [r for r in results if isinstance(r, BaseException)]
+    if exceptions:
+        raise MultiException(
+            "exceptions raised in execute_miner_synthetic_jobs task(s)", exceptions
+        )
 
 
 async def save_job_execution_event(subtype: str, long_description: str, data={}, success=False):
@@ -604,7 +615,10 @@ async def execute_synthetic_jobs(miner_client: MinerClient, synthetic_jobs: Iter
         )
         for synthetic_job in synthetic_jobs
     ]
-    await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    exceptions = [r for r in results if isinstance(r, BaseException)]
+    if exceptions:
+        raise MultiException("exceptions raised in execute_job task(s)", exceptions)
 
 
 def get_miners(metagraph) -> list[Miner]:
