@@ -43,6 +43,7 @@ test = [
     "ipdb",
     "freezegun",
     "pytest-mock>=3.14.0",
+    "faker>=26.0.0",
 ]
 format = [
     "ruff",
