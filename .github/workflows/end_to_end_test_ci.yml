@@ -141,8 +141,8 @@ jobs:
 
       - name: Check out facilitator
         run: |
-#          eval "$(ssh-agent -s)"
-#          ssh-add - <<< "${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}"
+          # eval "$(ssh-agent -s)"
+          # ssh-add - <<< "${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}"
           rm -rf facilitator
           git clone git@github.com:backend-developers-ltd/ComputeHorde-facilitator.git facilitator
 
