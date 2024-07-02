@@ -11,6 +11,8 @@ env:
   PYTHON_DEFAULT_VERSION: "3.11"
   BITTENSOR_NETWORK: "ws://3.91.62.249:9946"
   BITTENSOR_NETUID: "1"
+  E2E_MINER_IP: "87.120.208.149"
+  E2E_MINER_PORT: "8000"
   MINER_IMAGE_REPO: "compute-horde-miner-e2e"
   MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-e2e"
   MNEMONIC_MINER_COLDKEY: "cousin gate anger oak common vacuum bonus rice buyer smooth evidence coast"
@@ -184,55 +186,6 @@ jobs:
           
           echo "FACILITATOR_URI=ws://$HOST_IP:8090/ws/v0/" >> $GITHUB_ENV
 
-      - name: Run miner
-        run: |
-          set -euxo pipefail
-          # prepare files
-          cat > docker-compose.yml <<ENDDOCKERCOMPOSE
-          services:
-            miner-runner:
-              image: backenddevelopersltd/$MINER_IMAGE_REPO:v0-latest
-              volumes:
-                - /var/run/docker.sock:/var/run/docker.sock
-                - ./.env:/root/.env
-          ENDDOCKERCOMPOSE
-          
-          cat > .env <<ENDENV
-          SECRET_KEY=12345
-          POSTGRES_PASSWORD=12345
-          BITTENSOR_NETUID=$BITTENSOR_NETUID
-          BITTENSOR_NETWORK=$BITTENSOR_NETWORK
-          BITTENSOR_WALLET_NAME=compute_horde_miner
-          BITTENSOR_WALLET_HOTKEY_NAME=default
-          HOST_WALLET_DIR=$HOST_WALLET_DIR
-          BITTENSOR_MINER_PORT=8000
-          BITTENSOR_MINER_ADDRESS=$HOST_IP
-          COMPOSE_PROJECT_NAME=compute_horde_miner
-          PORT_FOR_EXECUTORS=8000
-          ADDRESS_FOR_EXECUTORS=$HOST_IP
-          EXECUTOR_IMAGE=backenddevelopersltd/executor-e2e:v0-latest
-          DEBUG_SKIP_PULLING_EXECUTOR_IMAGE=1
-          ENDENV
-          
-          # copy .env to "host", so that mounting works -_-
-          CONTAINER_NAME=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          docker run \
-            --rm \
-            --detach \
-            --name "$CONTAINER_NAME" \
-            --volume "$PWD:/root/pwd" \
-            alpine \
-            tail -f /dev/null
-          docker cp $PWD/.env "$CONTAINER_NAME:/root/pwd/.env"
-          docker rm -f "$CONTAINER_NAME"
-          
-          docker compose up --detach --wait
-          
-          sleep 10 # wait for containers to start
-          docker ps
-          # MINER_IP_ADDRESS=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' /compute_horde_miner-app-1)
-          # echo "MINER_IP_ADDRESS=$MINER_IP_ADDRESS" >> $GITHUB_ENV
-
       - name: Run validator
         run: |
           set -euxo pipefail
@@ -293,11 +246,21 @@ jobs:
           
           docker compose up --detach --wait
 
+      - name: Wait for miner update
+        run: |
+          python3 scripts/e2e/check_miner_version.py \
+            --miner-ip "$E2E_MINER_IP" \
+            --miner-port "$E2E_MINER_PORT" \
+            --expected-version "$GITHUB_SHA"
+
       - name: miner preparations
         working-directory: miner/envs/runner
         run: |
+          ssh "ubuntu@$E2E_MINER_IP" <<END
+          cd ~/compute_horde_miner
           docker compose exec miner-runner docker compose exec app python manage.py fetch_validators
           docker compose exec miner-runner docker compose exec app python manage.py announce_address_and_port
+          END
 
       - name: validator preparations
         working-directory: validator/envs/runner
@@ -341,13 +304,6 @@ jobs:
       - name: Print all logs and stop validator
         if: always()
         working-directory: validator/envs/runner
-        run: |
-          docker compose logs
-          docker compose down --remove-orphans --volumes
-
-      - name: Print all logs and stop miner
-        if: always()
-        working-directory: miner/envs/runner
         run: |
           docker compose logs
           docker compose down --remove-orphans --volumes
