@@ -35,6 +35,14 @@ jobs:
         with:
             ssh-private-key: ${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}
 
+      - name: test ssh
+        run: |
+          set -euxo pipefail
+          git clone git@github.com:backend-developers-ltd/ComputeHorde-facilitator.git facilitator
+          ssh "ubuntu@$E2E_MINER_IP" hostname
+          exit 1
+          
+
       - name: Docker login
         run: echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
