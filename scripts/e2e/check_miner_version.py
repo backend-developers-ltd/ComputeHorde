@@ -16,12 +16,12 @@ def main() -> int:
     for i in range(10):
         with suppress(Exception):
             time.sleep(i)
-            response = urlopen(f"http://{args.miner_ip}:{args.miner_port}/version", timeout=10)
+            response = urlopen(f"http://{args.miner_ip}:{args.miner_port}/version", timeout=2)
             data = json.loads(response.read())
             if data["miner_version"] == args.expected_version:
                 return 0
 
-        return 1
+    return 1
 
 
 if __name__ == "__main__":

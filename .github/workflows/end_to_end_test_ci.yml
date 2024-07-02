@@ -257,6 +257,7 @@ jobs:
         working-directory: miner/envs/runner
         run: |
           ssh "ubuntu@$E2E_MINER_IP" <<END
+          docker pull backenddevelopersltd/compute-horde-executor-e2e:v0-latest
           cd ~/compute_horde_miner
           docker compose exec miner-runner docker compose exec app python manage.py fetch_validators
           docker compose exec miner-runner docker compose exec app python manage.py announce_address_and_port
