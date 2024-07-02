@@ -254,8 +254,8 @@ jobs:
             --expected-version "$GITHUB_SHA"
 
       - name: miner preparations
-        working-directory: miner/envs/runner
         run: |
+          ssh-keygen -R "$E2E_MINER_IP"
           ssh "ubuntu@$E2E_MINER_IP" <<END
           docker pull backenddevelopersltd/compute-horde-executor-e2e:v0-latest
           cd ~/compute_horde_miner
