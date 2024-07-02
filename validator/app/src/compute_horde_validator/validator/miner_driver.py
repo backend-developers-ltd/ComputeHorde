@@ -168,6 +168,10 @@ async def execute_organic_job(
             await job.asave()
 
             logger.info(comment)
+            await save_event(
+                subtype=SystemEvent.EventSubType.JOB_REJECTED,
+                long_description=comment,
+            )
             if notify_callback:
                 await notify_callback(JobStatusUpdate.from_job(job, "rejected"))
             return
