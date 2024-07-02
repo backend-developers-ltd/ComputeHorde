@@ -137,7 +137,10 @@ class MinerClient(AbstractMinerClient):
             logger.error(f"Unauthorized in {self.miner_name}: {msg.code}, details: {msg.details}")
             return
         if isinstance(msg, V0ExecutorManifestRequest):
-            self.miner_manifest.set_result(msg.manifest)
+            try:
+                self.miner_manifest.set_result(msg.manifest)
+            except asyncio.InvalidStateError:
+                logger.warning(f"Received manifest from {msg} but future was already set")
             return
         job_state = self.get_job_state(msg.job_uuid)
         if job_state is None:
@@ -148,11 +151,17 @@ class MinerClient(AbstractMinerClient):
         elif isinstance(
             msg, V0DeclineJobRequest | V0ExecutorFailedRequest | V0ExecutorReadyRequest
         ):
-            job_state.miner_ready_or_declining_timestamp = time.time()
-            job_state.miner_ready_or_declining_future.set_result(msg)
+            try:
+                job_state.miner_ready_or_declining_future.set_result(msg)
+                job_state.miner_ready_or_declining_timestamp = time.time()
+            except asyncio.InvalidStateError:
+                logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
         elif isinstance(msg, V0JobFailedRequest | V0JobFinishedRequest):
-            job_state.miner_finished_or_failed_future.set_result(msg)
-            job_state.miner_finished_or_failed_timestamp = time.time()
+            try:
+                job_state.miner_finished_or_failed_future.set_result(msg)
+                job_state.miner_finished_or_failed_timestamp = time.time()
+            except asyncio.InvalidStateError:
+                logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
         elif isinstance(msg, V0MachineSpecsRequest):
             job_state.miner_machine_specs = msg.specs
         else:
@@ -494,7 +503,7 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
 
         if time_took < 10:
             logger.warning(
-                f"Miner {miner_client.miner_name} finished job too quickly: {time_took} - will default to 10s"
+                f"Miner {miner_client.miner_name} finished job {job.job_uuid} too quickly: {time_took} - will default to 10s"
             )
             time_took = 10
 
