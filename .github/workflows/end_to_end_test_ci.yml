@@ -38,9 +38,8 @@ jobs:
       - name: test ssh
         run: |
           set -euxo pipefail
-          ssh-keygen -R hostname || true
           git clone git@github.com:backend-developers-ltd/ComputeHorde-facilitator.git facilitator
-          ssh "ubuntu@$E2E_MINER_IP" hostname
+          ssh -o StrictHostKeyChecking=no "ubuntu@$E2E_MINER_IP" hostname
           exit 1
           
 
