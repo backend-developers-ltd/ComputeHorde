@@ -43,7 +43,9 @@ def _generate_validator_mocks(hotkeys: Iterable[str]):
     return [MagicMock(hotkey=key) for key in hotkeys]
 
 
-def test_fetch_validators_creates_new_active_validators(faker: Faker, mock_get_validators: MagicMock):
+def test_fetch_validators_creates_new_active_validators(
+    faker: Faker, mock_get_validators: MagicMock
+):
     new_keys = [faker.pystr() for _ in range(5)]
     mock_get_validators.return_value = _generate_validator_mocks(new_keys)
 
@@ -54,7 +56,10 @@ def test_fetch_validators_creates_new_active_validators(faker: Faker, mock_get_v
 
 
 def test_fetch_validators_updates_existing_validators(
-    inactive_validators_keys: list[str], active_validators: list[Validator], inactive_validators: list[Validator], mock_get_validators: MagicMock
+    inactive_validators_keys: list[str],
+    active_validators: list[Validator],
+    inactive_validators: list[Validator],
+    mock_get_validators: MagicMock,
 ):
     mock_get_validators.return_value = _generate_validator_mocks(inactive_validators_keys)
 
@@ -66,3 +71,21 @@ def test_fetch_validators_updates_existing_validators(
 
     for key in inactive_validators_keys:
         assert Validator.objects.get(public_key=key).active is True
+
+
+def test_fetch_validators_debug_validator_key(
+    active_validators: list[Validator],
+    inactive_validators: list[Validator],
+    mock_get_validators: MagicMock,
+    faker: Faker,
+    settings,
+):
+    debug_validator_key = faker.pystr()
+    settings.DEBUG_VALIDATOR_KEY = debug_validator_key
+
+    fetch_validators()
+
+    mock_get_validators.assert_not_called()
+
+    assert Validator.objects.count() == len(active_validators) + len(inactive_validators) + 1
+    assert Validator.objects.filter(active=True).get().public_key == debug_validator_key
