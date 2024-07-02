@@ -2,7 +2,7 @@ name: Run end to end tests
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, ci-e2e]
   pull_request:
     branches: [master, main]
   workflow_dispatch:
@@ -253,15 +253,14 @@ jobs:
             --miner-port "$E2E_MINER_PORT" \
             --expected-version "$GITHUB_SHA"
 
-      - name: miner preparations
-        run: |
-          ssh-keygen -R "$E2E_MINER_IP"
-          ssh "ubuntu@$E2E_MINER_IP" <<END
-          docker pull backenddevelopersltd/compute-horde-executor-e2e:v0-latest
-          cd ~/compute_horde_miner
-          docker compose exec miner-runner docker compose exec app python manage.py fetch_validators
-          docker compose exec miner-runner docker compose exec app python manage.py announce_address_and_port
-          END
+#      - name: miner preparations
+#        run: |
+#          ssh "ubuntu@$E2E_MINER_IP" <<END
+#          docker pull backenddevelopersltd/compute-horde-executor-e2e:v0-latest
+#          cd ~/compute_horde_miner
+#          docker compose exec miner-runner docker compose exec app python manage.py fetch_validators
+#          docker compose exec miner-runner docker compose exec app python manage.py announce_address_and_port
+#          END
 
       - name: validator preparations
         working-directory: validator/envs/runner
@@ -288,7 +287,19 @@ jobs:
 
       - name: test synthetic job
         run: |
-          echo TODO!!
+          cd validator/envs/runner
+          docker compose exec validator-runner \
+            docker compose exec app \
+              python manage.py debug_run_syntetic_job_to_miner \
+                --miner_hotkey "$MINER_HOTKEY_SS58" \
+                --miner_address "$E2E_MINER_IP" \
+                --miner_port "$E2E_MINER_PORT"
+          
+          docker compose exec validator-runner docker compose exec app python manage.py shell <<EOF
+          from compute_horde_validator.validator.models import SyntheticJob
+          job = SyntheticJob.objects.get()
+          assert job.status == SyntheticJob.Status.COMPLETED, job.status
+          EOF
 
       - name: check receipts in miner
         run: |
