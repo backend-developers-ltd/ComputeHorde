@@ -1,9 +1,11 @@
 import asyncio
+import contextlib
 import datetime
 import sys
 from collections.abc import Iterable
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.miner_client.base import MinerConnectionError
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils.timezone import now
@@ -49,7 +51,7 @@ class Command(BaseCommand):
 
         loop = asyncio.get_event_loop()
         key = settings.BITTENSOR_WALLET().get_hotkey()
-        client = MinerClient(
+        miner_client = MinerClient(
             loop=loop,
             miner_address=miner_address,
             miner_port=miner_port,
@@ -61,14 +63,19 @@ class Command(BaseCommand):
         )
 
         try:
-            asyncio.run(_execute_jobs(client, jobs))
+            asyncio.run(_execute_jobs(miner_client, jobs))
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)
 
 
-async def _execute_jobs(client: MinerClient, synthetic_jobs: Iterable[SyntheticJob]):
-    async with client:
+async def _execute_jobs(miner_client: MinerClient, synthetic_jobs: Iterable[SyntheticJob]):
+    async with contextlib.AsyncExitStack() as exit_stack:
+        try:
+            await exit_stack.enter_async_context(miner_client)
+        except MinerConnectionError as exc:
+            print(f"Miner connection error: {exc}")
+            return
         for job in synthetic_jobs:
-            client.add_job(str(job.job_uuid))
-        await execute_synthetic_jobs(client, synthetic_jobs)
+            miner_client.add_job(str(job.job_uuid))
+        await execute_synthetic_jobs(miner_client, synthetic_jobs)
