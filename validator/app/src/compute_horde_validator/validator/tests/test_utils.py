@@ -241,7 +241,7 @@ async def test_manifest_incentive__no_recent_manifests():
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_hotkey")
     batches = await create_mock_job_batches(miner)
 
-    await MinerManifest.objects.acreate(miner=miner, batch=batches[-1], executor_count=10)
+    await MinerManifest.objects.acreate(miner=miner, batch=batches[-1], online_executor_count=10)
 
     new_score = await apply_manifest_incentive(
         miner_hotkey=miner.hotkey, batch_id=batches[-1].pk, score=MOCK_SCORE
@@ -258,8 +258,8 @@ async def test_manifest_incentive__num_executors_increased():
     batches = await create_mock_job_batches(miner)
 
     for batch in batches[:-1]:
-        await MinerManifest.objects.acreate(miner=miner, batch=batch, executor_count=8)
-    await MinerManifest.objects.acreate(miner=miner, batch=batches[-1], executor_count=16)
+        await MinerManifest.objects.acreate(miner=miner, batch=batch, online_executor_count=8)
+    await MinerManifest.objects.acreate(miner=miner, batch=batches[-1], online_executor_count=16)
 
     new_score = await apply_manifest_incentive(
         miner_hotkey=miner.hotkey, batch_id=batches[-1].pk, score=MOCK_SCORE
@@ -276,7 +276,7 @@ async def test_manifest_incentive__not_applying():
     batches = await create_mock_job_batches(miner)
 
     for batch in batches:
-        await MinerManifest.objects.acreate(miner=miner, batch=batch, executor_count=8)
+        await MinerManifest.objects.acreate(miner=miner, batch=batch, online_executor_count=8)
 
     new_score = await apply_manifest_incentive(
         miner_hotkey=miner.hotkey, batch_id=batches[-1].pk, score=MOCK_SCORE
@@ -293,7 +293,7 @@ async def test_manifest_incentive__recently_registered():
     batches = await create_mock_job_batches(miner)
 
     for batch in batches[-2:]:
-        await MinerManifest.objects.acreate(miner=miner, batch=batch, executor_count=8)
+        await MinerManifest.objects.acreate(miner=miner, batch=batch, online_executor_count=8)
 
     new_score = await apply_manifest_incentive(
         miner_hotkey=miner.hotkey, batch_id=batches[-1].pk, score=MOCK_SCORE
@@ -310,7 +310,7 @@ async def test_manifest_incentive__few_executors():
     batches = await create_mock_job_batches(miner)
 
     for batch in batches:
-        await MinerManifest.objects.acreate(miner=miner, batch=batch, executor_count=3)
+        await MinerManifest.objects.acreate(miner=miner, batch=batch, online_executor_count=3)
 
     new_score = await apply_manifest_incentive(
         miner_hotkey=miner.hotkey, batch_id=batches[-1].pk, score=MOCK_SCORE

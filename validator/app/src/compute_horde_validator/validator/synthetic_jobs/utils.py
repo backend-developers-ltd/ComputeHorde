@@ -20,6 +20,7 @@ from compute_horde.miner_client.base import (
 from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.miner_requests import (
     BaseMinerRequest,
+    ExecutorManifest,
     UnauthorizedError,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
@@ -102,6 +103,7 @@ class MinerClient(AbstractMinerClient):
         self.keypair = keypair
         self._barrier = None
         self.miner_manifest = asyncio.Future()
+        self.online_executor_count = 0
 
     def add_job(self, job_uuid: str):
         job_state = JobState()
@@ -136,13 +138,6 @@ class MinerClient(AbstractMinerClient):
             return
         if isinstance(msg, V0ExecutorManifestRequest):
             self.miner_manifest.set_result(msg.manifest)
-            miner = await Miner.objects.aget(hotkey=self.miner_hotkey)
-            if self.batch_id:
-                await MinerManifest.objects.acreate(
-                    miner=miner,
-                    batch_id=self.batch_id,
-                    executor_count=msg.manifest.total_count,
-                )
             return
         job_state = self.get_job_state(msg.job_uuid)
         if job_state is None:
@@ -162,6 +157,16 @@ class MinerClient(AbstractMinerClient):
             job_state.miner_machine_specs = msg.specs
         else:
             raise UnsupportedMessageReceived(msg)
+
+    async def save_manifest(self, manifest: ExecutorManifest):
+        miner = await Miner.objects.aget(hotkey=self.miner_hotkey)
+        if self.batch_id:
+            await MinerManifest.objects.acreate(
+                miner=miner,
+                batch_id=self.batch_id,
+                executor_count=manifest.total_count,
+                online_executor_count=self.online_executor_count,
+            )
 
     def generate_authentication_message(self):
         payload = AuthenticationPayload(
@@ -345,6 +350,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
             await save_job_execution_event(
                 subtype=SystemEvent.EventSubType.GENERIC_ERROR, long_description=msg
             )
+        await miner_client.save_manifest(manifest)
 
 
 async def apply_manifest_incentive(miner_hotkey: str, batch_id: int, score: float) -> float:
@@ -368,15 +374,15 @@ async def apply_manifest_incentive(miner_hotkey: str, batch_id: int, score: floa
             ).order_by("-batch__id")
         ]
 
-        if len(manifests) > 0 and manifests[0].executor_count <= 3:
+        if len(manifests) > 0 and manifests[0].online_executor_count <= 3:
             logger.debug(
                 f"Applied manifest incentive for {miner_hotkey} - last manifest has 3 or less executors"
             )
         elif (
             len(manifests) == 3
-            and manifests[0].executor_count - manifests[1].executor_count
+            and manifests[0].online_executor_count - manifests[1].online_executor_count
             > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
-            and manifests[0].executor_count - manifests[2].executor_count
+            and manifests[0].online_executor_count - manifests[2].online_executor_count
             > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
         ):
             logger.debug(
@@ -549,6 +555,9 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
                 miner_client.miner_hotkey, job.batch_id, score
             )
             await job.asave()
+
+            # executor is verified as being online
+            miner_client.online_executor_count += 1
 
             # Send receipt to miner
             try:

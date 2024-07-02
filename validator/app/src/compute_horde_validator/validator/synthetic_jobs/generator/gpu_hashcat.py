@@ -48,10 +48,18 @@ class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
         return self.hash_job.timeout_seconds
 
     def base_docker_image_name(self) -> str:
-        return f"backenddevelopersltd/compute-horde-job:v{self.weights_version}-latest"
+        if self.weights_version == 0:
+            return "backenddevelopersltd/compute-horde-job:v0-latest"
+        elif self.weights_version in [1, 2]:
+            return "backenddevelopersltd/compute-horde-job:v1-latest"
+        else:
+            raise RuntimeError(f"No base_docker_image for weights_version: {self.weights_version}")
 
     def docker_image_name(self) -> str:
-        return f"backenddevelopersltd/compute-horde-job:v{self.weights_version}-latest"
+        if self.weights_version in [0, 1, 2]:
+            return self.base_docker_image_name()
+        else:
+            raise RuntimeError(f"No docker_image for weights_version: {self.weights_version}")
 
     def docker_run_options_preset(self) -> str:
         return "nvidia_all"
