@@ -35,14 +35,6 @@ jobs:
         with:
             ssh-private-key: ${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}
 
-      - name: test ssh
-        run: |
-          set -euxo pipefail
-          git clone git@github.com:backend-developers-ltd/ComputeHorde-facilitator.git facilitator
-          ssh -o StrictHostKeyChecking=no "ubuntu@$E2E_MINER_IP" hostname
-          exit 1
-          
-
       - name: Docker login
         run: echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
@@ -267,7 +259,7 @@ jobs:
 
       - name: miner preparations
         run: |
-          ssh "ubuntu@$E2E_MINER_IP" <<END
+          ssh -o StrictHostKeyChecking=no "ubuntu@$E2E_MINER_IP" <<END
           docker pull backenddevelopersltd/compute-horde-executor-e2e:v0-latest
           cd ~/compute_horde_miner
           docker compose exec miner-runner docker compose exec app python manage.py fetch_validators
