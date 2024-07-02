@@ -31,6 +31,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+            ssh-private-key: ${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}
+
       - name: Docker login
         run: echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
@@ -137,8 +141,8 @@ jobs:
 
       - name: Check out facilitator
         run: |
-          eval "$(ssh-agent -s)"
-          ssh-add - <<< "${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}"
+#          eval "$(ssh-agent -s)"
+#          ssh-add - <<< "${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}"
           rm -rf facilitator
           git clone git@github.com:backend-developers-ltd/ComputeHorde-facilitator.git facilitator
 
@@ -253,14 +257,14 @@ jobs:
             --miner-port "$E2E_MINER_PORT" \
             --expected-version "$GITHUB_SHA"
 
-#      - name: miner preparations
-#        run: |
-#          ssh "ubuntu@$E2E_MINER_IP" <<END
-#          docker pull backenddevelopersltd/compute-horde-executor-e2e:v0-latest
-#          cd ~/compute_horde_miner
-#          docker compose exec miner-runner docker compose exec app python manage.py fetch_validators
-#          docker compose exec miner-runner docker compose exec app python manage.py announce_address_and_port
-#          END
+      - name: miner preparations
+        run: |
+          ssh "ubuntu@$E2E_MINER_IP" <<END
+          docker pull backenddevelopersltd/compute-horde-executor-e2e:v0-latest
+          cd ~/compute_horde_miner
+          docker compose exec miner-runner docker compose exec app python manage.py fetch_validators
+          docker compose exec miner-runner docker compose exec app python manage.py announce_address_and_port
+          END
 
       - name: validator preparations
         working-directory: validator/envs/runner
