@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from compute_horde.mv_protocol.validator_requests import ReceiptPayload
+from compute_horde.mv_protocol.validator_requests import JobFinishedReceiptPayload
 from compute_horde.receipts import Receipt
 from constance.test.unittest import override_config
 from django.utils.timezone import now
@@ -40,7 +40,7 @@ def test__migration__not_migrating__should_not_get_receipts_from_old_miner(mocke
 def test_get_receipts_from_old_miner(mocker: MockerFixture):
     receipts = [
         Receipt(
-            payload=ReceiptPayload(
+            payload=JobFinishedReceiptPayload(
                 job_uuid=str(uuid.uuid4()),
                 miner_hotkey="m1",
                 validator_hotkey="v1",
@@ -52,7 +52,7 @@ def test_get_receipts_from_old_miner(mocker: MockerFixture):
             miner_signature="0xm1",
         ),
         Receipt(
-            payload=ReceiptPayload(
+            payload=JobFinishedReceiptPayload(
                 job_uuid=str(uuid.uuid4()),
                 miner_hotkey="m1",
                 validator_hotkey="v2",

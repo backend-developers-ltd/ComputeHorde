@@ -88,13 +88,16 @@ class ReceiptPayload(pydantic.BaseModel):
     job_uuid: str
     miner_hotkey: str
     validator_hotkey: str
-    time_started: datetime.datetime
-    time_took_us: int  # micro-seconds
-    score_str: str
 
     def blob_for_signing(self):
         # pydantic v2 does not support sort_keys anymore.
         return json.dumps(self.model_dump(), sort_keys=True, default=_json_dumps_default)
+
+
+class JobFinishedReceiptPayload(ReceiptPayload):
+    time_started: datetime.datetime
+    time_took_us: int  # micro-seconds
+    score_str: str
 
     @property
     def time_took(self):
@@ -107,23 +110,16 @@ class ReceiptPayload(pydantic.BaseModel):
 
 class V0ReceiptRequest(BaseValidatorRequest):
     message_type: RequestType = RequestType.V0ReceiptRequest
-    payload: ReceiptPayload
+    payload: JobFinishedReceiptPayload
     signature: str
 
     def blob_for_signing(self):
         return self.payload.blob_for_signing()
 
 
-class JobStartedReceiptPayload(pydantic.BaseModel):
-    job_uuid: str
-    miner_hotkey: str
-    validator_hotkey: str
+class JobStartedReceiptPayload(ReceiptPayload):
     time_accepted: datetime.datetime
     max_timeout: int  # seconds
-
-    def blob_for_signing(self):
-        # pydantic v2 does not support sort_keys anymore.
-        return json.dumps(self.model_dump(), sort_keys=True, default=_json_dumps_default)
 
 
 class V0JobStartedReceiptRequest(BaseValidatorRequest):

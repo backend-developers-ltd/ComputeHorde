@@ -10,13 +10,13 @@ import bittensor
 import pydantic
 import requests
 
-from .mv_protocol.validator_requests import ReceiptPayload
+from .mv_protocol.validator_requests import JobFinishedReceiptPayload
 
 logger = logging.getLogger(__name__)
 
 
 class Receipt(pydantic.BaseModel):
-    payload: ReceiptPayload
+    payload: JobFinishedReceiptPayload
     validator_signature: str
     miner_signature: str
 
@@ -53,7 +53,7 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
         for raw_receipt in csv_reader:
             try:
                 receipt = Receipt(
-                    payload=ReceiptPayload(
+                    payload=JobFinishedReceiptPayload(
                         job_uuid=raw_receipt["job_uuid"],
                         miner_hotkey=raw_receipt["miner_hotkey"],
                         validator_hotkey=raw_receipt["validator_hotkey"],

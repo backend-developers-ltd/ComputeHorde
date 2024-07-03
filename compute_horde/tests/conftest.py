@@ -4,7 +4,7 @@ import pytest
 import responses
 from bittensor import Keypair
 
-from compute_horde.mv_protocol.validator_requests import ReceiptPayload
+from compute_horde.mv_protocol.validator_requests import JobFinishedReceiptPayload
 from compute_horde.receipts import Receipt
 
 
@@ -31,7 +31,7 @@ def miner_keypair():
 
 @pytest.fixture
 def receipts(validator_keypair, miner_keypair):
-    payload1 = ReceiptPayload(
+    payload1 = JobFinishedReceiptPayload(
         job_uuid="0d89161e-65e4-46ad-bed8-ecfec1cc3c6b",
         miner_hotkey=miner_keypair.ss58_address,
         validator_hotkey=validator_keypair.ss58_address,
@@ -45,7 +45,7 @@ def receipts(validator_keypair, miner_keypair):
         miner_signature=f"0x{miner_keypair.sign(payload1.blob_for_signing()).hex()}",
     )
 
-    payload2 = ReceiptPayload(
+    payload2 = JobFinishedReceiptPayload(
         job_uuid="3342460e-4a99-438b-8757-795f4cb348dd",
         miner_hotkey=miner_keypair.ss58_address,
         validator_hotkey=validator_keypair.ss58_address,

@@ -3,7 +3,7 @@ from datetime import timedelta
 from enum import Enum
 from typing import Self
 
-from compute_horde.mv_protocol.validator_requests import ReceiptPayload
+from compute_horde.mv_protocol.validator_requests import JobFinishedReceiptPayload
 from compute_horde.receipts import Receipt
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
@@ -118,7 +118,7 @@ class JobFinishedReceipt(AbstractReceipt):
 
     def to_receipt(self):
         return Receipt(
-            payload=ReceiptPayload(
+            payload=JobFinishedReceiptPayload(
                 job_uuid=str(self.job_uuid),
                 miner_hotkey=self.miner_hotkey,
                 validator_hotkey=self.validator_hotkey,
