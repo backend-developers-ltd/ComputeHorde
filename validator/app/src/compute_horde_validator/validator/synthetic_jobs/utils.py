@@ -3,7 +3,6 @@ import contextlib
 import datetime
 import logging
 import time
-import traceback
 import uuid
 from collections.abc import Iterable
 from functools import lru_cache, partial
@@ -360,13 +359,10 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
         try:
             await execute_synthetic_jobs(miner_client, jobs)
         except ExceptionGroup as e:
-            msg = f"Multiple errors occurred during execution of some jobs for miner {miner_hotkey}"
-            logger.warning(f"{msg}: {e!r}")
-            stacktrace = "".join(traceback.format_exception(e))
-            long_description = msg + "\n" + stacktrace
+            msg = f"Multiple errors occurred during execution of some jobs for miner {miner_hotkey}: {e!r}"
+            logger.exception(msg)
             await save_job_execution_event(
-                subtype=SystemEvent.EventSubType.MULTIPLE_ERRORS_DURING_JOB,
-                long_description=long_description,
+                subtype=SystemEvent.EventSubType.GENERIC_ERROR, long_description=msg
             )
         except Exception as e:
             msg = f"Failed to execute jobs for miner {miner_hotkey}: {e}"
