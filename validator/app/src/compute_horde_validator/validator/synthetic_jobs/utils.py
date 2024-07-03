@@ -263,7 +263,12 @@ async def execute_synthetic_batch(axons_by_key, batch_id, miners):
         )
         for miner_id, miner_key in serving_miners
     ]
-    await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    exceptions = [r for r in results if isinstance(r, Exception)]
+    if exceptions:
+        raise ExceptionGroup(
+            "exceptions raised in execute_miner_synthetic_jobs task(s)", exceptions
+        )
 
 
 async def save_job_execution_event(subtype: str, long_description: str, data={}, success=False):
@@ -343,6 +348,12 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
         jobs = await SyntheticJob.objects.abulk_create(jobs)
         try:
             await execute_synthetic_jobs(miner_client, jobs)
+        except ExceptionGroup as e:
+            msg = f"Multiple errors occurred during execution of some jobs for miner {miner_hotkey}: {e!r}"
+            logger.exception(msg)
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.GENERIC_ERROR, long_description=msg
+            )
         except Exception as e:
             msg = f"Failed to execute jobs for miner {miner_hotkey}: {e}"
             logger.warning(msg)
@@ -604,7 +615,10 @@ async def execute_synthetic_jobs(miner_client: MinerClient, synthetic_jobs: Iter
         )
         for synthetic_job in synthetic_jobs
     ]
-    await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    exceptions = [r for r in results if isinstance(r, Exception)]
+    if exceptions:
+        raise ExceptionGroup("exceptions raised in execute_job task(s)", exceptions)
 
 
 def get_miners(metagraph) -> list[Miner]:
