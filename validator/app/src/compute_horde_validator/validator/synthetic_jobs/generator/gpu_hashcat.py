@@ -3,7 +3,7 @@ from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 from compute_horde_validator.validator.metagraph_client import get_weights_version
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
-    AbstractSyntheticJobGenerator,
+    BaseSyntheticJobGenerator,
 )
 from compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
     HASHJOB_PARAMS,
@@ -16,7 +16,7 @@ from compute_horde_validator.validator.utils import single_file_zip
 MAX_SCORE = 2
 
 
-class GPUHashcatSyntheticJobGenerator(AbstractSyntheticJobGenerator):
+class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def __init__(self):
         # set synthetic_jobs based on subnet weights_version
         self.weights_version = get_weights_version()

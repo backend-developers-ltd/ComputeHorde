@@ -11,7 +11,7 @@ import bittensor
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.base_requests import BaseRequest
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     MinerConnectionError,
@@ -87,7 +87,7 @@ class MinerClient(AbstractMinerClient):
         my_hotkey: str,
         miner_hotkey: str,
         miner_port: int,
-        job_uuid: None | str,
+        job_uuid: None | str | uuid.UUID,
         batch_id: None | int,
         keypair: bittensor.Keypair,
     ):
@@ -105,12 +105,12 @@ class MinerClient(AbstractMinerClient):
         self.miner_manifest = asyncio.Future()
         self.online_executor_count = 0
 
-    def add_job(self, job_uuid: str):
+    def add_job(self, job_uuid: str | uuid.UUID):
         job_state = JobState()
         self.job_states[str(job_uuid)] = job_state
         return job_state
 
-    def get_job_state(self, job_uuid: str):
+    def get_job_state(self, job_uuid: str | uuid.UUID):
         return self.job_states.get(str(job_uuid))
 
     def get_barrier(self):
@@ -321,36 +321,26 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
                 subtype=SystemEvent.EventSubType.FAILURE, long_description=msg, data=data
             )
             return
-        executor_count = 0
+
+        jobs = []
         for executor_class_manifest in manifest.executor_classes:
             # convert deprecated executor class 0 to default executor class
             if executor_class_manifest.executor_class == 0:
                 executor_class_manifest.executor_class = DEFAULT_EXECUTOR_CLASS
-            if executor_class_manifest.executor_class != DEFAULT_EXECUTOR_CLASS:
-                logger.warning(
-                    f"Executor classed other than {DEFAULT_EXECUTOR_CLASS} are not supported yet"
+            for _ in range(executor_class_manifest.count):
+                job = SyntheticJob(
+                    batch_id=batch_id,
+                    miner_id=miner_id,
+                    miner_address=axon_info.ip,
+                    miner_address_ip_version=axon_info.ip_type,
+                    miner_port=axon_info.port,
+                    executor_class=executor_class_manifest.executor_class,
+                    status=SyntheticJob.Status.PENDING,
                 )
-                continue
-            executor_count = executor_class_manifest.count
-            break
-        jobs = list(
-            await SyntheticJob.objects.abulk_create(
-                [
-                    SyntheticJob(
-                        batch_id=batch_id,
-                        miner_id=miner_id,
-                        miner_address=axon_info.ip,
-                        miner_address_ip_version=axon_info.ip_type,
-                        miner_port=axon_info.port,
-                        executor_class=DEFAULT_EXECUTOR_CLASS,
-                        status=SyntheticJob.Status.PENDING,
-                    )
-                    for i in range(executor_count)
-                ]
-            )
-        )
-        for job in jobs:
-            miner_client.add_job(str(job.job_uuid))
+                miner_client.add_job(job.job_uuid)
+                jobs.append(job)
+
+        jobs = await SyntheticJob.objects.abulk_create(jobs)
         try:
             await execute_synthetic_jobs(miner_client, jobs)
         except Exception as e:
@@ -416,14 +406,15 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
     save_event = partial(save_job_execution_event, data=data)
 
     job_state = miner_client.get_job_state(str(job.job_uuid))
-    job_generator = current.SyntheticJobGenerator()
+    job_executor_class = ExecutorClass(job.executor_class)
+    job_generator = await current.synthetic_job_generator_factory.create(job_executor_class)
     await job_generator.ainit()
     job.job_description = job_generator.job_description()
     await job.asave()
     await miner_client.send_model(
         V0InitialJobRequest(
             job_uuid=str(job.job_uuid),
-            executor_class=job.executor_class,
+            executor_class=job_executor_class,
             base_docker_image_name=job_generator.base_docker_image_name(),
             timeout_seconds=job_generator.timeout_seconds(),
             volume_type=VolumeType.inline.value,
@@ -469,7 +460,7 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
     await miner_client.send_model(
         V0JobRequest(
             job_uuid=str(job.job_uuid),
-            executor_class=job.executor_class,
+            executor_class=job_executor_class,
             docker_image_name=job_generator.docker_image_name(),
             docker_run_options_preset=job_generator.docker_run_options_preset(),
             docker_run_cmd=job_generator.docker_run_cmd(),
