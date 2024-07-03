@@ -192,7 +192,7 @@ class AbstractReceipt(models.Model):
         return f"job_uuid: {self.job_uuid}"
 
 
-class JobReceipt(AbstractReceipt):
+class JobFinishedReceipt(AbstractReceipt):
     time_started = models.DateTimeField()
     time_took_us = models.BigIntegerField()
     score_str = models.CharField(max_length=256)

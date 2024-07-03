@@ -7,7 +7,7 @@ from constance.test.unittest import override_config
 from django.utils.timezone import now
 from pytest_mock import MockerFixture
 
-from compute_horde_miner.miner.models import JobReceipt
+from compute_horde_miner.miner.models import JobFinishedReceipt
 from compute_horde_miner.miner.tasks import announce_address_and_port, get_receipts_from_old_miner
 
 
@@ -69,4 +69,4 @@ def test_get_receipts_from_old_miner(mocker: MockerFixture):
 
     get_receipts_from_old_miner()
 
-    assert JobReceipt.objects.count() == 2
+    assert JobFinishedReceipt.objects.count() == 2

@@ -6,7 +6,7 @@ from compute_horde.mv_protocol.validator_requests import ReceiptPayload
 from compute_horde.receipts import Receipt
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.models import JobReceipt, SystemEvent
+from compute_horde_validator.validator.models import JobFinishedReceipt, SystemEvent
 from compute_horde_validator.validator.tasks import fetch_receipts
 
 from .helpers import MockedAxonInfo, check_system_events, throw_error
@@ -73,7 +73,7 @@ def test_fetch_receipts__success(monkeypatch):
         "compute_horde_validator.validator.tasks.get_miner_receipts", mocked_get_miner_receipts
     )
     fetch_receipts()
-    assert JobReceipt.objects.count() == 2
+    assert JobFinishedReceipt.objects.count() == 2
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -81,7 +81,7 @@ def test_fetch_receipts__fail(monkeypatch):
     monkeypatch.setattr("bittensor.metagraph", MockedMetagraph)
     monkeypatch.setattr("compute_horde_validator.validator.tasks.get_miner_receipts", throw_error)
     fetch_receipts()
-    assert JobReceipt.objects.count() == 0
+    assert JobFinishedReceipt.objects.count() == 0
     check_system_events(
         SystemEvent.EventType.RECEIPT_FAILURE, SystemEvent.EventSubType.RECEIPT_FETCH_ERROR, 2
     )

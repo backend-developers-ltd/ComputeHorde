@@ -27,7 +27,7 @@ from compute_horde_validator.celery import app
 from compute_horde_validator.validator.locks import Locked, get_weight_setting_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
-    JobReceipt,
+    JobFinishedReceipt,
     OrganicJob,
     SyntheticJobBatch,
     SystemEvent,
@@ -400,13 +400,13 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
         return
 
     latest_job_receipt = (
-        JobReceipt.objects.filter(miner_hotkey=hotkey).order_by("-time_started").first()
+        JobFinishedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-time_started").first()
     )
     tolerance = timedelta(hours=1)
     cutoff_time = latest_job_receipt.time_started - tolerance if latest_job_receipt else None
 
     to_create = [
-        JobReceipt(
+        JobFinishedReceipt(
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,
             validator_hotkey=receipt.payload.validator_hotkey,
@@ -418,14 +418,14 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
         if cutoff_time is None or receipt.payload.time_started > cutoff_time
     ]
 
-    JobReceipt.objects.bulk_create(to_create, ignore_conflicts=True)
+    JobFinishedReceipt.objects.bulk_create(to_create, ignore_conflicts=True)
 
 
 @app.task
 def fetch_receipts():
     """Fetch job receipts from the miners."""
     # Delete old receipts before fetching new ones
-    JobReceipt.objects.filter(time_started__lt=now() - timedelta(days=7)).delete()
+    JobFinishedReceipt.objects.filter(time_started__lt=now() - timedelta(days=7)).delete()
 
     metagraph = bittensor.metagraph(
         netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK

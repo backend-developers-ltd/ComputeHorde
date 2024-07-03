@@ -106,7 +106,7 @@ class AbstractReceipt(models.Model):
         abstract = True
 
 
-class JobReceipt(AbstractReceipt):
+class JobFinishedReceipt(AbstractReceipt):
     time_started = models.DateTimeField()
     time_took_us = models.BigIntegerField()
     score_str = models.CharField(max_length=256)
