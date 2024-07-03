@@ -11,6 +11,7 @@ from compute_horde_validator.validator.models import (
     MinerBlacklist,
     AdminJobRequest,
     JobReceipt,
+    JobStartedReceipt,
     SystemEvent,
 )  # noqa
 from rangefilter.filters import DateTimeRangeFilter
@@ -115,6 +116,17 @@ class SystemEventAdmin(ReadOnlyAdmin):
     ordering = ["-timestamp"]
 
 
+class JobStartedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+    list_display = [
+        "job_uuid",
+        "miner_hotkey",
+        "validator_hotkey",
+        "time_accepted",
+        "max_timeout",
+    ]
+    ordering = ["-time_accepted"]
+
+
 class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
     list_display = [
         "job_uuid",
@@ -131,6 +143,7 @@ admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(JobReceipt, admin_class=JobReceiptsReadOnlyAdmin)
+admin.site.register(JobStartedReceipt, admin_class=JobStartedReceiptsReadOnlyAdmin)
 admin.site.register(MinerBlacklist)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)
 admin.site.register(SystemEvent, admin_class=SystemEventAdmin)

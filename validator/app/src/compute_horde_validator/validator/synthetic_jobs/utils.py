@@ -34,10 +34,12 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
+    JobStartedReceiptPayload,
     ReceiptPayload,
     V0AuthenticateRequest,
     V0InitialJobRequest,
     V0JobRequest,
+    V0JobStartedReceiptRequest,
     V0ReceiptRequest,
     VolumeType,
 )
@@ -188,7 +190,23 @@ class MinerClient(AbstractMinerClient):
             payload=payload, signature=f"0x{self.keypair.sign(payload.blob_for_signing()).hex()}"
         )
 
-    def generate_receipt_message(
+    def generate_job_started_receipt_message(
+        self, job: JobBase, accepted_timestamp: float, max_timeout: int
+    ) -> V0JobStartedReceiptRequest:
+        time_accepted = datetime.datetime.fromtimestamp(accepted_timestamp, datetime.UTC)
+        receipt_payload = JobStartedReceiptPayload(
+            job_uuid=str(job.job_uuid),
+            miner_hotkey=job.miner.hotkey,
+            validator_hotkey=self.my_hotkey,
+            time_accepted=time_accepted,
+            max_timeout=max_timeout,
+        )
+        return V0JobStartedReceiptRequest(
+            payload=receipt_payload,
+            signature=f"0x{self.keypair.sign(receipt_payload.blob_for_signing()).hex()}",
+        )
+
+    def generate_job_finished_receipt_message(
         self, job: JobBase, started_timestamp: float, time_took_seconds: float, score: float
     ) -> V0ReceiptRequest:
         time_started = datetime.datetime.fromtimestamp(started_timestamp, datetime.UTC)
@@ -449,6 +467,24 @@ async def _execute_synthetic_job(
         await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
         raise ValueError(comment)
 
+    # Send job started receipt to miner
+    try:
+        receipt_message = miner_client.generate_job_started_receipt_message(
+            job,
+            time.time(),
+            settings.MAX_SYNTHETIC_JOB_TIMEOUT,
+        )
+        await miner_client.send_model(receipt_message)
+        logger.debug(f"Sent job started receipt for {job.job_uuid}")
+    except Exception as e:
+        comment = f"Failed to send job started receipt to miner {miner_client.miner_name} for job {job.job_uuid}: {e}"
+        logger.warning(comment)
+        await sync_to_async(save_receipt_event)(
+            subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
+            long_description=comment,
+            data=data,
+        )
+
     # generate before locking on barrier
     volume_contents = await job_generator.volume_contents()
 
@@ -551,15 +587,15 @@ async def _execute_synthetic_job(
             )
             await job.asave()
 
-            # Send receipt to miner
+            # Send job finished receipt to miner
             try:
-                receipt_message = miner_client.generate_receipt_message(
+                receipt_message = miner_client.generate_job_finished_receipt_message(
                     job, full_job_sent, time_took, job.score
                 )
                 await miner_client.send_model(receipt_message)
-                logger.info("Receipt message sent")
+                logger.debug(f"Sent job finished receipt for {job.job_uuid}")
             except Exception as e:
-                comment = f"Failed to send receipt to miner {miner_client.miner_name} for job {job.job_uuid}: {e}"
+                comment = f"Failed to send job finished receipt to miner {miner_client.miner_name} for job {job.job_uuid}: {e}"
                 logger.warning(comment)
                 await sync_to_async(save_receipt_event)(
                     subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,

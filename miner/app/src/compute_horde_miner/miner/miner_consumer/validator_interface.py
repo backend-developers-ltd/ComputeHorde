@@ -22,7 +22,13 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ExecutorReady,
     ValidatorInterfaceMixin,
 )
-from compute_horde_miner.miner.models import AcceptedJob, JobReceipt, Validator, ValidatorBlacklist
+from compute_horde_miner.miner.models import (
+    AcceptedJob,
+    JobReceipt,
+    JobStartedReceipt,
+    Validator,
+    ValidatorBlacklist,
+)
 from compute_horde_miner.miner.tasks import prepare_receipts
 
 logger = logging.getLogger(__name__)
@@ -30,6 +36,11 @@ logger = logging.getLogger(__name__)
 AUTH_MESSAGE_MAX_AGE = 10
 
 DONT_CHECK = "DONT_CHECK"
+
+
+def get_miner_signature(msg: BaseValidatorRequest) -> str:
+    keypair = settings.BITTENSOR_WALLET().get_hotkey()
+    return f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
 
 
 class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
@@ -298,9 +309,27 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.full_job_details = msg.model_dump()
             await job.asave()
 
+        if isinstance(
+            msg, validator_requests.V0JobStartedReceiptRequest
+        ) and self.verify_receipt_msg(msg):
+            logger.info(
+                f"Received job started receipt for"
+                f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
+                f" max_timeout={msg.payload.max_timeout}"
+            )
+            await JobStartedReceipt.objects.acreate(
+                validator_signature=msg.signature,
+                miner_signature=get_miner_signature(msg),
+                job_uuid=msg.payload.job_uuid,
+                miner_hotkey=msg.payload.miner_hotkey,
+                validator_hotkey=msg.payload.validator_hotkey,
+                time_accepted=msg.payload.time_accepted,
+                max_timeout=msg.payload.max_timeout,
+            )
+
         if isinstance(msg, validator_requests.V0ReceiptRequest) and self.verify_receipt_msg(msg):
             logger.info(
-                f"Received receipt for"
+                f"Received job finished receipt for"
                 f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
                 f" time_took={msg.payload.time_took} score={msg.payload.score}"
             )
@@ -309,12 +338,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.score = msg.payload.score
             await job.asave()
 
-            keypair = settings.BITTENSOR_WALLET().get_hotkey()
-            miner_signature = f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
-
             await JobReceipt.objects.acreate(
                 validator_signature=msg.signature,
-                miner_signature=miner_signature,
+                miner_signature=get_miner_signature(msg),
                 job_uuid=msg.payload.job_uuid,
                 miner_hotkey=msg.payload.miner_hotkey,
                 validator_hotkey=msg.payload.validator_hotkey,
