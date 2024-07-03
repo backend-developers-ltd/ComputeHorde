@@ -10,7 +10,7 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
     MinerBlacklist,
     AdminJobRequest,
-    JobReceipt,
+    JobFinishedReceipt,
     JobStartedReceipt,
     SystemEvent,
 )  # noqa
@@ -127,7 +127,7 @@ class JobStartedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
     ordering = ["-time_accepted"]
 
 
-class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
     list_display = [
         "job_uuid",
         "miner_hotkey",
@@ -142,7 +142,7 @@ class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
-admin.site.register(JobReceipt, admin_class=JobReceiptsReadOnlyAdmin)
+admin.site.register(JobFinishedReceipt, admin_class=JobFinishedReceiptsReadOnlyAdmin)
 admin.site.register(JobStartedReceipt, admin_class=JobStartedReceiptsReadOnlyAdmin)
 admin.site.register(MinerBlacklist)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)

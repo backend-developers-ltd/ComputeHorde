@@ -1,7 +1,12 @@
 from django.contrib import admin  # noqa
 from django.contrib.admin import register, AdminSite  # noqa
 
-from compute_horde_miner.miner.models import AcceptedJob, Validator, ValidatorBlacklist, JobReceipt
+from compute_horde_miner.miner.models import (
+    AcceptedJob,
+    Validator,
+    ValidatorBlacklist,
+    JobFinishedReceipt,
+)
 
 
 admin.site.site_header = "ComputeHorde Miner Administration"
@@ -41,12 +46,12 @@ class AcceptedJobReadOnlyAdmin(ReadOnlyAdmin):
     ordering = ["-created_at"]
 
 
-class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
     list_display = ["job_uuid", "validator_hotkey", "score", "time_started", "time_took"]
     ordering = ["-time_started"]
 
 
 admin.site.register(AcceptedJob, admin_class=AcceptedJobReadOnlyAdmin)
 admin.site.register(Validator, admin_class=ValidatorReadOnlyAdmin)
-admin.site.register(JobReceipt, admin_class=JobReceiptsReadOnlyAdmin)
+admin.site.register(JobFinishedReceipt, admin_class=JobFinishedReceiptsReadOnlyAdmin)
 admin.site.register(ValidatorBlacklist)

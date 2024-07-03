@@ -24,7 +24,7 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
 )
 from compute_horde_miner.miner.models import (
     AcceptedJob,
-    JobReceipt,
+    JobFinishedReceipt,
     JobStartedReceipt,
     Validator,
     ValidatorBlacklist,
@@ -338,7 +338,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.score = msg.payload.score
             await job.asave()
 
-            await JobReceipt.objects.acreate(
+            await JobFinishedReceipt.objects.acreate(
                 validator_signature=msg.signature,
                 miner_signature=get_miner_signature(msg),
                 job_uuid=msg.payload.job_uuid,
