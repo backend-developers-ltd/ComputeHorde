@@ -42,6 +42,7 @@ class SystemEvent(models.Model):
         RECEIPT_SEND_ERROR = "RECEIPT_SEND_ERROR"
         SPECS_SEND_ERROR = "SPECS_SENDING_ERROR"
         HEARTBEAT_ERROR = "HEARTBEAT_ERROR"
+        MULTIPLE_ERRORS_DURING_JOB = "MULTIPLE_ERRORS_DURING_JOB"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
