@@ -177,24 +177,33 @@ class AdminJobRequest(models.Model):
         return f"uuid: {self.uuid} - miner hotkey: {self.miner.hotkey}"
 
 
-class JobReceipt(models.Model):
+class AbstractReceipt(models.Model):
     job_uuid = models.UUIDField()
     miner_hotkey = models.CharField(max_length=256)
     validator_hotkey = models.CharField(max_length=256)
-    time_started = models.DateTimeField()
-    time_took_us = models.BigIntegerField()
-    score_str = models.CharField(max_length=256)
 
     class Meta:
+        abstract = True
         constraints = [
-            UniqueConstraint(fields=["job_uuid"], name="unique_job_receipt_job_uuid"),
+            UniqueConstraint(fields=["job_uuid"], name="unique_%(class)s_job_uuid"),
         ]
 
     def __str__(self):
         return f"job_uuid: {self.job_uuid}"
+
+
+class JobReceipt(AbstractReceipt):
+    time_started = models.DateTimeField()
+    time_took_us = models.BigIntegerField()
+    score_str = models.CharField(max_length=256)
 
     def time_took(self):
         return timedelta(microseconds=self.time_took_us)
 
     def score(self):
         return float(self.score_str)
+
+
+class JobStartedReceipt(AbstractReceipt):
+    time_accepted = models.DateTimeField()
+    max_timeout = models.IntegerField()

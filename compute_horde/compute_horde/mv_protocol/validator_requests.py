@@ -22,6 +22,7 @@ class RequestType(enum.Enum):
     V0MachineSpecsRequest = "V0MachineSpecsRequest"
     V0JobRequest = "V0JobRequest"
     V0ReceiptRequest = "V0ReceiptRequest"
+    V0JobStartedReceiptRequest = "V0JobStartedReceiptRequest"
     GenericError = "GenericError"
 
 
@@ -107,6 +108,27 @@ class ReceiptPayload(pydantic.BaseModel):
 class V0ReceiptRequest(BaseValidatorRequest):
     message_type: RequestType = RequestType.V0ReceiptRequest
     payload: ReceiptPayload
+    signature: str
+
+    def blob_for_signing(self):
+        return self.payload.blob_for_signing()
+
+
+class JobStartedReceiptPayload(pydantic.BaseModel):
+    job_uuid: str
+    miner_hotkey: str
+    validator_hotkey: str
+    time_accepted: datetime.datetime
+    max_timeout: int  # seconds
+
+    def blob_for_signing(self):
+        # pydantic v2 does not support sort_keys anymore.
+        return json.dumps(self.model_dump(), sort_keys=True, default=_json_dumps_default)
+
+
+class V0JobStartedReceiptRequest(BaseValidatorRequest):
+    message_type: RequestType = RequestType.V0JobStartedReceiptRequest
+    payload: JobStartedReceiptPayload
     signature: str
 
     def blob_for_signing(self):

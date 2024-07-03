@@ -89,7 +89,7 @@ class AcceptedJob(models.Model):
         ]
 
 
-class JobReceipt(models.Model):
+class AbstractReceipt(models.Model):
     validator_signature = models.CharField(max_length=256)
     miner_signature = models.CharField(max_length=256)
 
@@ -97,12 +97,18 @@ class JobReceipt(models.Model):
     job_uuid = models.UUIDField()
     miner_hotkey = models.CharField(max_length=256)
     validator_hotkey = models.CharField(max_length=256)
-    time_started = models.DateTimeField()
-    time_took_us = models.BigIntegerField()
-    score_str = models.CharField(max_length=256)
 
     def __str__(self):
         return f"uuid: {self.job_uuid}"
+
+    class Meta:
+        abstract = True
+
+
+class JobReceipt(AbstractReceipt):
+    time_started = models.DateTimeField()
+    time_took_us = models.BigIntegerField()
+    score_str = models.CharField(max_length=256)
 
     def time_took(self):
         return timedelta(microseconds=self.time_took_us)
@@ -123,3 +129,8 @@ class JobReceipt(models.Model):
             validator_signature=self.validator_signature,
             miner_signature=self.miner_signature,
         )
+
+
+class JobStartedReceipt(AbstractReceipt):
+    time_accepted = models.DateTimeField()
+    max_timeout = models.IntegerField()
