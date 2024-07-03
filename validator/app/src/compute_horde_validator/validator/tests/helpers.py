@@ -63,6 +63,7 @@ async def mock_get_miner_axon_info(hotkey: str):
 class MockMinerClient(MinerClient):
     def __init__(self, loop: asyncio.AbstractEventLoop, **args):
         super().__init__(loop, **args)
+        self._sent_models = []
 
     def miner_url(self) -> str:
         return "ws://miner"
@@ -83,13 +84,25 @@ class MockMinerClient(MinerClient):
         pass
 
     async def send_model(self, model):
-        pass
+        self._sent_models.append(model)
 
+    def _query_sent_models(self, condition=None, model_class=None):
+        result = []
+        for model in self._sent_models:
+            if model_class is not None and not isinstance(model, model_class):
+                continue
+            if not condition(model):
+                continue
+            result.append(model)
+        return result
+
+
+class SingleExecutorMockMinerClient(MockMinerClient):
     def get_barrier(self):
         return asyncio.Barrier(1)
 
 
-class MockJobStateMinerClient(MockMinerClient):
+class MockJobStateMinerClient(SingleExecutorMockMinerClient):
     def get_job_state(self, job_uuid):
         job_state = JobState()
         job_state.miner_ready_or_declining_future.set_result(

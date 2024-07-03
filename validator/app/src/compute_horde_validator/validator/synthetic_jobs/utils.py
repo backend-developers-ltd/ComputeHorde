@@ -3,6 +3,7 @@ import contextlib
 import datetime
 import logging
 import time
+import traceback
 import uuid
 from collections.abc import Iterable
 from functools import lru_cache, partial
@@ -44,7 +45,7 @@ from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.metagraph_client import get_weights_version
+from compute_horde_validator.validator.metagraph_client import aget_weights_version
 from compute_horde_validator.validator.models import (
     JobBase,
     Miner,
@@ -240,12 +241,13 @@ def create_and_run_sythethic_job_batch(netuid, network):
             return
         axons_by_key = {n.hotkey: n.axon_info for n in metagraph.neurons}
         miners = get_miners(metagraph)
+    miners_previous_online_executors = get_previous_online_executors(miners, batch)
     miners = [(miner.id, miner.hotkey) for miner in miners]
-    execute_synthetic_batch(axons_by_key, batch.id, miners)
+    execute_synthetic_batch(axons_by_key, batch.id, miners, miners_previous_online_executors)
 
 
 @async_to_sync
-async def execute_synthetic_batch(axons_by_key, batch_id, miners):
+async def execute_synthetic_batch(axons_by_key, batch_id, miners, miners_previous_online_executors):
     serving_miners = [
         (miner_id, miner_key)
         for miner_id, miner_key in miners
@@ -256,7 +258,11 @@ async def execute_synthetic_batch(axons_by_key, batch_id, miners):
         asyncio.create_task(
             asyncio.wait_for(
                 execute_miner_synthetic_jobs(
-                    batch_id, miner_id, miner_key, axons_by_key[miner_key]
+                    batch_id,
+                    miner_id,
+                    miner_key,
+                    axons_by_key[miner_key],
+                    miners_previous_online_executors.get(miner_id),
                 ),
                 JOB_LENGTH,
             )
@@ -291,7 +297,9 @@ def save_receipt_event(subtype: str, long_description: str, data: dict):
     )
 
 
-async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_info):
+async def execute_miner_synthetic_jobs(
+    batch_id, miner_id, miner_hotkey, axon_info, miner_previous_online_executors
+):
     loop = asyncio.get_event_loop()
     key = settings.BITTENSOR_WALLET().get_hotkey()
     miner_client = MinerClient(
@@ -347,7 +355,7 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
 
         jobs = await SyntheticJob.objects.abulk_create(jobs)
         try:
-            await execute_synthetic_jobs(miner_client, jobs)
+            await execute_synthetic_jobs(miner_client, jobs, miner_previous_online_executors)
         except ExceptionGroup as e:
             msg = f"Multiple errors occurred during execution of some jobs for miner {miner_hotkey}: {e!r}"
             logger.exception(msg)
@@ -357,62 +365,35 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
         except Exception as e:
             msg = f"Failed to execute jobs for miner {miner_hotkey}: {e}"
             logger.warning(msg)
+            logger.warning("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             await save_job_execution_event(
                 subtype=SystemEvent.EventSubType.GENERIC_ERROR, long_description=msg
             )
         await miner_client.save_manifest(manifest)
 
 
-async def apply_manifest_incentive(miner_hotkey: str, batch_id: int, score: float) -> float:
-    weights_version = get_weights_version()
-    if weights_version in [0, 1]:
-        return score
-    elif weights_version == 2:
-        miner = await Miner.objects.aget(hotkey=miner_hotkey)
-
-        # get last 3 batches and manifests
-        batches = [
-            batch
-            async for batch in SyntheticJobBatch.objects.filter(id__lte=batch_id).order_by("-id")[
-                :3
-            ]
-        ]
-        manifests = [
-            manifest
-            async for manifest in MinerManifest.objects.filter(
-                miner=miner, batch__in=batches
-            ).order_by("-batch__id")
-        ]
-
-        if len(manifests) > 0 and manifests[0].online_executor_count <= 3:
-            logger.debug(
-                f"Applied manifest incentive for {miner_hotkey} - last manifest has 3 or less executors"
-            )
-        elif (
-            len(manifests) == 3
-            and manifests[0].online_executor_count - manifests[1].online_executor_count
-            > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
-            and manifests[0].online_executor_count - manifests[2].online_executor_count
-            > settings.EXECUTOR_COUNT_INCREASE_THRESHOLD
-        ):
-            logger.debug(
-                f"Applied manifest incentive for {miner_hotkey} - miner has increased number of executors significantly"
-            )
-        elif len(manifests) < 3:
-            logger.debug(
-                f"Applied manifest incentive for {miner_hotkey} - validator has missed one of the previous 2 synthetic jobs windows"
-            )
+async def apply_manifest_incentive(
+    score: float, previous_online_executors: int | None, current_online_executors: int
+) -> float:
+    weights_version = await aget_weights_version()
+    multiplier = None
+    if weights_version >= 2:
+        if previous_online_executors is None:
+            multiplier = settings.MANIFEST_SCORE_MULTIPLIER
         else:
-            # do not apply manifest incentive - return original score
-            return score
+            low, high = sorted([previous_online_executors, current_online_executors])
+            # low can be 0 if previous_online_executors == 0, but we make it that way to
+            # make this function correct for any kind of input
+            if low == 0 or high / low >= settings.MANIFEST_DANCE_RATIO_THRESHOLD:
+                multiplier = settings.MANIFEST_SCORE_MULTIPLIER
+    if multiplier is not None:
+        return score * multiplier
+    return score
 
-        # apply manifest incentive
-        return score * settings.MANIFEST_SCORE_MULTIPLIER
-    else:
-        raise RuntimeError(f"Scoring undefined for {weights_version=}")
 
-
-async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
+async def _execute_synthetic_job(
+    miner_client: MinerClient, job: SyntheticJob, previous_online_executors
+):
     data = {"job_uuid": str(job.job_uuid), "miner_hotkey": job.miner.hotkey}
     save_event = partial(save_job_execution_event, data=data)
 
@@ -432,7 +413,8 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
         )
     )
     try:
-        msg = await asyncio.wait_for(job_state.miner_ready_or_declining_future, JOB_LENGTH)
+        msg = await asyncio.wait_for(job_state.miner_ready_or_declining_future, TIMEOUT_BARRIER)
+        miner_client.online_executor_count += 1
     except TimeoutError:
         msg = None
 
@@ -443,6 +425,8 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
         logger.info(
             f"Miner {miner_client.miner_name} barrier timeout - some executors would not be tested."
         )
+
+    current_online_executors = miner_client.online_executor_count
 
     if isinstance(msg, V0DeclineJobRequest | V0ExecutorFailedRequest) or msg is None:
         comment = f"Miner {miner_client.miner_name} didn't accept job:" + (
@@ -563,12 +547,9 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
 
             # if job passed, save synthetic job score
             job.score = await apply_manifest_incentive(
-                miner_client.miner_hotkey, job.batch_id, score
+                score, previous_online_executors, current_online_executors
             )
             await job.asave()
-
-            # executor is verified as being online
-            miner_client.online_executor_count += 1
 
             # Send receipt to miner
             try:
@@ -601,17 +582,28 @@ async def _execute_synthetic_job(miner_client: MinerClient, job: SyntheticJob):
         raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
 
 
-async def execute_synthetic_job(miner_client: MinerClient, synthetic_job_id):
+async def execute_synthetic_job(
+    miner_client: MinerClient, synthetic_job_id, miner_previous_online_executors
+):
     synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related("miner").aget(
         id=synthetic_job_id
     )
-    await _execute_synthetic_job(miner_client, synthetic_job)
+    await _execute_synthetic_job(miner_client, synthetic_job, miner_previous_online_executors)
 
 
-async def execute_synthetic_jobs(miner_client: MinerClient, synthetic_jobs: Iterable[SyntheticJob]):
+async def execute_synthetic_jobs(
+    miner_client: MinerClient,
+    synthetic_jobs: Iterable[SyntheticJob],
+    miner_previous_online_executors,
+):
     tasks = [
         asyncio.create_task(
-            asyncio.wait_for(execute_synthetic_job(miner_client, synthetic_job.id), JOB_LENGTH)
+            asyncio.wait_for(
+                execute_synthetic_job(
+                    miner_client, synthetic_job.id, miner_previous_online_executors
+                ),
+                JOB_LENGTH,
+            )
         )
         for synthetic_job in synthetic_jobs
     ]
@@ -628,3 +620,16 @@ def get_miners(metagraph) -> list[Miner]:
         [Miner(hotkey=n.hotkey) for n in metagraph.neurons if n.hotkey not in existing_keys]
     )
     return existing + new_miners
+
+
+def get_previous_online_executors(miners, batch):
+    miner_ids = {miner.id for miner in miners}
+    previous_batch = SyntheticJobBatch.objects.filter(id__lt=batch.id).order_by("-id").first()
+    if previous_batch is None:
+        return {}
+    previous_online_executors = {
+        manifest.miner_id: manifest.online_executor_count
+        for manifest in MinerManifest.objects.filter(batch_id=previous_batch.id)
+        if manifest.miner_id in miner_ids
+    }
+    return previous_online_executors
