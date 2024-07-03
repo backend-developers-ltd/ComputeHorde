@@ -10,6 +10,7 @@ import bittensor
 import pydantic
 import requests
 
+from .executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from .mv_protocol.validator_requests import ReceiptPayload
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,9 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
         csv_reader = csv.DictReader(wrapper)
         for raw_receipt in csv_reader:
             try:
+                executor_class = ExecutorClass(
+                    raw_receipt.get("executor_class"), DEFAULT_EXECUTOR_CLASS
+                )
                 receipt = Receipt(
                     payload=ReceiptPayload(
                         job_uuid=raw_receipt["job_uuid"],
@@ -60,6 +64,7 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                         time_started=datetime.datetime.fromisoformat(raw_receipt["time_started"]),
                         time_took_us=int(raw_receipt["time_took_us"]),
                         score_str=raw_receipt["score_str"],
+                        executor_class=executor_class,
                     ),
                     validator_signature=raw_receipt["validator_signature"],
                     miner_signature=raw_receipt["miner_signature"],

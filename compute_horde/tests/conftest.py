@@ -4,6 +4,7 @@ import pytest
 import responses
 from bittensor import Keypair
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol.validator_requests import ReceiptPayload
 from compute_horde.receipts import Receipt
 
@@ -38,6 +39,7 @@ def receipts(validator_keypair, miner_keypair):
         time_started=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC),
         time_took_us=1_000_000,
         score_str="1.00",
+        executor_class=DEFAULT_EXECUTOR_CLASS,
     )
     receipt1 = Receipt(
         payload=payload1,
@@ -52,6 +54,7 @@ def receipts(validator_keypair, miner_keypair):
         time_started=datetime.datetime(2024, 1, 2, tzinfo=datetime.UTC),
         time_took_us=2_000_000,
         score_str="2.00",
+        executor_class=DEFAULT_EXECUTOR_CLASS,
     )
     receipt2 = Receipt(
         payload=payload2,

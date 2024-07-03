@@ -413,6 +413,7 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
             time_started=receipt.payload.time_started,
             time_took_us=receipt.payload.time_took_us,
             score_str=receipt.payload.score_str,
+            executor_class=receipt.payload.executor_class,
         )
         for receipt in receipts
         if cutoff_time is None or receipt.payload.time_started > cutoff_time

@@ -198,6 +198,7 @@ class MinerClient(AbstractMinerClient):
             time_started=time_started,
             time_took_us=int(time_took_seconds * 1_000_000),
             score_str=f"{score:.6f}",
+            executor_class=ExecutorClass(job.executor_class),
         )
         return V0ReceiptRequest(
             payload=receipt_payload,

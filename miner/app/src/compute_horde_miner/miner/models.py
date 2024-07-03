@@ -3,6 +3,7 @@ from datetime import timedelta
 from enum import Enum
 from typing import Self
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from compute_horde.mv_protocol.validator_requests import ReceiptPayload
 from compute_horde.receipts import Receipt
 from django.core.serializers.json import DjangoJSONEncoder
@@ -100,6 +101,7 @@ class JobReceipt(models.Model):
     time_started = models.DateTimeField()
     time_took_us = models.BigIntegerField()
     score_str = models.CharField(max_length=256)
+    executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
 
     def __str__(self):
         return f"uuid: {self.job_uuid}"
@@ -119,6 +121,7 @@ class JobReceipt(models.Model):
                 time_started=self.time_started,
                 time_took_us=self.time_took_us,
                 score_str=self.score_str,
+                executor_class=ExecutorClass(self.executor_class),
             ),
             validator_signature=self.validator_signature,
             miner_signature=self.miner_signature,
