@@ -2,7 +2,7 @@ import uuid
 from typing import NamedTuple
 
 import pytest
-from compute_horde.mv_protocol.validator_requests import ReceiptPayload
+from compute_horde.mv_protocol.validator_requests import JobFinishedReceiptPayload
 from compute_horde.receipts import Receipt
 from django.utils.timezone import now
 
@@ -35,7 +35,7 @@ def mocked_get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
     if hotkey == "5G9qWBzLPVVu2fCPPvg3QgPPK5JaJmJKaJha95TPHH9NZWuL":
         return [
             Receipt(
-                payload=ReceiptPayload(
+                payload=JobFinishedReceiptPayload(
                     job_uuid=str(uuid.uuid4()),
                     miner_hotkey="5G9qWBzLPVVu2fCPPvg3QgPPK5JaJmJKaJha95TPHH9NZWuL",
                     validator_hotkey="v1",
@@ -50,7 +50,7 @@ def mocked_get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
     elif hotkey == "5CPhGRp4cdEG4KSui7VQixHhvN5eBUSnMYeUF5thdxm4sKtz":
         return [
             Receipt(
-                payload=ReceiptPayload(
+                payload=JobFinishedReceiptPayload(
                     job_uuid=str(uuid.uuid4()),
                     miner_hotkey="5CPhGRp4cdEG4KSui7VQixHhvN5eBUSnMYeUF5thdxm4sKtz",
                     validator_hotkey="v1",

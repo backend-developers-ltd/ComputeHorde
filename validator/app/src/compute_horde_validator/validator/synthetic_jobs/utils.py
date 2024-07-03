@@ -34,8 +34,8 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
+    JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
-    ReceiptPayload,
     V0AuthenticateRequest,
     V0InitialJobRequest,
     V0JobRequest,
@@ -210,7 +210,7 @@ class MinerClient(AbstractMinerClient):
         self, job: JobBase, started_timestamp: float, time_took_seconds: float, score: float
     ) -> V0ReceiptRequest:
         time_started = datetime.datetime.fromtimestamp(started_timestamp, datetime.UTC)
-        receipt_payload = ReceiptPayload(
+        receipt_payload = JobFinishedReceiptPayload(
             job_uuid=str(job.job_uuid),
             miner_hotkey=job.miner.hotkey,
             validator_hotkey=self.my_hotkey,
