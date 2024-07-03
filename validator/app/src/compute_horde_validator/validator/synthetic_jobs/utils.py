@@ -3,6 +3,7 @@ import contextlib
 import datetime
 import logging
 import time
+import traceback
 import uuid
 from collections.abc import Iterable
 from functools import lru_cache, partial
@@ -63,12 +64,6 @@ TIMEOUT_BARRIER = JOB_LENGTH - 65
 
 
 logger = logging.getLogger(__name__)
-
-
-class MultiException(Exception):
-    def __init__(self, msg, excs):
-        self.msg = msg
-        self.excs = excs
 
 
 @lru_cache(maxsize=100)
@@ -270,9 +265,9 @@ async def execute_synthetic_batch(axons_by_key, batch_id, miners):
         for miner_id, miner_key in serving_miners
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    exceptions = [r for r in results if isinstance(r, BaseException)]
+    exceptions = [r for r in results if isinstance(r, Exception)]
     if exceptions:
-        raise MultiException(
+        raise ExceptionGroup(
             "exceptions raised in execute_miner_synthetic_jobs task(s)", exceptions
         )
 
@@ -364,6 +359,15 @@ async def execute_miner_synthetic_jobs(batch_id, miner_id, miner_hotkey, axon_in
             miner_client.add_job(str(job.job_uuid))
         try:
             await execute_synthetic_jobs(miner_client, jobs)
+        except ExceptionGroup as e:
+            msg = f"Multiple errors occurred during execution of some jobs for miner {miner_hotkey}"
+            logger.warning(f"{msg}: {e!r}")
+            stacktrace = "".join(traceback.format_exception(e))
+            long_description = msg + "\n" + stacktrace
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.MULTIPLE_ERRORS_DURING_JOB,
+                long_description=long_description,
+            )
         except Exception as e:
             msg = f"Failed to execute jobs for miner {miner_hotkey}: {e}"
             logger.warning(msg)
@@ -625,9 +629,9 @@ async def execute_synthetic_jobs(miner_client: MinerClient, synthetic_jobs: Iter
         for synthetic_job in synthetic_jobs
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    exceptions = [r for r in results if isinstance(r, BaseException)]
+    exceptions = [r for r in results if isinstance(r, Exception)]
     if exceptions:
-        raise MultiException("exceptions raised in execute_job task(s)", exceptions)
+        raise ExceptionGroup("exceptions raised in execute_job task(s)", exceptions)
 
 
 def get_miners(metagraph) -> list[Miner]:
