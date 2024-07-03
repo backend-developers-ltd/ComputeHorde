@@ -9,7 +9,7 @@ from django.utils.timezone import now
 
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import quasi_axon
-from compute_horde_miner.miner.models import JobFinishedReceipt, Validator
+from compute_horde_miner.miner.models import JobFinishedReceipt, JobStartedReceipt, Validator
 from compute_horde_miner.miner.receipt_store.current import receipts_store
 
 logger = get_task_logger(__name__)
@@ -73,6 +73,9 @@ def prepare_receipts():
 def clear_old_receipts():
     JobFinishedReceipt.objects.filter(
         time_started__lt=now() - RECEIPTS_MAX_RETENTION_PERIOD
+    ).delete()
+    JobStartedReceipt.objects.filter(
+        time_accepted__lt=now() - RECEIPTS_MAX_RETENTION_PERIOD
     ).delete()
 
 
