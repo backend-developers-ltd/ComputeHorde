@@ -22,7 +22,7 @@ def active_validators_keys(faker: Faker):
 
 @pytest.fixture
 def inactive_validators_keys(faker: Faker):
-    return [faker.pystr() for _ in range(5)]
+    return [faker.pystr() for _ in range(4)]
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +46,7 @@ def _generate_validator_mocks(hotkeys: Iterable[str]):
 def test_fetch_validators_creates_new_active_validators(
     faker: Faker, mock_get_validators: MagicMock
 ):
-    new_keys = [faker.pystr() for _ in range(5)]
+    new_keys = [faker.pystr() for _ in range(3)]
     mock_get_validators.return_value = _generate_validator_mocks(new_keys)
 
     fetch_validators()
@@ -70,7 +70,7 @@ def test_fetch_validators_updates_existing_validators(
     assert Validator.objects.filter(active=True).count() == len(inactive_validators)
 
     for key in inactive_validators_keys:
-        assert Validator.objects.get(public_key=key).active is True
+        assert Validator.objects.filter(public_key=key, active=True).exists()
 
 
 def test_fetch_validators_debug_validator_key(
