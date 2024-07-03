@@ -13,7 +13,7 @@ WEBSOCKET_TIMEOUT = 10
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_main_loop():
     validator_key = "some_public_key"
     await Validator.objects.acreate(public_key=validator_key, active=True)
