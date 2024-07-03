@@ -5,8 +5,8 @@ from enum import StrEnum
 
 class ExecutorClass(StrEnum):
     spin_up_4min__gpu_24gb = "spin_up-4min.gpu-24gb"
+    always_on__gpu_24gb = "always_on.gpu-24gb"
     # always_on__cpu_16c__ram_64gb = "always_on.cpu-16c.ram-64gb"
-    # always_on__gpu_24gb = "always_on.gpu-24gb"
     # always_on__gpu_80gb = "always_on.gpu-80gb"
     # always_on__gpu_24gb__docker_cached_facilitator = "always_on.gpu-24gb.docker_cached-facilitator"
 
@@ -33,14 +33,15 @@ EXECUTOR_CLASS = {
         gpu_vram_gb=24,
         spin_up_time=int(timedelta(minutes=4).total_seconds()),
     ),
+    ExecutorClass.always_on__gpu_24gb: ExecutorClassSpec(
+        description="always on, generic GPU machine",
+        has_gpu=True,
+        gpu_vram_gb=24,
+        spin_up_time=0,
+    ),
     # ExecutorClass.always_on__cpu_16c__ram_64gb: ExecutorClassSpec(
     #     cpu_cores=16,
     #     ram_gb=64,
-    #     spin_up_time=0,
-    # ),
-    # ExecutorClass.always_on__gpu_24gb: ExecutorClassSpec(
-    #     has_gpu=True,
-    #     gpu_vram_gb=24,
     #     spin_up_time=0,
     # ),
     # ExecutorClass.always_on__gpu_80gb: ExecutorClassSpec(
