@@ -29,13 +29,13 @@ def announce_address_and_port():
 
 @app.task
 def fetch_validators():
+    validators = get_validators(
+        netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK
+    )
+    validator_keys = {validator.hotkey for validator in validators}
+
     if settings.DEBUG_VALIDATOR_KEY:
-        validator_keys = {settings.DEBUG_VALIDATOR_KEY}
-    else:
-        validators = get_validators(
-            netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK
-        )
-        validator_keys = {validator.hotkey for validator in validators}
+        validator_keys.add(settings.DEBUG_VALIDATOR_KEY)
 
     to_activate = []
     to_deactivate = []

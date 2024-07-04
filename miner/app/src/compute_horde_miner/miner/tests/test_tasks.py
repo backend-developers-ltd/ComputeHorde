@@ -75,17 +75,20 @@ def test_fetch_validators_updates_existing_validators(
 
 def test_fetch_validators_debug_validator_key(
     active_validators: list[Validator],
+    active_validators_keys: list[str],
     inactive_validators: list[Validator],
     mock_get_validators: MagicMock,
     faker: Faker,
     settings,
 ):
+    mock_get_validators.return_value = _generate_validator_mocks(active_validators_keys)
+
     debug_validator_key = faker.pystr()
     settings.DEBUG_VALIDATOR_KEY = debug_validator_key
 
     fetch_validators()
 
-    mock_get_validators.assert_not_called()
-
     assert Validator.objects.count() == len(active_validators) + len(inactive_validators) + 1
-    assert Validator.objects.filter(active=True).get().public_key == debug_validator_key
+    assert set(Validator.objects.filter(active=True).values_list("public_key", flat=True)) == set(
+        active_validators_keys
+    ) | {debug_validator_key}
