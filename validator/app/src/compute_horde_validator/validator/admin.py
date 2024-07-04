@@ -121,6 +121,7 @@ class JobStartedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
         "job_uuid",
         "miner_hotkey",
         "validator_hotkey",
+        "executor_class",
         "time_accepted",
         "max_timeout",
     ]

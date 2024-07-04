@@ -3,6 +3,7 @@ from datetime import timedelta
 from enum import Enum
 from typing import Self
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol.validator_requests import JobFinishedReceiptPayload
 from compute_horde.receipts import Receipt
 from django.core.serializers.json import DjangoJSONEncoder
@@ -133,5 +134,6 @@ class JobFinishedReceipt(AbstractReceipt):
 
 
 class JobStartedReceipt(AbstractReceipt):
+    executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
     time_accepted = models.DateTimeField()
     max_timeout = models.IntegerField()
