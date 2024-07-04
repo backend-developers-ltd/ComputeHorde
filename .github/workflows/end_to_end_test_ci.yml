@@ -232,6 +232,7 @@ jobs:
           HOST_PROMETHEUS_METRICS_DIR=$PWD/prometheus-metrics
           DEBUG_RUN_SYNTHETIC_JOBS_MINUTE=*
           DEBUG_DONT_STAGGER_VALIDATORS=1
+          DEBUG_OVERRIDE_WEIGHTS_VERSION=1
           ENDENV
           
           # copy .env to "host", so that mounting works -_-
@@ -290,6 +291,7 @@ jobs:
 
       - name: test synthetic job
         run: |
+          set -euxo pipefail
           cd validator/envs/runner
           docker compose exec validator-runner \
             docker compose exec celery-worker \
@@ -322,6 +324,7 @@ jobs:
       - name: check receipts in facilitator
         working-directory: facilitator
         run: |
+          set -euxo pipefail
           docker compose exec app \
             python manage.py fetch_receipts \
               --miner-hotkey "$MINER_HOTKEY_SS58" \
