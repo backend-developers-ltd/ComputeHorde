@@ -60,6 +60,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 JOB_LENGTH = 300
+TIMEOUT_SETUP = 30
 TIMEOUT_LEEWAY = 1
 TIMEOUT_MARGIN = 60
 TIMEOUT_BARRIER = JOB_LENGTH - 65
@@ -468,11 +469,12 @@ async def _execute_synthetic_job(
         raise ValueError(comment)
 
     # Send job started receipt to miner
+    synthetic_job_execution_timeout = job_generator.timeout_seconds() + TIMEOUT_LEEWAY
     try:
         receipt_message = miner_client.generate_job_started_receipt_message(
             job,
             time.time(),
-            settings.MAX_SYNTHETIC_JOB_TIMEOUT,
+            synthetic_job_execution_timeout + TIMEOUT_MARGIN + TIMEOUT_SETUP,
         )
         await miner_client.send_model(receipt_message)
         logger.debug(f"Sent job started receipt for {job.job_uuid}")
@@ -508,14 +510,14 @@ async def _execute_synthetic_job(
     try:
         msg = await asyncio.wait_for(
             job_state.miner_finished_or_failed_future,
-            job_generator.timeout_seconds() + TIMEOUT_LEEWAY + TIMEOUT_MARGIN,
+            synthetic_job_execution_timeout + TIMEOUT_MARGIN,
         )
         time_took = job_state.miner_finished_or_failed_timestamp - full_job_sent
-        if time_took > (job_generator.timeout_seconds() + TIMEOUT_LEEWAY):
+        if time_took > (synthetic_job_execution_timeout):
             comment = f"Miner {miner_client.miner_name} sent a job result but too late: {msg}"
             logger.info(
                 comment
-                + f"{time_took=} {job_generator.timeout_seconds() + TIMEOUT_LEEWAY=} "
+                + f"{time_took=} {synthetic_job_execution_timeout=} "
                 + f"{job_state.miner_finished_or_failed_timestamp=} {full_job_sent=}"
             )
             await save_event(
