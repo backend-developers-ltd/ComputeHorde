@@ -205,5 +205,6 @@ class JobFinishedReceipt(AbstractReceipt):
 
 
 class JobStartedReceipt(AbstractReceipt):
+    executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
     time_accepted = models.DateTimeField()
     max_timeout = models.IntegerField()

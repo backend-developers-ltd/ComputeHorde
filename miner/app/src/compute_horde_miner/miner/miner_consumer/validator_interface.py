@@ -323,6 +323,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 job_uuid=msg.payload.job_uuid,
                 miner_hotkey=msg.payload.miner_hotkey,
                 validator_hotkey=msg.payload.validator_hotkey,
+                executor_class=msg.payload.executor_class,
                 time_accepted=msg.payload.time_accepted,
                 max_timeout=msg.payload.max_timeout,
             )

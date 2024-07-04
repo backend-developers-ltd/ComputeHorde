@@ -118,6 +118,7 @@ class V0ReceiptRequest(BaseValidatorRequest):
 
 
 class JobStartedReceiptPayload(ReceiptPayload):
+    executor_class: ExecutorClass
     time_accepted: datetime.datetime
     max_timeout: int  # seconds
 

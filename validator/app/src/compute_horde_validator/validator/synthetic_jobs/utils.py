@@ -199,6 +199,7 @@ class MinerClient(AbstractMinerClient):
             job_uuid=str(job.job_uuid),
             miner_hotkey=job.miner.hotkey,
             validator_hotkey=self.my_hotkey,
+            executor_class=ExecutorClass(job.executor_class),
             time_accepted=time_accepted,
             max_timeout=max_timeout,
         )
