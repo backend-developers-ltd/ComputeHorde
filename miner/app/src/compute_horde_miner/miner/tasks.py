@@ -33,6 +33,10 @@ def fetch_validators():
         netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK
     )
     validator_keys = {validator.hotkey for validator in validators}
+
+    if settings.DEBUG_VALIDATOR_KEY:
+        validator_keys.add(settings.DEBUG_VALIDATOR_KEY)
+
     to_activate = []
     to_deactivate = []
     to_create = []
