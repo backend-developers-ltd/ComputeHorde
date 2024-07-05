@@ -219,6 +219,8 @@ jobs:
                 - ./.env:/root/validator/.env
           ENDDOCKERCOMPOSE
           
+          DEBUG_RUN_SYNTHETIC_JOBS_MINUTE=$(python3 -c 'import datetime as dt; print((dt.datetime.now(dt.UTC) + dt.timedelta(minutes=5)).minute)')
+          
           cat > .env <<ENDENV
           SECRET_KEY=12345
           POSTGRES_PASSWORD=12345
@@ -230,7 +232,8 @@ jobs:
           COMPOSE_PROJECT_NAME=compute_horde_validator
           FACILITATOR_URI=$FACILITATOR_URI
           HOST_PROMETHEUS_METRICS_DIR=$PWD/prometheus-metrics
-          DEBUG_RUN_SYNTHETIC_JOBS_MINUTE=*
+          DEBUG_RUN_SYNTHETIC_JOBS_MINUTE=$DEBUG_RUN_SYNTHETIC_JOBS_MINUTE
+          DEBUG_RUN_SYNTHETIC_JOBS_HOUR=*
           DEBUG_DONT_STAGGER_VALIDATORS=1
           DEBUG_OVERRIDE_WEIGHTS_VERSION=1
           ENDENV
