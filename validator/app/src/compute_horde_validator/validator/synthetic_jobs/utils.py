@@ -38,9 +38,9 @@ from compute_horde.mv_protocol.validator_requests import (
     JobStartedReceiptPayload,
     V0AuthenticateRequest,
     V0InitialJobRequest,
+    V0JobFinishedReceiptRequest,
     V0JobRequest,
     V0JobStartedReceiptRequest,
-    V0ReceiptRequest,
     VolumeType,
 )
 from compute_horde.utils import MachineSpecs
@@ -210,7 +210,7 @@ class MinerClient(AbstractMinerClient):
 
     def generate_job_finished_receipt_message(
         self, job: JobBase, started_timestamp: float, time_took_seconds: float, score: float
-    ) -> V0ReceiptRequest:
+    ) -> V0JobFinishedReceiptRequest:
         time_started = datetime.datetime.fromtimestamp(started_timestamp, datetime.UTC)
         receipt_payload = JobFinishedReceiptPayload(
             job_uuid=str(job.job_uuid),
@@ -220,7 +220,7 @@ class MinerClient(AbstractMinerClient):
             time_took_us=int(time_took_seconds * 1_000_000),
             score_str=f"{score:.6f}",
         )
-        return V0ReceiptRequest(
+        return V0JobFinishedReceiptRequest(
             payload=receipt_payload,
             signature=f"0x{self.keypair.sign(receipt_payload.blob_for_signing()).hex()}",
         )

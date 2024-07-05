@@ -21,7 +21,7 @@ class RequestType(enum.Enum):
     V0InitialJobRequest = "V0InitialJobRequest"
     V0MachineSpecsRequest = "V0MachineSpecsRequest"
     V0JobRequest = "V0JobRequest"
-    V0ReceiptRequest = "V0ReceiptRequest"
+    V0JobFinishedReceiptRequest = "V0JobFinishedReceiptRequest"
     V0JobStartedReceiptRequest = "V0JobStartedReceiptRequest"
     GenericError = "GenericError"
 
@@ -108,8 +108,8 @@ class JobFinishedReceiptPayload(ReceiptPayload):
         return float(self.score_str)
 
 
-class V0ReceiptRequest(BaseValidatorRequest):
-    message_type: RequestType = RequestType.V0ReceiptRequest
+class V0JobFinishedReceiptRequest(BaseValidatorRequest):
+    message_type: RequestType = RequestType.V0JobFinishedReceiptRequest
     payload: JobFinishedReceiptPayload
     signature: str
 

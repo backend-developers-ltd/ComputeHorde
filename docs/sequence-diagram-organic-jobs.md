@@ -47,7 +47,7 @@ sequenceDiagram
 
     miner->>validator: V0MachineSpecsRequest
     miner->>validator: V0JobFinishedRequest
-    validator->>miner: V0ReceiptRequest
+    validator->>miner: V0JobFinishedReceiptRequest
 
     validator->>facilitator: JobStatusUpdate
     facilitator->>user: job results

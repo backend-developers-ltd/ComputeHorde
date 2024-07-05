@@ -139,7 +139,11 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
         return False, "Signature mismatches"
 
-    def verify_receipt_msg(self, msg: validator_requests.V0ReceiptRequest) -> bool:
+    def verify_receipt_msg(
+        self,
+        msg: validator_requests.V0JobStartedReceiptRequest
+        | validator_requests.V0JobFinishedReceiptRequest,
+    ) -> bool:
         if self.my_hotkey != DONT_CHECK and msg.payload.miner_hotkey != self.my_hotkey:
             logger.warning(
                 f"Miner hotkey mismatch in receipt for job_uuid {msg.payload.job_uuid} ({msg.payload.miner_hotkey!r} != {self.my_hotkey!r})"
@@ -328,7 +332,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 max_timeout=msg.payload.max_timeout,
             )
 
-        if isinstance(msg, validator_requests.V0ReceiptRequest) and self.verify_receipt_msg(msg):
+        if isinstance(
+            msg, validator_requests.V0JobFinishedReceiptRequest
+        ) and self.verify_receipt_msg(msg):
             logger.info(
                 f"Received job finished receipt for"
                 f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"

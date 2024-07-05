@@ -20,7 +20,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
-    V0ReceiptRequest,
+    V0JobFinishedReceiptRequest,
 )
 from django.conf import settings
 from django.utils.timezone import now
@@ -475,7 +475,9 @@ async def test_manifest_dance_incentives(
 
     miner_client = mocked_synthetic_miner_client.instance
     async for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
-        receipt = miner_client._query_sent_models(lambda m: m.payload.job_uuid, V0ReceiptRequest)[0]
+        receipt = miner_client._query_sent_models(
+            lambda m: m.payload.job_uuid, V0JobFinishedReceiptRequest
+        )[0]
         time_took = receipt.payload.time_took_us / 1_000_000
         assert abs(job.score * time_took - expected_multiplier) < 0.0001
 
@@ -561,6 +563,8 @@ def test_create_and_run_sythethic_job_batch(
 
     miner_client = mocked_synthetic_miner_client.instance
     for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
-        receipt = miner_client._query_sent_models(lambda m: m.payload.job_uuid, V0ReceiptRequest)[0]
+        receipt = miner_client._query_sent_models(
+            lambda m: m.payload.job_uuid, V0JobFinishedReceiptRequest
+        )[0]
         time_took = receipt.payload.time_took_us / 1_000_000
         assert abs(job.score * time_took - expected_multiplier) < 0.0001
