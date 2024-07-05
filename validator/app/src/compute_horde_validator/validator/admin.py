@@ -1,6 +1,5 @@
 from django.contrib import admin  # noqa
 from django.contrib import messages  # noqa
-from django.shortcuts import redirect  # noqa
 from django.utils.safestring import mark_safe  # noqa
 from django import forms
 

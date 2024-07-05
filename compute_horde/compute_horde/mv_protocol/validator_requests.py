@@ -7,7 +7,7 @@ from typing import Self
 import pydantic
 from pydantic import model_validator
 
-from ..base.output_upload import OutputUpload, OutputUploadType  # noqa
+from ..base.output_upload import OutputUpload  # noqa
 from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
 from ..executor_class import ExecutorClass

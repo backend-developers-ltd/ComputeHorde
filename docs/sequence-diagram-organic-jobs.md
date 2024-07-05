@@ -11,7 +11,7 @@ sequenceDiagram
     validator-->>facilitator: connect
     validator->>facilitator: V0AuthenticationRequest
     facilitator->>validator: Response
-    
+
     Note over facilitator,validator: wait for a job from facilitator
     user->>facilitator: submit job
     facilitator->>validator: V0JobRequest
@@ -24,7 +24,7 @@ sequenceDiagram
     miner-->>executor: reserve/start executor
     activate executor
     miner->>validator: V0AcceptJobRequest
-    
+
     Note over miner,executor: wait for executor to spin up
     executor-->>miner: connect
     miner->>executor: V0InitialJobRequest
