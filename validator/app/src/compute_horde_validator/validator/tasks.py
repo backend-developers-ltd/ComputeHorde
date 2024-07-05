@@ -16,7 +16,11 @@ from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
-from compute_horde.receipts import get_miner_receipts
+from compute_horde.receipts import (
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+    get_miner_receipts,
+)
 from compute_horde.utils import get_validators
 from constance import config
 from django.conf import settings
@@ -28,6 +32,7 @@ from compute_horde_validator.validator.locks import Locked, get_weight_setting_l
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
     JobFinishedReceipt,
+    JobStartedReceipt,
     OrganicJob,
     SyntheticJobBatch,
     SystemEvent,
@@ -390,7 +395,7 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
     try:
         receipts = get_miner_receipts(hotkey, ip, port)
     except Exception as e:
-        comment = f"Failed to fetch receipts from miner {hotkey} {ip}:{port}: {e}"
+        comment = f"Failed to fetch receipts from miner {hotkey} {ip}:{port}: {e!r}"
         logger.warning(comment)
         save_receipt_event(
             subtype=SystemEvent.EventSubType.RECEIPT_FETCH_ERROR,
@@ -398,14 +403,44 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
             data={"miner_hotkey": hotkey, "miner_ip": ip, "miner_port": port},
         )
         return
+    logger.debug(f"Miner returned {len(receipts)} receipts. {hotkey=}")
 
-    latest_job_receipt = (
+    tolerance = timedelta(hours=1)
+
+    latest_job_started_receipt = (
+        JobStartedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-time_accepted").first()
+    )
+    job_started_receipt_cutoff_time = (
+        latest_job_started_receipt.time_accepted - tolerance if latest_job_started_receipt else None
+    )
+    job_started_receipt_to_create = [
+        JobStartedReceipt(
+            job_uuid=receipt.payload.job_uuid,
+            miner_hotkey=receipt.payload.miner_hotkey,
+            validator_hotkey=receipt.payload.validator_hotkey,
+            executor_class=receipt.payload.executor_class,
+            time_accepted=receipt.payload.time_accepted,
+            max_timeout=receipt.payload.max_timeout,
+        )
+        for receipt in receipts
+        if isinstance(receipt.payload, JobStartedReceiptPayload)
+        and (
+            job_started_receipt_cutoff_time is None
+            or receipt.payload.time_accepted > job_started_receipt_cutoff_time
+        )
+    ]
+    logger.debug(f"Creating {len(job_started_receipt_to_create)} JobStartedReceipt. {hotkey=}")
+    JobStartedReceipt.objects.bulk_create(job_started_receipt_to_create, ignore_conflicts=True)
+
+    latest_job_finished_receipt = (
         JobFinishedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-time_started").first()
     )
-    tolerance = timedelta(hours=1)
-    cutoff_time = latest_job_receipt.time_started - tolerance if latest_job_receipt else None
-
-    to_create = [
+    job_finished_receipt_cutoff_time = (
+        latest_job_finished_receipt.time_started - tolerance
+        if latest_job_finished_receipt
+        else None
+    )
+    job_finished_receipt_to_create = [
         JobFinishedReceipt(
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,
@@ -415,16 +450,21 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
             score_str=receipt.payload.score_str,
         )
         for receipt in receipts
-        if cutoff_time is None or receipt.payload.time_started > cutoff_time
+        if isinstance(receipt.payload, JobFinishedReceiptPayload)
+        and (
+            job_finished_receipt_cutoff_time is None
+            or receipt.payload.time_started > job_finished_receipt_cutoff_time
+        )
     ]
-
-    JobFinishedReceipt.objects.bulk_create(to_create, ignore_conflicts=True)
+    logger.debug(f"Creating {len(job_finished_receipt_to_create)} JobFinishedReceipt. {hotkey=}")
+    JobFinishedReceipt.objects.bulk_create(job_finished_receipt_to_create, ignore_conflicts=True)
 
 
 @app.task
 def fetch_receipts():
     """Fetch job receipts from the miners."""
     # Delete old receipts before fetching new ones
+    JobStartedReceipt.objects.filter(time_accepted__lt=now() - timedelta(days=7)).delete()
     JobFinishedReceipt.objects.filter(time_started__lt=now() - timedelta(days=7)).delete()
 
     metagraph = bittensor.metagraph(

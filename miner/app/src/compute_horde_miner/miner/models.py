@@ -3,8 +3,11 @@ from datetime import timedelta
 from enum import Enum
 from typing import Self
 
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.mv_protocol.validator_requests import JobFinishedReceiptPayload
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
+from compute_horde.mv_protocol.validator_requests import (
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+)
 from compute_horde.receipts import Receipt
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
@@ -137,3 +140,17 @@ class JobStartedReceipt(AbstractReceipt):
     executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
     time_accepted = models.DateTimeField()
     max_timeout = models.IntegerField()
+
+    def to_receipt(self):
+        return Receipt(
+            payload=JobStartedReceiptPayload(
+                job_uuid=str(self.job_uuid),
+                miner_hotkey=self.miner_hotkey,
+                validator_hotkey=self.validator_hotkey,
+                executor_class=ExecutorClass(self.executor_class),
+                time_accepted=self.time_accepted,
+                max_timeout=self.max_timeout,
+            ),
+            validator_signature=self.validator_signature,
+            miner_signature=self.miner_signature,
+        )

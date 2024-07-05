@@ -5,7 +5,7 @@ import re
 from typing import Self
 
 import pydantic
-from pydantic import model_validator
+from pydantic import field_serializer, model_validator
 
 from ..base.output_upload import OutputUpload  # noqa
 from ..base.volume import Volume, VolumeType
@@ -107,6 +107,10 @@ class JobFinishedReceiptPayload(ReceiptPayload):
     def score(self):
         return float(self.score_str)
 
+    @field_serializer("time_started")
+    def serialize_dt(self, dt: datetime.datetime, _info):
+        return dt.isoformat()
+
 
 class V0JobFinishedReceiptRequest(BaseValidatorRequest):
     message_type: RequestType = RequestType.V0JobFinishedReceiptRequest
@@ -121,6 +125,10 @@ class JobStartedReceiptPayload(ReceiptPayload):
     executor_class: ExecutorClass
     time_accepted: datetime.datetime
     max_timeout: int  # seconds
+
+    @field_serializer("time_accepted")
+    def serialize_dt(self, dt: datetime.datetime, _info):
+        return dt.isoformat()
 
 
 class V0JobStartedReceiptRequest(BaseValidatorRequest):

@@ -4,7 +4,11 @@ import pytest
 import responses
 from bittensor import Keypair
 
-from compute_horde.mv_protocol.validator_requests import JobFinishedReceiptPayload
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.mv_protocol.validator_requests import (
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+)
 from compute_horde.receipts import Receipt
 
 
@@ -31,13 +35,13 @@ def miner_keypair():
 
 @pytest.fixture
 def receipts(validator_keypair, miner_keypair):
-    payload1 = JobFinishedReceiptPayload(
-        job_uuid="0d89161e-65e4-46ad-bed8-ecfec1cc3c6b",
+    payload1 = JobStartedReceiptPayload(
+        job_uuid="3342460e-4a99-438b-8757-795f4cb348dd",
         miner_hotkey=miner_keypair.ss58_address,
         validator_hotkey=validator_keypair.ss58_address,
-        time_started=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC),
-        time_took_us=1_000_000,
-        score_str="1.00",
+        executor_class=DEFAULT_EXECUTOR_CLASS,
+        time_accepted=datetime.datetime(2024, 1, 2, 1, 55, 0, tzinfo=datetime.UTC),
+        max_timeout=30,
     )
     receipt1 = Receipt(
         payload=payload1,
@@ -49,7 +53,7 @@ def receipts(validator_keypair, miner_keypair):
         job_uuid="3342460e-4a99-438b-8757-795f4cb348dd",
         miner_hotkey=miner_keypair.ss58_address,
         validator_hotkey=validator_keypair.ss58_address,
-        time_started=datetime.datetime(2024, 1, 2, tzinfo=datetime.UTC),
+        time_started=datetime.datetime(2024, 1, 2, 1, 57, 0, tzinfo=datetime.UTC),
         time_took_us=2_000_000,
         score_str="2.00",
     )

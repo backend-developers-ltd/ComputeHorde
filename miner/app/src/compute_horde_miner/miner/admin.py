@@ -6,6 +6,7 @@ from compute_horde_miner.miner.models import (
     Validator,
     ValidatorBlacklist,
     JobFinishedReceipt,
+    JobStartedReceipt,
 )
 
 
@@ -46,6 +47,17 @@ class AcceptedJobReadOnlyAdmin(ReadOnlyAdmin):
     ordering = ["-created_at"]
 
 
+class JobStartedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+    list_display = [
+        "job_uuid",
+        "validator_hotkey",
+        "executor_class",
+        "time_accepted",
+        "max_timeout",
+    ]
+    ordering = ["-time_accepted"]
+
+
 class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
     list_display = ["job_uuid", "validator_hotkey", "score", "time_started", "time_took"]
     ordering = ["-time_started"]
@@ -53,5 +65,6 @@ class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
 
 admin.site.register(AcceptedJob, admin_class=AcceptedJobReadOnlyAdmin)
 admin.site.register(Validator, admin_class=ValidatorReadOnlyAdmin)
+admin.site.register(JobStartedReceipt, admin_class=JobStartedReceiptsReadOnlyAdmin)
 admin.site.register(JobFinishedReceipt, admin_class=JobFinishedReceiptsReadOnlyAdmin)
 admin.site.register(ValidatorBlacklist)
