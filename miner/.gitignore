@@ -7,6 +7,7 @@
 /redis/
 /db/
 .env
+.env.validator
 .venv
 venv
 logs/
