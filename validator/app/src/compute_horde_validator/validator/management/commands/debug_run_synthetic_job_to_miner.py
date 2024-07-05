@@ -72,6 +72,9 @@ class Command(BaseCommand):
             sys.exit(1)
         except Exception:
             logger.info("command failed with exception", exc_info=True)
+            sys.exit(1)
+
+        print(f"synthetic_job_uuid={jobs[0].job_uuid}")
 
 
 async def _execute_jobs(miner_client: MinerClient, synthetic_jobs: Iterable[SyntheticJob]):

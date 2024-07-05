@@ -298,18 +298,24 @@ jobs:
               python manage.py debug_run_synthetic_job_to_miner \
                 --miner_hotkey "$MINER_HOTKEY_SS58" \
                 --miner_address "$E2E_MINER_IP" \
-                --miner_port "$E2E_MINER_PORT"
+                --miner_port "$E2E_MINER_PORT" \
+            | grep 'synthetic_job_uuid=' \
+            | sed 's/synthetic_job_uuid=//' \
+            | tee synthetic-job-uuid.txt
           sleep 5 # wait for receipt generation in miner
           docker compose exec validator-runner \
             docker compose exec celery-worker \
               python manage.py fetch_receipts
+          
+          SYNTHETIC_JOB_UUID=$(cat synthetic-job-uuid.txt)
+          echo "SYNTHETIC_JOB_UUID=$SYNTHETIC_JOB_UUID" >> $GITHUB_ENV
           
           docker compose exec validator-runner docker compose exec app python manage.py shell <<EOF
           import math
           from compute_horde_validator.validator.models import SyntheticJob
           from compute_horde_validator.validator.models import JobReceipt
           
-          job = SyntheticJob.objects.get()
+          job = SyntheticJob.objects.get(job_uuid="$SYNTHETIC_JOB_UUID")
           assert job.status == SyntheticJob.Status.COMPLETED, job.status
           
           with open("job_uuid.txt", "w") as f:
@@ -318,8 +324,6 @@ jobs:
           receipt = JobReceipt.objects.get(job_uuid=str(job.job_uuid))
           assert abs(job.score - receipt.score()) < 1e-6
           EOF
-          
-          echo "SYNTHETIC_JOB_UUID=$(cat job_uuid.txt)" >> $GITHUB_ENV
 
       - name: check receipts in facilitator
         working-directory: facilitator
@@ -331,7 +335,7 @@ jobs:
               --miner-ip "$E2E_MINER_IP" \
               --miner-port "$E2E_MINER_PORT"
           docker compose exec app python manage.py shell <<EOF
-          from project.core import JobReceipt
+          from project.core.models import JobReceipt
           assert JobReceipt.objects.filter(job_uuid="$SYNTHETIC_JOB_UUID").exists()
           EOF
 
