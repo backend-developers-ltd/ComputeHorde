@@ -66,9 +66,10 @@ class Command(BaseCommand):
 
         create_validator_database(options["validator_db_name"])
 
-        Validator.objects.get_or_create(
+        Validator.objects.update_or_create(
             public_key=hotkey_address,
-            active=True,
+            debug=True,
+            defaults={"active": True},
         )
 
         try:
@@ -79,7 +80,7 @@ class Command(BaseCommand):
             if options["remove_env_file"]:
                 options["validator_env_file"].unlink()
             if options["clean_validator_records"]:
-                Validator.objects.filter(public_key=hotkey_address).delete()
+                Validator.objects.filter(public_key=hotkey_address, debug=True).delete()
 
 
 def run_validator_synthetic_jobs(*, validator_image: str, env_file: Path):

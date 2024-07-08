@@ -13,4 +13,5 @@ class Command(BaseCommand):
         Validator.objects.create(
             public_key=options["validator_public_key"],
             active=True,
+            debug=True,
         )

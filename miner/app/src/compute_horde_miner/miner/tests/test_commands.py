@@ -73,7 +73,7 @@ def test_self_test_env_file(env_file: Path, hotkey_address: str, settings):
         validator_image=validator_image,
         validator_env_file=env_file,
         weights_version=999,
-        remove_env_file=False
+        remove_env_file=False,
     )
 
     assert env_file.exists()
@@ -99,11 +99,11 @@ def test_self_test_env_file(env_file: Path, hotkey_address: str, settings):
 def test_self_test_validator_record_created(hotkey_address: str, env_file: Path):
     call_command(
         "self_test",
-        validator_db_name='validator_db_name',
-        validator_image='custom_validator_image',
+        validator_db_name="validator_db_name",
+        validator_image="custom_validator_image",
         validator_env_file=env_file,
         weights_version=999,
-        clean_validator_records=False
+        clean_validator_records=False,
     )
 
-    assert Validator.objects.filter(public_key=hotkey_address, active=True).exists()
+    assert Validator.objects.filter(public_key=hotkey_address, active=True, debug=True).exists()
