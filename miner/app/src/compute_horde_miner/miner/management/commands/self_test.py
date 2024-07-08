@@ -1,3 +1,4 @@
+import argparse
 import secrets
 import subprocess
 from pathlib import Path
@@ -15,13 +16,7 @@ class Command(BaseCommand):
     Run self tests by emulating validator synthetic job requests
     """
 
-    def add_arguments(self, parser):
-        parser.add_argument(
-            "--validator_image",
-            default="backenddevelopersltd/compute-horde-validator:v0-latest",
-            type=str,
-            help="Validator docker image to use",
-        )
+    def add_arguments(self, parser: argparse.ArgumentParser):
         parser.add_argument(
             "--weights_version",
             default=None,
@@ -38,19 +33,25 @@ class Command(BaseCommand):
             "--validator_env_file",
             default=Path(".env.validator"),
             type=Path,
-            help="Environment file for validator container",
+            help="Env file name for validator container (default: .env.validator)",
+        )
+        parser.add_argument(
+            "--validator_image",
+            default="backenddevelopersltd/compute-horde-validator:v0-latest",
+            type=str,
+            help=argparse.SUPPRESS,
         )
         parser.add_argument(
             "--clean_validator_records",
             default=True,
             type=bool,
-            help="Clean validator db records after running the test (default: True)",
+            help=argparse.SUPPRESS,
         )
         parser.add_argument(
             "--remove_env_file",
             default=True,
             type=bool,
-            help="Remove env file after running the test (default: True)",
+            help=argparse.SUPPRESS,
         )
 
     def handle(self, *args, **options):
