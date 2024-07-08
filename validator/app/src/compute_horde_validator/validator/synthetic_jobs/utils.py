@@ -86,7 +86,6 @@ class JobState:
 class MinerClient(AbstractMinerClient):
     def __init__(
         self,
-        loop: asyncio.AbstractEventLoop,
         miner_address: str,
         my_hotkey: str,
         miner_hotkey: str,
@@ -95,7 +94,7 @@ class MinerClient(AbstractMinerClient):
         batch_id: None | int,
         keypair: bittensor.Keypair,
     ):
-        super().__init__(loop, f"{miner_hotkey}({miner_address}:{miner_port})")
+        super().__init__(f"{miner_hotkey}({miner_address}:{miner_port})")
         self.miner_hotkey = miner_hotkey
         self.my_hotkey = my_hotkey
         self.miner_address = miner_address
@@ -320,10 +319,8 @@ def save_receipt_event(subtype: str, long_description: str, data: dict):
 async def execute_miner_synthetic_jobs(
     batch_id, miner_id, miner_hotkey, axon_info, miner_previous_online_executors
 ):
-    loop = asyncio.get_event_loop()
     key = settings.BITTENSOR_WALLET().get_hotkey()
     miner_client = MinerClient(
-        loop=loop,
         miner_address=axon_info.ip,
         miner_port=axon_info.port,
         miner_hotkey=miner_hotkey,

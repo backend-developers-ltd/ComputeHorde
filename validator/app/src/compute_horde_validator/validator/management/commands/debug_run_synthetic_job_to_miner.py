@@ -52,10 +52,8 @@ class Command(BaseCommand):
             )
         ]
 
-        loop = asyncio.get_event_loop()
         key = settings.BITTENSOR_WALLET().get_hotkey()
         miner_client = MinerClient(
-            loop=loop,
             miner_address=miner_address,
             miner_port=miner_port,
             miner_hotkey=miner_hotkey,

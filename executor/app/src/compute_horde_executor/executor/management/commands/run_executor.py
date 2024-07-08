@@ -72,8 +72,8 @@ class RunConfigManager:
 
 
 class MinerClient(AbstractMinerClient):
-    def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, token: str):
-        super().__init__(loop, miner_address)
+    def __init__(self, miner_address: str, token: str):
+        super().__init__(miner_address)
         self.miner_address = miner_address
         self.token = token
         self.job_uuid: str | None = None
@@ -611,9 +611,7 @@ class Command(BaseCommand):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         self.loop = asyncio.get_event_loop()
-        self.miner_client = self.MINER_CLIENT_CLASS(
-            self.loop, settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN
-        )
+        self.miner_client = self.MINER_CLIENT_CLASS(settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN)
 
     def handle(self, *args, **options):
         self.loop.run_until_complete(self._executor_loop())
