@@ -648,6 +648,8 @@ async def execute_synthetic_jobs(
     results = await asyncio.gather(*tasks, return_exceptions=True)
     exceptions = [r for r in results if isinstance(r, Exception)]
     if exceptions:
+        for exception in exceptions:
+            logger.warning("Error occurred", exc_info=exception)
         raise ExceptionGroup("exceptions raised in execute_job task(s)", exceptions)
 
 
