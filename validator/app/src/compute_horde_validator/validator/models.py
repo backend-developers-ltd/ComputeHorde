@@ -1,9 +1,11 @@
 import logging
+from os import urandom
 import shlex
 import uuid
 from datetime import timedelta
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import UniqueConstraint
 
@@ -212,3 +214,32 @@ class JobStartedReceipt(AbstractReceipt):
     executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
     time_accepted = models.DateTimeField()
     max_timeout = models.IntegerField()
+
+
+def get_random_salt() -> list[int]:
+    return list(urandom(8))
+
+
+class Weights(models.Model):
+    """
+    Weights set by validator at specific block.
+    This is used to verify the weights revealed by the validator later.
+    """
+    uids = ArrayField(models.IntegerField())
+    weights = ArrayField(models.FloatField())
+    salt = ArrayField(models.IntegerField(), default=get_random_salt)
+    block = models.BigIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    revealed_at = models.DateTimeField(null=True, default=True)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["block"], name="unique_block"),
+        ]
+
+    def save(self, *args, **kwargs) -> None:
+        assert len(self.uids) == len(self.weights), "Length of uids and weights should be same"
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return str(self.weights)

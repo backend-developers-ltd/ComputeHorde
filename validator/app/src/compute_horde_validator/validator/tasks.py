@@ -36,6 +36,7 @@ from compute_horde_validator.validator.models import (
     OrganicJob,
     SyntheticJobBatch,
     SystemEvent,
+    Weights,
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
@@ -112,9 +113,29 @@ def do_set_weights(
     Set weights. To be used in other celery tasks in order to facilitate a timeout,
      since the multiprocessing version of this doesn't work in celery.
     """
-    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
-
     bittensor.turn_console_off()
+    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    hyperparams = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
+
+    if hyperparams.commit_reveal_weights_enabled:
+        metagraph = subtensor.metagraph(netuid)
+        with transaction.atomic():
+            weights_in_db = Weights.objects.create(
+                uids=uids,
+                weights=weights,
+                block=metagraph.block.item(),
+            )
+            return subtensor.commit_weights(
+                wallet=settings.BITTENSOR_WALLET(),
+                netuid=netuid,
+                uids=np.int64(uids),
+                weights=np.float32(weights),
+                salt=weights_in_db.salt,
+                version_key=version_key,
+                wait_for_inclusion=wait_for_inclusion,
+                wait_for_finalization=wait_for_finalization,
+            )
+
     return subtensor.set_weights(
         wallet=settings.BITTENSOR_WALLET(),
         netuid=netuid,
@@ -386,6 +407,63 @@ def set_scores():
                     long_description=msg,
                     data={"try_number": WEIGHT_SETTING_ATTEMPTS},
                 )
+
+
+@app.task()
+def reveal_scores() -> None:
+    """
+    Selects Weights that are older than `commit_reveal_weights_interval`
+    and haven't been revealed yet, and reveal them.
+    """
+    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    hyperparams = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
+    if not hyperparams.commit_reveal_weights_enabled:
+        logger.debug("Commit reveal weights is not enabled")
+        return
+
+    metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
+    current_block_number = metagraph.block.item()
+
+    unrevealed_weights = (
+        Weights.objects
+        .filter(
+            revealed_at=None,
+            block__lte=current_block_number - hyperparams.commit_reveal_weights_interval,
+        )
+        .order_by("created_at")
+        .select_for_update(skip_locked=True)
+    )
+    for weights in unrevealed_weights:
+        logger.debug("Scheduling revealing weights record %s, date: %s", weights.id, weights.created_at)
+        do_reveal_weights.delay(weights_id=weights.id)
+
+
+@app.task()
+def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
+    with transaction.atomic():
+        weights = (
+            Weights.objects
+            .filter(id=weights_id, revealed_at=None)
+            .select_for_update(skip_locked=True)
+            .first()
+        )
+        if not weights:
+            logger.debug("Weights with id %s have already been revealed or are being revealed at this moment", weights_id)
+            return
+
+        weights.revealed_at = now()
+        weights.save()
+
+        subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+        return subtensor.reveal_weights(
+            wallet=settings.BITTENSOR_WALLET(),
+            netuid=settings.BITTENSOR_NETUID,
+            uids=weights.uids,
+            weights=weights.weights,
+            salt=weights.salt,
+            wait_for_inclusion=True,
+            wait_for_finalization=True,
+        )
 
 
 @app.task
