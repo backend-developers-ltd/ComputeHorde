@@ -2,7 +2,7 @@ name: Run end to end tests
 
 on:
   push:
-    branches: [master, main, ci-e2e]
+    branches: [master, main]
   pull_request:
     branches: [master, main]
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
 env:
   PYTHON_DEFAULT_VERSION: "3.11"
   BITTENSOR_NETWORK: "ws://3.91.62.249:9946"
-  BITTENSOR_NETUID: "1"
+  BITTENSOR_NETUID: "4"
   E2E_MINER_IP: "87.120.208.149"
   E2E_MINER_PORT: "8000"
   MINER_IMAGE_REPO: "compute-horde-miner-e2e"
@@ -320,9 +320,6 @@ jobs:
           
           job = SyntheticJob.objects.get(job_uuid="$SYNTHETIC_JOB_UUID")
           assert job.status == SyntheticJob.Status.COMPLETED, job.status
-          
-          with open("job_uuid.txt", "w") as f:
-              f.write(str(job.job_uuid))
           
           receipt = JobReceipt.objects.get(job_uuid=str(job.job_uuid))
           assert abs(job.score - receipt.score()) < 1e-6
