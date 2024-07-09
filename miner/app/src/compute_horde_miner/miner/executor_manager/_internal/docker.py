@@ -29,9 +29,13 @@ class DockerExecutorManager(BaseExecutorManager):
             address = settings.ADDRESS_FOR_EXECUTORS
         else:
             compose_project_name = os.getenv("COMPOSE_PROJECT_NAME", "root")
-            container_id = subprocess.check_output(
-                ['docker', 'ps', '-q', '--filter', f"name={compose_project_name}[_-]app[_-]1"]
-            ).decode().strip()
+            container_id = (
+                subprocess.check_output(
+                    ["docker", "ps", "-q", "--filter", f"name={compose_project_name}[_-]app[_-]1"]
+                )
+                .decode()
+                .strip()
+            )
             address = (
                 subprocess.check_output(
                     [

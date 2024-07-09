@@ -71,7 +71,7 @@ class Command(BaseCommand):
             print("Interrupted by user")
             sys.exit(1)
         except Exception:
-            logger.info("command failed with exception", exc_info=True)
+            logger.warning("command failed with exception", exc_info=True)
             sys.exit(1)
 
         print(f"synthetic_job_uuid={jobs[0].job_uuid}")
