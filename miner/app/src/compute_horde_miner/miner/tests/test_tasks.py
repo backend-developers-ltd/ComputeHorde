@@ -73,18 +73,17 @@ def test_fetch_validators_updates_existing_validators(
         assert Validator.objects.filter(public_key=key, active=True).exists()
 
 
-def test_fetch_validators_debug_validator_key(
+def test_fetch_validators_debug(
     active_validators: list[Validator],
     active_validators_keys: list[str],
     inactive_validators: list[Validator],
     mock_get_validators: MagicMock,
     faker: Faker,
-    settings,
 ):
     mock_get_validators.return_value = _generate_validator_mocks(active_validators_keys)
 
     debug_validator_key = faker.pystr()
-    settings.DEBUG_VALIDATOR_KEY = debug_validator_key
+    Validator.objects.create(public_key=debug_validator_key, active=True, debug=True)
 
     fetch_validators()
 
@@ -92,3 +91,21 @@ def test_fetch_validators_debug_validator_key(
     assert set(Validator.objects.filter(active=True).values_list("public_key", flat=True)) == set(
         active_validators_keys
     ) | {debug_validator_key}
+
+
+def test_fetch_validators_debug_inactive(
+    active_validators_keys: list[str],
+    mock_get_validators: MagicMock,
+    faker: Faker,
+):
+    mock_get_validators.return_value = _generate_validator_mocks(active_validators_keys)
+
+    debug_validator_key = faker.pystr()
+    debug_validator = Validator.objects.create(
+        public_key=debug_validator_key, active=False, debug=True
+    )
+
+    fetch_validators()
+
+    debug_validator.refresh_from_db()
+    assert not debug_validator.active

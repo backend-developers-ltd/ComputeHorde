@@ -95,6 +95,21 @@ To switch your miner code to preprod images, follow these steps:
 
 **IMPORTANT**: Currently, this feature is only available on the preprod miner runner. You need to manually change the image tag in `docker-compose.yml` from `v0-latest` to `v0-preprod` before starting the miner runner. This additional step will not be required once the miner preprod feature is released to the upstream miner runner.
 
+
+## Self testing the miner
+
+You can self test your miner instance using the `self_test` command. It will simulate requests from the validator and check if your miner instance is able to handle them.
+
+```sh
+docker-compose exec miner_runner docker-compose exec miner python manage.py self_test
+```
+
+To use custom weights_version (instead of loading from the hyperparameters on chain), use the `--weights-version` option:
+
+```sh
+docker-compose exec miner_runner docker-compose exec miner python manage.py self_test --weights-version 2
+```
+
 # Setup development environment
 
 You'll need to have Python 3.11 and [pdm](https://pdm-project.org) installed.
