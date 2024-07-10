@@ -271,6 +271,11 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         "schedule": timedelta(minutes=10),
         "options": {},
     },
+    "fetch_dynamic_config": {
+        "task": "compute_horde_miner.miner.tasks.fetch_dynamic_config",
+        "schedule": timedelta(minutes=5),
+        "options": {},
+    },
 }
 CELERY_TASK_ROUTES = ["compute_horde_miner.celery.route_task"]
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())
@@ -366,6 +371,8 @@ BITTENSOR_WALLET_DIRECTORY = env.path(
 BITTENSOR_WALLET_NAME = env.str("BITTENSOR_WALLET_NAME")
 BITTENSOR_WALLET_HOTKEY_NAME = env.str("BITTENSOR_WALLET_HOTKEY_NAME")
 DEBUG_TURN_AUTHENTICATION_OFF = env.bool("DEBUG_TURN_AUTHENTICATION_OFF", default=False)
+
+DYNAMIC_CONFIG_BRANCH = env.str("DYNAMIC_CONFIG_BRANCH", default="prod")
 
 
 def BITTENSOR_WALLET():
