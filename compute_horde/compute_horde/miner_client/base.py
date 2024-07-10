@@ -21,6 +21,7 @@ class AbstractMinerClient(abc.ABC):
         self.max_debounce_count: int | None = 5  # set to None for unlimited debounce
         self.miner_name = miner_name
         self.ws: websockets.WebSocketClientProtocol | None = None
+        self.reconnect_task: asyncio.Task | None = None
         self.read_messages_task: asyncio.Task | None = None
         self.deferred_send_tasks: list[asyncio.Task] = []
 
@@ -55,6 +56,9 @@ class AbstractMinerClient(abc.ABC):
 
         if self.read_messages_task is not None and not self.read_messages_task.done():
             self.read_messages_task.cancel()
+
+        if self.reconnect_task is not None and not self.reconnect_task.done():
+            self.reconnect_task.cancel()
 
         if self.ws is not None and not self.ws.closed:
             await self.ws.close()
@@ -126,7 +130,7 @@ class AbstractMinerClient(abc.ABC):
             except websockets.WebSocketException as ex:
                 self.debounce_counter += 1
                 logger.info(f"Connection to miner {self.miner_name} lost: {str(ex)}")
-                asyncio.create_task(self.await_connect())
+                self.reconnect_task = asyncio.create_task(self.await_connect())
                 return
 
             try:
