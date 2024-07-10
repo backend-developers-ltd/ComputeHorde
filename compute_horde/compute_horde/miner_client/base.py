@@ -107,6 +107,9 @@ class AbstractMinerClient(abc.ABC):
             await self.ensure_connected()
             try:
                 await self.ws.send(model.model_dump_json())
+                # Summary: https://github.com/python-websockets/websockets/issues/867
+                # Longer discussion: https://github.com/python-websockets/websockets/issues/865
+                await asyncio.sleep(0)
             except websockets.WebSocketException as ex:
                 logger.error(f"Could not send to miner {self.miner_name}: {str(ex)}")
                 await asyncio.sleep(1 + random.random())

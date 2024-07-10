@@ -211,6 +211,9 @@ class FacilitatorClient:
         if self.ws is None:
             raise websockets.ConnectionClosed
         await self.ws.send(msg.model_dump_json())
+        # Summary: https://github.com/python-websockets/websockets/issues/867
+        # Longer discussion: https://github.com/python-websockets/websockets/issues/865
+        await asyncio.sleep(0)
 
     async def handle_message(self, raw_msg: str | bytes):
         """handle message received from facilitator"""
