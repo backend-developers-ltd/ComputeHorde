@@ -1,5 +1,6 @@
 import datetime
 
+import requests
 from celery.utils.log import get_task_logger
 from compute_horde.receipts import (
     JobFinishedReceiptPayload,
@@ -160,3 +161,19 @@ def get_receipts_from_old_miner():
         JobFinishedReceipt.objects.bulk_create(
             job_finished_receipt_to_create, ignore_conflicts=True
         )
+
+
+@app.task
+def fetch_dynamic_config() -> None:
+    url = f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/{settings.DYNAMIC_CONFIG_BRANCH}/miner-config.json"
+    response = requests.get(url)
+    response.raise_for_status()
+    for key, value in response.json().items():
+        try:
+            if key in ["SERVING", "MIGRATING", "OLD_MINER_IP", "OLD_MINER_PORT"]:
+                # Accidentally adding these keys as dynamic configs can harm the miner
+                continue
+
+            setattr(config, key, value)
+        except AttributeError:
+            logger.warning(f"Failed to set dynamic config {key}={value}")

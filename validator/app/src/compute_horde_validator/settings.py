@@ -270,6 +270,11 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         "schedule": timedelta(minutes=5),
         "options": {},
     },
+    "fetch_dynamic_config": {
+        "task": "compute_horde_validator.validator.tasks.fetch_dynamic_config",
+        "schedule": timedelta(minutes=5),
+        "options": {},
+    },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
@@ -366,6 +371,8 @@ DEBUG_OVERRIDE_WEIGHTS_VERSION = env.int("DEBUG_OVERRIDE_WEIGHTS_VERSION", defau
 
 MANIFEST_SCORE_MULTIPLIER = 1.05
 MANIFEST_DANCE_RATIO_THRESHOLD = 1.4
+
+DYNAMIC_CONFIG_BRANCH = env.str("DYNAMIC_CONFIG_BRANCH", default="prod")
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
