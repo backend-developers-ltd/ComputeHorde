@@ -171,14 +171,11 @@ def test_set_scores__set_weight_timeout():
 def test_set_scores__metagraph_fetch_exception():
     setup_db()
     set_scores()
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
         1,
-    )
-    check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GENERIC_ERROR, 1
     )
     # did not retry
     check_system_events(

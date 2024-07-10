@@ -108,6 +108,8 @@ def do_set_weights(
      since the multiprocessing version of this doesn't work in celery.
     """
     subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    if subtensor is None:
+        return (False, "Problem with connection to subtensor")
 
     bittensor.turn_console_off()
     return subtensor.set_weights(
@@ -259,7 +261,13 @@ def set_scores():
                 return
 
             subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+            if subtensor is None:
+                logger.debug("Problem with connection to subtensor")
+                return  # beater will retry in a minute
             metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
+            if metagraph is None:
+                logger.debug("Problem with connection to subtensor when getting metagraph")
+                return  # beater will retry in a minute
             neurons = metagraph.neurons
             hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
             score_per_uid = {}
