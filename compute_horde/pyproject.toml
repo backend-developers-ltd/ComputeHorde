@@ -47,6 +47,7 @@ type_check = [
 test = [
     "pytest>=8.2.1",
     "responses>=0.25.0",
+    "freezegun>=1.5.1",
 ]
 
 [tool.ruff]
