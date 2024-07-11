@@ -2,6 +2,7 @@ import logging
 import sys
 
 import bittensor
+import uvloop
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.core.management.base import BaseCommand
 
@@ -23,6 +24,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        uvloop.install()
         miner_hotkey = options["miner_hotkey"]
         miner_address = options["miner_address"]
         miner_port = options["miner_port"]
