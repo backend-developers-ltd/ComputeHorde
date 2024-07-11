@@ -141,6 +141,7 @@ CONSTANCE_CONFIG = {
     ),
     "OLD_MINER_IP": ("", "IP address of old miner for migration", str),
     "OLD_MINER_PORT": (8000, "PORT of old miner for migration", int),
+    "DEMO_CONFIG": (1234, "Demo config", int),
 }
 
 # Content Security Policy
