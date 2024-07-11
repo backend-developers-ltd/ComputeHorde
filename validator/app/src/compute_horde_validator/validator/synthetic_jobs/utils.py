@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from functools import lru_cache, partial
 
 import bittensor
+import uvloop
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
@@ -60,6 +61,8 @@ def batch_id_to_uuid(batch_id: int) -> uuid.UUID:
 
 
 def create_and_run_synthetic_job_batch(netuid, network):
+    uvloop.install()
+
     if settings.DEBUG_MINER_KEY:
         miners: list[Miner] = []
         axons_by_key: dict[str, bittensor.AxonInfo] = {}
