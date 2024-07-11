@@ -12,6 +12,9 @@ from .models import SystemEvent
 
 logger = logging.getLogger(__name__)
 
+# only when reading hyperparams fails - should be updated after hyperparam is updated
+DEFAULT_WEIGHTS_VERSION = 1
+
 
 class WeightVersionHolder:
     def __init__(self):
@@ -26,12 +29,20 @@ class WeightVersionHolder:
         with self._lock:
             if time.time() - self._time_set > 300:
                 subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-                hyperparameters = subtensor.get_subnet_hyperparameters(
-                    netuid=settings.BITTENSOR_NETUID
-                )
-                if hyperparameters is None:
-                    raise RuntimeError("Network hyperparameters are None")
-                self.value = hyperparameters.weights_version
+                try:
+                    hyperparameters = subtensor.get_subnet_hyperparameters(
+                        netuid=settings.BITTENSOR_NETUID
+                    )
+                    if hyperparameters is None:
+                        raise RuntimeError("Network hyperparameters are None")
+                    self.value = hyperparameters.weights_version
+                except Exception as exc:
+                    # we actually want to know about the problem
+                    logger.error(
+                        f"Error when getting weights version - will use default '{DEFAULT_WEIGHTS_VERSION}': {exc}",
+                        exc_info=True,
+                    )
+                    self.value = DEFAULT_WEIGHTS_VERSION
                 self._time_set = time.time()
         return self.value
 
