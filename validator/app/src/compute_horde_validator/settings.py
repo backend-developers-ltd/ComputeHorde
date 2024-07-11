@@ -365,6 +365,8 @@ STATS_COLLECTOR_URL = env.str(
 DEBUG_MINER_KEY = env.str("DEBUG_MINER_KEY", default="")
 DEBUG_MINER_ADDRESS = env.str("DEBUG_MINER_ADDRESS", default="")
 DEBUG_MINER_PORT = env.int("DEBUG_MINER_PORT", default=0)
+# how many distinct miners exists on ports starting at DEBUG_MINER_PORT
+DEBUG_MINER_COUNT = env.int("DEBUG_MINER_COUNT", default=1)
 # if you don't want to wait for your celery beat job to sleep on staging:
 DEBUG_DONT_STAGGER_VALIDATORS = env.bool("DEBUG_DONT_STAGGER_VALIDATORS", default=False)
 
