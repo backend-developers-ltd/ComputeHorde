@@ -1,5 +1,6 @@
 import sys
 
+import uvloop
 from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.core.management.base import BaseCommand
@@ -75,6 +76,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        uvloop.install()
         hotkey = options["miner_hotkey"]
         if hotkey:
             miner = Miner.objects.filter(hotkey=hotkey).first()
