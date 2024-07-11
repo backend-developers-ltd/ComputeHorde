@@ -1,6 +1,7 @@
 import contextlib
 import csv
 import datetime
+import enum
 import io
 import logging
 import shutil
@@ -10,13 +11,19 @@ import bittensor
 import pydantic
 import requests
 
-from .mv_protocol.validator_requests import ReceiptPayload
+from .executor_class import ExecutorClass
+from .mv_protocol.validator_requests import JobFinishedReceiptPayload, JobStartedReceiptPayload
 
 logger = logging.getLogger(__name__)
 
 
+class ReceiptType(enum.Enum):
+    JobStartedReceipt = "JobStartedReceipt"
+    JobFinishedReceipt = "JobFinishedReceipt"
+
+
 class Receipt(pydantic.BaseModel):
-    payload: ReceiptPayload
+    payload: JobStartedReceiptPayload | JobFinishedReceiptPayload
     validator_signature: str
     miner_signature: str
 
@@ -52,19 +59,39 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
         csv_reader = csv.DictReader(wrapper)
         for raw_receipt in csv_reader:
             try:
+                receipt_type = ReceiptType(raw_receipt["type"])
+                match receipt_type:
+                    case ReceiptType.JobStartedReceipt:
+                        payload = JobStartedReceiptPayload(
+                            job_uuid=raw_receipt["job_uuid"],
+                            miner_hotkey=raw_receipt["miner_hotkey"],
+                            validator_hotkey=raw_receipt["validator_hotkey"],
+                            executor_class=ExecutorClass(raw_receipt["executor_class"]),
+                            time_accepted=datetime.datetime.fromisoformat(
+                                raw_receipt["time_accepted"]
+                            ),
+                            max_timeout=int(raw_receipt["max_timeout"]),
+                        )
+
+                    case ReceiptType.JobFinishedReceipt:
+                        payload = JobFinishedReceiptPayload(
+                            job_uuid=raw_receipt["job_uuid"],
+                            miner_hotkey=raw_receipt["miner_hotkey"],
+                            validator_hotkey=raw_receipt["validator_hotkey"],
+                            time_started=datetime.datetime.fromisoformat(
+                                raw_receipt["time_started"]
+                            ),
+                            time_took_us=int(raw_receipt["time_took_us"]),
+                            score_str=raw_receipt["score_str"],
+                        )
+
                 receipt = Receipt(
-                    payload=ReceiptPayload(
-                        job_uuid=raw_receipt["job_uuid"],
-                        miner_hotkey=raw_receipt["miner_hotkey"],
-                        validator_hotkey=raw_receipt["validator_hotkey"],
-                        time_started=datetime.datetime.fromisoformat(raw_receipt["time_started"]),
-                        time_took_us=int(raw_receipt["time_took_us"]),
-                        score_str=raw_receipt["score_str"],
-                    ),
+                    payload=payload,
                     validator_signature=raw_receipt["validator_signature"],
                     miner_signature=raw_receipt["miner_signature"],
                 )
-            except (ValueError, pydantic.ValidationError):
+
+            except (KeyError, ValueError, pydantic.ValidationError):
                 logger.warning(f"Miner sent invalid receipt {raw_receipt=}")
                 continue
 

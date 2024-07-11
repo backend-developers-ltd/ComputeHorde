@@ -1,6 +1,5 @@
 from django.contrib import admin  # noqa
 from django.contrib import messages  # noqa
-from django.shortcuts import redirect  # noqa
 from django.utils.safestring import mark_safe  # noqa
 from django import forms
 
@@ -10,7 +9,8 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
     MinerBlacklist,
     AdminJobRequest,
-    JobReceipt,
+    JobFinishedReceipt,
+    JobStartedReceipt,
     SystemEvent,
 )  # noqa
 from rangefilter.filters import DateTimeRangeFilter
@@ -115,7 +115,19 @@ class SystemEventAdmin(ReadOnlyAdmin):
     ordering = ["-timestamp"]
 
 
-class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+class JobStartedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+    list_display = [
+        "job_uuid",
+        "miner_hotkey",
+        "validator_hotkey",
+        "executor_class",
+        "time_accepted",
+        "max_timeout",
+    ]
+    ordering = ["-time_accepted"]
+
+
+class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
     list_display = [
         "job_uuid",
         "miner_hotkey",
@@ -130,7 +142,8 @@ class JobReceiptsReadOnlyAdmin(ReadOnlyAdmin):
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
-admin.site.register(JobReceipt, admin_class=JobReceiptsReadOnlyAdmin)
+admin.site.register(JobFinishedReceipt, admin_class=JobFinishedReceiptsReadOnlyAdmin)
+admin.site.register(JobStartedReceipt, admin_class=JobStartedReceiptsReadOnlyAdmin)
 admin.site.register(MinerBlacklist)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)
 admin.site.register(SystemEvent, admin_class=SystemEventAdmin)

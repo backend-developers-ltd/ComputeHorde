@@ -78,4 +78,4 @@ async def _execute_jobs(miner_client: MinerClient, synthetic_jobs: Iterable[Synt
             return
         for job in synthetic_jobs:
             miner_client.add_job(str(job.job_uuid))
-        await execute_synthetic_jobs(miner_client, synthetic_jobs)
+        await execute_synthetic_jobs(miner_client, synthetic_jobs, 0)

@@ -1,13 +1,17 @@
 import uuid
 
 import pytest
-from compute_horde.mv_protocol.validator_requests import ReceiptPayload
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.mv_protocol.validator_requests import (
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+)
 from compute_horde.receipts import Receipt
 from constance.test.unittest import override_config
 from django.utils.timezone import now
 from pytest_mock import MockerFixture
 
-from compute_horde_miner.miner.models import JobReceipt
+from compute_horde_miner.miner.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde_miner.miner.tasks import announce_address_and_port, get_receipts_from_old_miner
 
 
@@ -40,19 +44,19 @@ def test__migration__not_migrating__should_not_get_receipts_from_old_miner(mocke
 def test_get_receipts_from_old_miner(mocker: MockerFixture):
     receipts = [
         Receipt(
-            payload=ReceiptPayload(
+            payload=JobStartedReceiptPayload(
                 job_uuid=str(uuid.uuid4()),
                 miner_hotkey="m1",
                 validator_hotkey="v1",
-                time_started=now(),
-                time_took_us=30_000_000,
-                score_str="123.45",
+                executor_class=DEFAULT_EXECUTOR_CLASS,
+                time_accepted=now(),
+                max_timeout=30,
             ),
             validator_signature="0xv1",
             miner_signature="0xm1",
         ),
         Receipt(
-            payload=ReceiptPayload(
+            payload=JobFinishedReceiptPayload(
                 job_uuid=str(uuid.uuid4()),
                 miner_hotkey="m1",
                 validator_hotkey="v2",
@@ -69,4 +73,5 @@ def test_get_receipts_from_old_miner(mocker: MockerFixture):
 
     get_receipts_from_old_miner()
 
-    assert JobReceipt.objects.count() == 2
+    assert JobStartedReceipt.objects.count() == 1
+    assert JobFinishedReceipt.objects.count() == 1

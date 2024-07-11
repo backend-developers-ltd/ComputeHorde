@@ -1,7 +1,11 @@
 import datetime
 
 from celery.utils.log import get_task_logger
-from compute_horde.receipts import get_miner_receipts
+from compute_horde.receipts import (
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+    get_miner_receipts,
+)
 from compute_horde.utils import get_validators
 from constance import config
 from django.conf import settings
@@ -9,7 +13,7 @@ from django.utils.timezone import now
 
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import quasi_axon
-from compute_horde_miner.miner.models import JobReceipt, Validator
+from compute_horde_miner.miner.models import JobFinishedReceipt, JobStartedReceipt, Validator
 from compute_horde_miner.miner.receipt_store.current import receipts_store
 
 logger = get_task_logger(__name__)
@@ -62,16 +66,29 @@ def fetch_validators():
 
 @app.task
 def prepare_receipts():
-    job_receipts = JobReceipt.objects.order_by("time_started").filter(
+    receipts = []
+
+    job_started_receipts = JobStartedReceipt.objects.order_by("time_accepted").filter(
+        time_accepted__gt=now() - RECEIPTS_MAX_SERVED_PERIOD
+    )
+    receipts += [jr.to_receipt() for jr in job_started_receipts]
+
+    job_finished_receipts = JobFinishedReceipt.objects.order_by("time_started").filter(
         time_started__gt=now() - RECEIPTS_MAX_SERVED_PERIOD
     )
-    receipts = [jr.to_receipt() for jr in job_receipts]
+    receipts += [jr.to_receipt() for jr in job_finished_receipts]
+
     receipts_store.store(receipts)
 
 
 @app.task
 def clear_old_receipts():
-    JobReceipt.objects.filter(time_started__lt=now() - RECEIPTS_MAX_RETENTION_PERIOD).delete()
+    JobFinishedReceipt.objects.filter(
+        time_started__lt=now() - RECEIPTS_MAX_RETENTION_PERIOD
+    ).delete()
+    JobStartedReceipt.objects.filter(
+        time_accepted__lt=now() - RECEIPTS_MAX_RETENTION_PERIOD
+    ).delete()
 
 
 @app.task
@@ -88,16 +105,43 @@ def get_receipts_from_old_miner():
     hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address
     receipts = get_miner_receipts(hotkey, config.OLD_MINER_IP, config.OLD_MINER_PORT)
 
-    latest_job_receipt = (
-        JobReceipt.objects.filter(miner_hotkey=hotkey).order_by("-time_started").first()
-    )
-    tolerance = datetime.timedelta(minutes=15)
-    cutoff_time = latest_job_receipt.time_started - tolerance if latest_job_receipt else None
+    tolerance = datetime.timedelta(hours=1)
 
-    to_create = [
-        JobReceipt(
-            validator_signature=receipt.validator_signature,
-            miner_signature=receipt.miner_signature,
+    latest_job_started_receipt = (
+        JobStartedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-time_accepted").first()
+    )
+    job_started_receipt_cutoff_time = (
+        latest_job_started_receipt.time_accepted - tolerance if latest_job_started_receipt else None
+    )
+    job_started_receipt_to_create = [
+        JobStartedReceipt(
+            job_uuid=receipt.payload.job_uuid,
+            miner_hotkey=receipt.payload.miner_hotkey,
+            validator_hotkey=receipt.payload.validator_hotkey,
+            executor_class=receipt.payload.executor_class,
+            time_accepted=receipt.payload.time_accepted,
+            max_timeout=receipt.payload.max_timeout,
+        )
+        for receipt in receipts
+        if isinstance(receipt.payload, JobStartedReceiptPayload)
+        and (
+            job_started_receipt_cutoff_time is None
+            or receipt.payload.time_accepted > job_started_receipt_cutoff_time
+        )
+    ]
+    if job_started_receipt_to_create:
+        JobStartedReceipt.objects.bulk_create(job_started_receipt_to_create, ignore_conflicts=True)
+
+    latest_job_finished_receipt = (
+        JobFinishedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-time_started").first()
+    )
+    job_finished_receipt_cutoff_time = (
+        latest_job_finished_receipt.time_started - tolerance
+        if latest_job_finished_receipt
+        else None
+    )
+    job_finished_receipt_to_create = [
+        JobFinishedReceipt(
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,
             validator_hotkey=receipt.payload.validator_hotkey,
@@ -106,11 +150,13 @@ def get_receipts_from_old_miner():
             score_str=receipt.payload.score_str,
         )
         for receipt in receipts
-        if cutoff_time is None or receipt.payload.time_started > cutoff_time
+        if isinstance(receipt.payload, JobFinishedReceiptPayload)
+        and (
+            job_finished_receipt_cutoff_time is None
+            or receipt.payload.time_started > job_finished_receipt_cutoff_time
+        )
     ]
-
-    if not to_create:
-        logger.info("All receipts already exist in this db. Migration is complete.")
-        return
-
-    JobReceipt.objects.bulk_create(to_create, ignore_conflicts=True)
+    if job_finished_receipt_to_create:
+        JobFinishedReceipt.objects.bulk_create(
+            job_finished_receipt_to_create, ignore_conflicts=True
+        )
