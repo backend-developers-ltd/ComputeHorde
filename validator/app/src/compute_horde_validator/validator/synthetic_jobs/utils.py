@@ -62,17 +62,23 @@ def create_and_run_sythethic_job_batch(netuid, network):
         accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
     )
     if settings.DEBUG_MINER_KEY:
-        miners = [Miner.objects.get_or_create(hotkey=settings.DEBUG_MINER_KEY)[0]]
-        axons_by_key = {
-            settings.DEBUG_MINER_KEY: bittensor.AxonInfo(
+        miners = []
+        axons_by_key = {}
+        for miner_index in range(settings.DEBUG_MINER_COUNT):
+            hotkey = settings.DEBUG_MINER_KEY
+            if miner_index > 0:
+                # fake hotkey based on miner index if there are more than one miners
+                hotkey = f"5u{miner_index:03}u{hotkey[6:]}"
+            miner = Miner.objects.get_or_create(hotkey=hotkey)[0]
+            miners.append(miner)
+            axons_by_key[hotkey] = bittensor.AxonInfo(
                 version=4,
                 ip=settings.DEBUG_MINER_ADDRESS,
                 ip_type=4,
-                port=settings.DEBUG_MINER_PORT,
-                hotkey=settings.DEBUG_MINER_KEY,
-                coldkey=settings.DEBUG_MINER_KEY,  # I hope it does not matter
+                port=settings.DEBUG_MINER_PORT + miner_index,
+                hotkey=hotkey,
+                coldkey=hotkey,  # I hope it does not matter
             )
-        }
     else:
         try:
             metagraph = bittensor.metagraph(netuid, network=network)
