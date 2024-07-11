@@ -11,6 +11,7 @@ import bittensor
 import celery.exceptions
 import numpy as np
 import requests
+import uvloop
 from asgiref.sync import async_to_sync
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
@@ -81,6 +82,8 @@ def _run_synthetic_jobs():
 
 @app.task()
 def run_synthetic_jobs():
+    uvloop.install()
+
     if not config.SERVING:
         logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
         return
@@ -263,6 +266,7 @@ def do_set_weights(
 
 @shared_task
 def trigger_run_admin_job_request(job_request_id: int):
+    uvloop.install()
     async_to_sync(run_admin_job_request)(job_request_id)
 
 
