@@ -142,7 +142,7 @@ jobs:
       - name: Check out facilitator
         run: |
           rm -rf facilitator
-          git clone git@github.com:backend-developers-ltd/ComputeHorde-facilitator.git facilitator
+          git clone git@github.com:backend-developers-ltd/compute-horde-facilitator-bac.git facilitator
 
       - name: Run facilitator
         working-directory: facilitator
@@ -316,12 +316,12 @@ jobs:
           docker compose exec validator-runner docker compose exec app python manage.py shell <<EOF
           import math
           from compute_horde_validator.validator.models import SyntheticJob
-          from compute_horde_validator.validator.models import JobReceipt
+          from compute_horde_validator.validator.models import JobFinishedReceipt
           
           job = SyntheticJob.objects.get(job_uuid="$SYNTHETIC_JOB_UUID")
           assert job.status == SyntheticJob.Status.COMPLETED, job.status
           
-          receipt = JobReceipt.objects.get(job_uuid=str(job.job_uuid))
+          receipt = JobFinishedReceipt.objects.get(job_uuid=str(job.job_uuid))
           assert abs(job.score - receipt.score()) < 1e-6
           EOF
 
@@ -335,8 +335,8 @@ jobs:
               --miner-ip "$E2E_MINER_IP" \
               --miner-port "$E2E_MINER_PORT"
           docker compose exec app python manage.py shell <<EOF
-          from project.core.models import JobReceipt
-          assert JobReceipt.objects.filter(job_uuid="$SYNTHETIC_JOB_UUID").exists()
+          from project.core.models import JobFinishedReceipt
+          assert JobFinishedReceipt.objects.filter(job_uuid="$SYNTHETIC_JOB_UUID").exists()
           EOF
 
       - name: Print all logs and stop validator
