@@ -18,6 +18,10 @@ class ExecutorUnavailable(Exception):
     pass
 
 
+class ExecutorBusy(ExecutorUnavailable):
+    pass
+
+
 class ReservedExecutor:
     def __init__(self, executor, timeout):
         self.executor = executor
@@ -48,7 +52,7 @@ class ExecutorClassPool:
                         await asyncio.sleep(1)
                     else:
                         logger.warning("Error unavailable after timeout")
-                        raise ExecutorUnavailable()
+                        raise ExecutorBusy()
                 else:
                     try:
                         executor = await self.manager.start_new_executor(
