@@ -16,6 +16,7 @@ from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
+from compute_horde.dynamic_config import sync_dynamic_config
 from compute_horde.receipts import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
@@ -510,3 +511,12 @@ def send_events_to_facilitator():
         events.update(sent=True)
     else:
         logger.error(f"Failed to send system events to facilitator: {response}")
+
+
+@app.task
+def fetch_dynamic_config() -> None:
+    sync_dynamic_config(
+        config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/validator-config-{settings.DYNAMIC_CONFIG_ENV}.json",
+        ignore_keys=["SERVING"],
+        namespace=config,
+    )

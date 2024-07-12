@@ -1,6 +1,7 @@
 import datetime
 
 from celery.utils.log import get_task_logger
+from compute_horde.dynamic_config import sync_dynamic_config
 from compute_horde.receipts import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
@@ -160,3 +161,12 @@ def get_receipts_from_old_miner():
         JobFinishedReceipt.objects.bulk_create(
             job_finished_receipt_to_create, ignore_conflicts=True
         )
+
+
+@app.task
+def fetch_dynamic_config() -> None:
+    sync_dynamic_config(
+        config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/miner-config-{settings.DYNAMIC_CONFIG_ENV}.json",
+        ignore_keys=["SERVING", "MIGRATING", "OLD_MINER_IP", "OLD_MINER_PORT"],
+        namespace=config,
+    )
