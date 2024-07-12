@@ -12,3 +12,5 @@ __pycache__
 build
 dist
 .pdm-python
+/wallets/
+/facilitator/

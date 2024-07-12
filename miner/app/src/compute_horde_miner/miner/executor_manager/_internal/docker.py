@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import subprocess
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
@@ -27,6 +28,14 @@ class DockerExecutorManager(BaseExecutorManager):
         if settings.ADDRESS_FOR_EXECUTORS:
             address = settings.ADDRESS_FOR_EXECUTORS
         else:
+            compose_project_name = os.getenv("COMPOSE_PROJECT_NAME", "root")
+            container_id = (
+                subprocess.check_output(
+                    ["docker", "ps", "-q", "--filter", f"name={compose_project_name}[_-]app[_-]1"]
+                )
+                .decode()
+                .strip()
+            )
             address = (
                 subprocess.check_output(
                     [
@@ -34,7 +43,7 @@ class DockerExecutorManager(BaseExecutorManager):
                         "inspect",
                         "-f",
                         "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
-                        "root_app_1",
+                        container_id,
                     ]
                 )
                 .decode()

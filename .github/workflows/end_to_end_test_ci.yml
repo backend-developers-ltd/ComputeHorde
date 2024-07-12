@@ -1,0 +1,354 @@
+name: Run end to end tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+env:
+  PYTHON_DEFAULT_VERSION: "3.11"
+  BITTENSOR_NETWORK: "ws://3.91.62.249:9946"
+  BITTENSOR_NETUID: "4"
+  E2E_MINER_IP: "87.120.208.92"
+  E2E_MINER_PORT: "8000"
+  MINER_IMAGE_REPO: "compute-horde-miner-e2e"
+  MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-e2e"
+  MNEMONIC_MINER_COLDKEY: "cousin gate anger oak common vacuum bonus rice buyer smooth evidence coast"
+  MNEMONIC_MINER_HOTKEY: "provide lyrics civil afford orange marine letter dash parrot secret eternal decrease"
+  MNEMONIC_VALIDATOR_COLDKEY: "chief wood gorilla arm that vault useful aware chair giant coconut plug"
+  MNEMONIC_VALIDATOR_HOTKEY: "syrup ill organ rigid supreme pen menu range tonight letter pear blind"
+  MINER_HOTKEY_SS58: "5FqSEa5kHZgwKMMuC7WsHLoXcf3UN9gCpDZ7iDifa2sTLBSB"
+  VALIDATOR_HOTKEY_SS58: "5GHikjqiHD1pUyCf3mzrjbEJgJvGnCp5FNKTXTtGkzhaJ37R"
+
+jobs:
+  e2e:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+            ssh-private-key: ${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}
+
+      - name: Docker login
+        run: echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      - name: Build executor image
+        run: |
+          cd executor
+          IMAGE_NAME=backenddevelopersltd/compute-horde-executor-e2e:v0-latest
+          docker pull "$IMAGE_NAME" || true
+          docker build \
+            --build-context compute-horde=../compute_horde \
+            -t "$IMAGE_NAME" \
+            -f app/envs/prod/Dockerfile \
+            .
+          docker push "$IMAGE_NAME"
+
+      - name: Build miner nginx image
+        run: |
+          cd miner/envs/runner/nginx
+          IMAGE_NAME="backenddevelopersltd/$MINER_NGINX_IMAGE_REPO:v0-latest"
+          docker pull "$IMAGE_NAME" || true
+          docker build --platform linux/amd64 -t "$IMAGE_NAME" .
+          docker push "$IMAGE_NAME"
+
+      - name: Build miner image
+        run: |
+          cd miner
+          IMAGE_NAME="backenddevelopersltd/$MINER_IMAGE_REPO:v0-latest"
+          docker pull "$IMAGE_NAME" || true
+          docker build \
+            --build-context compute-horde=../compute_horde \
+            -t "$IMAGE_NAME" \
+            --build-arg MINER_VERSION="$GITHUB_SHA" \
+            -f app/envs/prod/Dockerfile .
+          docker push "$IMAGE_NAME"
+
+      - name: Build miner runner image
+        run: |
+          cd miner/envs/runner
+          IMAGE_NAME=backenddevelopersltd/compute-horde-miner-runner-e2e:v0-latest
+          docker pull "$IMAGE_NAME" || true
+          docker build \
+            -t "$IMAGE_NAME" \
+            --build-arg MINER_RUNNER_VERSION="$GITHUB_SHA" \
+            --build-arg MINER_IMAGE_REPO="$MINER_IMAGE_REPO" \
+            --build-arg MINER_NGINX_IMAGE_REPO="$MINER_NGINX_IMAGE_REPO" \
+            .
+          docker push "$IMAGE_NAME"
+
+      - name: Set dynamic environment variables
+        run: |
+          set -euxo pipefail
+          echo "HOST_WALLET_DIR=$PWD/wallets" >> $GITHUB_ENV
+          # echo "HOST_IP=$(hostname -I | cut -d' ' -f1)" >> $GITHUB_ENV
+          echo "HOST_IP=$(ip -o route get to 8.8.8.8 | sed -n 's/.*src \([0-9.]\+\).*/\1/p')" >> $GITHUB_ENV
+
+      - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
+
+      - name: Create wallet files
+        run: |
+          set -euxo pipefail
+          CONTAINER_NAME=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          docker run \
+            --rm \
+            --detach \
+            --name "$CONTAINER_NAME" \
+            --volume "$HOST_WALLET_DIR:/root/.bittensor/wallets/" \
+            python:3.11-slim \
+            tail -f /dev/null
+
+          # generate the wallet files in "host", so that mounting works
+          cat <<EOF | docker exec --interactive "$CONTAINER_NAME" bash
+          set -euxo pipefail
+          pip install bittensor
+          btcli wallet regen_coldkey \
+            --wallet.name compute_horde_validator \
+            --wallet.hotkey default \
+            --mnemonic ${MNEMONIC_VALIDATOR_COLDKEY} \
+            --no_password --no_prompt
+          btcli wallet regen_hotkey \
+            --wallet.name compute_horde_validator \
+            --wallet.hotkey default \
+            --mnemonic ${MNEMONIC_VALIDATOR_HOTKEY} \
+            --no_password --no_prompt
+          btcli wallet regen_coldkey \
+            --wallet.name compute_horde_miner \
+            --wallet.hotkey default \
+            --mnemonic ${MNEMONIC_MINER_COLDKEY} \
+            --no_password --no_prompt
+          btcli wallet regen_hotkey \
+            --wallet.name compute_horde_miner \
+            --wallet.hotkey default \
+            --mnemonic ${MNEMONIC_MINER_HOTKEY} \
+            --no_password --no_prompt
+          btcli wallet list
+          EOF
+          docker rm -f "$CONTAINER_NAME"
+
+      - name: Check out facilitator
+        run: |
+          rm -rf facilitator
+          git clone git@github.com:backend-developers-ltd/compute-horde-facilitator-bac.git facilitator
+
+      - name: Run facilitator
+        working-directory: facilitator
+        run: |
+          set -euxo pipefail
+          ./setup-prod.sh
+          sed -i.bak \
+            -e '/SECRET_KEY/d' \
+            -e '/BITTENSOR_NETUID/d' \
+            -e '/BITTENSOR_NETWORK/d' \
+            -e '/POSTGRES_PASSWORD/d' \
+            -e '/DATABASE_URL/d' \
+            ./envs/prod/.env
+          
+          # journald logging driver is not supported on macos :(
+          if [ "${ACT:-false}" = "true" ]; then
+            sed -i.bak \
+              -e '/logging/d' \
+              -e '/driver:/d' \
+              -e '/options:/d' \
+              -e '/tag:/d' \
+              ./envs/prod/docker-compose.yml
+          fi
+          
+          echo "SECRET_KEY=12345" >> .env
+          echo "BITTENSOR_NETUID=$BITTENSOR_NETUID" >> .env
+          echo "BITTENSOR_NETWORK=$BITTENSOR_NETWORK" >> .env
+          echo "POSTGRES_PASSWORD=12345" >> .env
+          echo "DATABASE_URL=postgres://postgres:12345@db:5432/project" >> .env
+          
+          cat <<EOF > docker-compose.override.yml
+          services:
+            app:
+              ports:
+                - 8090:8000
+          EOF
+
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.override.yml \
+            up --detach --wait \
+            db redis app celery-worker
+          
+          echo "FACILITATOR_URI=ws://$HOST_IP:8090/ws/v0/" >> $GITHUB_ENV
+
+      - name: Run validator
+        run: |
+          set -euxo pipefail
+          
+          # build validator image
+          cd validator
+          docker build \
+            --build-context compute-horde=../compute_horde \
+            -t backenddevelopersltd/validator-e2e:v0-latest \
+            --build-arg VALIDATOR_VERSION="$GITHUB_SHA" \
+            -f app/envs/prod/Dockerfile .
+          
+          # build validator-runner image
+          cd envs/runner
+          sed -i.bak '/pull_policy/d' ./data/docker-compose.yml
+          docker build \
+            -t backenddevelopersltd/validator-runner-e2e:v0-latest \
+            --build-arg VALIDATOR_RUNNER_VERSION="${GITHUB_SHA}" \
+            --build-arg VALIDATOR_IMAGE_REPO=validator-e2e \
+            .
+
+          # prepare files
+          cat > docker-compose.yml <<ENDDOCKERCOMPOSE
+          services:
+            validator-runner:
+              image: backenddevelopersltd/validator-runner-e2e:v0-latest
+              volumes:
+                - /var/run/docker.sock:/var/run/docker.sock
+                - ./.env:/root/validator/.env
+          ENDDOCKERCOMPOSE
+          
+          DEBUG_RUN_SYNTHETIC_JOBS_MINUTE=$(python3 -c 'import datetime as dt; print((dt.datetime.now(dt.UTC) + dt.timedelta(minutes=5)).minute)')
+          
+          cat > .env <<ENDENV
+          SECRET_KEY=12345
+          POSTGRES_PASSWORD=12345
+          BITTENSOR_NETUID=$BITTENSOR_NETUID
+          BITTENSOR_NETWORK=$BITTENSOR_NETWORK
+          BITTENSOR_WALLET_NAME=compute_horde_validator
+          BITTENSOR_WALLET_HOTKEY_NAME=default
+          HOST_WALLET_DIR=$HOST_WALLET_DIR
+          COMPOSE_PROJECT_NAME=compute_horde_validator
+          FACILITATOR_URI=$FACILITATOR_URI
+          HOST_PROMETHEUS_METRICS_DIR=$PWD/prometheus-metrics
+          DEBUG_RUN_SYNTHETIC_JOBS_MINUTE=$DEBUG_RUN_SYNTHETIC_JOBS_MINUTE
+          DEBUG_RUN_SYNTHETIC_JOBS_HOUR=*
+          DEBUG_DONT_STAGGER_VALIDATORS=1
+          DEBUG_OVERRIDE_WEIGHTS_VERSION=1
+          ENDENV
+          
+          # copy .env to "host", so that mounting works -_-
+          CONTAINER_NAME=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          docker run \
+            --rm \
+            --detach \
+            --name "$CONTAINER_NAME" \
+            --volume "$PWD:/root/pwd" \
+            alpine \
+            tail -f /dev/null
+          docker cp $PWD/.env "$CONTAINER_NAME:/root/pwd/.env"
+          docker rm -f "$CONTAINER_NAME"
+          
+          docker compose up --detach --wait
+
+      - name: Wait for miner update
+        run: |
+          python3 scripts/e2e/check_miner_version.py \
+            --miner-ip "$E2E_MINER_IP" \
+            --miner-port "$E2E_MINER_PORT" \
+            --expected-version "$GITHUB_SHA"
+
+      - name: miner preparations
+        run: |
+          ssh -o StrictHostKeyChecking=no "ubuntu@$E2E_MINER_IP" <<END
+          docker pull backenddevelopersltd/compute-horde-executor-e2e:v0-latest
+          docker image prune --force
+          cd ~/compute_horde_miner
+          docker compose exec miner-runner docker compose exec app python manage.py fetch_validators
+          docker compose exec miner-runner docker compose exec app python manage.py announce_address_and_port
+          END
+
+      - name: validator preparations
+        working-directory: validator/envs/runner
+        run: |
+          sleep 60 # wait for migrations to complete
+          docker compose exec validator-runner docker compose exec app python manage.py fetch_miners
+
+      - name: facilitator preparations
+        working-directory: facilitator
+        run: |
+          docker compose exec app python manage.py sync_metagraph
+
+      - name: test organic job
+        run: |
+          cd validator/envs/runner
+          docker compose exec validator-runner \
+            docker compose exec app \
+              python manage.py debug_run_organic_job \
+                --miner_hotkey "$MINER_HOTKEY_SS58" \
+                --timeout 60 \
+                --docker_image alpine \
+                --cmd_args "echo 1" \
+                --nonzero_if_not_complete
+
+      - name: test synthetic job
+        run: |
+          set -euxo pipefail
+          cd validator/envs/runner
+          docker compose exec validator-runner \
+            docker compose exec celery-worker \
+              python manage.py debug_run_synthetic_job_to_miner \
+                --miner_hotkey "$MINER_HOTKEY_SS58" \
+                --miner_address "$E2E_MINER_IP" \
+                --miner_port "$E2E_MINER_PORT" \
+            | grep 'synthetic_job_uuid=' \
+            | sed 's/synthetic_job_uuid=//' \
+            | tee synthetic-job-uuid.txt
+          sleep 5 # wait for receipt generation in miner
+          docker compose exec validator-runner \
+            docker compose exec celery-worker \
+              python manage.py fetch_receipts
+          
+          SYNTHETIC_JOB_UUID=$(cat synthetic-job-uuid.txt)
+          echo "SYNTHETIC_JOB_UUID=$SYNTHETIC_JOB_UUID" >> $GITHUB_ENV
+          
+          docker compose exec validator-runner docker compose exec app python manage.py shell <<EOF
+          import math
+          from compute_horde_validator.validator.models import SyntheticJob
+          from compute_horde_validator.validator.models import JobFinishedReceipt
+          
+          job = SyntheticJob.objects.get(job_uuid="$SYNTHETIC_JOB_UUID")
+          assert job.status == SyntheticJob.Status.COMPLETED, job.status
+          
+          receipt = JobFinishedReceipt.objects.get(job_uuid=str(job.job_uuid))
+          assert abs(job.score - receipt.score()) < 1e-6
+          EOF
+
+      - name: check receipts in facilitator
+        working-directory: facilitator
+        run: |
+          set -euxo pipefail
+          docker compose exec app \
+            python manage.py fetch_receipts \
+              --miner-hotkey "$MINER_HOTKEY_SS58" \
+              --miner-ip "$E2E_MINER_IP" \
+              --miner-port "$E2E_MINER_PORT"
+          docker compose exec app python manage.py shell <<EOF
+          from project.core.models import JobFinishedReceipt
+          assert JobFinishedReceipt.objects.filter(job_uuid="$SYNTHETIC_JOB_UUID").exists()
+          EOF
+
+      - name: Print all logs and stop validator
+        if: always()
+        working-directory: validator/envs/runner
+        run: |
+          docker compose logs
+          docker compose down --remove-orphans --volumes
+
+      - name: Print all logs and stop facilitator
+        if: always()
+        working-directory: facilitator
+        run: |
+          docker compose logs
+          docker compose down --remove-orphans --volumes

@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import datetime
+import logging
 import sys
 from collections.abc import Iterable
 
@@ -16,6 +17,8 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
     execute_synthetic_jobs,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -67,6 +70,11 @@ class Command(BaseCommand):
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)
+        except Exception:
+            logger.warning("command failed with exception", exc_info=True)
+            sys.exit(1)
+
+        print(f"synthetic_job_uuid={jobs[0].job_uuid}")
 
 
 async def _execute_jobs(miner_client: MinerClient, synthetic_jobs: Iterable[SyntheticJob]):
