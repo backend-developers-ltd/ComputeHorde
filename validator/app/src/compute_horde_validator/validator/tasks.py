@@ -517,6 +517,5 @@ def send_events_to_facilitator():
 def fetch_dynamic_config() -> None:
     sync_dynamic_config(
         config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/validator-config-{settings.DYNAMIC_CONFIG_ENV}.json",
-        ignore_keys=["SERVING"],
         namespace=config,
     )
