@@ -1,0 +1,81 @@
+@startuml
+Actor Client
+participant Facilitator
+participant Validator
+participant Miner
+participant Executor
+participant Job
+participant "Cloud Storage"
+
+Client->Client: Generate a **client keypair** (via facilitator sdk)
+Client->Facilitator: Send job details and the public key
+Facilitator->Facilitator: Choose Validator and Miner
+Facilitator->Validator: Send job details
+Validator->Miner: Send initial job details
+Miner->Miner: Check for a free executor,\npossibly spin up a new one
+Miner->Executor: Pass initial job details
+Executor->Miner: Report readiness (initial preparations done)
+Miner->Validator: Report readiness (initial preparations done)
+Validator->Miner: Send all job details
+Miner->Executor: Send all job details
+
+alt job requires fetching data
+    Executor->"Cloud Storage": Fetch data
+end
+
+Executor->Executor: Start Job process
+Executor-->Job: Attempt connecting to a\npredefined websocket route
+Job->Executor: Report readiness for serving requests
+
+Executor->Miner: Report readiness for serving requests
+Miner->Validator: Report readiness for serving requests,\nprovide Job IP address, port and **Job public key**.\nThis is signed with Miner's hotkey.
+Validator->Facilitator: Report readiness for serving requests,\nprovide Job IP address, port and **Job public key**
+Facilitator->Client: Report readiness for serving requests,\nprovide Job IP address, port and **Job public key**
+
+loop until Client terminates the job or timeout occurs
+    opt if uploading or downloading large data is required
+        Client->Facilitator: send volume list\n(contains info about data to be fetched\nbefore and uploaded after the request)
+        note over Client: assign a **volume message id** to the request
+        note over Client: **volume uniqueness** Client will have to\nmake sure file names are unique and\nstore them to pass them to Job in subsequent steps
+        Facilitator->Validator: send volume list
+        Validator->Miner: send volume list
+        Miner->Executor: send volume list
+        Executor->"Cloud Storage": Fetch data
+        Executor->Miner: Report fetching done.\nInclude **volume message id**.
+        Miner->Validator: Report fetching done.\nInclude **volume message id**.
+        Validator->Facilitator: Report fetching done.\nInclude **volume message id**.
+        Facilitator->Client: Report fetching done.\nInclude **volume message id**.
+    end
+    Client->Job: Send request, it can be a streamed or buffered\nHTTP or a websocket. Request is signed using **client keypair**.
+    opt
+        note over Client: Pass input/output file names (the ones referred to in **volume uniqueness**)
+    end
+    Job->Client: Reply. Before the transmission ends, sign the\nresponse with the private counterpart of **Job public key**
+    opt
+        Job->Executor: Inform about files being ready for upload
+        note over Job: if this is a cross validation request,\nalso dump a signature of input/output, using the\nprivate counterpart of **Job public key**
+        Executor->"Cloud Storage": Upload data
+        Executor->Miner: Report uploading done
+        Miner->Validator: Report uploading done
+        Validator->Facilitator: Report uploading done
+        Facilitator->Client: Report uploading done
+    end
+    opt If this is a cross-validation request
+        Client->Client: Asses validity of the reposnse
+        opt if reponse is invalid
+            Client->Facilitator: Send info about malicious miner, signed\nwith a validator (not sn12 validator) hotkey.
+        end
+    end
+end
+
+alt job requires uploading data
+    Executor->"Cloud Storage": Upload data
+end
+Executor->"Cloud Storage": Upload stdout and stderr
+
+Executor->Miner: Report job done
+Miner->Validator: Report job done
+Validator->Facilitator: Report job done
+Facilitator->Client: Report job done
+
+@enduml

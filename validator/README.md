@@ -31,7 +31,20 @@ docker-compose up
 cd app/src
 pdm run manage.py wait_for_database --timeout 10
 pdm run manage.py migrate
-pdm run manage.py runserver
+```
+
+Typically, when developing validator, you want to test:
+
+1. Scheduling synthetic jobs
+2. Settings weights
+3. Passing organic jobs from a facilitator to a miner
+
+Some of these actions may require launching celery locally, which you can achieve by running TODO.
+
+## Scheduling synthetic jobs
+
+```shell
+DEBUG_MINER_KEY=... python manage.py debug_run_synthetic_jobs
 ```
 
 # Setup production environment (git deployment)
