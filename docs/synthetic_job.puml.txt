@@ -1,0 +1,33 @@
+@startuml
+participant Validator
+participant Miner
+participant Executor
+participant Job
+participant "Cloud Storage"
+
+Validator->Miner: Send initial job details
+Miner->Miner: Check for a free executor,\npossibly spin up a new one
+Miner->Executor: Pass initial job details
+Executor->Miner: Report readiness (initial preparations done)
+Miner->Validator: Report readiness (initial preparations done)
+Validator->Miner: Send all job details
+note over Validator: Start counting time
+Miner->Executor: Send all job details
+
+alt job requires fetching data
+    Executor->"Cloud Storage": Fetch data
+end
+
+Executor->Executor: Start Job process
+Job->Job: run
+Job->Executor: Report finish
+
+alt job requires uploading data
+    Executor->"Cloud Storage": Upload data
+end
+
+Executor->Miner: Report job done
+Miner->Validator: Report job done
+Validator->Validator: Calculate score based time and output
+
+@enduml
