@@ -6,6 +6,7 @@ from compute_horde.executor_class import (
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
+    ExecutorBusy,
     ExecutorClassPool,
     ExecutorUnavailable,
     ReservedExecutor,

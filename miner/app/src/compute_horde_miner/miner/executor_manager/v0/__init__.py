@@ -13,6 +13,7 @@ DockerExecutor = v1.DockerExecutor
 PULLING_TIMEOUT = v1.PULLING_TIMEOUT
 DOCKER_STOP_TIMEOUT = v1.DOCKER_STOP_TIMEOUT
 ExecutorUnavailable = v1.ExecutorUnavailable
+ExecutorBusy = v1.ExecutorBusy
 
 
 class BaseExecutorManager(v1.BaseExecutorManager):
