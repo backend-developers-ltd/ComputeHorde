@@ -10,7 +10,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_miner.miner.executor_manager import current
-from compute_horde_miner.miner.executor_manager.base import ExecutorUnavailable
+from compute_horde_miner.miner.executor_manager.base import ExecutorBusy, ExecutorUnavailable
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
     BaseConsumer,
     log_errors_explicitly,
@@ -275,10 +275,17 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
             try:
                 await current.executor_manager.reserve_executor(token)
-            except ExecutorUnavailable:
-                await self.send(
-                    miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
-                )
+            except ExecutorUnavailable as exc:
+                if isinstance(exc, ExecutorBusy):
+                    msg = miner_requests.V0DeclineJobBusyRequest(
+                        job_uuid=msg.job_uuid,
+                        receipts=[],
+                        timestamp=int(time.time()),
+                    )
+                else:
+                    msg = miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid)
+
+                await self.send(msg.model_dump_json())
                 await self.group_discard(token)
                 await job.adelete()
                 self.pending_jobs.pop(msg.job_uuid)

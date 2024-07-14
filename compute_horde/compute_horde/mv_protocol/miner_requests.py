@@ -2,6 +2,8 @@ import enum
 
 import pydantic
 
+from compute_horde.mv_protocol.validator_requests import JobStartedReceiptPayload
+
 from ..base_requests import BaseRequest, JobMixin
 from ..executor_class import ExecutorClass
 from ..utils import MachineSpecs
@@ -10,6 +12,7 @@ from ..utils import MachineSpecs
 class RequestType(enum.Enum):
     V0AcceptJobRequest = "V0AcceptJobRequest"
     V0DeclineJobRequest = "V0DeclineJobRequest"
+    V0DeclineJobBusyRequest = "V0DeclineJobBusyRequest"
     V0ExecutorManifestRequest = "V0ExecutorManifestRequest"
     V0ExecutorReadyRequest = "V0ExecutorReadyRequest"
     V0ExecutorFailedRequest = "V0ExecutorFailedRequest"
@@ -44,6 +47,12 @@ class V0AcceptJobRequest(BaseMinerRequest, JobMixin):
 
 class V0DeclineJobRequest(BaseMinerRequest, JobMixin):
     message_type: RequestType = RequestType.V0DeclineJobRequest
+
+
+class V0DeclineJobBusyRequest(BaseMinerRequest, JobMixin):
+    message_type: RequestType = RequestType.V0DeclineJobBusyRequest
+    receipts: list[JobStartedReceiptPayload]
+    timestamp: int
 
 
 class V0ExecutorReadyRequest(BaseMinerRequest, JobMixin):
