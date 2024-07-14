@@ -136,10 +136,17 @@ class JobFinishedReceipt(AbstractReceipt):
         )
 
 
+class JobStartedReceiptQuerySet(models.QuerySet):
+    def get_active(self) -> Self:
+        return self.exclude(job_uuid__in=JobFinishedReceipt.objects.values("job_uuid"))
+
+
 class JobStartedReceipt(AbstractReceipt):
     executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
     time_accepted = models.DateTimeField()
     max_timeout = models.IntegerField()
+
+    objects = JobStartedReceiptQuerySet.as_manager()
 
     def to_receipt(self):
         return Receipt(
