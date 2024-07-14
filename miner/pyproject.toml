@@ -44,6 +44,7 @@ test = [
     "freezegun",
     "pytest-mock>=3.14.0",
     "faker>=26.0.0",
+    "pytest-factoryboy>=2.7.0",
 ]
 format = [
     "ruff",

@@ -5,7 +5,7 @@
 groups = ["default", "format", "lint", "security_check", "test", "type_check"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.2"
-content_hash = "sha256:0f8ea4f67d1b868df7a0bd54c0069e7e3f2e8b86e2b70b443e57033eb1742647"
+content_hash = "sha256:960ec7ded6cbaf39340fb8f6c5d85900ce5af6d3e348a723bc1e07cb98485c7b"
 
 [[package]]
 name = "aiohttp"
@@ -621,7 +621,7 @@ dependencies = [
     "more-itertools>=10.2.0",
     "pydantic<3,>=2.3",
     "requests>=2.32.2",
-    "websockets<13.0,>=12.0",
+    "websockets>=11.0",
 ]
 
 [[package]]
@@ -1102,6 +1102,20 @@ files = [
 ]
 
 [[package]]
+name = "factory-boy"
+version = "3.3.0"
+requires_python = ">=3.7"
+summary = "A versatile test fixtures replacement based on thoughtbot's factory_bot for Ruby."
+groups = ["test"]
+dependencies = [
+    "Faker>=0.7.0",
+]
+files = [
+    {file = "factory_boy-3.3.0-py2.py3-none-any.whl", hash = "sha256:a2cdbdb63228177aa4f1c52f4b6d83fab2b8623bf602c7dedd7eb83c0f69c04c"},
+    {file = "factory_boy-3.3.0.tar.gz", hash = "sha256:bc76d97d1a65bbd9842a6d722882098eb549ec8ee1081f9fb2e8ff29f0c300f1"},
+]
+
+[[package]]
 name = "faker"
 version = "26.0.0"
 requires_python = ">=3.8"
@@ -1279,6 +1293,17 @@ groups = ["default"]
 files = [
     {file = "incremental-22.10.0-py2.py3-none-any.whl", hash = "sha256:b864a1f30885ee72c5ac2835a761b8fe8aa9c28b9395cacf27286602688d3e51"},
     {file = "incremental-22.10.0.tar.gz", hash = "sha256:912feeb5e0f7e0188e6f42241d2f450002e11bbc0937c65865045854c24c0bd0"},
+]
+
+[[package]]
+name = "inflection"
+version = "0.5.1"
+requires_python = ">=3.5"
+summary = "A port of Ruby on Rails inflector to Python"
+groups = ["test"]
+files = [
+    {file = "inflection-0.5.1-py2.py3-none-any.whl", hash = "sha256:f38b2b640938a4f35ade69ac3d053042959b62a0f1076a5bbaa1b9526605a8a2"},
+    {file = "inflection-0.5.1.tar.gz", hash = "sha256:1a29730d366e996aaacffb2f1f1cb9593dc38e2ddd30c91250c6dde09ea9b417"},
 ]
 
 [[package]]
@@ -2108,6 +2133,24 @@ files = [
 ]
 
 [[package]]
+name = "pytest-factoryboy"
+version = "2.7.0"
+requires_python = ">=3.8"
+summary = "Factory Boy support for pytest."
+groups = ["test"]
+dependencies = [
+    "factory-boy>=2.10.0",
+    "inflection",
+    "packaging",
+    "pytest>=6.2",
+    "typing-extensions",
+]
+files = [
+    {file = "pytest_factoryboy-2.7.0-py3-none-any.whl", hash = "sha256:bf3222db22d954fbf46f4bff902a0a8d82f3fc3594a47c04bbdc0546ff4c59a6"},
+    {file = "pytest_factoryboy-2.7.0.tar.gz", hash = "sha256:67fc54ec8669a3feb8ac60094dd57cd71eb0b20b2c319d2957873674c776a77b"},
+]
+
+[[package]]
 name = "pytest-mock"
 version = "3.14.0"
 requires_python = ">=3.8"
@@ -2700,7 +2743,7 @@ name = "typing-extensions"
 version = "4.12.2"
 requires_python = ">=3.8"
 summary = "Backported and Experimental Type Hints for Python 3.8+"
-groups = ["default", "type_check"]
+groups = ["default", "test", "type_check"]
 files = [
     {file = "typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d"},
     {file = "typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8"},
