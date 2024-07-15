@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 import pytest_asyncio
+from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from pytest_mock import MockerFixture
@@ -11,6 +12,7 @@ from compute_horde_miner import asgi
 from compute_horde_miner.miner.executor_manager.base import ExecutorUnavailable
 from compute_horde_miner.miner.executor_manager.v1 import ExecutorBusy
 from compute_horde_miner.miner.models import Validator
+from compute_horde_miner.miner.tests import factories
 from compute_horde_miner.miner.tests.executor_manager import fake_executor
 
 WEBSOCKET_TIMEOUT = 10
@@ -45,6 +47,23 @@ async def communicator(validator_key: str):
     yield _communicator
 
     await _communicator.disconnect()
+
+
+@pytest_asyncio.fixture
+async def authenticated_communicator(validator_key: str, communicator: WebsocketCommunicator):
+    await communicator.send_json_to(
+        {
+            "message_type": "V0AuthenticateRequest",
+            "payload": {
+                "validator_hotkey": validator_key,
+                "miner_hotkey": "some key",
+                "timestamp": int(time.time()),
+            },
+            "signature": "gibberish",
+        }
+    )
+    await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
+    return communicator
 
 
 @pytest.mark.django_db(transaction=True)
@@ -110,27 +129,14 @@ async def test_main_loop(validator_key: str, communicator: WebsocketCommunicator
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_decline_job(
-    validator_key: str, job_uuid: str, communicator: WebsocketCommunicator, mocker: MockerFixture
+    job_uuid: str, authenticated_communicator: WebsocketCommunicator, mocker: MockerFixture
 ):
     mocker.patch(
         "compute_horde_miner.miner.tests.executor_manager.TestExecutorManager.reserve_executor",
         side_effect=ExecutorUnavailable,
     )
 
-    await communicator.send_json_to(
-        {
-            "message_type": "V0AuthenticateRequest",
-            "payload": {
-                "validator_hotkey": validator_key,
-                "miner_hotkey": "some key",
-                "timestamp": int(time.time()),
-            },
-            "signature": "gibberish",
-        }
-    )
-    await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
-
-    await communicator.send_json_to(
+    await authenticated_communicator.send_json_to(
         {
             "message_type": "V0InitialJobRequest",
             "job_uuid": job_uuid,
@@ -140,7 +146,7 @@ async def test_decline_job(
             "volume_type": "inline",
         }
     )
-    response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
+    response = await authenticated_communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
     assert response == {
         "message_type": "V0DeclineJobRequest",
         "job_uuid": job_uuid,
@@ -150,27 +156,19 @@ async def test_decline_job(
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_decline_job_busy(
-    validator_key: str, job_uuid: str, communicator: WebsocketCommunicator, mocker: MockerFixture
+    job_uuid: str, authenticated_communicator: WebsocketCommunicator, mocker: MockerFixture
 ):
+    active_receipts = await sync_to_async(
+        lambda: factories.JobStartedReceiptFactory.create_batch(2)
+    )()
+    active_job_uuids = {receipt.job_uuid for receipt in active_receipts}
+
     mocker.patch(
         "compute_horde_miner.miner.tests.executor_manager.TestExecutorManager.reserve_executor",
         side_effect=ExecutorBusy,
     )
 
-    await communicator.send_json_to(
-        {
-            "message_type": "V0AuthenticateRequest",
-            "payload": {
-                "validator_hotkey": validator_key,
-                "miner_hotkey": "some key",
-                "timestamp": int(time.time()),
-            },
-            "signature": "gibberish",
-        }
-    )
-    await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
-
-    await communicator.send_json_to(
+    await authenticated_communicator.send_json_to(
         {
             "message_type": "V0InitialJobRequest",
             "job_uuid": job_uuid,
@@ -180,7 +178,13 @@ async def test_decline_job_busy(
             "volume_type": "inline",
         }
     )
-    response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
+    response = await authenticated_communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
 
     assert response["message_type"] == "V0DeclineJobBusyRequest"
     assert response["job_uuid"] == job_uuid
+    assert response["timestamp"] > 0
+
+    assert len(response["receipts"]) == len(active_receipts)
+
+    for receipt in response["receipts"]:
+        assert receipt["payload"]["job_uuid"] in active_job_uuids

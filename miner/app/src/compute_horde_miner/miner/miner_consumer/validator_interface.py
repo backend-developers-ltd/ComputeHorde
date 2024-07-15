@@ -4,6 +4,7 @@ import time
 import uuid
 
 import bittensor
+from asgiref.sync import sync_to_async
 from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 from django.conf import settings
@@ -277,9 +278,16 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 await current.executor_manager.reserve_executor(token)
             except ExecutorUnavailable as exc:
                 if isinstance(exc, ExecutorBusy):
+                    receipts = await sync_to_async(
+                        lambda: [r.to_receipt() for r in JobStartedReceipt.objects.get_active()]
+                    )()
+                    # NOTE: things could have changed already since the exception was raised.
+                    # We have to revisit this once the proper mechanism for synchronizing
+                    # reservations and receipts is in place.
+
                     msg = miner_requests.V0DeclineJobBusyRequest(
                         job_uuid=msg.job_uuid,
-                        receipts=[],
+                        receipts=receipts,
                         timestamp=int(time.time()),
                     )
                 else:
