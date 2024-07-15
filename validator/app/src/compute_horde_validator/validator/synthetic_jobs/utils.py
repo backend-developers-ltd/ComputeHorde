@@ -76,9 +76,10 @@ def batch_id_to_uuid(batch_id: int) -> uuid.UUID:
 
 class JobState:
     def __init__(self):
-        self.miner_ready_or_declining_future = asyncio.Future()
+        loop = asyncio.get_running_loop()
+        self.miner_ready_or_declining_future = loop.create_future()
         self.miner_ready_or_declining_timestamp: int = 0
-        self.miner_finished_or_failed_future = asyncio.Future()
+        self.miner_finished_or_failed_future = loop.create_future()
         self.miner_finished_or_failed_timestamp: int = 0
         self.miner_machine_specs: MachineSpecs | None = None
 
@@ -105,7 +106,8 @@ class MinerClient(AbstractMinerClient):
         self.batch_id = batch_id
         self.keypair = keypair
         self._barrier = None
-        self.miner_manifest = asyncio.Future()
+        loop = asyncio.get_running_loop()
+        self.miner_manifest = loop.create_future()
         self.online_executor_count = 0
 
     def add_job(self, job_uuid: str | uuid.UUID):
