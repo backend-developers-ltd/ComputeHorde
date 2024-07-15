@@ -128,6 +128,16 @@ CONSTANCE_CONFIG = {
         "Whether this validator is serving jobs and setting weights",
         bool,
     ),
+    "DYNAMIC_MANIFEST_SCORE_MULTIPLIER": (
+        1.05,
+        "The bonus rate for miners changing their horde size",
+        float,
+    ),
+    "DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD": (
+        1.4,
+        "The ratio at which the horde size needs to be changed for receiving bonus",
+        float,
+    ),
 }
 
 # Content Security Policy
@@ -368,9 +378,6 @@ HORDE_SCORE_SIZE_PARAM = 0
 HORDE_SCORE_CENTRAL_SIZE_PARAM = 1
 
 DEBUG_OVERRIDE_WEIGHTS_VERSION = env.int("DEBUG_OVERRIDE_WEIGHTS_VERSION", default=None)
-
-MANIFEST_SCORE_MULTIPLIER = 1.05
-MANIFEST_DANCE_RATIO_THRESHOLD = 1.4
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 
