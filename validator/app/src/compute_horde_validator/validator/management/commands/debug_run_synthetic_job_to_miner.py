@@ -1,10 +1,10 @@
-import asyncio
 import contextlib
 import datetime
 import logging
 import sys
 from collections.abc import Iterable
 
+from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import MinerConnectionError
 from django.conf import settings
@@ -51,20 +51,8 @@ class Command(BaseCommand):
                 status=SyntheticJob.Status.PENDING,
             )
         ]
-
-        key = settings.BITTENSOR_WALLET().get_hotkey()
-        miner_client = MinerClient(
-            miner_address=miner_address,
-            miner_port=miner_port,
-            miner_hotkey=miner_hotkey,
-            my_hotkey=key.ss58_address,
-            job_uuid=None,
-            batch_id=None,
-            keypair=key,
-        )
-
         try:
-            asyncio.run(_execute_jobs(miner_client, jobs))
+            _execute_jobs(miner_address, miner_port, miner_hotkey, jobs)
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)
@@ -75,8 +63,21 @@ class Command(BaseCommand):
         print(f"synthetic_job_uuid={jobs[0].job_uuid}")
 
 
-async def _execute_jobs(miner_client: MinerClient, synthetic_jobs: Iterable[SyntheticJob]):
+@async_to_sync
+async def _execute_jobs(
+    miner_address: str, miner_port: int, miner_hotkey: str, synthetic_jobs: Iterable[SyntheticJob]
+):
     async with contextlib.AsyncExitStack() as exit_stack:
+        key = settings.BITTENSOR_WALLET().get_hotkey()
+        miner_client = MinerClient(
+            miner_address=miner_address,
+            miner_port=miner_port,
+            miner_hotkey=miner_hotkey,
+            my_hotkey=key.ss58_address,
+            job_uuid=None,
+            batch_id=None,
+            keypair=key,
+        )
         try:
             await exit_stack.enter_async_context(miner_client)
         except MinerConnectionError as exc:
