@@ -1,4 +1,3 @@
-import asyncio
 import contextlib
 import json
 import time
@@ -155,7 +154,6 @@ async def run_admin_job_request(job_request_id: int, callback=None):
 
         keypair = get_keypair()
         miner_client = MinerClient(
-            loop=asyncio.get_event_loop(),
             miner_address=miner_axon_info.ip,
             miner_port=miner_axon_info.port,
             miner_hotkey=miner.hotkey,

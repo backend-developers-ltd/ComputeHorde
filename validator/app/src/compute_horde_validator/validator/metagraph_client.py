@@ -75,7 +75,8 @@ class AsyncMetagraphClient:
                 return self._cached_metagraph
         async with self._future_lock:
             if self._metagraph_future is None:
-                future = self._metagraph_future = asyncio.Future()
+                loop = asyncio.get_running_loop()
+                future = self._metagraph_future = loop.create_future()
                 set_result = True
             else:
                 future = self._metagraph_future

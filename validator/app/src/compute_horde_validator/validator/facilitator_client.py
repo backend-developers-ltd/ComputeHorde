@@ -255,7 +255,6 @@ class FacilitatorClient:
         )
 
         miner_client = self.MINER_CLIENT_CLASS(
-            loop=asyncio.get_event_loop(),
             miner_address=miner_axon_info.ip,
             miner_port=miner_axon_info.port,
             miner_hotkey=job_request.miner_hotkey,

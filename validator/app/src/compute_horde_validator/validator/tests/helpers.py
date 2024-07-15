@@ -38,7 +38,6 @@ class MockWallet:
 
 def get_miner_client(MINER_CLIENT, job_uuid: str):
     return MINER_CLIENT(
-        loop=asyncio.get_event_loop(),
         miner_address="ignore",
         my_hotkey="validator_hotkey",
         miner_hotkey="miner_hotkey",
@@ -61,8 +60,8 @@ async def mock_get_miner_axon_info(hotkey: str):
 
 
 class MockMinerClient(MinerClient):
-    def __init__(self, loop: asyncio.AbstractEventLoop, **args):
-        super().__init__(loop, **args)
+    def __init__(self, **args):
+        super().__init__(**args)
         self._sent_models = []
 
     def miner_url(self) -> str:

@@ -72,14 +72,15 @@ class RunConfigManager:
 
 
 class MinerClient(AbstractMinerClient):
-    def __init__(self, loop: asyncio.AbstractEventLoop, miner_address: str, token: str):
-        super().__init__(loop, miner_address)
+    def __init__(self, miner_address: str, token: str):
+        super().__init__(miner_address)
         self.miner_address = miner_address
         self.token = token
         self.job_uuid: str | None = None
-        self.initial_msg = asyncio.Future()
+        loop = asyncio.get_running_loop()
+        self.initial_msg = loop.create_future()
         self.initial_msg_lock = asyncio.Lock()
-        self.full_payload = asyncio.Future()
+        self.full_payload = loop.create_future()
         self.full_payload_lock = asyncio.Lock()
 
     def miner_url(self) -> str:
@@ -608,15 +609,8 @@ class Command(BaseCommand):
     MINER_CLIENT_CLASS = MinerClient
     JOB_RUNNER_CLASS = JobRunner
 
-    def __init__(self, *a, **kw):
-        super().__init__(*a, **kw)
-        self.loop = asyncio.get_event_loop()
-        self.miner_client = self.MINER_CLIENT_CLASS(
-            self.loop, settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN
-        )
-
     def handle(self, *args, **options):
-        self.loop.run_until_complete(self._executor_loop())
+        self.miner_client_for_tests = asyncio.run(self._executor_loop())
 
     async def is_system_safe_for_cve_2022_0492(self):
         process = await asyncio.create_subprocess_exec(
@@ -653,12 +647,13 @@ class Command(BaseCommand):
 
     async def _executor_loop(self):
         logger.debug(f"Connecting to miner: {settings.MINER_ADDRESS}")
-        async with self.miner_client:
+        miner_client = self.MINER_CLIENT_CLASS(settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN)
+        async with miner_client:
             logger.debug(f"Connected to miner: {settings.MINER_ADDRESS}")
-            initial_message: V0InitialJobRequest = await self.miner_client.initial_msg
+            initial_message: V0InitialJobRequest = await miner_client.initial_msg
             logger.debug("Checking for CVE-2022-0492 vulnerability")
             if not await self.is_system_safe_for_cve_2022_0492():
-                await self.miner_client.send_failed_to_prepare()
+                await miner_client.send_failed_to_prepare()
                 return
 
             job_runner = self.JOB_RUNNER_CLASS(initial_message)
@@ -667,24 +662,24 @@ class Command(BaseCommand):
                 try:
                     await job_runner.prepare()
                 except JobError:
-                    await self.miner_client.send_failed_to_prepare()
+                    await miner_client.send_failed_to_prepare()
                     return
 
                 logger.debug(f"Scraping hardware specs for job {initial_message.job_uuid}")
                 specs = get_machine_specs()
 
-                await self.miner_client.send_ready()
+                await miner_client.send_ready()
                 logger.debug(f"Informed miner that I'm ready for job {initial_message.job_uuid}")
 
-                job_request = await self.miner_client.full_payload
+                job_request = await miner_client.full_payload
                 logger.debug(f"Running job {initial_message.job_uuid}")
                 result = await job_runner.run_job(job_request)
                 result.specs = specs
 
                 if result.success:
-                    await self.miner_client.send_finished(result)
+                    await miner_client.send_finished(result)
                 else:
-                    await self.miner_client.send_failed(result)
+                    await miner_client.send_failed(result)
             except Exception:
                 logger.error(
                     f"Unhandled exception when working on job {initial_message.job_uuid}",
@@ -692,6 +687,8 @@ class Command(BaseCommand):
                 )
                 # not deferred, because this is the end of the process, making it deferred would cause it never
                 # to be sent
-                await self.miner_client.send_generic_error("Unexpected error")
+                await miner_client.send_generic_error("Unexpected error")
             finally:
                 await job_runner.clean()
+
+        return miner_client

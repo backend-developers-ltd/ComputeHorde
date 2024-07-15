@@ -16,12 +16,12 @@ class MinerConnectionError(Exception):
 
 
 class AbstractMinerClient(abc.ABC):
-    def __init__(self, loop: asyncio.AbstractEventLoop, miner_name: str):
+    def __init__(self, miner_name: str):
         self.debounce_counter = 0
         self.max_debounce_count: int | None = 5  # set to None for unlimited debounce
-        self.loop = loop
         self.miner_name = miner_name
         self.ws: websockets.WebSocketClientProtocol | None = None
+        self.reconnect_task: asyncio.Task | None = None
         self.read_messages_task: asyncio.Task | None = None
         self.deferred_send_tasks: list[asyncio.Task] = []
 
@@ -57,6 +57,9 @@ class AbstractMinerClient(abc.ABC):
         if self.read_messages_task is not None and not self.read_messages_task.done():
             self.read_messages_task.cancel()
 
+        if self.reconnect_task is not None and not self.reconnect_task.done():
+            self.reconnect_task.cancel()
+
         if self.ws is not None and not self.ws.closed:
             await self.ws.close()
 
@@ -83,7 +86,7 @@ class AbstractMinerClient(abc.ABC):
                     )
                     await asyncio.sleep(sleep_time)
                 self.ws = await self._connect()
-                self.read_messages_task = self.loop.create_task(self.read_messages())
+                self.read_messages_task = asyncio.create_task(self.read_messages())
                 if self.debounce_counter:
                     logger.info(
                         f"Connected to miner {self.miner_name} after {self.debounce_counter + 1} attempts"
@@ -117,7 +120,7 @@ class AbstractMinerClient(abc.ABC):
             return
 
     def deferred_send_model(self, model: BaseRequest):
-        task = self.loop.create_task(self.send_model(model))
+        task = asyncio.create_task(self.send_model(model))
         self.deferred_send_tasks.append(task)
 
     async def read_messages(self):
@@ -127,7 +130,7 @@ class AbstractMinerClient(abc.ABC):
             except websockets.WebSocketException as ex:
                 self.debounce_counter += 1
                 logger.info(f"Connection to miner {self.miner_name} lost: {str(ex)}")
-                self.loop.create_task(self.await_connect())
+                self.reconnect_task = asyncio.create_task(self.await_connect())
                 return
 
             try:
