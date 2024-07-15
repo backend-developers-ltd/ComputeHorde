@@ -167,6 +167,5 @@ def get_receipts_from_old_miner():
 def fetch_dynamic_config() -> None:
     sync_dynamic_config(
         config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/miner-config-{settings.DYNAMIC_CONFIG_ENV}.json",
-        ignore_keys=["SERVING", "MIGRATING", "OLD_MINER_IP", "OLD_MINER_PORT"],
         namespace=config,
     )

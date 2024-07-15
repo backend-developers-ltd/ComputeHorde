@@ -6,17 +6,17 @@ from freezegun import freeze_time
 from compute_horde.dynamic_config import sync_dynamic_config
 
 
-def test_dynamic_config__ignored_keys_skipped(mocked_responses):
+def test_dynamic_config__non_dynamic_key_skipped(mocked_responses):
     # arrange
     config_url = "http://127.0.0.1:8000/config.json"
     mocked_responses.get(
         config_url,
         json={
-            "ignored_key": {
+            "RANDOM_KEY": {
                 "description": "...",
                 "items": [{"value": 1}],
             },
-            "key": {
+            "DYNAMIC_KEY": {
                 "description": "...",
                 "items": [{"value": 2}],
             },
@@ -25,10 +25,10 @@ def test_dynamic_config__ignored_keys_skipped(mocked_responses):
     namespace = Namespace()
 
     # act
-    sync_dynamic_config(config_url, ["ignored_key"], namespace)
+    sync_dynamic_config(config_url, namespace)
 
     # assert
-    assert vars(namespace) == {"key": 2}
+    assert vars(namespace) == {"DYNAMIC_KEY": 2}
 
 
 @pytest.mark.parametrize(
@@ -45,7 +45,7 @@ def test_dynamic_config__correct_time_is_picked(mocked_responses, frozen_time, e
     mocked_responses.get(
         config_url,
         json={
-            "key": {
+            "DYNAMIC_KEY": {
                 "description": "...",
                 "items": [
                     {
@@ -62,7 +62,7 @@ def test_dynamic_config__correct_time_is_picked(mocked_responses, frozen_time, e
 
     # act
     with freeze_time(frozen_time):
-        sync_dynamic_config(config_url, ["ignored_key"], namespace)
+        sync_dynamic_config(config_url, namespace)
 
     # assert
-    assert vars(namespace) == {"key": expected_value}
+    assert vars(namespace) == {"DYNAMIC_KEY": expected_value}

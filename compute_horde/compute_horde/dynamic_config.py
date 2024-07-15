@@ -24,20 +24,18 @@ class SupportsSetAttr(Protocol):
     def __setattr__(self, key: str, value: Any) -> None: ...
 
 
-def sync_dynamic_config(
-    config_url: str, ignore_keys: list[str], namespace: SupportsSetAttr
-) -> None:
+def sync_dynamic_config(config_url: str, namespace: SupportsSetAttr) -> None:
     """
     Fetches dynamic config from a URL and sets them to namespace.
+    Only the keys with `DYNAMIC_` prefix are considered.
 
     :param config_url: URL to a JSON object of dynamic config
-    :param ignore_keys: keys to ignore from the JSON config
     :param namespace: An object where the config values will be set as attributes
     """
     response = requests.get(config_url)
     response.raise_for_status()
     for param_key, raw_param in response.json().items():
-        if param_key in ignore_keys:
+        if not param_key.startswith("DYNAMIC_"):
             continue
 
         param = Param.model_validate(raw_param)
