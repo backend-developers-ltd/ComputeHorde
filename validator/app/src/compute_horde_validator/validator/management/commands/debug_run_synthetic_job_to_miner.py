@@ -11,12 +11,14 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils.timezone import now
 
+from compute_horde_validator.validator.metagraph_client import aget_weights_version
 from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     JOB_LENGTH,
     MinerClient,
     execute_synthetic_jobs,
 )
+from compute_horde_validator.validator.utils import aget_config
 
 logger = logging.getLogger(__name__)
 
@@ -85,4 +87,11 @@ async def _execute_jobs(
             return
         for job in synthetic_jobs:
             miner_client.add_job(str(job.job_uuid))
-        await execute_synthetic_jobs(miner_client, synthetic_jobs, 0)
+        await execute_synthetic_jobs(
+            miner_client,
+            synthetic_jobs,
+            0,
+            await aget_weights_version(),
+            await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER"),
+            await aget_config("DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD"),
+        )
