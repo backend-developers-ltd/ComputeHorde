@@ -21,6 +21,7 @@ env:
   MNEMONIC_VALIDATOR_HOTKEY: "syrup ill organ rigid supreme pen menu range tonight letter pear blind"
   MINER_HOTKEY_SS58: "5FqSEa5kHZgwKMMuC7WsHLoXcf3UN9gCpDZ7iDifa2sTLBSB"
   VALIDATOR_HOTKEY_SS58: "5GHikjqiHD1pUyCf3mzrjbEJgJvGnCp5FNKTXTtGkzhaJ37R"
+  DOCKER_CONTENT_TRUST: 1
 
 jobs:
   e2e:

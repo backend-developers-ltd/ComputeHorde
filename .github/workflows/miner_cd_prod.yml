@@ -10,6 +10,7 @@ env:
   STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-staging"
   DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner"
   DIST_VERSION_PREFIX: "miner-prod"
+  DOCKER_CONTENT_TRUST: 1
 
 jobs:
   deploy:

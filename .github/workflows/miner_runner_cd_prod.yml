@@ -13,6 +13,7 @@ env:
   MINER_IMAGE_REPO: "compute-horde-miner"
   MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx"
   DIST_VERSION_PREFIX: "miner-runner-prod"
+  DOCKER_CONTENT_TRUST: 1
 
 jobs:
   deploy:
