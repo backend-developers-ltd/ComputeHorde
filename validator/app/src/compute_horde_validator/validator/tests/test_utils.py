@@ -22,7 +22,7 @@ from compute_horde.mv_protocol.miner_requests import (
 from compute_horde.mv_protocol.validator_requests import (
     V0JobFinishedReceiptRequest,
 )
-from django.conf import settings
+from constance.test.unittest import override_config
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
@@ -48,7 +48,9 @@ from .helpers import (
 )
 
 MOCK_SCORE = 0.8
-MANIFEST_INCENTIVE_APPLIED_SCORE = MOCK_SCORE * settings.MANIFEST_INCENTIVE_MULTIPLIER
+MANIFEST_INCENTIVE_MULTIPLIER = 1.05
+MANIFEST_DANCE_RATIO_THRESHOLD = 1.4
+MANIFEST_INCENTIVE_APPLIED_SCORE = MOCK_SCORE * MANIFEST_INCENTIVE_MULTIPLIER
 NOT_SCORED = 0.0
 
 logger = logging.getLogger(__name__)
@@ -407,28 +409,32 @@ time_took_mock_synthetic_job_generator_factory = MagicMock(
 )
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@override_config(
+    DYNAMIC_MANIFEST_SCORE_MULTIPLIER=MANIFEST_INCENTIVE_MULTIPLIER,
+    DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=MANIFEST_DANCE_RATIO_THRESHOLD,
+)
 @pytest.mark.parametrize(
     "curr_online_executor_count,prev_online_executor_count,expected_multiplier",
     [
         # None -> 3
-        (3, None, settings.MANIFEST_INCENTIVE_MULTIPLIER),
+        (3, None, MANIFEST_INCENTIVE_MULTIPLIER),
         # 0 -> 3 - e.g. all executors failed to start cause docker images were not cached
-        (3, 0, settings.MANIFEST_INCENTIVE_MULTIPLIER),
+        (3, 0, MANIFEST_INCENTIVE_MULTIPLIER),
         # 10 -> below ratio
-        (10, int(10 * settings.MANIFEST_DANCE_RATIO_THRESHOLD) - 1, 1),
+        (10, int(10 * MANIFEST_DANCE_RATIO_THRESHOLD) - 1, 1),
         # below ratio -> 10
-        (int(10 * settings.MANIFEST_DANCE_RATIO_THRESHOLD) - 1, 10, 1),
+        (int(10 * MANIFEST_DANCE_RATIO_THRESHOLD) - 1, 10, 1),
         # 10 -> above ratio
         (
-            int(10 * settings.MANIFEST_DANCE_RATIO_THRESHOLD) + 1,
+            int(10 * MANIFEST_DANCE_RATIO_THRESHOLD) + 1,
             10,
-            settings.MANIFEST_INCENTIVE_MULTIPLIER,
+            MANIFEST_INCENTIVE_MULTIPLIER,
         ),
         # above ratio -> 10
         (
             10,
-            int(10 * settings.MANIFEST_DANCE_RATIO_THRESHOLD) + 1,
-            settings.MANIFEST_INCENTIVE_MULTIPLIER,
+            int(10 * MANIFEST_DANCE_RATIO_THRESHOLD) + 1,
+            MANIFEST_INCENTIVE_MULTIPLIER,
         ),
     ],
 )
@@ -497,9 +503,9 @@ async def test_manifest_dance_incentives(
         # no effect on v1
         ("override_weights_version_v1", 1, 1, None),
         # basic test for v2
-        ("override_weights_version_v2", settings.MANIFEST_INCENTIVE_MULTIPLIER, 1, None),
+        ("override_weights_version_v2", MANIFEST_INCENTIVE_MULTIPLIER, 1, None),
         # just basic test for previous executors on single current executor
-        ("override_weights_version_v2", settings.MANIFEST_INCENTIVE_MULTIPLIER, 1, 100),
+        ("override_weights_version_v2", MANIFEST_INCENTIVE_MULTIPLIER, 1, 100),
     ],
 )
 def test_create_and_run_sythethic_job_batch(

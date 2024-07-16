@@ -57,7 +57,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.synthetic_jobs.generator import current
-from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
+from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME, aget_config
 
 JOB_LENGTH = 300
 TIMEOUT_SETUP = 30
@@ -398,13 +398,14 @@ async def apply_manifest_incentive(
     multiplier = None
     if weights_version >= 2:
         if previous_online_executors is None:
-            multiplier = settings.MANIFEST_SCORE_MULTIPLIER
+            multiplier = await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER")
         else:
             low, high = sorted([previous_online_executors, current_online_executors])
             # low can be 0 if previous_online_executors == 0, but we make it that way to
             # make this function correct for any kind of input
-            if low == 0 or high / low >= settings.MANIFEST_DANCE_RATIO_THRESHOLD:
-                multiplier = settings.MANIFEST_SCORE_MULTIPLIER
+            threshold = await aget_config("DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD")
+            if low == 0 or high / low >= threshold:
+                multiplier = await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER")
     if multiplier is not None:
         return score * multiplier
     return score
