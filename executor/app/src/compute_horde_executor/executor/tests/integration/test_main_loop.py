@@ -11,6 +11,7 @@ from functools import partial
 from unittest import mock
 
 import httpx
+from compute_horde.transport import AbstractTransport
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
 
@@ -54,32 +55,33 @@ def get_file_from_request(request):
     return parsed_data
 
 
-class MockWebsocket:
-    def __init__(self, messages):
-        self.closed = False
+class MockTransport(AbstractTransport):
+    def __init__(self, messages: list[str]):
         self.sent: list[str] = []
         self.messages = messages
         self.sent_messages: list[str] = []
 
+    async def connect(self): ...
+
+    async def close(self): ...
+
+    async def is_connected(self):
+        return True
+
     async def send(self, message):
         self.sent_messages.append(message)
 
-    async def recv(self):
+    async def receive(self):
         try:
             return next(self.messages)
         except StopIteration:
             await asyncio.Future()
 
-    async def close(self): ...
-
 
 class TestMinerClient(MinerClient):
     def __init__(self, *args, messages, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__messages = messages
-
-    async def _connect(self):
-        return MockWebsocket(self.__messages)
+        transport = MockTransport(messages)
+        super().__init__(*args, transport=transport, **kwargs)
 
 
 class TestCommand(Command):
@@ -118,7 +120,7 @@ def test_main_loop():
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -170,7 +172,7 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -224,7 +226,7 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -283,7 +285,7 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -347,7 +349,7 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -407,7 +409,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -473,7 +475,7 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -538,7 +540,7 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -597,7 +599,7 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -654,7 +656,7 @@ def test_raw_script_job():
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -738,7 +740,7 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -826,7 +828,7 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -909,7 +911,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
             "job_uuid": job_uuid,
@@ -926,7 +928,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
     ]
-    print([json.loads(msg) for msg in command.miner_client_for_tests.ws.sent_messages])
+    print([json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages])
 
     request1 = httpx_mock.get_request(url=url1)
     assert request1 is not None
