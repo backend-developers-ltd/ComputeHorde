@@ -8,7 +8,7 @@ on:
 env:
   BUILD_DIRECTORY: "executor"
   TAG_VERSION: "v0-latest"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-executor-staging"
+  DOCKER_REPO_NAME: "andreeareef/compute-horde-executor-staging"
   DIST_VERSION_PREFIX: "executor-staging"
 
 jobs:

@@ -7,8 +7,8 @@ on:
 
 env:
   TAG_VERSION: "v0-latest"
-  STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator-staging"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator"
+  STAGING_DOCKER_REPO_NAME: "andreeareef/compute-horde-validator-staging"
+  DOCKER_REPO_NAME: "andreeareef/compute-horde-validator"
   DIST_VERSION_PREFIX: "validator-prod"
   DOCKER_CONTENT_TRUST: 1
 

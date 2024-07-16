@@ -8,7 +8,7 @@ on:
 env:
   BUILD_DIRECTORY: "miner"
   TAG_VERSION: "v0-latest"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-staging"
+  DOCKER_REPO_NAME: "andreeareef/compute-horde-miner-staging"
   DIST_VERSION_PREFIX: "miner-staging"
 
 jobs:

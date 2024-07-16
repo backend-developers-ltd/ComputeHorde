@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
 # Define image
-IMAGE_NAME="backenddevelopersltd/compute-horde-job-echo:v0-latest"
+IMAGE_NAME="andreeareef/compute-horde-job-echo:v0-latest"
 
 # Build the Docker image
 docker build -t $IMAGE_NAME .

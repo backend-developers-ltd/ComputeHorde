@@ -104,7 +104,7 @@ def test_main_loop():
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -156,7 +156,7 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -210,7 +210,7 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -269,7 +269,7 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -333,7 +333,7 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -384,7 +384,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -451,7 +451,7 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -515,7 +515,7 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -574,7 +574,7 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -701,7 +701,7 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -807,7 +807,7 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "job_uuid": job_uuid,
@@ -875,7 +875,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
                 json.dumps(
                     {
                         "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "job_uuid": job_uuid,

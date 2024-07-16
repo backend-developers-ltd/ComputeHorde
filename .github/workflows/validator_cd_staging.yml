@@ -8,7 +8,7 @@ on:
 env:
   BUILD_DIRECTORY: "validator"
   TAG_VERSION: "v0-latest"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator-staging"
+  DOCKER_REPO_NAME: "andreeareef/compute-horde-validator-staging"
   DIST_VERSION_PREFIX: "validator-staging"
 
 jobs:

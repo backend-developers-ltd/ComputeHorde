@@ -8,7 +8,7 @@ on:
 env:
   BUILD_DIRECTORY: "validator/envs/runner"
   TAG_VERSION: "v0-latest"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator-runner"
+  DOCKER_REPO_NAME: "andreeareef/compute-horde-validator-runner"
   VALIDATOR_IMAGE_REPO: "compute-horde-validator"
   DIST_VERSION_PREFIX: "validator-runner-prod"
   DOCKER_CONTENT_TRUST: 1

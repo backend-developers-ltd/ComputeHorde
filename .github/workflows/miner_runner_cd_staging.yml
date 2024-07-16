@@ -8,8 +8,8 @@ on:
 env:
   BUILD_DIRECTORY: "miner/envs/runner"
   TAG_VERSION: "v0-latest"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-runner-staging"
-  DOCKER_NGINX_REPO_NAME: "backenddevelopersltd/compute-horde-miner-nginx-staging"
+  DOCKER_REPO_NAME: "andreeareef/compute-horde-miner-runner-staging"
+  DOCKER_NGINX_REPO_NAME: "andreeareef/compute-horde-miner-nginx-staging"
   MINER_IMAGE_REPO: "compute-horde-miner-staging"
   MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-staging"
   DIST_VERSION_PREFIX: "miner-runner-staging"
