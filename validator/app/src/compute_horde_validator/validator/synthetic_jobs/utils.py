@@ -44,10 +44,11 @@ from compute_horde.mv_protocol.validator_requests import (
     VolumeType,
 )
 from compute_horde.utils import MachineSpecs
+from constance import config
 from django.conf import settings
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.metagraph_client import aget_weights_version
+from compute_horde_validator.validator.metagraph_client import get_weights_version
 from compute_horde_validator.validator.models import (
     JobBase,
     Miner,
@@ -57,7 +58,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.synthetic_jobs.generator import current
-from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME, aget_config
+from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 JOB_LENGTH = 300
 TIMEOUT_SETUP = 30
@@ -276,11 +277,27 @@ def create_and_run_sythethic_job_batch(netuid, network):
         miners = get_miners(metagraph)
     miners_previous_online_executors = get_previous_online_executors(miners, batch)
     miners = [(miner.id, miner.hotkey) for miner in miners]
-    execute_synthetic_batch(axons_by_key, batch.id, miners, miners_previous_online_executors)
+    execute_synthetic_batch(
+        axons_by_key,
+        batch.id,
+        miners,
+        miners_previous_online_executors,
+        get_weights_version(),
+        config.DYNAMIC_MANIFEST_SCORE_MULTIPLIER,
+        config.DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD,
+    )
 
 
 @async_to_sync
-async def execute_synthetic_batch(axons_by_key, batch_id, miners, miners_previous_online_executors):
+async def execute_synthetic_batch(
+    axons_by_key,
+    batch_id,
+    miners,
+    miners_previous_online_executors,
+    weights_version: int,
+    manifest_score_multiplier: float,
+    manifest_dance_ratio_threshold: float,
+):
     serving_miners = [
         (miner_id, miner_key)
         for miner_id, miner_key in miners
@@ -296,6 +313,9 @@ async def execute_synthetic_batch(axons_by_key, batch_id, miners, miners_previou
                     miner_key,
                     axons_by_key[miner_key],
                     miners_previous_online_executors.get(miner_id),
+                    weights_version,
+                    manifest_score_multiplier,
+                    manifest_dance_ratio_threshold,
                 ),
                 JOB_LENGTH,
             )
@@ -327,7 +347,14 @@ def save_receipt_event(subtype: str, long_description: str, data: dict):
 
 
 async def execute_miner_synthetic_jobs(
-    batch_id, miner_id, miner_hotkey, axon_info, miner_previous_online_executors
+    batch_id,
+    miner_id,
+    miner_hotkey,
+    axon_info,
+    miner_previous_online_executors,
+    weights_version: int,
+    manifest_score_multiplier: float,
+    manifest_dance_ratio_threshold: float,
 ):
     key = settings.BITTENSOR_WALLET().get_hotkey()
     miner_client = MinerClient(
@@ -382,7 +409,14 @@ async def execute_miner_synthetic_jobs(
 
         jobs = await SyntheticJob.objects.abulk_create(jobs)
         try:
-            await execute_synthetic_jobs(miner_client, jobs, miner_previous_online_executors)
+            await execute_synthetic_jobs(
+                miner_client,
+                jobs,
+                miner_previous_online_executors,
+                weights_version,
+                manifest_score_multiplier,
+                manifest_dance_ratio_threshold,
+            )
         except ExceptionGroup as e:
             msg = f"Multiple errors occurred during execution of some jobs for miner {miner_hotkey}: {e!r}"
             logger.warning(msg)
@@ -400,27 +434,35 @@ async def execute_miner_synthetic_jobs(
 
 
 async def apply_manifest_incentive(
-    score: float, previous_online_executors: int | None, current_online_executors: int
+    score: float,
+    previous_online_executors: int | None,
+    current_online_executors: int,
+    weights_version: int,
+    manifest_score_multiplier: float,
+    manifest_dance_ratio_threshold: float,
 ) -> float:
-    weights_version = await aget_weights_version()
     multiplier = None
     if weights_version >= 2:
         if previous_online_executors is None:
-            multiplier = await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER")
+            multiplier = manifest_score_multiplier
         else:
             low, high = sorted([previous_online_executors, current_online_executors])
             # low can be 0 if previous_online_executors == 0, but we make it that way to
             # make this function correct for any kind of input
-            threshold = await aget_config("DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD")
-            if low == 0 or high / low >= threshold:
-                multiplier = await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER")
+            if low == 0 or high / low >= manifest_dance_ratio_threshold:
+                multiplier = manifest_score_multiplier
     if multiplier is not None:
         return score * multiplier
     return score
 
 
 async def _execute_synthetic_job(
-    miner_client: MinerClient, job: SyntheticJob, previous_online_executors
+    miner_client: MinerClient,
+    job: SyntheticJob,
+    previous_online_executors,
+    weights_version: int,
+    manifest_score_multiplier: float,
+    manifest_dance_ratio_threshold: float,
 ):
     data = {"job_uuid": str(job.job_uuid), "miner_hotkey": job.miner.hotkey}
     save_event = partial(save_job_execution_event, data=data)
@@ -594,7 +636,12 @@ async def _execute_synthetic_job(
 
             # if job passed, save synthetic job score
             job.score = await apply_manifest_incentive(
-                score, previous_online_executors, current_online_executors
+                score,
+                previous_online_executors,
+                current_online_executors,
+                weights_version,
+                manifest_score_multiplier,
+                manifest_dance_ratio_threshold,
             )
             await job.asave()
 
@@ -630,24 +677,44 @@ async def _execute_synthetic_job(
 
 
 async def execute_synthetic_job(
-    miner_client: MinerClient, synthetic_job_id, miner_previous_online_executors
+    miner_client: MinerClient,
+    synthetic_job_id,
+    miner_previous_online_executors,
+    weights_version: int,
+    manifest_score_multiplier: float,
+    manifest_dance_ratio_threshold: float,
 ):
     synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related("miner").aget(
         id=synthetic_job_id
     )
-    await _execute_synthetic_job(miner_client, synthetic_job, miner_previous_online_executors)
+    await _execute_synthetic_job(
+        miner_client,
+        synthetic_job,
+        miner_previous_online_executors,
+        weights_version,
+        manifest_score_multiplier,
+        manifest_dance_ratio_threshold,
+    )
 
 
 async def execute_synthetic_jobs(
     miner_client: MinerClient,
     synthetic_jobs: Iterable[SyntheticJob],
     miner_previous_online_executors,
+    weights_version: int,
+    manifest_score_multiplier: float,
+    manifest_dance_ratio_threshold: float,
 ):
     tasks = [
         asyncio.create_task(
             asyncio.wait_for(
                 execute_synthetic_job(
-                    miner_client, synthetic_job.id, miner_previous_online_executors
+                    miner_client,
+                    synthetic_job.id,
+                    miner_previous_online_executors,
+                    weights_version,
+                    manifest_score_multiplier,
+                    manifest_dance_ratio_threshold,
                 ),
                 JOB_LENGTH,
             )
