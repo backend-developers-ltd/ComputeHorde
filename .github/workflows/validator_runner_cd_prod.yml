@@ -8,7 +8,7 @@ on:
 env:
   BUILD_DIRECTORY: "validator/envs/runner"
   TAG_VERSION: "v0-latest"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator-runner"
+  DOCKER_REPO_NAME: "andreeareef/compute-horde-validator-runner"
   VALIDATOR_IMAGE_REPO: "compute-horde-validator"
   DIST_VERSION_PREFIX: "validator-runner-prod"
   DOCKER_CONTENT_TRUST: 1
@@ -34,7 +34,7 @@ jobs:
 
           docker image tag "${IMAGE_NAME}" "${SHA_IMAGE_NAME}"
 
-          echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
 
           docker push "${IMAGE_NAME}"
           docker push "${SHA_IMAGE_NAME}"

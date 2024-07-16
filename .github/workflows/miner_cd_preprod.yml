@@ -7,8 +7,8 @@ on:
 
 env:
   TAG_VERSION: "v0-latest"
-  STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-staging"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-preprod"
+  STAGING_DOCKER_REPO_NAME: "andreeareef/compute-horde-miner-staging"
+  DOCKER_REPO_NAME: "andreeareef/compute-horde-miner-preprod"
   DIST_VERSION_PREFIX: "miner-preprod"
   DOCKER_CONTENT_TRUST: 1
 
@@ -27,7 +27,7 @@ jobs:
           docker pull "${SHA_IMAGE_NAME}"
           docker image tag "${SHA_IMAGE_NAME}" "${IMAGE_NAME}"
 
-          echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
 
           docker push "${IMAGE_NAME}"
       - name: Get current date

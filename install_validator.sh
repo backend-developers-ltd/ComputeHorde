@@ -83,7 +83,7 @@ version: '3.7'
 services:
 
   validator-runner:
-    image: backenddevelopersltd/compute-horde-validator-runner:v0-latest
+    image: andreeareef/compute-horde-validator-runner:v0-latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -113,7 +113,7 @@ FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
 MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
 ENDENV
 
-docker pull backenddevelopersltd/compute-horde-validator:v0-latest
+docker pull andreeareef/compute-horde-validator:v0-latest
 docker compose up -d
 
 ENDSSH

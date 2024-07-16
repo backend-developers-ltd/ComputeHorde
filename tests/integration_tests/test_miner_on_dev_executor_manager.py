@@ -154,7 +154,7 @@ class Test(ActiveSubnetworkBaseTest):
                         "message_type": "V0JobRequest",
                         "job_uuid": job_uuid,
                         "executor_class": DEFAULT_EXECUTOR_CLASS,
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "docker_image_name": "andreeareef/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "timeout_seconds": 60,

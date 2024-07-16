@@ -21,7 +21,7 @@ Install nvidia drivers. For example, on ubuntu:
 To test that all the drivers are working properly, run the following command:
 
 ```
-docker run --runtime=nvidia --gpus all backenddevelopersltd/compute-horde-job:v0-latest --runtime 600 --restore-disable --attack-mode 3 --workload-profile 3 --optimized-kernel-enable --hash-type 1410 --hex-salt -1 ?l?d?u --outfile-format 2 --quiet 5726c17704f709432e2c7d816b8b3fc3236263c4cf7383267bf13bea22e91a85:55507f1971ff79d5 ?1?1?1?1?1?1
+docker run --runtime=nvidia --gpus all andreeareef/compute-horde-job:v0-latest --runtime 600 --restore-disable --attack-mode 3 --workload-profile 3 --optimized-kernel-enable --hash-type 1410 --hex-salt -1 ?l?d?u --outfile-format 2 --quiet 5726c17704f709432e2c7d816b8b3fc3236263c4cf7383267bf13bea22e91a85:55507f1971ff79d5 ?1?1?1?1?1?1
 ```
 
 
@@ -38,7 +38,7 @@ version: '3.7'
 services:
 
   miner-runner:
-    image: backenddevelopersltd/compute-horde-miner-runner:v0-latest
+    image: andreeareef/compute-horde-miner-runner:v0-latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -61,11 +61,11 @@ Test if it is running properly with `docker-compose ps`.
 
 ## How it works
 
-The `backenddevelopersltd/compute-horde-miner-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a miner.
+The `andreeareef/compute-horde-miner-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a miner.
 A `watchtower` container will automatically apply updates for containers.
 
 ```
-backenddevelopersltd/compute-horde-miner-runner
+andreeareef/compute-horde-miner-runner
 |__postgres
 |__redis
 |__app
@@ -76,4 +76,4 @@ backenddevelopersltd/compute-horde-miner-runner
 
 The `watchtower` container may update:
 1) core services in `docker-compose.yml` (like `app` or `worker`), and
-2) `backenddevelopersltd/compute-horde-miner-runner` container itself, which will automatically update ALL the other containers.
+2) `andreeareef/compute-horde-miner-runner` container itself, which will automatically update ALL the other containers.

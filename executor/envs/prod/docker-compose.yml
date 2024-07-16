@@ -3,7 +3,7 @@ version: '3.7'
 services:
 
   app:
-    image: backenddevelopersltd/compute-horde-executor:v0-latest
+    image: andreeareef/compute-horde-executor:v0-latest
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
     init: true

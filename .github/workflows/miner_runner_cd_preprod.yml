@@ -8,8 +8,8 @@ on:
 env:
   BUILD_DIRECTORY: "miner/envs/runner"
   TAG_VERSION: "v0-latest"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-runner-preprod"
-  DOCKER_NGINX_REPO_NAME: "backenddevelopersltd/compute-horde-miner-nginx-preprod"
+  DOCKER_REPO_NAME: "andreeareef/compute-horde-miner-runner-preprod"
+  DOCKER_NGINX_REPO_NAME: "andreeareef/compute-horde-miner-nginx-preprod"
   MINER_IMAGE_REPO: "compute-horde-miner-preprod"
   MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-preprod"
   DIST_VERSION_PREFIX: "miner-runner-preprod"
@@ -37,7 +37,7 @@ jobs:
 
           docker image tag "${IMAGE_NAME}" "${SHA_IMAGE_NAME}"
 
-          echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
 
           docker push "${IMAGE_NAME}"
           docker push "${SHA_IMAGE_NAME}"
@@ -53,7 +53,7 @@ jobs:
 
           docker image tag "${IMAGE_NAME}" "${SHA_IMAGE_NAME}"
 
-          echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
 
           docker push "${IMAGE_NAME}"
           docker push "${SHA_IMAGE_NAME}"

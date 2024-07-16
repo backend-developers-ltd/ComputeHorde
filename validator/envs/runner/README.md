@@ -21,7 +21,7 @@ version: '3.7'
 services:
     
   validator-runner:
-    image: backenddevelopersltd/compute-horde-validator-runner:v0-latest
+    image: andreeareef/compute-horde-validator-runner:v0-latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -87,11 +87,11 @@ it is inconsequential, and we will remove it soon.
 
 ## How it works
 
-The `backenddevelopersltd/compute-horde-validator-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a validator. 
+The `andreeareef/compute-horde-validator-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a validator. 
 A `watchtower` container that will automatically apply updates for containers.
 
 ```
-backenddevelopersltd/compute-horde-validator-runner
+andreeareef/compute-horde-validator-runner
 |__postgres
 |__redis
 |__worker
@@ -101,4 +101,4 @@ backenddevelopersltd/compute-horde-validator-runner
 
 The `watchtower` container may update:
 1) core services in `docker-compose.yml` (like `worker`), and
-2) `backenddevelopersltd/compute-horde-validator-runner` container itself, which will automatically update ALL the other containers.
+2) `andreeareef/compute-horde-validator-runner` container itself, which will automatically update ALL the other containers.
