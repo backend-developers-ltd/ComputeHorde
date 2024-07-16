@@ -33,6 +33,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobFinishedReceiptRequest,
     V0JobStartedReceiptRequest,
 )
+from compute_horde.transport import WSTransport
 from compute_horde.utils import MachineSpecs
 
 from compute_horde_validator.validator.models import (
@@ -79,6 +80,7 @@ class MinerClient(AbstractMinerClient):
         loop = asyncio.get_running_loop()
         self.miner_manifest = loop.create_future()
         self.online_executor_count = 0
+        self.transport = WSTransport(self.miner_url())
 
     def add_job(self, job_uuid: str | uuid.UUID):
         job_state = JobState()
@@ -209,6 +211,5 @@ class MinerClient(AbstractMinerClient):
         )
 
     async def _connect(self):
-        ws = await super()._connect()
-        await ws.send(self.generate_authentication_message().model_dump_json())
-        return ws
+        await super()._connect()
+        await self.transport.send(self.generate_authentication_message().model_dump_json())
