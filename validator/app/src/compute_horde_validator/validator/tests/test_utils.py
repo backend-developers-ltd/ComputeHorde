@@ -25,6 +25,7 @@ from compute_horde.mv_protocol.validator_requests import (
 from constance.test.unittest import override_config
 from django.utils.timezone import now
 
+from compute_horde_validator.validator.metagraph_client import aget_weights_version
 from compute_horde_validator.validator.models import (
     Miner,
     MinerManifest,
@@ -41,6 +42,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_sythethic_job_batch,
     execute_miner_synthetic_jobs,
 )
+from compute_horde_validator.validator.utils import aget_config
 
 from .helpers import (
     check_system_events,
@@ -159,6 +161,9 @@ async def miner_synthetic_jobs_scheme(
             "miner_hotkey",
             miner_axon_info,
             prev_online_executor_count,
+            await aget_weights_version(),
+            await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER"),
+            await aget_config("DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD"),
         )
     )
     try:
