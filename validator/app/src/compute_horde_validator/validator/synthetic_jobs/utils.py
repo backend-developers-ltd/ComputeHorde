@@ -95,7 +95,8 @@ class MinerClient(AbstractMinerClient):
         batch_id: None | int,
         keypair: bittensor.Keypair,
     ):
-        super().__init__(f"{miner_hotkey}({miner_address}:{miner_port})")
+        loop = asyncio.get_running_loop()
+        super().__init__(loop, f"{miner_hotkey}({miner_address}:{miner_port})")
         self.miner_hotkey = miner_hotkey
         self.my_hotkey = my_hotkey
         self.miner_address = miner_address
@@ -106,7 +107,6 @@ class MinerClient(AbstractMinerClient):
         self.batch_id = batch_id
         self.keypair = keypair
         self._barrier = None
-        loop = asyncio.get_running_loop()
         self.miner_manifest = loop.create_future()
         self.online_executor_count = 0
 
