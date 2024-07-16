@@ -10,6 +10,7 @@ env:
   STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator-staging"
   DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-validator-preprod"
   DIST_VERSION_PREFIX: "validator-preprod"
+  DOCKER_CONTENT_TRUST: 1
 
 jobs:
   deploy:
