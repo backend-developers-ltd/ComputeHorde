@@ -46,7 +46,6 @@ ENV = env("ENV", default="prod")
 DOCKER_CONTENT_TRUST = 1
 
 
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY", default="dummy")
 

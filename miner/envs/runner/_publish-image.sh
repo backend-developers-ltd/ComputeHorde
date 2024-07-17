@@ -5,4 +5,5 @@ if [ -z "$(docker info 2>/dev/null | grep 'Username' | awk '{print $2}')" ]; the
 	echo "$DOCKERHUB_PAT" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 fi
 
+export DOCKER_CONTENT_TRUST=1
 docker push "$IMAGE_NAME"
