@@ -138,19 +138,31 @@ class MinerClient(AbstractMinerClient):
         return validator_requests.GenericError
 
     async def handle_message(self, msg: BaseRequest):
-        if isinstance(msg, UnauthorizedError):
-            logger.error(f"Unauthorized in {self.miner_name}: {msg.code}, details: {msg.details}")
+        if isinstance(msg, self.incoming_generic_error_class()):
+            msg = f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
+            logger.warning(msg)
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR, long_description=msg
+            )
             return
-        if isinstance(msg, V0ExecutorManifestRequest):
+        elif isinstance(msg, UnauthorizedError):
+            logger.error(f"Unauthorized in {self.miner_name}: {msg.code}, details: {msg.details}")
+            await save_job_execution_event(
+                subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR, long_description=msg
+            )
+            return
+        elif isinstance(msg, V0ExecutorManifestRequest):
             try:
                 self.miner_manifest.set_result(msg.manifest)
             except asyncio.InvalidStateError:
                 logger.warning(f"Received manifest from {msg} but future was already set")
             return
+
         job_state = self.get_job_state(msg.job_uuid)
         if job_state is None:
             logger.info(f"Received info about another job: {msg}")
             return
+
         if isinstance(msg, V0AcceptJobRequest):
             logger.info(f"Miner {self.miner_name} accepted job")
         elif isinstance(
@@ -255,7 +267,7 @@ def create_and_run_sythethic_job_batch(netuid, network):
             msg = f"Failed to get metagraph - will not run synthetic jobs: {e}"
             logger.warning(msg)
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-                type_=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
                 long_description=msg,
             )
@@ -291,11 +303,7 @@ async def execute_synthetic_batch(axons_by_key, batch_id, miners, miners_previou
         for miner_id, miner_key in serving_miners
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    exceptions = [r for r in results if isinstance(r, Exception)]
-    if exceptions:
-        raise ExceptionGroup(
-            "exceptions raised in execute_miner_synthetic_jobs task(s)", exceptions
-        )
+    handle_synthetic_job_exceptions(results)
 
 
 async def save_job_execution_event(subtype: str, long_description: str, data={}, success=False):
@@ -377,7 +385,7 @@ async def execute_miner_synthetic_jobs(
             await execute_synthetic_jobs(miner_client, jobs, miner_previous_online_executors)
         except ExceptionGroup as e:
             msg = f"Multiple errors occurred during execution of some jobs for miner {miner_hotkey}: {e!r}"
-            logger.exception(msg)
+            logger.warning(msg)
             await save_job_execution_event(
                 subtype=SystemEvent.EventSubType.GENERIC_ERROR, long_description=msg
             )
@@ -647,11 +655,25 @@ async def execute_synthetic_jobs(
         for synthetic_job in synthetic_jobs
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    exceptions = [r for r in results if isinstance(r, Exception)]
+    handle_synthetic_job_exceptions(results)
+
+
+def handle_synthetic_job_exceptions(results):
+    exceptions = []
+    for r in results:
+        if isinstance(r, TimeoutError):
+            msg = f"Synthetic Job has exceeded timeout {JOB_LENGTH}: {r}"
+            logger.warning(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
+                long_description=msg,
+            )
+        elif isinstance(r, Exception):
+            logger.warning("Error occurred", exc_info=r)
+            exceptions.append(r)
     if exceptions:
-        for exception in exceptions:
-            logger.warning("Error occurred", exc_info=exception)
-        raise ExceptionGroup("exceptions raised in execute_job task(s)", exceptions)
+        raise ExceptionGroup("exceptions raised while executing synthetic job task(s)", exceptions)
 
 
 def get_miners(metagraph) -> list[Miner]:
