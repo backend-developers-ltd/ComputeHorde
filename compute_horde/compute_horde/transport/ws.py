@@ -46,6 +46,9 @@ class WSTransport(AbstractTransport):
                 await self._ws.close()
 
     async def connect(self):
+        if self._ws and self._ws.open:
+            return
+
         loop = asyncio.get_running_loop()
         start_time = loop.time()
         attempt = 0

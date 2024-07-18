@@ -44,7 +44,8 @@ class AbstractMinerClient(abc.ABC):
 
     async def connect(self):
         await self.transport.start()
-        self.read_messages_task = asyncio.create_task(self.read_messages())
+        if self.read_messages_task is None or self.read_messages_task.done():
+            self.read_messages_task = asyncio.create_task(self.read_messages())
 
     async def __aenter__(self):
         await self.connect()
