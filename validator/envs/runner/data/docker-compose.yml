@@ -58,7 +58,7 @@ services:
     env_file: ./.env
     environment:
       - CELERY_MASTER_CONCURRENCY=4
-      - CELERY_WORKER_CONCURRENCY=2
+      - CELERY_WORKER_CONCURRENCY=8
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
