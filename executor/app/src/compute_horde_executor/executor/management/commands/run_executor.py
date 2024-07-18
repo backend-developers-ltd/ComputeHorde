@@ -77,17 +77,18 @@ class RunConfigManager:
 
 
 class MinerClient(AbstractMinerClient):
-    def __init__(self, miner_address: str, token: str, transport: AbstractTransport):
-        super().__init__(miner_address, transport)
+    def __init__(self, miner_address: str, token: str, transport: AbstractTransport | None = None):
         self.miner_address = miner_address
         self.token = token
+        transport = transport or WSTransport(miner_address, self.miner_url())
+        super().__init__(miner_address, transport)
+
         self.job_uuid: str | None = None
         loop = asyncio.get_running_loop()
         self.initial_msg = loop.create_future()
         self.initial_msg_lock = asyncio.Lock()
         self.full_payload = loop.create_future()
         self.full_payload_lock = asyncio.Lock()
-        self.transport = transport or WSTransport(self.miner_url())
 
     def miner_url(self) -> str:
         return f"{self.miner_address}/v0.1/executor_interface/{self.token}"
