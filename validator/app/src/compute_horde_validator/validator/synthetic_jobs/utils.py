@@ -47,7 +47,7 @@ from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.metagraph_client import aget_weights_version
+from compute_horde_validator.validator.dynamic_config import aget_config, aget_weights_version
 from compute_horde_validator.validator.models import (
     JobBase,
     Miner,
@@ -57,7 +57,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.synthetic_jobs.generator import current
-from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME, aget_config
+from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 JOB_LENGTH = 300
 TIMEOUT_SETUP = 30

@@ -4,9 +4,6 @@ import io
 import zipfile
 from functools import cache
 
-from asgiref.sync import sync_to_async
-from constance import config
-
 MACHINE_SPEC_GROUP_NAME = "machine_spec_sending"
 
 
@@ -43,8 +40,3 @@ def get_dummy_inline_zip_volume() -> str:
     zip_contents = in_memory_output.read()
     base64_zip_contents = base64.b64encode(zip_contents)
     return base64_zip_contents.decode()
-
-
-@sync_to_async
-def aget_config(key):
-    return getattr(config, key)
