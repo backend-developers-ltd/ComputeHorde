@@ -138,6 +138,7 @@ CONSTANCE_CONFIG = {
         "The ratio at which the horde size needs to be changed for receiving bonus",
         float,
     ),
+    "DYNAMIC_WEIGHTS_VERSION": (1, "The weights version for synthetic jobs", int),
 }
 
 # Content Security Policy

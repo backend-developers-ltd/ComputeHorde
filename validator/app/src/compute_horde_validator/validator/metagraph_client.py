@@ -1,8 +1,6 @@
 import asyncio
 import datetime as dt
 import logging
-import threading
-import time
 
 import bittensor
 from asgiref.sync import sync_to_async
@@ -11,52 +9,6 @@ from django.conf import settings
 from .models import SystemEvent
 
 logger = logging.getLogger(__name__)
-
-# only when reading hyperparams fails - should be updated after hyperparam is updated
-DEFAULT_WEIGHTS_VERSION = 1
-
-
-class WeightVersionHolder:
-    def __init__(self):
-        self._time_set = 0
-        self.value = None
-        self._lock = threading.Lock()
-
-    def get(self):
-        if settings.DEBUG_OVERRIDE_WEIGHTS_VERSION is not None:
-            return settings.DEBUG_OVERRIDE_WEIGHTS_VERSION
-
-        with self._lock:
-            if time.time() - self._time_set > 300:
-                subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-                try:
-                    hyperparameters = subtensor.get_subnet_hyperparameters(
-                        netuid=settings.BITTENSOR_NETUID
-                    )
-                    if hyperparameters is None:
-                        raise RuntimeError("Network hyperparameters are None")
-                    self.value = hyperparameters.weights_version
-                except Exception as exc:
-                    # we actually want to know about the problem
-                    logger.error(
-                        f"Error when getting weights version - will use default '{DEFAULT_WEIGHTS_VERSION}': {exc}",
-                        exc_info=True,
-                    )
-                    self.value = DEFAULT_WEIGHTS_VERSION
-                self._time_set = time.time()
-        return self.value
-
-
-weights_version_holder = WeightVersionHolder()
-
-
-def get_weights_version():
-    return weights_version_holder.get()
-
-
-@sync_to_async(thread_sensitive=False)
-def aget_weights_version():
-    return get_weights_version()
 
 
 class AsyncMetagraphClient:

@@ -1,7 +1,7 @@
 from asgiref.sync import sync_to_async
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
-from compute_horde_validator.validator.metagraph_client import get_weights_version
+from compute_horde_validator.validator.dynamic_config import aget_weights_version
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
 )
@@ -19,12 +19,13 @@ MAX_SCORE = 2
 class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def __init__(self):
         # set synthetic_jobs based on subnet weights_version
-        self.weights_version = get_weights_version()
+        self.weights_version = None
         self.hash_job = None
         self.expected_answer = None
 
     async def ainit(self):
         """Allow to initialize generator in asyncio and non blocking"""
+        self.weights_version = await aget_weights_version()
         self.hash_job, self.expected_answer = await self._get_hash_job()
 
     @sync_to_async(thread_sensitive=False)
