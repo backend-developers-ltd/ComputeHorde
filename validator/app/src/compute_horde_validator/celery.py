@@ -14,6 +14,13 @@ app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
 
 def route_task(name, args, kwargs, options, task=None, **kw):
+    worker_queue_names = {
+        "compute_horde_validator.validator.tasks.fetch_receipts_from_miner",
+        "compute_horde_validator.validator.tasks.send_events_to_facilitator",
+        "compute_horde_validator.validator.tasks.fetch_dynamic_config",
+    }
+    if name in worker_queue_names:
+        return {"queue": "worker"}
     return {"queue": "celery"}
 
 

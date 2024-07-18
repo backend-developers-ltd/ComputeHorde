@@ -270,11 +270,12 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         ),
         "options": {},
     },
-    "fetch_receipts": {
-        "task": "compute_horde_validator.validator.tasks.fetch_receipts",
-        "schedule": crontab(minute="15,45"),  # try to stay away from set_scores task :)
-        "options": {},
-    },
+    # TODO: high CPU usage may impact synthetic jobs - we should profile it and make it less CPU heavy
+    # "fetch_receipts": {
+    #     "task": "compute_horde_validator.validator.tasks.fetch_receipts",
+    #     "schedule": crontab(minute="15,45"),  # try to stay away from set_scores task :)
+    #     "options": {},
+    # },
     "send_events_to_facilitator": {
         "task": "compute_horde_validator.validator.tasks.send_events_to_facilitator",
         "schedule": timedelta(minutes=5),
