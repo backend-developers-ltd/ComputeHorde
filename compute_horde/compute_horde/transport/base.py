@@ -6,6 +6,10 @@ class TransportConnectionError(Exception):
 
 
 class AbstractTransport(abc.ABC):
+    """
+    A base communication layer for sending and receiving messages.
+    """
+
     def __init__(self, name: str, *args, **kwargs):
         self.name = name
 

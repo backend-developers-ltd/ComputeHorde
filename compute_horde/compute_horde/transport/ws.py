@@ -10,6 +10,34 @@ logger = logging.getLogger(__name__)
 
 
 class WSTransport(AbstractTransport):
+    """
+    A WebSocket transport layer for exchanging messages between parties.
+
+    An instance needs to be started before sending or receiving messages and stopped after use. That's where the actual connection is established and terminated. Not started instances will raise a runtime error when trying to send or receive messages.
+
+    ```python
+    transport = WSTransport("ws://example.com")
+    await transport.start()
+
+    await transport.send("Hello, world!")
+
+    message = await transport.receive()
+
+    await transport.stop()
+    ```
+
+    Continuously receiving messages can be done using an async for loop.
+
+    ```python
+    transport = WSTransport("ws://example.com")
+    await transport.start()
+
+    async for message in transport:
+        print(message)
+    ```
+    await transport.stop()
+    """
+
     def __init__(
         self,
         name: str,
