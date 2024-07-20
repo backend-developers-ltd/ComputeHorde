@@ -28,7 +28,7 @@ up once and then queries the Job back and forth multiple times for the lifetime 
 requests is the only form of network communication the Job is allowed. Additional data may be fed to the Job. Details
 must be, however, passed through the Miner (not directly).
 
-![streaming_organic_job.puml.svg](streaming_organic_job.puml.svg)
+![streaming_organic_job.puml.svg](streaming_organic_job_full.puml.svg)
 
 TODO: when Job finishes handling a requests and provides a signature, it should also provide timestamps. So the blob to
 sign is gonna contain:
