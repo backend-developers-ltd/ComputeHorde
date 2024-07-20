@@ -1,0 +1,39 @@
+@startuml
+Actor Client
+participant ComputeHorde
+participant Job
+participant Storage
+
+note over ComputeHorde: this component represents several layers\nof ComputeHorde, merged for brevity.\nThese are: Facilitator, Validator, Miner and Executor.
+Client->Client: Generate a **client keypair** (via facilitator sdk)
+Client->ComputeHorde: Send job details and the public key
+
+opt job requires fetching data
+    ComputeHorde->Storage: Fetch data
+end
+
+ComputeHorde->Job: Start Job process
+activate Job #lightgreen
+ComputeHorde-->Job: Attempt connecting to a\npredefined websocket route
+Job->ComputeHorde: Report readiness for serving requests
+
+ComputeHorde->Client: Report readiness for serving requests,\nprovide Job IP address, port and **Job public key**
+
+loop until Client terminates the job or timeout occurs
+    Client->Job: Send request, it can be a streamed or buffered\nHTTP or a websocket. Request is signed using **client keypair**.
+    activate Job #darkgreen
+    Job->Client: Reply. Before the transmission ends, sign input/output\ndigest (or full value(s) in case of texts)\nwith the private counterpart of **Job public key**.
+    deactivate Job
+end
+
+Job->ComputeHorde: Report finish
+deactivate Job
+
+opt job requires uploading data
+    ComputeHorde->Storage: Upload data
+end
+ComputeHorde->Storage: Upload stdout and stderr
+
+ComputeHorde->Client: Report job done
+
+@enduml

@@ -1,0 +1,58 @@
+@startuml
+participant SN17Validator
+participant SN17ValidatorPrivateExecutionAgent
+participant SN17Miner
+participant ComputeHorde
+participant Job
+participant Storage
+
+note over ComputeHorde: This component represents several layers\nof ComputeHorde, merged for brevity.\nThese are: Facilitator, Validator, Miner and Executor.
+SN17Validator->SN17Validator: Generate a **client keypair** (via facilitator sdk)
+SN17Validator->ComputeHorde: Send job details and the public key
+
+opt job requires fetching data
+    ComputeHorde->Storage: Fetch data
+end
+
+ComputeHorde->Job: Start Job process
+activate Job #lightgreen
+ComputeHorde-->Job: Attempt connecting to a\npredefined websocket route
+Job->ComputeHorde: Report readiness for serving requests
+
+ComputeHorde->SN17Validator: Report readiness for serving requests,\nprovide Job IP address, port and **Job public key**
+
+loop
+    SN17Validator->SN17Miner: Issue request
+    activate SN17Miner #lightgreen
+    SN17Miner->SN17Validator: Reply
+    deactivate SN17Miner
+
+    SN17Validator->Job: Send a request to validate Miner's result.\nRequest is signed using **client keypair**.
+    activate Job #darkgreen
+    Job->SN17Validator: Reply. Before the transmission ends, sign input/output\ndigest (or full value(s) in case of texts)\nwith the private counterpart of **Job public key**.
+    deactivate Job
+    opt Validate every nth ComputeHorde's answer on trusted hardware
+        SN17Validator->SN17ValidatorPrivateExecutionAgent: Send the same request as the one to ComputeHorde
+        activate SN17ValidatorPrivateExecutionAgent #lightblue
+        SN17ValidatorPrivateExecutionAgent->SN17Validator: Reply
+        deactivate SN17ValidatorPrivateExecutionAgent
+
+        SN17Validator->SN17Validator: Compare replies
+        opt If malicious ComputeHorde miner behaviour detected
+            SN17Validator->ComputeHorde: Inform all validators about malicious ComputeHorde miner.\nThe signature (using the job key) in the result\nascertains validators of the miner's result.
+            ComputeHorde->ComputeHorde: All validators, after verifying the correct\nanswers on their own trusted hardware,\ngive 0 weights to the malicious miner.
+        end
+    end
+end
+
+Job->ComputeHorde: Report finish
+deactivate Job
+
+opt job requires uploading data
+    ComputeHorde->Storage: Upload data
+end
+ComputeHorde->Storage: Upload stdout and stderr
+
+ComputeHorde->SN17Validator: Report job done
+
+@enduml
