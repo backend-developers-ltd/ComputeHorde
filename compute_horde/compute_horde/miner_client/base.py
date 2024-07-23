@@ -94,7 +94,7 @@ class AbstractMinerClient(abc.ABC):
                 return
             except (websockets.WebSocketException, OSError) as ex:
                 self.debounce_counter += 1
-                logger.info(f"Could not connect to miner {self.miner_name}: {repr(ex)}")
+                logger.warning(f"Could not connect to miner {self.miner_name}: {repr(ex)}")
 
     def sleep_time(self):
         return (2**self.debounce_counter) + random.random()
@@ -141,14 +141,6 @@ class AbstractMinerClient(abc.ABC):
                 self.deferred_send_model(self.outgoing_generic_error_class()(details=error_msg))
                 continue
 
-            if isinstance(msg, self.incoming_generic_error_class()):
-                try:
-                    raise RuntimeError(
-                        f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
-                    )
-                except Exception:
-                    logger.exception("")
-                continue
             try:
                 await self.handle_message(msg)
             except UnsupportedMessageReceived:
