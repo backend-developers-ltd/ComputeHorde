@@ -43,13 +43,21 @@ jobs:
         run: |
           cd executor
           IMAGE_NAME=andreeareef/compute-horde-executor-e2e:v0-latest
+          echo "HERE -------------------------------"
+          echo "${{ secrets.DOCKERHUB_DELEGATED_KEY_TEST }}" > ci.key
+          chmod 600 ci.key
+          echo password2000 | docker trust key load ci.key
+          echo "HERE ---- will pull"
           docker pull "$IMAGE_NAME" || true
+          echo "HERE ---- will build"
           docker build \
             --build-context compute-horde=../compute_horde \
             -t "$IMAGE_NAME" \
             -f app/envs/prod/Dockerfile \
             .
+          echo "HERE ---- will push"
           docker push "$IMAGE_NAME"
+          echo "HERE ---- pushed"
 
       - name: Build miner nginx image
         run: |
