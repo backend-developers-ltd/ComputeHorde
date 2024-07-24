@@ -264,5 +264,7 @@ async def execute_organic_job(
         else:
             comment = f"Unexpected msg from miner {miner_client.miner_name}: {msg}"
             logger.warning(comment)
-            await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
+            await save_event(
+                subtype=SystemEvent.EventSubType.UNEXPECTED_MESSAGE, long_description=comment
+            )
             raise ValueError(comment)

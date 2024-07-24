@@ -142,13 +142,13 @@ class MinerClient(AbstractMinerClient):
             msg = f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
             logger.warning(msg)
             await save_job_execution_event(
-                subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR, long_description=msg
+                subtype=SystemEvent.EventSubType.GENERIC_ERROR, long_description=msg
             )
             return
         elif isinstance(msg, UnauthorizedError):
             logger.error(f"Unauthorized in {self.miner_name}: {msg.code}, details: {msg.details}")
             await save_job_execution_event(
-                subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR, long_description=msg
+                subtype=SystemEvent.EventSubType.UNAUTHORIZED, long_description=msg
             )
             return
         elif isinstance(msg, V0ExecutorManifestRequest):
@@ -358,7 +358,7 @@ async def execute_miner_synthetic_jobs(
             msg = f"Cannot send synthetic jobs to miner {miner_hotkey}: manifest future timed out"
             logger.warning(msg)
             await save_job_execution_event(
-                subtype=SystemEvent.EventSubType.FAILURE, long_description=msg, data=data
+                subtype=SystemEvent.EventSubType.MANIFEST_ERROR, long_description=msg, data=data
             )
             return
 
@@ -474,7 +474,9 @@ async def _execute_synthetic_job(
         logger.debug(f"Miner {miner_client.miner_name} ready for job: {msg}")
     else:
         comment = f"Unexpected msg from miner {miner_client.miner_name}: {msg}"
-        await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
+        await save_event(
+            subtype=SystemEvent.EventSubType.UNEXPECTED_MESSAGE, long_description=comment
+        )
         raise ValueError(comment)
 
     # Send job started receipt to miner
