@@ -690,6 +690,14 @@ def get_miners(metagraph) -> list[Miner]:
     new_miners = Miner.objects.bulk_create(
         [Miner(hotkey=n.hotkey) for n in metagraph.neurons if n.hotkey not in existing_keys]
     )
+    data = {"block": metagraph.block.item()}
+    if new_miners:
+        data["new_miners"] = len(new_miners)
+    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        type=SystemEvent.EventType.VALIDATOR_MINERS_REFRESH,
+        subtype=SystemEvent.EventSubType.SUCCESS,
+        data=data,
+    )
     return existing + new_miners
 
 
