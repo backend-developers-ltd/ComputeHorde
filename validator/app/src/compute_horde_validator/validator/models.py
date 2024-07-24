@@ -36,6 +36,7 @@ class SystemEvent(models.Model):
         WRITING_TO_CHAIN_GENERIC_ERROR = "WRITING_TO_CHAIN_GENERIC_ERROR"
         GIVING_UP = "GIVING_UP"
         MANIFEST_ERROR = "MANIFEST_ERROR"
+        MANIFEST_TIMEOUT = "MANIFEST_TIMEOUT"
         MINER_CONNECTION_ERROR = "MINER_CONNECTION_ERROR"
         JOB_NOT_STARTED = "JOB_NOT_STARTED"
         JOB_REJECTED = "JOB_REJECTED"
@@ -44,6 +45,8 @@ class SystemEvent(models.Model):
         RECEIPT_SEND_ERROR = "RECEIPT_SEND_ERROR"
         SPECS_SEND_ERROR = "SPECS_SENDING_ERROR"
         HEARTBEAT_ERROR = "HEARTBEAT_ERROR"
+        UNEXPECTED_MESSAGE = "UNEXPECTED_MESSAGE"
+        UNAUTHORIZED = "UNAUTHORIZED"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
