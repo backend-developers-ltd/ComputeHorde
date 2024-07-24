@@ -37,7 +37,7 @@ jobs:
             ssh-private-key: ${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}
 
       - name: Docker login
-        run: echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+        run: echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
 
       - name: Build executor image
         run: |
