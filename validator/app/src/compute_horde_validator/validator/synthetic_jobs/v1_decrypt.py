@@ -100,18 +100,11 @@ def scrape_specs() -> dict[str, any]:
     return data
 
 
-# json dump to file
-with open("/specs/specs.json", "w") as file:
-    json.dump(scrape_specs(), file)
-
-
 def hash(s: bytes) -> bytes:
     return b64encode(hashlib.sha256(s).digest(), altchars=b"-_")
 
 
-with open("/volume/payload.txt", "rb") as file:
-    data = pickle.load(file)
-
+def decrypt(data) -> str:
     answers = []
     for i in range(int(data["n"])):
         payload = data["payloads"][i]
@@ -131,7 +124,21 @@ with open("/volume/payload.txt", "rb") as file:
         passwords = subprocess.check_output(cmd, shell=True, text=True)
         passwords = [p for p in sorted(passwords.split("\n")) if p != ""]
         answers.append(passwords)
-
-    print(
-        hash("".join(["".join(passwords) for passwords in answers]).encode("utf-8")).decode("utf-8")
+    return hash("".join(["".join(passwords) for passwords in answers]).encode("utf-8")).decode(
+        "utf-8"
     )
+
+
+def run():
+    # json dump to file
+    with open("/specs/specs.json", "w") as file:
+        json.dump(scrape_specs(), file)
+
+    with open("/volume/payload.txt", "rb") as file:
+        data = pickle.load(file)
+        answer = decrypt(data)
+        print(answer)
+
+
+if __name__ == "__main__":
+    run()

@@ -9,9 +9,7 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 from cryptography.fernet import Fernet
-
-from compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
-    HASHJOB_PARAMS,
+from synthetic_job import (
     Algorithm,
     JobParams,
     SyntheticJob,
@@ -105,6 +103,7 @@ class V1SyntheticJob(SyntheticJob):
             "num_letters": [params.num_letters for params in self.params],
             "num_digits": [params.num_digits for params in self.params],
         }
+
         return pickle.dumps(data)
 
     def docker_run_cmd(self) -> list[str]:
@@ -125,9 +124,22 @@ class V1SyntheticJob(SyntheticJob):
 
 
 if __name__ == "__main__":
+    import json
+
+    from v1_decrypt import decrypt
+
     algorithms = Algorithm.get_all_algorithms()
-    params = [HASHJOB_PARAMS[1][algorithm] for algorithm in algorithms]
+
+    params = [
+        JobParams(timeout=53, num_letters=2, num_digits=0, num_hashes=1),
+        JobParams(timeout=53, num_letters=1, num_digits=1, num_hashes=1),
+        JobParams(timeout=53, num_letters=1, num_digits=1, num_hashes=1),
+    ]
+
     job = V1SyntheticJob.generate(algorithms, params)
     # print(job.raw_script())
-    print(f"Payload: {job.payload}")
-    print(f"Answer: {job.answer}")
+    data = pickle.loads(job.payload)
+    answers = decrypt(data)
+    print(f"Payload: {json.dumps(data, indent=4)}")
+    print(f"Cracked Answer:  {answers}")
+    print(f"Expected Answer: {job.answer}")
