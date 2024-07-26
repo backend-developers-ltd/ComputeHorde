@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import pickle
 import random
@@ -9,11 +10,15 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 from cryptography.fernet import Fernet
-from synthetic_job import (
+
+from compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
     Algorithm,
     JobParams,
     SyntheticJob,
 )
+
+# pack 4 hotkey characters into 3 bytes
+SALT_HOTKEY_NUM_CHARS = 4
 
 
 @dataclass
@@ -22,6 +27,7 @@ class V1SyntheticJob(SyntheticJob):
     passwords: list[list[str]]
     salts: list[bytes]
     params: list[JobParams]
+    salt_prefix: str
 
     DIGITS: ClassVar[str] = string.digits
     ALPHABET: ClassVar[str] = string.ascii_letters + DIGITS
@@ -34,7 +40,11 @@ class V1SyntheticJob(SyntheticJob):
 
     @classmethod
     def generate(
-        cls, algorithms: list[Algorithm], params: list[JobParams], salt_length_bytes: int = 8
+        cls,
+        algorithms: list[Algorithm],
+        params: list[JobParams],
+        salt_length_bytes: int = 8,
+        salt_prefix: str | None = None,
     ) -> Self:
         # generate distinct passwords for each algorithm
         passwords = []
@@ -48,11 +58,22 @@ class V1SyntheticJob(SyntheticJob):
                 )
             passwords.append(sorted(list(_passwords)))
 
+        # generate salts
+        salt_bytes_prefix = b""
+        if salt_prefix:
+            salt_prefix = salt_prefix[:SALT_HOTKEY_NUM_CHARS]
+            salt_bytes_prefix = base64.b64decode(salt_prefix)
+        salts = [
+            salt_bytes_prefix + secrets.token_bytes(salt_length_bytes - len(salt_bytes_prefix))
+            for _ in range(len(algorithms))
+        ]
+
         return cls(
             algorithms=algorithms,
             params=params,
             passwords=passwords,
-            salts=[secrets.token_bytes(salt_length_bytes) for _ in range(len(algorithms))],
+            salts=salts,
+            salt_prefix=salt_prefix if salt_prefix else "",
         )
 
     @property
@@ -115,9 +136,10 @@ class V1SyntheticJob(SyntheticJob):
 
     @property
     def answer(self) -> str:
-        return self._hash(
-            "".join(["".join(passwords) for passwords in self.passwords]).encode("utf-8")
-        ).decode("utf-8")
+        passwords_str = "".join(["".join(passwords) for passwords in self.passwords])
+        # if available, also verify the miner hotkey salt prefix as part of the answer
+        passwords_str += self.salt_prefix
+        return self._hash(passwords_str.encode("utf-8")).decode("utf-8")
 
     def __str__(self) -> str:
         return f"V1SyntheticJob {self.algorithms} {self.params}"
@@ -136,10 +158,12 @@ if __name__ == "__main__":
         JobParams(timeout=53, num_letters=1, num_digits=1, num_hashes=1),
     ]
 
-    job = V1SyntheticJob.generate(algorithms, params)
+    job = V1SyntheticJob.generate(algorithms, params, salt_prefix="5HBVrFGy6oYhRRtEE")
     # print(job.raw_script())
+
     data = pickle.loads(job.payload)
-    answers = decrypt(data)
     print(f"Payload: {json.dumps(data, indent=4)}")
+
+    answers = decrypt(data)
     print(f"Cracked Answer:  {answers}")
     print(f"Expected Answer: {job.answer}")

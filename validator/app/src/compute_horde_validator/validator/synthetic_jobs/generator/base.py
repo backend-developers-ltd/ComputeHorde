@@ -5,7 +5,7 @@ from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 
 class BaseSyntheticJobGenerator(abc.ABC):
-    async def ainit(self):
+    async def ainit(self, miner_hotkey: str = None):
         """Allow to initialize generator in asyncio and non blocking"""
 
     @abc.abstractmethod

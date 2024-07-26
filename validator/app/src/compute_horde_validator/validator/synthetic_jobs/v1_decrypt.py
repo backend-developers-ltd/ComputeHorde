@@ -1,3 +1,4 @@
+import base64
 import csv
 import hashlib
 import json
@@ -8,6 +9,9 @@ import subprocess
 from base64 import b64encode
 
 from cryptography.fernet import Fernet
+
+# pack 4 hotkey characters into 3 bytes
+SALT_HOTKEY_NUM_BYTES = 3
 
 
 def run_cmd(cmd):
@@ -104,8 +108,16 @@ def hash(s: bytes) -> bytes:
     return b64encode(hashlib.sha256(s).digest(), altchars=b"-_")
 
 
+def get_salt_prefix(payload: str) -> str:
+    salt = payload.split(":")[1]
+    salt = bytes.fromhex(salt)
+    return base64.b64encode(salt[:SALT_HOTKEY_NUM_BYTES]).decode("utf-8")
+
+
 def decrypt(data) -> str:
     answers = []
+    salt_prefixes = []
+    salt_prefix = ""
     for i in range(int(data["n"])):
         payload = data["payloads"][i]
         mask = data["masks"][i]
@@ -117,6 +129,8 @@ def decrypt(data) -> str:
             key = b64encode(hashlib.sha256(passwords).digest(), altchars=b"-_")
             payload = Fernet(key).decrypt(payload).decode("utf-8")
 
+        salt_prefixes.append(get_salt_prefix(payload))
+
         with open("_payload.txt", mode="wb") as f:
             f.write(payload.encode("utf-8"))
 
@@ -124,9 +138,16 @@ def decrypt(data) -> str:
         passwords = subprocess.check_output(cmd, shell=True, text=True)
         passwords = [p for p in sorted(passwords.split("\n")) if p != ""]
         answers.append(passwords)
-    return hash("".join(["".join(passwords) for passwords in answers]).encode("utf-8")).decode(
-        "utf-8"
-    )
+
+    # if salt prefix are consistent, then hotkey prefix is encoded
+    if all([x == salt_prefixes[0] for x in salt_prefixes[1:]]):
+        salt_prefix = salt_prefixes[0]
+    else:
+        salt_prefix = ""
+
+    passwords_str = "".join(["".join(passwords) for passwords in answers])
+    passwords_str += salt_prefix
+    return hash(passwords_str.encode("utf-8")).decode("utf-8")
 
 
 def run():

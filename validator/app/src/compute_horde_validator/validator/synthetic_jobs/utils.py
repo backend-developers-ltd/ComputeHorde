@@ -427,8 +427,10 @@ async def _execute_synthetic_job(
 
     job_state = miner_client.get_job_state(str(job.job_uuid))
     job_executor_class = ExecutorClass(job.executor_class)
+
     job_generator = await current.synthetic_job_generator_factory.create(job_executor_class)
-    await job_generator.ainit()
+
+    await job_generator.ainit(miner_client.my_hotkey)
     job.job_description = job_generator.job_description()
     await job.asave()
     await miner_client.send_model(
