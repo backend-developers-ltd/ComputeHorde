@@ -244,13 +244,10 @@ class MinerClient(AbstractMinerClient):
         return ws
 
 
-def create_and_run_sythethic_job_batch(netuid, network):
-    batch = SyntheticJobBatch.objects.create(
-        accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
-    )
+def create_and_run_synthetic_job_batch(netuid, network):
     if settings.DEBUG_MINER_KEY:
-        miners = []
-        axons_by_key = {}
+        miners: list[Miner] = []
+        axons_by_key: dict[str, bittensor.AxonInfo] = {}
         for miner_index in range(settings.DEBUG_MINER_COUNT):
             hotkey = settings.DEBUG_MINER_KEY
             if miner_index > 0:
@@ -280,33 +277,36 @@ def create_and_run_sythethic_job_batch(netuid, network):
             return
         axons_by_key = {n.hotkey: n.axon_info for n in metagraph.neurons}
         miners = get_miners(metagraph)
-    miners_previous_online_executors = get_previous_online_executors(miners, batch)
-    miners = [(miner.id, miner.hotkey) for miner in miners]
-    execute_synthetic_batch(axons_by_key, batch.id, miners, miners_previous_online_executors)
+        miners = [
+            miner
+            for miner in miners
+            if miner.hotkey in axons_by_key and axons_by_key[miner.hotkey].is_serving
+        ]
+
+    execute_synthetic_batch(axons_by_key, miners)
 
 
 @async_to_sync
-async def execute_synthetic_batch(axons_by_key, batch_id, miners, miners_previous_online_executors):
-    serving_miners = [
-        (miner_id, miner_key)
-        for miner_id, miner_key in miners
-        if axons_by_key[miner_key].is_serving
-    ]
+async def execute_synthetic_batch(axons_by_key: dict[str, bittensor.AxonInfo], miners: list[Miner]):
+    batch = await SyntheticJobBatch.objects.acreate(
+        accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
+    )
+    miners_previous_online_executors = await get_previous_online_executors(miners, batch)
 
     tasks = [
         asyncio.create_task(
             asyncio.wait_for(
                 execute_miner_synthetic_jobs(
-                    batch_id,
-                    miner_id,
-                    miner_key,
-                    axons_by_key[miner_key],
-                    miners_previous_online_executors.get(miner_id),
+                    batch.id,
+                    miner.id,
+                    miner.hotkey,
+                    axons_by_key[miner.hotkey],
+                    miners_previous_online_executors.get(miner.id),
                 ),
                 JOB_LENGTH,
             )
         )
-        for miner_id, miner_key in serving_miners
+        for miner in miners
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     handle_synthetic_job_exceptions(results)
@@ -710,14 +710,18 @@ def get_miners(metagraph) -> list[Miner]:
     return existing + new_miners
 
 
-def get_previous_online_executors(miners, batch):
+async def get_previous_online_executors(
+    miners: list[Miner], batch: SyntheticJobBatch
+) -> dict[int, int]:
     miner_ids = {miner.id for miner in miners}
-    previous_batch = SyntheticJobBatch.objects.filter(id__lt=batch.id).order_by("-id").first()
+    previous_batch = (
+        await SyntheticJobBatch.objects.filter(id__lt=batch.id).order_by("-id").afirst()
+    )
     if previous_batch is None:
         return {}
     previous_online_executors = {
         manifest.miner_id: manifest.online_executor_count
-        for manifest in MinerManifest.objects.filter(batch_id=previous_batch.id)
+        async for manifest in MinerManifest.objects.filter(batch_id=previous_batch.id)
         if manifest.miner_id in miner_ids
     }
     return previous_online_executors
