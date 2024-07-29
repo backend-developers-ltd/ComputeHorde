@@ -498,8 +498,9 @@ async def handle_synthetic_job_exceptions(results):
 
 
 def get_miners(metagraph) -> list[Miner]:
-    existing = list(Miner.objects.filter(hotkey__in=[n.hotkey for n in metagraph.neurons]))
-    existing_keys = [m.hotkey for m in existing]
+    keys = {n.hotkey for n in metagraph.neurons}
+    existing = list(Miner.objects.filter(hotkey__in=keys))
+    existing_keys = {m.hotkey for m in existing}
     new_miners = Miner.objects.bulk_create(
         [Miner(hotkey=n.hotkey) for n in metagraph.neurons if n.hotkey not in existing_keys]
     )
