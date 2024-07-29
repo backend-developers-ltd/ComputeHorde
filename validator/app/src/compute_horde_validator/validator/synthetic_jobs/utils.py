@@ -191,7 +191,7 @@ async def execute_miner_synthetic_jobs(
 
         jobs = await SyntheticJob.objects.abulk_create(jobs)
         try:
-            await execute_synthetic_jobs(miner_client, jobs, miner_previous_online_executors)
+            await _execute_synthetic_jobs(miner_client, jobs, miner_previous_online_executors)
         except ExceptionGroup as e:
             msg = f"Multiple errors occurred during execution of some jobs for miner {miner_hotkey}: {e!r}"
             logger.warning(msg)
@@ -440,7 +440,7 @@ async def _execute_synthetic_job(
         raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
 
 
-async def execute_synthetic_job(
+async def _execute_synthetic_job_id(
     miner_client: MinerClient, synthetic_job_id, miner_previous_online_executors
 ):
     synthetic_job: SyntheticJob = await SyntheticJob.objects.prefetch_related("miner").aget(
@@ -449,7 +449,7 @@ async def execute_synthetic_job(
     await _execute_synthetic_job(miner_client, synthetic_job, miner_previous_online_executors)
 
 
-async def execute_synthetic_jobs(
+async def _execute_synthetic_jobs(
     miner_client: MinerClient,
     synthetic_jobs: Iterable[SyntheticJob],
     miner_previous_online_executors,
@@ -457,7 +457,7 @@ async def execute_synthetic_jobs(
     tasks = [
         asyncio.create_task(
             asyncio.wait_for(
-                execute_synthetic_job(
+                _execute_synthetic_job_id(
                     miner_client, synthetic_job.id, miner_previous_online_executors
                 ),
                 JOB_LENGTH,
