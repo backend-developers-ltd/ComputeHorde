@@ -41,7 +41,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
-    create_and_run_sythethic_job_batch,
+    create_and_run_synthetic_job_batch,
     save_receipt_event,
 )
 
@@ -74,7 +74,7 @@ def _run_synthetic_jobs():
     try:
         # metagraph will be refetched and that's fine, after sleeping
         # for e.g. 30 minutes we should refetch the miner list
-        create_and_run_sythethic_job_batch(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
+        create_and_run_synthetic_job_batch(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
     except billiard.exceptions.SoftTimeLimitExceeded:
         logger.info("Running synthetic jobs timed out")
 
