@@ -226,11 +226,12 @@ class Weights(models.Model):
     This is used to verify the weights revealed by the validator later.
     """
     uids = ArrayField(models.IntegerField())
-    weights = ArrayField(models.FloatField())
+    weights = ArrayField(models.IntegerField())
     salt = ArrayField(models.IntegerField(), default=get_random_salt)
+    version_key = models.IntegerField()
     block = models.BigIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
-    revealed_at = models.DateTimeField(null=True, default=True)
+    revealed_at = models.DateTimeField(null=True, default=None)
 
     class Meta:
         constraints = [
@@ -238,7 +239,7 @@ class Weights(models.Model):
         ]
 
     def save(self, *args, **kwargs) -> None:
-        assert len(self.uids) == len(self.weights), "Length of uids and weights should be same"
+        assert len(self.uids) == len(self.weights), "Length of uids and weights should be the same"
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
