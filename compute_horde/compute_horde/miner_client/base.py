@@ -47,6 +47,9 @@ class AbstractMinerClient(abc.ABC):
         await self.connect()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
+    async def close(self):
         for t in self.deferred_send_tasks:
             t.cancel()
 
