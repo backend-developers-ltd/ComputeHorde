@@ -237,6 +237,9 @@ class Weights(models.Model):
         constraints = [
             UniqueConstraint(fields=["block"], name="unique_block"),
         ]
+        indexes = [
+            models.Index(fields=["created_at", "revealed_at"]),
+        ]
 
     def save(self, *args, **kwargs) -> None:
         assert len(self.uids) == len(self.weights), "Length of uids and weights should be the same"

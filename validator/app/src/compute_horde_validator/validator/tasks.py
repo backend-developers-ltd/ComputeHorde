@@ -61,6 +61,14 @@ WEIGHT_SETTING_ATTEMPTS = 100
 WEIGHT_SETTING_FAILURE_BACKOFF = 5
 
 
+class WeightsRevealError(Exception):
+    pass
+
+
+class UnrevealedWeightsError(Exception):
+    pass
+
+
 @app.task(
     soft_time_limit=SYNTHETIC_JOBS_SOFT_LIMIT,
     time_limit=SYNTHETIC_JOBS_HARD_LIMIT,
@@ -115,10 +123,34 @@ def do_set_weights(
     """
     bittensor.turn_console_off()
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    metagraph = subtensor_.metagraph(netuid)
+    current_block = metagraph.block.item()
+
+    try:
+        hyperparams = subtensor_.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
+        commit_reveal_weights_enabled = bool(hyperparams.commit_reveal_weights_enabled)
+        commit_reveal_weights_interval = hyperparams.commit_reveal_weights_interval
+    except Exception:
+        logger.exception('Failed to fetch "commit_reveal_weights_*" hyperparameters')
+        commit_reveal_weights_enabled = None
+        commit_reveal_weights_interval = 0
 
     def _commit_weights() -> tuple[bool, str]:
-        metagraph = subtensor_.metagraph(netuid)
         with transaction.atomic():
+            last_weights = Weights.objects.order_by('-created_at').first()
+            if (
+                last_weights and
+                last_weights.revealed_at is None and
+                last_weights.block >= current_block - commit_reveal_weights_interval * 1.5
+            ):
+                # ___|______________________|______________________|____________________
+                #    ^-commit weights       ^-time to reveal       ^-2x time to reveal
+                #    |_________________________________|_______________________________
+                #     impossible to commit new weights     can commit new weights
+                #     unless last weights are revealed     no matter what
+
+                raise UnrevealedWeightsError("Cannot commit new weights before revealing old ones")
+
             weights_in_db = Weights.objects.create(
                 uids=uids,
                 weights=weights,
@@ -148,13 +180,6 @@ def do_set_weights(
             wait_for_finalization=wait_for_finalization,
             max_retries=2,
         )
-
-    try:
-        hyperparams = subtensor_.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
-        commit_reveal_weights_enabled = bool(hyperparams.commit_reveal_weights_enabled)
-    except Exception:
-        logger.exception('Failed to fetch "commit_reveal_weights_enabled" hyperparameter')
-        commit_reveal_weights_enabled = None
 
     match commit_reveal_weights_enabled:
         case None:
@@ -437,17 +462,13 @@ def set_scores():
 @app.task()
 def reveal_scores(reveal_in_advance_num_blocks: int = 10) -> None:
     """
-    Selects Weights that are older than `commit_reveal_weights_interval`
+    Select latest Weights that are older than `commit_reveal_weights_interval`
     and haven't been revealed yet, and reveal them.
     """
     subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
 
     try:
         hyperparams = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
-        if not hyperparams.commit_reveal_weights_enabled:
-            logger.debug("Commit reveal weights is not enabled")
-            return
-
         commit_reveal_weights_interval = hyperparams.commit_reveal_weights_interval
     except Exception:
         logger.exception('Failed to fetch "commit_reveal_weights_enabled" hyperparameter')
@@ -456,21 +477,14 @@ def reveal_scores(reveal_in_advance_num_blocks: int = 10) -> None:
     metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
     current_block_number = metagraph.block.item()
 
-    unrevealed_weights = (
-        Weights.objects
-        .filter(
-            revealed_at=None,
-            block__lte=current_block_number - (commit_reveal_weights_interval - reveal_in_advance_num_blocks),
-        )
-        .order_by("created_at")
-    )
-    for weights in unrevealed_weights:
-        logger.debug("Scheduling revealing weights record %s, date: %s", weights.id, weights.created_at)
-        do_reveal_weights.delay(weights_id=weights.id)
-
-
-class WeightsRevealError(Exception):
-    pass
+    last_weights = Weights.objects.order_by('-created_at').first()
+    if (
+        last_weights and
+        last_weights.revealed_at is None and
+        last_weights.block <= current_block_number - (commit_reveal_weights_interval - reveal_in_advance_num_blocks)
+    ):
+        logger.debug("Scheduling revealing weights record %s created at %s", last_weights.id, last_weights.created_at)
+        do_reveal_weights.delay(weights_id=last_weights.id)
 
 
 @app.task()

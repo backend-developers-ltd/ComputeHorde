@@ -279,10 +279,7 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
     # },
     "reveal_scores": {
         "task": "compute_horde_validator.validator.tasks.reveal_scores",
-        "schedule": crontab(
-            minute=env("DEBUG_SET_SCORES_MINUTE", default="*/1"),
-            hour=env("DEBUG_SET_SCORES_HOUR", default="*"),
-        ),
+        "schedule": timedelta(minutes=1),
         "options": {},
     },
     "send_events_to_facilitator": {
