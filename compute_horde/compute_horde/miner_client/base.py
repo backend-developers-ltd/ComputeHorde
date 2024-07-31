@@ -54,8 +54,9 @@ class AbstractMinerClient(abc.ABC):
         await self.close()
 
     async def close(self):
-        for t in self.deferred_send_tasks:
-            t.cancel()
+        for deferred_send_task in self.deferred_send_tasks:
+            if not deferred_send_task.done():
+                deferred_send_task.cancel()
 
         if self.read_messages_task is not None and not self.read_messages_task.done():
             self.read_messages_task.cancel()
