@@ -30,8 +30,8 @@ class BaseSyntheticJobGenerator(abc.ABC):
     @abc.abstractmethod
     def docker_run_options_preset(self) -> str: ...
 
-    def docker_run_cmd(self) -> list[str] | None:
-        return None
+    def docker_run_cmd(self) -> list[str]:
+        return []
 
     def raw_script(self) -> str | None:
         return None

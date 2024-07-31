@@ -72,7 +72,7 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def docker_run_options_preset(self) -> str:
         return "mock"
 
-    def docker_run_cmd(self) -> list[str] | None:
+    def docker_run_cmd(self) -> list[str]:
         return ["mock"]
 
     async def volume_contents(self) -> str:
