@@ -137,11 +137,11 @@ def do_set_weights(
 
     def _commit_weights() -> tuple[bool, str]:
         with transaction.atomic():
-            last_weights = Weights.objects.order_by('-created_at').first()
+            last_weights = Weights.objects.order_by("-created_at").first()
             if (
-                last_weights and
-                last_weights.revealed_at is None and
-                last_weights.block >= current_block - commit_reveal_weights_interval * 1.5
+                last_weights
+                and last_weights.revealed_at is None
+                and last_weights.block >= current_block - commit_reveal_weights_interval * 1.5
             ):
                 # ___|______________________|______________________|____________________
                 #    ^-commit weights       ^-time to reveal       ^-2x time to reveal
@@ -185,7 +185,7 @@ def do_set_weights(
         case None:
             # we don't know current hyperparams, so we can't decide which method to use -> try both
             is_success, msg = _commit_weights()
-            if not is_success:  # 'Subtensor returned `CommitRevealDisabled (Module)` error. This means: `Attemtping to commit/reveal weights when disabled.`'
+            if not is_success:  # 'Subtensor returned `CommitRevealDisabled (Module)` error. This means: `attempting to commit/reveal weights when disabled.`'
                 is_success, msg = _set_weights()
             return is_success, msg
 
@@ -194,7 +194,6 @@ def do_set_weights(
 
         case False:
             return _set_weights()
-
 
 
 @shared_task
@@ -477,13 +476,18 @@ def reveal_scores(reveal_in_advance_num_blocks: int = 10) -> None:
     metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
     current_block_number = metagraph.block.item()
 
-    last_weights = Weights.objects.order_by('-created_at').first()
+    last_weights = Weights.objects.order_by("-created_at").first()
     if (
-        last_weights and
-        last_weights.revealed_at is None and
-        last_weights.block <= current_block_number - (commit_reveal_weights_interval - reveal_in_advance_num_blocks)
+        last_weights
+        and last_weights.revealed_at is None
+        and last_weights.block
+        <= current_block_number - (commit_reveal_weights_interval - reveal_in_advance_num_blocks)
     ):
-        logger.debug("Scheduling revealing weights record %s created at %s", last_weights.id, last_weights.created_at)
+        logger.debug(
+            "Scheduling revealing weights record %s created at %s",
+            last_weights.id,
+            last_weights.created_at,
+        )
         do_reveal_weights.delay(weights_id=last_weights.id)
 
 
@@ -491,13 +495,15 @@ def reveal_scores(reveal_in_advance_num_blocks: int = 10) -> None:
 def do_reveal_weights(weights_id: int) -> None:
     with transaction.atomic():
         weights = (
-            Weights.objects
-            .filter(id=weights_id, revealed_at=None)
+            Weights.objects.filter(id=weights_id, revealed_at=None)
             .select_for_update(skip_locked=True)
             .first()
         )
         if not weights:
-            logger.debug("Weights with id %s have already been revealed or are being revealed at this moment", weights_id)
+            logger.debug(
+                "Weights with id %s have already been revealed or are being revealed at this moment",
+                weights_id,
+            )
             return
 
         weights.revealed_at = now()

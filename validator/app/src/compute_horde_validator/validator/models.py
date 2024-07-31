@@ -1,8 +1,8 @@
 import logging
-from os import urandom
 import shlex
 import uuid
 from datetime import timedelta
+from os import urandom
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.contrib.postgres.fields import ArrayField
@@ -225,6 +225,7 @@ class Weights(models.Model):
     Weights set by validator at specific block.
     This is used to verify the weights revealed by the validator later.
     """
+
     uids = ArrayField(models.IntegerField())
     weights = ArrayField(models.IntegerField())
     salt = ArrayField(models.IntegerField(), default=get_random_salt)
