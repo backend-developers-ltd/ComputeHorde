@@ -105,6 +105,7 @@ class FacilitatorClient:
 
         # send machine specs to facilitator
         self.specs_task = asyncio.create_task(self.wait_for_specs())
+        reconnects = 0
         try:
             async for ws in self.connect():
                 try:
@@ -122,6 +123,12 @@ class FacilitatorClient:
                 except Exception as exc:
                     self.ws = None
                     logger.error(str(exc), exc_info=exc)
+                reconnects += 1
+                if reconnects > 5:
+                    # stop facilitator connector after 5 reconnects
+                    # allow restart policy to run it again, maybe fixing some broken async tasks
+                    # this allow facilitator to cause restart by disconnecting 5 times
+                    break
 
         except asyncio.exceptions.CancelledError:
             self.ws = None
