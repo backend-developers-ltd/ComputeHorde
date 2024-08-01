@@ -13,11 +13,14 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
+    Weights,
 )
-from compute_horde_validator.validator.tasks import set_scores
+from compute_horde_validator.validator.tasks import reveal_scores, set_scores
 
 from .helpers import (
     NUM_NEURONS,
+    MockHyperparameters,
+    MockMetagraph,
     MockSubtensor,
     MockWallet,
     check_system_events,
@@ -63,7 +66,9 @@ def test_set_scores__set_weight_success():
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
     check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS, SystemEvent.EventSubType.SUCCESS, 1
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
+        1,
     )
 
 
@@ -81,7 +86,7 @@ def test_set_scores__set_weight_failure():
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.WRITING_TO_CHAIN_FAILED,
+        SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
         1,
     )
     # end of retries system event
@@ -112,11 +117,13 @@ def test_set_scores__set_weight_eventual_success():
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.WRITING_TO_CHAIN_FAILED,
+        SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
         2,
     )
     check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS, SystemEvent.EventSubType.SUCCESS, 1
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
+        1,
     )
 
 
@@ -211,4 +218,112 @@ async def test_set_scores__multiple_starts():
     # end of retries system event
     await sync_to_async(check_system_events)(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 1
+    )
+
+
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__commit():
+    setup_db()
+    set_scores()
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
+        1,
+    )
+    assert Weights.objects.count() == 1
+
+
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__double_commit_failure():
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+
+    weights = Weights.objects.all()
+    assert len(weights) == 1
+    assert weights[0].revealed_at is None
+
+    setup_db()
+    set_scores()
+    assert Weights.objects.count() == 1
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_UNREVEALED_ERROR,
+        1,
+    )
+
+
+mocked_metagraph = MockMetagraph()
+
+
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        mocked_metagraph=lambda: mocked_metagraph,
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__reveal():
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+
+    last_weights = Weights.objects.order_by("-id").first()
+    assert last_weights
+    assert last_weights.revealed_at is None
+
+    reveal_scores()
+    last_weights.refresh_from_db()
+    assert last_weights.revealed_at is None
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
+        1,
+    )
+
+    # wait for the interval to pass
+    class _MockBlock:
+        def item(self) -> int:
+            return 1020
+
+    mocked_metagraph.block = _MockBlock()
+
+    from bittensor import subtensor
+
+    assert subtensor().metagraph(netuid=1).block.item() == 1020
+    reveal_scores()
+
+    last_weights.refresh_from_db()
+    assert last_weights.revealed_at is not None
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
+        1,
     )

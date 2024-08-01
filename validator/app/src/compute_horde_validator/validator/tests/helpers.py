@@ -207,8 +207,8 @@ class MockSubtensor:
     def max_weight_limit(self, netuid):
         return 99999
 
-    def get_subnet_hyperparameters(self, *args, **kwargs):
-        return None
+    def get_subnet_hyperparameters(self, netuid: int) -> MockHyperparameters:
+        return self.hyperparameters
 
     def metagraph(self, netuid):
         return self.mocked_metagraph()
@@ -227,10 +227,14 @@ class MockSubtensor:
         return self.mocked_set_weights()
 
     def commit_weights(self, **kwargs) -> tuple[bool, str]:
+        if self.hyperparameters.commit_reveal_weights_enabled:
+            return True, ""
         return False, "MockSubtensor doesn't support commit_weights"
 
-    def get_subnet_hyperparameters(self, netuid) -> MockHyperparameters:
-        return self.hyperparameters
+    def reveal_weights(self, **kwargs) -> tuple[bool, str]:
+        if self.hyperparameters.commit_reveal_weights_enabled:
+            return True, ""
+        return False, "MockSubtensor doesn't support reveal_weights"
 
 
 class MockNeuron:
