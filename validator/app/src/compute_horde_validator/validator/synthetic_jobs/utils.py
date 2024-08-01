@@ -303,7 +303,7 @@ async def execute_synthetic_batch(axons_by_key, batch_id, miners, miners_previou
         for miner_id, miner_key in serving_miners
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    handle_synthetic_job_exceptions(results)
+    await handle_synthetic_job_exceptions(results)
 
 
 async def save_job_execution_event(subtype: str, long_description: str, data={}, success=False):
@@ -657,16 +657,16 @@ async def execute_synthetic_jobs(
         for synthetic_job in synthetic_jobs
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    handle_synthetic_job_exceptions(results)
+    await handle_synthetic_job_exceptions(results)
 
 
-def handle_synthetic_job_exceptions(results):
+async def handle_synthetic_job_exceptions(results):
     exceptions = []
     for r in results:
         if isinstance(r, TimeoutError):
             msg = f"Synthetic Job has exceeded timeout {JOB_LENGTH}: {r}"
             logger.warning(msg)
-            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
                 long_description=msg,
@@ -674,7 +674,7 @@ def handle_synthetic_job_exceptions(results):
         elif isinstance(r, asyncio.CancelledError):
             msg = f"Synthetic Job with {JOB_LENGTH} timeout has been cancelled: {r}"
             logger.warning(msg)
-            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
                 long_description=msg,
