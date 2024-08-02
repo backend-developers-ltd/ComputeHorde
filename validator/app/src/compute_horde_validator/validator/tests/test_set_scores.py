@@ -5,7 +5,6 @@ from unittest.mock import patch
 import pytest
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from django.conf import settings
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
@@ -13,13 +12,16 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
+    Weights,
 )
-from compute_horde_validator.validator.tasks import set_scores
+from compute_horde_validator.validator.tasks import reveal_scores, set_scores
 
 from .helpers import (
     NUM_NEURONS,
+    MockHyperparameters,
+    MockMetagraph,
     MockSubtensor,
-    MockWallet,
+    MockSubtensorWithInaccessibleHyperparams,
     check_system_events,
     throw_error,
 )
@@ -50,20 +52,21 @@ def setup_db():
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__no_batches_found():
+def test_set_scores__no_batches_found(settings):
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_success():
+def test_set_scores__set_weight_success(settings):
     setup_db()
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
     check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS, SystemEvent.EventSubType.SUCCESS, 1
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
+        1,
     )
 
 
@@ -73,15 +76,14 @@ def test_set_scores__set_weight_success():
     "bittensor.subtensor",
     lambda *args, **kwargs: MockSubtensor(mocked_set_weights=lambda: (False, "error")),
 )
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_failure():
+def test_set_scores__set_weight_failure(settings):
     setup_db()
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.WRITING_TO_CHAIN_FAILED,
+        SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
         1,
     )
     # end of retries system event
@@ -102,9 +104,8 @@ def set_weights_succeed_third_time():
     "bittensor.subtensor",
     lambda *args, **kwargs: MockSubtensor(mocked_set_weights=set_weights_succeed_third_time),
 )
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_eventual_success():
+def test_set_scores__set_weight_eventual_success(settings):
     global weight_set_attempts
     weight_set_attempts = 0
     setup_db()
@@ -112,20 +113,21 @@ def test_set_scores__set_weight_eventual_success():
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.WRITING_TO_CHAIN_FAILED,
+        SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
         2,
     )
     check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS, SystemEvent.EventSubType.SUCCESS, 1
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
+        1,
     )
 
 
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_set_weights=throw_error))
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_exception():
+def test_set_scores__set_weight_exception(settings):
     setup_db()
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
@@ -145,9 +147,8 @@ def test_set_scores__set_weight_exception():
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_timeout():
+def test_set_scores__set_weight_timeout(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = False  # to make it timeout
     setup_db()
     set_scores()
@@ -166,9 +167,8 @@ def test_set_scores__set_weight_timeout():
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_metagraph=throw_error))
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__metagraph_fetch_exception():
+def test_set_scores__metagraph_fetch_exception(settings):
     setup_db()
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
@@ -190,11 +190,182 @@ def test_set_scores__metagraph_fetch_exception():
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensorWithInaccessibleHyperparams(
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=False,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__broken_hyperparameters__commit_weights_disabled(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+    assert SystemEvent.objects.count() == 2, SystemEvent.objects.all()
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
+        1,
+    )
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
+        1,
+    )
+    assert Weights.objects.count() == 0
+
+
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensorWithInaccessibleHyperparams(
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__broken_hyperparameters__commit_weights_enabled(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+    assert SystemEvent.objects.count() == 1, SystemEvent.objects.all()
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
+        1,
+    )
+    assert Weights.objects.count() == 1
+
+
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__commit(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+    assert (
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
+    ), SystemError.objects.all()
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
+        1,
+    )
+    assert Weights.objects.count() == 1
+
+
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__double_commit_failure(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+
+    weights = Weights.objects.all()
+    assert len(weights) == 1
+    assert weights[0].revealed_at is None
+
+    setup_db()
+    set_scores()
+    assert Weights.objects.count() == 1
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_UNREVEALED_ERROR,
+        1,
+    )
+
+
+mocked_metagraph = MockMetagraph()
+
+
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        mocked_metagraph=lambda: mocked_metagraph,
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__reveal(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+
+    last_weights = Weights.objects.order_by("-id").first()
+    assert last_weights
+    assert last_weights.revealed_at is None
+
+    reveal_scores()
+    last_weights.refresh_from_db()
+    assert last_weights.revealed_at is None
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
+        0,  # nothing happened because it's too early to reveal weights
+    )
+
+    # wait for the interval to pass
+    class _MockBlock:
+        def item(self) -> int:
+            return 1020
+
+    mocked_metagraph.block = _MockBlock()
+
+    from bittensor import subtensor
+
+    assert subtensor().metagraph(netuid=1).block.item() == 1020
+    reveal_scores()
+
+    last_weights.refresh_from_db()
+    assert last_weights.revealed_at is not None
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
+        1,
+    )
+
+
+# ! This test is the last because otherwise it breaks other tests
+# ! (probably it doesn't release lock properly, so other tests cannot set scores)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
-async def test_set_scores__multiple_starts():
+async def test_set_scores__multiple_starts(settings):
     # to ensure the other tasks will be run at the same time
     settings.CELERY_TASK_ALWAYS_EAGER = False
     await sync_to_async(setup_db)()

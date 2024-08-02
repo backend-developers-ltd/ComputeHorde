@@ -12,6 +12,7 @@ from compute_horde_validator.validator.models import (
     JobFinishedReceipt,
     JobStartedReceipt,
     SystemEvent,
+    Weights,
 )  # noqa
 from rangefilter.filters import DateTimeRangeFilter
 
@@ -139,6 +140,11 @@ class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
     ordering = ["-time_started"]
 
 
+class WeightsReadOnlyAdmin(ReadOnlyAdmin):
+    list_display = ["block", "created_at", "revealed_at"]
+    ordering = ["-created_at"]
+
+
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
@@ -147,3 +153,4 @@ admin.site.register(JobStartedReceipt, admin_class=JobStartedReceiptsReadOnlyAdm
 admin.site.register(MinerBlacklist)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)
 admin.site.register(SystemEvent, admin_class=SystemEventAdmin)
+admin.site.register(Weights, admin_class=WeightsReadOnlyAdmin)

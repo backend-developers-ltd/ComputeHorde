@@ -2,8 +2,10 @@ import logging
 import shlex
 import uuid
 from datetime import timedelta
+from os import urandom
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import UniqueConstraint
 
@@ -30,6 +32,13 @@ class SystemEvent(models.Model):
         SUCCESS = "SUCCESS"
         FAILURE = "FAILURE"
         SUBTENSOR_CONNECTIVITY_ERROR = "SUBTENSOR_CONNECTIVITY_ERROR"
+        COMMIT_WEIGHTS_SUCCESS = "COMMIT_WEIGHTS_SUCCESS"
+        COMMIT_WEIGHTS_ERROR = "COMMIT_WEIGHTS_ERROR"
+        COMMIT_WEIGHTS_UNREVEALED_ERROR = "COMMIT_WEIGHTS_UNREVEALED_ERROR"
+        REVEAL_WEIGHTS_ERROR = "REVEAL_WEIGHTS_ERROR"
+        REVEAL_WEIGHTS_SUCCESS = "REVEAL_WEIGHTS_SUCCESS"
+        SET_WEIGHTS_SUCCESS = "SET_WEIGHTS_SUCCESS"
+        SET_WEIGHTS_ERROR = "SET_WEIGHTS_ERROR"
         GENERIC_ERROR = "GENERIC_ERROR"
         WRITING_TO_CHAIN_TIMEOUT = "WRITING_TO_CHAIN_TIMEOUT"
         WRITING_TO_CHAIN_FAILED = "WRITING_TO_CHAIN_FAILED"
@@ -212,3 +221,37 @@ class JobStartedReceipt(AbstractReceipt):
     executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
     time_accepted = models.DateTimeField()
     max_timeout = models.IntegerField()
+
+
+def get_random_salt() -> list[int]:
+    return list(urandom(8))
+
+
+class Weights(models.Model):
+    """
+    Weights set by validator at specific block.
+    This is used to verify the weights revealed by the validator later.
+    """
+
+    uids = ArrayField(models.IntegerField())
+    weights = ArrayField(models.IntegerField())
+    salt = ArrayField(models.IntegerField(), default=get_random_salt)
+    version_key = models.IntegerField()
+    block = models.BigIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    revealed_at = models.DateTimeField(null=True, default=None)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["block"], name="unique_block"),
+        ]
+        indexes = [
+            models.Index(fields=["created_at", "revealed_at"]),
+        ]
+
+    def save(self, *args, **kwargs) -> None:
+        assert len(self.uids) == len(self.weights), "Length of uids and weights should be the same"
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return str(self.weights)

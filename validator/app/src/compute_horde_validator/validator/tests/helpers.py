@@ -28,14 +28,6 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-class MockWallet:
-    def __init__(self, *args):
-        pass
-
-    def get_hotkey(self):
-        return get_keypair()
-
-
 def get_miner_client(MINER_CLIENT, job_uuid: str):
     return MINER_CLIENT(
         miner_address="ignore",
@@ -180,15 +172,26 @@ def get_dummy_job_request_v1(uuid: str) -> V1FacilitatorJobRequest:
     )
 
 
+class MockHyperparameters:
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
 class MockSubtensor:
     def __init__(
         self,
         *args,
         mocked_set_weights=lambda: (True, ""),
         mocked_metagraph=lambda: MockMetagraph(),
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=False,
+            commit_reveal_weights_interval=1000,
+        ),
     ):
         self.mocked_set_weights = mocked_set_weights
         self.mocked_metagraph = mocked_metagraph
+        self.hyperparameters = hyperparameters
 
     def min_allowed_weights(self, netuid):
         return 0
@@ -196,22 +199,52 @@ class MockSubtensor:
     def max_weight_limit(self, netuid):
         return 99999
 
-    def get_subnet_hyperparameters(self, *args):
-        return None
+    def get_subnet_hyperparameters(self, netuid: int) -> MockHyperparameters:
+        return self.hyperparameters
 
     def metagraph(self, netuid):
         return self.mocked_metagraph()
 
     def set_weights(
-        self, wallet, netuid, uids, weights, version_key, wait_for_inclusion, wait_for_finalization
+        self,
+        wallet,
+        netuid,
+        uids,
+        weights,
+        version_key,
+        wait_for_inclusion,
+        wait_for_finalization,
+        **kwargs,
     ) -> tuple[bool, str]:
         return self.mocked_set_weights()
+
+    def commit_weights(self, **kwargs) -> tuple[bool, str]:
+        if self.hyperparameters.commit_reveal_weights_enabled:
+            return True, ""
+        return False, "MockSubtensor doesn't support commit_weights"
+
+    def reveal_weights(self, **kwargs) -> tuple[bool, str]:
+        if self.hyperparameters.commit_reveal_weights_enabled:
+            return True, ""
+        return False, "MockSubtensor doesn't support reveal_weights"
+
+
+class MockSubtensorWithInaccessibleHyperparams(MockSubtensor):
+    """Subtensor but it fails when getting hyperparameters - just like real subtensor!"""
+
+    def get_subnet_hyperparameters(self, netuid: int) -> MockHyperparameters:
+        raise Exception("Subtensor is broken")
 
 
 class MockNeuron:
     def __init__(self, hotkey, uid):
         self.hotkey = hotkey
         self.uid = uid
+
+
+class MockBlock:
+    def item(self) -> int:
+        return 1000
 
 
 class MockMetagraph:
@@ -223,6 +256,7 @@ class MockMetagraph:
         self.hotkeys = [f"hotkey_{i}" for i in range(num_neurons)]
         self.uids = np.array(list(range(num_neurons)))
         self.neurons = [MockNeuron(f"hotkey_{i}", i) for i in range(NUM_NEURONS)]
+        self.block = MockBlock()
 
 
 def check_system_events(

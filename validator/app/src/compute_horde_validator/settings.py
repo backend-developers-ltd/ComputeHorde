@@ -277,6 +277,11 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
     #     "schedule": crontab(minute="15,45"),  # try to stay away from set_scores task :)
     #     "options": {},
     # },
+    "reveal_scores": {
+        "task": "compute_horde_validator.validator.tasks.reveal_scores",
+        "schedule": timedelta(minutes=1),
+        "options": {},
+    },
     "send_events_to_facilitator": {
         "task": "compute_horde_validator.validator.tasks.send_events_to_facilitator",
         "schedule": timedelta(minutes=5),
