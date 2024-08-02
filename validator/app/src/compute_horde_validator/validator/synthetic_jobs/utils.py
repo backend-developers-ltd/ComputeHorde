@@ -270,6 +270,7 @@ def create_and_run_sythethic_job_batch(netuid, network):
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
                 long_description=msg,
+                data={},
             )
             return
         axons_by_key = {n.hotkey: n.axon_info for n in metagraph.neurons}
@@ -670,6 +671,7 @@ async def handle_synthetic_job_exceptions(results):
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
                 long_description=msg,
+                data={},
             )
         elif isinstance(r, asyncio.CancelledError):
             msg = f"Synthetic Job with {JOB_LENGTH} timeout has been cancelled: {r}"
@@ -678,6 +680,7 @@ async def handle_synthetic_job_exceptions(results):
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
                 long_description=msg,
+                data={},
             )
         elif isinstance(r, Exception):
             logger.warning("Error occurred", exc_info=r)
