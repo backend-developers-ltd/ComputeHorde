@@ -28,6 +28,7 @@ dependencies = [
     "tenacity~=8.2.3",
     "django-constance[database]==3.1.0",
     "django-admin-rangefilter==0.12.4",
+    "bittensor==7.3.0",
 ]
 
 [build-system]
