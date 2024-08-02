@@ -5,7 +5,6 @@ from unittest.mock import patch
 import pytest
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from django.conf import settings
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
@@ -53,7 +52,7 @@ def setup_db():
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__no_batches_found():
+def test_set_scores__no_batches_found(settings):
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
@@ -61,7 +60,7 @@ def test_set_scores__no_batches_found():
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_success():
+def test_set_scores__set_weight_success(settings):
     setup_db()
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
@@ -80,7 +79,7 @@ def test_set_scores__set_weight_success():
 )
 @patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_failure():
+def test_set_scores__set_weight_failure(settings):
     setup_db()
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
@@ -109,7 +108,7 @@ def set_weights_succeed_third_time():
 )
 @patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_eventual_success():
+def test_set_scores__set_weight_eventual_success(settings):
     global weight_set_attempts
     weight_set_attempts = 0
     setup_db()
@@ -132,7 +131,7 @@ def test_set_scores__set_weight_eventual_success():
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_set_weights=throw_error))
 @patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_exception():
+def test_set_scores__set_weight_exception(settings):
     setup_db()
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
@@ -154,7 +153,7 @@ def test_set_scores__set_weight_exception():
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_timeout():
+def test_set_scores__set_weight_timeout(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = False  # to make it timeout
     setup_db()
     set_scores()
@@ -175,7 +174,7 @@ def test_set_scores__set_weight_timeout():
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_metagraph=throw_error))
 @patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__metagraph_fetch_exception():
+def test_set_scores__metagraph_fetch_exception(settings):
     setup_db()
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
@@ -197,30 +196,6 @@ def test_set_scores__metagraph_fetch_exception():
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.asyncio
-async def test_set_scores__multiple_starts():
-    # to ensure the other tasks will be run at the same time
-    settings.CELERY_TASK_ALWAYS_EAGER = False
-    await sync_to_async(setup_db)()
-
-    tasks = [sync_to_async(set_scores, thread_sensitive=False)() for _ in range(5)]
-    await asyncio.gather(*tasks)
-
-    assert await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acount() == 2
-    await sync_to_async(check_system_events)(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
-        1,
-    )
-    # end of retries system event
-    await sync_to_async(check_system_events)(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 1
-    )
-
-
 @patch(
     "bittensor.subtensor",
     lambda *args, **kwargs: MockSubtensor(
@@ -232,10 +207,13 @@ async def test_set_scores__multiple_starts():
 )
 @patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight__commit():
+def test_set_scores__set_weight__commit(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
     setup_db()
     set_scores()
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
+    assert (
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
+    ), SystemError.objects.all()
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
         SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
@@ -256,7 +234,7 @@ def test_set_scores__set_weight__commit():
 )
 @patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight__double_commit_failure():
+def test_set_scores__set_weight__double_commit_failure(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True
     setup_db()
     set_scores()
@@ -290,7 +268,7 @@ mocked_metagraph = MockMetagraph()
 )
 @patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight__reveal():
+def test_set_scores__set_weight__reveal(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True
     setup_db()
     set_scores()
@@ -305,7 +283,7 @@ def test_set_scores__set_weight__reveal():
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
-        1,
+        0,  # nothing happened because it's too early to reveal weights
     )
 
     # wait for the interval to pass
@@ -326,4 +304,34 @@ def test_set_scores__set_weight__reveal():
         SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
         SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
         1,
+    )
+
+
+# ! This test is the last because otherwise it breaks other tests
+# ! (probably it doesn't release lock properly, so other tests cannot set scores)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.asyncio
+async def test_set_scores__multiple_starts(settings):
+    # to ensure the other tasks will be run at the same time
+    settings.CELERY_TASK_ALWAYS_EAGER = False
+    await sync_to_async(setup_db)()
+
+    tasks = [sync_to_async(set_scores, thread_sensitive=False)() for _ in range(5)]
+    await asyncio.gather(*tasks)
+
+    assert await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acount() == 2
+    await sync_to_async(check_system_events)(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
+        1,
+    )
+    # end of retries system event
+    await sync_to_async(check_system_events)(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 1
     )
