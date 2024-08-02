@@ -21,7 +21,6 @@ from .helpers import (
     MockHyperparameters,
     MockMetagraph,
     MockSubtensor,
-    MockWallet,
     check_system_events,
     throw_error,
 )
@@ -58,7 +57,6 @@ def test_set_scores__no_batches_found(settings):
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight_success(settings):
     setup_db()
@@ -77,7 +75,6 @@ def test_set_scores__set_weight_success(settings):
     "bittensor.subtensor",
     lambda *args, **kwargs: MockSubtensor(mocked_set_weights=lambda: (False, "error")),
 )
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight_failure(settings):
     setup_db()
@@ -106,7 +103,6 @@ def set_weights_succeed_third_time():
     "bittensor.subtensor",
     lambda *args, **kwargs: MockSubtensor(mocked_set_weights=set_weights_succeed_third_time),
 )
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight_eventual_success(settings):
     global weight_set_attempts
@@ -129,7 +125,6 @@ def test_set_scores__set_weight_eventual_success(settings):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_set_weights=throw_error))
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight_exception(settings):
     setup_db()
@@ -151,7 +146,6 @@ def test_set_scores__set_weight_exception(settings):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight_timeout(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = False  # to make it timeout
@@ -172,7 +166,6 @@ def test_set_scores__set_weight_timeout(settings):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_metagraph=throw_error))
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__metagraph_fetch_exception(settings):
     setup_db()
@@ -205,7 +198,6 @@ def test_set_scores__metagraph_fetch_exception(settings):
         ),
     ),
 )
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight__commit(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True
@@ -232,7 +224,6 @@ def test_set_scores__set_weight__commit(settings):
         ),
     ),
 )
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight__double_commit_failure(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True
@@ -266,7 +257,6 @@ mocked_metagraph = MockMetagraph()
         ),
     ),
 )
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight__reveal(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True
@@ -314,7 +304,6 @@ def test_set_scores__set_weight__reveal(settings):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch("django.conf.settings.BITTENSOR_WALLET", lambda *args, **kwargs: MockWallet())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
 async def test_set_scores__multiple_starts(settings):
