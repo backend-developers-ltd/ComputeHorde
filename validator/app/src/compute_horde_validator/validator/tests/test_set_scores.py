@@ -21,6 +21,7 @@ from .helpers import (
     MockHyperparameters,
     MockMetagraph,
     MockSubtensor,
+    MockSubtensorWithInaccessibleHyperparams,
     check_system_events,
     throw_error,
 )
@@ -183,6 +184,64 @@ def test_set_scores__metagraph_fetch_exception(settings):
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 0
     )
+
+
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensorWithInaccessibleHyperparams(
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=False,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__broken_hyperparameters__commit_weights_disabled(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+    assert SystemEvent.objects.count() == 2, SystemEvent.objects.all()
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
+        1,
+    )
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
+        1,
+    )
+    assert Weights.objects.count() == 0
+
+
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensorWithInaccessibleHyperparams(
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__broken_hyperparameters__commit_weights_enabled(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+    assert SystemEvent.objects.count() == 1, SystemEvent.objects.all()
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
+        1,
+    )
+    assert Weights.objects.count() == 1
 
 
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)

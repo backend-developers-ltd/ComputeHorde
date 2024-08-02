@@ -156,40 +156,40 @@ def do_set_weights(
             )
             return False, "Cannot commit new weights before revealing old ones"
 
-        with transaction.atomic():
-            weights_in_db = Weights.objects.create(
-                uids=uids,
-                weights=weights,
-                block=metagraph.block.item(),
-                version_key=version_key,
+        weights_in_db = Weights(
+            uids=uids,
+            weights=weights,
+            block=metagraph.block.item(),
+            version_key=version_key,
+        )
+        is_success, message = subtensor_.commit_weights(
+            wallet=settings.BITTENSOR_WALLET(),
+            netuid=netuid,
+            uids=uids,
+            weights=weights,
+            salt=weights_in_db.salt,
+            version_key=version_key,
+            wait_for_inclusion=wait_for_inclusion,
+            wait_for_finalization=wait_for_finalization,
+            max_retries=2,
+        )
+        if is_success:
+            logger.info("Successfully committed weights!!!")
+            weights_in_db.save()
+            save_weight_setting_event(
+                type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+                subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
+                long_description=f"message from chain: {message}",
+                data={"weights_id": weights_in_db.id},
             )
-            is_success, message = subtensor_.commit_weights(
-                wallet=settings.BITTENSOR_WALLET(),
-                netuid=netuid,
-                uids=uids,
-                weights=weights,
-                salt=weights_in_db.salt,
-                version_key=version_key,
-                wait_for_inclusion=wait_for_inclusion,
-                wait_for_finalization=wait_for_finalization,
-                max_retries=2,
+        else:
+            logger.info("Failed to commit weights due to: %s", message)
+            save_weight_setting_failure(
+                subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
+                long_description=f"message from chain: {message}",
+                data={"weights_id": weights_in_db.id},
             )
-            if is_success:
-                logger.info("Successfully committed weights!!!")
-                save_weight_setting_event(
-                    type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
-                    subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
-                    long_description=f"message from chain: {message}",
-                    data={"weights_id": weights_in_db.id},
-                )
-            else:
-                logger.info(f"Failed to commit weights due to {message=}")
-                save_weight_setting_failure(
-                    subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
-                    long_description=f"message from chain: {message}",
-                    data={"weights_id": weights_in_db.id},
-                )
-            return is_success, message
+        return is_success, message
 
     def _set_weights() -> tuple[bool, str]:
         is_success, message = subtensor_.set_weights(

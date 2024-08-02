@@ -229,6 +229,13 @@ class MockSubtensor:
         return False, "MockSubtensor doesn't support reveal_weights"
 
 
+class MockSubtensorWithInaccessibleHyperparams(MockSubtensor):
+    """Subtensor but it fails when getting hyperparameters - just like real subtensor!"""
+
+    def get_subnet_hyperparameters(self, netuid: int) -> MockHyperparameters:
+        raise Exception("Subtensor is broken")
+
+
 class MockNeuron:
     def __init__(self, hotkey, uid):
         self.hotkey = hotkey
