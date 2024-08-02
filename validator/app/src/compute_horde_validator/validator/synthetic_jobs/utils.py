@@ -97,7 +97,13 @@ def create_and_run_synthetic_job_batch(netuid, network):
             if miner.hotkey in axons_by_key and axons_by_key[miner.hotkey].is_serving
         ]
 
-    execute_synthetic_batch(axons_by_key, miners)
+    # execute_synthetic_batch(axons_by_key, miners)
+    # TODO move import to top
+    from compute_horde_validator.validator.synthetic_jobs.batch_run import (
+        execute_synthetic_batch_run,
+    )
+
+    execute_synthetic_batch_run(axons_by_key, miners)
 
 
 @async_to_sync
