@@ -22,6 +22,7 @@ from .helpers import (
     MockMetagraph,
     MockSubtensor,
     MockSubtensorWithInaccessibleHyperparams,
+    always_same_result,
     check_system_events,
     throw_error,
 )
@@ -303,13 +304,9 @@ def test_set_scores__set_weight__double_commit_failure(settings):
     )
 
 
-mocked_metagraph = MockMetagraph()
-
-
 @patch(
     "bittensor.subtensor",
     lambda *args, **kwargs: MockSubtensor(
-        mocked_metagraph=lambda: mocked_metagraph,
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
             commit_reveal_weights_interval=20,
@@ -317,7 +314,7 @@ mocked_metagraph = MockMetagraph()
     ),
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight__reveal(settings):
+def test_set_scores__set_weight__reveal__too_early(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True
     setup_db()
     set_scores()
@@ -326,7 +323,11 @@ def test_set_scores__set_weight__reveal(settings):
     assert last_weights
     assert last_weights.revealed_at is None
 
+    from bittensor import subtensor
+
+    assert subtensor().metagraph(netuid=1).block.item() == 1000
     reveal_scores()
+
     last_weights.refresh_from_db()
     assert last_weights.revealed_at is None
     check_system_events(
@@ -335,16 +336,73 @@ def test_set_scores__set_weight__reveal(settings):
         0,  # nothing happened because it's too early to reveal weights
     )
 
+
+# we need to patch subtensor to always return same metagraph, so that we can "change"
+# block number globally
+@patch(
+    "compute_horde_validator.validator.tests.helpers.MockSubtensor.metagraph",
+    always_same_result(MockMetagraph()),
+)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__reveal__in_time(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+
+    last_weights = Weights.objects.order_by("-id").first()
+    assert last_weights
+    assert last_weights.revealed_at is None
+
     # wait for the interval to pass
     class _MockBlock:
         def item(self) -> int:
             return 1020
 
-    mocked_metagraph.block = _MockBlock()
+    from bittensor import subtensor
+
+    subtensor().metagraph(netuid=1).block = _MockBlock()
+    reveal_scores()
+
+    last_weights.refresh_from_db()
+    assert last_weights.revealed_at is not None
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
+        1,
+    )
+
+
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensorWithInaccessibleHyperparams(
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__reveal__any_time_if_broken_hyperparams(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+
+    last_weights = Weights.objects.order_by("-id").first()
+    assert last_weights
+    assert last_weights.revealed_at is None
 
     from bittensor import subtensor
 
-    assert subtensor().metagraph(netuid=1).block.item() == 1020
+    assert subtensor().metagraph(netuid=1).block.item() == 1000
     reveal_scores()
 
     last_weights.refresh_from_db()

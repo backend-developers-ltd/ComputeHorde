@@ -271,3 +271,8 @@ def check_system_events(
         .count()
         == count
     )
+
+
+def always_same_result(result):
+    """Return a function which accepts everything and returns the same result"""
+    return lambda *args, **kwargs: result
