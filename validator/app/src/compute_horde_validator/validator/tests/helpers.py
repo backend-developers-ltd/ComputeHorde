@@ -1,4 +1,5 @@
 import asyncio
+import numbers
 from typing import NamedTuple
 
 import numpy as np
@@ -187,11 +188,15 @@ class MockSubtensor:
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=False,
             commit_reveal_weights_interval=1000,
+            max_weight_limit=65535,
         ),
     ):
         self.mocked_set_weights = mocked_set_weights
         self.mocked_metagraph = mocked_metagraph
         self.hyperparameters = hyperparameters
+        self.weights_set: list[list[numbers.Number]] = []
+        self.weights_committed: list[list[numbers.Number]] = []
+        self.weights_revealed: list[list[numbers.Number]] = []
 
     def min_allowed_weights(self, netuid):
         return 0
@@ -216,14 +221,19 @@ class MockSubtensor:
         wait_for_finalization,
         **kwargs,
     ) -> tuple[bool, str]:
+        if not isinstance(weights, list):
+            weights = weights.tolist()
+        self.weights_set.append(weights)
         return self.mocked_set_weights()
 
-    def commit_weights(self, **kwargs) -> tuple[bool, str]:
+    def commit_weights(self, weights, **kwargs) -> tuple[bool, str]:
+        self.weights_committed.append(weights)
         if self.hyperparameters.commit_reveal_weights_enabled:
             return True, ""
         return False, "MockSubtensor doesn't support commit_weights"
 
-    def reveal_weights(self, **kwargs) -> tuple[bool, str]:
+    def reveal_weights(self, weights, **kwargs) -> tuple[bool, str]:
+        self.weights_revealed.append(weights)
         if self.hyperparameters.commit_reveal_weights_enabled:
             return True, ""
         return False, "MockSubtensor doesn't support reveal_weights"
