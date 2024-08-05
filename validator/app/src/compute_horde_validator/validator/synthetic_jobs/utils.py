@@ -47,7 +47,11 @@ from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.dynamic_config import aget_config, aget_weights_version
+from compute_horde_validator.validator.dynamic_config import (
+    aget_config,
+    aget_weights_version,
+    get_synthetic_jobs_flow_version,
+)
 from compute_horde_validator.validator.models import (
     JobBase,
     Miner,
@@ -56,6 +60,7 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
     SystemEvent,
 )
+from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
@@ -284,13 +289,14 @@ def create_and_run_synthetic_job_batch(netuid, network):
             if miner.hotkey in axons_by_key and axons_by_key[miner.hotkey].is_serving
         ]
 
-    # execute_synthetic_batch(axons_by_key, miners)
-    # TODO move import to top
-    from compute_horde_validator.validator.synthetic_jobs.batch_run import (
-        execute_synthetic_batch_run,
-    )
-
-    execute_synthetic_batch_run(axons_by_key, miners)
+    flow_version = get_synthetic_jobs_flow_version()
+    match flow_version:
+        case 1:
+            execute_synthetic_batch(axons_by_key, miners)
+        case 2:
+            execute_synthetic_batch_run(axons_by_key, miners)
+        case _:
+            raise ValueError(f"Unsupported synthetic jobs flow version: {flow_version}")
 
 
 @async_to_sync
