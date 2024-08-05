@@ -42,21 +42,30 @@ jobs:
       - name: Build executor image
         run: |
           cd executor
-          IMAGE_NAME=andreeareef/compute-horde-executor-e2e:v0-latest
-          echo "HERE -------------------------------"
-          echo "${{ secrets.DOCKERHUB_DELEGATED_KEY_TEST }}" > ci.key
-          chmod 600 ci.key
-          echo password2000 | docker trust key load ci.key
+          IMAGE_NAME=andreeareef/compute-horde-executor-e2e-final:v0-latest
+          
+          echo "LOADING KEY -------------------------------"
+          echo "${{ secrets.DOCKER_CONTENT_TRUST_REPOSITORY_KEY }}" > repo.key
+          chmod 600 repo.key
+          echo "${{ secrets.DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE }}" | docker trust key load repo.key
+          echo "KEY LOADED -------------------------------"
+
+          echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
+          export DOCKER_CONTENT_TRUST=1
+          echo "LOGGED IN -------------------------------"
+
           echo "HERE ---- will pull"
           docker pull "$IMAGE_NAME" || true
+
           echo "HERE ---- will build"
           docker build \
             --build-context compute-horde=../compute_horde \
             -t "$IMAGE_NAME" \
             -f app/envs/prod/Dockerfile \
             .
+
           echo "HERE ---- will push"
-          docker push "$IMAGE_NAME"
+          echo "${{ secrets.DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE }}" | docker push "$IMAGE_NAME"
           echo "HERE ---- pushed"
 
       - name: Build miner nginx image
@@ -271,7 +280,7 @@ jobs:
       - name: miner preparations
         run: |
           ssh -o StrictHostKeyChecking=no "ubuntu@$E2E_MINER_IP" <<END
-          docker pull andreeareef/compute-horde-executor-e2e:v0-latest
+          docker pull andreeareef/compute-horde-executor-e2e-final:v0-latest
           docker image prune --force
           cd ~/compute_horde_miner
           docker compose exec miner-runner docker compose exec app python manage.py fetch_validators
