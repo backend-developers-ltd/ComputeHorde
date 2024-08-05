@@ -386,6 +386,7 @@ HORDE_SCORE_SIZE_PARAM = 0
 # non integer number - like 4.5 (all hordes smaller than 5 will get 0 weights)
 HORDE_SCORE_CENTRAL_SIZE_PARAM = 1
 
+SYNTHETIC_JOBS_FLOW_VERSION = env.int("SYNTHETIC_JOBS_FLOW_VERSION", default=1)
 DEBUG_OVERRIDE_WEIGHTS_VERSION = env.int("DEBUG_OVERRIDE_WEIGHTS_VERSION", default=None)
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
