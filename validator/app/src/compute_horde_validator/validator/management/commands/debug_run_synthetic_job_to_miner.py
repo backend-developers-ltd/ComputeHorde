@@ -6,7 +6,9 @@ import uvloop
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.core.management.base import BaseCommand
 
+from compute_horde_validator.validator.dynamic_config import get_synthetic_jobs_flow_version
 from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.synthetic_jobs.utils import execute_synthetic_batch
 
 logger = logging.getLogger(__name__)
@@ -43,7 +45,14 @@ class Command(BaseCommand):
             )
         }
         try:
-            execute_synthetic_batch(axons_by_key, miners)
+            flow_version = get_synthetic_jobs_flow_version()
+            match flow_version:
+                case 1:
+                    execute_synthetic_batch(axons_by_key, miners)
+                case 2:
+                    execute_synthetic_batch_run(axons_by_key, miners)
+                case _:
+                    raise ValueError(f"Unsupported synthetic jobs flow version: {flow_version}")
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)
