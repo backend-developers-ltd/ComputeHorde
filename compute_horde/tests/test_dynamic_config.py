@@ -51,7 +51,6 @@ def test_dynamic_config__correct_time_is_picked(mocked_responses, frozen_time, e
                     {
                         "value": i,
                         "effective_from": f"2024-01-0{i}T00:00:00.000Z",
-                        "effective_until": f"2024-01-0{i + 1}T00:00:00.000Z",
                     }
                     for i in range(1, 6)
                 ],
