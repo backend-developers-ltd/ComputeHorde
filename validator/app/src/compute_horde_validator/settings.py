@@ -139,6 +139,11 @@ CONSTANCE_CONFIG = {
         float,
     ),
     "DYNAMIC_WEIGHTS_VERSION": (1, "The weights version for synthetic jobs", int),
+    "DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION": (
+        1,
+        "The synthetic jobs flow version",
+        int,
+    ),
 }
 
 # Content Security Policy
@@ -387,6 +392,9 @@ HORDE_SCORE_SIZE_PARAM = 0
 HORDE_SCORE_CENTRAL_SIZE_PARAM = 1
 
 DEBUG_OVERRIDE_WEIGHTS_VERSION = env.int("DEBUG_OVERRIDE_WEIGHTS_VERSION", default=None)
+DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
+    "DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION", default=None
+)
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 

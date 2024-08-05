@@ -34,3 +34,11 @@ async def aget_weights_version():
     if settings.DEBUG_OVERRIDE_WEIGHTS_VERSION is not None:
         return settings.DEBUG_OVERRIDE_WEIGHTS_VERSION
     return await aget_config("DYNAMIC_WEIGHTS_VERSION")
+
+
+# this is called from a sync context, and rarely, so we don't need caching
+def get_synthetic_jobs_flow_version():
+    if settings.DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION is not None:
+        return settings.DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION
+    config = constance.utils.get_values()
+    return config.get("DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION")
