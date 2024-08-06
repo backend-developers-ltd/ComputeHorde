@@ -153,18 +153,88 @@ def test_set_scores__set_weight_eventual_success(settings):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_set_weights=throw_error))
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight_exception(settings):
+def test_set_scores__set_weight__exception(settings):
     setup_db()
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+        SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
         1,
     )
     # end of retries system event
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE, SystemEvent.EventSubType.GIVING_UP, 1
+    )
+
+
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        mocked_commit_weights=lambda: throw_error(),
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__commit__exception(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
+        1,
+    )
+
+
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
+@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
+@patch(
+    "compute_horde_validator.validator.tests.helpers.MockSubtensor.metagraph",
+    always_same_result(MockMetagraph()),
+)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        mocked_reveal_weights=lambda: throw_error(),
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+            commit_reveal_weights_interval=20,
+        ),
+    ),
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__reveal__exception(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    setup_db()
+    set_scores()
+
+    last_weights = Weights.objects.order_by("-id").first()
+    assert last_weights
+    assert last_weights.revealed_at is None
+
+    # wait for the interval to pass
+    class _MockBlock:
+        def item(self) -> int:
+            return 1020
+
+    from bittensor import subtensor
+
+    subtensor().metagraph(netuid=1).block = _MockBlock()
+    reveal_scores()
+
+    last_weights.refresh_from_db()
+    assert last_weights.revealed_at is None
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
+        1,
     )
 
 
@@ -229,10 +299,15 @@ def test_set_scores__set_weight__broken_hyperparameters__commit_weights_disabled
     settings.CELERY_TASK_ALWAYS_EAGER = True
     setup_db()
     set_scores()
-    assert SystemEvent.objects.count() == 2, SystemEvent.objects.all()
+    assert SystemEvent.objects.count() == 3, SystemEvent.objects.all()
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
+        1,
+    )
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.SUBTENSOR_HYPERPARAMETERS_FETCH_ERROR,
         1,
     )
     check_system_events(
@@ -262,7 +337,12 @@ def test_set_scores__set_weight__broken_hyperparameters__commit_weights_enabled(
     settings.CELERY_TASK_ALWAYS_EAGER = True
     setup_db()
     set_scores()
-    assert SystemEvent.objects.count() == 1, SystemEvent.objects.all()
+    assert SystemEvent.objects.count() == 2, SystemEvent.objects.all()
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.SUBTENSOR_HYPERPARAMETERS_FETCH_ERROR,
+        1,
+    )
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
         SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,

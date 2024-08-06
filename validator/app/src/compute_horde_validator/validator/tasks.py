@@ -133,8 +133,14 @@ def do_set_weights(
         commit_reveal_weights_enabled = bool(hyperparams.commit_reveal_weights_enabled)
         commit_reveal_weights_interval = hyperparams.commit_reveal_weights_interval
         max_weight = hyperparams.max_weight_limit
-    except Exception:
-        logger.exception('Failed to fetch "commit_reveal_weights_*" hyperparameters')
+    except Exception as e:
+        message = f'Failed to fetch "commit_reveal_weights_*" hyperparameters: {e}'
+        logger.warning(message)
+        save_weight_setting_failure(
+            subtype=SystemEvent.EventSubType.SUBTENSOR_HYPERPARAMETERS_FETCH_ERROR,
+            long_description=message,
+            data={},
+        )
         commit_reveal_weights_enabled = None
         commit_reveal_weights_interval = 0
         max_weight = 65535
@@ -170,17 +176,22 @@ def do_set_weights(
             block=metagraph.block.item(),
             version_key=version_key,
         )
-        is_success, message = subtensor_.commit_weights(
-            wallet=settings.BITTENSOR_WALLET(),
-            netuid=netuid,
-            uids=uids,
-            weights=normalized_weights,
-            salt=weights_in_db.salt,
-            version_key=version_key,
-            wait_for_inclusion=wait_for_inclusion,
-            wait_for_finalization=wait_for_finalization,
-            max_retries=2,
-        )
+        try:
+            is_success, message = subtensor_.commit_weights(
+                wallet=settings.BITTENSOR_WALLET(),
+                netuid=netuid,
+                uids=uids,
+                weights=normalized_weights,
+                salt=weights_in_db.salt,
+                version_key=version_key,
+                wait_for_inclusion=wait_for_inclusion,
+                wait_for_finalization=wait_for_finalization,
+                max_retries=2,
+            )
+        except Exception as e:
+            is_success = False
+            message = str(e)
+
         if is_success:
             logger.info("Successfully committed weights!!!")
             weights_in_db.save()
@@ -200,16 +211,20 @@ def do_set_weights(
         return is_success, message
 
     def _set_weights() -> tuple[bool, str]:
-        is_success, message = subtensor_.set_weights(
-            wallet=settings.BITTENSOR_WALLET(),
-            netuid=netuid,
-            uids=np.int64(uids),
-            weights=np.float32(weights),
-            version_key=version_key,
-            wait_for_inclusion=wait_for_inclusion,
-            wait_for_finalization=wait_for_finalization,
-            max_retries=2,
-        )
+        try:
+            is_success, message = subtensor_.set_weights(
+                wallet=settings.BITTENSOR_WALLET(),
+                netuid=netuid,
+                uids=np.int64(uids),
+                weights=np.float32(weights),
+                version_key=version_key,
+                wait_for_inclusion=wait_for_inclusion,
+                wait_for_finalization=wait_for_finalization,
+                max_retries=2,
+            )
+        except Exception as e:
+            is_success = False
+            message = str(e)
         if is_success:
             logger.info("Successfully set weights!!!")
             save_weight_setting_event(
@@ -502,8 +517,14 @@ def reveal_scores(reveal_in_advance_num_blocks: int = 10) -> None:
     try:
         hyperparams = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
         commit_reveal_weights_interval = hyperparams.commit_reveal_weights_interval
-    except Exception:
-        logger.exception('Failed to fetch "commit_reveal_weights_enabled" hyperparameter')
+    except Exception as e:
+        message = f'Failed to fetch "commit_reveal_weights_enabled" hyperparameter: {e}'
+        logger.warning(message)
+        save_weight_setting_failure(
+            subtype=SystemEvent.EventSubType.SUBTENSOR_HYPERPARAMETERS_FETCH_ERROR,
+            long_description=message,
+            data={},
+        )
         commit_reveal_weights_interval = 0
 
     metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
@@ -541,22 +562,26 @@ def do_reveal_weights(weights_id: int) -> None:
 
         wallet = settings.BITTENSOR_WALLET()
         subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-        is_success, msg = subtensor_.reveal_weights(
-            wallet=wallet,
-            netuid=settings.BITTENSOR_NETUID,
-            uids=weights.uids,
-            weights=weights.weights,
-            salt=weights.salt,
-            version_key=weights.version_key,
-            wait_for_inclusion=True,
-            wait_for_finalization=True,
-            max_retries=2,
-        )
+        try:
+            is_success, message = subtensor_.reveal_weights(
+                wallet=wallet,
+                netuid=settings.BITTENSOR_NETUID,
+                uids=weights.uids,
+                weights=weights.weights,
+                salt=weights.salt,
+                version_key=weights.version_key,
+                wait_for_inclusion=True,
+                wait_for_finalization=True,
+                max_retries=2,
+            )
+        except Exception as e:
+            is_success = False
+            message = str(e)
         if is_success:
             save_weight_setting_event(
                 type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
                 subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
-                long_description=msg,
+                long_description=message,
                 data={"weights_id": weights.id},
             )
             weights.revealed_at = now()
@@ -564,7 +589,7 @@ def do_reveal_weights(weights_id: int) -> None:
         else:
             save_weight_setting_failure(
                 subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
-                long_description=msg,
+                long_description=message,
                 data={"weights_id": weights.id},
             )
 
