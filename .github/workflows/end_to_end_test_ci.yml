@@ -45,11 +45,12 @@ jobs:
           IMAGE_NAME=andreeareef/compute-horde-executor-e2e-final:v0-latest
           
           echo "LOADING KEY -------------------------------"
-          echo "${{ secrets.DOCKER_CONTENT_TRUST_REPOSITORY_KEY }}" > repo.key
+          echo "${{ secrets.DOCKERHUB_DELEGATED_KEY_TEST}}" > repo.key
           chmod 600 repo.key
-          echo "${{ secrets.DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE }}" | docker trust key load repo.key
+          docker trust key load repo.key
           echo "KEY LOADED -------------------------------"
 
+          echo "LOGGING INTO DOCKERHUB -------------------------------"
           echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
           export DOCKER_CONTENT_TRUST=1
           echo "LOGGED IN -------------------------------"
@@ -65,7 +66,7 @@ jobs:
             .
 
           echo "HERE ---- will push"
-          echo "${{ secrets.DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE }}" | docker push "$IMAGE_NAME"
+          echo "${{ secrets.DOCKERHUB_DELEGATED_KEY_TEST_PASSPHRASE  }}" | docker push "$IMAGE_NAME"
           echo "HERE ---- pushed"
 
       - name: Build miner nginx image
