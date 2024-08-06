@@ -1,5 +1,6 @@
 import contextlib
 import json
+import numbers
 import time
 import traceback
 from collections import defaultdict
@@ -104,6 +105,11 @@ def run_synthetic_jobs():
     _run_synthetic_jobs.apply_async()
 
 
+def _normalize_weights_for_committing(weights: list[numbers.Number], max_: int):
+    factor = max_ / max(weights)
+    return [round(w * factor) for w in weights]
+
+
 @app.task()
 def do_set_weights(
     netuid: int,
@@ -126,10 +132,12 @@ def do_set_weights(
         hyperparams = subtensor_.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
         commit_reveal_weights_enabled = bool(hyperparams.commit_reveal_weights_enabled)
         commit_reveal_weights_interval = hyperparams.commit_reveal_weights_interval
+        max_weight = hyperparams.max_weight_limit
     except Exception:
         logger.exception('Failed to fetch "commit_reveal_weights_*" hyperparameters')
         commit_reveal_weights_enabled = None
         commit_reveal_weights_interval = 0
+        max_weight = 65535
 
     def _commit_weights() -> tuple[bool, str]:
         last_weights = Weights.objects.order_by("-created_at").first()
@@ -155,10 +163,10 @@ def do_set_weights(
                 },
             )
             return False, "Cannot commit new weights before revealing old ones"
-
+        normalized_weights = _normalize_weights_for_committing(weights, max_weight)
         weights_in_db = Weights(
             uids=uids,
-            weights=weights,
+            weights=normalized_weights,
             block=metagraph.block.item(),
             version_key=version_key,
         )
@@ -166,7 +174,7 @@ def do_set_weights(
             wallet=settings.BITTENSOR_WALLET(),
             netuid=netuid,
             uids=uids,
-            weights=weights,
+            weights=normalized_weights,
             salt=weights_in_db.salt,
             version_key=version_key,
             wait_for_inclusion=wait_for_inclusion,
@@ -222,7 +230,11 @@ def do_set_weights(
     match commit_reveal_weights_enabled:
         case None:
             # we don't know current hyperparams, so we can't decide which method to use -> try both
-            is_success, msg = _commit_weights()
+            try:
+                is_success, msg = _commit_weights()
+            except:
+                is_success, msg = False, "Unexpected error occurred when committing weights"
+                logger.exception("Encountered when committing weights")
             if not is_success:  # 'Subtensor returned `CommitRevealDisabled (Module)` error. This means: `attempting to commit/reveal weights when disabled.`'
                 is_success, msg = _set_weights()
             return is_success, msg

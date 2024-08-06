@@ -14,7 +14,11 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
     Weights,
 )
-from compute_horde_validator.validator.tasks import reveal_scores, set_scores
+from compute_horde_validator.validator.tasks import (
+    _normalize_weights_for_committing,
+    reveal_scores,
+    set_scores,
+)
 
 from .helpers import (
     NUM_NEURONS,
@@ -40,7 +44,7 @@ def setup_db():
     for i in range(NUM_NEURONS):
         SyntheticJob.objects.create(
             batch=job_batch,
-            score=0,
+            score=i,
             job_uuid=uuid.uuid4(),
             miner=Miner.objects.get(hotkey=f"hotkey_{i}"),
             miner_address="ignore",
@@ -51,6 +55,15 @@ def setup_db():
         )
 
 
+def test_normalize_scores():
+    assert _normalize_weights_for_committing([0.5, 1.5, 100.1, 30], 65535) == [
+        327,
+        982,
+        65535,
+        19641,
+    ]
+
+
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__no_batches_found(settings):
@@ -58,17 +71,29 @@ def test_set_scores__no_batches_found(settings):
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight_success(settings):
-    setup_db()
-    set_scores()
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
-    check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
-        SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
-        1,
-    )
+    subtensor_ = MockSubtensor()
+    with patch(
+        "bittensor.subtensor",
+        lambda *a, **kw: subtensor_,
+    ):
+        setup_db()
+        set_scores()
+        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
+        assert subtensor_.weights_set == [
+            [
+                0.10000000149011612,
+                0.20000000298023224,
+                0.30000001192092896,
+                0.4000000059604645,
+            ]
+        ]
+        check_system_events(
+            SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+            SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
+            1,
+        )
 
 
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
@@ -228,6 +253,7 @@ def test_set_scores__set_weight__broken_hyperparameters__commit_weights_disabled
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
             commit_reveal_weights_interval=20,
+            max_weight_limit=65535,
         ),
     ),
 )
@@ -249,29 +275,39 @@ def test_set_scores__set_weight__broken_hyperparameters__commit_weights_enabled(
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
-@patch(
-    "bittensor.subtensor",
-    lambda *args, **kwargs: MockSubtensor(
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__commit(settings):
+    subtensor_ = MockSubtensor(
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
             commit_reveal_weights_interval=20,
+            max_weight_limit=65535,
         ),
-    ),
-)
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight__commit(settings):
-    settings.CELERY_TASK_ALWAYS_EAGER = True
-    setup_db()
-    set_scores()
-    assert (
-        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
-    ), SystemError.objects.all()
-    check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
-        SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
-        1,
     )
-    assert Weights.objects.count() == 1
+    with patch(
+        "bittensor.subtensor",
+        lambda *a, **kw: subtensor_,
+    ):
+        settings.CELERY_TASK_ALWAYS_EAGER = True
+        setup_db()
+        set_scores()
+        assert (
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
+        ), SystemEvent.objects.all()
+        assert subtensor_.weights_committed == [
+            [
+                16384,
+                32768,
+                49151,
+                65535,
+            ]
+        ]
+        check_system_events(
+            SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+            SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
+            1,
+        )
+        assert Weights.objects.count() == 1
 
 
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
@@ -281,6 +317,7 @@ def test_set_scores__set_weight__commit(settings):
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
             commit_reveal_weights_interval=20,
+            max_weight_limit=65535,
         ),
     ),
 )
@@ -310,6 +347,7 @@ def test_set_scores__set_weight__double_commit_failure(settings):
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
             commit_reveal_weights_interval=20,
+            max_weight_limit=65535,
         ),
     ),
 )
@@ -343,42 +381,50 @@ def test_set_scores__set_weight__reveal__too_early(settings):
     "compute_horde_validator.validator.tests.helpers.MockSubtensor.metagraph",
     always_same_result(MockMetagraph()),
 )
-@patch(
-    "bittensor.subtensor",
-    lambda *args, **kwargs: MockSubtensor(
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__reveal__in_time(settings):
+    subtensor_ = MockSubtensor(
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
             commit_reveal_weights_interval=20,
+            max_weight_limit=65535,
         ),
-    ),
-)
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight__reveal__in_time(settings):
-    settings.CELERY_TASK_ALWAYS_EAGER = True
-    setup_db()
-    set_scores()
-
-    last_weights = Weights.objects.order_by("-id").first()
-    assert last_weights
-    assert last_weights.revealed_at is None
-
-    # wait for the interval to pass
-    class _MockBlock:
-        def item(self) -> int:
-            return 1020
-
-    from bittensor import subtensor
-
-    subtensor().metagraph(netuid=1).block = _MockBlock()
-    reveal_scores()
-
-    last_weights.refresh_from_db()
-    assert last_weights.revealed_at is not None
-    check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
-        SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
-        1,
     )
+    with patch(
+        "bittensor.subtensor",
+        lambda *a, **kw: subtensor_,
+    ):
+        settings.CELERY_TASK_ALWAYS_EAGER = True
+        setup_db()
+        set_scores()
+
+        last_weights = Weights.objects.order_by("-id").first()
+        assert last_weights
+        assert last_weights.revealed_at is None
+
+        # wait for the interval to pass
+        class _MockBlock:
+            def item(self) -> int:
+                return 1020
+
+        subtensor_.metagraph(netuid=1).block = _MockBlock()
+        reveal_scores()
+
+        assert subtensor_.weights_revealed == [
+            [
+                16384,
+                32768,
+                49151,
+                65535,
+            ]
+        ]
+        last_weights.refresh_from_db()
+        assert last_weights.revealed_at is not None
+        check_system_events(
+            SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+            SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
+            1,
+        )
 
 
 @patch(
@@ -387,6 +433,7 @@ def test_set_scores__set_weight__reveal__in_time(settings):
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
             commit_reveal_weights_interval=20,
+            max_weight_limit=65535,
         ),
     ),
 )
