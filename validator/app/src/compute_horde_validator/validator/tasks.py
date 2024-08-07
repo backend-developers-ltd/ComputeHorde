@@ -5,7 +5,7 @@ import time
 import traceback
 from collections import defaultdict
 from datetime import timedelta
-from math import floor
+from math import ceil, floor
 
 import billiard.exceptions
 import bittensor
@@ -67,23 +67,23 @@ class WeightsRevealError(Exception):
     pass
 
 
-def when_to_run(start_block: int, end_block: int, total: int, index_: int) -> int:
+def when_to_run(epoch: range, total: int, index_: int) -> int:
     """
-    Evenly distribute validation runs during the epoch.
+    Select block when to run validation for a given validator.
+    Evenly distribute runs across validators.
 
     total == 3
 
     |______________________________________________________|__________
-    ^-start_block                                          ^-end_block
+    ^-epoch.start                                           ^-epoch.stop
     _____________|_____________|_____________|_____________|
                  ^-0           ^-1           ^-2
     |____________|_____________|
          blocks      blocks
         b/w runs    b/w runs
     """
-    assert end_block > start_block
-    blocks_between_runs = (end_block - start_block) / (total + 1)
-    return start_block + floor(blocks_between_runs * (index_ + 1))
+    blocks_between_runs = (epoch.stop - epoch.start) / (total + 1)
+    return epoch.start + floor(blocks_between_runs * (index_ + 1))
 
 
 def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
@@ -125,7 +125,7 @@ def schedule_synthetic_jobs() -> None:
 
         run_in_current_epoch = (
             ScheduledSyntheticJobs.objects.filter(
-                block__gte=current_epoch[0], block__lte=current_epoch[1]
+                block__gte=current_epoch.start, block__lt=current_epoch.stop
             )
             .order_by("block")
             .last()
@@ -148,8 +148,7 @@ def schedule_synthetic_jobs() -> None:
             return
 
         next_run_block = when_to_run(
-            start_block=current_epoch[0],
-            end_block=current_epoch[1],
+            epoch=current_epoch,
             total=len(validators),
             index_=this_validator_index,
         )
@@ -162,7 +161,7 @@ def schedule_synthetic_jobs() -> None:
     soft_time_limit=SYNTHETIC_JOBS_SOFT_LIMIT,
     time_limit=SYNTHETIC_JOBS_HARD_LIMIT,
 )
-def _run_synthetic_jobs():
+def _run_synthetic_jobs() -> None:
     try:
         # metagraph will be refetched and that's fine, after sleeping
         # for e.g. 30 minutes we should refetch the miner list
@@ -171,8 +170,14 @@ def _run_synthetic_jobs():
         logger.info("Running synthetic jobs timed out")
 
 
+BLOCK_DURATION = timedelta(seconds=12)
+DEFAULT_MAX_LATE_BLOCKS = ceil(
+    settings.CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] / BLOCK_DURATION
+)
+
+
 @app.task()
-def run_synthetic_jobs(max_late_blocks: int = 3) -> None:
+def run_synthetic_jobs(max_late_blocks: int = DEFAULT_MAX_LATE_BLOCKS) -> None:
     """
     Run synthetic jobs as scheduled by ScheduledValidationRun.
     Don't run jobs if we're too late (more than `max_late_blocks`
@@ -191,7 +196,7 @@ def run_synthetic_jobs(max_late_blocks: int = 3) -> None:
 
     with transaction.atomic():
         scheduled_run = (
-            ScheduledSyntheticJobs.objects.select_for_update()
+            ScheduledSyntheticJobs.objects.select_for_update(skip_locked=True)
             .filter(
                 block__gte=current_block - max_late_blocks,
                 **(

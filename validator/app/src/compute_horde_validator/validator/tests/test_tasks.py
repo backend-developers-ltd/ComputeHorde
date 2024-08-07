@@ -1,4 +1,5 @@
-from unittest.mock import patch
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import MagicMock, patch
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
@@ -14,6 +15,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.tasks import (
     get_epoch_containing_block,
+    run_synthetic_jobs,
     schedule_synthetic_jobs,
     send_events_to_facilitator,
     trigger_run_admin_job_request,
@@ -21,7 +23,6 @@ from compute_horde_validator.validator.tasks import (
 )
 
 from .helpers import (
-    MockNeuron,
     MockSubtensor,
     SingleExecutorMockMinerClient,
     mock_get_miner_axon_info,
@@ -156,9 +157,9 @@ def test__get_epoch_containing_block(netuid, block, expected_epoch):
 
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test__when_to_run():
-    assert when_to_run(start_block=100, end_block=200, total=4, index_=2) == 160
-    assert when_to_run(start_block=100, end_block=200, total=2, index_=0) == 133
-    assert when_to_run(start_block=100, end_block=200, total=2, index_=1) == 166
+    assert when_to_run(epoch=range(100, 201), total=4, index_=2) == 160
+    assert when_to_run(epoch=range(100, 201), total=2, index_=0) == 133
+    assert when_to_run(epoch=range(100, 201), total=2, index_=1) == 167
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
@@ -174,12 +175,184 @@ def test__schedule_validation_run__not_in_validators(validators):
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__schedule_validation_run__simple(settings, validators):
-    this_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+def test__schedule_validation_run__simple(validators_with_this_hotkey):
     with patch(
         "compute_horde_validator.validator.tasks.get_validators",
-        lambda *args, **kwargs: [*validators, MockNeuron(hotkey=this_hotkey, uid=100)],
+        lambda *args, **kwargs: validators_with_this_hotkey,
     ):
         assert ScheduledSyntheticJobs.objects.count() == 0
         schedule_synthetic_jobs()
         assert ScheduledSyntheticJobs.objects.count() == 1
+
+        schedule = ScheduledSyntheticJobs.objects.last()
+        assert schedule.block in range(1000, 1070)
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test__schedule_validation_run__concurrent(validators_with_this_hotkey):
+    with patch(
+        "compute_horde_validator.validator.tasks.get_validators",
+        lambda *args, **kwargs: validators_with_this_hotkey,
+    ):
+        assert ScheduledSyntheticJobs.objects.count() == 0
+        num_threads = 10
+        with ThreadPoolExecutor(max_workers=num_threads) as pool:
+            pool.map(lambda _: schedule_synthetic_jobs(), range(num_threads))
+
+        assert ScheduledSyntheticJobs.objects.count() == 1
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__schedule_validation_run__already_scheduled(validators_with_this_hotkey):
+    from bittensor import subtensor
+
+    current_block = subtensor().get_current_block()
+    assert current_block == 1000
+
+    ScheduledSyntheticJobs.objects.create(block=current_block + 20)
+    with patch(
+        "compute_horde_validator.validator.tasks.get_validators",
+        lambda *args, **kwargs: validators_with_this_hotkey,
+    ):
+        schedule_synthetic_jobs()
+        assert ScheduledSyntheticJobs.objects.count() == 1
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__run_synthetic_jobs__not_serving():
+    from constance import config
+
+    config.SERVING = False
+
+    run_synthetic_jobs()
+
+    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
+
+    assert _run_synthetic_jobs.apply_async.call_count == 0
+
+
+@patch(
+    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+)
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__run_synthetic_jobs__not_scheduled():
+    run_synthetic_jobs()
+
+    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
+
+    assert _run_synthetic_jobs.apply_async.call_count == 0
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch(
+    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+)
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__run_synthetic_jobs__debug_dont_stagger_validators__true(settings):
+    settings.DEBUG_DONT_STAGGER_VALIDATORS = True
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+
+    from bittensor import subtensor
+
+    current_block = subtensor().get_current_block()
+    ScheduledSyntheticJobs.objects.create(block=current_block + 50)
+
+    run_synthetic_jobs()
+
+    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
+
+    assert _run_synthetic_jobs.apply_async.call_count == 1
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch(
+    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+)
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__run_synthetic_jobs__debug_dont_stagger_validators__false(settings):
+    settings.DEBUG_DONT_STAGGER_VALIDATORS = False
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+
+    from bittensor import subtensor
+
+    current_block = subtensor().get_current_block()
+    ScheduledSyntheticJobs.objects.create(block=current_block + 50)
+
+    run_synthetic_jobs()
+
+    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
+
+    assert _run_synthetic_jobs.apply_async.call_count == 0
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch(
+    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+)
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__run_synthetic_jobs__too_late(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+
+    from bittensor import subtensor
+
+    current_block = subtensor().get_current_block()
+    ScheduledSyntheticJobs.objects.create(block=current_block - 4)
+
+    run_synthetic_jobs(max_late_blocks=3)
+
+    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
+
+    assert _run_synthetic_jobs.apply_async.call_count == 0
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch(
+    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+)
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__run_synthetic_jobs__in_time(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+
+    from bittensor import subtensor
+
+    current_block = subtensor().get_current_block()
+    ScheduledSyntheticJobs.objects.create(block=current_block - 1)
+
+    run_synthetic_jobs(max_late_blocks=3)
+
+    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
+
+    assert _run_synthetic_jobs.apply_async.call_count == 1
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch(
+    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+)
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test__run_synthetic_jobs__concurrent(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+
+    from bittensor import subtensor
+
+    current_block = subtensor().get_current_block()
+    ScheduledSyntheticJobs.objects.create(block=current_block - 1)
+
+    num_threads = 10
+    with ThreadPoolExecutor(max_workers=num_threads) as pool:
+        pool.map(lambda _: run_synthetic_jobs(max_late_blocks=3), range(num_threads))
+
+    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
+
+    assert _run_synthetic_jobs.apply_async.call_count == 1
+    assert ScheduledSyntheticJobs.objects.last().started_at is not None
