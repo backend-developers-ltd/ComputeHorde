@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 class ParamItem(BaseModel):
     value: Any
     effective_from: datetime.datetime | None = None  # None = from the beginning of time (-inf)
-    effective_until: datetime.datetime | None = None  # None = to the end of time (+inf)
     reason: str | None = None
 
 
@@ -43,9 +42,6 @@ def sync_dynamic_config(config_url: str, namespace: SupportsSetAttr) -> None:
         for param_item in param.items:
             if param_item.effective_from is not None and param_item.effective_from > now:
                 logger.warning(f"Ignoring dynamic config {param_key}={param_item.value}")
-                continue
-
-            if param_item.effective_until is not None and param_item.effective_until < now:
                 continue
 
             try:
