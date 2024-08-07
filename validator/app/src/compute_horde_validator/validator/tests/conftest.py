@@ -5,7 +5,7 @@ from unittest.mock import patch
 import bittensor
 import pytest
 
-from .helpers import MockMinerClient
+from .helpers import MockMinerClient, MockNeuron
 
 logger = logging.getLogger(__name__)
 
@@ -53,3 +53,8 @@ def mocked_synthetic_miner_client():
 
         MockedMinerClient.side_effect = side_effect
         yield MockedMinerClient
+
+
+@pytest.fixture
+def validators():
+    return [MockNeuron(hotkey=f"hehetrololo{i}", uid=i) for i in range(10)]
