@@ -33,7 +33,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobFinishedReceiptRequest,
     V0JobStartedReceiptRequest,
 )
-from compute_horde.transport import WSTransport
+from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
 from django.conf import settings
 
@@ -78,12 +78,18 @@ class MinerClient(AbstractMinerClient):
         job_uuid: None | str | uuid.UUID,
         batch_id: None | int,
         keypair: bittensor.Keypair,
+        transport: AbstractTransport | None = None,
     ):
-        super().__init__(f"{miner_hotkey}({miner_address}:{miner_port})")
         self.miner_hotkey = miner_hotkey
         self.my_hotkey = my_hotkey
         self.miner_address = miner_address
         self.miner_port = miner_port
+
+        name = f"{miner_hotkey}({miner_address}:{miner_port})"
+        transport = transport or WSTransport(name, self.miner_url())
+
+        super().__init__(name, transport)
+
         self.job_states = {}
         if job_uuid is not None:
             self.add_job(job_uuid)
@@ -93,7 +99,6 @@ class MinerClient(AbstractMinerClient):
         loop = asyncio.get_running_loop()
         self.miner_manifest = loop.create_future()
         self.online_executor_count = 0
-        self.transport = WSTransport(self.miner_url())
 
     def add_job(self, job_uuid: str | uuid.UUID):
         job_state = JobState()
@@ -223,6 +228,6 @@ class MinerClient(AbstractMinerClient):
             signature=f"0x{self.keypair.sign(receipt_payload.blob_for_signing()).hex()}",
         )
 
-    async def _connect(self):
-        await super()._connect()
+    async def connect(self):
+        await super().connect()
         await self.transport.send(self.generate_authentication_message().model_dump_json())

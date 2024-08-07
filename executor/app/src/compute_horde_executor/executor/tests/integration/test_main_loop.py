@@ -61,12 +61,9 @@ class MockTransport(AbstractTransport):
         self.messages = messages
         self.sent_messages: list[str] = []
 
-    async def connect(self): ...
+    async def start(self): ...
 
-    async def close(self): ...
-
-    async def is_connected(self):
-        return True
+    async def stop(self): ...
 
     async def send(self, message):
         self.sent_messages.append(message)
@@ -78,15 +75,10 @@ class MockTransport(AbstractTransport):
             await asyncio.Future()
 
 
-class TestMinerClient(MinerClient):
-    def __init__(self, *args, messages, **kwargs):
-        transport = MockTransport(messages)
-        super().__init__(*args, transport=transport, **kwargs)
-
-
 class TestCommand(Command):
     def __init__(self, messages, *args, **kwargs):
-        self.MINER_CLIENT_CLASS = partial(TestMinerClient, messages=messages)
+        transport = MockTransport(messages)
+        self.MINER_CLIENT_CLASS = partial(MinerClient, transport=transport)
         super().__init__(*args, **kwargs)
 
 
