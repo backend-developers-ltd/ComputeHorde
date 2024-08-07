@@ -78,7 +78,7 @@ class RunConfigManager:
 
 class MinerClient(AbstractMinerClient):
     def __init__(self, miner_address: str, token: str, transport: AbstractTransport):
-        super().__init__(miner_address)
+        super().__init__(miner_address, transport)
         self.miner_address = miner_address
         self.token = token
         self.job_uuid: str | None = None

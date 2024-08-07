@@ -60,7 +60,7 @@ class MockMinerClient(MinerClient):
     def miner_url(self) -> str:
         return "ws://miner"
 
-    async def await_connect(self):
+    async def connect(self):
         return
 
     def accepted_request_type(self) -> type[BaseRequest]:

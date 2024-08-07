@@ -6,12 +6,11 @@ class TransportConnectionError(Exception):
 
 
 class AbstractTransport(abc.ABC):
-    @abc.abstractmethod
-    async def connect(self):
-        pass
+    def __init__(self, name: str, *args, **kwargs):
+        self.name = name
 
     @abc.abstractmethod
-    async def send(self, data: str | bytes):
+    async def send(self, data: str | bytes) -> None:
         pass
 
     @abc.abstractmethod
@@ -19,5 +18,16 @@ class AbstractTransport(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def close(self):
+    async def start(self) -> None:
         pass
+
+    @abc.abstractmethod
+    async def stop(self) -> None:
+        pass
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        message = await self.receive()
+        return message
