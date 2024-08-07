@@ -4,16 +4,28 @@
 [metadata]
 groups = ["default", "format", "lint", "security_check", "test", "type_check"]
 strategy = ["cross_platform", "inherit_metadata"]
-lock_version = "4.4.2"
-content_hash = "sha256:0f8ea4f67d1b868df7a0bd54c0069e7e3f2e8b86e2b70b443e57033eb1742647"
+lock_version = "4.4.1"
+content_hash = "sha256:c9ba1451c7092f18977cf82e39517de6b688592fb5ff4cf0f343fed13899c9b6"
+
+[[package]]
+name = "aiohappyeyeballs"
+version = "2.3.4"
+requires_python = "<4.0,>=3.8"
+summary = "Happy Eyeballs for asyncio"
+groups = ["default"]
+files = [
+    {file = "aiohappyeyeballs-2.3.4-py3-none-any.whl", hash = "sha256:40a16ceffcf1fc9e142fd488123b2e218abc4188cf12ac20c67200e1579baa42"},
+    {file = "aiohappyeyeballs-2.3.4.tar.gz", hash = "sha256:7e1ae8399c320a8adec76f6c919ed5ceae6edd4c3672f4d9eae2b27e37c80ff6"},
+]
 
 [[package]]
 name = "aiohttp"
-version = "3.9.0b0"
+version = "3.10.1"
 requires_python = ">=3.8"
 summary = "Async http client/server framework (asyncio)"
 groups = ["default"]
 dependencies = [
+    "aiohappyeyeballs>=2.3.0",
     "aiosignal>=1.1.2",
     "attrs>=17.3.0",
     "frozenlist>=1.1.1",
@@ -21,22 +33,22 @@ dependencies = [
     "yarl<2.0,>=1.0",
 ]
 files = [
-    {file = "aiohttp-3.9.0b0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:94197a77859ab1039b9ca6c3c393b8e7b5fc34a9abfbcb58daac38ab89684a99"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:0c78d2cfe1515cfb31ba67edf0518c6677a963ec2039b652b03a886733e72e65"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:28b38a14f564c833e59c99f748b48803e4babeabc6a0307952b01e6c8d642cab"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e596cfc52380f71e197e7cf0e2d3c4714b4bf66d2d562cdbd5442284bac18909"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:6190951b7933c834d9346e21c5a81642caa210d291cda4036daf85fc53162d35"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:fb0cb2cbf95cf4cc40307d0d0187f59c4b86b1d7d1a624922a7d0b046deffba7"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e27c283e21e94fa1582d31b57c514b87ab609882ade413ce43f585d73c8a33fc"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:c6826c59b4e99673728bcdaecacbd699b7521f17ca165c63a5e26e23d42aeea5"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-musllinux_1_1_aarch64.whl", hash = "sha256:aa4738f3b1b916b1cc69ed3d1dead9714919dc4d30ae0d5f6d55eadb2c511133"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:4b2abd7936f687de3a3ab199b145a9de01ed046eb5640cd66f47da07a9050a78"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-musllinux_1_1_ppc64le.whl", hash = "sha256:652cc00a97bc206c470db06276ce57ff2a53a625795bbce8435ef8b6a4cb0113"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-musllinux_1_1_s390x.whl", hash = "sha256:d54529c1d95d5d200ecb7133a343785e5661a804f3dcee090a7bca3b48189d69"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:324fe990c97721ea8eb4d439f12b59d1a93cd7e0dd188c7b145bffdfbd327dc3"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-win32.whl", hash = "sha256:3a2ef8318435f40f5906af36fda20b5432e07e6a7e05de3a4d2934c25320b8ff"},
-    {file = "aiohttp-3.9.0b0-cp311-cp311-win_amd64.whl", hash = "sha256:887d8757aafc7f6fbda76faaff21fc2aa31b9dca0911ecd6b60b0fe922a2abfc"},
-    {file = "aiohttp-3.9.0b0.tar.gz", hash = "sha256:cecc64fd7bae6debdf43437e3c83183c40d4f4d86486946f412c113960598eee"},
+    {file = "aiohttp-3.10.1-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:f6979b4f20d3e557a867da9d9227de4c156fcdcb348a5848e3e6190fd7feb972"},
+    {file = "aiohttp-3.10.1-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:03c0c380c83f8a8d4416224aafb88d378376d6f4cadebb56b060688251055cd4"},
+    {file = "aiohttp-3.10.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:1c2b104e81b3c3deba7e6f5bc1a9a0e9161c380530479970766a6655b8b77c7c"},
+    {file = "aiohttp-3.10.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b023b68c61ab0cd48bd38416b421464a62c381e32b9dc7b4bdfa2905807452a4"},
+    {file = "aiohttp-3.10.1-cp311-cp311-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:1a07c76a82390506ca0eabf57c0540cf5a60c993c442928fe4928472c4c6e5e6"},
+    {file = "aiohttp-3.10.1-cp311-cp311-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:41d8dab8c64ded1edf117d2a64f353efa096c52b853ef461aebd49abae979f16"},
+    {file = "aiohttp-3.10.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:615348fab1a9ef7d0960a905e83ad39051ae9cb0d2837da739b5d3a7671e497a"},
+    {file = "aiohttp-3.10.1-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:256ee6044214ee9d66d531bb374f065ee94e60667d6bbeaa25ca111fc3997158"},
+    {file = "aiohttp-3.10.1-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:b7d5bb926805022508b7ddeaad957f1fce7a8d77532068d7bdb431056dc630cd"},
+    {file = "aiohttp-3.10.1-cp311-cp311-musllinux_1_2_i686.whl", hash = "sha256:028faf71b338f069077af6315ad54281612705d68889f5d914318cbc2aab0d50"},
+    {file = "aiohttp-3.10.1-cp311-cp311-musllinux_1_2_ppc64le.whl", hash = "sha256:5c12310d153b27aa630750be44e79313acc4e864c421eb7d2bc6fa3429c41bf8"},
+    {file = "aiohttp-3.10.1-cp311-cp311-musllinux_1_2_s390x.whl", hash = "sha256:de1a91d5faded9054957ed0a9e01b9d632109341942fc123947ced358c5d9009"},
+    {file = "aiohttp-3.10.1-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:9c186b270979fb1dee3ababe2d12fb243ed7da08b30abc83ebac3a928a4ddb15"},
+    {file = "aiohttp-3.10.1-cp311-cp311-win32.whl", hash = "sha256:4a9ce70f5e00380377aac0e568abd075266ff992be2e271765f7b35d228a990c"},
+    {file = "aiohttp-3.10.1-cp311-cp311-win_amd64.whl", hash = "sha256:a77c79bac8d908d839d32c212aef2354d2246eb9deb3e2cb01ffa83fb7a6ea5d"},
+    {file = "aiohttp-3.10.1.tar.gz", hash = "sha256:8b0d058e4e425d3b45e8ec70d49b402f4d6b21041e674798b1f91ba027c73f28"},
 ]
 
 [[package]]
@@ -300,26 +312,25 @@ files = [
 
 [[package]]
 name = "bittensor"
-version = "7.1.1"
+version = "7.3.1"
 requires_python = ">=3.9"
 summary = "bittensor"
 groups = ["default"]
 dependencies = [
     "PyNaCl<=1.5.0,>=1.3.0",
-    "aiohttp==3.9.0b0",
-    "ansible-vault==2.1.0",
-    "ansible==6.7.0",
+    "aiohttp~=3.9",
+    "ansible-vault~=2.1",
+    "ansible~=6.7",
     "backoff",
-    "black==23.7.0",
-    "certifi==2024.2.2",
-    "colorama==0.4.6",
-    "cryptography==42.0.5",
-    "ddt==1.6.0",
+    "certifi~=2024.2.2",
+    "colorama~=0.4.6",
+    "cryptography~=42.0.5",
+    "ddt~=1.6.0",
     "eth-utils<2.3.0",
-    "fastapi==0.110.1",
+    "fastapi~=0.110.1",
     "fuzzywuzzy>=0.18.0",
-    "msgpack-numpy-opentensor==0.5.0",
-    "munch==2.5.0",
+    "msgpack-numpy-opentensor~=0.5.0",
+    "munch~=2.5.0",
     "nest-asyncio",
     "netaddr",
     "numpy",
@@ -327,48 +338,23 @@ dependencies = [
     "password-strength",
     "pycryptodome<4.0.0,>=3.18.0",
     "pydantic<3,>=2.3",
-    "pytest",
-    "pytest-asyncio",
     "python-Levenshtein",
-    "python-statemachine==2.1.2",
+    "python-statemachine~=2.1.2",
     "pyyaml",
     "requests",
     "retry",
     "rich",
-    "scalecodec==1.2.7",
-    "shtab==1.6.5",
-    "substrate-interface==1.7.5",
+    "scalecodec==1.2.11",
+    "shtab~=1.6.5",
+    "substrate-interface~=1.7.9",
     "termcolor",
     "tqdm",
-    "uvicorn==0.22.0",
+    "uvicorn<=0.30",
     "wheel",
 ]
 files = [
-    {file = "bittensor-7.1.1-py3-none-any.whl", hash = "sha256:4b285acea50e081fdd6257771aca99d0735b2aad2caf2fa183c41e461edf8bc9"},
-    {file = "bittensor-7.1.1.tar.gz", hash = "sha256:5e2a1b3d5a8561dd1dc770c7faaf7aad70ca2a5e001073a7fda0d717012e01fe"},
-]
-
-[[package]]
-name = "black"
-version = "23.7.0"
-requires_python = ">=3.8"
-summary = "The uncompromising code formatter."
-groups = ["default"]
-dependencies = [
-    "click>=8.0.0",
-    "mypy-extensions>=0.4.3",
-    "packaging>=22.0",
-    "pathspec>=0.9.0",
-    "platformdirs>=2",
-]
-files = [
-    {file = "black-23.7.0-cp311-cp311-macosx_10_16_arm64.whl", hash = "sha256:b5b0ee6d96b345a8b420100b7d71ebfdd19fab5e8301aff48ec270042cd40ac2"},
-    {file = "black-23.7.0-cp311-cp311-macosx_10_16_universal2.whl", hash = "sha256:893695a76b140881531062d48476ebe4a48f5d1e9388177e175d76234ca247cd"},
-    {file = "black-23.7.0-cp311-cp311-macosx_10_16_x86_64.whl", hash = "sha256:c333286dc3ddca6fdff74670b911cccedacb4ef0a60b34e491b8a67c833b343a"},
-    {file = "black-23.7.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:831d8f54c3a8c8cf55f64d0422ee875eecac26f5f649fb6c1df65316b67c8926"},
-    {file = "black-23.7.0-cp311-cp311-win_amd64.whl", hash = "sha256:7f3bf2dec7d541b4619b8ce526bda74a6b0bffc480a163fed32eb8b3c9aed8ad"},
-    {file = "black-23.7.0-py3-none-any.whl", hash = "sha256:9fd59d418c60c0348505f2ddf9609c1e1de8e7493eab96198fc89d9f865e7a96"},
-    {file = "black-23.7.0.tar.gz", hash = "sha256:022a582720b0d9480ed82576c920a8c1dde97cc38ff11d8d8859b3bd6ca9eedb"},
+    {file = "bittensor-7.3.1-py3-none-any.whl", hash = "sha256:67d2f375ca53b31e49b1802c6100de3c66df6d760ef562a3ddff63db408ce80b"},
+    {file = "bittensor-7.3.1.tar.gz", hash = "sha256:0eb8de326c1f644d8b660e81919301f6ddccb0a824bce8f94c1b1a844624c26b"},
 ]
 
 [[package]]
@@ -621,7 +607,7 @@ dependencies = [
     "more-itertools>=10.2.0",
     "pydantic<3,>=2.3",
     "requests>=2.32.2",
-    "websockets<13.0,>=12.0",
+    "websockets>=11.0",
 ]
 
 [[package]]
@@ -1286,7 +1272,7 @@ name = "iniconfig"
 version = "2.0.0"
 requires_python = ">=3.7"
 summary = "brain-dead simple config-ini parsing"
-groups = ["default", "test"]
+groups = ["test"]
 files = [
     {file = "iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374"},
     {file = "iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3"},
@@ -1583,7 +1569,7 @@ name = "mypy-extensions"
 version = "1.0.0"
 requires_python = ">=3.5"
 summary = "Type system extensions for programs checked with the mypy type checker."
-groups = ["default", "type_check"]
+groups = ["type_check"]
 files = [
     {file = "mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d"},
     {file = "mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782"},
@@ -1685,17 +1671,6 @@ files = [
 ]
 
 [[package]]
-name = "pathspec"
-version = "0.12.1"
-requires_python = ">=3.8"
-summary = "Utility library for gitignore style pattern matching of file paths."
-groups = ["default"]
-files = [
-    {file = "pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08"},
-    {file = "pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712"},
-]
-
-[[package]]
 name = "pbr"
 version = "6.0.0"
 requires_python = ">=2.6"
@@ -1746,7 +1721,7 @@ name = "pluggy"
 version = "1.5.0"
 requires_python = ">=3.8"
 summary = "plugin and hook calling mechanisms for python"
-groups = ["default", "test"]
+groups = ["test"]
 files = [
     {file = "pluggy-1.5.0-py3-none-any.whl", hash = "sha256:44e1ad92c8ca002de6377e165f3e0f1be63266ab4d554740532335b9d75ea669"},
     {file = "pluggy-1.5.0.tar.gz", hash = "sha256:2cffa88e94fdc978c4c574f15f9e59b7f4201d439195c3715ca9e2486f1d0cf1"},
@@ -2067,7 +2042,7 @@ name = "pytest"
 version = "8.2.2"
 requires_python = ">=3.8"
 summary = "pytest: simple powerful testing with Python"
-groups = ["default", "test"]
+groups = ["test"]
 dependencies = [
     "colorama; sys_platform == \"win32\"",
     "iniconfig",
@@ -2084,7 +2059,7 @@ name = "pytest-asyncio"
 version = "0.23.7"
 requires_python = ">=3.8"
 summary = "Pytest support for asyncio"
-groups = ["default", "test"]
+groups = ["test"]
 dependencies = [
     "pytest<9,>=7.0.0",
 ]
@@ -2344,8 +2319,8 @@ files = [
 
 [[package]]
 name = "scalecodec"
-version = "1.2.7"
-requires_python = ">=3.6, <4"
+version = "1.2.11"
+requires_python = "<4,>=3.6"
 summary = "Python SCALE Codec Library"
 groups = ["default"]
 dependencies = [
@@ -2354,8 +2329,8 @@ dependencies = [
     "requests>=2.24.0",
 ]
 files = [
-    {file = "scalecodec-1.2.7-py3-none-any.whl", hash = "sha256:2d951041b10429e7bcee9a08b693d151add002875cc961ab90cd7a844d01bdfd"},
-    {file = "scalecodec-1.2.7.tar.gz", hash = "sha256:5215354a5e8f12f8f647cb0cced572873c8a91943ad7d3e2c1e3d7a28be65ade"},
+    {file = "scalecodec-1.2.11-py3-none-any.whl", hash = "sha256:d15c94965f617caa25096f83a45f5f73031d05e6ee08d6039969f0a64fc35de1"},
+    {file = "scalecodec-1.2.11.tar.gz", hash = "sha256:99a2cdbfccdcaf22bd86b86da55a730a2855514ad2309faef4a4a93ac6cbeb8d"},
 ]
 
 [[package]]
@@ -2489,8 +2464,8 @@ files = [
 
 [[package]]
 name = "substrate-interface"
-version = "1.7.5"
-requires_python = ">=3.7, <4"
+version = "1.7.10"
+requires_python = "<4,>=3.7"
 summary = "Library for interfacing with a Substrate node"
 groups = ["default"]
 dependencies = [
@@ -2506,13 +2481,13 @@ dependencies = [
     "py-sr25519-bindings<1,>=0.2.0",
     "pycryptodome<4,>=3.11.0",
     "requests<3,>=2.21.0",
-    "scalecodec<1.3,>=1.2.6",
+    "scalecodec<1.3,>=1.2.10",
     "websocket-client<2,>=0.57.0",
     "xxhash<4,>=1.3.0",
 ]
 files = [
-    {file = "substrate-interface-1.7.5.tar.gz", hash = "sha256:8d4f961cd566d748f4a3ae0747983be5fe57e349071c0650114afc8c5ab06b93"},
-    {file = "substrate_interface-1.7.5-py3-none-any.whl", hash = "sha256:8e8381b6ce6f370b90a6ae537964f118421f199663c9efd5b2a1b04982082005"},
+    {file = "substrate-interface-1.7.10.tar.gz", hash = "sha256:0dec0104abc16d01c3d22700253a84e67430b5e56c46efea71fea47063a8eaa4"},
+    {file = "substrate_interface-1.7.10-py3-none-any.whl", hash = "sha256:4873e9f1b75375ed9fcdd12d7bca66c47ab0e9fbd532ec4f9538ceac0f0ab2f5"},
 ]
 
 [[package]]
