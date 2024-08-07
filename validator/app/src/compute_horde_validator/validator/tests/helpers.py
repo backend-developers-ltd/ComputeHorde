@@ -15,8 +15,8 @@ from compute_horde_validator.validator.facilitator_api import (
     V0FacilitatorJobRequest,
     V1FacilitatorJobRequest,
 )
+from compute_horde_validator.validator.miner_client import JobState, MinerClient
 from compute_horde_validator.validator.models import SystemEvent
-from compute_horde_validator.validator.synthetic_jobs.utils import JobState, MinerClient
 
 NUM_NEURONS = 5
 
