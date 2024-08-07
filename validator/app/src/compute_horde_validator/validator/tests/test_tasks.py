@@ -5,13 +5,28 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 from requests import Response
 
-from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob, SystemEvent
+from compute_horde_validator.validator.models import (
+    AdminJobRequest,
+    Miner,
+    OrganicJob,
+    ScheduledSyntheticJobs,
+    SystemEvent,
+)
 from compute_horde_validator.validator.tasks import (
+    get_epoch_containing_block,
+    schedule_synthetic_jobs,
     send_events_to_facilitator,
     trigger_run_admin_job_request,
+    when_to_run,
 )
 
-from .helpers import SingleExecutorMockMinerClient, mock_get_miner_axon_info, throw_error
+from .helpers import (
+    MockNeuron,
+    MockSubtensor,
+    SingleExecutorMockMinerClient,
+    mock_get_miner_axon_info,
+    throw_error,
+)
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
@@ -113,3 +128,58 @@ def test_send_events_to_facilitator__failure():
     add_system_events()
     send_events_to_facilitator()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(sent=False).count() == 2
+
+
+@pytest.mark.parametrize(
+    ("netuid", "block", "expected_epoch"),
+    [
+        # netuid == 0
+        (0, 25, range(-1, 360)),
+        (0, 359, range(-1, 360)),
+        (0, 360, range(360, 721)),
+        (0, 720, range(360, 721)),
+        (0, 721, range(721, 1082)),
+        # netuid == 12
+        (12, 25, range(-13, 348)),
+        (12, 347, range(-13, 348)),
+        (12, 348, range(348, 709)),
+        (12, 708, range(348, 709)),
+        (12, 709, range(709, 1070)),
+        (12, 1100, range(1070, 1431)),
+    ],
+)
+def test__get_epoch_containing_block(netuid, block, expected_epoch):
+    assert (
+        get_epoch_containing_block(block=block, netuid=netuid) == expected_epoch
+    ), f"block: {block}, netuid: {netuid}, expected: {expected_epoch}"
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__when_to_run():
+    assert when_to_run(start_block=100, end_block=200, total=4, index_=2) == 160
+    assert when_to_run(start_block=100, end_block=200, total=2, index_=0) == 133
+    assert when_to_run(start_block=100, end_block=200, total=2, index_=1) == 166
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__schedule_validation_run__not_in_validators(validators):
+    with patch(
+        "compute_horde_validator.validator.tasks.get_validators", lambda *args, **kwargs: validators
+    ):
+        assert ScheduledSyntheticJobs.objects.count() == 0
+        schedule_synthetic_jobs()
+        assert ScheduledSyntheticJobs.objects.count() == 0
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__schedule_validation_run__simple(settings, validators):
+    this_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+    with patch(
+        "compute_horde_validator.validator.tasks.get_validators",
+        lambda *args, **kwargs: [*validators, MockNeuron(hotkey=this_hotkey, uid=100)],
+    ):
+        assert ScheduledSyntheticJobs.objects.count() == 0
+        schedule_synthetic_jobs()
+        assert ScheduledSyntheticJobs.objects.count() == 1

@@ -8,6 +8,7 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import UniqueConstraint
+from django.utils.timezone import now
 
 logger = logging.getLogger(__name__)
 
@@ -256,3 +257,18 @@ class Weights(models.Model):
 
     def __str__(self) -> str:
         return str(self.weights)
+
+
+class ScheduledSyntheticJobs(models.Model):
+    """
+    Scheduled running of synthetic jobs for a specific block.
+    """
+
+    block = models.BigIntegerField(
+        unique=True, help_text="Block number for which validation is scheduled"
+    )
+    created_at = models.DateTimeField(default=now)
+    started_at = models.DateTimeField(null=True, default=None)
+
+    def __str__(self) -> str:
+        return f"Scheduled validation #{self.pk} at block #{self.block}"

@@ -255,12 +255,14 @@ CELERY_COMPRESSION = "gzip"  # task compression
 CELERY_MESSAGE_COMPRESSION = "gzip"  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
+    "schedule_synthetic_jobs": {
+        "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
+        "schedule": timedelta(minutes=1),
+        "options": {},
+    },
     "run_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.run_synthetic_jobs",
-        "schedule": crontab(
-            minute=env("DEBUG_RUN_SYNTHETIC_JOBS_MINUTE", default="0"),
-            hour=env("DEBUG_RUN_SYNTHETIC_JOBS_HOUR", default="*/2"),
-        ),
+        "schedule": timedelta(minutes=1),
         "options": {},
     },
     "set_scores": {

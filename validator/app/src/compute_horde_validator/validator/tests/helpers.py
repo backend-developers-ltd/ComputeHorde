@@ -242,6 +242,9 @@ class MockSubtensor:
             return self.mocked_reveal_weights()
         return False, "MockSubtensor doesn't support reveal_weights"
 
+    def get_current_block(self) -> int:
+        return 1000
+
 
 class MockSubtensorWithInaccessibleHyperparams(MockSubtensor):
     """Subtensor but it fails when getting hyperparameters - just like real subtensor!"""
@@ -285,8 +288,3 @@ def check_system_events(
         .count()
         == count
     )
-
-
-def always_same_result(result):
-    """Return a function which accepts everything and returns the same result"""
-    return lambda *args, **kwargs: result
