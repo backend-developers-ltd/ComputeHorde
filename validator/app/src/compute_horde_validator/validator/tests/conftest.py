@@ -58,3 +58,9 @@ def mocked_synthetic_miner_client():
 @pytest.fixture
 def validators():
     return [MockNeuron(hotkey=f"hehetrololo{i}", uid=i) for i in range(10)]
+
+
+@pytest.fixture
+def validators_with_this_hotkey(settings, validators):
+    this_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+    return [*validators, MockNeuron(hotkey=this_hotkey, uid=100)]
