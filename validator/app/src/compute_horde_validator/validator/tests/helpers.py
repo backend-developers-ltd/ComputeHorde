@@ -184,6 +184,8 @@ class MockSubtensor:
         self,
         *args,
         mocked_set_weights=lambda: (True, ""),
+        mocked_commit_weights=lambda: (True, ""),
+        mocked_reveal_weights=lambda: (True, ""),
         mocked_metagraph=lambda: MockMetagraph(),
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=False,
@@ -192,6 +194,8 @@ class MockSubtensor:
         ),
     ):
         self.mocked_set_weights = mocked_set_weights
+        self.mocked_commit_weights = mocked_commit_weights
+        self.mocked_reveal_weights = mocked_reveal_weights
         self.mocked_metagraph = mocked_metagraph
         self.hyperparameters = hyperparameters
         self.weights_set: list[list[numbers.Number]] = []
@@ -229,13 +233,13 @@ class MockSubtensor:
     def commit_weights(self, weights, **kwargs) -> tuple[bool, str]:
         self.weights_committed.append(weights)
         if self.hyperparameters.commit_reveal_weights_enabled:
-            return True, ""
+            return self.mocked_commit_weights()
         return False, "MockSubtensor doesn't support commit_weights"
 
     def reveal_weights(self, weights, **kwargs) -> tuple[bool, str]:
         self.weights_revealed.append(weights)
         if self.hyperparameters.commit_reveal_weights_enabled:
-            return True, ""
+            return self.mocked_reveal_weights()
         return False, "MockSubtensor doesn't support reveal_weights"
 
 
