@@ -21,6 +21,7 @@ env:
   MNEMONIC_VALIDATOR_HOTKEY: "syrup ill organ rigid supreme pen menu range tonight letter pear blind"
   MINER_HOTKEY_SS58: "5FqSEa5kHZgwKMMuC7WsHLoXcf3UN9gCpDZ7iDifa2sTLBSB"
   VALIDATOR_HOTKEY_SS58: "5GHikjqiHD1pUyCf3mzrjbEJgJvGnCp5FNKTXTtGkzhaJ37R"
+  DOCKER_CONTENT_TRUST: 1
 
 jobs:
   e2e:
@@ -36,24 +37,42 @@ jobs:
             ssh-private-key: ${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}
 
       - name: Docker login
-        run: echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+        run: echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
 
       - name: Build executor image
         run: |
           cd executor
-          IMAGE_NAME=backenddevelopersltd/compute-horde-executor-e2e:v0-latest
+          IMAGE_NAME=andreeareef/compute-horde-executor-e2e-final:v0-latest
+          
+          echo "LOADING KEY -------------------------------"
+          echo "${{ secrets.DOCKERHUB_DELEGATED_KEY_TEST}}" > repo.key
+          chmod 600 repo.key
+          docker trust key load repo.key
+          echo "KEY LOADED -------------------------------"
+
+          echo "LOGGING INTO DOCKERHUB -------------------------------"
+          echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
+          export DOCKER_CONTENT_TRUST=1
+          echo "LOGGED IN -------------------------------"
+
+          echo "HERE ---- will pull"
           docker pull "$IMAGE_NAME" || true
+
+          echo "HERE ---- will build"
           docker build \
             --build-context compute-horde=../compute_horde \
             -t "$IMAGE_NAME" \
             -f app/envs/prod/Dockerfile \
             .
-          docker push "$IMAGE_NAME"
+
+          echo "HERE ---- will push"
+          echo "${{ secrets.DOCKERHUB_DELEGATED_KEY_TEST_PASSPHRASE  }}" | docker push "$IMAGE_NAME"
+          echo "HERE ---- pushed"
 
       - name: Build miner nginx image
         run: |
           cd miner/envs/runner/nginx
-          IMAGE_NAME="backenddevelopersltd/$MINER_NGINX_IMAGE_REPO:v0-latest"
+          IMAGE_NAME="andreeareef/$MINER_NGINX_IMAGE_REPO:v0-latest"
           docker pull "$IMAGE_NAME" || true
           docker build --platform linux/amd64 -t "$IMAGE_NAME" .
           docker push "$IMAGE_NAME"
@@ -61,7 +80,7 @@ jobs:
       - name: Build miner image
         run: |
           cd miner
-          IMAGE_NAME="backenddevelopersltd/$MINER_IMAGE_REPO:v0-latest"
+          IMAGE_NAME="andreeareef/$MINER_IMAGE_REPO:v0-latest"
           docker pull "$IMAGE_NAME" || true
           docker build \
             --build-context compute-horde=../compute_horde \
@@ -73,7 +92,7 @@ jobs:
       - name: Build miner runner image
         run: |
           cd miner/envs/runner
-          IMAGE_NAME=backenddevelopersltd/compute-horde-miner-runner-e2e:v0-latest
+          IMAGE_NAME=andreeareef/compute-horde-miner-runner-e2e:v0-latest
           docker pull "$IMAGE_NAME" || true
           docker build \
             -t "$IMAGE_NAME" \
@@ -196,7 +215,7 @@ jobs:
           cd validator
           docker build \
             --build-context compute-horde=../compute_horde \
-            -t backenddevelopersltd/validator-e2e:v0-latest \
+            -t andreeareef/validator-e2e:v0-latest \
             --build-arg VALIDATOR_VERSION="$GITHUB_SHA" \
             -f app/envs/prod/Dockerfile .
           
@@ -204,7 +223,7 @@ jobs:
           cd envs/runner
           sed -i.bak '/pull_policy/d' ./data/docker-compose.yml
           docker build \
-            -t backenddevelopersltd/validator-runner-e2e:v0-latest \
+            -t andreeareef/validator-runner-e2e:v0-latest \
             --build-arg VALIDATOR_RUNNER_VERSION="${GITHUB_SHA}" \
             --build-arg VALIDATOR_IMAGE_REPO=validator-e2e \
             .
@@ -213,7 +232,7 @@ jobs:
           cat > docker-compose.yml <<ENDDOCKERCOMPOSE
           services:
             validator-runner:
-              image: backenddevelopersltd/validator-runner-e2e:v0-latest
+              image: andreeareef/validator-runner-e2e:v0-latest
               volumes:
                 - /var/run/docker.sock:/var/run/docker.sock
                 - ./.env:/root/validator/.env
@@ -262,7 +281,7 @@ jobs:
       - name: miner preparations
         run: |
           ssh -o StrictHostKeyChecking=no "ubuntu@$E2E_MINER_IP" <<END
-          docker pull backenddevelopersltd/compute-horde-executor-e2e:v0-latest
+          docker pull andreeareef/compute-horde-executor-e2e-final:v0-latest
           docker image prune --force
           cd ~/compute_horde_miner
           docker compose exec miner-runner docker compose exec app python manage.py fetch_validators

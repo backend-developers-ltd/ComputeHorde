@@ -54,8 +54,8 @@ EXECUTOR_CLASS = {
     #     gpu_vram_gb=24,
     #     spin_up_time=0,
     #     docker_cached_images=[
-    #         "backenddevelopersltd/compute-horde-job-huggingface",
-    #         "backenddevelopersltd/compute-horde-job-ffmpeg:vidstab-v0",
+    #         "andreeareef/compute-horde-job-huggingface",
+    #         "andreeareef/compute-horde-job-ffmpeg:vidstab-v0",
     #     ],
     # ),
 }
