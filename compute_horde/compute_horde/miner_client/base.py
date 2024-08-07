@@ -2,11 +2,9 @@ import abc
 import asyncio
 import logging
 import random
-import time
-
-import websockets
 
 from compute_horde.base_requests import BaseRequest, ValidationError
+from compute_horde.transport import AbstractTransport, TransportConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -16,14 +14,11 @@ class MinerConnectionError(Exception):
 
 
 class AbstractMinerClient(abc.ABC):
-    def __init__(self, miner_name: str):
-        self.debounce_counter = 0
-        self.max_debounce_count: int | None = 5  # set to None for unlimited debounce
+    def __init__(self, miner_name: str, transport: AbstractTransport):
         self.miner_name = miner_name
-        self.ws: websockets.WebSocketClientProtocol | None = None
-        self.reconnect_task: asyncio.Task | None = None
         self.read_messages_task: asyncio.Task | None = None
         self.deferred_send_tasks: list[asyncio.Task] = []
+        self.transport = transport
 
     @abc.abstractmethod
     def miner_url(self) -> str: ...
@@ -47,8 +42,13 @@ class AbstractMinerClient(abc.ABC):
         """
         ...
 
+    async def connect(self):
+        await self.transport.start()
+        if self.read_messages_task is None or self.read_messages_task.done():
+            self.read_messages_task = asyncio.create_task(self.read_messages())
+
     async def __aenter__(self):
-        await self.await_connect()
+        await self.connect()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         for t in self.deferred_send_tasks:
@@ -57,63 +57,13 @@ class AbstractMinerClient(abc.ABC):
         if self.read_messages_task is not None and not self.read_messages_task.done():
             self.read_messages_task.cancel()
 
-        if self.reconnect_task is not None and not self.reconnect_task.done():
-            self.reconnect_task.cancel()
-
-        if self.ws is not None and not self.ws.closed:
-            await self.ws.close()
-
-    async def _connect(self):
-        return await websockets.connect(self.miner_url(), max_size=50 * (2**20))  # 50MB
-
-    async def await_connect(self):
-        start_time = time.time()
-        while True:
-            try:
-                if (
-                    self.max_debounce_count is not None
-                    and self.debounce_counter > self.max_debounce_count
-                ):
-                    time_took = time.time() - start_time
-                    raise MinerConnectionError(
-                        f"Could not connect to miner {self.miner_name} after {self.max_debounce_count} tries"
-                        f" in {time_took:0.2f} seconds"
-                    )
-                if self.debounce_counter:
-                    sleep_time = self.sleep_time()
-                    logger.info(
-                        f"Retrying connection to miner {self.miner_name} in {sleep_time:0.2f}"
-                    )
-                    await asyncio.sleep(sleep_time)
-                self.ws = await self._connect()
-                self.read_messages_task = asyncio.create_task(self.read_messages())
-                if self.debounce_counter:
-                    logger.info(
-                        f"Connected to miner {self.miner_name} after {self.debounce_counter + 1} attempts"
-                    )
-                return
-            except (websockets.WebSocketException, OSError) as ex:
-                self.debounce_counter += 1
-                logger.warning(f"Could not connect to miner {self.miner_name}: {repr(ex)}")
-
-    def sleep_time(self):
-        return (2**self.debounce_counter) + random.random()
-
-    async def ensure_connected(self):
-        if self.ws is None or self.ws.closed:
-            if self.read_messages_task is not None and not self.read_messages_task.done():
-                self.read_messages_task.cancel()
-            await self.await_connect()
+        await self.transport.stop()
 
     async def send_model(self, model: BaseRequest):
         while True:
-            await self.ensure_connected()
             try:
-                await self.ws.send(model.model_dump_json())
-                # Summary: https://github.com/python-websockets/websockets/issues/867
-                # Longer discussion: https://github.com/python-websockets/websockets/issues/865
-                await asyncio.sleep(0)
-            except websockets.WebSocketException as ex:
+                await self.transport.send(model.model_dump_json())
+            except TransportConnectionError as ex:
                 logger.error(f"Could not send to miner {self.miner_name}: {str(ex)}")
                 await asyncio.sleep(1 + random.random())
                 continue
@@ -124,15 +74,7 @@ class AbstractMinerClient(abc.ABC):
         self.deferred_send_tasks.append(task)
 
     async def read_messages(self):
-        while True:
-            try:
-                msg = await self.ws.recv()
-            except websockets.WebSocketException as ex:
-                self.debounce_counter += 1
-                logger.info(f"Connection to miner {self.miner_name} lost: {str(ex)}")
-                self.reconnect_task = asyncio.create_task(self.await_connect())
-                return
-
+        async for msg in self.transport:
             try:
                 msg = self.accepted_request_type().parse(msg)
             except ValidationError as ex:
@@ -147,12 +89,6 @@ class AbstractMinerClient(abc.ABC):
                 error_msg = f"Unsupported message from miner {self.miner_name}"
                 logger.exception(error_msg)
                 self.deferred_send_model(self.outgoing_generic_error_class()(details=error_msg))
-            else:
-                if self.debounce_counter:
-                    logger.info(
-                        f"Receviced valid message from miner {self.miner_name} after {self.debounce_counter + 1} connection attempts"
-                    )
-                    self.debounce_counter = 0
 
 
 class UnsupportedMessageReceived(Exception):

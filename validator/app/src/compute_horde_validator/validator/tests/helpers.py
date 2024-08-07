@@ -15,8 +15,8 @@ from compute_horde_validator.validator.facilitator_api import (
     V0FacilitatorJobRequest,
     V1FacilitatorJobRequest,
 )
+from compute_horde_validator.validator.miner_client import JobState, MinerClient
 from compute_horde_validator.validator.models import SystemEvent
-from compute_horde_validator.validator.synthetic_jobs.utils import JobState, MinerClient
 
 NUM_NEURONS = 5
 
@@ -60,7 +60,7 @@ class MockMinerClient(MinerClient):
     def miner_url(self) -> str:
         return "ws://miner"
 
-    async def await_connect(self):
+    async def connect(self):
         return
 
     def accepted_request_type(self) -> type[BaseRequest]:
