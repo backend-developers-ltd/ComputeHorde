@@ -390,6 +390,10 @@ DEBUG_OVERRIDE_WEIGHTS_VERSION = env.int("DEBUG_OVERRIDE_WEIGHTS_VERSION", defau
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 
+# synthetic jobs are evenly distributed through the epoch, however
+# we start them from some offset because scheduling takes some time
+SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
+
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:

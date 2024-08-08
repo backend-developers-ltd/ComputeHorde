@@ -67,7 +67,7 @@ class WeightsRevealError(Exception):
     pass
 
 
-def when_to_run(epoch: range, total: int, index_: int) -> int:
+def when_to_run(epoch: range, total: int, index_: int, offset: int = 0) -> int:
     """
     Select block when to run validation for a given validator.
     Evenly distribute runs across validators.
@@ -79,11 +79,11 @@ def when_to_run(epoch: range, total: int, index_: int) -> int:
     _____________|_____________|_____________|_____________|
                  ^-0           ^-1           ^-2
     |____________|_____________|
-         blocks      blocks
-        b/w runs    b/w runs
+        offset       blocks
+                    b/w runs
     """
-    blocks_between_runs = (epoch.stop - epoch.start) / (total + 1)
-    return epoch.start + floor(blocks_between_runs * (index_ + 1))
+    blocks_between_runs = (epoch.stop - epoch.start - offset) / total
+    return epoch.start + offset + floor(blocks_between_runs * index_)
 
 
 def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
@@ -92,15 +92,14 @@ def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
         pub fn blocks_until_next_epoch(netuid: u16, tempo: u16, block_number: u64) -> u64
     See https://github.com/opentensor/subtensor.
 
-    An epoch happens whenever (block_number + netuid + 1) is exactly divisible by (tempo + 1).
+    See also: https://github.com/opentensor/bittensor/pull/2168/commits/9e8745447394669c03d9445373920f251630b6b8
     """
     assert tempo > 0
 
-    shift = (block + netuid + 1) % (tempo + 1)
-    blocks_until_next_epoch = tempo - shift
-    epoch_end = block + blocks_until_next_epoch
-    epoch_start = epoch_end - tempo
-    return range(epoch_start, epoch_end + 1)
+    interval = tempo + 1
+    last_epoch = block - 1 - (block + netuid + 1) % interval
+    next_tempo_block_start = last_epoch + interval
+    return range(last_epoch, next_tempo_block_start)
 
 
 @app.task
@@ -149,6 +148,7 @@ def schedule_synthetic_jobs() -> None:
 
         next_run_block = when_to_run(
             epoch=current_epoch,
+            offset=settings.SYNTHETIC_JOBS_RUN_OFFSET,
             total=len(validators),
             index_=this_validator_index,
         )

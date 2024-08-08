@@ -191,10 +191,6 @@ def test_set_scores__set_weight__commit__exception(settings):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch(
-    "compute_horde_validator.validator.tests.helpers.MockSubtensor.metagraph",
-    always_same_result(MockMetagraph()),
-)
-@patch(
     "bittensor.subtensor",
     lambda *args, **kwargs: MockSubtensor(
         mocked_reveal_weights=lambda: throw_error(),
@@ -214,15 +210,14 @@ def test_set_scores__set_weight__reveal__exception(settings):
     assert last_weights
     assert last_weights.revealed_at is None
 
-    # wait for the interval to pass
-    class _MockBlock:
-        def item(self) -> int:
-            return 1020
+    with patch(
+        "compute_horde_validator.validator.tests.helpers.MockSubtensor.get_current_block",
+        lambda _: 1020,
+    ):
+        from bittensor import subtensor
 
-    from bittensor import subtensor
-
-    subtensor().metagraph(netuid=1).block = _MockBlock()
-    reveal_scores()
+        assert subtensor().get_current_block() == 1020
+        reveal_scores()
 
     last_weights.refresh_from_db()
     assert last_weights.revealed_at is None
