@@ -1,11 +1,12 @@
 import logging
 import sys
 
+import uvloop
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from compute_horde_validator.validator.synthetic_jobs.utils import (
-    create_and_run_sythethic_job_batch,
+    create_and_run_synthetic_job_batch,
 )
 
 logger = logging.getLogger(__name__)
@@ -17,8 +18,9 @@ class Command(BaseCommand):
     """
 
     def handle(self, *args, **options):
+        uvloop.install()
         try:
-            create_and_run_sythethic_job_batch(
+            create_and_run_synthetic_job_batch(
                 settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK
             )
         except KeyboardInterrupt:

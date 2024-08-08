@@ -11,6 +11,7 @@ import bittensor
 import celery.exceptions
 import numpy as np
 import requests
+import uvloop
 from asgiref.sync import async_to_sync
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
@@ -41,7 +42,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
-    create_and_run_sythethic_job_batch,
+    create_and_run_synthetic_job_batch,
     save_receipt_event,
 )
 
@@ -74,13 +75,15 @@ def _run_synthetic_jobs():
     try:
         # metagraph will be refetched and that's fine, after sleeping
         # for e.g. 30 minutes we should refetch the miner list
-        create_and_run_sythethic_job_batch(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
+        create_and_run_synthetic_job_batch(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
     except billiard.exceptions.SoftTimeLimitExceeded:
         logger.info("Running synthetic jobs timed out")
 
 
 @app.task()
 def run_synthetic_jobs():
+    uvloop.install()
+
     if not config.SERVING:
         logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
         return
@@ -263,6 +266,7 @@ def do_set_weights(
 
 @shared_task
 def trigger_run_admin_job_request(job_request_id: int):
+    uvloop.install()
     async_to_sync(run_admin_job_request)(job_request_id)
 
 

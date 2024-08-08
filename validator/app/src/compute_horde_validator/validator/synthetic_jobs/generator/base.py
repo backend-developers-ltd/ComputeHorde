@@ -1,12 +1,22 @@
 import abc
+import uuid
 
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 
 class BaseSyntheticJobGenerator(abc.ABC):
+    def __init__(self):
+        self._uuid = uuid.uuid4()
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self._uuid})"
+
     async def ainit(self):
         """Allow to initialize generator in asyncio and non blocking"""
+
+    def uuid(self) -> uuid.UUID:
+        return self._uuid
 
     @abc.abstractmethod
     def timeout_seconds(self) -> int: ...
@@ -20,8 +30,8 @@ class BaseSyntheticJobGenerator(abc.ABC):
     @abc.abstractmethod
     def docker_run_options_preset(self) -> str: ...
 
-    def docker_run_cmd(self) -> list[str] | None:
-        return None
+    def docker_run_cmd(self) -> list[str]:
+        return []
 
     def raw_script(self) -> str | None:
         return None
