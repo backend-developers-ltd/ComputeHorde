@@ -63,15 +63,18 @@ class AbstractMinerClient(abc.ABC):
 
         await self.transport.stop()
 
-    async def send_model(self, model: BaseRequest):
+    async def send(self, data: str | bytes):
         while True:
             try:
-                await self.transport.send(model.model_dump_json())
+                await self.transport.send(data)
             except TransportConnectionError as ex:
                 logger.error(f"Could not send to miner {self.miner_name}: {str(ex)}")
                 await asyncio.sleep(1 + random.random())
                 continue
             return
+
+    async def send_model(self, model: BaseRequest):
+        await self.send(model.model_dump_json())
 
     def deferred_send_model(self, model: BaseRequest):
         task = asyncio.create_task(self.send_model(model))
