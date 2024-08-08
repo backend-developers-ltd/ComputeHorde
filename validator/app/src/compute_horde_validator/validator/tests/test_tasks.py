@@ -135,18 +135,18 @@ def test_send_events_to_facilitator__failure():
     ("netuid", "block", "expected_epoch"),
     [
         # netuid == 0
-        (0, 25, range(-1, 360)),
-        (0, 359, range(-1, 360)),
-        (0, 360, range(360, 721)),
-        (0, 720, range(360, 721)),
-        (0, 721, range(721, 1082)),
+        (0, 25, range(-2, 359)),
+        (0, 359, range(-2, 359)),
+        (0, 360, range(359, 720)),
+        (0, 720, range(359, 720)),
+        (0, 721, range(720, 1081)),
         # netuid == 12
-        (12, 25, range(-13, 348)),
-        (12, 347, range(-13, 348)),
-        (12, 348, range(348, 709)),
-        (12, 708, range(348, 709)),
-        (12, 709, range(709, 1070)),
-        (12, 1100, range(1070, 1431)),
+        (12, 25, range(-14, 347)),
+        (12, 347, range(-14, 347)),
+        (12, 348, range(347, 708)),
+        (12, 708, range(347, 708)),
+        (12, 709, range(708, 1069)),
+        (12, 1100, range(1069, 1430)),
     ],
 )
 def test__get_epoch_containing_block(netuid, block, expected_epoch):
@@ -157,9 +157,13 @@ def test__get_epoch_containing_block(netuid, block, expected_epoch):
 
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test__when_to_run():
-    assert when_to_run(epoch=range(100, 201), total=4, index_=2) == 160
-    assert when_to_run(epoch=range(100, 201), total=2, index_=0) == 133
-    assert when_to_run(epoch=range(100, 201), total=2, index_=1) == 167
+    assert when_to_run(epoch=range(100, 151), total=4, index_=2) == 125
+    assert when_to_run(epoch=range(100, 151), total=2, index_=0) == 100
+    assert when_to_run(epoch=range(100, 151), total=2, index_=1) == 125
+
+    assert when_to_run(epoch=range(100, 201), offset=10, total=3, index_=0) == 110
+    assert when_to_run(epoch=range(100, 201), offset=10, total=3, index_=1) == 140
+    assert when_to_run(epoch=range(100, 201), offset=10, total=3, index_=2) == 170
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
