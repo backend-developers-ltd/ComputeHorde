@@ -57,7 +57,7 @@ def mocked_synthetic_miner_client():
 
 @pytest.fixture
 def validators():
-    return [MockNeuron(hotkey=f"hehetrololo{i}", uid=i) for i in range(10)]
+    return [MockNeuron(hotkey=f"mock_validator_hotkey_{i}", uid=i) for i in range(10)]
 
 
 @pytest.fixture
