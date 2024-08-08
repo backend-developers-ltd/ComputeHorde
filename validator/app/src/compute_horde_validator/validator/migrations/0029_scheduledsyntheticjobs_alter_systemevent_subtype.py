@@ -6,7 +6,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("validator", "0027_weights_weights_unique_block"),
+        ("validator", "0028_alter_systemevent_subtype"),
     ]
 
     operations = [
