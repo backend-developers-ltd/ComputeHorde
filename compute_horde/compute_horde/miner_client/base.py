@@ -109,11 +109,11 @@ class AbstractMinerClient(abc.ABC):
                 self.read_messages_task.cancel()
             await self.await_connect()
 
-    async def send_model(self, model: BaseRequest):
+    async def send(self, text: str):
         while True:
             await self.ensure_connected()
             try:
-                await self.ws.send(model.model_dump_json())
+                await self.ws.send(text)
                 # Summary: https://github.com/python-websockets/websockets/issues/867
                 # Longer discussion: https://github.com/python-websockets/websockets/issues/865
                 await asyncio.sleep(0)
@@ -122,6 +122,9 @@ class AbstractMinerClient(abc.ABC):
                 await asyncio.sleep(1 + random.random())
                 continue
             return
+
+    async def send_model(self, model: BaseRequest):
+        await self.send(model.model_dump_json())
 
     def deferred_send_model(self, model: BaseRequest):
         task = asyncio.create_task(self.send_model(model))
