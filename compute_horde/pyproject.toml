@@ -1,8 +1,7 @@
 [project]
 name = "compute-horde"
-dynamic = ["version"]
-authors = [{name = "Backend Developers LTD"}]
-license = {text = "MIT License"}
+authors = [{ name = "Backend Developers LTD" }]
+license = { text = "MIT License" }
 readme = "README.md"
 requires-python = "==3.11.*"
 dependencies = [
@@ -12,6 +11,7 @@ dependencies = [
     "more-itertools>=10.2.0",
     "requests>=2.32.2",
 ]
+dynamic = ["version"]
 
 [build-system]
 requires = ["pdm-backend"]
@@ -29,13 +29,8 @@ tag_regex = '^library-v(?P<version>\d+\.\d+\.\d+(a\d+)?)$'
 
 [tool.pdm.dev-dependencies]
 format = ["ruff"]
-lint = [
-    "ruff",
-    "codespell[toml]",
-]
-release = [
-    "towncrier>=23.11.0,<24",
-]
+lint = ["ruff", "codespell[toml]"]
+release = ["towncrier>=23.11.0,<24"]
 type_check = [
     "django-stubs[compatible-mypy]",
     "djangorestframework-stubs[compatible-mypy]",
@@ -44,11 +39,7 @@ type_check = [
     "types-python-dateutil",
     "types-requests",
 ]
-test = [
-    "pytest>=8.2.1",
-    "responses>=0.25.0",
-    "freezegun>=1.5.1",
-]
+test = ["pytest>=8.2.1", "responses>=0.25.0", "freezegun>=1.5.1"]
 
 [tool.ruff]
 line-length = 100
@@ -58,8 +49,21 @@ line-length = 100
 select = ["E", "F", "I", "UP"]
 # TODO: remove E501 once docstrings are formatted
 ignore = [
-    "D100", "D105", "D107", "D200", "D202", "D203", "D205", "D212", "D400", "D401", "D415",
-    "D101", "D102","D103", "D104", # TODO remove once we have docstring for all public methods
+    "D100",
+    "D105",
+    "D107",
+    "D200",
+    "D202",
+    "D203",
+    "D205",
+    "D212",
+    "D400",
+    "D401",
+    "D415",
+    "D101",
+    "D102",
+    "D103",
+    "D104", # TODO remove once we have docstring for all public methods
     "E501", # TODO: remove E501 once docstrings are formatted
 ]
 
