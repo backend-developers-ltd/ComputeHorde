@@ -1,3 +1,7 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
 [project]
 name = "compute-horde"
 authors = [{ name = "Backend Developers LTD" }]
@@ -12,10 +16,6 @@ dependencies = [
     "requests>=2.32.2",
 ]
 dynamic = ["version"]
-
-[build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
 
 [tool.pdm]
 distribution = true

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
 [project]
 name = "validator"
 requires-python = "==3.11.*"
@@ -29,10 +33,6 @@ dependencies = [
     "bittensor==7.3.0",
 ]
 dynamic = ["version"]
-
-[build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
 
 [tool.pdm]
 distribution = false

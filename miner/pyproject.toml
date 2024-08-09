@@ -1,3 +1,7 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
 [project]
 name = "miner"
 requires-python = "==3.11.*"
@@ -25,10 +29,6 @@ dependencies = [
     "django-constance[database]==3.1.0",
 ]
 dynamic = ["version"]
-
-[build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
 
 [tool.pdm]
 distribution = false

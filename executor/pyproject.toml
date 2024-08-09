@@ -1,3 +1,7 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
 [project]
 name = "executor"
 requires-python = "==3.11.*"
@@ -25,10 +29,6 @@ dependencies = [
     "django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01",
 ]
 dynamic = ["version"]
-
-[build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
 
 [tool.pdm]
 distribution = false
