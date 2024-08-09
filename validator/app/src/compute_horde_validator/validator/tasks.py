@@ -5,6 +5,7 @@ import time
 import traceback
 from collections import defaultdict
 from datetime import timedelta
+from math import ceil, floor
 
 import billiard.exceptions
 import bittensor
@@ -29,7 +30,7 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator.locks import Locked, get_weight_setting_lock
+from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
     JobFinishedReceipt,
@@ -46,7 +47,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from .miner_driver import execute_organic_job
-from .models import AdminJobRequest
+from .models import AdminJobRequest, ScheduledSyntheticJobs
 
 logger = get_task_logger(__name__)
 
@@ -66,11 +67,101 @@ class WeightsRevealError(Exception):
     pass
 
 
+def when_to_run(epoch: range, total: int, index_: int, offset: int = 0) -> int:
+    """
+    Select block when to run validation for a given validator.
+    Evenly distribute runs across validators.
+
+    total == 3
+
+    |______________________________________________________|__________
+    ^-epoch.start                                           ^-epoch.stop
+    _____________|_____________|_____________|_____________|
+                 ^-0           ^-1           ^-2
+    |____________|_____________|
+        offset       blocks
+                    b/w runs
+    """
+    blocks_between_runs = (epoch.stop - epoch.start - offset) / total
+    return epoch.start + offset + floor(blocks_between_runs * index_)
+
+
+def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
+    """
+    Reimplementing the logic from subtensor's Rust function:
+        pub fn blocks_until_next_epoch(netuid: u16, tempo: u16, block_number: u64) -> u64
+    See https://github.com/opentensor/subtensor.
+
+    See also: https://github.com/opentensor/bittensor/pull/2168/commits/9e8745447394669c03d9445373920f251630b6b8
+    """
+    assert tempo > 0
+
+    interval = tempo + 1
+    last_epoch = block - 1 - (block + netuid + 1) % interval
+    next_tempo_block_start = last_epoch + interval
+    return range(last_epoch, next_tempo_block_start)
+
+
+@app.task
+def schedule_synthetic_jobs() -> None:
+    """
+    For current epoch, decide when miners' validation should happen.
+    Result is a ScheduledValidationRun object in the database.
+    """
+    with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR), transaction.atomic():
+        try:
+            get_advisory_lock(LockType.VALIDATION_SCHEDULING)
+        except Locked:
+            logger.debug("Another thread already scheduling validation")
+            return
+
+        bittensor.turn_console_off()
+        subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+        current_block = subtensor_.get_current_block()
+        current_epoch = get_epoch_containing_block(
+            block=current_block, netuid=settings.BITTENSOR_NETUID
+        )
+
+        run_in_current_epoch = (
+            ScheduledSyntheticJobs.objects.filter(
+                block__gte=current_epoch.start, block__lt=current_epoch.stop
+            )
+            .order_by("block")
+            .last()
+        )
+        if run_in_current_epoch:
+            logger.debug("Validation is already scheduled at block %s", run_in_current_epoch.block)
+            return
+
+        validators = get_validators(
+            netuid=settings.BITTENSOR_NETUID,
+            network=settings.BITTENSOR_NETWORK,
+        )
+        this_hotkey = get_keypair().ss58_address
+        try:
+            this_validator_index = [vali.hotkey for vali in validators].index(this_hotkey)
+        except ValueError:
+            logger.exception(
+                "This validator is not in a list of validators -> not scheduling validation run"
+            )
+            return
+
+        next_run_block = when_to_run(
+            epoch=current_epoch,
+            offset=settings.SYNTHETIC_JOBS_RUN_OFFSET,
+            total=len(validators),
+            index_=this_validator_index,
+        )
+
+        scheduled_run = ScheduledSyntheticJobs.objects.create(block=next_run_block)
+        logger.debug("Scheduled validation run %s", scheduled_run)
+
+
 @app.task(
     soft_time_limit=SYNTHETIC_JOBS_SOFT_LIMIT,
     time_limit=SYNTHETIC_JOBS_HARD_LIMIT,
 )
-def _run_synthetic_jobs():
+def _run_synthetic_jobs() -> None:
     try:
         # metagraph will be refetched and that's fine, after sleeping
         # for e.g. 30 minutes we should refetch the miner list
@@ -80,28 +171,78 @@ def _run_synthetic_jobs():
 
 
 @app.task()
-def run_synthetic_jobs():
+def run_synthetic_jobs(
+    wait_in_advance_blocks: int | None = None,
+    poll_interval: timedelta | None = None,
+) -> None:
+    """
+    Run synthetic jobs as scheduled by ScheduledValidationRun.
+    If there is a job scheduled in near `wait_in_advance_blocks` blocks,
+    wait till the block is reached, and run the jobs.
+
+    If `settings.DEBUG_DONT_STAGGER_VALIDATORS` is set, we will run
+    future jobs immediately.
+    """
+
     if not config.SERVING:
         logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
         return
 
-    if not settings.DEBUG_DONT_STAGGER_VALIDATORS:
-        validators = get_validators(
-            netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK
-        )
-        my_key = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-        validator_keys = [n.hotkey for n in validators]
-        if my_key not in validator_keys:
-            raise ValueError(
-                "Can't determine proper synthetic job window due to not in top 23 validators"
+    if settings.DEBUG_DONT_STAGGER_VALIDATORS:
+        _run_synthetic_jobs.apply_async()
+        return
+
+    wait_in_advance_blocks = wait_in_advance_blocks or config.SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS
+    poll_interval = poll_interval or timedelta(seconds=config.SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL)
+
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor_.get_current_block()
+
+    with transaction.atomic():
+        ongoing_scheduled_jobs = list(
+            ScheduledSyntheticJobs.objects.select_for_update(skip_locked=True)
+            .filter(
+                block__gte=current_block,
+                block__lte=current_block + wait_in_advance_blocks,
+                started_at__isnull=True,
             )
-        my_index = validator_keys.index(my_key)
-        window_per_validator = JOB_WINDOW / len(validator_keys)
-        my_window_starts_at = window_per_validator * my_index
-        logger.info(
-            f"Sleeping for {my_window_starts_at:02f}s because I am {my_index} out of {len(validator_keys)}"
+            .order_by("block")
         )
-        time.sleep(my_window_starts_at)
+        if not ongoing_scheduled_jobs:
+            logger.debug("No ongoing scheduled synthetic jobs")
+            return
+
+        if len(ongoing_scheduled_jobs) > 1:
+            logger.warning(
+                "More than one scheduled synthetic jobs found (%s)",
+                ongoing_scheduled_jobs,
+            )
+
+        target_block = ongoing_scheduled_jobs[0].block
+        blocks_to_wait = target_block - subtensor_.get_current_block()
+        for _ in range(ceil(blocks_to_wait * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION * 2 / poll_interval)):
+            current_block = subtensor_.get_current_block()
+            if current_block >= target_block:
+                break
+            logger.debug(
+                "Waiting for block %s, current block is %s, sleeping for %s",
+                target_block,
+                current_block,
+                poll_interval,
+            )
+            time.sleep(poll_interval.total_seconds())
+        else:
+            logger.error(
+                "Failed to wait for target block %s, current block is %s",
+                target_block,
+                current_block,
+            )
+
+        now_ = now()
+        for scheduled_run in ongoing_scheduled_jobs:
+            scheduled_run.started_at = now_
+            scheduled_run.save()
+
     _run_synthetic_jobs.apply_async()
 
 
@@ -125,8 +266,7 @@ def do_set_weights(
     """
     bittensor.turn_console_off()
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    metagraph = subtensor_.metagraph(netuid)
-    current_block = metagraph.block.item()
+    current_block = subtensor_.get_current_block()
 
     try:
         hyperparams = subtensor_.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
@@ -173,7 +313,7 @@ def do_set_weights(
         weights_in_db = Weights(
             uids=uids,
             weights=normalized_weights,
-            block=metagraph.block.item(),
+            block=current_block,
             version_key=version_key,
         )
         try:
@@ -247,7 +387,7 @@ def do_set_weights(
             # we don't know current hyperparams, so we can't decide which method to use -> try both
             try:
                 is_success, msg = _commit_weights()
-            except:
+            except Exception:
                 is_success, msg = False, "Unexpected error occurred when committing weights"
                 logger.exception("Encountered when committing weights")
             if not is_success:  # 'Subtensor returned `CommitRevealDisabled (Module)` error. This means: `attempting to commit/reveal weights when disabled.`'
@@ -389,7 +529,7 @@ def set_scores():
     with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR):
         with transaction.atomic():
             try:
-                get_weight_setting_lock()
+                get_advisory_lock(LockType.WEIGHT_SETTING)
             except Locked:
                 logger.debug("Another thread already setting weights")
                 return
@@ -527,15 +667,15 @@ def reveal_scores(reveal_in_advance_num_blocks: int = 10) -> None:
         )
         commit_reveal_weights_interval = 0
 
-    metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
-    current_block_number = metagraph.block.item()
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor_.get_current_block()
 
     last_weights = Weights.objects.order_by("-created_at").first()
     if (
         last_weights
         and last_weights.revealed_at is None
         and last_weights.block
-        <= current_block_number - (commit_reveal_weights_interval - reveal_in_advance_num_blocks)
+        <= current_block - (commit_reveal_weights_interval - reveal_in_advance_num_blocks)
     ):
         logger.debug(
             "Scheduling revealing weights record %s created at %s",

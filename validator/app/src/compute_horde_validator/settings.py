@@ -121,6 +121,8 @@ if CORS_ENABLED := env.bool("CORS_ENABLED", default=True):
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+BITTENSOR_APPROXIMATE_BLOCK_DURATION = timedelta(seconds=12)
+
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_CONFIG = {
     "SERVING": (
@@ -139,6 +141,16 @@ CONSTANCE_CONFIG = {
         float,
     ),
     "DYNAMIC_WEIGHTS_VERSION": (1, "The weights version for synthetic jobs", int),
+    "SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS": (
+        3,
+        "How many blocks in advance to start waiting before synthetic jobs spawn",
+        int,
+    ),
+    "SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL": (
+        (BITTENSOR_APPROXIMATE_BLOCK_DURATION / 3).total_seconds(),
+        "How often (in seconds) to poll for block change",
+        float,
+    ),
 }
 
 # Content Security Policy
@@ -255,12 +267,14 @@ CELERY_COMPRESSION = "gzip"  # task compression
 CELERY_MESSAGE_COMPRESSION = "gzip"  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
+    "schedule_synthetic_jobs": {
+        "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
+        "schedule": timedelta(minutes=1),
+        "options": {},
+    },
     "run_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.run_synthetic_jobs",
-        "schedule": crontab(
-            minute=env("DEBUG_RUN_SYNTHETIC_JOBS_MINUTE", default="0"),
-            hour=env("DEBUG_RUN_SYNTHETIC_JOBS_HOUR", default="*/2"),
-        ),
+        "schedule": timedelta(seconds=30),
         "options": {},
     },
     "set_scores": {
@@ -387,6 +401,10 @@ HORDE_SCORE_CENTRAL_SIZE_PARAM = 1
 DEBUG_OVERRIDE_WEIGHTS_VERSION = env.int("DEBUG_OVERRIDE_WEIGHTS_VERSION", default=None)
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
+
+# synthetic jobs are evenly distributed through the epoch, however
+# we start them from some offset because scheduling takes some time
+SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
