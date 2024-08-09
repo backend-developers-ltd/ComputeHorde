@@ -1,5 +1,5 @@
 #!/bin/sh
-set -eux pipefail
+set -euxo pipefail
 # Copyright 2020, Reef Technologies (reef.pl), All rights reserved.
 
 if [ ! -f ".env" ]; then
