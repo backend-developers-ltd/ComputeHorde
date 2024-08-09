@@ -343,6 +343,29 @@ def test__run_synthetic_jobs__in_time(settings):
     "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
 )
 @patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__run_synthetic_jobs__many_scheduled_runs(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+
+    from bittensor import subtensor
+
+    current_block = subtensor().get_current_block()
+    ScheduledSyntheticJobs.objects.create(block=current_block - 1)
+    ScheduledSyntheticJobs.objects.create(block=current_block - 2)
+    ScheduledSyntheticJobs.objects.create(block=current_block - 3)
+
+    run_synthetic_jobs(max_late_blocks=5)
+
+    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
+
+    assert _run_synthetic_jobs.apply_async.call_count == 1
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch(
+    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+)
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test__run_synthetic_jobs__concurrent(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True

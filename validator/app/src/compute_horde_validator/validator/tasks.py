@@ -195,9 +195,8 @@ def run_synthetic_jobs(max_late_blocks: int = DEFAULT_MAX_LATE_BLOCKS) -> None:
     current_block = subtensor_.get_current_block()
 
     with transaction.atomic():
-        scheduled_run = (
-            ScheduledSyntheticJobs.objects.select_for_update(skip_locked=True)
-            .filter(
+        scheduled_runs = list(
+            ScheduledSyntheticJobs.objects.select_for_update(skip_locked=True).filter(
                 block__gte=current_block - max_late_blocks,
                 **(
                     dict(block__lte=current_block)
@@ -206,14 +205,21 @@ def run_synthetic_jobs(max_late_blocks: int = DEFAULT_MAX_LATE_BLOCKS) -> None:
                 ),
                 started_at__isnull=True,
             )
-            .first()
         )
-        if not scheduled_run:
-            logger.debug("No scheduled validation run found")
+        if not scheduled_runs:
+            logger.debug("No scheduled synthetic jobs found")
             return
 
-        scheduled_run.started_at = now()
-        scheduled_run.save()
+        if len(scheduled_runs) > 1:
+            logger.warning(
+                "More than one scheduled synthetic jobs run found (%s), running all of them",
+                scheduled_runs,
+            )
+
+        now_ = now()
+        for scheduled_run in scheduled_runs:
+            scheduled_run.started_at = now_
+            scheduled_run.save()
 
     _run_synthetic_jobs.apply_async()
 
