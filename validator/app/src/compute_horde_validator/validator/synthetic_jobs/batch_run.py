@@ -83,23 +83,19 @@ _MAX_MINER_CLIENT_DEBOUNCE_COUNT = 4  # approximately 32 seconds
 
 
 class MinerClient(AbstractMinerClient):
-    def __init__(
-        self,
-        ctx: "BatchContext",
-        miner_hotkey: str,
-        miner_address: str,
-        miner_port: int,
-    ):
-        miner_name = f"{miner_hotkey}({miner_address}:{miner_port})"
+    def __init__(self, ctx: "BatchContext", miner_hotkey: str):
+        miner_name = ctx.names[miner_hotkey]
         super().__init__(miner_name)
         self.max_debounce_count = _MAX_MINER_CLIENT_DEBOUNCE_COUNT
 
         self.ctx = ctx
         self.own_hotkey = ctx.own_keypair.ss58_address
         self.own_keypair = ctx.own_keypair
+
+        axon = ctx.axons[miner_hotkey]
         self.miner_hotkey = miner_hotkey
-        self.miner_address = miner_address
-        self.miner_port = miner_port
+        self.miner_address = axon.ip
+        self.miner_port = axon.port
 
     def miner_url(self) -> str:
         return f"ws://{self.miner_address}:{self.miner_port}/v0.1/validator_interface/{self.own_hotkey}"
@@ -115,10 +111,9 @@ class MinerClient(AbstractMinerClient):
 
     async def handle_message(self, msg: BaseRequest) -> None:
         if isinstance(msg, GenericError):
-            text = f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
-            logger.warning(text)
-            is_unauthorized = msg.details is not None and msg.details.startswith(
-                ("Unknown validator", "Inactive validator")
+            logger.warning("%s error: %s", self.miner_name, msg.model_dump_json())
+            is_unauthorized = msg.details is not None and msg.details.lower().startswith(
+                ("unknown validator", "inactive validator")
             )
             subtype = (
                 SystemEvent.EventSubType.UNAUTHORIZED
@@ -128,19 +123,17 @@ class MinerClient(AbstractMinerClient):
             self.ctx.system_event(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=subtype,
-                description=text,
+                description=str(msg),
                 miner_hotkey=self.miner_hotkey,
             )
             if is_unauthorized:
                 # miner doesn't recognize our authority, close the connection to avoid retries
-                logger.warning("Closing connection to miner %s", self.miner_name)
+                logger.warning("%s closing connection", self.miner_name)
                 await self.close()
             return
 
         if isinstance(msg, UnauthorizedError):
-            logger.warning(
-                "Unauthorized in %s: %s, details: %s", self.miner_name, msg.code, msg.details
-            )
+            logger.warning("%s unauthorized: %s %s", self.miner_name, msg.code, msg.details)
             self.ctx.system_event(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.UNAUTHORIZED,
@@ -153,20 +146,16 @@ class MinerClient(AbstractMinerClient):
                 self.ctx.manifests[self.miner_hotkey] = msg.manifest
                 self.ctx.manifest_events[self.miner_hotkey].set()
             else:
-                logger.warning(
-                    "Duplicate message %s received from miner %s", msg.message_type, self.miner_name
-                )
+                logger.warning("%s duplicate message: %s", self.miner_name, msg.message_type)
             return
 
         job_uuid = getattr(msg, "job_uuid", None)
         if job_uuid is not None:
             job = self.ctx.jobs.get(job_uuid)
             if job is not None:
-                job.handle_message(msg, self.miner_name)
+                job.handle_message(msg)
             else:
-                logger.info(
-                    "Received info about unexpected job %s from %s", job_uuid, self.miner_name
-                )
+                logger.info("%s unexpected/old job: %s", self.miner_name, job_uuid)
             return
 
         raise UnsupportedMessageReceived(msg)
@@ -191,9 +180,9 @@ class MinerClient(AbstractMinerClient):
 @dataclass
 class ExceptionInfo:
     exception: Exception
-    miner_hotkey: str | None = None
-    job_uuid: str | None = None
-    stage: str | None = None
+    miner_hotkey: str
+    job_uuid: str
+    stage: str
 
 
 @dataclass
@@ -201,6 +190,8 @@ class Job:
     ctx: "BatchContext"
 
     uuid: str
+    # full name for easier debugging: "{miner_hotkey}({ip}:{port}) job {uuid}"
+    name: str
     miner_hotkey: str
     executor_class: ExecutorClass
     job_generator: BaseSyntheticJobGenerator
@@ -240,10 +231,10 @@ class Job:
     # scoring
     time_took: timedelta | None = None
     success: bool = False
-    comment: str = "FAILED"
+    comment: str = "failed"
     score: float = 0
 
-    def handle_message(self, msg: BaseRequest, miner_name: str) -> None:
+    def handle_message(self, msg: BaseRequest) -> None:
         duplicate = False
         match msg:
             case V0AcceptJobRequest() | V0DeclineJobRequest():
@@ -274,12 +265,7 @@ class Job:
                 self.machine_specs = msg
 
         if duplicate:
-            logger.warning(
-                "Duplicate message %s received from miner %s for job %s",
-                msg.message_type,
-                miner_name,
-                self.uuid,
-            )
+            logger.warning("%s duplicate message: %s", self.name, msg.message_type)
 
     def system_event(
         self,
@@ -300,7 +286,6 @@ class Job:
 
     def emit_telemetry_event(self) -> None:
         data = dict(
-            batch_uuid=self.ctx.uuid,
             job_uuid=self.uuid,
             miner_hotkey=self.miner_hotkey,
             validator_hotkey=self.ctx.own_keypair.ss58_address,
@@ -334,7 +319,7 @@ class Job:
         self.ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
             subtype=SystemEvent.EventSubType.SYNTHETIC_JOB,
-            description="Validator synthetic job telemetry",
+            description="job telemetry",
             data=data,
         )
 
@@ -350,6 +335,8 @@ class BatchContext:
 
     # all dictionaries have miner.hotkey as key
     axons: dict[str, bittensor.AxonInfo]
+    # full name for easier debugging: "{miner_hotkey}({ip}:{port})"
+    names: dict[str, str]
     miners: dict[str, Miner]
     clients: dict[str, MinerClient]
     executors: dict[str, defaultdict[ExecutorClass, int]]
@@ -383,10 +370,18 @@ class BatchContext:
     ) -> None:
         if data is None:
             data = {}
+
+        assert "batch_uuid" not in data
+        data["batch_uuid"] = self.uuid
+
         if job_uuid is not None:
+            assert "job_uuid" not in data
             data["job_uuid"] = job_uuid
+
         if miner_hotkey is not None:
+            assert "miner_hotkey" not in data
             data["miner_hotkey"] = miner_hotkey
+
         try:
             event = SystemEvent(
                 type=type,
@@ -411,7 +406,6 @@ class BatchContext:
                     received_msg_count[msg.message_type.value] += 1
 
         data = dict(
-            batch_uuid=self.uuid,
             validator_hotkey=self.own_keypair.ss58_address,
             miner_count=len(self.miners),
             synthetic_job_count=len(self.jobs),
@@ -424,7 +418,7 @@ class BatchContext:
         self.system_event(
             type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
             subtype=SystemEvent.EventSubType.SYNTHETIC_BATCH,
-            description="Validator synthetic jobs batch telemetry",
+            description="batch telemetry",
             data=data,
         )
 
@@ -443,12 +437,9 @@ def _model_dump(model: BaseModel | None) -> dict | None:
 
 def _handle_exceptions(ctx: BatchContext, exceptions: list[ExceptionInfo]) -> None:
     for exc_info in exceptions:
-        text = (
-            f"Job failed "
-            f"{exc_info.miner_hotkey} {exc_info.job_uuid} "
-            f"{exc_info.stage}: {exc_info.exception!r}"
-        )
-        logger.warning(text)
+        name = ctx.jobs[exc_info.job_uuid].name
+        text = f"{exc_info.stage}: {exc_info.exception!r}"
+        logger.warning("%s %s", name, text)
 
         if isinstance(exc_info.exception, TimeoutError | asyncio.CancelledError):
             subtype = SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT
@@ -477,6 +468,7 @@ def _init_context(
         own_keypair=own_keypair,
         hotkeys=[],
         axons={},
+        names={},
         miners={},
         clients={},
         executors={},
@@ -496,13 +488,9 @@ def _init_context(
         axon = axons[hotkey]
         ctx.hotkeys.append(hotkey)
         ctx.axons[hotkey] = axon
+        ctx.names[hotkey] = f"{hotkey}({axon.ip}:{axon.port})"
         ctx.miners[hotkey] = miner
-        ctx.clients[hotkey] = MinerClient(
-            ctx=ctx,
-            miner_hotkey=hotkey,
-            miner_address=axon.ip,
-            miner_port=axon.port,
-        )
+        ctx.clients[hotkey] = MinerClient(ctx=ctx, miner_hotkey=hotkey)
         ctx.executors[hotkey] = defaultdict(int)
         ctx.job_generators[hotkey] = {}
         ctx.online_executor_count[hotkey] = 0
@@ -557,18 +545,23 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
 
 def _generate_job_finished_receipt(ctx: BatchContext, job: Job) -> None:
     assert job.job_finished_receipt is None
-
-    assert job.success
-    assert job.time_took is not None
     assert job.job_before_sent_time is not None
+
+    if not job.success:
+        assert job.score == 0
+
+    if job.time_took is not None:
+        time_took_sec = job.time_took.total_seconds()
+    else:
+        time_took_sec = 0
 
     payload = JobFinishedReceiptPayload(
         job_uuid=job.uuid,
         miner_hotkey=job.miner_hotkey,
         validator_hotkey=ctx.own_keypair.ss58_address,
         time_started=job.job_before_sent_time,
-        time_took_us=int(job.time_took.total_seconds() * 1_000_000),
-        score_str=f"{job.score:.6f}",
+        time_took_us=int(time_took_sec * 1_000_000),
+        score_str=f"{job.score:.6g}",
     )
     job.job_finished_receipt = V0JobFinishedReceiptRequest(
         payload=payload,
@@ -587,12 +580,12 @@ async def _get_miner_manifest(
         try:
             await client.await_connect()
         except MinerConnectionError as exc:
-            text = f"Miner connection error: {exc!r}"
-            logger.warning(text)
+            name = ctx.names[miner_hotkey]
+            logger.warning("%s connection error: %r", name, exc)
             ctx.system_event(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR,
-                description=text,
+                description=repr(exc),
                 miner_hotkey=miner_hotkey,
             )
             return
@@ -613,11 +606,19 @@ async def _get_miner_manifest(
             executors[executor_class] += executor_class_manifest.count
 
 
+async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
+    client = ctx.clients[miner_hotkey]
+
+    async with asyncio.timeout(_CLOSE_TIMEOUT):
+        await client.close()
+
+
 async def _generate_jobs(ctx: BatchContext) -> None:
     start_time = time.time()
     generated_job_count = 0
 
     for hotkey, executors in ctx.executors.items():
+        miner_name = ctx.names[hotkey]
         for executor_class, count in executors.items():
             job_generators = []
             for _ in range(count):
@@ -627,6 +628,7 @@ async def _generate_jobs(ctx: BatchContext) -> None:
                 ctx.jobs[job_uuid] = Job(
                     ctx=ctx,
                     uuid=job_uuid,
+                    name=f"{miner_name} job {job_uuid}",
                     miner_hotkey=hotkey,
                     executor_class=executor_class,
                     job_generator=job_generator,
@@ -684,15 +686,15 @@ async def _send_initial_job_request(
         _generate_job_started_receipt(ctx, job)
         assert job.job_started_receipt is not None
         try:
+            receipt_json = job.job_started_receipt.model_dump_json()
             async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
-                await client.send_model(job.job_started_receipt)
+                await client.send(receipt_json)
         except Exception as exc:
-            text = f"{job.miner_hotkey} job {job.uuid} failed to send job started receipt: {exc!r}"
-            logger.warning(text)
+            logger.warning("%s failed to send job started receipt: %r", job.name, exc)
             job.system_event(
                 type=SystemEvent.EventType.RECEIPT_FAILURE,
                 subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
-                description=text,
+                description=repr(exc),
             )
 
 
@@ -731,20 +733,24 @@ async def _send_job_request(
 
 async def _send_job_finished_receipts(ctx: BatchContext) -> None:
     for job in ctx.jobs.values():
-        if job.success:
+        # generate job finished receipts for all jobs
+        # which returned a response, even if they failed
+        if job.job_response is not None:
             client = ctx.clients[job.miner_hotkey]
-            _generate_job_finished_receipt(ctx, job)
-            assert job.job_finished_receipt is not None
             try:
+                _generate_job_finished_receipt(ctx, job)
+                assert job.job_finished_receipt is not None
+
+                receipt_json = job.job_finished_receipt.model_dump_json()
                 async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
-                    await client.send_model(job.job_finished_receipt)
+                    await client.send(receipt_json)
+
             except Exception as exc:
-                text = f"{job.miner_hotkey} job {job.uuid} failed to send job finished receipt: {exc!r}"
-                logger.warning(text)
+                logger.warning("%s failed to send job finished receipt: %r", job.name, exc)
                 job.system_event(
                     type=SystemEvent.EventType.RECEIPT_FAILURE,
                     subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
-                    description=text,
+                    description=repr(exc),
                 )
 
 
@@ -753,16 +759,16 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
         if isinstance(job.accept_response, V0DeclineJobRequest) or isinstance(
             job.executor_response, V0ExecutorFailedRequest
         ):
-            text = f"{job.miner_hotkey} job {job.uuid} refused job"
-            logger.warning(text)
+            logger.warning("%s refused", job.name)
             job.system_event(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
-                description=text,
+                description="refused",
             )
         if isinstance(job.job_response, V0JobFailedRequest):
-            text = f"{job.miner_hotkey} job {job.uuid} failed job"
-            logger.warning(text)
+            returncode = job.job_response.docker_process_exit_status
+            text = f"failed: {returncode=}"
+            logger.warning("%s %s", job.name, text)
             job.system_event(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.FAILURE,
@@ -797,24 +803,12 @@ async def _send_machine_specs(ctx: BatchContext) -> None:
                         },
                     )
             except Exception as exc:
-                text = f"{job.miner_hotkey} job {job.uuid} failed to send machine specs: {exc!r}"
-                logger.warning(text)
+                logger.warning("%s failed to send machine specs: %r", job.name, exc)
                 job.system_event(
                     type=SystemEvent.EventType.VALIDATOR_CHANNEL_LAYER_ERROR,
                     subtype=SystemEvent.EventSubType.SPECS_SEND_ERROR,
-                    description=text,
+                    description=repr(exc),
                 )
-
-
-async def _close_clients(ctx: BatchContext) -> None:
-    # should we create a task for each client so
-    # we can close them in parallel? seems unnecessary
-    for hotkey, client in ctx.clients.items():
-        try:
-            async with asyncio.timeout(_CLOSE_TIMEOUT):
-                await client.close()
-        except Exception as exc:
-            logger.warning("%s failed to close client: %r", hotkey, exc)
 
 
 async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
@@ -822,7 +816,7 @@ async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
     tasks = [
         asyncio.create_task(
             _get_miner_manifest(ctx, start_barrier, miner_hotkey),
-            name=f"{miner_hotkey}-get_manifest",
+            name=f"{miner_hotkey}._get_miner_manifest",
         )
         for miner_hotkey in ctx.hotkeys
     ]
@@ -832,8 +826,8 @@ async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             hotkey = ctx.hotkeys[i]
-            text = f"Failed to get manifest {hotkey}: {result}"
-            logger.warning(text)
+            name = ctx.names[hotkey]
+            logger.warning("%s failed to get manifest: %r", name, result)
 
             if isinstance(result, TimeoutError | asyncio.CancelledError):
                 subtype = SystemEvent.EventSubType.MANIFEST_TIMEOUT
@@ -843,9 +837,29 @@ async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
             ctx.system_event(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=subtype,
-                description=text,
+                description=repr(result),
                 miner_hotkey=hotkey,
             )
+        else:
+            assert result is None
+
+
+async def _multi_close_client(ctx: BatchContext) -> None:
+    tasks = [
+        asyncio.create_task(
+            _close_client(ctx, miner_hotkey),
+            name=f"{miner_hotkey}._close_client",
+        )
+        for miner_hotkey in ctx.hotkeys
+    ]
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            hotkey = ctx.hotkeys[i]
+            name = ctx.names[hotkey]
+            logger.warning("%s failed to close client: %r", name, result)
         else:
             assert result is None
 
@@ -859,7 +873,7 @@ async def _multi_send_initial_job_request(ctx: BatchContext) -> None:
     tasks = [
         asyncio.create_task(
             _send_initial_job_request(ctx, start_barrier, max_spin_up_time, job_uuid),
-            name=f"{job_uuid}-send_initial_job",
+            name=f"{job_uuid}._send_initial_job_request",
         )
         for job_uuid in ctx.job_uuids
     ]
@@ -898,7 +912,7 @@ async def _multi_send_job_request(ctx: BatchContext) -> None:
     tasks = [
         asyncio.create_task(
             _send_job_request(ctx, start_barrier, job_uuid),
-            name=f"{job_uuid}-send_job",
+            name=f"{job_uuid}._send_job_request",
         )
         for job_uuid in executor_ready_job_uuids
     ]
@@ -948,26 +962,29 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
     job.score = 0
     job.success = False
+    job.comment = "failed"
 
     if job.job_response is None:
         job.comment = "timed out"
-        logger.info("%s job %s %s", job.miner_hotkey, job.uuid, job.comment)
+        logger.info("%s %s", job.name, job.comment)
         return
 
     if isinstance(job.job_response, V0JobFailedRequest):
-        job.comment = f"failed with return code {job.job_response.docker_process_exit_status}"
-        logger.info("%s job %s %s", job.miner_hotkey, job.uuid, job.comment)
+        returncode = job.job_response.docker_process_exit_status
+        job.comment = f"failed: {returncode=}"
+        logger.info("%s %s", job.name, job.comment)
         return
 
     assert isinstance(job.job_response, V0JobFinishedRequest)
     assert job.job_before_sent_time is not None
     assert job.job_response_time is not None
     job.time_took = job.job_response_time - job.job_before_sent_time
-    assert job.time_took.total_seconds() >= 0
+    time_took_sec = job.time_took.total_seconds()
+    assert time_took_sec >= 0
 
-    if job.time_took.total_seconds() > job.job_generator.timeout_seconds():
-        job.comment = f"took too long: {job.time_took.total_seconds():.2f} seconds"
-        logger.info("%s job %s %s", job.miner_hotkey, job.uuid, job.comment)
+    if time_took_sec > job.job_generator.timeout_seconds():
+        job.comment = f"took too long: {time_took_sec=:.2f}"
+        logger.info("%s %s", job.name, job.comment)
         job.system_event(
             type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
             subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
@@ -977,7 +994,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
     job.success, job.comment, job.score = job.job_generator.verify(
         job.job_response,
-        job.time_took.total_seconds(),
+        time_took_sec,
     )
 
     if job.success:
@@ -999,11 +1016,10 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
         )
 
     logger.info(
-        "%s job %s finished with %s in %.2f seconds with score %f: %s",
-        job.miner_hotkey,
-        job.uuid,
+        "%s finished with %s in %.2f seconds with score %.6g: %s",
+        job.name,
         "success" if job.success else "failure",
-        job.time_took.total_seconds(),
+        time_took_sec,
         job.score,
         job.comment,
     )
@@ -1019,12 +1035,11 @@ async def _score_jobs(ctx: BatchContext) -> None:
         try:
             await _score_job(ctx, job)
         except Exception as exc:
-            text = f"{job.miner_hotkey} job {job.uuid} failed to score: {exc!r}"
-            logger.warning(text)
+            logger.warning("%s failed to score: %r", job.name, exc)
             job.system_event(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.MINER_SCORING_ERROR,
-                description=text,
+                description=repr(exc),
             )
 
 
@@ -1048,9 +1063,13 @@ def _db_get_previous_online_executor_count(ctx: BatchContext) -> None:
 def _db_persist(ctx: BatchContext) -> None:
     start_time = time.time()
 
-    # persist the system events first
+    # persist the system events first, this function can be called
+    # after an exception, the rest of the data might not be consistent
     SystemEvent.objects.bulk_create(ctx.events)
 
+    # persist the batch and the jobs in the same transaction, to
+    # prevent a situation where because of a crash only some of
+    # the jobs are saved, which would generate incorrect weights
     with transaction.atomic():
         # accepting_results_until is not used anywhere, it doesn't
         # matter that we pick a somewhat arbitrary time for it
@@ -1081,19 +1100,19 @@ def _db_persist(ctx: BatchContext) -> None:
             synthetic_jobs.append(synthetic_job)
         SyntheticJob.objects.bulk_create(synthetic_jobs)
 
-        miner_manifests: list[MinerManifest] = []
-        for miner in ctx.miners.values():
-            manifest = ctx.manifests[miner.hotkey]
-            if manifest is not None:
-                miner_manifests.append(
-                    MinerManifest(
-                        miner=miner,
-                        batch=batch,
-                        executor_count=manifest.total_count,
-                        online_executor_count=ctx.online_executor_count[miner.hotkey],
-                    )
+    miner_manifests: list[MinerManifest] = []
+    for miner in ctx.miners.values():
+        manifest = ctx.manifests[miner.hotkey]
+        if manifest is not None:
+            miner_manifests.append(
+                MinerManifest(
+                    miner=miner,
+                    batch=batch,
+                    executor_count=manifest.total_count,
+                    online_executor_count=ctx.online_executor_count[miner.hotkey],
                 )
-        MinerManifest.objects.bulk_create(miner_manifests)
+            )
+    MinerManifest.objects.bulk_create(miner_manifests)
 
     job_started_receipts: list[JobStartedReceipt] = []
     for job in ctx.jobs.values():
@@ -1200,21 +1219,20 @@ async def execute_synthetic_batch_run(
         else:
             logger.warning("No executors available")
 
-        logger.info("STAGE: _close_clients")
-        ctx.stage_start_time["_close_clients"] = datetime.now(tz=UTC)
-        await _close_clients(ctx)
+        logger.info("STAGE: _multi_close_client")
+        ctx.stage_start_time["_multi_close_client"] = datetime.now(tz=UTC)
+        await _multi_close_client(ctx)
 
         logger.info("STAGE: _send_machine_specs")
         ctx.stage_start_time["_send_machine_specs"] = datetime.now(tz=UTC)
         await _send_machine_specs(ctx)
 
     except Exception as exc:
-        msg = f"Synthetic jobs batch failure: {exc!r}"
-        logger.error(msg)
+        logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_FAILURE,
             subtype=SystemEvent.EventSubType.GENERIC_ERROR,
-            description=msg,
+            description=repr(exc),
         )
 
     try:
@@ -1222,8 +1240,7 @@ async def execute_synthetic_batch_run(
         ctx.stage_start_time["_emit_telemetry_events"] = datetime.now(tz=UTC)
         _emit_telemetry_events(ctx)
     except Exception as exc:
-        msg = f"Synthetic jobs batch failure: {exc!r}"
-        logger.error(msg)
+        logger.error("Synthetic jobs batch failure: %r", exc)
 
     logger.info("STAGE: _db_persist")
     ctx.stage_start_time["_db_persist"] = datetime.now(tz=UTC)
