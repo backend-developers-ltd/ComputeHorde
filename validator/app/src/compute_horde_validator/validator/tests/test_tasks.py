@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -302,15 +303,15 @@ def test__run_synthetic_jobs__debug_dont_stagger_validators__false(settings):
 )
 @patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__run_synthetic_jobs__too_late(settings):
+def test__run_synthetic_jobs__too_early(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True
 
     from bittensor import subtensor
 
     current_block = subtensor().get_current_block()
-    ScheduledSyntheticJobs.objects.create(block=current_block - 4)
+    ScheduledSyntheticJobs.objects.create(block=current_block + 4)
 
-    run_synthetic_jobs(max_late_blocks=3)
+    run_synthetic_jobs(wait_in_advance_blocks=3)
 
     from compute_horde_validator.validator.tasks import _run_synthetic_jobs
 
@@ -329,9 +330,9 @@ def test__run_synthetic_jobs__in_time(settings):
     from bittensor import subtensor
 
     current_block = subtensor().get_current_block()
-    ScheduledSyntheticJobs.objects.create(block=current_block - 1)
+    ScheduledSyntheticJobs.objects.create(block=current_block + 3)
 
-    run_synthetic_jobs(max_late_blocks=3)
+    run_synthetic_jobs(wait_in_advance_blocks=3, sleep_for=timedelta(seconds=1))
 
     from compute_horde_validator.validator.tasks import _run_synthetic_jobs
 
@@ -350,11 +351,11 @@ def test__run_synthetic_jobs__many_scheduled_runs(settings):
     from bittensor import subtensor
 
     current_block = subtensor().get_current_block()
-    ScheduledSyntheticJobs.objects.create(block=current_block - 1)
-    ScheduledSyntheticJobs.objects.create(block=current_block - 2)
-    ScheduledSyntheticJobs.objects.create(block=current_block - 3)
+    ScheduledSyntheticJobs.objects.create(block=current_block + 1)
+    ScheduledSyntheticJobs.objects.create(block=current_block + 2)
+    ScheduledSyntheticJobs.objects.create(block=current_block + 3)
 
-    run_synthetic_jobs(max_late_blocks=5)
+    run_synthetic_jobs(wait_in_advance_blocks=5, sleep_for=timedelta(seconds=1))
 
     from compute_horde_validator.validator.tasks import _run_synthetic_jobs
 
@@ -373,11 +374,11 @@ def test__run_synthetic_jobs__concurrent(settings):
     from bittensor import subtensor
 
     current_block = subtensor().get_current_block()
-    ScheduledSyntheticJobs.objects.create(block=current_block - 1)
+    ScheduledSyntheticJobs.objects.create(block=current_block + 1)
 
     num_threads = 10
     with ThreadPoolExecutor(max_workers=num_threads) as pool:
-        pool.map(lambda _: run_synthetic_jobs(max_late_blocks=3), range(num_threads))
+        pool.map(lambda _: run_synthetic_jobs(wait_in_advance_blocks=3), range(num_threads))
 
     from compute_horde_validator.validator.tasks import _run_synthetic_jobs
 
