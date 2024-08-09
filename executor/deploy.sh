@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright 2020, Reef Technologies (reef.pl), All rights reserved.
 set -euxo pipefail
 
