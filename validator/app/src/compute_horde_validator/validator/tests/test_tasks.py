@@ -332,7 +332,7 @@ def test__run_synthetic_jobs__in_time(settings):
     current_block = subtensor().get_current_block()
     ScheduledSyntheticJobs.objects.create(block=current_block + 3)
 
-    run_synthetic_jobs(wait_in_advance_blocks=3, sleep_for=timedelta(seconds=1))
+    run_synthetic_jobs(wait_in_advance_blocks=3, poll_interval=timedelta(seconds=1))
 
     from compute_horde_validator.validator.tasks import _run_synthetic_jobs
 
@@ -355,7 +355,7 @@ def test__run_synthetic_jobs__many_scheduled_runs(settings):
     ScheduledSyntheticJobs.objects.create(block=current_block + 2)
     ScheduledSyntheticJobs.objects.create(block=current_block + 3)
 
-    run_synthetic_jobs(wait_in_advance_blocks=5, sleep_for=timedelta(seconds=1))
+    run_synthetic_jobs(wait_in_advance_blocks=5, poll_interval=timedelta(seconds=1))
 
     from compute_horde_validator.validator.tasks import _run_synthetic_jobs
 

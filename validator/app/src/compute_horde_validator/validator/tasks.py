@@ -170,19 +170,10 @@ def _run_synthetic_jobs() -> None:
         logger.info("Running synthetic jobs timed out")
 
 
-APPROXIMATE_BLOCK_DURATION = timedelta(seconds=12)
-DEFAULT_WAIT_IN_ADVANCE_BLOCKS = (
-    ceil(
-        settings.CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] / APPROXIMATE_BLOCK_DURATION
-    )
-    * 2
-)
-
-
 @app.task()
 def run_synthetic_jobs(
-    wait_in_advance_blocks: int = DEFAULT_WAIT_IN_ADVANCE_BLOCKS,
-    sleep_for: timedelta = APPROXIMATE_BLOCK_DURATION / 3,
+    wait_in_advance_blocks: int | None = None,
+    poll_interval: timedelta | None = None,
 ) -> None:
     """
     Run synthetic jobs as scheduled by ScheduledValidationRun.
@@ -200,6 +191,9 @@ def run_synthetic_jobs(
     if settings.DEBUG_DONT_STAGGER_VALIDATORS:
         _run_synthetic_jobs.apply_async()
         return
+
+    wait_in_advance_blocks = wait_in_advance_blocks or config.SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS
+    poll_interval = poll_interval or timedelta(seconds=config.SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL)
 
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
@@ -226,7 +220,7 @@ def run_synthetic_jobs(
 
         target_block = ongoing_scheduled_jobs[0].block
         blocks_to_wait = target_block - subtensor_.get_current_block()
-        for _ in range(ceil(blocks_to_wait * APPROXIMATE_BLOCK_DURATION * 2 / sleep_for)):
+        for _ in range(ceil(blocks_to_wait * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION * 2 / poll_interval)):
             current_block = subtensor_.get_current_block()
             if current_block >= target_block:
                 break
@@ -234,9 +228,9 @@ def run_synthetic_jobs(
                 "Waiting for block %s, current block is %s, sleeping for %s",
                 target_block,
                 current_block,
-                sleep_for,
+                poll_interval,
             )
-            time.sleep(sleep_for.total_seconds())
+            time.sleep(poll_interval.total_seconds())
         else:
             logger.error(
                 "Failed to wait for target block %s, current block is %s",
