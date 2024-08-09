@@ -1,8 +1,10 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
 [project]
 name = "executor"
 requires-python = "==3.11.*"
-version = "0"
-
 dependencies = [
     "Django~=4.2.4",
     "django-cors-headers~=4.2.0",
@@ -26,10 +28,7 @@ dependencies = [
     "django-prometheus==2.3.1",
     "django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01",
 ]
-
-[build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+dynamic = ["version"]
 
 [tool.pdm]
 distribution = false
@@ -44,13 +43,8 @@ test = [
     "freezegun",
     "requests-toolbelt>=1.0.0",
 ]
-format = [
-    "ruff",
-]
-lint = [
-    "ruff",
-    "codespell[toml]",
-]
+format = ["ruff"]
+lint = ["ruff", "codespell[toml]"]
 type_check = [
     "django-stubs[compatible-mypy]",
     "djangorestframework-stubs[compatible-mypy]",
@@ -59,9 +53,7 @@ type_check = [
     "types-python-dateutil",
     "types-requests",
 ]
-security_check = [
-    "bandit>=1.7.7",
-]
+security_check = ["bandit>=1.7.7"]
 
 [tool.ruff]
 src = ["app/src"]
@@ -72,8 +64,21 @@ line-length = 100
 select = ["E", "F", "I", "UP"]
 # TODO: remove E501 once docstrings are formatted
 ignore = [
-    "D100", "D105", "D107", "D200", "D202", "D203", "D205", "D212", "D400", "D401", "D415",
-    "D101", "D102","D103", "D104", # TODO remove once we have docstring for all public methods
+    "D100",
+    "D105",
+    "D107",
+    "D200",
+    "D202",
+    "D203",
+    "D205",
+    "D212",
+    "D400",
+    "D401",
+    "D415",
+    "D101",
+    "D102",
+    "D103",
+    "D104", # TODO remove once we have docstring for all public methods
     "E501", # TODO: remove E501 once docstrings are formatted
 ]
 
