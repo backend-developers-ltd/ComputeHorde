@@ -1,3 +1,6 @@
+#!/bin/sh
+set -e
+
 cd "$(dirname "$0")"
 
 for file in *.puml.txt
