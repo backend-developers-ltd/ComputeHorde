@@ -6,6 +6,7 @@ import os
 import random
 import string
 import subprocess
+import sys
 import time
 import uuid
 import zipfile
@@ -38,19 +39,19 @@ class Test(ActiveSubnetworkBaseTest):
 
     @classmethod
     def miner_path_and_args(cls) -> list[str]:
-        return ["python", "miner/app/src/manage.py", "runserver", str(MINER_PORT)]
+        return [sys.executable, "miner/app/src/manage.py", "runserver", str(MINER_PORT)]
 
     @classmethod
     def miner_preparation_tasks(cls):
-        db_shell_cmd = "python miner/app/src/manage.py dbshell"
+        db_shell_cmd = f"{sys.executable} miner/app/src/manage.py dbshell"
         for cmd in [
             f'echo "DROP DATABASE IF EXISTS compute_horde_miner_integration_test" | {db_shell_cmd}',
             f'echo "CREATE DATABASE compute_horde_miner_integration_test" | {db_shell_cmd}',
         ]:
             subprocess.check_call(cmd, shell=True)
         for args in [
-            ["python", "miner/app/src/manage.py", "migrate"],
-            ["python", "miner/app/src/manage.py", "debug_add_validator", validator_key],
+            [sys.executable, "miner/app/src/manage.py", "migrate"],
+            [sys.executable, "miner/app/src/manage.py", "debug_add_validator", validator_key],
         ]:
             subprocess.check_call(
                 args, env={**os.environ, "DATABASE_SUFFIX": "_integration_test"}
