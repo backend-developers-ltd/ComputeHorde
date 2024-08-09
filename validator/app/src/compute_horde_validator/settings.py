@@ -262,7 +262,7 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
     },
     "run_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.run_synthetic_jobs",
-        "schedule": timedelta(seconds=30),  # this should match `max_late_blocks`!
+        "schedule": timedelta(seconds=30),
         "options": {},
     },
     "set_scores": {

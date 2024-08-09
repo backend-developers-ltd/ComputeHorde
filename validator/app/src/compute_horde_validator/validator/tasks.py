@@ -170,18 +170,24 @@ def _run_synthetic_jobs() -> None:
         logger.info("Running synthetic jobs timed out")
 
 
-BLOCK_DURATION = timedelta(seconds=12)
-DEFAULT_MAX_LATE_BLOCKS = ceil(
-    settings.CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] / BLOCK_DURATION
+APPROXIMATE_BLOCK_DURATION = timedelta(seconds=12)
+DEFAULT_WAIT_IN_ADVANCE_BLOCKS = (
+    ceil(
+        settings.CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] / APPROXIMATE_BLOCK_DURATION
+    )
+    * 2
 )
 
 
 @app.task()
-def run_synthetic_jobs(max_late_blocks: int = DEFAULT_MAX_LATE_BLOCKS) -> None:
+def run_synthetic_jobs(
+    wait_in_advance_blocks: int = DEFAULT_WAIT_IN_ADVANCE_BLOCKS,
+    sleep_for: timedelta = APPROXIMATE_BLOCK_DURATION / 3,
+) -> None:
     """
     Run synthetic jobs as scheduled by ScheduledValidationRun.
-    Don't run jobs if we're too late (more than `max_late_blocks`
-    after scheduled run block).
+    If there is a job scheduled in near `wait_in_advance_blocks` blocks,
+    wait till the block is reached, and run the jobs.
 
     If `settings.DEBUG_DONT_STAGGER_VALIDATORS` is set, we will run
     future jobs immediately.
@@ -191,33 +197,55 @@ def run_synthetic_jobs(max_late_blocks: int = DEFAULT_MAX_LATE_BLOCKS) -> None:
         logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
         return
 
+    if settings.DEBUG_DONT_STAGGER_VALIDATORS:
+        _run_synthetic_jobs.apply_async()
+        return
+
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
     with transaction.atomic():
-        scheduled_runs = list(
-            ScheduledSyntheticJobs.objects.select_for_update(skip_locked=True).filter(
-                block__gte=current_block - max_late_blocks,
-                **(
-                    dict(block__lte=current_block)
-                    if not settings.DEBUG_DONT_STAGGER_VALIDATORS
-                    else dict()
-                ),
+        ongoing_scheduled_jobs = list(
+            ScheduledSyntheticJobs.objects.select_for_update(skip_locked=True)
+            .filter(
+                block__gte=current_block,
+                block__lte=current_block + wait_in_advance_blocks,
                 started_at__isnull=True,
             )
+            .order_by("block")
         )
-        if not scheduled_runs:
-            logger.debug("No scheduled synthetic jobs found")
+        if not ongoing_scheduled_jobs:
+            logger.debug("No ongoing scheduled synthetic jobs")
             return
 
-        if len(scheduled_runs) > 1:
+        if len(ongoing_scheduled_jobs) > 1:
             logger.warning(
-                "More than one scheduled synthetic jobs run found (%s), running all of them",
-                scheduled_runs,
+                "More than one scheduled synthetic jobs found (%s)",
+                ongoing_scheduled_jobs,
+            )
+
+        target_block = ongoing_scheduled_jobs[0].block
+        blocks_to_wait = target_block - subtensor_.get_current_block()
+        for _ in range(ceil(blocks_to_wait * APPROXIMATE_BLOCK_DURATION * 2 / sleep_for)):
+            current_block = subtensor_.get_current_block()
+            if current_block >= target_block:
+                break
+            logger.debug(
+                "Waiting for block %s, current block is %s, sleeping for %s",
+                target_block,
+                current_block,
+                sleep_for,
+            )
+            time.sleep(sleep_for.total_seconds())
+        else:
+            logger.error(
+                "Failed to wait for target block %s, current block is %s",
+                target_block,
+                current_block,
             )
 
         now_ = now()
-        for scheduled_run in scheduled_runs:
+        for scheduled_run in ongoing_scheduled_jobs:
             scheduled_run.started_at = now_
             scheduled_run.save()
 
