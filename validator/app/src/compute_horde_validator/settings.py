@@ -121,6 +121,8 @@ if CORS_ENABLED := env.bool("CORS_ENABLED", default=True):
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+BITTENSOR_APPROXIMATE_BLOCK_DURATION = timedelta(seconds=12)
+
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_CONFIG = {
     "SERVING": (
@@ -139,6 +141,16 @@ CONSTANCE_CONFIG = {
         float,
     ),
     "DYNAMIC_WEIGHTS_VERSION": (1, "The weights version for synthetic jobs", int),
+    "SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS": (
+        3,
+        "How many blocks in advance to start waiting before synthetic jobs spawn",
+        int,
+    ),
+    "SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL": (
+        (BITTENSOR_APPROXIMATE_BLOCK_DURATION / 3).total_seconds(),
+        "How often (in seconds) to poll for block change",
+        float,
+    ),
 }
 
 # Content Security Policy
