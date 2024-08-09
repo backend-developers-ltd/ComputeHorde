@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eux -o pipefail
+set -euxo pipefail
 
 RELPATH="$(dirname "$0")"
 ABSPATH="$(realpath "$RELPATH")"

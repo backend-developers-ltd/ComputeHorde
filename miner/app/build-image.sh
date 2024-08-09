@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eux -o pipefail
+set -euxo pipefail
 
 IMAGE_NAME="backenddevelopersltd/compute-horde-miner:v0-latest"
 # Dockerfile assumes that build is run in the parent dir
