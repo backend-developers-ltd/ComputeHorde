@@ -16,7 +16,7 @@ from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
-    MinerConnectionError,
+    TransportConnectionError,
     UnsupportedMessageReceived,
 )
 from compute_horde.mv_protocol import miner_requests, validator_requests
@@ -45,6 +45,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobStartedReceiptRequest,
     VolumeType,
 )
+from compute_horde.transport import WSTransport
 from django.conf import settings
 from django.db import transaction
 from pydantic import BaseModel
@@ -84,10 +85,6 @@ _MAX_MINER_CLIENT_DEBOUNCE_COUNT = 4  # approximately 32 seconds
 
 class MinerClient(AbstractMinerClient):
     def __init__(self, ctx: "BatchContext", miner_hotkey: str):
-        miner_name = ctx.names[miner_hotkey]
-        super().__init__(miner_name)
-        self.max_debounce_count = _MAX_MINER_CLIENT_DEBOUNCE_COUNT
-
         self.ctx = ctx
         self.own_hotkey = ctx.own_keypair.ss58_address
         self.own_keypair = ctx.own_keypair
@@ -96,6 +93,12 @@ class MinerClient(AbstractMinerClient):
         self.miner_hotkey = miner_hotkey
         self.miner_address = axon.ip
         self.miner_port = axon.port
+
+        name = ctx.names[miner_hotkey]
+        transport = WSTransport(
+            name, self.miner_url(), max_retries=_MAX_MINER_CLIENT_DEBOUNCE_COUNT
+        )
+        super().__init__(name, transport)
 
     def miner_url(self) -> str:
         return f"ws://{self.miner_address}:{self.miner_port}/v0.1/validator_interface/{self.own_hotkey}"
@@ -171,10 +174,20 @@ class MinerClient(AbstractMinerClient):
             signature=f"0x{self.own_keypair.sign(payload.blob_for_signing()).hex()}",
         )
 
-    async def _connect(self):
-        ws = await super()._connect()
-        await ws.send(self.generate_authentication_message().model_dump_json())
-        return ws
+    async def connect(self) -> None:
+        await super().connect()
+        await self.transport.send(self.generate_authentication_message().model_dump_json())
+
+    async def send_check(self, data: str | bytes) -> None:
+        await self.send(data, error_event_callback=self._handle_send_error_event)
+
+    async def _handle_send_error_event(self, msg: str):
+        self.ctx.system_event(
+            type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+            subtype=SystemEvent.EventSubType.MINER_SEND_ERROR,
+            description=str(msg),
+            miner_hotkey=self.miner_hotkey,
+        )
 
 
 @dataclass
@@ -578,8 +591,8 @@ async def _get_miner_manifest(
 
     async with asyncio.timeout(_GET_MANIFEST_TIMEOUT):
         try:
-            await client.await_connect()
-        except MinerConnectionError as exc:
+            await client.connect()
+        except TransportConnectionError as exc:
             name = ctx.names[miner_hotkey]
             logger.warning("%s connection error: %r", name, exc)
             ctx.system_event(
@@ -674,7 +687,7 @@ async def _send_initial_job_request(
         # send can block, so take a timestamp
         # on both sides to detect long send times
         job.accept_before_sent_time = datetime.now(tz=UTC)
-        await client.send(request_json)
+        await client.send_check(request_json)
         job.accept_after_sent_time = datetime.now(tz=UTC)
 
         await job.accept_response_event.wait()
@@ -688,7 +701,7 @@ async def _send_initial_job_request(
         try:
             receipt_json = job.job_started_receipt.model_dump_json()
             async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
-                await client.send(receipt_json)
+                await client.send_check(receipt_json)
         except Exception as exc:
             logger.warning("%s failed to send job started receipt: %r", job.name, exc)
             job.system_event(
@@ -725,7 +738,7 @@ async def _send_job_request(
         # send can block, so take a timestamp
         # on both sides to detect long send times
         job.job_before_sent_time = datetime.now(tz=UTC)
-        await client.send(request_json)
+        await client.send_check(request_json)
         job.job_after_sent_time = datetime.now(tz=UTC)
 
         await job.job_response_event.wait()
@@ -743,7 +756,7 @@ async def _send_job_finished_receipts(ctx: BatchContext) -> None:
 
                 receipt_json = job.job_finished_receipt.model_dump_json()
                 async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
-                    await client.send(receipt_json)
+                    await client.send_check(receipt_json)
 
             except Exception as exc:
                 logger.warning("%s failed to send job finished receipt: %r", job.name, exc)
