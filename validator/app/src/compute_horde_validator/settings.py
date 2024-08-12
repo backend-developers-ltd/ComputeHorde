@@ -139,6 +139,11 @@ CONSTANCE_CONFIG = {
         float,
     ),
     "DYNAMIC_WEIGHTS_VERSION": (1, "The weights version for synthetic jobs", int),
+    "DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION": (
+        1,
+        "The synthetic jobs flow version",
+        int,
+    ),
 }
 
 # Content Security Policy
