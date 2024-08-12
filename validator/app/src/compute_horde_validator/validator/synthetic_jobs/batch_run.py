@@ -787,7 +787,10 @@ async def _send_machine_specs(ctx: BatchContext) -> None:
     assert channel_layer is not None
 
     for job in ctx.jobs.values():
-        if job.machine_specs is not None:
+        # only take into account machine specs from executors which
+        # finished the job successfully, to prevent fake executors
+        # from pushing specs for non-existing GPUs
+        if job.success and job.machine_specs is not None:
             try:
                 async with asyncio.timeout(_SEND_MACHINE_SPECS_TIMEOUT):
                     await channel_layer.group_send(
