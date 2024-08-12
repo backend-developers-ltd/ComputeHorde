@@ -45,6 +45,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobStartedReceiptRequest,
     VolumeType,
 )
+from compute_horde.transport import WSTransport
 from django.conf import settings
 from django.db import transaction
 from pydantic import BaseModel
@@ -84,10 +85,6 @@ _MAX_MINER_CLIENT_DEBOUNCE_COUNT = 4  # approximately 32 seconds
 
 class MinerClient(AbstractMinerClient):
     def __init__(self, ctx: "BatchContext", miner_hotkey: str):
-        miner_name = ctx.names[miner_hotkey]
-        super().__init__(miner_name)
-        self.max_debounce_count = _MAX_MINER_CLIENT_DEBOUNCE_COUNT
-
         self.ctx = ctx
         self.own_hotkey = ctx.own_keypair.ss58_address
         self.own_keypair = ctx.own_keypair
@@ -96,6 +93,12 @@ class MinerClient(AbstractMinerClient):
         self.miner_hotkey = miner_hotkey
         self.miner_address = axon.ip
         self.miner_port = axon.port
+
+        name = ctx.names[miner_hotkey]
+        transport = WSTransport(
+            name, self.miner_url(), max_retries=_MAX_MINER_CLIENT_DEBOUNCE_COUNT
+        )
+        super().__init__(name, transport)
 
     def miner_url(self) -> str:
         return f"ws://{self.miner_address}:{self.miner_port}/v0.1/validator_interface/{self.own_hotkey}"
@@ -171,10 +174,9 @@ class MinerClient(AbstractMinerClient):
             signature=f"0x{self.own_keypair.sign(payload.blob_for_signing()).hex()}",
         )
 
-    async def _connect(self):
-        ws = await super()._connect()
-        await ws.send(self.generate_authentication_message().model_dump_json())
-        return ws
+    async def connect(self):
+        await super().connect()
+        await self.transport.send(self.generate_authentication_message().model_dump_json())
 
 
 @dataclass
@@ -578,7 +580,7 @@ async def _get_miner_manifest(
 
     async with asyncio.timeout(_GET_MANIFEST_TIMEOUT):
         try:
-            await client.await_connect()
+            await client.connect()
         except MinerConnectionError as exc:
             name = ctx.names[miner_hotkey]
             logger.warning("%s connection error: %r", name, exc)
