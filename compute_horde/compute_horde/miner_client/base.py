@@ -53,9 +53,17 @@ class AbstractMinerClient(abc.ABC):
         for deferred_send_task in self.deferred_send_tasks:
             if not deferred_send_task.done():
                 deferred_send_task.cancel()
+                try:
+                    await deferred_send_task
+                except Exception as ex:
+                    logger.debug("Exception raised on task cancel: %r", ex)
 
         if self.read_messages_task is not None and not self.read_messages_task.done():
             self.read_messages_task.cancel()
+            try:
+                await self.read_messages_task
+            except Exception as ex:
+                logger.debug("Exception raised on task cancel: %r", ex)
 
         await self.transport.stop()
 
