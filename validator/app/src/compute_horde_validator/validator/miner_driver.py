@@ -7,7 +7,7 @@ from typing import Literal
 
 from compute_horde.base.output_upload import ZipAndHttpPutUpload
 from compute_horde.base.volume import InlineVolume, ZipUrlVolume
-from compute_horde.miner_client.base import MinerConnectionError
+from compute_horde.miner_client.base import TransportConnectionError
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
@@ -96,16 +96,17 @@ async def execute_organic_job(
     wait_timeout: int = 300,
     notify_callback=None,
 ):
-    save_event = partial(
-        save_job_execution_event,
-        data={"miner_hotkey": miner_client.my_hotkey, "job_uuid": str(job.job_uuid)},
-    )
+    data = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
+    save_event = partial(save_job_execution_event, data=data)
+
+    async def handle_send_error_event(msg: str):
+        await save_event(subtype=SystemEvent.EventSubType.MINER_SEND_ERROR, long_description=msg)
 
     job_state = miner_client.get_job_state(job.job_uuid)
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
             await exit_stack.enter_async_context(miner_client)
-        except MinerConnectionError as exc:
+        except TransportConnectionError as exc:
             comment = f"Miner connection error: {exc}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
@@ -138,7 +139,8 @@ async def execute_organic_job(
                 base_docker_image_name=job_request.docker_image or None,
                 timeout_seconds=total_job_timeout,
                 volume_type=volume.volume_type.value if volume else None,
-            )
+            ),
+            error_event_callback=handle_send_error_event,
         )
 
         try:
@@ -206,7 +208,8 @@ async def execute_organic_job(
                 docker_run_cmd=job_request.get_args(),
                 volume=volume,  # TODO: raw scripts
                 output_upload=output_upload,
-            )
+            ),
+            error_event_callback=handle_send_error_event,
         )
         full_job_sent = time.time()
         try:

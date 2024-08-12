@@ -6,7 +6,7 @@ from collections.abc import Iterable
 
 from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.miner_client.base import MinerConnectionError
+from compute_horde.miner_client.base import TransportConnectionError
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils.timezone import now
@@ -80,7 +80,7 @@ async def _execute_jobs(
         )
         try:
             await exit_stack.enter_async_context(miner_client)
-        except MinerConnectionError as exc:
+        except TransportConnectionError as exc:
             print(f"Miner connection error: {exc}")
             return
         for job in synthetic_jobs:

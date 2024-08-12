@@ -13,7 +13,7 @@ from asgiref.sync import async_to_sync, sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
-    MinerConnectionError,
+    TransportConnectionError,
 )
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
@@ -146,7 +146,7 @@ async def execute_miner_synthetic_jobs(
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
             await exit_stack.enter_async_context(miner_client)
-        except MinerConnectionError as exc:
+        except TransportConnectionError as exc:
             msg = f"Miner connection error: {exc}"
             logger.warning(msg)
             await save_job_execution_event(
@@ -228,6 +228,9 @@ async def _execute_synthetic_job(
     data = {"job_uuid": str(job.job_uuid), "miner_hotkey": job.miner.hotkey}
     save_event = partial(save_job_execution_event, data=data)
 
+    async def handle_send_error_event(msg: str):
+        await save_event(subtype=SystemEvent.EventSubType.MINER_SEND_ERROR, long_description=msg)
+
     job_state = miner_client.get_job_state(str(job.job_uuid))
     job_executor_class = ExecutorClass(job.executor_class)
     job_generator = await current.synthetic_job_generator_factory.create(job_executor_class)
@@ -241,7 +244,8 @@ async def _execute_synthetic_job(
             base_docker_image_name=job_generator.base_docker_image_name(),
             timeout_seconds=job_generator.timeout_seconds(),
             volume_type=VolumeType.inline.value,
-        )
+        ),
+        error_event_callback=handle_send_error_event,
     )
     try:
         msg = await asyncio.wait_for(job_state.miner_ready_or_declining_future, TIMEOUT_BARRIER)
@@ -290,7 +294,7 @@ async def _execute_synthetic_job(
             time.time(),
             synthetic_job_execution_timeout + TIMEOUT_MARGIN + TIMEOUT_SETUP,
         )
-        await miner_client.send_model(receipt_message)
+        await miner_client.send_model(receipt_message, error_event_callback=handle_send_error_event)
         logger.debug(f"Sent job started receipt for {job.job_uuid}")
     except Exception as e:
         comment = f"Failed to send job started receipt to miner {miner_client.miner_name} for job {job.job_uuid}: {e}"
@@ -317,7 +321,8 @@ async def _execute_synthetic_job(
                 "contents": volume_contents,
             },
             output_upload=None,
-        )
+        ),
+        error_event_callback=handle_send_error_event,
     )
     full_job_sent = time.time()
     msg = None
@@ -408,7 +413,9 @@ async def _execute_synthetic_job(
                 receipt_message = miner_client.generate_job_finished_receipt_message(
                     job, full_job_sent, time_took, job.score
                 )
-                await miner_client.send_model(receipt_message)
+                await miner_client.send_model(
+                    receipt_message, error_event_callback=handle_send_error_event
+                )
                 logger.debug(f"Sent job finished receipt for {job.job_uuid}")
             except Exception as e:
                 comment = f"Failed to send job finished receipt to miner {miner_client.miner_name} for job {job.job_uuid}: {e}"

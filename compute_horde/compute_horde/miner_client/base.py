@@ -9,10 +9,6 @@ from compute_horde.transport import AbstractTransport, TransportConnectionError
 logger = logging.getLogger(__name__)
 
 
-class MinerConnectionError(Exception):
-    pass
-
-
 class AbstractMinerClient(abc.ABC):
     def __init__(self, miner_name: str, transport: AbstractTransport):
         self.miner_name = miner_name
@@ -59,12 +55,18 @@ class AbstractMinerClient(abc.ABC):
 
         await self.transport.stop()
 
-    async def send_model(self, model: BaseRequest):
+    async def send_model(self, model: BaseRequest, error_event_callback=None):
         while True:
             try:
                 await self.transport.send(model.model_dump_json())
             except TransportConnectionError as ex:
-                logger.error(f"Could not send to miner {self.miner_name}: {str(ex)}")
+                msg = f"Could not send to miner {self.miner_name}: {str(ex)}"
+                logger.warning(msg)
+                if error_event_callback:
+                    try:
+                        await error_event_callback(msg)
+                    except Exception as callback_ex:
+                        logger.error("Could not execute error event callback: %s", str(callback_ex))
                 await asyncio.sleep(1 + random.random())
                 continue
             return

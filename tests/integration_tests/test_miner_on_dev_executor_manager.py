@@ -51,7 +51,12 @@ class Test(ActiveSubnetworkBaseTest):
             subprocess.check_call(cmd, shell=True)
         for args in [
             [sys.executable, "miner/app/src/manage.py", "migrate"],
-            [sys.executable, "miner/app/src/manage.py", "debug_add_validator", validator_key],
+            [
+                sys.executable,
+                "miner/app/src/manage.py",
+                "debug_add_validator",
+                validator_key,
+            ],
         ]:
             subprocess.check_call(
                 args, env={**os.environ, "DATABASE_SUFFIX": "_integration_test"}
