@@ -141,12 +141,12 @@ CONSTANCE_CONFIG = {
         float,
     ),
     "DYNAMIC_WEIGHTS_VERSION": (1, "The weights version for synthetic jobs", int),
-    "SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS": (
+    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS": (
         3,
         "How many blocks in advance to start waiting before synthetic jobs spawn",
         int,
     ),
-    "SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL": (
+    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL": (
         (BITTENSOR_APPROXIMATE_BLOCK_DURATION / 3).total_seconds(),
         "How often (in seconds) to poll for block change",
         float,

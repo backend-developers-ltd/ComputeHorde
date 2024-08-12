@@ -204,9 +204,9 @@ def run_synthetic_jobs(
         return
 
     wait_in_advance_blocks = (
-        wait_in_advance_blocks or config.SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS
+        wait_in_advance_blocks or config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS
     )
-    poll_interval = poll_interval or timedelta(seconds=config.SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL)
+    poll_interval = poll_interval or timedelta(seconds=config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL)
 
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
