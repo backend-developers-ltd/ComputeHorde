@@ -103,10 +103,37 @@ class MinerBlacklist(models.Model):
         return f"hotkey: {self.miner.hotkey}"
 
 
+class Epoch(models.Model):
+    start = models.BigIntegerField()
+    stop = models.BigIntegerField()
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["start", "stop"], name="unique_epoch"),
+        ]
+
+    def __str__(self):
+        return f"Epoch [{self.start};{self.stop})"
+
+
 class SyntheticJobBatch(models.Model):
-    started_at = models.DateTimeField(auto_now_add=True)
-    accepting_results_until = models.DateTimeField()
+    """
+    Scheduled running of synthetic jobs for a specific block.
+    """
+
+    block = models.BigIntegerField(
+        null=True, unique=True, help_text="Block number for which this batch is scheduled"
+    )
+    epoch = models.ForeignKey(
+        Epoch, blank=True, null=True, related_name="batches", on_delete=models.CASCADE
+    )
+    created_at = models.DateTimeField(default=now)
+    started_at = models.DateTimeField(null=True)
+    accepting_results_until = models.DateTimeField(null=True)
     scored = models.BooleanField(default=False)
+
+    def __str__(self) -> str:
+        return f"Scheduled validation #{self.pk} at block #{self.block}"
 
 
 class MinerManifest(models.Model):
@@ -257,18 +284,3 @@ class Weights(models.Model):
 
     def __str__(self) -> str:
         return str(self.weights)
-
-
-class ScheduledSyntheticJobs(models.Model):
-    """
-    Scheduled running of synthetic jobs for a specific block.
-    """
-
-    block = models.BigIntegerField(
-        unique=True, help_text="Block number for which validation is scheduled"
-    )
-    created_at = models.DateTimeField(default=now)
-    started_at = models.DateTimeField(null=True, default=None)
-
-    def __str__(self) -> str:
-        return f"Scheduled validation #{self.pk} at block #{self.block}"

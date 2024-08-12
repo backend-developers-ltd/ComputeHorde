@@ -38,8 +38,8 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
-    create_and_run_sythethic_job_batch,
     execute_miner_synthetic_jobs,
+    run_synthethic_job_batch,
 )
 
 from .helpers import (
@@ -193,9 +193,8 @@ def syntethic_batch_scheme_single_miner(
     async def as_coro(fun, *args, **kwargs):
         fun(*args, *kwargs)
 
-    thread = threading.Thread(
-        target=create_and_run_sythethic_job_batch, args=(1, "test"), daemon=True
-    )
+    batch = SyntheticJobBatch.objects.create()
+    thread = threading.Thread(target=run_synthethic_job_batch, args=(batch, 1, "test"), daemon=True)
     thread.start()
 
     try:
@@ -508,7 +507,7 @@ async def test_manifest_dance_incentives(
         ("override_weights_version_v2", MANIFEST_INCENTIVE_MULTIPLIER, 1, 100),
     ],
 )
-def test_create_and_run_sythethic_job_batch(
+def test_create_and_run_synthethic_job_batch(
     weights_version_override,
     settings,
     mocked_synthetic_miner_client,

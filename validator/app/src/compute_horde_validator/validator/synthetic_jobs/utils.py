@@ -57,10 +57,15 @@ def batch_id_to_uuid(batch_id: int) -> uuid.UUID:
     return uuid.uuid4()
 
 
-def create_and_run_sythethic_job_batch(netuid, network):
-    batch = SyntheticJobBatch.objects.create(
-        accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
-    )
+def run_synthethic_job_batch(
+    batch: SyntheticJobBatch,
+    netuid: int = settings.BITTENSOR_NETUID,
+    network: str = settings.BITTENSOR_NETWORK,
+) -> None:
+    batch.started_at = now()
+    batch.accepting_results_until = batch.started_at + datetime.timedelta(seconds=JOB_LENGTH)
+    batch.save()
+
     if settings.DEBUG_MINER_KEY:
         miners = [Miner.objects.get_or_create(hotkey=settings.DEBUG_MINER_KEY)[0]]
         axons_by_key = {

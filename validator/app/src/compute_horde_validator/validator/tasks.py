@@ -42,12 +42,12 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     MinerClient,
-    create_and_run_sythethic_job_batch,
+    run_synthethic_job_batch,
     save_receipt_event,
 )
 
 from .miner_driver import execute_organic_job
-from .models import AdminJobRequest, ScheduledSyntheticJobs
+from .models import AdminJobRequest, Epoch
 
 logger = get_task_logger(__name__)
 
@@ -122,15 +122,15 @@ def schedule_synthetic_jobs() -> None:
             block=current_block, netuid=settings.BITTENSOR_NETUID
         )
 
-        run_in_current_epoch = (
-            ScheduledSyntheticJobs.objects.filter(
+        batch_in_current_epoch = (
+            SyntheticJobBatch.objects.filter(
                 block__gte=current_epoch.start, block__lt=current_epoch.stop
             )
             .order_by("block")
             .last()
         )
-        if run_in_current_epoch:
-            logger.debug("Validation is already scheduled at block %s", run_in_current_epoch.block)
+        if batch_in_current_epoch:
+            logger.debug("Synthetic jobs are already scheduled at block %s", batch_in_current_epoch.block)
             return
 
         validators = get_validators(
@@ -142,7 +142,7 @@ def schedule_synthetic_jobs() -> None:
             this_validator_index = [vali.hotkey for vali in validators].index(this_hotkey)
         except ValueError:
             logger.exception(
-                "This validator is not in a list of validators -> not scheduling validation run"
+                "This validator is not in a list of validators -> not scheduling synthetic jobs run"
             )
             return
 
@@ -153,19 +153,29 @@ def schedule_synthetic_jobs() -> None:
             index_=this_validator_index,
         )
 
-        scheduled_run = ScheduledSyntheticJobs.objects.create(block=next_run_block)
-        logger.debug("Scheduled validation run %s", scheduled_run)
+        epoch, _ = Epoch.objects.get_or_create(start=current_epoch.start, stop=current_epoch.stop)
+        batch = SyntheticJobBatch.objects.create(
+            block=next_run_block,
+            epoch=epoch,
+        )
+        logger.debug("Scheduled synthetic jobs run %s", batch)
 
 
 @app.task(
     soft_time_limit=SYNTHETIC_JOBS_SOFT_LIMIT,
     time_limit=SYNTHETIC_JOBS_HARD_LIMIT,
 )
-def _run_synthetic_jobs() -> None:
+def _run_synthetic_jobs(synthetic_jobs_batch_id: int) -> None:
+    batch = SyntheticJobBatch.objects.get(id=synthetic_jobs_batch_id)
+
     try:
         # metagraph will be refetched and that's fine, after sleeping
         # for e.g. 30 minutes we should refetch the miner list
-        create_and_run_sythethic_job_batch(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
+        run_synthethic_job_batch(
+            batch=batch,
+            netuid=settings.BITTENSOR_NETUID,
+            network=settings.BITTENSOR_NETWORK,
+        )
     except billiard.exceptions.SoftTimeLimitExceeded:
         logger.info("Running synthetic jobs timed out")
 
@@ -176,12 +186,12 @@ def run_synthetic_jobs(
     poll_interval: timedelta | None = None,
 ) -> None:
     """
-    Run synthetic jobs as scheduled by ScheduledValidationRun.
+    Run synthetic jobs as scheduled by SyntheticJobBatch.
     If there is a job scheduled in near `wait_in_advance_blocks` blocks,
     wait till the block is reached, and run the jobs.
 
     If `settings.DEBUG_DONT_STAGGER_VALIDATORS` is set, we will run
-    future jobs immediately.
+    synthetic jobs immediately.
     """
 
     if not config.SERVING:
@@ -189,18 +199,21 @@ def run_synthetic_jobs(
         return
 
     if settings.DEBUG_DONT_STAGGER_VALIDATORS:
-        _run_synthetic_jobs.apply_async()
+        batch = SyntheticJobBatch.objects.create()
+        _run_synthetic_jobs.apply_async(synthetic_jobs_batch_id=batch.id)
         return
 
-    wait_in_advance_blocks = wait_in_advance_blocks or config.SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS
+    wait_in_advance_blocks = (
+        wait_in_advance_blocks or config.SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS
+    )
     poll_interval = poll_interval or timedelta(seconds=config.SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL)
 
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
     with transaction.atomic():
-        ongoing_scheduled_jobs = list(
-            ScheduledSyntheticJobs.objects.select_for_update(skip_locked=True)
+        ongoing_synthetic_job_batches = list(
+            SyntheticJobBatch.objects.select_for_update(skip_locked=True)
             .filter(
                 block__gte=current_block,
                 block__lte=current_block + wait_in_advance_blocks,
@@ -208,19 +221,22 @@ def run_synthetic_jobs(
             )
             .order_by("block")
         )
-        if not ongoing_scheduled_jobs:
+        if not ongoing_synthetic_job_batches:
             logger.debug("No ongoing scheduled synthetic jobs")
             return
 
-        if len(ongoing_scheduled_jobs) > 1:
+        if len(ongoing_synthetic_job_batches) > 1:
             logger.warning(
                 "More than one scheduled synthetic jobs found (%s)",
-                ongoing_scheduled_jobs,
+                ongoing_synthetic_job_batches,
             )
 
-        target_block = ongoing_scheduled_jobs[0].block
+        batch = ongoing_synthetic_job_batches[0]
+        target_block = batch.block
         blocks_to_wait = target_block - subtensor_.get_current_block()
-        for _ in range(ceil(blocks_to_wait * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION * 2 / poll_interval)):
+        for _ in range(
+            ceil(blocks_to_wait * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION * 2 / poll_interval)
+        ):
             current_block = subtensor_.get_current_block()
             if current_block >= target_block:
                 break
@@ -238,12 +254,10 @@ def run_synthetic_jobs(
                 current_block,
             )
 
-        now_ = now()
-        for scheduled_run in ongoing_scheduled_jobs:
-            scheduled_run.started_at = now_
-            scheduled_run.save()
+        batch.started_at = now()
+        batch.save()
 
-    _run_synthetic_jobs.apply_async()
+    _run_synthetic_jobs.apply_async(synthetic_jobs_batch_id=batch.id)
 
 
 def _normalize_weights_for_committing(weights: list[numbers.Number], max_: int):
