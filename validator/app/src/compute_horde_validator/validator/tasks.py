@@ -247,7 +247,7 @@ def do_set_weights(
             # we don't know current hyperparams, so we can't decide which method to use -> try both
             try:
                 is_success, msg = _commit_weights()
-            except:
+            except Exception:
                 is_success, msg = False, "Unexpected error occurred when committing weights"
                 logger.exception("Encountered when committing weights")
             if not is_success:  # 'Subtensor returned `CommitRevealDisabled (Module)` error. This means: `attempting to commit/reveal weights when disabled.`'
