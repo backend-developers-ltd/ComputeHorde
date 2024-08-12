@@ -454,7 +454,7 @@ def _handle_exceptions(ctx: BatchContext, exceptions: list[ExceptionInfo]) -> No
         text = f"{exc_info.stage}: {exc_info.exception!r}"
         logger.warning("%s %s", name, text)
 
-        if isinstance(exc_info.exception, TimeoutError | asyncio.CancelledError):
+        if isinstance(exc_info.exception, BaseException):
             subtype = SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT
         else:
             subtype = SystemEvent.EventSubType.GENERIC_ERROR
@@ -837,7 +837,7 @@ async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for i, result in enumerate(results):
-        if isinstance(result, Exception | asyncio.CancelledError):
+        if isinstance(result, BaseException):
             hotkey = ctx.hotkeys[i]
             name = ctx.names[hotkey]
             logger.warning("%s failed to get manifest: %r", name, result)
@@ -869,7 +869,7 @@ async def _multi_close_client(ctx: BatchContext) -> None:
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for i, result in enumerate(results):
-        if isinstance(result, Exception | asyncio.CancelledError):
+        if isinstance(result, BaseException):
             hotkey = ctx.hotkeys[i]
             name = ctx.names[hotkey]
             logger.warning("%s failed to close client: %r", name, result)
@@ -895,7 +895,7 @@ async def _multi_send_initial_job_request(ctx: BatchContext) -> None:
 
     exceptions: list[ExceptionInfo] = []
     for i, result in enumerate(results):
-        if isinstance(result, Exception | asyncio.CancelledError):
+        if isinstance(result, BaseException):
             job_uuid = ctx.job_uuids[i]
             job = ctx.jobs[job_uuid]
             job.exception = result
@@ -934,7 +934,7 @@ async def _multi_send_job_request(ctx: BatchContext) -> None:
 
     exceptions: list[ExceptionInfo] = []
     for i, result in enumerate(results):
-        if isinstance(result, Exception | asyncio.CancelledError):
+        if isinstance(result, BaseException):
             job_uuid = executor_ready_job_uuids[i]
             job = ctx.jobs[job_uuid]
             job.exception = result
