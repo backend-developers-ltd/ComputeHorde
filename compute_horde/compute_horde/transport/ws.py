@@ -105,7 +105,7 @@ class WSTransport(AbstractTransport):
                 await asyncio.sleep(0)
                 # Summary: https://github.com/python-websockets/websockets/issues/867
                 # Longer discussion: https://github.com/python-websockets/websockets/issues/865
-                logger.debug(f"Sent message to {self.name}: {data}")
+                # logger.debug(f"Sent message to {self.name}: {data}")
                 return
             except (websockets.WebSocketException, OSError):
                 logger.info(f"Could not send msg to {self.name}. Reconnecting...")
@@ -115,7 +115,7 @@ class WSTransport(AbstractTransport):
         while True:
             try:
                 msg = await self.ws.recv()
-                logger.debug(f"Received message from {self.name}: {msg}")
+                # logger.debug(f"Received message from {self.name}: {msg}")
                 return msg
             except (websockets.WebSocketException, OSError):
                 logger.info(f"Could not receive msg from {self.name}. Reconnecting...")
