@@ -36,7 +36,12 @@ from compute_horde.em_protocol.miner_requests import (
     V0InitialJobRequest,
     V0JobRequest,
 )
-from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
+from compute_horde.miner_client.base import (
+    AbstractMinerClient,
+    AbstractTransport,
+    UnsupportedMessageReceived,
+)
+from compute_horde.transport import WSTransport
 from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -72,10 +77,12 @@ class RunConfigManager:
 
 
 class MinerClient(AbstractMinerClient):
-    def __init__(self, miner_address: str, token: str):
-        super().__init__(miner_address)
+    def __init__(self, miner_address: str, token: str, transport: AbstractTransport | None = None):
         self.miner_address = miner_address
         self.token = token
+        transport = transport or WSTransport(miner_address, self.miner_url())
+        super().__init__(miner_address, transport)
+
         self.job_uuid: str | None = None
         loop = asyncio.get_running_loop()
         self.initial_msg = loop.create_future()
