@@ -75,7 +75,7 @@ class MockMinerClient(MinerClient):
     async def handle_message(self, msg):
         pass
 
-    async def send_model(self, model):
+    async def send_model(self, model, error_event_callback=None):
         self._sent_models.append(model)
 
     def _query_sent_models(self, condition=None, model_class=None):

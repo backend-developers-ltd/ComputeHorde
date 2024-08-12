@@ -13,7 +13,7 @@ from asgiref.sync import async_to_sync, sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
-    MinerConnectionError,
+    TransportConnectionError,
 )
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
@@ -146,7 +146,7 @@ async def execute_miner_synthetic_jobs(
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
             await exit_stack.enter_async_context(miner_client)
-        except MinerConnectionError as exc:
+        except TransportConnectionError as exc:
             msg = f"Miner connection error: {exc}"
             logger.warning(msg)
             await save_job_execution_event(

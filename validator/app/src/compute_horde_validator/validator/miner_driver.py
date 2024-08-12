@@ -7,7 +7,7 @@ from typing import Literal
 
 from compute_horde.base.output_upload import ZipAndHttpPutUpload
 from compute_horde.base.volume import InlineVolume, ZipUrlVolume
-from compute_horde.miner_client.base import MinerConnectionError
+from compute_horde.miner_client.base import TransportConnectionError
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
@@ -106,7 +106,7 @@ async def execute_organic_job(
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
             await exit_stack.enter_async_context(miner_client)
-        except MinerConnectionError as exc:
+        except TransportConnectionError as exc:
             comment = f"Miner connection error: {exc}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
