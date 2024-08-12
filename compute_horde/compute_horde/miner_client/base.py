@@ -59,13 +59,16 @@ class AbstractMinerClient(abc.ABC):
 
         await self.transport.stop()
 
-    async def send_model(self, model: BaseRequest):
+    async def send_model(self, model: BaseRequest, error_event_callback=None):
         while True:
             try:
                 await self.transport.send(model.model_dump_json())
             except TransportConnectionError as ex:
-                logger.error(f"Could not send to miner {self.miner_name}: {str(ex)}")
+                msg = f"Could not send to miner {self.miner_name}: {str(ex)}"
+                logger.warning(msg)
                 await asyncio.sleep(1 + random.random())
+                if error_event_callback:
+                    await error_event_callback(msg)
                 continue
             return
 
