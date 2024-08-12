@@ -63,7 +63,10 @@ class AbstractMinerClient(abc.ABC):
                 msg = f"Could not send to miner {self.miner_name}: {str(ex)}"
                 logger.warning(msg)
                 if error_event_callback:
-                    await error_event_callback(msg)
+                    try:
+                        await error_event_callback(msg)
+                    except Exception as callback_ex:
+                        logger.error("Could not execute error event callback: %s", str(callback_ex))
                 await asyncio.sleep(1 + random.random())
                 continue
             return
