@@ -192,7 +192,7 @@ class MinerClient(AbstractMinerClient):
 
 @dataclass
 class ExceptionInfo:
-    exception: Exception
+    exception: BaseException
     miner_hotkey: str
     job_uuid: str
     stage: str
@@ -212,7 +212,7 @@ class Job:
 
     # responses
 
-    exception: Exception | None = None
+    exception: BaseException | None = None
     # not-exact, approximate time since it's after asyncio.gather returns
     exception_time: datetime | None = None
     exception_stage: str | None = None
@@ -702,7 +702,7 @@ async def _send_initial_job_request(
             receipt_json = job.job_started_receipt.model_dump_json()
             async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
                 await client.send_check(receipt_json)
-        except Exception as exc:
+        except (Exception, asyncio.CancelledError) as exc:
             logger.warning("%s failed to send job started receipt: %r", job.name, exc)
             job.system_event(
                 type=SystemEvent.EventType.RECEIPT_FAILURE,
@@ -758,7 +758,7 @@ async def _send_job_finished_receipts(ctx: BatchContext) -> None:
                 async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
                     await client.send_check(receipt_json)
 
-            except Exception as exc:
+            except (Exception, asyncio.CancelledError) as exc:
                 logger.warning("%s failed to send job finished receipt: %r", job.name, exc)
                 job.system_event(
                     type=SystemEvent.EventType.RECEIPT_FAILURE,
@@ -815,7 +815,7 @@ async def _send_machine_specs(ctx: BatchContext) -> None:
                             "specs": job.machine_specs.specs,
                         },
                     )
-            except Exception as exc:
+            except (Exception, asyncio.CancelledError) as exc:
                 logger.warning("%s failed to send machine specs: %r", job.name, exc)
                 job.system_event(
                     type=SystemEvent.EventType.VALIDATOR_CHANNEL_LAYER_ERROR,
@@ -837,7 +837,7 @@ async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for i, result in enumerate(results):
-        if isinstance(result, Exception):
+        if isinstance(result, Exception | asyncio.CancelledError):
             hotkey = ctx.hotkeys[i]
             name = ctx.names[hotkey]
             logger.warning("%s failed to get manifest: %r", name, result)
@@ -869,7 +869,7 @@ async def _multi_close_client(ctx: BatchContext) -> None:
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for i, result in enumerate(results):
-        if isinstance(result, Exception):
+        if isinstance(result, Exception | asyncio.CancelledError):
             hotkey = ctx.hotkeys[i]
             name = ctx.names[hotkey]
             logger.warning("%s failed to close client: %r", name, result)
@@ -895,7 +895,7 @@ async def _multi_send_initial_job_request(ctx: BatchContext) -> None:
 
     exceptions: list[ExceptionInfo] = []
     for i, result in enumerate(results):
-        if isinstance(result, Exception):
+        if isinstance(result, Exception | asyncio.CancelledError):
             job_uuid = ctx.job_uuids[i]
             job = ctx.jobs[job_uuid]
             job.exception = result
@@ -934,7 +934,7 @@ async def _multi_send_job_request(ctx: BatchContext) -> None:
 
     exceptions: list[ExceptionInfo] = []
     for i, result in enumerate(results):
-        if isinstance(result, Exception):
+        if isinstance(result, Exception | asyncio.CancelledError):
             job_uuid = executor_ready_job_uuids[i]
             job = ctx.jobs[job_uuid]
             job.exception = result
@@ -1047,7 +1047,7 @@ async def _score_jobs(ctx: BatchContext) -> None:
     for job in ctx.jobs.values():
         try:
             await _score_job(ctx, job)
-        except Exception as exc:
+        except (Exception, asyncio.CancelledError) as exc:
             logger.warning("%s failed to score: %r", job.name, exc)
             job.system_event(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
@@ -1240,7 +1240,7 @@ async def execute_synthetic_batch_run(
         ctx.stage_start_time["_send_machine_specs"] = datetime.now(tz=UTC)
         await _send_machine_specs(ctx)
 
-    except Exception as exc:
+    except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_FAILURE,
@@ -1252,7 +1252,7 @@ async def execute_synthetic_batch_run(
         logger.info("STAGE: _emit_telemetry_events")
         ctx.stage_start_time["_emit_telemetry_events"] = datetime.now(tz=UTC)
         _emit_telemetry_events(ctx)
-    except Exception as exc:
+    except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
 
     logger.info("STAGE: _db_persist")
