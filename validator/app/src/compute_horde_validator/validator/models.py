@@ -28,6 +28,7 @@ class SystemEvent(models.Model):
         RECEIPT_FAILURE = "RECEIPT_FAILURE"
         FACILITATOR_CLIENT_ERROR = "FACILITATOR_CLIENT_ERROR"
         VALIDATOR_MINERS_REFRESH = "VALIDATOR_MINERS_REFRESH"
+        VALIDATOR_SYNTHETIC_JOBS_FAILURE = "VALIDATOR_SYNTHETIC_JOBS_FAILURE"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -58,6 +59,7 @@ class SystemEvent(models.Model):
         HEARTBEAT_ERROR = "HEARTBEAT_ERROR"
         UNEXPECTED_MESSAGE = "UNEXPECTED_MESSAGE"
         UNAUTHORIZED = "UNAUTHORIZED"
+        OVERSLEPT = "OVERSLEPT"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
@@ -131,6 +133,9 @@ class SyntheticJobBatch(models.Model):
     started_at = models.DateTimeField(null=True)
     accepting_results_until = models.DateTimeField(null=True)
     scored = models.BooleanField(default=False)
+    is_missed = models.BooleanField(
+        default=False, help_text="Whether the batch was missed (not run)"
+    )
 
     def __str__(self) -> str:
         return f"Scheduled validation #{self.pk} at block #{self.block}"

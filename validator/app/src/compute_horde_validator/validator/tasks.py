@@ -130,7 +130,9 @@ def schedule_synthetic_jobs() -> None:
             .last()
         )
         if batch_in_current_epoch:
-            logger.debug("Synthetic jobs are already scheduled at block %s", batch_in_current_epoch.block)
+            logger.debug(
+                "Synthetic jobs are already scheduled at block %s", batch_in_current_epoch.block
+            )
             return
 
         validators = get_validators(
@@ -206,7 +208,9 @@ def run_synthetic_jobs(
     wait_in_advance_blocks = (
         wait_in_advance_blocks or config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS
     )
-    poll_interval = poll_interval or timedelta(seconds=config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL)
+    poll_interval = poll_interval or timedelta(
+        seconds=config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL
+    )
 
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
@@ -258,6 +262,34 @@ def run_synthetic_jobs(
         batch.save()
 
     _run_synthetic_jobs.apply_async(synthetic_jobs_batch_id=batch.id)
+
+
+@app.task()
+def check_missed_synthetic_jobs() -> None:
+    """
+    Check if there are any synthetic jobs that were scheduled to run, but didn't.
+    """
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor_.get_current_block()
+
+    with transaction.atomic():
+        past_job_batches = SyntheticJobBatch.objects.select_for_update(skip_locked=True).filter(
+            block__lt=current_block, started_at__isnull=True, is_missed=False
+        )
+        for batch in past_job_batches:
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
+                subtype=SystemEvent.EventSubType.OVERSLEPT,
+                long_description="Failed to run synthetic jobs in time",
+                data={
+                    "batch_id": batch.id,
+                    "created_at": str(batch.created_at),
+                    "block": batch.block,
+                    "current_block": current_block,
+                    "current_time": str(now()),
+                },
+            )
+        past_job_batches.update(is_missed=True)
 
 
 def _normalize_weights_for_committing(weights: list[numbers.Number], max_: int):

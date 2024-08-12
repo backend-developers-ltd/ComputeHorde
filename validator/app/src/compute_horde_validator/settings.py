@@ -277,6 +277,11 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         "schedule": timedelta(seconds=30),
         "options": {},
     },
+    "check_missed_synthetic_jobs": {
+        "task": "compute_horde_validator.validator.tasks.check_missed_synthetic_jobs",
+        "schedule": timedelta(minutes=10),
+        "options": {},
+    },
     "set_scores": {
         "task": "compute_horde_validator.validator.tasks.set_scores",
         "schedule": crontab(

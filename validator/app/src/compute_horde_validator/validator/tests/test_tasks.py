@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
+from django.utils.timezone import now
 from requests import Response
 
 from compute_horde_validator.validator.models import (
@@ -15,6 +16,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.tasks import (
+    check_missed_synthetic_jobs,
     get_epoch_containing_block,
     run_synthetic_jobs,
     schedule_synthetic_jobs,
@@ -379,3 +381,53 @@ def test__run_synthetic_jobs__concurrent(settings):
 
     assert _run_synthetic_jobs.apply_async.call_count == 1
     assert SyntheticJobBatch.objects.last().started_at is not None
+
+
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch(
+    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+)
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test__check_missed_synthetic_jobs(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
+
+    check_missed_synthetic_jobs()
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
+
+    from bittensor import subtensor
+
+    current_block = subtensor().get_current_block()
+    SyntheticJobBatch.objects.create(block=current_block + 10)
+    SyntheticJobBatch.objects.create(
+        block=current_block - 10, started_at=now() - timedelta(seconds=5)
+    )
+    check_missed_synthetic_jobs()
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
+
+    missed_batch = SyntheticJobBatch.objects.create(block=current_block - 5)
+    check_missed_synthetic_jobs()
+    assert (
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
+        .filter(
+            type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
+            subtype=SystemEvent.EventSubType.OVERSLEPT,
+        )
+        .count()
+        == 1
+    )
+
+    missed_batch.refresh_from_db()
+    assert missed_batch.is_missed is True
+    check_missed_synthetic_jobs()
+    assert (
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
+        .filter(
+            type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
+            subtype=SystemEvent.EventSubType.OVERSLEPT,
+        )
+        .count()
+        == 1
+    )
