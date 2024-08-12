@@ -145,7 +145,7 @@ class MinerClient(AbstractMinerClient):
             )
 
         if isinstance(msg, V0ExecutorManifestRequest):
-            if self.miner_hotkey not in self.ctx.manifests:
+            if self.ctx.manifests[self.miner_hotkey] is None:
                 self.ctx.manifests[self.miner_hotkey] = msg.manifest
                 self.ctx.manifest_events[self.miner_hotkey].set()
             else:
