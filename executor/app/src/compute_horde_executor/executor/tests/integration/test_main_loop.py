@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import io
 import json
@@ -11,7 +10,7 @@ from functools import partial
 from unittest import mock
 
 import httpx
-from compute_horde.transport import AbstractTransport
+from compute_horde.transport import StubTransport
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
 
@@ -55,29 +54,9 @@ def get_file_from_request(request):
     return parsed_data
 
 
-class MockTransport(AbstractTransport):
-    def __init__(self, messages: list[str]):
-        self.sent: list[str] = []
-        self.messages = messages
-        self.sent_messages: list[str] = []
-
-    async def start(self): ...
-
-    async def stop(self): ...
-
-    async def send(self, message):
-        self.sent_messages.append(message)
-
-    async def receive(self):
-        try:
-            return next(self.messages)
-        except StopIteration:
-            await asyncio.Future()
-
-
 class TestCommand(Command):
     def __init__(self, messages, *args, **kwargs):
-        transport = MockTransport(messages)
+        transport = StubTransport("test", messages)
         self.MINER_CLIENT_CLASS = partial(MinerClient, transport=transport)
         super().__init__(*args, **kwargs)
 
