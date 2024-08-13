@@ -187,6 +187,7 @@ class MinerClient(AbstractMinerClient):
             subtype=SystemEvent.EventSubType.MINER_SEND_ERROR,
             description=str(msg),
             miner_hotkey=self.miner_hotkey,
+            func="send_check",
         )
 
 
@@ -288,18 +289,20 @@ class Job:
         type: SystemEvent.EventType,
         subtype: SystemEvent.EventSubType,
         description: str,
+        func: str | None = None,
         data: dict[str, str] | None = None,
-    ) -> None:
-        self.ctx.system_event(
+    ) -> SystemEvent | None:
+        return self.ctx.system_event(
             type=type,
             subtype=subtype,
             description=description,
             data=data,
             job_uuid=self.uuid,
             miner_hotkey=self.miner_hotkey,
+            func=func,
         )
 
-    def emit_telemetry_event(self) -> None:
+    def emit_telemetry_event(self) -> SystemEvent | None:
         data = dict(
             job_uuid=self.uuid,
             miner_hotkey=self.miner_hotkey,
@@ -332,7 +335,7 @@ class Job:
             score=self.score,
             score_manifest_multiplier=self.score_manifest_multiplier,
         )
-        self.ctx.system_event(
+        return self.ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
             subtype=SystemEvent.EventSubType.SYNTHETIC_JOB,
             description="job telemetry",
@@ -383,7 +386,8 @@ class BatchContext:
         data: dict[str, Any] | None = None,
         job_uuid: str | None = None,
         miner_hotkey: str | None = None,
-    ) -> None:
+        func: str | None = None,
+    ) -> SystemEvent | None:
         if data is None:
             data = {}
 
@@ -398,6 +402,10 @@ class BatchContext:
             assert "miner_hotkey" not in data
             data["miner_hotkey"] = miner_hotkey
 
+        if func is not None:
+            assert "func" not in data
+            data["func"] = func
+
         try:
             event = SystemEvent(
                 type=type,
@@ -406,11 +414,13 @@ class BatchContext:
                 data=data,
             )
             self.events.append(event)
+            return event
         except Exception as exc:
-            logger.error("Failed to add system event: %r", exc)
+            logger.error("Failed to emit system event: %r", exc)
+            return None
 
-    def emit_telemetry_event(self) -> None:
-        received_msg_count: dict[str, int] = defaultdict(int)
+    def emit_telemetry_event(self) -> SystemEvent | None:
+        messages_count: dict[str, int] = defaultdict(int)
         for job in self.jobs.values():
             for msg in (
                 job.accept_response,
@@ -419,19 +429,44 @@ class BatchContext:
                 job.machine_specs,
             ):
                 if msg is not None:
-                    received_msg_count[msg.message_type.value] += 1
+                    messages_count[msg.message_type.value] += 1
+        # convert to regular dict for nice logging
+        messages_count = dict(messages_count)
+
+        job_count = dict(
+            total=len(self.jobs),
+            failed=sum(1 for job in self.jobs.values() if not job.success),
+            successful=sum(1 for job in self.jobs.values() if job.success),
+        )
+
+        counts = dict(
+            miners=len(self.miners),
+            manifests=sum(1 for manifest in self.manifests.values() if manifest is not None),
+            messages=messages_count,
+            jobs=job_count,
+            system_events=len(self.events),
+        )
+
+        manifests = {}
+        for miner_hotkey, manifest in self.manifests.items():
+            if manifest is not None:
+                executors = {
+                    executor_class_manifest.executor_class: executor_class_manifest.count
+                    for executor_class_manifest in manifest.executor_classes
+                }
+            else:
+                executors = None
+            manifests[miner_hotkey] = executors
 
         data = dict(
             validator_hotkey=self.own_keypair.ss58_address,
-            miner_count=len(self.miners),
-            synthetic_job_count=len(self.jobs),
-            system_event_count=len(self.events),
-            received_msg_count=received_msg_count,
             stage_start_time={
                 stage: _datetime_dump(dt) for stage, dt in self.stage_start_time.items()
             },
+            counts=counts,
+            manifests=manifests,
         )
-        self.system_event(
+        return self.system_event(
             type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
             subtype=SystemEvent.EventSubType.SYNTHETIC_BATCH,
             description="batch telemetry",
@@ -468,6 +503,7 @@ def _handle_exceptions(ctx: BatchContext, exceptions: list[ExceptionInfo]) -> No
             description=text,
             miner_hotkey=exc_info.miner_hotkey,
             job_uuid=exc_info.job_uuid,
+            func=exc_info.stage,
         )
 
 
@@ -603,6 +639,7 @@ async def _get_miner_manifest(
                 subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR,
                 description=repr(exc),
                 miner_hotkey=miner_hotkey,
+                func="connect",
             )
             return
 
@@ -711,6 +748,7 @@ async def _send_initial_job_request(
                 type=SystemEvent.EventType.RECEIPT_FAILURE,
                 subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
                 description=repr(exc),
+                func="_send_initial_job_request",
             )
 
 
@@ -767,6 +805,7 @@ async def _send_job_finished_receipts(ctx: BatchContext) -> None:
                     type=SystemEvent.EventType.RECEIPT_FAILURE,
                     subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
                     description=repr(exc),
+                    func="_send_job_finished_receipts",
                 )
 
 
@@ -793,7 +832,11 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
 
 
 def _emit_telemetry_events(ctx: BatchContext) -> None:
-    ctx.emit_telemetry_event()
+    batch_system_event = ctx.emit_telemetry_event()
+    if batch_system_event is not None:
+        counts = batch_system_event.data.get("counts")
+        logger.info("Batch telemetry counts: %s", counts)
+
     for job in ctx.jobs.values():
         job.emit_telemetry_event()
 
@@ -824,6 +867,7 @@ async def _send_machine_specs(ctx: BatchContext) -> None:
                     type=SystemEvent.EventType.VALIDATOR_CHANNEL_LAYER_ERROR,
                     subtype=SystemEvent.EventSubType.SPECS_SEND_ERROR,
                     description=repr(exc),
+                    func="_send_machine_specs",
                 )
 
 
@@ -855,6 +899,7 @@ async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
                 subtype=subtype,
                 description=repr(result),
                 miner_hotkey=hotkey,
+                func="_get_miner_manifest",
             )
         else:
             assert result is None
@@ -1057,6 +1102,7 @@ async def _score_jobs(ctx: BatchContext) -> None:
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.MINER_SCORING_ERROR,
                 description=repr(exc),
+                func="_score_jobs",
             )
 
 
@@ -1250,6 +1296,7 @@ async def execute_synthetic_batch_run(
             type=SystemEvent.EventType.VALIDATOR_FAILURE,
             subtype=SystemEvent.EventSubType.GENERIC_ERROR,
             description=repr(exc),
+            func="execute_synthetic_batch_run",
         )
 
     try:
@@ -1258,6 +1305,12 @@ async def execute_synthetic_batch_run(
         _emit_telemetry_events(ctx)
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
+        ctx.system_event(
+            type=SystemEvent.EventType.VALIDATOR_FAILURE,
+            subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+            description=repr(exc),
+            func="execute_synthetic_batch_run",
+        )
 
     logger.info("STAGE: _db_persist")
     ctx.stage_start_time["_db_persist"] = datetime.now(tz=UTC)
