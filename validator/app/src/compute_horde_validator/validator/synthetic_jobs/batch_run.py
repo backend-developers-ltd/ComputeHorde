@@ -981,6 +981,10 @@ async def _multi_send_job_request(ctx: BatchContext) -> None:
         job.uuid
         for job in ctx.jobs.values()
         if isinstance(job.executor_response, V0ExecutorReadyRequest)
+        # occasionally we can get a job response (V0JobFailedRequest | V0JobFinishedRequest)
+        # before sending the actual job request (V0JobRequest), for example because
+        # the executor decide to abort the job before the details were sent
+        and job.job_response is None
     ]
     logger.info("Sending job requests for %d ready jobs", len(executor_ready_job_uuids))
     start_barrier = asyncio.Barrier(len(executor_ready_job_uuids))
