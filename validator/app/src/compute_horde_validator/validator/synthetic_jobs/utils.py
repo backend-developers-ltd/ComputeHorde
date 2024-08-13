@@ -228,7 +228,7 @@ async def execute_miner_synthetic_jobs(
 
 async def apply_manifest_incentive(
     score: float, previous_online_executors: int | None, current_online_executors: int
-) -> float:
+) -> tuple[float, float | None]:
     weights_version = await aget_weights_version()
     multiplier = None
     if weights_version >= 2:
@@ -242,8 +242,8 @@ async def apply_manifest_incentive(
             if low == 0 or high / low >= threshold:
                 multiplier = await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER")
     if multiplier is not None:
-        return score * multiplier
-    return score
+        score *= multiplier
+    return score, multiplier
 
 
 async def _execute_synthetic_job(
@@ -427,7 +427,7 @@ async def _execute_synthetic_job(
             )
 
             # if job passed, save synthetic job score
-            job.score = await apply_manifest_incentive(
+            job.score, _multiplier = await apply_manifest_incentive(
                 score, previous_online_executors, current_online_executors
             )
             await job.asave()

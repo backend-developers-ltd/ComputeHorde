@@ -246,6 +246,8 @@ class Job:
     success: bool = False
     comment: str = "failed"
     score: float = 0
+    # dancing bonus
+    score_manifest_multiplier: float | None = None
 
     def handle_message(self, msg: BaseRequest) -> None:
         duplicate = False
@@ -328,6 +330,7 @@ class Job:
             success=self.success,
             comment=self.comment,
             score=self.score,
+            score_manifest_multiplier=self.score_manifest_multiplier,
         )
         self.ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
@@ -974,6 +977,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     from compute_horde_validator.validator.synthetic_jobs.utils import apply_manifest_incentive
 
     job.score = 0
+    job.score_manifest_multiplier = None
     job.success = False
     job.comment = "failed"
 
@@ -1016,7 +1020,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
             subtype=SystemEvent.EventSubType.SUCCESS,
             description=job.comment,
         )
-        job.score = await apply_manifest_incentive(
+        job.score, job.score_manifest_multiplier = await apply_manifest_incentive(
             job.score,
             ctx.previous_online_executor_count[job.miner_hotkey],
             ctx.online_executor_count[job.miner_hotkey],
