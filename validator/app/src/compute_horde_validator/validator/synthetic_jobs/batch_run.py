@@ -245,7 +245,8 @@ class Job:
 
     # scoring
     time_took: timedelta | None = None
-    success: bool = False
+    correct: bool | None = None  # returned correct answer (even if outside time limit)
+    success: bool = False  # returned correct answer within time limit
     comment: str = "failed"
     score: float = 0
     # dancing bonus
@@ -332,6 +333,7 @@ class Job:
             machine_specs=_model_dump(self.machine_specs),
             time_took=_timedelta_dump(self.time_took),
             success=self.success,
+            correct=self.correct,
             comment=self.comment,
             score=self.score,
             score_manifest_multiplier=self.score_manifest_multiplier,
@@ -439,6 +441,9 @@ class BatchContext:
             total=len(self.jobs),
             failed=sum(1 for job in self.jobs.values() if not job.success),
             successful=sum(1 for job in self.jobs.values() if job.success),
+            correct=sum(1 for job in self.jobs.values() if job.correct),
+            # don't count None as incorrect
+            incorrect=sum(1 for job in self.jobs.values() if job.correct is False),
         )
 
         counts = dict(
@@ -1062,6 +1067,12 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     time_took_sec = job.time_took.total_seconds()
     assert time_took_sec >= 0
 
+    # TODO separate correctness check from scoring in job generator
+    job.correct, comment, score = job.job_generator.verify(
+        job.job_response,
+        time_took_sec,
+    )
+
     if time_took_sec > job.job_generator.timeout_seconds():
         job.comment = f"took too long: {time_took_sec=:.2f}"
         logger.info("%s %s", job.name, job.comment)
@@ -1072,10 +1083,9 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
         )
         return
 
-    job.success, job.comment, job.score = job.job_generator.verify(
-        job.job_response,
-        time_took_sec,
-    )
+    job.success = job.correct
+    job.comment = comment
+    job.score = score
 
     if job.success:
         job.system_event(
