@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import statistics
 import time
 import uuid
 from collections import defaultdict
@@ -329,7 +330,7 @@ class Job:
             job_response=_model_dump(self.job_response),
             job_response_time=_datetime_dump(self.job_response_time),
             machine_specs=_model_dump(self.machine_specs),
-            time_took=self.time_took.total_seconds() if self.time_took is not None else None,
+            time_took=_timedelta_dump(self.time_took),
             success=self.success,
             comment=self.comment,
             score=self.score,
@@ -376,6 +377,7 @@ class BatchContext:
     # telemetry
     events: list[SystemEvent]
     stage_start_time: dict[str, datetime]
+    average_job_send_time: timedelta | None = None
 
     def system_event(
         self,
@@ -463,6 +465,7 @@ class BatchContext:
             stage_start_time={
                 stage: _datetime_dump(dt) for stage, dt in self.stage_start_time.items()
             },
+            average_job_send_time=_timedelta_dump(self.average_job_send_time),
             counts=counts,
             manifests=manifests,
         )
@@ -478,6 +481,12 @@ def _datetime_dump(dt: datetime | None) -> str | None:
     if dt is None:
         return None
     return dt.isoformat()
+
+
+def _timedelta_dump(delta: timedelta | None) -> float | None:
+    if delta is None:
+        return None
+    return delta.total_seconds()
 
 
 def _model_dump(model: BaseModel | None) -> dict | None:
@@ -1001,20 +1010,21 @@ async def _multi_send_job_request(ctx: BatchContext) -> None:
     _handle_exceptions(ctx, exceptions)
 
 
-def _check_send_times(ctx: BatchContext) -> None:
+def _compute_average_send_time(ctx: BatchContext) -> None:
+    durations_sec: list[float] = []
+
     for job in ctx.jobs.values():
         if job.job_after_sent_time is None:
             continue
         assert job.job_before_sent_time is not None
         duration = job.job_after_sent_time - job.job_before_sent_time
-        if duration.total_seconds() > 1:
-            logger.warning(
-                "%s long websocket msg send time: %s [%s to %s]",
-                job.name,
-                duration,
-                job.job_before_sent_time,
-                job.job_after_sent_time,
-            )
+        duration_sec = duration.total_seconds()
+        durations_sec.append(duration_sec)
+
+    average_duration_sec = statistics.mean(durations_sec)
+    assert average_duration_sec >= 0
+    ctx.average_job_send_time = timedelta(seconds=average_duration_sec)
+    logger.info("Average job send time: %.6f seconds", average_duration_sec)
 
 
 async def _score_job(ctx: BatchContext, job: Job) -> None:
@@ -1041,6 +1051,14 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     assert job.job_before_sent_time is not None
     assert job.job_response_time is not None
     job.time_took = job.job_response_time - job.job_before_sent_time
+
+    # subtract the average time to send a job request.
+    # this will normalize the timing between validators
+    # with different upload speeds
+    assert ctx.average_job_send_time is not None
+    if ctx.average_job_send_time >= job.time_took:
+        job.time_took -= ctx.average_job_send_time
+
     time_took_sec = job.time_took.total_seconds()
     assert time_took_sec >= 0
 
@@ -1260,9 +1278,9 @@ async def execute_synthetic_batch_run(
                 ctx.stage_start_time["_multi_send_job_request"] = datetime.now(tz=UTC)
                 await _multi_send_job_request(ctx)
 
-                logger.info("STAGE: _check_send_times")
-                ctx.stage_start_time["_check_send_times"] = datetime.now(tz=UTC)
-                _check_send_times(ctx)
+                logger.info("STAGE: _compute_average_send_time")
+                ctx.stage_start_time["_compute_average_send_time"] = datetime.now(tz=UTC)
+                _compute_average_send_time(ctx)
 
                 logger.info("STAGE: _score_jobs")
                 ctx.stage_start_time["_score_jobs"] = datetime.now(tz=UTC)
