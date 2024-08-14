@@ -67,7 +67,7 @@ discard executors which declined/timed out.
 
 If all the tasks from above finish before the timeout (spin up time), sleep the rest of the period. Example: if the longest spin-up time across executor classes returned in the manifests is 4 min, but all executors accept/decline the initial job request in 3 minutes, sleep for another 1 minute.
 
-We send the job started receipts before the `V0InitialJobRequest` message, since if the miner accepts the executor is considered reserved, including during the 4 min spin-up time.
+We send the job started receipts before the `V0JobRequest` message, since if the miner accepts the executor is considered reserved, including during the 4 min spin-up time.
 
 ### Send actual jobs
 
