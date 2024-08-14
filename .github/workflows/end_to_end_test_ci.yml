@@ -50,7 +50,7 @@ jobs:
       - name: Build executor image
         run: |
           cd executor
-          IMAGE_NAME=andreeareef/compute-horde-executor-e2e:v0-latest
+          IMAGE_NAME=andreeareef/compute-horde-executor-e2e-killme:v0-latest
           docker pull "$IMAGE_NAME" || true
           docker build \
             --build-context compute-horde=../compute_horde \
