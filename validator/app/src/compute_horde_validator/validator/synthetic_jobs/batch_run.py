@@ -76,7 +76,8 @@ _SEND_MACHINE_SPECS_TIMEOUT = 5
 # responses of slow executors.
 # it is not taken into account when scoring, jobs will still
 # fail if they take too long, but we'll know how long they took
-_JOB_RESPONSE_EXTRA_TIMEOUT = 5 * 60
+# when debugging failed jobs
+_JOB_RESPONSE_EXTRA_TIMEOUT = 2 * 60
 
 # these two should match, the manifest timeout
 # should be enough to fit max debounce count retries

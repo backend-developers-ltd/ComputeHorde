@@ -55,7 +55,7 @@ TIMEOUT_MARGIN = 60
 TIMEOUT_BARRIER = JOB_LENGTH - 65
 
 # new synchronized flow waits longer for job responses
-SYNTHETIC_JOBS_SOFT_LIMIT = 15 * 60
+SYNTHETIC_JOBS_SOFT_LIMIT = 12 * 60
 SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
 
 logger = logging.getLogger(__name__)
