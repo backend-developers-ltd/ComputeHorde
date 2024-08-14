@@ -68,6 +68,11 @@ from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 logger = logging.getLogger(__name__)
 
+# always-on executor classes have spin_up_time=0, but realistically
+# we need a bit more for all the back-and-forth messaging, especially
+# when we talk with a lot of executors
+_MIN_SPIN_UP_TIME = 2
+
 _CLOSE_TIMEOUT = 1
 _SEND_RECEIPT_TIMEOUT = 5
 _SEND_MACHINE_SPECS_TIMEOUT = 5
@@ -724,6 +729,7 @@ async def _send_initial_job_request(
 
     spin_up_time = EXECUTOR_CLASS[job.executor_class].spin_up_time
     assert spin_up_time is not None
+    spin_up_time = max(spin_up_time, _MIN_SPIN_UP_TIME)
     stagger_wait_interval = max_spin_up_time - spin_up_time
     assert stagger_wait_interval >= 0
 
