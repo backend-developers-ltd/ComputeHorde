@@ -1,9 +1,9 @@
 from compute_horde_validator.validator.dynamic_config import aget_config, aget_weights_version
 
 
-async def apply_manifest_incentive(
-    score: float, previous_online_executors: int | None, current_online_executors: int
-) -> tuple[float, float | None]:
+async def get_manifest_multiplier(
+    previous_online_executors: int | None, current_online_executors: int
+) -> float | None:
     weights_version = await aget_weights_version()
     multiplier = None
     if weights_version >= 2:
@@ -16,6 +16,4 @@ async def apply_manifest_incentive(
             threshold = await aget_config("DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD")
             if low == 0 or high / low >= threshold:
                 multiplier = await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER")
-    if multiplier is not None:
-        score *= multiplier
-    return score, multiplier
+    return multiplier

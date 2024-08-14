@@ -42,7 +42,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.synthetic_jobs.generator import current
-from compute_horde_validator.validator.synthetic_jobs.scoring import apply_manifest_incentive
+from compute_horde_validator.validator.synthetic_jobs.scoring import get_manifest_multiplier
 from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 JOB_LENGTH = 300
@@ -404,9 +404,13 @@ async def _execute_synthetic_job(
             )
 
             # if job passed, save synthetic job score
-            job.score, _multiplier = await apply_manifest_incentive(
-                score, previous_online_executors, current_online_executors
+
+            job.score = score
+            multiplier = await get_manifest_multiplier(
+                previous_online_executors, current_online_executors
             )
+            if multiplier is not None:
+                job.score *= multiplier
             await job.asave()
 
             # Send job finished receipt to miner
