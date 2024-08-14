@@ -297,6 +297,8 @@ class Job:
                 else:
                     duplicate = True
 
+            # we don't care if we receive multiple specs messages,
+            # doesn't matter which one we keep, miner controls it
             case V0MachineSpecsRequest():
                 self.machine_specs = msg
 
