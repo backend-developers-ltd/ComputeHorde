@@ -1125,12 +1125,6 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
             subtype=SystemEvent.EventSubType.SUCCESS,
             description=job.comment,
         )
-        job.score_manifest_multiplier = await get_manifest_multiplier(
-            ctx.previous_online_executor_count[job.miner_hotkey],
-            ctx.online_executor_count[job.miner_hotkey],
-        )
-        if job.score_manifest_multiplier is not None:
-            job.score *= job.score_manifest_multiplier
     else:
         job.system_event(
             type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
@@ -1150,11 +1144,6 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
 async def _score_jobs(ctx: BatchContext) -> None:
     for job in ctx.jobs.values():
-        # count both successful and failed jobs from an executor
-        if job.job_response is not None:
-            ctx.online_executor_count[job.miner_hotkey] += 1
-
-    for job in ctx.jobs.values():
         try:
             await _score_job(ctx, job)
         except (Exception, asyncio.CancelledError) as exc:
@@ -1165,6 +1154,31 @@ async def _score_jobs(ctx: BatchContext) -> None:
                 description=repr(exc),
                 func="_score_jobs",
             )
+
+    # compute for each hotkey how many executors finished successfully
+    for job in ctx.jobs.values():
+        if job.success:
+            ctx.online_executor_count[job.miner_hotkey] += 1
+
+    # apply manifest bonus
+    # do not combine with the previous loop, we use online_executor_count
+    for job in ctx.jobs.values():
+        if job.success:
+            try:
+                job.score_manifest_multiplier = await get_manifest_multiplier(
+                    ctx.previous_online_executor_count[job.miner_hotkey],
+                    ctx.online_executor_count[job.miner_hotkey],
+                )
+            except (Exception, asyncio.CancelledError) as exc:
+                logger.warning("%s failed to score: %r", job.name, exc)
+                job.system_event(
+                    type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                    subtype=SystemEvent.EventSubType.MINER_SCORING_ERROR,
+                    description=repr(exc),
+                    func="_score_jobs",
+                )
+            if job.score_manifest_multiplier is not None:
+                job.score *= job.score_manifest_multiplier
 
 
 # sync_to_async is needed since we use the sync Django ORM
