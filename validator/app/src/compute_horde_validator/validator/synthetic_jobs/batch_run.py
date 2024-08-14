@@ -252,6 +252,11 @@ class Job:
     job_finished_receipt: V0JobFinishedReceiptRequest | None = None
 
     # scoring
+
+    # !!! time_took can be negative since it's just
+    #     `job_response_time - job_before_sent_time`
+    #     and miner could have already sent a failed
+    #     response before we sent the job details
     time_took: timedelta | None = None
     correct: bool | None = None  # returned correct answer (even if outside time limit)
     success: bool = False  # returned correct answer within time limit
@@ -261,7 +266,12 @@ class Job:
     score_manifest_multiplier: float | None = None
 
     def handle_message(self, msg: BaseRequest) -> None:
+        # !!! it is very important to not allow a newer message of a
+        #     certain kind to override a previously received message
+        #     of the same kind. miners could play games with that.
+        #     please don't change without discussion
         duplicate = False
+
         match msg:
             case V0AcceptJobRequest() | V0DeclineJobRequest():
                 if self.accept_response is None:
@@ -1065,6 +1075,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     assert isinstance(job.job_response, V0JobFinishedRequest)
     assert job.job_before_sent_time is not None
     assert job.job_response_time is not None
+
     job.time_took = job.job_response_time - job.job_before_sent_time
 
     # subtract the average time to send a job request.
@@ -1074,8 +1085,17 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     if ctx.average_job_send_time >= job.time_took:
         job.time_took -= ctx.average_job_send_time
 
+    # !!! time_took can be negative if miner sends responses out of order
     time_took_sec = job.time_took.total_seconds()
-    assert time_took_sec >= 0
+    if time_took_sec <= 0:
+        job.comment = f"out of order job response: {time_took_sec=:.2f}"
+        logger.info("%s %s", job.name, job.comment)
+        job.system_event(
+            type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+            subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
+            description=job.comment,
+        )
+        return
 
     # TODO separate correctness check from scoring in job generator
     job.correct, comment, score = job.job_generator.verify(
