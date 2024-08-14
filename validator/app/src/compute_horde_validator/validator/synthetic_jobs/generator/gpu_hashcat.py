@@ -18,6 +18,7 @@ MAX_SCORE = 2
 
 class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def __init__(self):
+        super().__init__()
         # set synthetic_jobs based on subnet weights_version
         self.weights_version = None
         self.hash_job = None

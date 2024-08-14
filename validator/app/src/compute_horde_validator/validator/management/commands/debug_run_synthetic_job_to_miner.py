@@ -1,22 +1,15 @@
-import contextlib
-import datetime
 import logging
 import sys
-from collections.abc import Iterable
 
-from asgiref.sync import async_to_sync
+import bittensor
+import uvloop
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.miner_client.base import TransportConnectionError
-from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.utils.timezone import now
 
-from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
-from compute_horde_validator.validator.synthetic_jobs.utils import (
-    JOB_LENGTH,
-    MinerClient,
-    execute_synthetic_jobs,
-)
+from compute_horde_validator.validator.dynamic_config import get_synthetic_jobs_flow_version
+from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
+from compute_horde_validator.validator.synthetic_jobs.utils import execute_synthetic_batch
 
 logger = logging.getLogger(__name__)
 
@@ -33,56 +26,36 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        uvloop.install()
+
         miner_hotkey = options["miner_hotkey"]
         miner_address = options["miner_address"]
         miner_port = options["miner_port"]
-        executor_class = options["executor_class"]
-        batch = SyntheticJobBatch.objects.create(
-            accepting_results_until=now() + datetime.timedelta(seconds=JOB_LENGTH)
-        )
-        jobs = [
-            SyntheticJob.objects.create(
-                batch=batch,
-                miner=Miner.objects.get_or_create(hotkey=miner_hotkey)[0],
-                miner_address=miner_address,
-                miner_address_ip_version=4,
-                miner_port=miner_port,
-                executor_class=executor_class,
-                status=SyntheticJob.Status.PENDING,
+        # TODO
+        # executor_class = options["executor_class"]
+        miners = [Miner.objects.get_or_create(hotkey=miner_hotkey)[0]]
+        axons_by_key = {
+            miner_hotkey: bittensor.AxonInfo(
+                version=4,
+                ip=miner_address,
+                ip_type=4,
+                port=miner_port,
+                hotkey=miner_hotkey,
+                coldkey=miner_hotkey,
             )
-        ]
+        }
         try:
-            _execute_jobs(miner_address, miner_port, miner_hotkey, jobs)
+            flow_version = get_synthetic_jobs_flow_version()
+            match flow_version:
+                case 1:
+                    execute_synthetic_batch(axons_by_key, miners)
+                case 2:
+                    execute_synthetic_batch_run(axons_by_key, miners)
+                case _:
+                    raise ValueError(f"Unsupported synthetic jobs flow version: {flow_version}")
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)
         except Exception:
             logger.warning("command failed with exception", exc_info=True)
             sys.exit(1)
-
-        print(f"synthetic_job_uuid={jobs[0].job_uuid}")
-
-
-@async_to_sync
-async def _execute_jobs(
-    miner_address: str, miner_port: int, miner_hotkey: str, synthetic_jobs: Iterable[SyntheticJob]
-):
-    async with contextlib.AsyncExitStack() as exit_stack:
-        key = settings.BITTENSOR_WALLET().get_hotkey()
-        miner_client = MinerClient(
-            miner_address=miner_address,
-            miner_port=miner_port,
-            miner_hotkey=miner_hotkey,
-            my_hotkey=key.ss58_address,
-            job_uuid=None,
-            batch_id=None,
-            keypair=key,
-        )
-        try:
-            await exit_stack.enter_async_context(miner_client)
-        except TransportConnectionError as exc:
-            print(f"Miner connection error: {exc}")
-            return
-        for job in synthetic_jobs:
-            miner_client.add_job(str(job.job_uuid))
-        await execute_synthetic_jobs(miner_client, synthetic_jobs, 0)

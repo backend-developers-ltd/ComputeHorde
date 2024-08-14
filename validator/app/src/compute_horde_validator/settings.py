@@ -139,6 +139,11 @@ CONSTANCE_CONFIG = {
         float,
     ),
     "DYNAMIC_WEIGHTS_VERSION": (1, "The weights version for synthetic jobs", int),
+    "DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION": (
+        1,
+        "The synthetic jobs flow version",
+        int,
+    ),
 }
 
 # Content Security Policy
@@ -370,6 +375,8 @@ STATS_COLLECTOR_URL = env.str(
 DEBUG_MINER_KEY = env.str("DEBUG_MINER_KEY", default="")
 DEBUG_MINER_ADDRESS = env.str("DEBUG_MINER_ADDRESS", default="")
 DEBUG_MINER_PORT = env.int("DEBUG_MINER_PORT", default=0)
+# how many distinct miners exists on ports starting at DEBUG_MINER_PORT
+DEBUG_MINER_COUNT = env.int("DEBUG_MINER_COUNT", default=1)
 # if you don't want to wait for your celery beat job to sleep on staging:
 DEBUG_DONT_STAGGER_VALIDATORS = env.bool("DEBUG_DONT_STAGGER_VALIDATORS", default=False)
 
@@ -385,6 +392,9 @@ HORDE_SCORE_SIZE_PARAM = 0
 HORDE_SCORE_CENTRAL_SIZE_PARAM = 1
 
 DEBUG_OVERRIDE_WEIGHTS_VERSION = env.int("DEBUG_OVERRIDE_WEIGHTS_VERSION", default=None)
+DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
+    "DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION", default=None
+)
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 

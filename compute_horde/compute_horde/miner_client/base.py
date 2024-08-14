@@ -47,18 +47,37 @@ class AbstractMinerClient(abc.ABC):
         await self.connect()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        for t in self.deferred_send_tasks:
-            t.cancel()
+        await self.close()
+
+    async def close(self):
+        for deferred_send_task in self.deferred_send_tasks:
+            if not deferred_send_task.done():
+                deferred_send_task.cancel()
+                try:
+                    await deferred_send_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as ex:
+                    logger.debug("Exception raised on task cancel: %r", ex)
 
         if self.read_messages_task is not None and not self.read_messages_task.done():
             self.read_messages_task.cancel()
+            try:
+                await self.read_messages_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as ex:
+                logger.debug("Exception raised on task cancel: %r", ex)
 
         await self.transport.stop()
 
     async def send_model(self, model: BaseRequest, error_event_callback=None):
+        await self.send(model.model_dump_json(), error_event_callback)
+
+    async def send(self, data: str | bytes, error_event_callback=None):
         while True:
             try:
-                await self.transport.send(model.model_dump_json())
+                await self.transport.send(data)
             except TransportConnectionError as ex:
                 msg = f"Could not send to miner {self.miner_name}: {str(ex)}"
                 logger.warning(msg)
