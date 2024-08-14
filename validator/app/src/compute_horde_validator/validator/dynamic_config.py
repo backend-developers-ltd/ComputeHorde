@@ -3,6 +3,7 @@ import time
 
 import constance.utils
 from asgiref.sync import sync_to_async
+from constance import config
 from django.conf import settings
 
 
@@ -40,5 +41,4 @@ async def aget_weights_version():
 def get_synthetic_jobs_flow_version():
     if settings.DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION is not None:
         return settings.DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION
-    config = constance.utils.get_values()
-    return config.get("DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION")
+    return config.DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION
