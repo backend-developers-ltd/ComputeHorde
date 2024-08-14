@@ -64,7 +64,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
 )
-from compute_horde_validator.validator.synthetic_jobs.scoring import apply_manifest_incentive
+from compute_horde_validator.validator.synthetic_jobs.scoring import get_manifest_multiplier
 from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 logger = logging.getLogger(__name__)
@@ -1125,11 +1125,12 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
             subtype=SystemEvent.EventSubType.SUCCESS,
             description=job.comment,
         )
-        job.score, job.score_manifest_multiplier = await apply_manifest_incentive(
-            job.score,
+        job.score_manifest_multiplier = await get_manifest_multiplier(
             ctx.previous_online_executor_count[job.miner_hotkey],
             ctx.online_executor_count[job.miner_hotkey],
         )
+        if job.score_manifest_multiplier is not None:
+            job.score *= job.score_manifest_multiplier
     else:
         job.system_event(
             type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
