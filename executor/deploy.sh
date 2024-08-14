@@ -22,6 +22,10 @@ SERVICES=$(docker-compose ps --services 2>&1 > /dev/stderr \
 # shellcheck disable=2086
 docker-compose stop $SERVICES
 
+# explicitly pull the docker compose images to verify DCT
+export DOCKER_CONTENT_TRUST=1
+docker compose convert --images | sort -u | xargs -n 1 docker pull
+
 # start the app container only in order to perform migrations
 docker-compose up -d db  # in case it hasn't been launched before
 docker-compose run --rm app sh -c "python manage.py wait_for_database --timeout 10; python manage.py migrate"

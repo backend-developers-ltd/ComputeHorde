@@ -151,6 +151,7 @@ ENDENV
 
 rm ~/tmpvars
 
+export DOCKER_CONTENT_TRUST=1
 docker pull andreeareef/compute-horde-executor:v0-latest
 docker pull andreeareef/compute-horde-miner:v0-latest
 docker pull andreeareef/compute-horde-job:v0-latest

@@ -113,6 +113,7 @@ FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
 MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
 ENDENV
 
+export DOCKER_CONTENT_TRUST=1
 docker pull andreeareef/compute-horde-validator:v0-latest
 docker compose up -d
 
