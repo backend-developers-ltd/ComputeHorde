@@ -31,11 +31,7 @@ from compute_horde.mv_protocol.validator_requests import (
 from django.conf import settings
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.dynamic_config import (
-    aget_config,
-    aget_weights_version,
-    get_synthetic_jobs_flow_version,
-)
+from compute_horde_validator.validator.dynamic_config import get_synthetic_jobs_flow_version
 from compute_horde_validator.validator.miner_client import MinerClient, save_job_execution_event
 from compute_horde_validator.validator.models import (
     Miner,
@@ -46,6 +42,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.synthetic_jobs.generator import current
+from compute_horde_validator.validator.synthetic_jobs.scoring import apply_manifest_incentive
 from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 JOB_LENGTH = 300
@@ -224,26 +221,6 @@ async def execute_miner_synthetic_jobs(
                 subtype=SystemEvent.EventSubType.GENERIC_ERROR, long_description=msg
             )
         await miner_client.save_manifest(manifest)
-
-
-async def apply_manifest_incentive(
-    score: float, previous_online_executors: int | None, current_online_executors: int
-) -> tuple[float, float | None]:
-    weights_version = await aget_weights_version()
-    multiplier = None
-    if weights_version >= 2:
-        if previous_online_executors is None:
-            multiplier = await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER")
-        else:
-            low, high = sorted([previous_online_executors, current_online_executors])
-            # low can be 0 if previous_online_executors == 0, but we make it that way to
-            # make this function correct for any kind of input
-            threshold = await aget_config("DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD")
-            if low == 0 or high / low >= threshold:
-                multiplier = await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER")
-    if multiplier is not None:
-        score *= multiplier
-    return score, multiplier
 
 
 async def _execute_synthetic_job(

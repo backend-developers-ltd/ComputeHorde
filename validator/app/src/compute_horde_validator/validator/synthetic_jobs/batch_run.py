@@ -64,6 +64,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
 )
+from compute_horde_validator.validator.synthetic_jobs.scoring import apply_manifest_incentive
 from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 logger = logging.getLogger(__name__)
@@ -1045,9 +1046,6 @@ def _compute_average_send_time(ctx: BatchContext) -> None:
 
 
 async def _score_job(ctx: BatchContext, job: Job) -> None:
-    # TODO move to top, workaround for circular import
-    from compute_horde_validator.validator.synthetic_jobs.utils import apply_manifest_incentive
-
     job.score = 0
     job.score_manifest_multiplier = None
     job.success = False
