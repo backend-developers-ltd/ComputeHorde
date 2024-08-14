@@ -12,6 +12,7 @@ env:
   VALIDATOR_IMAGE_REPO: "compute-horde-validator-preprod"
   DIST_VERSION_PREFIX: "validator-runner-preprod"
   DOCKER_CONTENT_TRUST: 1
+  DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "passthis"
 
 jobs:
   deploy:
@@ -24,6 +25,11 @@ jobs:
         run: |
           IMAGE_NAME="${DOCKER_REPO_NAME}:${TAG_VERSION}"
           SHA_IMAGE_NAME="${DOCKER_REPO_NAME}:git-${GITHUB_SHA}"
+
+          DELEGATION_KEY_FILE="$HOME/.docker/trust/private/${{ secrets.DOCKERHUB_DELEGATED_KEY_ID }}.key"
+          mkdir -p $(dirname "$DELEGATION_KEY_FILE")
+          echo "${{ secrets.DOCKERHUB_DELEGATED_KEY }}" > "$DELEGATION_KEY_FILE"
+          chmod 600 "$DELEGATION_KEY_FILE"
 
           cd "${BUILD_DIRECTORY}" && \
             docker build \

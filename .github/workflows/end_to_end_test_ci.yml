@@ -22,6 +22,7 @@ env:
   MINER_HOTKEY_SS58: "5FqSEa5kHZgwKMMuC7WsHLoXcf3UN9gCpDZ7iDifa2sTLBSB"
   VALIDATOR_HOTKEY_SS58: "5GHikjqiHD1pUyCf3mzrjbEJgJvGnCp5FNKTXTtGkzhaJ37R"
   DOCKER_CONTENT_TRUST: 1
+  DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "passthis"
 
 jobs:
   e2e:
@@ -37,7 +38,14 @@ jobs:
             ssh-private-key: ${{ secrets.FACILITATOR_DEPLOY_KEY_PRIVATE }}
 
       - name: Docker login
-        run: echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
+        run: |
+          echo "${{ secrets.DOCKERHUB_KEY_TEST }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME_TEST }}" --password-stdin
+
+          DELEGATION_KEY_FILE="$HOME/.docker/trust/private/${{ secrets.DOCKERHUB_DELEGATED_KEY_ID }}.key"
+          mkdir -p $(dirname "$DELEGATION_KEY_FILE")
+          echo "${{ secrets.DOCKERHUB_DELEGATED_KEY }}" > "$DELEGATION_KEY_FILE"
+          chmod 600 "$DELEGATION_KEY_FILE"
+
 
       - name: Build executor image
         run: |
