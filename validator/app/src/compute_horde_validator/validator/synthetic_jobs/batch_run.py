@@ -1075,22 +1075,16 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
         return
 
     assert isinstance(job.job_response, V0JobFinishedRequest)
-    assert job.job_before_sent_time is not None
     assert job.job_response_time is not None
 
-    job.time_took = job.job_response_time - job.job_before_sent_time
-
-    # subtract the average time to send a job request.
-    # this will normalize the timing between validators
-    # with different upload speeds
-    assert ctx.average_job_send_time is not None
-    if ctx.average_job_send_time >= job.time_took:
-        job.time_took -= ctx.average_job_send_time
-
     # !!! time_took can be negative if miner sends responses out of order
-    time_took_sec = job.time_took.total_seconds()
-    if time_took_sec <= 0:
-        job.comment = f"out of order job response: {time_took_sec=:.2f}"
+    if job.job_before_sent_time is not None:
+        job.time_took = job.job_response_time - job.job_before_sent_time
+    else:
+        job.time_took = None
+
+    if job.time_took is None or job.time_took.total_seconds() <= 0:
+        job.comment = "out of order job response"
         logger.info("%s %s", job.name, job.comment)
         job.system_event(
             type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
@@ -1098,6 +1092,15 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
             description=job.comment,
         )
         return
+
+    # subtract the average time to send a job request. this will normalize
+    # the timing between validators with different upload speeds.
+    # if the time becomes negative, set it to 1 sec
+    assert ctx.average_job_send_time is not None
+    job.time_took -= ctx.average_job_send_time
+    if job.time_took.total_seconds() <= 0:
+        job.time_took = timedelta(seconds=1)
+    time_took_sec = job.time_took.total_seconds()
 
     # TODO separate correctness check from scoring in job generator
     job.correct, comment, score = job.job_generator.verify(
