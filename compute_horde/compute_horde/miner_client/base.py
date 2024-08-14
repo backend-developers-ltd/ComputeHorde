@@ -55,6 +55,8 @@ class AbstractMinerClient(abc.ABC):
                 deferred_send_task.cancel()
                 try:
                     await deferred_send_task
+                except asyncio.CancelledError:
+                    pass
                 except Exception as ex:
                     logger.debug("Exception raised on task cancel: %r", ex)
 
@@ -62,6 +64,8 @@ class AbstractMinerClient(abc.ABC):
             self.read_messages_task.cancel()
             try:
                 await self.read_messages_task
+            except asyncio.CancelledError:
+                pass
             except Exception as ex:
                 logger.debug("Exception raised on task cancel: %r", ex)
 
