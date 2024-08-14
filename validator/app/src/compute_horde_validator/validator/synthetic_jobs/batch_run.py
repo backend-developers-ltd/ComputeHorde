@@ -144,6 +144,7 @@ class MinerClient(AbstractMinerClient):
                 description=str(msg),
                 miner_hotkey=self.miner_hotkey,
             )
+            return
 
         if isinstance(msg, V0ExecutorManifestRequest):
             if self.ctx.manifests[self.miner_hotkey] is None:
