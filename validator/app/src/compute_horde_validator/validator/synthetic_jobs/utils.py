@@ -309,6 +309,7 @@ async def _execute_synthetic_job(
     # generate before locking on barrier
     volume_contents = await job_generator.volume_contents()
 
+    full_job_sent = time.time()
     await miner_client.send_model(
         V0JobRequest(
             job_uuid=str(job.job_uuid),
@@ -325,7 +326,6 @@ async def _execute_synthetic_job(
         ),
         error_event_callback=handle_send_error_event,
     )
-    full_job_sent = time.time()
     msg = None
     try:
         msg = await asyncio.wait_for(
