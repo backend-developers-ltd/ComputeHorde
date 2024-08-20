@@ -31,6 +31,7 @@ from django.utils.timezone import now
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.locks import Locked, get_weight_setting_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
+from compute_horde_validator.validator.miner_client import MinerClient
 from compute_horde_validator.validator.models import (
     JobFinishedReceipt,
     JobStartedReceipt,
@@ -42,7 +43,6 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
-    MinerClient,
     create_and_run_synthetic_job_batch,
     save_receipt_event,
 )
