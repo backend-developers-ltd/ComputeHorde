@@ -75,6 +75,7 @@ services:
     tmpfs: /run
     depends_on:
       - redis
+      - db
     logging:
       <<: *logging
     labels:
@@ -95,6 +96,7 @@ services:
     command: nice celery -A compute_horde_miner beat -l INFO --schedule /tmp/celerybeat-schedule -f /tmp/celery-beat.log
     depends_on:
       - redis
+      - db
     logging:
       <<: *logging
     labels:
