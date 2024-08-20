@@ -10,7 +10,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 
-from compute_horde_validator.validator.miner_client import MinerClient
+from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 
 from .helpers import get_miner_client
 

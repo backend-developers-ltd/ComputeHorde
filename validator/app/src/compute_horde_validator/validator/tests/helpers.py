@@ -11,12 +11,12 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from django.conf import settings
 
-from compute_horde_validator.validator.facilitator_api import (
+from compute_horde_validator.validator.models import SystemEvent
+from compute_horde_validator.validator.organic_jobs.facilitator_api import (
     V0FacilitatorJobRequest,
     V1FacilitatorJobRequest,
 )
-from compute_horde_validator.validator.miner_client import JobState, MinerClient
-from compute_horde_validator.validator.models import SystemEvent
+from compute_horde_validator.validator.organic_jobs.miner_client import JobState, MinerClient
 
 NUM_NEURONS = 5
 

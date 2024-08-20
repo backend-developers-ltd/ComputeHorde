@@ -5,13 +5,13 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from compute_horde_validator.validator.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
     Miner,
     MinerBlacklist,
     OrganicJob,
 )
+from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.tasks import run_admin_job_request
 
 
