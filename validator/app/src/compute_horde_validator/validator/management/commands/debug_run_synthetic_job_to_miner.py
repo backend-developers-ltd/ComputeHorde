@@ -3,6 +3,7 @@ import sys
 
 import bittensor
 import uvloop
+from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.core.management.base import BaseCommand
 
@@ -43,7 +44,7 @@ class Command(BaseCommand):
             )
         }
         try:
-            execute_synthetic_batch_run(axons_by_key, miners)
+            async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners)
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)

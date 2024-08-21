@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bittensor
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.base.volume import InlineVolume
 from compute_horde.base_requests import BaseRequest
@@ -1291,7 +1291,6 @@ def _db_persist(ctx: BatchContext) -> None:
     logger.info("Persisted to database in %.2f seconds", duration)
 
 
-@async_to_sync
 async def execute_synthetic_batch_run(
     axons: dict[str, bittensor.AxonInfo], serving_miners: list[Miner]
 ) -> None:

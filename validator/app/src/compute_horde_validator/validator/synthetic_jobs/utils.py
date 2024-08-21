@@ -4,16 +4,11 @@ from functools import lru_cache
 
 import bittensor
 import uvloop
+from asgiref.sync import async_to_sync
 from django.conf import settings
 
 from compute_horde_validator.validator.models import Miner, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
-
-JOB_LENGTH = 300
-TIMEOUT_SETUP = 30
-TIMEOUT_LEEWAY = 1
-TIMEOUT_MARGIN = 60
-TIMEOUT_BARRIER = JOB_LENGTH - 65
 
 # new synchronized flow waits longer for job responses
 SYNTHETIC_JOBS_SOFT_LIMIT = 12 * 60
@@ -69,7 +64,7 @@ def create_and_run_synthetic_job_batch(netuid, network):
             if miner.hotkey in axons_by_key and axons_by_key[miner.hotkey].is_serving
         ]
 
-    execute_synthetic_batch_run(axons_by_key, miners)
+    async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners)
 
 
 def save_receipt_event(subtype: str, long_description: str, data: dict):
