@@ -893,7 +893,7 @@ async def _send_machine_specs(ctx: BatchContext) -> None:
                             "type": "machine.specs",
                             "batch_id": ctx.uuid,
                             "miner_hotkey": job.miner_hotkey,
-                            "specs": job.machine_specs.specs,
+                            "specs": job.machine_specs.specs.specs,
                         },
                     )
             except (Exception, asyncio.CancelledError) as exc:
