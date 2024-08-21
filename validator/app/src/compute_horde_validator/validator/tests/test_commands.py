@@ -9,7 +9,7 @@ from django.core import management
 from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob, SystemEvent
 
 from .helpers import (
-    SingleExecutorMockMinerClient,
+    MockMinerClient,
     check_system_events,
     mock_get_miner_axon_info,
     throw_error,
@@ -48,7 +48,7 @@ def test_debug_run_organic_job_command__job_completed():
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
-@patch("compute_horde_validator.validator.tasks.MinerClient", SingleExecutorMockMinerClient)
+@patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_timeout():
     # random miner to be picked

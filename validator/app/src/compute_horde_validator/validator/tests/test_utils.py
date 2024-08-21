@@ -29,9 +29,9 @@ logger = logging.getLogger(__name__)
 )
 async def test_miner_client__handle_message__set_ready_or_declining_future(msg: BaseRequest):
     miner_client = get_miner_client(MinerClient, msg.job_uuid)
-    assert not miner_client.get_job_state(msg.job_uuid).miner_ready_or_declining_future.done()
+    assert not miner_client.miner_ready_or_declining_future.done()
     await miner_client.handle_message(msg)
-    assert await miner_client.get_job_state(msg.job_uuid).miner_ready_or_declining_future == msg
+    assert await miner_client.miner_ready_or_declining_future == msg
 
 
 @pytest.mark.asyncio
@@ -55,6 +55,6 @@ async def test_miner_client__handle_message__set_ready_or_declining_future(msg: 
 )
 async def test_miner_client__handle_message__set_other_msg(msg: BaseRequest):
     miner_client = get_miner_client(MinerClient, msg.job_uuid)
-    assert not miner_client.get_job_state(msg.job_uuid).miner_finished_or_failed_future.done()
+    assert not miner_client.miner_finished_or_failed_future.done()
     await miner_client.handle_message(msg)
-    assert await miner_client.get_job_state(msg.job_uuid).miner_finished_or_failed_future == msg
+    assert await miner_client.miner_finished_or_failed_future == msg

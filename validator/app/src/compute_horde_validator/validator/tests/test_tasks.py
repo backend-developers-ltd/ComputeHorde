@@ -11,11 +11,11 @@ from compute_horde_validator.validator.tasks import (
     trigger_run_admin_job_request,
 )
 
-from .helpers import SingleExecutorMockMinerClient, mock_get_miner_axon_info, throw_error
+from .helpers import MockMinerClient, mock_get_miner_axon_info, throw_error
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
-@patch("compute_horde_validator.validator.tasks.MinerClient", SingleExecutorMockMinerClient)
+@patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_trigger_run_admin_job__should_trigger_job():
     miner = Miner.objects.create(hotkey="miner_client_1")
@@ -42,7 +42,7 @@ def test_trigger_run_admin_job__should_trigger_job():
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", throw_error)
-@patch("compute_horde_validator.validator.tasks.MinerClient", SingleExecutorMockMinerClient)
+@patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_trigger_run_admin_job__should_not_trigger_job():
     miner = Miner.objects.create(hotkey="miner_client_2")

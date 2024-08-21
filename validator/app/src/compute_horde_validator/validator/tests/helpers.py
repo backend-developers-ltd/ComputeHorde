@@ -1,4 +1,3 @@
-import asyncio
 import numbers
 from typing import NamedTuple
 
@@ -16,7 +15,7 @@ from compute_horde_validator.validator.organic_jobs.facilitator_api import (
     V0FacilitatorJobRequest,
     V1FacilitatorJobRequest,
 )
-from compute_horde_validator.validator.organic_jobs.miner_client import JobState, MinerClient
+from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 
 NUM_NEURONS = 5
 
@@ -53,8 +52,8 @@ async def mock_get_miner_axon_info(hotkey: str):
 
 
 class MockMinerClient(MinerClient):
-    def __init__(self, **args):
-        super().__init__(**args)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._sent_models = []
 
     def miner_url(self) -> str:
@@ -89,25 +88,19 @@ class MockMinerClient(MinerClient):
         return result
 
 
-class SingleExecutorMockMinerClient(MockMinerClient):
-    def get_barrier(self):
-        return asyncio.Barrier(1)
-
-
-class MockJobStateMinerClient(SingleExecutorMockMinerClient):
-    def get_job_state(self, job_uuid):
-        job_state = JobState()
-        job_state.miner_ready_or_declining_future.set_result(
-            V0ExecutorReadyRequest(job_uuid=job_uuid)
+class MockJobStateMinerClient(MockMinerClient):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.miner_ready_or_declining_future.set_result(
+            V0ExecutorReadyRequest(job_uuid=self.job_uuid)
         )
-        job_state.miner_finished_or_failed_future.set_result(
+        self.miner_finished_or_failed_future.set_result(
             V0JobFinishedRequest(
-                job_uuid=job_uuid,
+                job_uuid=self.job_uuid,
                 docker_process_stdout="",
                 docker_process_stderr="",
             )
         )
-        return job_state
 
 
 def get_dummy_job_request_v0(uuid: str) -> V0FacilitatorJobRequest:
