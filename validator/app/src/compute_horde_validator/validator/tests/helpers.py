@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import numbers
 from typing import NamedTuple
 
@@ -10,6 +9,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0ExecutorReadyRequest,
     V0JobFinishedRequest,
 )
+from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 from django.conf import settings
 
 from compute_horde_validator.validator.facilitator_api import (
@@ -55,11 +55,26 @@ async def mock_get_miner_axon_info(hotkey: str):
 
 
 class MockSyntheticMinerClient(batch_run.MinerClient):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._sent_models = []
+
     async def connect(self) -> None:
         pass
 
     async def send(self, data: str | bytes, error_event_callback=None):
-        pass
+        msg = BaseValidatorRequest.parse(data)
+        self._sent_models.append(msg)
+
+    def _query_sent_models(self, condition=None, model_class=None):
+        result = []
+        for model in self._sent_models:
+            if model_class is not None and not isinstance(model, model_class):
+                continue
+            if not condition(model):
+                continue
+            result.append(model)
+        return result
 
 
 class MockMinerClient(MinerClient):

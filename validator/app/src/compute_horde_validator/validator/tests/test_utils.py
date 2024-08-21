@@ -2,20 +2,17 @@ import asyncio
 import logging
 import threading
 import time
-import uuid
 from unittest.mock import MagicMock, patch
 
 import bittensor
 import pytest
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
-from compute_horde.miner_client.base import BaseRequest
 from compute_horde.mv_protocol.miner_requests import (
     ExecutorClassManifest,
     ExecutorManifest,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
-    V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
@@ -35,7 +32,6 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
-    MinerClient,
     execute_synthetic_batch_run,
 )
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
@@ -48,7 +44,6 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 
 from .helpers import (
     check_system_events,
-    get_miner_client,
 )
 
 MOCK_SCORE = 0.8
@@ -202,17 +197,35 @@ def syntethic_batch_scheme_single_miner(
         miner_client = wait_for_not_none(lambda: mocked_synthetic_miner_client.instance)
 
         # we change async state, eg. Futures - so run as coroutine threadsafe using loop from miner_manifest Future
-        loop = miner_client.miner_manifest.get_loop()
+        loop = miner_client.ctx._loop
 
-        asyncio.run_coroutine_threadsafe(as_coro(manifest_callback, miner_client), loop)
+        future = asyncio.run_coroutine_threadsafe(manifest_callback(miner_client), loop)
+        future.result(timeout=5)
 
-        wait_for_true(lambda: len(miner_client.job_states) == expected_jobs)
+        wait_for_true(lambda: len(miner_client.ctx.job_uuids) == expected_jobs)
 
-        asyncio.run_coroutine_threadsafe(as_coro(interaction_callback, miner_client), loop)
+        future = asyncio.run_coroutine_threadsafe(
+            interaction_callback(miner_client, after_job_sent=False), loop
+        )
+        future.result(timeout=5)
+
+        # wait for job_request to be sent
+        wait_for_true(
+            lambda: all(
+                job.job_after_sent_time is not None for job in miner_client.ctx.jobs.values()
+            )
+        )
+
+        future = asyncio.run_coroutine_threadsafe(
+            interaction_callback(miner_client, after_job_sent=True), loop
+        )
+        future.result(timeout=5)
     finally:
         # contrary to the async version this does not cancel task, so it might be left running
         # and influence next tests
         thread.join(timeout=5)
+        if thread.is_alive():
+            raise TimeoutError("thread still running")
 
 
 class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
@@ -340,47 +353,49 @@ async def test_execute_synthetic_job(
         assert await SystemEvent.objects.aget() == 0
 
 
-@pytest.mark.asyncio
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.parametrize(
-    "msg",
-    [
-        V0ExecutorReadyRequest(job_uuid=str(uuid.uuid4())),
-        V0ExecutorFailedRequest(job_uuid=str(uuid.uuid4())),
-        V0ExecutorReadyRequest(job_uuid=str(uuid.uuid4())),
-    ],
-)
-async def test_miner_client__handle_message__set_ready_or_declining_future(msg: BaseRequest):
-    miner_client = get_miner_client(MinerClient, msg.job_uuid)
-    assert not miner_client.get_job_state(msg.job_uuid).miner_ready_or_declining_future.done()
-    await miner_client.handle_message(msg)
-    assert await miner_client.get_job_state(msg.job_uuid).miner_ready_or_declining_future == msg
+# TODO: move to organic job tests
+# @pytest.mark.asyncio
+# @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+# @pytest.mark.parametrize(
+#     "msg",
+#     [
+#         V0ExecutorReadyRequest(job_uuid=str(uuid.uuid4())),
+#         V0ExecutorFailedRequest(job_uuid=str(uuid.uuid4())),
+#         V0ExecutorReadyRequest(job_uuid=str(uuid.uuid4())),
+#     ],
+# )
+# async def test_miner_client__handle_message__set_ready_or_declining_future(msg: BaseRequest):
+#     miner_client = get_miner_client(MinerClient, msg.job_uuid)
+#     assert not miner_client.get_job_state(msg.job_uuid).miner_ready_or_declining_future.done()
+#     await miner_client.handle_message(msg)
+#     assert await miner_client.get_job_state(msg.job_uuid).miner_ready_or_declining_future == msg
 
 
-@pytest.mark.asyncio
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.parametrize(
-    "msg",
-    [
-        V0JobFailedRequest(
-            job_uuid=str(uuid.uuid4()),
-            docker_process_exit_status=1,
-            docker_process_stdout="stdout",
-            docker_process_stderr="stderr",
-        ),
-        V0JobFinishedRequest(
-            job_uuid=str(uuid.uuid4()),
-            docker_process_exit_status=1,
-            docker_process_stdout="stdout",
-            docker_process_stderr="stderr",
-        ),
-    ],
-)
-async def test_miner_client__handle_message__set_other_msg(msg: BaseRequest):
-    miner_client = get_miner_client(MinerClient, msg.job_uuid)
-    assert not miner_client.get_job_state(msg.job_uuid).miner_finished_or_failed_future.done()
-    await miner_client.handle_message(msg)
-    assert await miner_client.get_job_state(msg.job_uuid).miner_finished_or_failed_future == msg
+# TODO: move to organic job tests
+# @pytest.mark.asyncio
+# @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+# @pytest.mark.parametrize(
+#     "msg",
+#     [
+#         V0JobFailedRequest(
+#             job_uuid=str(uuid.uuid4()),
+#             docker_process_exit_status=1,
+#             docker_process_stdout="stdout",
+#             docker_process_stderr="stderr",
+#         ),
+#         V0JobFinishedRequest(
+#             job_uuid=str(uuid.uuid4()),
+#             docker_process_exit_status=1,
+#             docker_process_stdout="stdout",
+#             docker_process_stderr="stderr",
+#         ),
+#     ],
+# )
+# async def test_miner_client__handle_message__set_other_msg(msg: BaseRequest):
+#     miner_client = get_miner_client(MinerClient, msg.job_uuid)
+#     assert not miner_client.get_job_state(msg.job_uuid).miner_finished_or_failed_future.done()
+#     await miner_client.handle_message(msg)
+#     assert await miner_client.get_job_state(msg.job_uuid).miner_finished_or_failed_future == msg
 
 
 async def create_mock_job_batches(miner):
@@ -492,10 +507,6 @@ async def test_manifest_dance_incentives(
         assert abs(job.score * time_took - expected_multiplier) < 0.0001
 
 
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.JOB_LENGTH", 10)
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_LEEWAY", 1)
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_MARGIN", 1)
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_BARRIER", 3)
 @patch(
     "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
     TimeToookScoreMockSyntheticJobGeneratorFactory(),
@@ -520,6 +531,7 @@ def test_create_and_run_synthetic_job_batch(
     expected_multiplier,
     current_online_executors,
     previous_online_executors,
+    small_spin_up_times,
 ):
     request.getfixturevalue(weights_version_override)
     miner_hotkey = "miner_hotkey"
@@ -542,25 +554,27 @@ def test_create_and_run_synthetic_job_batch(
             )
         ]
     )
+    manifest_request = V0ExecutorManifestRequest(manifest=manifest)
 
     job_uuids = []
 
-    def manifest_callback(miner_client):
-        miner_client.miner_manifest.set_result(manifest)
+    async def manifest_callback(miner_client):
+        await miner_client.handle_message(manifest_request)
 
-    def interaction_callback(miner_client):
-        for job_uuid in miner_client.job_states:
+    async def interaction_callback(miner_client, after_job_sent):
+        for job_uuid in miner_client.ctx.job_uuids:
             job_uuids.append(job_uuid)
-            miner_client.job_states[job_uuid].miner_ready_or_declining_future.set_result(
-                V0ExecutorReadyRequest(job_uuid=job_uuid)
-            )
-            miner_client.job_states[job_uuid].miner_finished_or_failed_future.set_result(
-                V0JobFinishedRequest(
-                    job_uuid=job_uuid,
-                    docker_process_stdout="",
-                    docker_process_stderr="",
+            if not after_job_sent:
+                await miner_client.handle_message(V0AcceptJobRequest(job_uuid=job_uuid))
+                await miner_client.handle_message(V0ExecutorReadyRequest(job_uuid=job_uuid))
+            else:
+                await miner_client.handle_message(
+                    V0JobFinishedRequest(
+                        job_uuid=job_uuid,
+                        docker_process_stdout="",
+                        docker_process_stderr="",
+                    )
                 )
-            )
 
     syntethic_batch_scheme_single_miner(
         settings,

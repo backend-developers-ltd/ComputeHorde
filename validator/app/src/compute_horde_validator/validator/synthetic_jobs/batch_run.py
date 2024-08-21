@@ -401,6 +401,9 @@ class BatchContext:
     stage_start_time: dict[str, datetime]
     average_job_send_time: timedelta | None = None
 
+    # for tests
+    _loop: asyncio.AbstractEventLoop | None = None
+
     def system_event(
         self,
         *,
@@ -567,6 +570,7 @@ def _init_context(
         jobs={},
         events=[],
         stage_start_time={"_init_context": start_time},
+        _loop=asyncio.get_running_loop(),
     )
 
     for miner in serving_miners:
