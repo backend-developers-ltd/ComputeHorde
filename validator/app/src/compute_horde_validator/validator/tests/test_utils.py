@@ -21,7 +21,6 @@ from compute_horde.mv_protocol.miner_requests import (
 from compute_horde.mv_protocol.validator_requests import (
     V0JobFinishedReceiptRequest,
 )
-from constance.test.unittest import override_config
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
@@ -132,20 +131,21 @@ async def miner_synthetic_jobs_scheme(
     manifest_callback,
     expected_jobs,
     interaction_callback,
+    miner_hotkey="miner_hotkey",
 ):
-    miner, _ = await Miner.objects.aget_or_create(hotkey="miner_hotkey")
+    miner, _ = await Miner.objects.aget_or_create(hotkey=miner_hotkey)
     miner_axon_info = bittensor.AxonInfo(
         version=4,
         ip="ignore",
         ip_type=4,
         port=9999,
-        hotkey="miner_hotkey",
-        coldkey="miner_hotkey",
+        hotkey=miner_hotkey,
+        coldkey=miner_hotkey,
     )
 
     # create synthetic jobs task for miner
     task = asyncio.create_task(
-        execute_synthetic_batch_run({"miner_hotkey": miner_axon_info}, [miner])
+        execute_synthetic_batch_run({miner_hotkey: miner_axon_info}, [miner])
     )
     try:
         # wait for creation of mocked MinerClient to get instance
@@ -418,17 +418,13 @@ time_took_mock_synthetic_job_generator_factory = MagicMock(
 )
 
 
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.JOB_LENGTH", 5)
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_LEEWAY", 1)
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_MARGIN", 1)
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_BARRIER", 3)
 @patch(
     "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
     TimeToookScoreMockSyntheticJobGeneratorFactory(),
 )
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@override_config(
+@pytest.mark.override_config(
     DYNAMIC_MANIFEST_SCORE_MULTIPLIER=MANIFEST_INCENTIVE_MULTIPLIER,
     DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=MANIFEST_DANCE_RATIO_THRESHOLD,
 )
@@ -463,7 +459,19 @@ async def test_manifest_dance_incentives(
     expected_multiplier,
     mocked_synthetic_miner_client,
     override_weights_version_v2,
+    small_spin_up_times,
 ):
+    miner_hotkey = "miner_hotkey"
+    miner, _ = await Miner.objects.aget_or_create(hotkey=miner_hotkey)
+    if prev_online_executor_count:
+        batch = await SyntheticJobBatch.objects.acreate(accepting_results_until=now(), scored=True)
+        await MinerManifest.objects.acreate(
+            miner=miner,
+            batch=batch,
+            executor_count=prev_online_executor_count,
+            online_executor_count=prev_online_executor_count,
+        )
+
     manifest = ExecutorManifest(
         executor_classes=[
             ExecutorClassManifest(
@@ -471,37 +479,39 @@ async def test_manifest_dance_incentives(
             )
         ]
     )
+    manifest_request = V0ExecutorManifestRequest(manifest=manifest)
     job_uuids = []
 
-    def manifest_callback(miner_client):
-        miner_client.miner_manifest.set_result(manifest)
+    async def manifest_callback(miner_client):
+        await miner_client.handle_message(manifest_request)
 
-    def interaction_callback(miner_client):
-        for job_uuid in miner_client.job_states:
+    async def interaction_callback(miner_client, after_job_sent):
+        for job_uuid in miner_client.ctx.job_uuids:
             job_uuids.append(job_uuid)
-            miner_client.job_states[job_uuid].miner_ready_or_declining_future.set_result(
-                V0ExecutorReadyRequest(job_uuid=job_uuid)
-            )
-            miner_client.job_states[job_uuid].miner_finished_or_failed_future.set_result(
-                V0JobFinishedRequest(
-                    job_uuid=job_uuid,
-                    docker_process_stdout="",
-                    docker_process_stderr="",
+            if not after_job_sent:
+                await miner_client.handle_message(V0AcceptJobRequest(job_uuid=job_uuid))
+                await miner_client.handle_message(V0ExecutorReadyRequest(job_uuid=job_uuid))
+            else:
+                await miner_client.handle_message(
+                    V0JobFinishedRequest(
+                        job_uuid=job_uuid,
+                        docker_process_stdout="",
+                        docker_process_stderr="",
+                    )
                 )
-            )
+        return True
 
     await miner_synthetic_jobs_scheme(
         mocked_synthetic_miner_client,
         manifest_callback,
         curr_online_executor_count,
         interaction_callback,
-        prev_online_executor_count=prev_online_executor_count,
     )
 
     miner_client = mocked_synthetic_miner_client.instance
     async for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
         receipt = miner_client._query_sent_models(
-            lambda m: m.payload.job_uuid, V0JobFinishedReceiptRequest
+            lambda m: m.payload.job_uuid == str(job.job_uuid), V0JobFinishedReceiptRequest
         )[0]
         time_took = receipt.payload.time_took_us / 1_000_000
         assert abs(job.score * time_took - expected_multiplier) < 0.0001
@@ -588,7 +598,7 @@ def test_create_and_run_synthetic_job_batch(
     miner_client = mocked_synthetic_miner_client.instance
     for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
         receipt = miner_client._query_sent_models(
-            lambda m: m.payload.job_uuid, V0JobFinishedReceiptRequest
+            lambda m: m.payload.job_uuid == str(job.job_uuid), V0JobFinishedReceiptRequest
         )[0]
         time_took = receipt.payload.time_took_us / 1_000_000
         assert abs(job.score * time_took - expected_multiplier) < 0.0001
