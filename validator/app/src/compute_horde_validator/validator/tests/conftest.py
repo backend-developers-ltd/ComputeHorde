@@ -1,8 +1,11 @@
 import logging
 from collections.abc import Generator
+from unittest.mock import patch
 
 import bittensor
 import pytest
+
+from .helpers import MockMinerClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,3 +36,20 @@ def override_weights_version_v2(settings):
 @pytest.fixture
 def override_weights_version_v1(settings):
     settings.DEBUG_OVERRIDE_WEIGHTS_VERSION = 1
+
+
+@pytest.fixture
+def mocked_synthetic_miner_client():
+    with patch(
+        "compute_horde_validator.validator.synthetic_jobs.utils.MinerClient"
+    ) as MockedMinerClient:
+        MockedMinerClient.instance = None
+
+        def side_effect(*args, **kwargs):
+            if MockedMinerClient.instance is not None:
+                raise RuntimeError("You can create only single instance of mocked MinerClient")
+            MockedMinerClient.instance = MockMinerClient(*args, **kwargs)
+            return MockedMinerClient.instance
+
+        MockedMinerClient.side_effect = side_effect
+        yield MockedMinerClient
