@@ -4,8 +4,9 @@ from unittest.mock import patch
 
 import bittensor
 import pytest
+from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClass
 
-from .helpers import MockMinerClient
+from .helpers import MockSyntheticMinerClient
 
 logger = logging.getLogger(__name__)
 
@@ -41,15 +42,20 @@ def override_weights_version_v1(settings):
 @pytest.fixture
 def mocked_synthetic_miner_client():
     with patch(
-        "compute_horde_validator.validator.synthetic_jobs.utils.MinerClient"
+        "compute_horde_validator.validator.synthetic_jobs.batch_run.MinerClient"
     ) as MockedMinerClient:
         MockedMinerClient.instance = None
 
         def side_effect(*args, **kwargs):
             if MockedMinerClient.instance is not None:
                 raise RuntimeError("You can create only single instance of mocked MinerClient")
-            MockedMinerClient.instance = MockMinerClient(*args, **kwargs)
+            MockedMinerClient.instance = MockSyntheticMinerClient(*args, **kwargs)
             return MockedMinerClient.instance
 
         MockedMinerClient.side_effect = side_effect
         yield MockedMinerClient
+
+
+@pytest.fixture
+def small_spin_up_times(monkeypatch):
+    monkeypatch.setattr(EXECUTOR_CLASS[ExecutorClass.spin_up_4min__gpu_24gb], "spin_up_time", 4)

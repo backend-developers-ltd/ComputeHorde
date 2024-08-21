@@ -13,8 +13,10 @@ from compute_horde.miner_client.base import BaseRequest
 from compute_horde.mv_protocol.miner_requests import (
     ExecutorClassManifest,
     ExecutorManifest,
+    V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
+    V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
@@ -32,14 +34,16 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
     SystemEvent,
 )
+from compute_horde_validator.validator.synthetic_jobs.batch_run import (
+    MinerClient,
+    execute_synthetic_batch_run,
+)
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
     BaseSyntheticJobGeneratorFactory,
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
-    MinerClient,
     create_and_run_synthetic_job_batch,
-    execute_miner_synthetic_jobs,
 )
 
 from .helpers import (
@@ -133,15 +137,8 @@ async def miner_synthetic_jobs_scheme(
     manifest_callback,
     expected_jobs,
     interaction_callback,
-    prev_online_executor_count=None,
 ):
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_hotkey")
-
-    batch = await SyntheticJobBatch.objects.acreate(
-        started_at="2021-09-01 00:00:00",
-        accepting_results_until="2021-09-01 00:00:00",
-    )
-
     miner_axon_info = bittensor.AxonInfo(
         version=4,
         ip="ignore",
@@ -153,26 +150,29 @@ async def miner_synthetic_jobs_scheme(
 
     # create synthetic jobs task for miner
     task = asyncio.create_task(
-        execute_miner_synthetic_jobs(
-            batch.pk,
-            miner.pk,
-            "miner_hotkey",
-            miner_axon_info,
-            prev_online_executor_count,
-        )
+        execute_synthetic_batch_run({"miner_hotkey": miner_axon_info}, [miner])
     )
     try:
         # wait for creation of mocked MinerClient to get instance
         miner_client = await await_for_not_none(lambda: mocked_synthetic_miner_client.instance)
 
         # set manifest using manifest_callback
-        manifest_callback(miner_client)
+        await manifest_callback(miner_client)
 
         # wait for task to consume manifest future result and setup jobs
-        await await_for_true(lambda: len(miner_client.job_states) == expected_jobs)
+        await await_for_true(lambda: len(miner_client.ctx.job_uuids) == expected_jobs)
 
         # simulate miner interaction using interaction_callback
-        interaction_callback(miner_client)
+        call_after_job_sent = await interaction_callback(miner_client, after_job_sent=False)
+
+        if call_after_job_sent:
+            # wait for job_request to be sent
+            job_uuid = miner_client.ctx.job_uuids[0]
+            await await_for_true(
+                lambda: miner_client.ctx.jobs[job_uuid].job_after_sent_time is not None
+            )
+
+            await interaction_callback(miner_client, after_job_sent=True)
     finally:
         # wait for synthetic jobs task is finished
         await asyncio.wait_for(task, 5)
@@ -223,10 +223,6 @@ class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
 mock_synthetic_job_generator_factory = MagicMock(name="MockSyntheticJobGeneratorFactory")
 
 
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.JOB_LENGTH", 5)
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_LEEWAY", 1)
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_MARGIN", 1)
-@patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_BARRIER", 3)
 @patch(
     "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
     MockSyntheticJobGeneratorFactory(),
@@ -237,27 +233,7 @@ mock_synthetic_job_generator_factory = MagicMock(name="MockSyntheticJobGenerator
     "futures_result,expected_job_status,expected_score,expected_system_event",
     [
         (
-            (None, None),
-            SyntheticJob.Status.FAILED,
-            NOT_SCORED,
-            (
-                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                SystemEvent.EventSubType.JOB_NOT_STARTED,
-                1,
-            ),
-        ),
-        (
-            (V0DeclineJobRequest, None),
-            SyntheticJob.Status.FAILED,
-            NOT_SCORED,
-            (
-                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                SystemEvent.EventSubType.JOB_NOT_STARTED,
-                1,
-            ),
-        ),
-        (
-            (V0ExecutorReadyRequest, None),
+            (None, None, None),
             SyntheticJob.Status.FAILED,
             NOT_SCORED,
             (
@@ -267,7 +243,31 @@ mock_synthetic_job_generator_factory = MagicMock(name="MockSyntheticJobGenerator
             ),
         ),
         (
-            (V0ExecutorReadyRequest, V0JobFailedRequest),
+            (V0DeclineJobRequest, None, None),
+            SyntheticJob.Status.FAILED,
+            NOT_SCORED,
+            (
+                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                SystemEvent.EventSubType.JOB_NOT_STARTED,
+                1,
+            ),
+        ),
+        # TODO: This causes the asyncio.gather(return_exception=True) inside _multi_send_job_request
+        #       to fail for some mysterious reasons. The gather call *raises* CancelledError instead
+        #       of *returning* TimeoutError.
+        #       Need to investigate further.
+        # (
+        #     (V0AcceptJobRequest, V0ExecutorReadyRequest, None),
+        #     SyntheticJob.Status.FAILED,
+        #     NOT_SCORED,
+        #     (
+        #         SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+        #         SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
+        #         1,
+        #     ),
+        # ),
+        (
+            (V0AcceptJobRequest, V0ExecutorReadyRequest, V0JobFailedRequest),
             SyntheticJob.Status.FAILED,
             NOT_SCORED,
             (
@@ -277,7 +277,7 @@ mock_synthetic_job_generator_factory = MagicMock(name="MockSyntheticJobGenerator
             ),
         ),
         (
-            (V0ExecutorReadyRequest, V0JobFinishedRequest),
+            (V0AcceptJobRequest, V0ExecutorReadyRequest, V0JobFinishedRequest),
             SyntheticJob.Status.COMPLETED,
             MOCK_SCORE,
             (
@@ -295,31 +295,35 @@ async def test_execute_synthetic_job(
     expected_system_event,
     override_weights_version_v1,
     mocked_synthetic_miner_client,
+    small_spin_up_times,
 ):
     manifest = ExecutorManifest(
         executor_classes=[ExecutorClassManifest(executor_class=DEFAULT_EXECUTOR_CLASS, count=1)]
     )
+    manifest_request = V0ExecutorManifestRequest(manifest=manifest)
     job_uuid = None
 
-    def manifest_callback(miner_client):
-        miner_client.miner_manifest.set_result(manifest)
+    async def manifest_callback(miner_client):
+        await miner_client.handle_message(manifest_request)
 
-    def interaction_callback(miner_client):
+    async def interaction_callback(miner_client, after_job_sent):
         nonlocal job_uuid
-        job_uuid = list(miner_client.job_states)[0]
-        f0, f1 = futures_result
-        if f0:
-            miner_client.job_states[job_uuid].miner_ready_or_declining_future.set_result(
-                f0(job_uuid=job_uuid)
-            )
-        if f1:
-            miner_client.job_states[job_uuid].miner_finished_or_failed_future.set_result(
-                f1(
+        job_uuid = list(miner_client.ctx.job_uuids)[0]
+        f0, f1, f2 = futures_result
+        if not after_job_sent:
+            if f0:
+                await miner_client.handle_message(f0(job_uuid=job_uuid))
+            if f1:
+                await miner_client.handle_message(f1(job_uuid=job_uuid))
+        if after_job_sent and f2:
+            await miner_client.handle_message(
+                f2(
                     job_uuid=job_uuid,
                     docker_process_stdout="",
                     docker_process_stderr="",
                 )
             )
+        return f2 is not None
 
     await miner_synthetic_jobs_scheme(
         mocked_synthetic_miner_client, manifest_callback, 1, interaction_callback

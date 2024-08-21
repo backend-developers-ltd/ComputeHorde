@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import numbers
 from typing import NamedTuple
 
@@ -17,6 +18,7 @@ from compute_horde_validator.validator.facilitator_api import (
 )
 from compute_horde_validator.validator.miner_client import JobState, MinerClient
 from compute_horde_validator.validator.models import SystemEvent
+from compute_horde_validator.validator.synthetic_jobs import batch_run
 
 NUM_NEURONS = 5
 
@@ -50,6 +52,14 @@ class MockedAxonInfo(NamedTuple):
 
 async def mock_get_miner_axon_info(hotkey: str):
     return MockedAxonInfo(is_serving=True, ip_type=4, ip="0000", port=8000)
+
+
+class MockSyntheticMinerClient(batch_run.MinerClient):
+    async def connect(self) -> None:
+        pass
+
+    async def send(self, data: str | bytes, error_event_callback=None):
+        pass
 
 
 class MockMinerClient(MinerClient):
