@@ -23,9 +23,9 @@ from compute_horde_validator.validator.metagraph_client import (
     create_metagraph_refresh_task,
     get_miner_axon_info,
 )
+from compute_horde_validator.validator.miner_client import MinerClient
 from compute_horde_validator.validator.miner_driver import execute_organic_job
 from compute_horde_validator.validator.models import Miner, OrganicJob, SystemEvent
-from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
 from compute_horde_validator.validator.utils import (
     MACHINE_SPEC_GROUP_NAME,
 )
