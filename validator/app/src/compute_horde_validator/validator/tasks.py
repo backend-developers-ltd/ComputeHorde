@@ -32,6 +32,7 @@ from django.utils.timezone import now
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
+from compute_horde_validator.validator.miner_client import MinerClient
 from compute_horde_validator.validator.models import (
     JobFinishedReceipt,
     JobStartedReceipt,
@@ -41,8 +42,9 @@ from compute_horde_validator.validator.models import (
     Weights,
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
-    MinerClient,
-    run_synthethic_job_batch,
+    SYNTHETIC_JOBS_HARD_LIMIT,
+    SYNTHETIC_JOBS_SOFT_LIMIT,
+    create_and_run_synthetic_job_batch,
     save_receipt_event,
 )
 
@@ -52,8 +54,6 @@ from .models import AdminJobRequest, Epoch
 logger = get_task_logger(__name__)
 
 JOB_WINDOW = 2 * 60 * 60
-SYNTHETIC_JOBS_SOFT_LIMIT = 2 * 300  # 2 x job timeout - let validator code not to be "instant"
-SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
 
 SCORING_ALGO_VERSION = 2
 
@@ -168,16 +168,10 @@ def schedule_synthetic_jobs() -> None:
     time_limit=SYNTHETIC_JOBS_HARD_LIMIT,
 )
 def _run_synthetic_jobs(synthetic_jobs_batch_id: int) -> None:
-    batch = SyntheticJobBatch.objects.get(id=synthetic_jobs_batch_id)
-
     try:
         # metagraph will be refetched and that's fine, after sleeping
         # for e.g. 30 minutes we should refetch the miner list
-        run_synthethic_job_batch(
-            batch=batch,
-            netuid=settings.BITTENSOR_NETUID,
-            network=settings.BITTENSOR_NETWORK,
-        )
+        create_and_run_synthetic_job_batch(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
     except billiard.exceptions.SoftTimeLimitExceeded:
         logger.info("Running synthetic jobs timed out")
 

@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand
 
 from compute_horde_validator.validator.models import SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.utils import (
-    run_synthethic_job_batch,
+    create_and_run_synthetic_job_batch,
 )
 
 logger = logging.getLogger(__name__)
@@ -18,12 +18,9 @@ class Command(BaseCommand):
     """
 
     def handle(self, *args, **options):
-        batch = SyntheticJobBatch.objects.create()
         try:
-            run_synthethic_job_batch(
-                batch=batch,
-                netuid=settings.BITTENSOR_NETUID,
-                network=settings.BITTENSOR_NETWORK,
+            create_and_run_synthetic_job_batch(
+                settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK
             )
         except KeyboardInterrupt:
             print("Interrupted by user")

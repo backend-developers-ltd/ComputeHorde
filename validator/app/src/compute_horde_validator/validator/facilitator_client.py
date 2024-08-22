@@ -23,9 +23,9 @@ from compute_horde_validator.validator.metagraph_client import (
     create_metagraph_refresh_task,
     get_miner_axon_info,
 )
+from compute_horde_validator.validator.miner_client import MinerClient
 from compute_horde_validator.validator.miner_driver import execute_organic_job
 from compute_horde_validator.validator.models import Miner, OrganicJob, SystemEvent
-from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
 from compute_horde_validator.validator.utils import (
     MACHINE_SPEC_GROUP_NAME,
 )
@@ -180,7 +180,7 @@ class FacilitatorClient:
                             specs_queue.insert(0, spec_to_send)
                             msg = f"Error occurred while sending specs: {exc}"
                             await save_facilitator_event(
-                                subtype=SystemEvent.Subtype.SPECS_SEND_ERROR,
+                                subtype=SystemEvent.EventSubType.SPECS_SEND_ERROR,
                                 long_description=msg,
                                 data={
                                     "miner_hotkey": spec_to_send.miner_hotkey,
@@ -201,7 +201,7 @@ class FacilitatorClient:
                     msg = f"Error occurred while sending heartbeat: {exc}"
                     logger.warning(msg)
                     await save_facilitator_event(
-                        subtype=SystemEvent.Subtype.HEARTBEAT_ERROR,
+                        subtype=SystemEvent.EventSubType.HEARTBEAT_ERROR,
                         long_description=msg,
                     )
             await asyncio.sleep(self.HEARTBEAT_PERIOD)
@@ -216,7 +216,7 @@ class FacilitatorClient:
     )
     async def send_model(self, msg: BaseModel):
         if self.ws is None:
-            raise websockets.ConnectionClosed
+            raise websockets.ConnectionClosed(rcvd=None, sent=None)
         await self.ws.send(msg.model_dump_json())
         # Summary: https://github.com/python-websockets/websockets/issues/867
         # Longer discussion: https://github.com/python-websockets/websockets/issues/865
