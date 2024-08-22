@@ -4,7 +4,6 @@ import sys
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from compute_horde_validator.validator.models import SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
 )

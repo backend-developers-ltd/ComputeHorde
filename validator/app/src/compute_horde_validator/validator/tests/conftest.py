@@ -6,7 +6,7 @@ import bittensor
 import pytest
 from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClass
 
-from .helpers import MockSyntheticMinerClient, MockNeuron
+from .helpers import MockNeuron, MockSyntheticMinerClient
 
 logger = logging.getLogger(__name__)
 
