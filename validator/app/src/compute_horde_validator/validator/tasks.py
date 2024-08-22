@@ -583,12 +583,14 @@ def set_scores():
             hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
             score_per_uid = {}
             batches = list(
-                SyntheticJobBatch.objects.prefetch_related("synthetic_jobs").filter(
+                SyntheticJobBatch.objects.prefetch_related("synthetic_jobs")
+                .filter(
                     scored=False,
                     started_at__gte=now() - timedelta(days=1),
                     accepting_results_until__lt=now(),
                     epoch__isnull=False,
-                ).order_by('-started_at')
+                )
+                .order_by("-started_at")
             )
             if not batches:
                 logger.info("No batches - nothing to score")
@@ -601,8 +603,10 @@ def set_scores():
                 batches = [batches[-1]]
 
             if subtensor.get_current_block() <= batches[-1].epoch.stop:
-                logger.debug("There is a batch ready to be scored but we're "
-                             "waiting for the beginning of next epoch to set weights")
+                logger.debug(
+                    "There is a batch ready to be scored but we're "
+                    "waiting for the beginning of next epoch to set weights"
+                )
                 return
 
             # scaling factor for avg_score of a horde - best in range [0, 1] (0 means no effect on score)

@@ -39,7 +39,7 @@ def setup_db(epoch_number=0):
         started_at=now(),
         accepting_results_until=now(),
         scored=False,
-        epoch=Epoch.objects.create(start=360*epoch_number, stop=360*(epoch_number + 1))
+        epoch=Epoch.objects.create(start=360 * epoch_number, stop=360 * (epoch_number + 1)),
     )
     for i in range(NUM_NEURONS):
         SyntheticJob.objects.create(
@@ -106,7 +106,9 @@ def test_set_scores__set_weight_success(settings):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch(
     "bittensor.subtensor",
-    lambda *args, **kwargs: MockSubtensor(mocked_set_weights=lambda: (False, "error"), override_block_number=361),
+    lambda *args, **kwargs: MockSubtensor(
+        mocked_set_weights=lambda: (False, "error"), override_block_number=361
+    ),
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight_failure(settings):
@@ -134,7 +136,9 @@ def set_weights_succeed_third_time():
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch(
     "bittensor.subtensor",
-    lambda *args, **kwargs: MockSubtensor(mocked_set_weights=set_weights_succeed_third_time, override_block_number=361),
+    lambda *args, **kwargs: MockSubtensor(
+        mocked_set_weights=set_weights_succeed_third_time, override_block_number=361
+    ),
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight_eventual_success(settings):
@@ -157,7 +161,12 @@ def test_set_scores__set_weight_eventual_success(settings):
 
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_set_weights=throw_error, override_block_number=361))
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        mocked_set_weights=throw_error, override_block_number=361
+    ),
+)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight__exception(settings):
     setup_db()
@@ -265,7 +274,10 @@ def test_set_scores__set_weight_timeout(settings):
 
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_metagraph=throw_error, override_block_number=361))
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(mocked_metagraph=throw_error, override_block_number=361),
+)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__metagraph_fetch_exception(settings):
     setup_db()
@@ -469,7 +481,7 @@ def test_set_scores__set_weight__reveal__in_time(settings):
             commit_reveal_weights_enabled=True,
             commit_reveal_weights_interval=20,
             max_weight_limit=65535,
-            override_block_number=361
+            override_block_number=361,
         ),
     )
     with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
