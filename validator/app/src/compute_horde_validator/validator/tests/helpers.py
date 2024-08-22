@@ -220,6 +220,7 @@ class MockSubtensor:
             max_weight_limit=65535,
         ),
         block_duration=timedelta(seconds=1),
+        override_block_number=None,
     ):
         self.mocked_set_weights = mocked_set_weights
         self.mocked_commit_weights = mocked_commit_weights
@@ -231,6 +232,7 @@ class MockSubtensor:
         self.weights_revealed: list[list[numbers.Number]] = []
         self.init_time = monotonic()
         self.block_duration = block_duration
+        self.override_block_number = override_block_number
 
     def min_allowed_weights(self, netuid):
         return 0
@@ -273,6 +275,8 @@ class MockSubtensor:
         return False, "MockSubtensor doesn't support reveal_weights"
 
     def get_current_block(self) -> int:
+        if self.override_block_number is not None:
+            return self.override_block_number
         return 1000 + int((monotonic() - self.init_time) / self.block_duration.total_seconds())
 
 

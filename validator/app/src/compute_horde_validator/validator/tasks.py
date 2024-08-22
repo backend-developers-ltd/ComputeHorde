@@ -220,7 +220,7 @@ def run_synthetic_jobs(
             .order_by("block")
         )
         if not ongoing_synthetic_job_batches:
-            logger.debug("No ongoing scheduled synthetic jobs")
+            logger.debug("No ongoing scheduled synthetic jobs, current block is %s", current_block)
             return
 
         if len(ongoing_synthetic_job_batches) > 1:
@@ -587,10 +587,22 @@ def set_scores():
                     scored=False,
                     started_at__gte=now() - timedelta(days=1),
                     accepting_results_until__lt=now(),
-                )
+                    epoch__isnull=False,
+                ).order_by('-started_at')
             )
             if not batches:
                 logger.info("No batches - nothing to score")
+                return
+            if len(batches) > 1:
+                logger.error("Unexpected number batches eligible for scoring: %s", len(batches))
+                for batch in batches[:-1]:
+                    batch.scored = True
+                    batch.save()
+                batches = [batches[-1]]
+
+            if subtensor.get_current_block() <= batches[-1].epoch.stop:
+                logger.debug("There is a batch ready to be scored but we're "
+                             "waiting for the beginning of next epoch to set weights")
                 return
 
             # scaling factor for avg_score of a horde - best in range [0, 1] (0 means no effect on score)
