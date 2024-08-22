@@ -26,7 +26,7 @@ services:
       <<: *logging
 
   app:
-    image: andreeareef/${VALIDATOR_IMAGE_REPO}:v0-latest
+    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
     pull_policy: always
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
@@ -49,7 +49,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-worker:
-    image: andreeareef/${VALIDATOR_IMAGE_REPO}:v0-latest
+    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
     pull_policy: always
     init: true
     healthcheck:
@@ -72,7 +72,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-beat:
-    image: andreeareef/${VALIDATOR_IMAGE_REPO}:v0-latest
+    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
     pull_policy: always
     init: true
     restart: unless-stopped
@@ -90,7 +90,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   connect-facilitator:
-    image: andreeareef/${VALIDATOR_IMAGE_REPO}:v0-latest
+    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
     pull_policy: always
     init: true
     restart: unless-stopped
@@ -109,7 +109,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   nginx:
-    image: andreeareef/compute-horde-validator-nginx:v0-latest
+    image: backenddevelopersltd/compute-horde-validator-nginx:v0-latest
     restart: unless-stopped
     healthcheck:
       test: wget -q --spider 0.0.0.0:80/admin/login/ || exit 1
@@ -127,11 +127,11 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   dct-pull:
-    image: andreeareef/compute-horde-dct-pull:v0-latest
+    image: backenddevelopersltd/compute-horde-dct-pull:v0-latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: andreeareef/compute-horde-dct-pull:v0-latest andreeareef/${VALIDATOR_IMAGE_REPO}:v0-latest andreeareef/compute-horde-validator-nginx:v0-latest
+    command: backenddevelopersltd/compute-horde-dct-pull:v0-latest backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest backenddevelopersltd/compute-horde-validator-nginx:v0-latest
     logging:
       <<: *logging
     labels:

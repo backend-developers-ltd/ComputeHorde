@@ -83,7 +83,7 @@ version: '3.7'
 services:
 
   validator-runner:
-    image: andreeareef/compute-horde-validator-runner:v0-latest
+    image: backenddevelopersltd/compute-horde-validator-runner:v0-latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -114,7 +114,7 @@ MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
 ENDENV
 
 export DOCKER_CONTENT_TRUST=1
-docker pull andreeareef/compute-horde-validator:v0-latest
+docker pull backenddevelopersltd/compute-horde-validator:v0-latest
 docker compose up -d
 
 ENDSSH

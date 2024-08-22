@@ -33,7 +33,7 @@ from compute_horde_miner.miner.executor_manager import current  # noqa
 
 JOB_TIMEOUT_SECONDS = 60
 PREPARATION_TIMEOUT_SECONDS = 60
-JOB_IMAGE_NAME = "andreeareef/compute-horde-job:v0-latest"
+JOB_IMAGE_NAME = "backenddevelopersltd/compute-horde-job:v0-latest"
 EXPECTED_JOB_RESULT = "mQNJTt"
 MAX_SCORE = 2
 JOB_RUN_CMD = [

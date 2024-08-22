@@ -106,7 +106,7 @@ version: '3.7'
 services:
 
   miner-runner:
-    image: andreeareef/compute-horde-miner-runner:v0-latest
+    image: backenddevelopersltd/compute-horde-miner-runner:v0-latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -152,9 +152,9 @@ ENDENV
 rm ~/tmpvars
 
 export DOCKER_CONTENT_TRUST=1
-docker pull andreeareef/compute-horde-executor:v0-latest
-docker pull andreeareef/compute-horde-miner:v0-latest
-docker pull andreeareef/compute-horde-job:v0-latest
+docker pull backenddevelopersltd/compute-horde-executor:v0-latest
+docker pull backenddevelopersltd/compute-horde-miner:v0-latest
+docker pull backenddevelopersltd/compute-horde-job:v0-latest
 docker compose up -d
 
 ENDSSH

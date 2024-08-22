@@ -56,8 +56,8 @@ jobs:
           echo "PDM_IGNORE_SAVED_PYTHON=1" >> $GITHUB_ENV
       - name: Prepare environment
         run: ./setup-dev.sh
-      - name: Build andreeareef/compute-horde-job-echo:v0-latest image
-        run: docker build . -t andreeareef/compute-horde-job-echo:v0-latest
+      - name: Build backenddevelopersltd/compute-horde-job-echo:v0-latest image
+        run: docker build . -t backenddevelopersltd/compute-horde-job-echo:v0-latest
         working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_tests
       - name: Run unit tests
         run: pdm run nox -vs test --no-venv
