@@ -171,7 +171,11 @@ def _run_synthetic_jobs(synthetic_jobs_batch_id: int) -> None:
     try:
         # metagraph will be refetched and that's fine, after sleeping
         # for e.g. 30 minutes we should refetch the miner list
-        create_and_run_synthetic_job_batch(settings.BITTENSOR_NETUID, settings.BITTENSOR_NETWORK)
+        create_and_run_synthetic_job_batch(
+            settings.BITTENSOR_NETUID,
+            settings.BITTENSOR_NETWORK,
+            synthetic_jobs_batch_id=synthetic_jobs_batch_id,
+        )
     except billiard.exceptions.SoftTimeLimitExceeded:
         logger.info("Running synthetic jobs timed out")
 
@@ -196,7 +200,7 @@ def run_synthetic_jobs(
 
     if settings.DEBUG_DONT_STAGGER_VALIDATORS:
         batch = SyntheticJobBatch.objects.create()
-        _run_synthetic_jobs.apply_async(synthetic_jobs_batch_id=batch.id)
+        _run_synthetic_jobs.apply_async(kwargs={"synthetic_jobs_batch_id": batch.id})
         return
 
     wait_in_advance_blocks = (
@@ -255,7 +259,7 @@ def run_synthetic_jobs(
         batch.started_at = now()
         batch.save()
 
-    _run_synthetic_jobs.apply_async(synthetic_jobs_batch_id=batch.id)
+    _run_synthetic_jobs.apply_async(kwargs={"synthetic_jobs_batch_id": batch.id})
 
 
 @app.task()

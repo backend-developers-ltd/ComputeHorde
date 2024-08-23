@@ -22,7 +22,7 @@ def batch_id_to_uuid(batch_id: int) -> uuid.UUID:
     return uuid.uuid4()
 
 
-def create_and_run_synthetic_job_batch(netuid, network):
+def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id: int | None = None):
     uvloop.install()
 
     if settings.DEBUG_MINER_KEY:
@@ -64,7 +64,7 @@ def create_and_run_synthetic_job_batch(netuid, network):
             if miner.hotkey in axons_by_key and axons_by_key[miner.hotkey].is_serving
         ]
 
-    async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners)
+    async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners, synthetic_jobs_batch_id)
 
 
 def save_receipt_event(subtype: str, long_description: str, data: dict):
