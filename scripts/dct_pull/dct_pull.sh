@@ -16,6 +16,6 @@ while true; do
         echo -e "\n\nPulling $image"
         docker pull $image && echo -e "${GREEN}Successfully pulled signed image: $image${NC}" || echo -e "${RED}Failed to pull signed image: $image${NC}"
     done
-    sleep 5m
+    sleep 1m
 done
 
