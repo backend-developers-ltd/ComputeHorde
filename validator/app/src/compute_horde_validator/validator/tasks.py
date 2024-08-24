@@ -23,7 +23,7 @@ from compute_horde.receipts import (
     JobStartedReceiptPayload,
     get_miner_receipts,
 )
-from compute_horde.utils import get_validators
+from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
 from django.conf import settings
 from django.db import transaction
@@ -163,10 +163,18 @@ def schedule_synthetic_jobs() -> None:
             )
             return
 
-        validators = get_validators(
-            netuid=settings.BITTENSOR_NETUID,
-            network=settings.BITTENSOR_NETWORK,
-        )
+        try:
+            validators = get_validators(
+                netuid=settings.BITTENSOR_NETUID,
+                network=settings.BITTENSOR_NETWORK,
+                block=current_cycle.start,
+            )
+        except ValidatorListError:
+            logger.exception(
+                "Can't fetch metagraph from beginning of the cycle (block %s)", current_cycle.start
+            )
+            return
+
         this_hotkey = get_keypair().ss58_address
         try:
             this_validator_index = [vali.hotkey for vali in validators].index(this_hotkey)

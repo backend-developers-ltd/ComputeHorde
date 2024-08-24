@@ -7,6 +7,7 @@ from unittest import mock
 
 import constance
 import numpy as np
+from bittensor import Balance
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import BaseRequest
 from compute_horde.mv_protocol.miner_requests import (
@@ -15,6 +16,7 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 from django.conf import settings
+from substrateinterface.exceptions import SubstrateRequestException
 
 from compute_horde_validator.validator.facilitator_api import (
     V0FacilitatorJobRequest,
@@ -245,7 +247,14 @@ class MockSubtensor:
     def get_subnet_hyperparameters(self, netuid: int) -> MockHyperparameters:
         return self.hyperparameters
 
-    def metagraph(self, netuid):
+    def metagraph(self, netuid, block: int | None = None):
+        if block is not None and block < self.get_current_block() - 300:
+            raise SubstrateRequestException(
+                {
+                    "code": -32000,
+                    "message": "Client error: UnknownBlock: State already discarded for 0xabc",
+                }
+            )
         return self.mocked_metagraph()
 
     def set_weights(
@@ -286,6 +295,7 @@ class MockNeuron:
     def __init__(self, hotkey, uid):
         self.hotkey = hotkey
         self.uid = uid
+        self.stake = Balance((uid + 1) * 1001.0)
 
 
 class MockBlock:
@@ -294,14 +304,25 @@ class MockBlock:
 
 
 class MockMetagraph:
-    def __init__(self, netuid=1, num_neurons=NUM_NEURONS):
+    def __init__(
+        self,
+        netuid=1,
+        num_neurons: int | None = NUM_NEURONS,
+        neurons: list[MockNeuron] | None = None,
+    ):
+        if (neurons is None) == (num_neurons is None):
+            raise ValueError("Specify either num_neurons or neurons, exactly one of them")
+        if neurons is not None:
+            num_neurons = len(neurons)
+            self.neurons = neurons
+        else:
+            self.neurons = [MockNeuron(f"hotkey_{i}", i) for i in range(NUM_NEURONS)]
         self.n = num_neurons
         self.netuid = netuid
         self.num_neurons = num_neurons
         self.W = np.ones((num_neurons, num_neurons))
         self.hotkeys = [f"hotkey_{i}" for i in range(num_neurons)]
         self.uids = np.array(list(range(num_neurons)))
-        self.neurons = [MockNeuron(f"hotkey_{i}", i) for i in range(NUM_NEURONS)]
         self.block = MockBlock()
 
 

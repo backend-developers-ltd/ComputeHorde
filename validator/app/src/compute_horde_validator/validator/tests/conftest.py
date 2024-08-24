@@ -63,10 +63,10 @@ def small_spin_up_times(monkeypatch):
 
 @pytest.fixture
 def validators():
-    return [MockNeuron(hotkey=f"mock_validator_hotkey_{i}", uid=i) for i in range(10)]
+    return [MockNeuron(hotkey=f"mock_validator_hotkey_{i}", uid=i * 3) for i in range(10)]
 
 
 @pytest.fixture
 def validators_with_this_hotkey(settings, validators):
     this_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-    return [*validators, MockNeuron(hotkey=this_hotkey, uid=100)]
+    return [*validators, MockNeuron(hotkey=this_hotkey, uid=17)]

@@ -27,6 +27,7 @@ from compute_horde_validator.validator.tasks import (
 )
 
 from .helpers import (
+    MockMetagraph,
     MockSubtensor,
     SingleExecutorMockMinerClient,
     mock_get_miner_axon_info,
@@ -205,19 +206,31 @@ def test__schedule_validation_run__not_in_validators(validators):
         assert SyntheticJobBatch.objects.count() == 0
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=140))
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=1200))
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__schedule_validation_run__unable_to_fetch_metagraph(validators):
+    assert SyntheticJobBatch.objects.count() == 0
+    schedule_synthetic_jobs()
+    assert SyntheticJobBatch.objects.count() == 0
+
+
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test__schedule_validation_run__simple(validators_with_this_hotkey):
     with patch(
-        "compute_horde_validator.validator.tasks.get_validators",
-        lambda *args, **kwargs: validators_with_this_hotkey,
+        "bittensor.subtensor",
+        lambda *args, **kwargs: MockSubtensor(
+            override_block_number=140,
+            mocked_metagraph=lambda *a, **kw: MockMetagraph(
+                neurons=validators_with_this_hotkey, num_neurons=None
+            ),
+        ),
     ):
         assert SyntheticJobBatch.objects.count() == 0
         schedule_synthetic_jobs()
         assert SyntheticJobBatch.objects.count() == 1
 
         schedule = SyntheticJobBatch.objects.last()
-        assert schedule.block == 644
+        assert schedule.block == 263
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
