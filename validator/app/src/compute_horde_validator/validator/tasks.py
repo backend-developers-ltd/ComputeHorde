@@ -1,6 +1,7 @@
 import contextlib
 import json
 import numbers
+import random
 import time
 import traceback
 from collections import defaultdict
@@ -68,13 +69,60 @@ class WeightsRevealError(Exception):
     pass
 
 
-def when_to_run(cycle: range, total: int, index_: int, offset: int = 0) -> int:
+class ScheduleError(Exception):
+    pass
+
+
+def when_to_run(subtensor_: bittensor.subtensor, current_cycle) -> int:
     """
     Select block when to run validation for a given validator.
-    Evenly distribute runs across validators.
+    Validators needs to run their jobs temporarily separated from others.
+    The order of validators within a cycle is random, seeded by a block
+    preceding the cycle, therefore all validators should arrive at the same order.
+    """
 
-    total == 3
+    try:
+        validators = get_validators(
+            netuid=settings.BITTENSOR_NETUID,
+            network=settings.BITTENSOR_NETWORK,
+            block=current_cycle.start,
+        )
+    except ValidatorListError:
+        raise ScheduleError() from ValidatorListError
 
+    ordered_hotkeys = [vali.hotkey for vali in validators]
+    this_hotkey = get_keypair().ss58_address
+    if this_hotkey not in ordered_hotkeys:
+        raise ScheduleError(
+            "This validator is not in a list of validators -> not scheduling synthetic jobs run"
+        )
+
+    try:
+        seed = subtensor_.get_block_hash(
+            current_cycle.start - config.DYNAMIC_BLOCK_FINALIZATION_NUMBER
+        )
+    except Exception as ex:
+        raise ScheduleError("Could not get seed hash") from ex
+
+    random.Random(seed).shuffle(ordered_hotkeys)
+    index_ = ordered_hotkeys.index(this_hotkey)
+    block = calculate_job_start_block(
+        cycle=current_cycle,
+        offset=settings.SYNTHETIC_JOBS_RUN_OFFSET,
+        total=len(validators),
+        index_=ordered_hotkeys.index(this_hotkey),
+    )
+
+    SystemEvent.objects.create(
+        type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOB_SCHEDULED,
+        subtype=SystemEvent.EventSubType.SUCCESS,
+        data={"seed": seed, "index": index_, "block": block},
+    )
+    return block
+
+
+def calculate_job_start_block(cycle: range, total: int, index_: int, offset: int = 0) -> int:
+    """
     |______________________________________________________|__________
     ^-cycle.start                                          ^-cycle.stop
     _____________|_____________|_____________|_____________|
@@ -163,33 +211,7 @@ def schedule_synthetic_jobs() -> None:
             )
             return
 
-        try:
-            validators = get_validators(
-                netuid=settings.BITTENSOR_NETUID,
-                network=settings.BITTENSOR_NETWORK,
-                block=current_cycle.start,
-            )
-        except ValidatorListError:
-            logger.exception(
-                "Can't fetch metagraph from beginning of the cycle (block %s)", current_cycle.start
-            )
-            return
-
-        this_hotkey = get_keypair().ss58_address
-        try:
-            this_validator_index = [vali.hotkey for vali in validators].index(this_hotkey)
-        except ValueError:
-            logger.exception(
-                "This validator is not in a list of validators -> not scheduling synthetic jobs run"
-            )
-            return
-
-        next_run_block = when_to_run(
-            cycle=current_cycle,
-            offset=settings.SYNTHETIC_JOBS_RUN_OFFSET,
-            total=len(validators),
-            index_=this_validator_index,
-        )
+        next_run_block = when_to_run(subtensor_, current_cycle)
 
         cycle, _ = Cycle.objects.get_or_create(start=current_cycle.start, stop=current_cycle.stop)
         batch = SyntheticJobBatch.objects.create(

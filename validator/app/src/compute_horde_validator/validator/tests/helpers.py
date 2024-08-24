@@ -225,6 +225,7 @@ class MockSubtensor:
         ),
         block_duration=timedelta(seconds=1),
         override_block_number=None,
+        block_hash="0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464",
     ):
         self.mocked_set_weights = mocked_set_weights
         self.mocked_commit_weights = mocked_commit_weights
@@ -237,6 +238,10 @@ class MockSubtensor:
         self.init_time = monotonic()
         self.block_duration = block_duration
         self.override_block_number = override_block_number
+        self.block_hash = block_hash
+
+    def get_block_hash(self, block_id) -> str:
+        return self.block_hash
 
     def min_allowed_weights(self, netuid):
         return 0

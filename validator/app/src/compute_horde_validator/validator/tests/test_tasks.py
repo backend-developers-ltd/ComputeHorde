@@ -16,6 +16,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.tasks import (
+    calculate_job_start_block,
     check_missed_synthetic_jobs,
     get_cycle_containing_block,
     get_epoch_containing_block,
@@ -23,7 +24,6 @@ from compute_horde_validator.validator.tasks import (
     schedule_synthetic_jobs,
     send_events_to_facilitator,
     trigger_run_admin_job_request,
-    when_to_run,
 )
 
 from .helpers import (
@@ -185,14 +185,14 @@ def test__get_cycle_containing_block(netuid, block, expected_cycle):
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__when_to_run():
-    assert when_to_run(cycle=range(100, 151), total=4, index_=2) == 125
-    assert when_to_run(cycle=range(100, 151), total=2, index_=0) == 100
-    assert when_to_run(cycle=range(100, 151), total=2, index_=1) == 125
+def test__calculate_job_start_block():
+    assert calculate_job_start_block(cycle=range(100, 151), total=4, index_=2) == 125
+    assert calculate_job_start_block(cycle=range(100, 151), total=2, index_=0) == 100
+    assert calculate_job_start_block(cycle=range(100, 151), total=2, index_=1) == 125
 
-    assert when_to_run(cycle=range(100, 201), offset=10, total=3, index_=0) == 110
-    assert when_to_run(cycle=range(100, 201), offset=10, total=3, index_=1) == 140
-    assert when_to_run(cycle=range(100, 201), offset=10, total=3, index_=2) == 170
+    assert calculate_job_start_block(cycle=range(100, 201), offset=10, total=3, index_=0) == 110
+    assert calculate_job_start_block(cycle=range(100, 201), offset=10, total=3, index_=1) == 140
+    assert calculate_job_start_block(cycle=range(100, 201), offset=10, total=3, index_=2) == 170
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
@@ -230,7 +230,7 @@ def test__schedule_validation_run__simple(validators_with_this_hotkey):
         assert SyntheticJobBatch.objects.count() == 1
 
         schedule = SyntheticJobBatch.objects.last()
-        assert schedule.block == 263
+        assert schedule.block == 390
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
