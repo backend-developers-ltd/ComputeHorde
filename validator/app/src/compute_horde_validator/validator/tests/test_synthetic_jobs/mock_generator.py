@@ -41,7 +41,7 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
         return "mock"
 
 
-class TimeToookScoreMockSyntheticJobGenerator(MockSyntheticJobGenerator):
+class TimeTookScoreMockSyntheticJobGenerator(MockSyntheticJobGenerator):
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         return True, "mock", 1 / time_took
 
@@ -49,3 +49,8 @@ class TimeToookScoreMockSyntheticJobGenerator(MockSyntheticJobGenerator):
 class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
     async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
         return MockSyntheticJobGenerator()
+
+
+class TimeTookScoreMockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
+    async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
+        return TimeTookScoreMockSyntheticJobGenerator()

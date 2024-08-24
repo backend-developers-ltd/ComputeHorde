@@ -4,12 +4,7 @@ from unittest.mock import patch
 
 import bittensor
 import pytest
-import pytest_asyncio
 from asgiref.sync import sync_to_async
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.miner_client.base import AbstractTransport
-from compute_horde.mv_protocol import miner_requests
-from django.conf import settings
 from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.miner_client import MinerClient
@@ -22,137 +17,19 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     execute_miner_synthetic_jobs,
 )
-from compute_horde_validator.validator.tests.mock_generator import (
+from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
+
+from ..helpers import check_system_events
+from .mock_generator import (
     MOCK_SCORE,
     NOT_SCORED,
     MockSyntheticJobGeneratorFactory,
 )
-from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
-from .helpers import (
-    check_system_events,
-)
-
-
-@pytest.fixture
-def miner_hotkey():
-    return "miner_hotkey"
-
-
-@pytest.fixture
-def validator_hotkey():
-    return "validator_hotkey"
-
-
-@pytest.fixture
-def miner_axon_info(miner_hotkey: str):
-    return bittensor.AxonInfo(
-        version=4,
-        ip="ignore",
-        ip_type=4,
-        port=9999,
-        hotkey=miner_hotkey,
-        coldkey=miner_hotkey,
-    )
-
-
-@pytest_asyncio.fixture
-async def miner(miner_hotkey: str):
-    return await Miner.objects.acreate(hotkey=miner_hotkey)
-
-
-@pytest_asyncio.fixture
-async def batch():
-    return await SyntheticJobBatch.objects.acreate(
-        started_at="2021-09-01 00:00:00",
-        accepting_results_until="2021-09-01 00:00:00",
-    )
-
-
-@pytest.fixture
-def keypair():
-    return settings.BITTENSOR_WALLET().get_hotkey()
-
-
-@pytest.fixture
-def job_uuid():
-    return uuid.uuid4()
-
-
-@pytest.fixture
-def manifest_message():
-    return miner_requests.V0ExecutorManifestRequest(
-        manifest=miner_requests.ExecutorManifest(
-            executor_classes=[
-                miner_requests.ExecutorClassManifest(executor_class=DEFAULT_EXECUTOR_CLASS, count=1)
-            ]
-        )
-    ).model_dump_json()
-
-
-@pytest.fixture
-def executor_ready_message(job_uuid: uuid.UUID):
-    return miner_requests.V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
-
-
-@pytest.fixture
-def accept_job_message(job_uuid: uuid.UUID):
-    return miner_requests.V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
-
-
-@pytest.fixture
-def decline_job_message(job_uuid: uuid.UUID):
-    return miner_requests.V0DeclineJobRequest(job_uuid=str(job_uuid)).model_dump_json()
-
-
-@pytest.fixture
-def docker_process_stdout():
-    return "stdout"
-
-
-@pytest.fixture
-def docker_process_stderr():
-    return "stderr"
-
-
-@pytest.fixture
-def job_finish_message(job_uuid: uuid.UUID, docker_process_stdout: str, docker_process_stderr: str):
-    return miner_requests.V0JobFinishedRequest(
-        job_uuid=str(job_uuid),
-        docker_process_stdout=docker_process_stdout,
-        docker_process_stderr=docker_process_stderr,
-    ).model_dump_json()
-
-
-@pytest.fixture
-def job_failed_message(job_uuid: uuid.UUID, docker_process_stdout: str, docker_process_stderr: str):
-    return miner_requests.V0JobFailedRequest(
-        job_uuid=str(job_uuid),
-        docker_process_exit_status=1,
-        docker_process_stdout=docker_process_stdout,
-        docker_process_stderr=docker_process_stderr,
-    ).model_dump_json()
-
-
-@pytest_asyncio.fixture
-async def transport(miner_hotkey: str):
-    return MinerSimulationTransport(miner_hotkey)
-
-
-@pytest_asyncio.fixture
-async def miner_client(
-    miner_hotkey: str, validator_hotkey: str, keypair, job_uuid: str, transport: AbstractTransport
-):
-    return MinerClient(
-        miner_address="ignore",
-        my_hotkey=validator_hotkey,
-        miner_hotkey=miner_hotkey,
-        miner_port=9999,
-        job_uuid=job_uuid,
-        batch_id=None,
-        keypair=keypair,
-        transport=transport,
-    )
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.django_db(databases=["default", "default_alias"], transaction=True),
+]
 
 
 @pytest.fixture(autouse=True)
@@ -163,8 +40,6 @@ def _patch_generator_factory(mocker: MockerFixture):
     )
 
 
-@pytest.mark.asyncio
-@pytest.mark.django_db(transaction=True)
 async def test_execute_miner_synthetic_jobs_success(
     miner: Miner,
     batch: SyntheticJobBatch,
@@ -202,8 +77,6 @@ async def test_execute_miner_synthetic_jobs_success(
     )
 
 
-@pytest.mark.asyncio
-@pytest.mark.django_db(transaction=True)
 @patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_LEEWAY", 0.05)
 @patch("compute_horde_validator.validator.synthetic_jobs.utils.TIMEOUT_MARGIN", 0.05)
 async def test_execute_miner_synthetic_jobs_success_timeout(
@@ -244,8 +117,6 @@ async def test_execute_miner_synthetic_jobs_success_timeout(
     )
 
 
-@pytest.mark.asyncio
-@pytest.mark.django_db(transaction=True)
 async def test_execute_miner_synthetic_jobs_job_failed(
     miner: Miner,
     batch: SyntheticJobBatch,
@@ -283,8 +154,6 @@ async def test_execute_miner_synthetic_jobs_job_failed(
     )
 
 
-@pytest.mark.asyncio
-@pytest.mark.django_db(transaction=True)
 async def test_execute_miner_synthetic_jobs_job_declined(
     miner: Miner,
     batch: SyntheticJobBatch,
@@ -318,8 +187,6 @@ async def test_execute_miner_synthetic_jobs_job_declined(
     )
 
 
-@pytest.mark.asyncio
-@pytest.mark.django_db(transaction=True)
 @patch("compute_horde_validator.validator.synthetic_jobs.utils.MANIFEST_TIMEOUT", 0.2)
 async def test_execute_miner_synthetic_jobs_no_manifest(
     miner: Miner,
