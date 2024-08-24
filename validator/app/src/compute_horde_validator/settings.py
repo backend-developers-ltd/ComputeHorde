@@ -417,7 +417,7 @@ DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 
-# synthetic jobs are evenly distributed through the epoch, however
+# synthetic jobs are evenly distributed through the cycle, however
 # we start them from some offset because scheduling takes some time
 SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
 

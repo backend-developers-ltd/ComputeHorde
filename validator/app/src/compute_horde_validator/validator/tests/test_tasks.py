@@ -17,6 +17,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.tasks import (
     check_missed_synthetic_jobs,
+    get_cycle_containing_block,
     get_epoch_containing_block,
     run_synthetic_jobs,
     schedule_synthetic_jobs,
@@ -158,15 +159,39 @@ def test__get_epoch_containing_block(netuid, block, expected_epoch):
     ), f"block: {block}, netuid: {netuid}, expected: {expected_epoch}"
 
 
+@pytest.mark.parametrize(
+    ("netuid", "block", "expected_cycle"),
+    [
+        # netuid == 0
+        (0, 25, range(-2, 359 + 361)),
+        (0, 359, range(-2, 359 + 361)),
+        (0, 360, range(359 - 361, 720)),
+        (0, 720, range(359 - 361, 720)),
+        (0, 721, range(720, 1081 + 361)),
+        # netuid == 12
+        (12, 25, range(-14, 347 + 361)),
+        (12, 347, range(-14, 347 + 361)),
+        (12, 348, range(347 - 361, 708)),
+        (12, 708, range(347 - 361, 708)),
+        (12, 709, range(708, 1069 + 361)),
+        (12, 1100, range(1069 - 361, 1430)),
+    ],
+)
+def test__get_cycle_containing_block(netuid, block, expected_cycle):
+    assert (
+        get_cycle_containing_block(block=block, netuid=netuid) == expected_cycle
+    ), f"block: {block}, netuid: {netuid}, expected: {expected_cycle}"
+
+
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test__when_to_run():
-    assert when_to_run(epoch=range(100, 151), total=4, index_=2) == 125
-    assert when_to_run(epoch=range(100, 151), total=2, index_=0) == 100
-    assert when_to_run(epoch=range(100, 151), total=2, index_=1) == 125
+    assert when_to_run(cycle=range(100, 151), total=4, index_=2) == 125
+    assert when_to_run(cycle=range(100, 151), total=2, index_=0) == 100
+    assert when_to_run(cycle=range(100, 151), total=2, index_=1) == 125
 
-    assert when_to_run(epoch=range(100, 201), offset=10, total=3, index_=0) == 110
-    assert when_to_run(epoch=range(100, 201), offset=10, total=3, index_=1) == 140
-    assert when_to_run(epoch=range(100, 201), offset=10, total=3, index_=2) == 170
+    assert when_to_run(cycle=range(100, 201), offset=10, total=3, index_=0) == 110
+    assert when_to_run(cycle=range(100, 201), offset=10, total=3, index_=1) == 140
+    assert when_to_run(cycle=range(100, 201), offset=10, total=3, index_=2) == 170
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
@@ -180,7 +205,7 @@ def test__schedule_validation_run__not_in_validators(validators):
         assert SyntheticJobBatch.objects.count() == 0
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=140))
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test__schedule_validation_run__simple(validators_with_this_hotkey):
     with patch(
@@ -192,7 +217,7 @@ def test__schedule_validation_run__simple(validators_with_this_hotkey):
         assert SyntheticJobBatch.objects.count() == 1
 
         schedule = SyntheticJobBatch.objects.last()
-        assert schedule.block in range(1000, 1070)
+        assert schedule.block == 644
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())

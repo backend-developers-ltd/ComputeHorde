@@ -112,17 +112,17 @@ class MinerBlacklist(models.Model):
         return f"hotkey: {self.miner.hotkey}"
 
 
-class Epoch(models.Model):
+class Cycle(models.Model):
     start = models.BigIntegerField()
     stop = models.BigIntegerField()
 
     class Meta:
         constraints = [
-            UniqueConstraint(fields=["start", "stop"], name="unique_epoch"),
+            UniqueConstraint(fields=["start", "stop"], name="unique_cycle"),
         ]
 
     def __str__(self):
-        return f"Epoch [{self.start};{self.stop})"
+        return f"Cycle [{self.start};{self.stop})"
 
 
 class SyntheticJobBatch(models.Model):
@@ -133,8 +133,8 @@ class SyntheticJobBatch(models.Model):
     block = models.BigIntegerField(
         null=True, unique=True, help_text="Block number for which this batch is scheduled"
     )
-    epoch = models.ForeignKey(
-        Epoch, blank=True, null=True, related_name="batches", on_delete=models.CASCADE
+    cycle = models.ForeignKey(
+        Cycle, blank=True, null=True, related_name="batches", on_delete=models.CASCADE
     )
     created_at = models.DateTimeField(default=now)
     started_at = models.DateTimeField(null=True)

@@ -17,6 +17,8 @@ PROMETHEUS_EXPORT_MIGRATIONS = False
 BITTENSOR_NETUID = 12
 BITTENSOR_NETWORK = "local"
 
+CELERY_TASK_ALWAYS_EAGER = True
+
 BITTENSOR_WALLET_DIRECTORY = pathlib.Path("~").expanduser() / ".bittensor" / "wallets"
 BITTENSOR_WALLET_NAME = "test_validator"
 BITTENSOR_WALLET_HOTKEY_NAME = "default"

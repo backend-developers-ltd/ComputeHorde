@@ -34,6 +34,7 @@ from compute_horde_validator.validator.locks import Locked, LockType, get_adviso
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.miner_client import MinerClient
 from compute_horde_validator.validator.models import (
+    Cycle,
     JobFinishedReceipt,
     JobStartedReceipt,
     OrganicJob,
@@ -49,7 +50,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from .miner_driver import execute_organic_job
-from .models import AdminJobRequest, Epoch
+from .models import AdminJobRequest
 
 logger = get_task_logger(__name__)
 
@@ -67,7 +68,7 @@ class WeightsRevealError(Exception):
     pass
 
 
-def when_to_run(epoch: range, total: int, index_: int, offset: int = 0) -> int:
+def when_to_run(cycle: range, total: int, index_: int, offset: int = 0) -> int:
     """
     Select block when to run validation for a given validator.
     Evenly distribute runs across validators.
@@ -75,15 +76,15 @@ def when_to_run(epoch: range, total: int, index_: int, offset: int = 0) -> int:
     total == 3
 
     |______________________________________________________|__________
-    ^-epoch.start                                           ^-epoch.stop
+    ^-cycle.start                                          ^-cycle.stop
     _____________|_____________|_____________|_____________|
                  ^-0           ^-1           ^-2
     |____________|_____________|
         offset       blocks
                     b/w runs
     """
-    blocks_between_runs = (epoch.stop - epoch.start - offset) / total
-    return epoch.start + offset + floor(blocks_between_runs * index_)
+    blocks_between_runs = (cycle.stop - cycle.start - offset) / total
+    return cycle.start + offset + floor(blocks_between_runs * index_)
 
 
 def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
@@ -93,6 +94,10 @@ def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
     See https://github.com/opentensor/subtensor.
 
     See also: https://github.com/opentensor/bittensor/pull/2168/commits/9e8745447394669c03d9445373920f251630b6b8
+
+    If given block happens to be an end of an epoch, the resulting epoch will end with it. The beginning of an epoch
+    is the first block when values like "dividends" are different (before an epoch they are constant for a full
+    tempo).
     """
     assert tempo > 0
 
@@ -102,11 +107,34 @@ def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
     return range(last_epoch, next_tempo_block_start)
 
 
+def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
+    """
+    A cycle contains two epochs, starts on an even one. A cycle is the basic unit of passage of time in compute horde,
+    and validators testing miners are synchronised to cycles.
+    """
+    very_first_epoch = get_epoch_containing_block(0, netuid, tempo=tempo)
+    epoch_containing_block = get_epoch_containing_block(block, netuid, tempo=tempo)
+
+    if ((epoch_containing_block.start - very_first_epoch.start) / (tempo + 1)) % 2:
+        # that's the second epoch in this cycle
+        first_epoch = range(
+            epoch_containing_block.start - (tempo + 1), epoch_containing_block.stop - (tempo + 1)
+        )
+        second_epoch = epoch_containing_block
+    else:
+        first_epoch = epoch_containing_block
+        second_epoch = range(
+            epoch_containing_block.start + (tempo + 1), epoch_containing_block.stop + (tempo + 1)
+        )
+
+    return range(first_epoch.start, second_epoch.stop)
+
+
 @app.task
 def schedule_synthetic_jobs() -> None:
     """
-    For current epoch, decide when miners' validation should happen.
-    Result is a ScheduledValidationRun object in the database.
+    For current cycle, decide when miners' validation should happen.
+    Result is a SyntheticJobBatch object in the database.
     """
     with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR), transaction.atomic():
         try:
@@ -118,20 +146,20 @@ def schedule_synthetic_jobs() -> None:
         bittensor.turn_console_off()
         subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
         current_block = subtensor_.get_current_block()
-        current_epoch = get_epoch_containing_block(
+        current_cycle = get_cycle_containing_block(
             block=current_block, netuid=settings.BITTENSOR_NETUID
         )
 
-        batch_in_current_epoch = (
+        batch_in_current_cycle = (
             SyntheticJobBatch.objects.filter(
-                block__gte=current_epoch.start, block__lt=current_epoch.stop
+                block__gte=current_cycle.start, block__lt=current_cycle.stop
             )
             .order_by("block")
             .last()
         )
-        if batch_in_current_epoch:
+        if batch_in_current_cycle:
             logger.debug(
-                "Synthetic jobs are already scheduled at block %s", batch_in_current_epoch.block
+                "Synthetic jobs are already scheduled at block %s", batch_in_current_cycle.block
             )
             return
 
@@ -149,16 +177,16 @@ def schedule_synthetic_jobs() -> None:
             return
 
         next_run_block = when_to_run(
-            epoch=current_epoch,
+            cycle=current_cycle,
             offset=settings.SYNTHETIC_JOBS_RUN_OFFSET,
             total=len(validators),
             index_=this_validator_index,
         )
 
-        epoch, _ = Epoch.objects.get_or_create(start=current_epoch.start, stop=current_epoch.stop)
+        cycle, _ = Cycle.objects.get_or_create(start=current_cycle.start, stop=current_cycle.stop)
         batch = SyntheticJobBatch.objects.create(
             block=next_run_block,
-            epoch=epoch,
+            cycle=cycle,
         )
         logger.debug("Scheduled synthetic jobs run %s", batch)
 
@@ -592,7 +620,7 @@ def set_scores():
                     scored=False,
                     started_at__gte=now() - timedelta(days=1),
                     accepting_results_until__lt=now(),
-                    epoch__isnull=False,
+                    cycle__isnull=False,
                 )
                 .order_by("-started_at")
             )
@@ -606,10 +634,10 @@ def set_scores():
                     batch.save()
                 batches = [batches[-1]]
 
-            if subtensor.get_current_block() <= batches[-1].epoch.stop:
+            if subtensor.get_current_block() <= batches[-1].cycle.stop:
                 logger.debug(
                     "There is a batch ready to be scored but we're "
-                    "waiting for the beginning of next epoch to set weights"
+                    "waiting for the beginning of next cycle to set weights"
                 )
                 return
 
