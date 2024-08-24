@@ -9,6 +9,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
 )
 
 MOCK_SCORE = 0.8
+NOT_SCORED = 0.0
 
 
 class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
@@ -16,7 +17,7 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
         pass
 
     def timeout_seconds(self) -> int:
-        return 2
+        return 1
 
     def base_docker_image_name(self) -> str:
         return "mock"
