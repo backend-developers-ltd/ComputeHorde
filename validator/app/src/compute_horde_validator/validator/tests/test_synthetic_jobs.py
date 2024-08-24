@@ -8,6 +8,7 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.mv_protocol import miner_requests
 from django.conf import settings
+from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.miner_client import MinerClient
 from compute_horde_validator.validator.models import (
@@ -17,6 +18,10 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     execute_miner_synthetic_jobs,
+)
+from compute_horde_validator.validator.tests.mock_generator import (
+    MOCK_SCORE,
+    MockSyntheticJobGeneratorFactory,
 )
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
@@ -127,6 +132,14 @@ async def miner_client(
     )
 
 
+@pytest.fixture(autouse=True)
+def _patch_generator_factory(mocker: MockerFixture):
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
+        MockSyntheticJobGeneratorFactory(),
+    )
+
+
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.django_db
 async def test_execute_miner_synthetic_jobs(
@@ -142,10 +155,10 @@ async def test_execute_miner_synthetic_jobs(
     transport: AbstractTransport,
     job_uuid: uuid.UUID,
 ):
-    await transport.add_message(manifest_message, receive_before=1)
-    await transport.add_message(executor_ready_message, receive_before=1)
-    await transport.add_message(accept_job_message, receive_before=0)
-    await transport.add_message(job_finish_message, receive_before=1)
+    await transport.add_message(manifest_message, send_before=1)
+    await transport.add_message(executor_ready_message, send_before=1)
+    await transport.add_message(accept_job_message, send_before=2)
+    await transport.add_message(job_finish_message, send_before=0)
 
     await asyncio.wait_for(
         execute_miner_synthetic_jobs(
@@ -163,3 +176,4 @@ async def test_execute_miner_synthetic_jobs(
     job = await SyntheticJob.objects.aget(job_uuid=job_uuid)
 
     assert job.status == SyntheticJob.Status.COMPLETED
+    assert job.score == MOCK_SCORE

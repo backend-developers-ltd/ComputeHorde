@@ -6,48 +6,53 @@ from compute_horde.miner_client.base import AbstractTransport
 
 
 class MinerSimulationTransport(AbstractTransport):
+    """
+    A simulation transport layer mimicking the behavior of a real miner.
+    Feed the messages to be received (miner responses) in a sequence and the transport
+    will receive them in the same order. Each message can be set to be received after a
+    specified number of sent messages replicating the real communication flow.
+    """
+
     def __init__(self, name: str, *args, **kwargs):
         super().__init__(name, *args, **kwargs)
         self.received: list[str] = []
         self.sent = []
-        self.remaining = 0
+        self.receive_at_counter = 0
         self.to_receive: deque[tuple[int, str]] = deque()
-        self.ready_to_receive = asyncio.Event()
-        self.ready_to_receive.set()
+        self.receive_condition = asyncio.Condition()
         self.logger = logging.getLogger(f"transport.{name}")
 
     async def start(self): ...
 
     async def stop(self): ...
 
-    async def send(self, message):
-        self.logger.debug(f"Sending message: {message}")
+    async def send(self, message: str) -> None:
+        async with self.receive_condition:
+            self.sent.append(message)
+            self.receive_condition.notify_all()
 
-        self.sent.append(message)
+        self.logger.debug(f"Sent message: {message}")
 
-        self.remaining = max(0, self.remaining - 1)
-        if self.remaining == 0:
-            self.ready_to_receive.set()
-
-    async def receive(self):
-        if not self.to_receive:
+    async def receive(self) -> str:
+        try:
+            receive_at, message = self.to_receive.popleft()
+        except IndexError:
             self.logger.debug("No more messages to receive")
             await asyncio.Future()
 
-        await self.ready_to_receive.wait()
-
-        self.remaining, message = self.to_receive.popleft()
-        self.ready_to_receive.clear()
-
-        self.received.append(message)
+        async with self.receive_condition:
+            await self.receive_condition.wait_for(lambda: len(self.sent) >= receive_at)
 
         self.logger.debug(f"Received message: {message}")
+        self.received.append(message)
 
         return message
 
-    async def add_message(self, message, receive_before=0):
-        if not self.to_receive:
-            self.remaining = receive_before
-            self.ready_to_receive.clear()
+    async def add_message(self, message: str, send_before=0) -> None:
+        """
+        Add a message to be received after a certain number of sent messages.
+        Receives the message immediately if send_before is 0.
+        """
 
-        self.to_receive.append((receive_before, message))
+        self.receive_at_counter += send_before
+        self.to_receive.append((self.receive_at_counter, message))
