@@ -3,7 +3,9 @@ import numbers
 from datetime import timedelta
 from time import monotonic
 from typing import NamedTuple
+from unittest import mock
 
+import constance
 import numpy as np
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import BaseRequest
@@ -280,13 +282,6 @@ class MockSubtensor:
         return 1000 + int((monotonic() - self.init_time) / self.block_duration.total_seconds())
 
 
-class MockSubtensorWithInaccessibleHyperparams(MockSubtensor):
-    """Subtensor but it fails when getting hyperparameters - just like real subtensor!"""
-
-    def get_subnet_hyperparameters(self, netuid: int) -> MockHyperparameters:
-        raise Exception("Subtensor is broken")
-
-
 class MockNeuron:
     def __init__(self, hotkey, uid):
         self.hotkey = hotkey
@@ -322,3 +317,12 @@ def check_system_events(
         .count()
         == count
     )
+
+
+def patch_constance(config_overlay: dict):
+    old_getattr = constance.base.Config.__getattr__
+
+    def new_getattr(s, key):
+        return config_overlay[key] if key in config_overlay else old_getattr(s, key)
+
+    return mock.patch.object(constance.base.Config, "__getattr__", new_getattr)

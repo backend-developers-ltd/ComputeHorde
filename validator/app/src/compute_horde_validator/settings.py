@@ -156,6 +156,26 @@ CONSTANCE_CONFIG = {
         "How often (in seconds) to poll for block change",
         float,
     ),
+    "DYNAMIC_BLOCK_FINALIZATION_NUMBER": (
+        3,
+        "After this many blocks pass, a block can be considered final",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": (
+        True,
+        "This should be synced with the hyperparam",
+        bool,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": (
+        370,
+        "In blocks. This should be synced with the hyperparam",
+        int,
+    ),
+    "DYNAMIC_MAX_WEIGHT": (
+        65535,
+        "This should be synced with the hyperparam",
+        int,
+    ),
 }
 
 # Content Security Policy

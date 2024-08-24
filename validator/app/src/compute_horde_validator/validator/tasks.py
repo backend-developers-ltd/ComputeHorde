@@ -340,22 +340,9 @@ def do_set_weights(
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
-    try:
-        hyperparams = subtensor_.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
-        commit_reveal_weights_enabled = bool(hyperparams.commit_reveal_weights_enabled)
-        commit_reveal_weights_interval = hyperparams.commit_reveal_weights_interval
-        max_weight = hyperparams.max_weight_limit
-    except Exception as e:
-        message = f'Failed to fetch "commit_reveal_weights_*" hyperparameters: {e}'
-        logger.warning(message)
-        save_weight_setting_failure(
-            subtype=SystemEvent.EventSubType.SUBTENSOR_HYPERPARAMETERS_FETCH_ERROR,
-            long_description=message,
-            data={},
-        )
-        commit_reveal_weights_enabled = None
-        commit_reveal_weights_interval = 0
-        max_weight = 65535
+    commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
+    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
+    max_weight = config.DYNAMIC_MAX_WEIGHT
 
     def _commit_weights() -> tuple[bool, str]:
         last_weights = Weights.objects.order_by("-created_at").first()
@@ -455,17 +442,6 @@ def do_set_weights(
         return is_success, message
 
     match commit_reveal_weights_enabled:
-        case None:
-            # we don't know current hyperparams, so we can't decide which method to use -> try both
-            try:
-                is_success, msg = _commit_weights()
-            except Exception:
-                is_success, msg = False, "Unexpected error occurred when committing weights"
-                logger.exception("Encountered when committing weights")
-            if not is_success:  # 'Subtensor returned `CommitRevealDisabled (Module)` error. This means: `attempting to commit/reveal weights when disabled.`'
-                is_success, msg = _set_weights()
-            return is_success, msg
-
         case True:
             return _commit_weights()
 
@@ -740,20 +716,7 @@ def reveal_scores(reveal_in_advance_num_blocks: int = 10) -> None:
     Select latest Weights that are older than `commit_reveal_weights_interval`
     and haven't been revealed yet, and reveal them.
     """
-    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
-
-    try:
-        hyperparams = subtensor.get_subnet_hyperparameters(netuid=settings.BITTENSOR_NETUID)
-        commit_reveal_weights_interval = hyperparams.commit_reveal_weights_interval
-    except Exception as e:
-        message = f'Failed to fetch "commit_reveal_weights_enabled" hyperparameter: {e}'
-        logger.warning(message)
-        save_weight_setting_failure(
-            subtype=SystemEvent.EventSubType.SUBTENSOR_HYPERPARAMETERS_FETCH_ERROR,
-            long_description=message,
-            data={},
-        )
-        commit_reveal_weights_interval = 0
+    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
 
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
