@@ -87,8 +87,8 @@ def when_to_run(subtensor_: bittensor.subtensor, current_cycle) -> int:
             network=settings.BITTENSOR_NETWORK,
             block=current_cycle.start,
         )
-    except ValidatorListError:
-        raise ScheduleError() from ValidatorListError
+    except ValidatorListError as ex:
+        raise ScheduleError() from ex
 
     ordered_hotkeys = [vali.hotkey for vali in validators]
     this_hotkey = get_keypair().ss58_address
