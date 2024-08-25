@@ -1,21 +1,22 @@
 import asyncio
 import json
 import uuid
+from collections.abc import Callable
 from unittest.mock import patch
 
 import bittensor
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol import miner_requests
-from constance.test.unittest import override_config
+from django.utils import timezone
 
-from compute_horde_validator.validator.miner_client import MinerClient
 from compute_horde_validator.validator.models import (
     Miner,
+    MinerManifest,
     SyntheticJob,
     SyntheticJobBatch,
 )
-from compute_horde_validator.validator.synthetic_jobs.utils import execute_miner_synthetic_jobs
+from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
 from .mock_generator import (
@@ -25,22 +26,19 @@ from .mock_generator import (
 MANIFEST_INCENTIVE_MULTIPLIER = 1.05
 MANIFEST_DANCE_RATIO_THRESHOLD = 1.4
 
-
-@pytest.fixture(autouse=True)
-def _override_config():
-    with override_config(
-        DYNAMIC_MANIFEST_SCORE_MULTIPLIER=MANIFEST_INCENTIVE_MULTIPLIER,
-        DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=MANIFEST_DANCE_RATIO_THRESHOLD,
-    ):
-        yield
+job_factory = TimeTookScoreMockSyntheticJobGeneratorFactory()
 
 
 @patch(
     "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
-    TimeTookScoreMockSyntheticJobGeneratorFactory(),
+    job_factory,
 )
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.override_config(
+    DYNAMIC_MANIFEST_SCORE_MULTIPLIER=MANIFEST_INCENTIVE_MULTIPLIER,
+    DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=MANIFEST_DANCE_RATIO_THRESHOLD,
+)
 @pytest.mark.parametrize(
     "curr_online_executor_count,prev_online_executor_count,expected_multiplier",
     [
@@ -71,22 +69,25 @@ async def test_manifest_dance_incentives(
     prev_online_executor_count: int,
     expected_multiplier: float,
     miner: Miner,
-    batch: SyntheticJobBatch,
-    miner_hotkey: str,
-    miner_axon_info: bittensor.AxonInfo,
-    miner_client: MinerClient,
+    axon_dict: dict[str, bittensor.AxonInfo],
+    create_simulation_miner_client: Callable,
     transport: MinerSimulationTransport,
     override_weights_version_v2,
+    small_spin_up_times,
 ):
     job_uuids = [uuid.uuid4() for _ in range(curr_online_executor_count)]
+    job_factory._uuids = job_uuids.copy()
 
-    def make_uuid_generator():
-        uuids = job_uuids.copy()
-
-        def _generate():
-            return uuids.pop(0)
-
-        return _generate
+    if prev_online_executor_count:
+        batch = await SyntheticJobBatch.objects.acreate(
+            accepting_results_until=timezone.now(), scored=True
+        )
+        await MinerManifest.objects.acreate(
+            miner=miner,
+            batch=batch,
+            executor_count=prev_online_executor_count,
+            online_executor_count=prev_online_executor_count,
+        )
 
     manifest_message = miner_requests.V0ExecutorManifestRequest(
         manifest=miner_requests.ExecutorManifest(
@@ -99,37 +100,34 @@ async def test_manifest_dance_incentives(
     ).model_dump_json()
     await transport.add_message(manifest_message, send_before=1)
 
-    async def add_job_messages(request_class, send_before=1, **kwargs):
+    async def add_job_messages(request_class, send_before=1, sleep_before=0, **kwargs):
         for job_uuid in job_uuids:
             msg = request_class(
                 job_uuid=str(job_uuid),
                 **kwargs,
             ).model_dump_json()
-            await transport.add_message(msg, send_before=send_before)
+            await transport.add_message(msg, send_before=send_before, sleep_before=sleep_before)
 
-    await add_job_messages(miner_requests.V0ExecutorReadyRequest, send_before=1)
-    await add_job_messages(miner_requests.V0AcceptJobRequest, send_before=2)
+    await add_job_messages(miner_requests.V0AcceptJobRequest, send_before=1, sleep_before=0.05)
+    await add_job_messages(miner_requests.V0ExecutorReadyRequest, send_before=0)
     await add_job_messages(
         miner_requests.V0JobFinishedRequest,
-        send_before=0,
+        send_before=2,
+        sleep_before=0.05,
         docker_process_stdout="",
         docker_process_stderr="",
     )
 
     await asyncio.wait_for(
-        execute_miner_synthetic_jobs(
-            batch.pk,
-            miner.pk,
-            miner_hotkey,
-            miner_axon_info,
-            prev_online_executor_count,
-            miner_client,
-            generate_job_uuid=make_uuid_generator(),
+        execute_synthetic_batch_run(
+            axon_dict,
+            [miner],
+            create_miner_client=create_simulation_miner_client,
         ),
-        timeout=1,
+        timeout=2,
     )
 
-    job_finished_messages = miner_client.transport.sent[-len(job_uuids) :]
+    job_finished_messages = transport.sent[-len(job_uuids) :]
 
     for msg in job_finished_messages:
         receipt = json.loads(msg)

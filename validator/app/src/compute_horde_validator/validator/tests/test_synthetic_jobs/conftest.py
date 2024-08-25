@@ -8,11 +8,11 @@ from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.mv_protocol import miner_requests
 from django.conf import settings
 
-from compute_horde_validator.validator.miner_client import MinerClient
 from compute_horde_validator.validator.models import (
     Miner,
     SyntheticJobBatch,
 )
+from compute_horde_validator.validator.synthetic_jobs.batch_run import BatchContext, MinerClient
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
 
@@ -68,20 +68,12 @@ async def transport(miner_hotkey: str):
     return MinerSimulationTransport(miner_hotkey)
 
 
-@pytest_asyncio.fixture
-async def miner_client(
-    miner_hotkey: str, validator_hotkey: str, keypair, transport: AbstractTransport
-):
-    return MinerClient(
-        miner_address="ignore",
-        my_hotkey=validator_hotkey,
-        miner_hotkey=miner_hotkey,
-        miner_port=9999,
-        job_uuid=None,
-        batch_id=None,
-        keypair=keypair,
-        transport=transport,
-    )
+@pytest.fixture
+def create_simulation_miner_client(transport: AbstractTransport):
+    def _create(ctx: BatchContext, miner_hotkey: str):
+        return MinerClient(ctx=ctx, miner_hotkey=miner_hotkey, transport=transport)
+
+    return _create
 
 
 @pytest.fixture
