@@ -46,7 +46,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobStartedReceiptRequest,
     VolumeType,
 )
-from compute_horde.transport import WSTransport
+from compute_horde.transport import AbstractTransport, WSTransport
 from django.conf import settings
 from django.db import transaction
 from pydantic import BaseModel
@@ -92,7 +92,12 @@ _MAX_MINER_CLIENT_DEBOUNCE_COUNT = 4  # approximately 32 seconds
 
 
 class MinerClient(AbstractMinerClient):
-    def __init__(self, ctx: "BatchContext", miner_hotkey: str):
+    def __init__(
+        self,
+        ctx: "BatchContext",
+        miner_hotkey: str,
+        transport: AbstractTransport | None = None,
+    ):
         self.ctx = ctx
         self.own_hotkey = ctx.own_keypair.ss58_address
         self.own_keypair = ctx.own_keypair
@@ -103,7 +108,7 @@ class MinerClient(AbstractMinerClient):
         self.miner_port = axon.port
 
         name = ctx.names[miner_hotkey]
-        transport = WSTransport(
+        transport = transport or WSTransport(
             name, self.miner_url(), max_retries=_MAX_MINER_CLIENT_DEBOUNCE_COUNT
         )
         super().__init__(name, transport)
