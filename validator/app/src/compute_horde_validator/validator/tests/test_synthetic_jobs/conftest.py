@@ -6,12 +6,8 @@ import pytest_asyncio
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.mv_protocol import miner_requests
-from django.conf import settings
 
-from compute_horde_validator.validator.models import (
-    Miner,
-    SyntheticJobBatch,
-)
+from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.synthetic_jobs.batch_run import BatchContext, MinerClient
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
@@ -48,19 +44,6 @@ def axon_dict(miner_hotkey: str, miner_axon_info: bittensor.AxonInfo):
 @pytest_asyncio.fixture
 async def miner(miner_hotkey: str):
     return await Miner.objects.acreate(hotkey=miner_hotkey)
-
-
-@pytest_asyncio.fixture
-async def batch():
-    return await SyntheticJobBatch.objects.acreate(
-        started_at="2021-09-01 00:00:00",
-        accepting_results_until="2021-09-01 00:00:00",
-    )
-
-
-@pytest.fixture
-def keypair():
-    return settings.BITTENSOR_WALLET().get_hotkey()
 
 
 @pytest_asyncio.fixture

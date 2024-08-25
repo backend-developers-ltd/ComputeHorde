@@ -50,7 +50,9 @@ class MinerSimulationTransport(AbstractTransport):
 
         return message
 
-    async def add_message(self, message: str, send_before: int = 0, sleep_before: int = 0) -> None:
+    async def add_message(
+        self, message: str, send_before: int = 0, sleep_before: float = 0
+    ) -> None:
         """
         Add a message to be received after a certain number of sent messages.
         Receives the message immediately if send_before is 0.

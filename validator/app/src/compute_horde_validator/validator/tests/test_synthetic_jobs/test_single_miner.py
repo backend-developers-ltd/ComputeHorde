@@ -6,7 +6,6 @@ from unittest.mock import patch
 import bittensor
 import pytest
 from asgiref.sync import sync_to_async
-from compute_horde.transport import AbstractTransport
 from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.models import (
@@ -14,11 +13,7 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
     SystemEvent,
 )
-from compute_horde_validator.validator.synthetic_jobs.batch_run import (
-    BatchContext,
-    MinerClient,
-    execute_synthetic_batch_run,
-)
+from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
 from ..helpers import check_system_events
@@ -40,14 +35,6 @@ def _patch_generator_factory(mocker: MockerFixture, job_uuid: uuid.UUID):
         "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
         MockSyntheticJobGeneratorFactory(uuids=[job_uuid]),
     )
-
-
-@pytest.fixture
-def create_simulation_miner_client(transport: AbstractTransport):
-    def _create(ctx: BatchContext, miner_hotkey: str):
-        return MinerClient(ctx=ctx, miner_hotkey=miner_hotkey, transport=transport)
-
-    return _create
 
 
 async def test_execute_miner_synthetic_jobs_success(
