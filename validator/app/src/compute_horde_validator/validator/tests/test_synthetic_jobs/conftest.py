@@ -38,6 +38,13 @@ def miner_axon_info(miner_hotkey: str):
     )
 
 
+@pytest.fixture
+def axon_dict(miner_hotkey: str, miner_axon_info: bittensor.AxonInfo):
+    return {
+        miner_hotkey: miner_axon_info,
+    }
+
+
 @pytest_asyncio.fixture
 async def miner(miner_hotkey: str):
     return await Miner.objects.acreate(hotkey=miner_hotkey)

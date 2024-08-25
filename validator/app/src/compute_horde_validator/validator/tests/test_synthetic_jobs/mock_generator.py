@@ -1,3 +1,5 @@
+import uuid
+
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
@@ -13,6 +15,9 @@ NOT_SCORED = 0.0
 
 
 class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
+    def __init__(self, _uuid: uuid.UUID):
+        self._uuid = _uuid
+
     async def ainit(self):
         pass
 
@@ -47,10 +52,15 @@ class TimeTookScoreMockSyntheticJobGenerator(MockSyntheticJobGenerator):
 
 
 class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
+    def __init__(self, uuids: list[uuid.UUID] = None):
+        self._uuids = uuids or []
+
     async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
-        return MockSyntheticJobGenerator()
+        _uuid = self._uuids.pop(0)
+        return MockSyntheticJobGenerator(_uuid)
 
 
-class TimeTookScoreMockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
+class TimeTookScoreMockSyntheticJobGeneratorFactory(MockSyntheticJobGeneratorFactory):
     async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
-        return TimeTookScoreMockSyntheticJobGenerator()
+        _uuid = self._uuids.pop(0)
+        return TimeTookScoreMockSyntheticJobGenerator(_uuid)
