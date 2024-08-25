@@ -7,7 +7,6 @@ from compute_horde.mv_protocol.validator_requests import (
     JobStartedReceiptPayload,
 )
 from compute_horde.receipts import Receipt
-from constance.test.unittest import override_config
 from django.utils.timezone import now
 from pytest_mock import MockerFixture
 
@@ -16,7 +15,7 @@ from compute_horde_miner.miner.tasks import announce_address_and_port, get_recei
 
 
 @pytest.mark.django_db
-@override_config(SERVING=False)
+@pytest.mark.override_config(SERVING=False)
 def test__migration__not_serving__should_not_announce_address(mocker: MockerFixture):
     announce_mock = mocker.patch(
         "compute_horde_miner.miner.tasks.quasi_axon.announce_address_and_port"
@@ -29,7 +28,7 @@ def test__migration__not_serving__should_not_announce_address(mocker: MockerFixt
 
 
 @pytest.mark.django_db
-@override_config(MIGRATING=False, OLD_MINER_IP="127.0.0.1")
+@pytest.mark.override_config(MIGRATING=False, OLD_MINER_IP="127.0.0.1")
 def test__migration__not_migrating__should_not_get_receipts_from_old_miner(mocker: MockerFixture):
     get_miner_receipts_mock = mocker.patch("compute_horde_miner.miner.tasks.get_miner_receipts")
 
@@ -40,7 +39,7 @@ def test__migration__not_migrating__should_not_get_receipts_from_old_miner(mocke
 
 
 @pytest.mark.django_db
-@override_config(SERVING=False, MIGRATING=True, OLD_MINER_IP="127.0.0.1")
+@pytest.mark.override_config(SERVING=False, MIGRATING=True, OLD_MINER_IP="127.0.0.1")
 def test_get_receipts_from_old_miner(mocker: MockerFixture):
     receipts = [
         Receipt(
