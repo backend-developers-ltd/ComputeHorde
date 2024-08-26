@@ -1,8 +1,13 @@
 import asyncio
 import numbers
+from datetime import timedelta
+from time import monotonic
 from typing import NamedTuple
+from unittest import mock
 
+import constance
 import numpy as np
+from bittensor import Balance
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import BaseRequest
 from compute_horde.mv_protocol.miner_requests import (
@@ -11,6 +16,7 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 from django.conf import settings
+from substrateinterface.exceptions import SubstrateRequestException
 
 from compute_horde_validator.validator.facilitator_api import (
     V0FacilitatorJobRequest,
@@ -217,6 +223,9 @@ class MockSubtensor:
             commit_reveal_weights_interval=1000,
             max_weight_limit=65535,
         ),
+        block_duration=timedelta(seconds=1),
+        override_block_number=None,
+        block_hash="0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464",
     ):
         self.mocked_set_weights = mocked_set_weights
         self.mocked_commit_weights = mocked_commit_weights
@@ -226,6 +235,13 @@ class MockSubtensor:
         self.weights_set: list[list[numbers.Number]] = []
         self.weights_committed: list[list[numbers.Number]] = []
         self.weights_revealed: list[list[numbers.Number]] = []
+        self.init_time = monotonic()
+        self.block_duration = block_duration
+        self.override_block_number = override_block_number
+        self.block_hash = block_hash
+
+    def get_block_hash(self, block_id) -> str:
+        return self.block_hash
 
     def min_allowed_weights(self, netuid):
         return 0
@@ -236,7 +252,14 @@ class MockSubtensor:
     def get_subnet_hyperparameters(self, netuid: int) -> MockHyperparameters:
         return self.hyperparameters
 
-    def metagraph(self, netuid):
+    def metagraph(self, netuid, block: int | None = None):
+        if block is not None and block < self.get_current_block() - 300:
+            raise SubstrateRequestException(
+                {
+                    "code": -32000,
+                    "message": "Client error: UnknownBlock: State already discarded for 0xabc",
+                }
+            )
         return self.mocked_metagraph()
 
     def set_weights(
@@ -267,18 +290,17 @@ class MockSubtensor:
             return self.mocked_reveal_weights()
         return False, "MockSubtensor doesn't support reveal_weights"
 
-
-class MockSubtensorWithInaccessibleHyperparams(MockSubtensor):
-    """Subtensor but it fails when getting hyperparameters - just like real subtensor!"""
-
-    def get_subnet_hyperparameters(self, netuid: int) -> MockHyperparameters:
-        raise Exception("Subtensor is broken")
+    def get_current_block(self) -> int:
+        if self.override_block_number is not None:
+            return self.override_block_number
+        return 1000 + int((monotonic() - self.init_time) / self.block_duration.total_seconds())
 
 
 class MockNeuron:
     def __init__(self, hotkey, uid):
         self.hotkey = hotkey
         self.uid = uid
+        self.stake = Balance((uid + 1) * 1001.0)
 
 
 class MockBlock:
@@ -287,14 +309,25 @@ class MockBlock:
 
 
 class MockMetagraph:
-    def __init__(self, netuid=1, num_neurons=NUM_NEURONS):
+    def __init__(
+        self,
+        netuid=1,
+        num_neurons: int | None = NUM_NEURONS,
+        neurons: list[MockNeuron] | None = None,
+    ):
+        if (neurons is None) == (num_neurons is None):
+            raise ValueError("Specify either num_neurons or neurons, exactly one of them")
+        if neurons is not None:
+            num_neurons = len(neurons)
+            self.neurons = neurons
+        else:
+            self.neurons = [MockNeuron(f"hotkey_{i}", i) for i in range(NUM_NEURONS)]
         self.n = num_neurons
         self.netuid = netuid
         self.num_neurons = num_neurons
         self.W = np.ones((num_neurons, num_neurons))
         self.hotkeys = [f"hotkey_{i}" for i in range(num_neurons)]
         self.uids = np.array(list(range(num_neurons)))
-        self.neurons = [MockNeuron(f"hotkey_{i}", i) for i in range(NUM_NEURONS)]
         self.block = MockBlock()
 
 
@@ -312,6 +345,10 @@ def check_system_events(
     )
 
 
-def always_same_result(result):
-    """Return a function which accepts everything and returns the same result"""
-    return lambda *args, **kwargs: result
+def patch_constance(config_overlay: dict):
+    old_getattr = constance.base.Config.__getattr__
+
+    def new_getattr(s, key):
+        return config_overlay[key] if key in config_overlay else old_getattr(s, key)
+
+    return mock.patch.object(constance.base.Config, "__getattr__", new_getattr)

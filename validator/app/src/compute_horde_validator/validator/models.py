@@ -8,6 +8,7 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import UniqueConstraint
+from django.utils.timezone import now
 
 logger = logging.getLogger(__name__)
 
@@ -27,15 +28,16 @@ class SystemEvent(models.Model):
         RECEIPT_FAILURE = "RECEIPT_FAILURE"
         FACILITATOR_CLIENT_ERROR = "FACILITATOR_CLIENT_ERROR"
         VALIDATOR_MINERS_REFRESH = "VALIDATOR_MINERS_REFRESH"
+        VALIDATOR_SYNTHETIC_JOBS_FAILURE = "VALIDATOR_SYNTHETIC_JOBS_FAILURE"
         VALIDATOR_FAILURE = "VALIDATOR_FAILURE"
         VALIDATOR_TELEMETRY = "VALIDATOR_TELEMETRY"
         VALIDATOR_CHANNEL_LAYER_ERROR = "VALIDATOR_CHANNEL_LAYER_ERROR"
+        VALIDATOR_SYNTHETIC_JOB_SCHEDULED = "VALIDATOR_SYNTHETIC_JOB_SCHEDULED"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
         FAILURE = "FAILURE"
         SUBTENSOR_CONNECTIVITY_ERROR = "SUBTENSOR_CONNECTIVITY_ERROR"
-        SUBTENSOR_HYPERPARAMETERS_FETCH_ERROR = "SUBTENSOR_HYPERPARAMETERS_FETCH_ERROR"
         COMMIT_WEIGHTS_SUCCESS = "COMMIT_WEIGHTS_SUCCESS"
         COMMIT_WEIGHTS_ERROR = "COMMIT_WEIGHTS_ERROR"
         COMMIT_WEIGHTS_UNREVEALED_ERROR = "COMMIT_WEIGHTS_UNREVEALED_ERROR"
@@ -64,6 +66,7 @@ class SystemEvent(models.Model):
         UNAUTHORIZED = "UNAUTHORIZED"
         SYNTHETIC_BATCH = "SYNTHETIC_BATCH"
         SYNTHETIC_JOB = "SYNTHETIC_JOB"
+        OVERSLEPT = "OVERSLEPT"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
@@ -109,10 +112,40 @@ class MinerBlacklist(models.Model):
         return f"hotkey: {self.miner.hotkey}"
 
 
+class Cycle(models.Model):
+    start = models.BigIntegerField()
+    stop = models.BigIntegerField()
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["start", "stop"], name="unique_cycle"),
+        ]
+
+    def __str__(self):
+        return f"Cycle [{self.start};{self.stop})"
+
+
 class SyntheticJobBatch(models.Model):
-    started_at = models.DateTimeField(auto_now_add=True)
-    accepting_results_until = models.DateTimeField()
+    """
+    Scheduled running of synthetic jobs for a specific block.
+    """
+
+    block = models.BigIntegerField(
+        null=True, unique=True, help_text="Block number for which this batch is scheduled"
+    )
+    cycle = models.ForeignKey(
+        Cycle, blank=True, null=True, related_name="batches", on_delete=models.CASCADE
+    )
+    created_at = models.DateTimeField(default=now)
+    started_at = models.DateTimeField(null=True)
+    accepting_results_until = models.DateTimeField(null=True)
     scored = models.BooleanField(default=False)
+    is_missed = models.BooleanField(
+        default=False, help_text="Whether the batch was missed (not run)"
+    )
+
+    def __str__(self) -> str:
+        return f"Scheduled validation #{self.pk} at block #{self.block}"
 
 
 class MinerManifest(models.Model):

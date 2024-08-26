@@ -121,6 +121,8 @@ if CORS_ENABLED := env.bool("CORS_ENABLED", default=True):
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+BITTENSOR_APPROXIMATE_BLOCK_DURATION = timedelta(seconds=12)
+
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_CONFIG = {
     "SERVING": (
@@ -142,6 +144,36 @@ CONSTANCE_CONFIG = {
     "DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION": (
         1,
         "The synthetic jobs flow version",
+        int,
+    ),
+    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS": (
+        3,
+        "How many blocks in advance to start waiting before synthetic jobs spawn",
+        int,
+    ),
+    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL": (
+        (BITTENSOR_APPROXIMATE_BLOCK_DURATION / 3).total_seconds(),
+        "How often (in seconds) to poll for block change",
+        float,
+    ),
+    "DYNAMIC_BLOCK_FINALIZATION_NUMBER": (
+        3,
+        "After this many blocks pass, a block can be considered final",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": (
+        True,
+        "This should be synced with the hyperparam",
+        bool,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": (
+        370,
+        "In blocks. This should be synced with the hyperparam",
+        int,
+    ),
+    "DYNAMIC_MAX_WEIGHT": (
+        65535,
+        "This should be synced with the hyperparam",
         int,
     ),
 }
@@ -260,12 +292,19 @@ CELERY_COMPRESSION = "gzip"  # task compression
 CELERY_MESSAGE_COMPRESSION = "gzip"  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
+    "schedule_synthetic_jobs": {
+        "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
+        "schedule": timedelta(minutes=1),
+        "options": {},
+    },
     "run_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.run_synthetic_jobs",
-        "schedule": crontab(
-            minute=env("DEBUG_RUN_SYNTHETIC_JOBS_MINUTE", default="0"),
-            hour=env("DEBUG_RUN_SYNTHETIC_JOBS_HOUR", default="*/2"),
-        ),
+        "schedule": timedelta(seconds=30),
+        "options": {},
+    },
+    "check_missed_synthetic_jobs": {
+        "task": "compute_horde_validator.validator.tasks.check_missed_synthetic_jobs",
+        "schedule": timedelta(minutes=10),
         "options": {},
     },
     "set_scores": {
@@ -397,6 +436,10 @@ DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
 )
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
+
+# synthetic jobs are evenly distributed through the cycle, however
+# we start them from some offset because scheduling takes some time
+SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:

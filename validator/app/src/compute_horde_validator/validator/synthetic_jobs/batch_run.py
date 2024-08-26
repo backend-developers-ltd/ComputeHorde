@@ -403,6 +403,7 @@ class BatchContext:
 
     # for tests
     _loop: asyncio.AbstractEventLoop | None = None
+    batch_id: int | None = None
 
     def system_event(
         self,
@@ -545,7 +546,9 @@ def _handle_exceptions(ctx: BatchContext, exceptions: list[ExceptionInfo]) -> No
 
 
 def _init_context(
-    axons: dict[str, bittensor.AxonInfo], serving_miners: list[Miner]
+    axons: dict[str, bittensor.AxonInfo],
+    serving_miners: list[Miner],
+    batch_id: int | None = None,
 ) -> BatchContext:
     start_time = datetime.now(tz=UTC)
 
@@ -571,6 +574,7 @@ def _init_context(
         events=[],
         stage_start_time={"_init_context": start_time},
         _loop=asyncio.get_running_loop(),
+        batch_id=batch_id,
     )
 
     for miner in serving_miners:
@@ -1219,10 +1223,14 @@ def _db_persist(ctx: BatchContext) -> None:
         # accepting_results_until is not used anywhere, it doesn't
         # matter that we pick a somewhat arbitrary time for it
         now = datetime.now(tz=UTC)
-        batch = SyntheticJobBatch.objects.create(
-            started_at=ctx.stage_start_time["_init_context"],
-            accepting_results_until=ctx.stage_start_time.get("_multi_send_job_request", now),
-        )
+        if ctx.batch_id is not None:
+            batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
+        else:
+            batch = SyntheticJobBatch(
+                started_at=ctx.stage_start_time["_init_context"],
+            )
+        batch.accepting_results_until = ctx.stage_start_time.get("_multi_send_job_request", now)
+        batch.save()
 
         synthetic_jobs: list[SyntheticJob] = []
         for job in ctx.jobs.values():
@@ -1296,7 +1304,9 @@ def _db_persist(ctx: BatchContext) -> None:
 
 
 async def execute_synthetic_batch_run(
-    axons: dict[str, bittensor.AxonInfo], serving_miners: list[Miner]
+    axons: dict[str, bittensor.AxonInfo],
+    serving_miners: list[Miner],
+    batch_id: int | None = None,
 ) -> None:
     if not axons or not serving_miners:
         logger.warning("No miners provided")
@@ -1307,7 +1317,7 @@ async def execute_synthetic_batch_run(
     random.shuffle(serving_miners)
 
     logger.info("STAGE: _init_context")
-    ctx = _init_context(axons, serving_miners)
+    ctx = _init_context(axons, serving_miners, batch_id)
 
     try:
         logger.info("STAGE: _db_get_previous_online_executor_count")
