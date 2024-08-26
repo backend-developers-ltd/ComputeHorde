@@ -56,15 +56,6 @@ def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id:
     async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners, synthetic_jobs_batch_id)
 
 
-def save_receipt_event(subtype: str, long_description: str, data: dict):
-    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-        type=SystemEvent.EventType.RECEIPT_FAILURE,
-        subtype=subtype,
-        long_description=long_description,
-        data=data,
-    )
-
-
 def get_miners(metagraph) -> list[Miner]:
     keys = {n.hotkey for n in metagraph.neurons}
     existing = list(Miner.objects.filter(hotkey__in=keys))

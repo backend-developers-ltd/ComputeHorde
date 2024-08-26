@@ -49,7 +49,6 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
-    save_receipt_event,
 )
 
 from .miner_driver import execute_organic_job
@@ -534,6 +533,15 @@ async def run_admin_job_request(job_request_id: int, callback=None):
         job_request,
         total_job_timeout=job_request.timeout,
         notify_callback=callback,
+    )
+
+
+def save_receipt_event(subtype: str, long_description: str, data: dict):
+    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        type=SystemEvent.EventType.RECEIPT_FAILURE,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
     )
 
 
