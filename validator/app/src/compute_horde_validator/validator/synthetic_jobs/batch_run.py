@@ -1104,10 +1104,12 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     # subtract the average time to send a job request. this will normalize
     # the timing between validators with different upload speeds.
     # if the time becomes negative, set it to 1 sec
-    assert ctx.average_job_send_time is not None
-    job.time_took -= ctx.average_job_send_time
-    if job.time_took.total_seconds() <= 0:
-        job.time_took = timedelta(seconds=1)
+
+    # assert ctx.average_job_send_time is not None
+    # job.time_took -= ctx.average_job_send_time
+    # if job.time_took.total_seconds() <= 0:
+    #     job.time_took = timedelta(seconds=1)
+
     time_took_sec = job.time_took.total_seconds()
 
     # TODO separate correctness check from scoring in job generator
