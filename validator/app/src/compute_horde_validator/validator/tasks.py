@@ -43,9 +43,11 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
     Weights,
 )
-from compute_horde_validator.validator.synthetic_jobs.utils import (
+from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
+)
+from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
     save_receipt_event,
 )

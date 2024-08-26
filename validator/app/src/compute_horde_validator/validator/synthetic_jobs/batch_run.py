@@ -91,6 +91,10 @@ _JOB_RESPONSE_EXTRA_TIMEOUT = 2 * 60
 _GET_MANIFEST_TIMEOUT = 35
 _MAX_MINER_CLIENT_DEBOUNCE_COUNT = 4  # approximately 32 seconds
 
+# Celery job timeouts
+SYNTHETIC_JOBS_SOFT_LIMIT = 12 * 60
+SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
+
 
 class MinerClient(AbstractMinerClient):
     def __init__(
