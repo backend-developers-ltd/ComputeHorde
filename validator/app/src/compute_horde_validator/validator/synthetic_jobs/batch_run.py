@@ -5,6 +5,7 @@ import statistics
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -554,11 +555,13 @@ def _init_context(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     batch_id: int | None = None,
+    create_miner_client: Callable | None = None,
 ) -> BatchContext:
     start_time = datetime.now(tz=UTC)
 
     own_wallet = settings.BITTENSOR_WALLET()
     own_keypair = own_wallet.get_hotkey()
+    create_miner_client = create_miner_client or MinerClient
 
     ctx = BatchContext(
         uuid=str(uuid.uuid4()),
@@ -589,7 +592,7 @@ def _init_context(
         ctx.axons[hotkey] = axon
         ctx.names[hotkey] = f"{hotkey}({axon.ip}:{axon.port})"
         ctx.miners[hotkey] = miner
-        ctx.clients[hotkey] = MinerClient(ctx=ctx, miner_hotkey=hotkey)
+        ctx.clients[hotkey] = create_miner_client(ctx=ctx, miner_hotkey=hotkey)
         ctx.executors[hotkey] = defaultdict(int)
         ctx.job_generators[hotkey] = {}
         ctx.online_executor_count[hotkey] = 0
@@ -1312,6 +1315,7 @@ async def execute_synthetic_batch_run(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     batch_id: int | None = None,
+    create_miner_client: Callable | None = None,
 ) -> None:
     if not axons or not serving_miners:
         logger.warning("No miners provided")
@@ -1322,7 +1326,7 @@ async def execute_synthetic_batch_run(
     random.shuffle(serving_miners)
 
     logger.info("STAGE: _init_context")
-    ctx = _init_context(axons, serving_miners, batch_id)
+    ctx = _init_context(axons, serving_miners, batch_id, create_miner_client)
 
     try:
         logger.info("STAGE: _db_get_previous_online_executor_count")
