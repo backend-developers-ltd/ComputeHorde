@@ -149,8 +149,6 @@ def test(session):
     with session.chdir(str(APP_ROOT)):
         session.run(
             "pytest",
-            "-W",
-            "ignore::DeprecationWarning",
             "-s",
             "-x",
             "-vv",

@@ -44,8 +44,6 @@ def test(session):
     install(session, "test")
     session.run(
         "pytest",
-        "-W",
-        "ignore::DeprecationWarning",
         "-s",
         "-x",
         "-vv",
