@@ -28,11 +28,6 @@ def miner_hotkey():
 
 
 @pytest.fixture
-def validator_hotkey():
-    return "validator_hotkey"
-
-
-@pytest.fixture
 def miner_axon_info(miner_hotkey: str):
     return bittensor.AxonInfo(
         version=4,
