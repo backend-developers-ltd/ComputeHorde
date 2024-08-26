@@ -1,6 +1,4 @@
 import logging
-import uuid
-from functools import lru_cache
 
 import bittensor
 import uvloop
@@ -15,11 +13,6 @@ SYNTHETIC_JOBS_SOFT_LIMIT = 12 * 60
 SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
 
 logger = logging.getLogger(__name__)
-
-
-@lru_cache(maxsize=100)
-def batch_id_to_uuid(batch_id: int) -> uuid.UUID:
-    return uuid.uuid4()
 
 
 def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id: int | None = None):
