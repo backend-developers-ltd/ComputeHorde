@@ -382,6 +382,9 @@ class Job:
 
 @dataclass
 class BatchContext:
+    # an already existing SyntheticJobBatch model can be optionally passed in
+    batch_id: int | None
+
     uuid: str
     own_keypair: bittensor.Keypair
 
@@ -417,7 +420,6 @@ class BatchContext:
 
     # for tests
     _loop: asyncio.AbstractEventLoop | None = None
-    batch_id: int | None = None
 
     def system_event(
         self,
@@ -572,6 +574,7 @@ def _init_context(
     create_miner_client = create_miner_client or MinerClient
 
     ctx = BatchContext(
+        batch_id=batch_id,
         uuid=str(uuid.uuid4()),
         own_keypair=own_keypair,
         hotkeys=[],
@@ -590,7 +593,6 @@ def _init_context(
         events=[],
         stage_start_time={"_init_context": start_time},
         _loop=asyncio.get_running_loop(),
-        batch_id=batch_id,
     )
 
     for miner in serving_miners:
@@ -1240,15 +1242,15 @@ def _db_persist(ctx: BatchContext) -> None:
     # prevent a situation where because of a crash only some of
     # the jobs are saved, which would generate incorrect weights
     with transaction.atomic():
-        # accepting_results_until is not used anywhere, it doesn't
-        # matter that we pick a somewhat arbitrary time for it
-        now = datetime.now(tz=UTC)
         if ctx.batch_id is not None:
             batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
         else:
             batch = SyntheticJobBatch(
                 started_at=ctx.stage_start_time["_init_context"],
             )
+        # accepting_results_until is not used anywhere, it doesn't
+        # matter that we pick a somewhat arbitrary time for it
+        now = datetime.now(tz=UTC)
         batch.accepting_results_until = ctx.stage_start_time.get("_multi_send_job_request", now)
         batch.save()
 
