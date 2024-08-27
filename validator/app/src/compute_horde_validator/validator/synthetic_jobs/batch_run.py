@@ -1422,10 +1422,6 @@ async def execute_synthetic_batch_run(
         else:
             logger.warning("No executors available")
 
-        logger.info("STAGE: _multi_close_client")
-        ctx.stage_start_time["_multi_close_client"] = datetime.now(tz=UTC)
-        await _multi_close_client(ctx)
-
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
@@ -1436,6 +1432,19 @@ async def execute_synthetic_batch_run(
         )
 
     await _db_persist_system_events(ctx)
+
+    try:
+        logger.info("STAGE: _multi_close_client")
+        ctx.stage_start_time["_multi_close_client"] = datetime.now(tz=UTC)
+        await _multi_close_client(ctx)
+    except (Exception, asyncio.CancelledError) as exc:
+        logger.error("Synthetic jobs batch failure: %r", exc)
+        ctx.system_event(
+            type=SystemEvent.EventType.VALIDATOR_FAILURE,
+            subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+            description=repr(exc),
+            func="_multi_close_client",
+        )
 
     try:
         logger.info("STAGE: _emit_telemetry_events")
