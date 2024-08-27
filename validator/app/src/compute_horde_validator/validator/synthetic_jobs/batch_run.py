@@ -1423,7 +1423,7 @@ async def execute_synthetic_batch_run(
             type=SystemEvent.EventType.VALIDATOR_FAILURE,
             subtype=SystemEvent.EventSubType.GENERIC_ERROR,
             description=repr(exc),
-            func="execute_synthetic_batch_run",
+            func="_emit_telemetry_events",
         )
 
     logger.info("STAGE: _db_persist")
