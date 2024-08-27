@@ -1251,7 +1251,7 @@ def _db_persist_system_events(ctx: BatchContext) -> None:
     if not ctx.events:
         return
 
-    logger.info(f"Persisting {len(ctx.events):,} system events")
+    logger.info("Persisting %d system events", len(ctx.events))
     SystemEvent.objects.bulk_create(ctx.events)
 
     # we call this function multiple times during a batch,
