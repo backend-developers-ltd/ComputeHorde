@@ -914,6 +914,9 @@ async def _send_machine_specs(ctx: BatchContext) -> None:
     channel_layer = get_channel_layer()
     assert channel_layer is not None
 
+    send_exc: BaseException | None = None
+    send_exc_count = 0
+
     for job in ctx.jobs.values():
         # only take into account machine specs from executors which
         # finished the job successfully, to prevent fake executors
@@ -931,13 +934,18 @@ async def _send_machine_specs(ctx: BatchContext) -> None:
                         },
                     )
             except (Exception, asyncio.CancelledError) as exc:
+                send_exc = exc
+                send_exc_count += 1
                 logger.warning("%s failed to send machine specs: %r", job.name, exc)
-                job.system_event(
-                    type=SystemEvent.EventType.VALIDATOR_CHANNEL_LAYER_ERROR,
-                    subtype=SystemEvent.EventSubType.SPECS_SEND_ERROR,
-                    description=repr(exc),
-                    func="_send_machine_specs",
-                )
+
+    if send_exc_count:
+        msg = f"{send_exc_count} exceptions raised when trying to send machine specs. last one: {send_exc!r}"
+        ctx.system_event(
+            type=SystemEvent.EventType.VALIDATOR_CHANNEL_LAYER_ERROR,
+            subtype=SystemEvent.EventSubType.SPECS_SEND_ERROR,
+            description=msg,
+            func="_send_machine_specs",
+        )
 
 
 async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
@@ -1240,6 +1248,10 @@ def _db_get_previous_online_executor_count(ctx: BatchContext) -> None:
 # sync_to_async is needed since we use the sync Django ORM
 @sync_to_async
 def _db_persist_system_events(ctx: BatchContext) -> None:
+    if not ctx.events:
+        return
+
+    logger.info(f"Persisting {len(ctx.events):,} system events")
     SystemEvent.objects.bulk_create(ctx.events)
 
     # we call this function multiple times during a batch,
@@ -1414,10 +1426,6 @@ async def execute_synthetic_batch_run(
         ctx.stage_start_time["_multi_close_client"] = datetime.now(tz=UTC)
         await _multi_close_client(ctx)
 
-        logger.info("STAGE: _send_machine_specs")
-        ctx.stage_start_time["_send_machine_specs"] = datetime.now(tz=UTC)
-        await _send_machine_specs(ctx)
-
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
@@ -1426,6 +1434,8 @@ async def execute_synthetic_batch_run(
             description=repr(exc),
             func="execute_synthetic_batch_run",
         )
+
+    await _db_persist_system_events(ctx)
 
     try:
         logger.info("STAGE: _emit_telemetry_events")
@@ -1440,12 +1450,19 @@ async def execute_synthetic_batch_run(
             func="_emit_telemetry_events",
         )
 
-    logger.info("STAGE: _db_persist_system_events")
-    ctx.stage_start_time["_db_persist_system_events"] = datetime.now(tz=UTC)
     await _db_persist_system_events(ctx)
 
     logger.info("STAGE: _db_persist")
     ctx.stage_start_time["_db_persist"] = datetime.now(tz=UTC)
     await _db_persist(ctx)
+
+    # send the machine specs after the batch is done, it can fail or take a long time
+    try:
+        logger.info("STAGE: _send_machine_specs")
+        await _send_machine_specs(ctx)
+    except (Exception, asyncio.CancelledError) as exc:
+        logger.error("Synthetic jobs batch failure: %r", exc)
+
+    await _db_persist_system_events(ctx)
 
     logger.info("BATCH DONE")
