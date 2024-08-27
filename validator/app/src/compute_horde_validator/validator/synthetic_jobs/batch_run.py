@@ -70,6 +70,8 @@ from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 logger = logging.getLogger(__name__)
 
+_GIVE_AVERAGE_JOB_SEND_TIME_BONUS = False
+
 # always-on executor classes have spin_up_time=0, but realistically
 # we need a bit more for all the back-and-forth messaging, especially
 # when we talk with a lot of executors
@@ -274,6 +276,7 @@ class Job:
     score: float = 0
     # dancing bonus
     score_manifest_multiplier: float | None = None
+    average_job_send_time_bonus: timedelta | None = None
 
     def handle_message(self, msg: BaseRequest) -> None:
         # !!! it is very important to not allow a newer message of a
@@ -367,6 +370,7 @@ class Job:
             comment=self.comment,
             score=self.score,
             score_manifest_multiplier=self.score_manifest_multiplier,
+            average_job_send_time_bonus=_timedelta_dump(self.average_job_send_time_bonus),
         )
         return self.ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
@@ -1080,6 +1084,7 @@ def _compute_average_send_time(ctx: BatchContext) -> None:
 async def _score_job(ctx: BatchContext, job: Job) -> None:
     job.score = 0
     job.score_manifest_multiplier = None
+    job.average_job_send_time_bonus = None
     job.success = False
     job.comment = "failed"
 
@@ -1113,13 +1118,16 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
         )
         return
 
-    # subtract the average time to send a job request. this will normalize
-    # the timing between validators with different upload speeds.
-    # if the time becomes negative, set it to 1 sec
-    assert ctx.average_job_send_time is not None
-    job.time_took -= ctx.average_job_send_time
-    if job.time_took.total_seconds() <= 0:
-        job.time_took = timedelta(seconds=1)
+    if _GIVE_AVERAGE_JOB_SEND_TIME_BONUS:
+        # subtract the average time to send a job request. this will normalize
+        # the timing between validators with different upload speeds.
+        # if the time becomes negative, set it to 1 sec
+        assert ctx.average_job_send_time is not None
+        job.average_job_send_time_bonus = ctx.average_job_send_time
+        job.time_took -= ctx.average_job_send_time
+        if job.time_took.total_seconds() <= 0:
+            job.time_took = timedelta(seconds=1)
+
     time_took_sec = job.time_took.total_seconds()
 
     # TODO separate correctness check from scoring in job generator
