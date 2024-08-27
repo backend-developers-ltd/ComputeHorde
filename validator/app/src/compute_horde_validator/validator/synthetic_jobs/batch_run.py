@@ -414,7 +414,13 @@ class BatchContext:
     jobs: dict[str, Job]
 
     # telemetry
+
+    # system events, periodically flushed to database, which is why
+    # we need a separate event_count field to track how many we
+    # created during a batch run
     events: list[SystemEvent]
+    event_count: int
+
     stage_start_time: dict[str, datetime]
     average_job_send_time: timedelta | None = None
 
@@ -458,6 +464,7 @@ class BatchContext:
                 data=data,
             )
             self.events.append(event)
+            self.event_count += 1
             return event
         except Exception as exc:
             logger.error("Failed to emit system event: %r", exc)
@@ -491,7 +498,7 @@ class BatchContext:
             manifests=sum(1 for manifest in self.manifests.values() if manifest is not None),
             messages=messages_count,
             jobs=job_count,
-            system_events=len(self.events),
+            system_events=self.event_count,
         )
 
         manifests = {}
@@ -591,6 +598,7 @@ def _init_context(
         job_uuids=[],
         jobs={},
         events=[],
+        event_count=0,
         stage_start_time={"_init_context": start_time},
         _loop=asyncio.get_running_loop(),
     )
@@ -1231,12 +1239,18 @@ def _db_get_previous_online_executor_count(ctx: BatchContext) -> None:
 
 # sync_to_async is needed since we use the sync Django ORM
 @sync_to_async
+def _db_persist_system_events(ctx: BatchContext) -> None:
+    SystemEvent.objects.bulk_create(ctx.events)
+
+    # we call this function multiple times during a batch,
+    # clear the list to avoid duplicate events
+    ctx.events.clear()
+
+
+# sync_to_async is needed since we use the sync Django ORM
+@sync_to_async
 def _db_persist(ctx: BatchContext) -> None:
     start_time = time.time()
-
-    # persist the system events first, this function can be called
-    # after an exception, the rest of the data might not be consistent
-    SystemEvent.objects.bulk_create(ctx.events)
 
     # persist the batch and the jobs in the same transaction, to
     # prevent a situation where because of a crash only some of
@@ -1425,6 +1439,10 @@ async def execute_synthetic_batch_run(
             description=repr(exc),
             func="_emit_telemetry_events",
         )
+
+    logger.info("STAGE: _db_persist_system_events")
+    ctx.stage_start_time["_db_persist_system_events"] = datetime.now(tz=UTC)
+    await _db_persist_system_events(ctx)
 
     logger.info("STAGE: _db_persist")
     ctx.stage_start_time["_db_persist"] = datetime.now(tz=UTC)
