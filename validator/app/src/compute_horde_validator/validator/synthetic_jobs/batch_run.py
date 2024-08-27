@@ -1093,7 +1093,10 @@ def _compute_average_send_time(ctx: BatchContext) -> None:
         duration_sec = duration.total_seconds()
         durations_sec.append(duration_sec)
 
-    average_duration_sec = statistics.mean(durations_sec)
+    if durations_sec:
+        average_duration_sec = statistics.mean(durations_sec)
+    else:
+        average_duration_sec = 0
     assert average_duration_sec >= 0
     ctx.average_job_send_time = timedelta(seconds=average_duration_sec)
     logger.info("Average job send time: %.6f seconds", average_duration_sec)
