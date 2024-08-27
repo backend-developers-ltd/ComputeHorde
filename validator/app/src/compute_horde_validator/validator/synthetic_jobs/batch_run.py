@@ -1400,6 +1400,11 @@ async def execute_synthetic_batch_run(
                 ctx.stage_start_time["_multi_send_job_request"] = datetime.now(tz=UTC)
                 await _multi_send_job_request(ctx)
 
+                # don't persist system events before this point, we want to minimize
+                # any extra interactions which could slow down job processing before
+                # we get the responses from the miners
+                await _db_persist_system_events(ctx)
+
                 logger.info("STAGE: _compute_average_send_time")
                 ctx.stage_start_time["_compute_average_send_time"] = datetime.now(tz=UTC)
                 _compute_average_send_time(ctx)
@@ -1408,12 +1413,16 @@ async def execute_synthetic_batch_run(
                 ctx.stage_start_time["_score_jobs"] = datetime.now(tz=UTC)
                 await _score_jobs(ctx)
 
+                await _db_persist_system_events(ctx)
+
                 logger.info("STAGE: _send_job_finished_receipts")
                 ctx.stage_start_time["_send_job_finished_receipts"] = datetime.now(tz=UTC)
                 await _send_job_finished_receipts(ctx)
 
             else:
                 logger.warning("No jobs accepted")
+
+            await _db_persist_system_events(ctx)
 
             logger.info("STAGE: _emit_decline_or_failure_events")
             ctx.stage_start_time["_emit_decline_or_failure_events"] = datetime.now(tz=UTC)
