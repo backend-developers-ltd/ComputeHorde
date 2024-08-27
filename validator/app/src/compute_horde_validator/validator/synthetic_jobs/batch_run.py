@@ -437,6 +437,7 @@ class BatchContext:
         job_uuid: str | None = None,
         miner_hotkey: str | None = None,
         func: str | None = None,
+        append: bool = True,
     ) -> SystemEvent | None:
         if data is None:
             data = {}
@@ -463,12 +464,39 @@ class BatchContext:
                 long_description=description,
                 data=data,
             )
-            self.events.append(event)
+            # checkpoint events are sent directly to the database,
+            # don't append them to avoid duplication
+            if append:
+                self.events.append(event)
             self.event_count += 1
             return event
         except Exception as exc:
             logger.error("Failed to emit system event: %r", exc)
             return None
+
+    # sync_to_async is needed since we use the sync Django ORM
+    @sync_to_async
+    def checkpoint_system_event(self, stage: str, *, dt: datetime | None = None) -> None:
+        try:
+            if dt is None:
+                dt = datetime.now(tz=UTC)
+            logger.info("STAGE: %s", stage)
+            self.stage_start_time[stage] = dt
+
+            event = self.system_event(
+                type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+                subtype=SystemEvent.EventSubType.CHECKPOINT,
+                description=stage,
+                data=dict(
+                    time=_datetime_dump(dt),
+                    stage=stage,
+                ),
+                append=False,
+            )
+            if event is not None:
+                event.save()
+        except Exception as exc:
+            logger.error("Failed to checkpoint system event: %r", exc)
 
     def emit_telemetry_event(self) -> SystemEvent | None:
         messages_count: dict[str, int] = defaultdict(int)
@@ -574,8 +602,6 @@ def _init_context(
     batch_id: int | None = None,
     create_miner_client: Callable | None = None,
 ) -> BatchContext:
-    start_time = datetime.now(tz=UTC)
-
     own_wallet = settings.BITTENSOR_WALLET()
     own_keypair = own_wallet.get_hotkey()
     create_miner_client = create_miner_client or MinerClient
@@ -599,7 +625,7 @@ def _init_context(
         jobs={},
         events=[],
         event_count=0,
-        stage_start_time={"_init_context": start_time},
+        stage_start_time={},
         _loop=asyncio.get_running_loop(),
     )
 
@@ -1276,7 +1302,7 @@ def _db_persist(ctx: BatchContext) -> None:
             batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
         else:
             batch = SyntheticJobBatch(
-                started_at=ctx.stage_start_time["_init_context"],
+                started_at=ctx.stage_start_time["BATCH_BEGIN"],
             )
         # accepting_results_until is not used anywhere, it doesn't
         # matter that we pick a somewhat arbitrary time for it
@@ -1364,44 +1390,40 @@ async def execute_synthetic_batch_run(
     if not axons or not serving_miners:
         logger.warning("No miners provided")
         return
+
+    start_time = datetime.now(tz=UTC)
     logger.info("Executing synthetic jobs batch for %d miners", len(serving_miners))
 
     # randomize the order of miners each batch to avoid systemic bias
     random.shuffle(serving_miners)
 
-    logger.info("STAGE: _init_context")
     ctx = _init_context(axons, serving_miners, batch_id, create_miner_client)
+    await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
     try:
-        logger.info("STAGE: _db_get_previous_online_executor_count")
-        ctx.stage_start_time["_db_get_previous_online_executor_count"] = datetime.now(tz=UTC)
+        await ctx.checkpoint_system_event("_db_get_previous_online_executor_count")
         await _db_get_previous_online_executor_count(ctx)
 
-        logger.info("STAGE: _multi_get_miner_manifest")
-        ctx.stage_start_time["_multi_get_miner_manifest"] = datetime.now(tz=UTC)
+        await ctx.checkpoint_system_event("_multi_get_miner_manifest")
         await _multi_get_miner_manifest(ctx)
 
-        logger.info("STAGE: _get_total_executor_count")
-        ctx.stage_start_time["_get_total_executor_count"] = datetime.now(tz=UTC)
+        await ctx.checkpoint_system_event("_get_total_executor_count")
         total_executor_count = _get_total_executor_count(ctx)
 
         if total_executor_count != 0:
-            logger.info("STAGE: _generate_jobs")
-            ctx.stage_start_time["_generate_jobs"] = datetime.now(tz=UTC)
+            await ctx.checkpoint_system_event("_generate_jobs")
             await _generate_jobs(ctx)
 
             # randomize the order of jobs each batch to avoid systemic bias
             random.shuffle(ctx.job_uuids)
 
-            logger.info("STAGE: _multi_send_initial_job_request")
-            ctx.stage_start_time["_multi_send_initial_job_request"] = datetime.now(tz=UTC)
+            await ctx.checkpoint_system_event("_multi_send_initial_job_request")
             await _multi_send_initial_job_request(ctx)
 
             if any(
                 isinstance(job.accept_response, V0AcceptJobRequest) for job in ctx.jobs.values()
             ):
-                logger.info("STAGE: _multi_send_job_request")
-                ctx.stage_start_time["_multi_send_job_request"] = datetime.now(tz=UTC)
+                await ctx.checkpoint_system_event("_multi_send_job_request")
                 await _multi_send_job_request(ctx)
 
                 # don't persist system events before this point, we want to minimize
@@ -1409,18 +1431,15 @@ async def execute_synthetic_batch_run(
                 # we get the responses from the miners
                 await _db_persist_system_events(ctx)
 
-                logger.info("STAGE: _compute_average_send_time")
-                ctx.stage_start_time["_compute_average_send_time"] = datetime.now(tz=UTC)
+                await ctx.checkpoint_system_event("_compute_average_send_time")
                 _compute_average_send_time(ctx)
 
-                logger.info("STAGE: _score_jobs")
-                ctx.stage_start_time["_score_jobs"] = datetime.now(tz=UTC)
+                await ctx.checkpoint_system_event("_score_jobs")
                 await _score_jobs(ctx)
 
                 await _db_persist_system_events(ctx)
 
-                logger.info("STAGE: _send_job_finished_receipts")
-                ctx.stage_start_time["_send_job_finished_receipts"] = datetime.now(tz=UTC)
+                await ctx.checkpoint_system_event("_send_job_finished_receipts")
                 await _send_job_finished_receipts(ctx)
 
             else:
@@ -1428,8 +1447,7 @@ async def execute_synthetic_batch_run(
 
             await _db_persist_system_events(ctx)
 
-            logger.info("STAGE: _emit_decline_or_failure_events")
-            ctx.stage_start_time["_emit_decline_or_failure_events"] = datetime.now(tz=UTC)
+            await ctx.checkpoint_system_event("_emit_decline_or_failure_events")
             _emit_decline_or_failure_events(ctx)
 
         else:
@@ -1446,9 +1464,8 @@ async def execute_synthetic_batch_run(
 
     await _db_persist_system_events(ctx)
 
+    await ctx.checkpoint_system_event("_multi_close_client")
     try:
-        logger.info("STAGE: _multi_close_client")
-        ctx.stage_start_time["_multi_close_client"] = datetime.now(tz=UTC)
         await _multi_close_client(ctx)
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
@@ -1459,9 +1476,8 @@ async def execute_synthetic_batch_run(
             func="_multi_close_client",
         )
 
+    await ctx.checkpoint_system_event("_emit_telemetry_events")
     try:
-        logger.info("STAGE: _emit_telemetry_events")
-        ctx.stage_start_time["_emit_telemetry_events"] = datetime.now(tz=UTC)
         _emit_telemetry_events(ctx)
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
@@ -1474,17 +1490,16 @@ async def execute_synthetic_batch_run(
 
     await _db_persist_system_events(ctx)
 
-    logger.info("STAGE: _db_persist")
-    ctx.stage_start_time["_db_persist"] = datetime.now(tz=UTC)
+    await ctx.checkpoint_system_event("_db_persist")
     await _db_persist(ctx)
 
     # send the machine specs after the batch is done, it can fail or take a long time
+    await ctx.checkpoint_system_event("_send_machine_specs")
     try:
-        logger.info("STAGE: _send_machine_specs")
         await _send_machine_specs(ctx)
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
 
     await _db_persist_system_events(ctx)
 
-    logger.info("BATCH DONE")
+    await ctx.checkpoint_system_event("BATCH_END")
