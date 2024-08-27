@@ -1281,12 +1281,17 @@ def _db_persist_system_events(ctx: BatchContext) -> None:
         return
 
     logger.info("Persisting %d system events", len(ctx.events))
-    SystemEvent.objects.bulk_create(ctx.events)
-
-    # we call this function multiple times during a batch,
-    # clear the list to avoid persisting the same event
-    # multiple times
-    ctx.events.clear()
+    try:
+        # it's possible some events were already inserted during
+        # a previous call, but the operation failed before clearing
+        # the events list, so ignore insert conflicts
+        SystemEvent.objects.bulk_create(ctx.events, ignore_conflicts=True)
+        # we call this function multiple times during a batch,
+        # clear the list to avoid persisting the same event
+        # multiple times
+        ctx.events.clear()
+    except Exception as exc:
+        logger.error("Failed to persist system events: %r", exc)
 
 
 # sync_to_async is needed since we use the sync Django ORM
