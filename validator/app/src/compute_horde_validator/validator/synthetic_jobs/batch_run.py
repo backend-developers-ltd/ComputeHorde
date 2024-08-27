@@ -1258,7 +1258,8 @@ def _db_persist_system_events(ctx: BatchContext) -> None:
     SystemEvent.objects.bulk_create(ctx.events)
 
     # we call this function multiple times during a batch,
-    # clear the list to avoid duplicate events
+    # clear the list to avoid persisting the same event
+    # multiple times
     ctx.events.clear()
 
 
