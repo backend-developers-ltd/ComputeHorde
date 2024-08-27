@@ -1,6 +1,4 @@
 import logging
-import uuid
-from functools import lru_cache
 
 import bittensor
 import uvloop
@@ -10,16 +8,7 @@ from django.conf import settings
 from compute_horde_validator.validator.models import Miner, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 
-# new synchronized flow waits longer for job responses
-SYNTHETIC_JOBS_SOFT_LIMIT = 12 * 60
-SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
-
 logger = logging.getLogger(__name__)
-
-
-@lru_cache(maxsize=100)
-def batch_id_to_uuid(batch_id: int) -> uuid.UUID:
-    return uuid.uuid4()
 
 
 def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id: int | None = None):
@@ -65,15 +54,6 @@ def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id:
         ]
 
     async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners, synthetic_jobs_batch_id)
-
-
-def save_receipt_event(subtype: str, long_description: str, data: dict):
-    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-        type=SystemEvent.EventType.RECEIPT_FAILURE,
-        subtype=subtype,
-        long_description=long_description,
-        data=data,
-    )
 
 
 def get_miners(metagraph) -> list[Miner]:
