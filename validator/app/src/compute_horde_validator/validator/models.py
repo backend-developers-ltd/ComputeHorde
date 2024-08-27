@@ -66,6 +66,7 @@ class SystemEvent(models.Model):
         UNAUTHORIZED = "UNAUTHORIZED"
         SYNTHETIC_BATCH = "SYNTHETIC_BATCH"
         SYNTHETIC_JOB = "SYNTHETIC_JOB"
+        CHECKPOINT = "CHECKPOINT"
         OVERSLEPT = "OVERSLEPT"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
