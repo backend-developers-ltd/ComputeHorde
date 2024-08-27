@@ -1379,9 +1379,9 @@ async def execute_synthetic_batch_run(
         ctx.stage_start_time["_multi_close_client"] = datetime.now(tz=UTC)
         await _multi_close_client(ctx)
 
-        logger.info("STAGE: _send_machine_specs")
-        ctx.stage_start_time["_send_machine_specs"] = datetime.now(tz=UTC)
-        await _send_machine_specs(ctx)
+        # logger.info("STAGE: _send_machine_specs")
+        # ctx.stage_start_time["_send_machine_specs"] = datetime.now(tz=UTC)
+        # await _send_machine_specs(ctx)
 
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
