@@ -254,7 +254,6 @@ class MinerClient(AbstractMinerClient):
     async def send_job_finished_receipt_message(
         self, job: JobBase, started_timestamp: float, time_took_seconds: float, score: float
     ):
-        # Send job finished receipt to miner
         try:
             receipt_message = self.generate_job_finished_receipt_message(
                 job, started_timestamp, time_took_seconds, score
@@ -283,9 +282,9 @@ class MinerClient(AbstractMinerClient):
 
         return handle_send_error_event
 
-    async def save_receipt_event(job: JobBase, subtype: str, long_description: str):
+    async def save_receipt_event(self, job: JobBase, subtype: str, long_description: str):
         data = {"job_uuid": str(job.job_uuid), "miner_hotkey": job.miner.hotkey}
-        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
             type=SystemEvent.EventType.RECEIPT_FAILURE,
             subtype=subtype,
             long_description=long_description,

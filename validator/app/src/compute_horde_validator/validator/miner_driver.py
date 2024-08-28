@@ -175,7 +175,7 @@ async def execute_organic_job(
             await miner_client.send_job_started_receipt_message(
                 job=job,
                 accepted_timestamp=time.time(),
-                max_timeout=job_timer.time_left(),
+                max_timeout=int(job_timer.time_left()),
             )
         else:
             raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
@@ -261,7 +261,7 @@ async def execute_organic_job(
                 job=job,
                 started_timestamp=job_timer.start_time.timestamp(),
                 time_took_seconds=job_timer.passed_time(),
-                score=0,  # no score for oraginc jobs (at least right now)
+                score=0,  # no score for organic jobs (at least right now)
             )
             return
         else:
