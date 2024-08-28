@@ -58,6 +58,9 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DEBUG", default=False)
 
+# Local miner run by a validator
+IS_LOCAL_MINER = env.bool("IS_LOCAL_MINER", default=False)
+
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
@@ -250,7 +253,21 @@ CELERY_RESULT_EXPIRES = int(timedelta(days=1).total_seconds())  # time until tas
 CELERY_COMPRESSION = "gzip"  # task compression
 CELERY_MESSAGE_COMPRESSION = "gzip"  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
-CELERY_BEAT_SCHEDULE = {  # type: ignore
+
+SHARED_CELERY_BEAT_SCHEDULE = {
+    "clear_old_receipts": {
+        "task": "compute_horde_miner.miner.tasks.clear_old_receipts",
+        "schedule": timedelta(hours=1),
+        "options": {},
+    },
+    "fetch_dynamic_config": {
+        "task": "compute_horde_miner.miner.tasks.fetch_dynamic_config",
+        "schedule": timedelta(minutes=5),
+        "options": {},
+    },
+}
+
+PROD_CELERY_BEAT_SCHEDULE = {
     "announce_address_and_port": {
         "task": "compute_horde_miner.miner.tasks.announce_address_and_port",
         "schedule": 60,
@@ -261,22 +278,18 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         "schedule": 60,
         "options": {},
     },
-    "clear_old_receipts": {
-        "task": "compute_horde_miner.miner.tasks.clear_old_receipts",
-        "schedule": timedelta(hours=1),
-        "options": {},
-    },
     "get_receipts_from_old_miner": {
         "task": "compute_horde_miner.miner.tasks.get_receipts_from_old_miner",
         "schedule": timedelta(minutes=10),
         "options": {},
     },
-    "fetch_dynamic_config": {
-        "task": "compute_horde_miner.miner.tasks.fetch_dynamic_config",
-        "schedule": timedelta(minutes=5),
-        "options": {},
-    },
 }
+
+if IS_LOCAL_MINER:
+    CELERY_BEAT_SCHEDULE = SHARED_CELERY_BEAT_SCHEDULE
+else:
+    CELERY_BEAT_SCHEDULE = SHARED_CELERY_BEAT_SCHEDULE | PROD_CELERY_BEAT_SCHEDULE
+
 CELERY_TASK_ROUTES = ["compute_horde_miner.celery.route_task"]
 CELERY_TASK_TIME_LIMIT = int(timedelta(minutes=5).total_seconds())
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
