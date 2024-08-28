@@ -36,7 +36,7 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
             hash_job = V0SyntheticJob.generate(
                 algorithm, HASHJOB_PARAMS[self.weights_version][algorithm]
             )
-        elif self.weights_version in [1, 2]:
+        elif self.weights_version in [1, 2, 3]:
             algorithms = Algorithm.get_all_algorithms()
             params = [HASHJOB_PARAMS[self.weights_version][algorithm] for algorithm in algorithms]
             hash_job = V1SyntheticJob.generate(algorithms, params)
@@ -52,13 +52,13 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def base_docker_image_name(self) -> str:
         if self.weights_version == 0:
             return "backenddevelopersltd/compute-horde-job:v0-latest"
-        elif self.weights_version in [1, 2]:
+        elif self.weights_version in [1, 2, 3]:
             return "backenddevelopersltd/compute-horde-job:v1-latest"
         else:
             raise RuntimeError(f"No base_docker_image for weights_version: {self.weights_version}")
 
     def docker_image_name(self) -> str:
-        if self.weights_version in [0, 1, 2]:
+        if self.weights_version in [0, 1, 2, 3]:
             return self.base_docker_image_name()
         else:
             raise RuntimeError(f"No docker_image for weights_version: {self.weights_version}")
@@ -81,6 +81,8 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
             return MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds())))
         elif self.weights_version in [1, 2]:
             return 1 / time_took
+        elif self.weights_version == 3:
+            return 1 if time_took <= self.timeout_seconds() else 0
         else:
             raise RuntimeError(f"No score function for weights_version: {self.weights_version}")
 
