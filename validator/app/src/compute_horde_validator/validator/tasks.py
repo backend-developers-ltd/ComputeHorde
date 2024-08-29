@@ -741,7 +741,7 @@ def set_scores():
 
 
 @app.task()
-def reveal_scores(reveal_in_advance_num_blocks: int = 10) -> None:
+def reveal_scores(reveal_in_advance_num_blocks: int = -5) -> None:  # FIXME: -(-5) is 5
     """
     Select latest Weights that are older than `commit_reveal_weights_interval`
     and haven't been revealed yet, and reveal them.
