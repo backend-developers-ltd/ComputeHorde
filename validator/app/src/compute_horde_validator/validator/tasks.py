@@ -276,7 +276,8 @@ def run_synthetic_jobs(
         ongoing_synthetic_job_batches = list(
             SyntheticJobBatch.objects.select_for_update(skip_locked=True)
             .filter(
-                block__gte=current_block,
+                block__gte=current_block
+                - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
                 block__lte=current_block + wait_in_advance_blocks,
                 started_at__isnull=True,
             )
@@ -294,26 +295,68 @@ def run_synthetic_jobs(
 
         batch = ongoing_synthetic_job_batches[0]
         target_block = batch.block
-        blocks_to_wait = target_block - subtensor_.get_current_block()
-        for _ in range(
-            ceil(blocks_to_wait * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION * 2 / poll_interval)
-        ):
-            current_block = subtensor_.get_current_block()
-            if current_block >= target_block:
-                break
-            logger.debug(
-                "Waiting for block %s, current block is %s, sleeping for %s",
-                target_block,
+        blocks_to_wait = target_block - current_block
+        if blocks_to_wait < 0:
+            logger.info(
+                "Overslept a batch run, but still within acceptable margin, batch_id: %s, should_run_at_block: %s, current_block: %s",
+                batch.id,
+                batch.block,
                 current_block,
-                poll_interval,
             )
-            time.sleep(poll_interval.total_seconds())
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING,
+                subtype=SystemEvent.EventSubType.WARNING,
+                long_description="Overslept a batch run, but still within acceptable margin",
+                data={
+                    "batch_id": batch.id,
+                    "batch_created_at": str(batch.created_at),
+                    "should_run_at_block": batch.block,
+                    "current_block": current_block,
+                },
+            )
+        elif blocks_to_wait == 0:
+            logger.info(
+                "Woke up just in time to run batch, batch_id: %s, should_run_at_block: %s",
+                batch.id,
+                batch.block,
+            )
         else:
-            logger.error(
-                "Failed to wait for target block %s, current block is %s",
-                target_block,
-                current_block,
-            )
+            for _ in range(
+                ceil(
+                    blocks_to_wait
+                    * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
+                    * 2
+                    / poll_interval
+                )
+            ):
+                current_block = subtensor_.get_current_block()
+                if current_block >= target_block:
+                    break
+                logger.debug(
+                    "Waiting for block %s, current block is %s, sleeping for %s",
+                    target_block,
+                    current_block,
+                    poll_interval,
+                )
+                time.sleep(poll_interval.total_seconds())
+            else:
+                logger.error(
+                    "Failed to wait for target block %s, current block is %s",
+                    target_block,
+                    current_block,
+                )
+                SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                    type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
+                    subtype=SystemEvent.EventSubType.FAILED_TO_WAIT,
+                    long_description="Failed to await the right block to run at",
+                    data={
+                        "batch_id": batch.id,
+                        "batch_created_at": str(batch.created_at),
+                        "should_run_at_block": batch.block,
+                        "current_block": current_block,
+                    },
+                )
+                return
 
         batch.started_at = now()
         batch.save()
@@ -331,7 +374,9 @@ def check_missed_synthetic_jobs() -> None:
 
     with transaction.atomic():
         past_job_batches = SyntheticJobBatch.objects.select_for_update(skip_locked=True).filter(
-            block__lt=current_block, started_at__isnull=True, is_missed=False
+            block__lt=current_block - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
+            started_at__isnull=True,
+            is_missed=False,
         )
         for batch in past_job_batches:
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
