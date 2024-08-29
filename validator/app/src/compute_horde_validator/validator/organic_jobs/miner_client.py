@@ -7,10 +7,7 @@ from functools import cached_property
 import bittensor
 from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import ExecutorClass
-from compute_horde.miner_client.base import (
-    AbstractMinerClient,
-    UnsupportedMessageReceived,
-)
+from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
 from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.miner_requests import (
     BaseMinerRequest,
@@ -36,9 +33,7 @@ from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
 from django.conf import settings
 
-from compute_horde_validator.validator.models import (
-    SystemEvent,
-)
+from compute_horde_validator.validator.models import SystemEvent
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +71,7 @@ class MinerClient(AbstractMinerClient):
         super().__init__(name, transport)
 
     @cached_property
-    def my_hotkey(self):
+    def my_hotkey(self) -> str:
         return self.my_keypair.ss58_address
 
     def miner_url(self) -> str:
@@ -97,31 +92,47 @@ class MinerClient(AbstractMinerClient):
         # TODO: make empty
         msg = f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
         await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-            type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+            type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
             subtype=SystemEvent.EventSubType.GENERIC_ERROR,
             long_description=msg,
             data={},
         )
 
-    async def notify_unauthorized_error(self, msg: UnauthorizedError):
+    async def notify_unauthorized_error(self, msg: UnauthorizedError) -> None:
         # TODO: make empty
         msg = f"Unauthorized in {self.miner_name}: {msg.code}, details: {msg.details}"
         await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-            type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+            type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
             subtype=SystemEvent.EventSubType.UNAUTHORIZED,
             long_description=msg,
             data={},
         )
 
-    async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
+    async def notify_receipt_failure(self, comment: str) -> None:
         # TODO: make empty
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.RECEIPT_FAILURE,
+            subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
+            long_description=comment,
+            data={"job_uuid": self.job_uuid, "miner_hotkey": self.miner_hotkey},
+        )
+
+    async def job_error_event_callback(self, msg: str) -> None:
+        # TODO: make empty
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
+            subtype=SystemEvent.EventSubType.MINER_SEND_ERROR,
+            long_description=msg,
+            data={"job_uuid": self.job_uuid, "miner_hotkey": self.miner_hotkey},
+        )
+
+    async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
         try:
             self.miner_manifest.set_result(msg.manifest)
         except asyncio.InvalidStateError:
             logger.warning(f"Received manifest from {msg} but future was already set")
 
     async def handle_machine_specs_request(self, msg: V0MachineSpecsRequest) -> None:
-        # TODO: make empty
         self.miner_machine_specs = msg.specs
 
     async def handle_message(self, msg: BaseRequest) -> None:
@@ -160,7 +171,7 @@ class MinerClient(AbstractMinerClient):
         else:
             raise UnsupportedMessageReceived(msg)
 
-    def generate_authentication_message(self):
+    def generate_authentication_message(self) -> V0AuthenticateRequest:
         payload = AuthenticationPayload(
             validator_hotkey=self.my_hotkey,
             miner_hotkey=self.miner_hotkey,
@@ -172,16 +183,14 @@ class MinerClient(AbstractMinerClient):
 
     def generate_job_started_receipt_message(
         self,
-        job_uuid: str,
-        miner_hotkey: str,
         executor_class: ExecutorClass,
         accepted_timestamp: float,
         max_timeout: int,
     ) -> V0JobStartedReceiptRequest:
         time_accepted = datetime.datetime.fromtimestamp(accepted_timestamp, datetime.UTC)
         receipt_payload = JobStartedReceiptPayload(
-            job_uuid=job_uuid,
-            miner_hotkey=miner_hotkey,
+            job_uuid=self.job_uuid,
+            miner_hotkey=self.miner_hotkey,
             validator_hotkey=self.my_hotkey,
             executor_class=executor_class,
             time_accepted=time_accepted,
@@ -194,47 +203,36 @@ class MinerClient(AbstractMinerClient):
 
     async def send_job_started_receipt_message(
         self,
-        job_uuid: str,
-        miner_hotkey: str,
         executor_class: ExecutorClass,
         accepted_timestamp: float,
         max_timeout: int,
-    ):
+    ) -> None:
         try:
             receipt_message = self.generate_job_started_receipt_message(
-                job_uuid,
-                miner_hotkey,
                 executor_class,
                 accepted_timestamp,
                 max_timeout,
             )
             await self.send_model(
                 receipt_message,
-                error_event_callback=self.get_job_error_event_callback(job_uuid, miner_hotkey),
+                error_event_callback=self.job_error_event_callback,
             )
-            logger.debug(f"Sent job started receipt for {job_uuid}")
+            logger.debug(f"Sent job started receipt for {self.job_uuid}")
         except Exception as e:
-            comment = f"Failed to send job started receipt to miner {self.miner_name} for job {job_uuid}: {e}"
+            comment = f"Failed to send job started receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
             logger.warning(comment)
-            await self.save_receipt_event(
-                job_uuid=job_uuid,
-                miner_hotkey=miner_hotkey,
-                subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
-                long_description=comment,
-            )
+            await self.notify_receipt_failure(comment)
 
     def generate_job_finished_receipt_message(
         self,
-        job_uuid: str,
-        miner_hotkey: str,
         started_timestamp: float,
         time_took_seconds: float,
         score: float,
     ) -> V0JobFinishedReceiptRequest:
         time_started = datetime.datetime.fromtimestamp(started_timestamp, datetime.UTC)
         receipt_payload = JobFinishedReceiptPayload(
-            job_uuid=job_uuid,
-            miner_hotkey=miner_hotkey,
+            job_uuid=self.job_uuid,
+            miner_hotkey=self.miner_hotkey,
             validator_hotkey=self.my_hotkey,
             time_started=time_started,
             time_took_us=int(time_took_seconds * 1_000_000),
@@ -247,53 +245,23 @@ class MinerClient(AbstractMinerClient):
 
     async def send_job_finished_receipt_message(
         self,
-        job_uuid: str,
-        miner_hotkey: str,
         started_timestamp: float,
         time_took_seconds: float,
         score: float,
-    ):
+    ) -> None:
         try:
             receipt_message = self.generate_job_finished_receipt_message(
-                job_uuid, miner_hotkey, started_timestamp, time_took_seconds, score
+                started_timestamp, time_took_seconds, score
             )
             await self.send_model(
                 receipt_message,
-                error_event_callback=self.get_job_error_event_callback(job_uuid, miner_hotkey),
+                error_event_callback=self.job_error_event_callback,
             )
-            logger.debug(f"Sent job finished receipt for {job_uuid}")
+            logger.debug(f"Sent job finished receipt for {self.job_uuid}")
         except Exception as e:
-            comment = f"Failed to send job finished receipt to miner {self.miner_name} for job {job_uuid}: {e}"
+            comment = f"Failed to send job finished receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
             logger.warning(comment)
-            await self.save_receipt_event(
-                job_uuid=job_uuid,
-                miner_hotkey=miner_hotkey,
-                subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
-                long_description=comment,
-            )
-
-    def get_job_error_event_callback(self, job_uuid: str, miner_hotkey: str):
-        async def handle_send_error_event(msg: str):
-            # TODO: make empty
-            await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-                type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
-                subtype=SystemEvent.EventSubType.MINER_SEND_ERROR,
-                long_description=msg,
-                data={"job_uuid": job_uuid, "miner_hotkey": miner_hotkey},
-            )
-
-        return handle_send_error_event
-
-    async def save_receipt_event(
-        self, job_uuid: str, miner_hotkey: str, subtype: str, long_description: str
-    ):
-        data = {"job_uuid": job_uuid, "miner_hotkey": miner_hotkey}
-        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-            type=SystemEvent.EventType.RECEIPT_FAILURE,
-            subtype=subtype,
-            long_description=long_description,
-            data=data,
-        )
+            await self.notify_receipt_failure(comment)
 
     async def connect(self) -> None:
         await super().connect()

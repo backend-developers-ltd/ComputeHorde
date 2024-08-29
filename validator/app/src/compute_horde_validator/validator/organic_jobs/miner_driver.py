@@ -16,10 +16,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
     V0JobFinishedRequest,
 )
-from compute_horde.mv_protocol.validator_requests import (
-    V0InitialJobRequest,
-    V0JobRequest,
-)
+from compute_horde.mv_protocol.validator_requests import V0InitialJobRequest, V0JobRequest
 from django.conf import settings
 from pydantic import BaseModel
 
@@ -29,9 +26,7 @@ from compute_horde_validator.validator.models import (
     OrganicJob,
     SystemEvent,
 )
-from compute_horde_validator.validator.organic_jobs.facilitator_api import (
-    V0FacilitatorJobRequest,
-)
+from compute_horde_validator.validator.organic_jobs.facilitator_api import V0FacilitatorJobRequest
 from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_volume
 
 logger = logging.getLogger(__name__)
@@ -186,8 +181,6 @@ async def execute_organic_job(
                     JobStatusUpdate.from_job(job, "accepted", msg.message_type.value)
                 )
             await miner_client.send_job_started_receipt_message(
-                job_uuid=str(job.job_uuid),
-                miner_hotkey=job.miner.hotkey,
                 executor_class=ExecutorClass(job.executor_class),
                 accepted_timestamp=time.time(),
                 max_timeout=int(job_timer.time_left()),
@@ -273,8 +266,6 @@ async def execute_organic_job(
                     JobStatusUpdate.from_job(job, "completed", msg.message_type.value)
                 )
             await miner_client.send_job_finished_receipt_message(
-                job_uuid=str(job.job_uuid),
-                miner_hotkey=job.miner.hotkey,
                 started_timestamp=job_timer.start_time.timestamp(),
                 time_took_seconds=job_timer.passed_time(),
                 score=0,  # no score for organic jobs (at least right now)
