@@ -125,7 +125,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
     def verify_auth_msg(self, msg: validator_requests.V0AuthenticateRequest) -> tuple[bool, str]:
         if msg.payload.timestamp < time.time() - AUTH_MESSAGE_MAX_AGE:
             return False, "msg too old"
-        if msg.payload.miner_hotkey != self.my_hotkey:
+        if not settings.IS_LOCAL_MINER and msg.payload.miner_hotkey != self.my_hotkey:
             return False, f"wrong miner hotkey ({self.my_hotkey}!={msg.payload.miner_hotkey})"
         if msg.payload.validator_hotkey != self.validator_key:
             return (
