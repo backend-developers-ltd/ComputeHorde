@@ -21,16 +21,16 @@ from compute_horde.mv_protocol.validator_requests import (
 )
 from pydantic import BaseModel
 
-from compute_horde_validator.validator.facilitator_api import (
-    V0FacilitatorJobRequest,
-)
-from compute_horde_validator.validator.miner_client import save_job_execution_event
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
     JobBase,
     OrganicJob,
     SystemEvent,
 )
+from compute_horde_validator.validator.organic_jobs.facilitator_api import (
+    V0FacilitatorJobRequest,
+)
+from compute_horde_validator.validator.organic_jobs.miner_client import save_job_execution_event
 from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_volume
 
 logger = logging.getLogger(__name__)

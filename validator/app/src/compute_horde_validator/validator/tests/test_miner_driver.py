@@ -13,9 +13,9 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobStartedReceiptRequest,
 )
 
-from compute_horde_validator.validator.facilitator_client import OrganicJob
-from compute_horde_validator.validator.miner_driver import execute_organic_job
 from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.organic_jobs.facilitator_client import OrganicJob
+from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
 
 from .helpers import (
     SingleExecutorMockMinerClient,
