@@ -60,6 +60,7 @@ DEBUG = env.bool("DEBUG", default=False)
 
 # Local miner run by a validator
 IS_LOCAL_MINER = env.bool("IS_LOCAL_MINER", default=False)
+LOCAL_MINER_VALIDATOR_PUBLIC_KEY = env.str("LOCAL_MINER_VALIDATOR_PUBLIC_KEY", default="")
 
 ALLOWED_HOSTS = ["*"]
 
