@@ -294,6 +294,7 @@ class MockNeuron:
         self.hotkey = hotkey
         self.uid = uid
         self.stake = Balance((uid + 1) * 1001.0)
+        self.axon_info = MockedAxonInfo(True, f"127.0.0.{uid}", 4, 8000 + uid)
 
 
 class MockBlock:
