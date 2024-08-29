@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 from functools import lru_cache
 
@@ -20,6 +21,18 @@ logger = logging.getLogger(__name__)
 @lru_cache(maxsize=100)
 def batch_id_to_uuid(batch_id: int) -> uuid.UUID:
     return uuid.uuid4()
+
+
+def try_to_get_metagraph(netuid, network, tries=3):
+    for try_number in range(tries):
+        try:
+            subtensor = bittensor.subtensor(network=network)
+            return subtensor.metagraph(netuid)
+        except Exception:
+            if try_number == tries - 1:
+                raise
+            logger.exception("Encountered when fetching metagraph")
+            time.sleep(try_number + 1)
 
 
 def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id: int | None = None):
@@ -45,12 +58,12 @@ def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id:
             )
     else:
         try:
-            metagraph = bittensor.metagraph(netuid, network=network)
+            metagraph = try_to_get_metagraph(netuid, network=network)
         except Exception as e:
             msg = f"Failed to get metagraph - will not run synthetic jobs: {e}"
             logger.warning(msg)
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-                type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
                 subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
                 long_description=msg,
                 data={},
