@@ -19,12 +19,12 @@ from compute_horde.mv_protocol.validator_requests import (
     V0InitialJobRequest,
     V0JobRequest,
 )
-from django.conf import settings
 from pydantic import BaseModel
 
 from compute_horde_validator.validator.facilitator_api import (
     V0FacilitatorJobRequest,
 )
+from compute_horde_validator.validator.miner_client import save_job_execution_event
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
     JobBase,
@@ -75,17 +75,6 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
                 docker_process_stderr=job.stderr,
             )
         return job_status
-
-
-async def save_job_execution_event(subtype: str, long_description: str, data={}, success=False):
-    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-        type=SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS
-        if success
-        else SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
-        subtype=subtype,
-        long_description=long_description,
-        data=data,
-    )
 
 
 async def execute_organic_job(
@@ -183,6 +172,11 @@ async def execute_organic_job(
                 await notify_callback(
                     JobStatusUpdate.from_job(job, "accepted", msg.message_type.value)
                 )
+            await miner_client.send_job_started_receipt_message(
+                job=job,
+                accepted_timestamp=time.time(),
+                max_timeout=int(job_timer.time_left()),
+            )
         else:
             raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
 
@@ -263,6 +257,12 @@ async def execute_organic_job(
                 await notify_callback(
                     JobStatusUpdate.from_job(job, "completed", msg.message_type.value)
                 )
+            await miner_client.send_job_finished_receipt_message(
+                job=job,
+                started_timestamp=job_timer.start_time.timestamp(),
+                time_took_seconds=job_timer.passed_time(),
+                score=0,  # no score for organic jobs (at least right now)
+            )
             return
         else:
             comment = f"Unexpected msg from miner {miner_client.miner_name}: {msg}"

@@ -3,6 +3,7 @@ import datetime
 import logging
 import time
 import uuid
+from functools import partial
 
 import bittensor
 from compute_horde.base_requests import BaseRequest
@@ -49,9 +50,9 @@ logger = logging.getLogger(__name__)
 
 async def save_job_execution_event(subtype: str, long_description: str, data={}, success=False):
     await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-        type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_SUCCESS
+        type=SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS
         if success
-        else SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+        else SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
         subtype=subtype,
         long_description=long_description,
         data=data,
@@ -211,6 +212,28 @@ class MinerClient(AbstractMinerClient):
             signature=f"0x{self.keypair.sign(receipt_payload.blob_for_signing()).hex()}",
         )
 
+    async def send_job_started_receipt_message(
+        self, job: JobBase, accepted_timestamp: float, max_timeout: int
+    ):
+        try:
+            receipt_message = self.generate_job_started_receipt_message(
+                job,
+                accepted_timestamp,
+                max_timeout,
+            )
+            await self.send_model(
+                receipt_message, error_event_callback=self.get_job_error_event_callback(job)
+            )
+            logger.debug(f"Sent job started receipt for {job.job_uuid}")
+        except Exception as e:
+            comment = f"Failed to send job started receipt to miner {self.miner_name} for job {job.job_uuid}: {e}"
+            logger.warning(comment)
+            await self.save_receipt_event(
+                job=job,
+                subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
+                long_description=comment,
+            )
+
     def generate_job_finished_receipt_message(
         self, job: JobBase, started_timestamp: float, time_took_seconds: float, score: float
     ) -> V0JobFinishedReceiptRequest:
@@ -226,6 +249,46 @@ class MinerClient(AbstractMinerClient):
         return V0JobFinishedReceiptRequest(
             payload=receipt_payload,
             signature=f"0x{self.keypair.sign(receipt_payload.blob_for_signing()).hex()}",
+        )
+
+    async def send_job_finished_receipt_message(
+        self, job: JobBase, started_timestamp: float, time_took_seconds: float, score: float
+    ):
+        try:
+            receipt_message = self.generate_job_finished_receipt_message(
+                job, started_timestamp, time_took_seconds, score
+            )
+            await self.send_model(
+                receipt_message, error_event_callback=self.get_job_error_event_callback(job)
+            )
+            logger.debug(f"Sent job finished receipt for {job.job_uuid}")
+        except Exception as e:
+            comment = f"Failed to send job finished receipt to miner {self.miner_name} for job {job.job_uuid}: {e}"
+            logger.warning(comment)
+            await self.save_receipt_event(
+                job=job,
+                subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
+                long_description=comment,
+            )
+
+    def get_job_error_event_callback(self, job: JobBase):
+        data = {"job_uuid": str(job.job_uuid), "miner_hotkey": job.miner.hotkey}
+        save_event = partial(save_job_execution_event, data=data)
+
+        async def handle_send_error_event(msg: str):
+            await save_event(
+                subtype=SystemEvent.EventSubType.MINER_SEND_ERROR, long_description=msg
+            )
+
+        return handle_send_error_event
+
+    async def save_receipt_event(self, job: JobBase, subtype: str, long_description: str):
+        data = {"job_uuid": str(job.job_uuid), "miner_hotkey": job.miner.hotkey}
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.RECEIPT_FAILURE,
+            subtype=subtype,
+            long_description=long_description,
+            data=data,
         )
 
     async def connect(self):
