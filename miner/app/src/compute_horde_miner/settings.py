@@ -256,11 +256,6 @@ CELERY_MESSAGE_COMPRESSION = "gzip"  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 
 SHARED_CELERY_BEAT_SCHEDULE = {
-    "clear_old_receipts": {
-        "task": "compute_horde_miner.miner.tasks.clear_old_receipts",
-        "schedule": timedelta(hours=1),
-        "options": {},
-    },
     "fetch_dynamic_config": {
         "task": "compute_horde_miner.miner.tasks.fetch_dynamic_config",
         "schedule": timedelta(minutes=5),
@@ -272,6 +267,11 @@ PROD_CELERY_BEAT_SCHEDULE = {
     "announce_address_and_port": {
         "task": "compute_horde_miner.miner.tasks.announce_address_and_port",
         "schedule": 60,
+        "options": {},
+    },
+    "clear_old_receipts": {
+        "task": "compute_horde_miner.miner.tasks.clear_old_receipts",
+        "schedule": timedelta(hours=1),
         "options": {},
     },
     "fetch_validators": {
