@@ -18,7 +18,7 @@ from compute_horde_validator.validator.organic_jobs.facilitator_client import Or
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
 
 from .helpers import (
-    SingleExecutorMockMinerClient,
+    MockMinerClient,
     get_dummy_job_request_v0,
     get_dummy_job_request_v1,
     get_miner_client,
@@ -110,14 +110,12 @@ async def test_miner_driver(
         executor_class=DEFAULT_EXECUTOR_CLASS,
         job_description="User job from facilitator",
     )
-    miner_client = get_miner_client(SingleExecutorMockMinerClient, job_uuid)
+    miner_client = get_miner_client(MockMinerClient, job_uuid)
     f0, f1 = futures_result
     if f0:
-        miner_client.job_states[job_uuid].miner_ready_or_declining_future.set_result(
-            f0(job_uuid=job_uuid)
-        )
+        miner_client.miner_ready_or_declining_future.set_result(f0(job_uuid=job_uuid))
     if f1:
-        miner_client.job_states[job_uuid].miner_finished_or_failed_future.set_result(
+        miner_client.miner_finished_or_failed_future.set_result(
             f1(
                 job_uuid=job_uuid,
                 docker_process_stdout="mocked stdout",

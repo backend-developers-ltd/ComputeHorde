@@ -262,13 +262,11 @@ class FacilitatorClient:
         )
 
         miner_client = self.MINER_CLIENT_CLASS(
+            miner_hotkey=job_request.miner_hotkey,
             miner_address=miner_axon_info.ip,
             miner_port=miner_axon_info.port,
-            miner_hotkey=job_request.miner_hotkey,
-            my_hotkey=self.my_hotkey(),
             job_uuid=job_request.uuid,
-            batch_id=None,
-            keypair=self.keypair,
+            my_keypair=self.keypair,
         )
         await execute_organic_job(
             miner_client,

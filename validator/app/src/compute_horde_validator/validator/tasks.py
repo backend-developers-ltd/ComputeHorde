@@ -506,15 +506,13 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             job_description="Validator Job from Admin Panel",
         )
 
-        keypair = get_keypair()
+        my_keypair = get_keypair()
         miner_client = MinerClient(
+            miner_hotkey=miner.hotkey,
             miner_address=miner_axon_info.ip,
             miner_port=miner_axon_info.port,
-            miner_hotkey=miner.hotkey,
-            my_hotkey=keypair.ss58_address,
             job_uuid=job.job_uuid,
-            batch_id=None,
-            keypair=keypair,
+            my_keypair=my_keypair,
         )
 
         job_request.status_message = "Job successfully triggered"
