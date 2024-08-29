@@ -33,6 +33,7 @@ class SystemEvent(models.Model):
         VALIDATOR_TELEMETRY = "VALIDATOR_TELEMETRY"
         VALIDATOR_CHANNEL_LAYER_ERROR = "VALIDATOR_CHANNEL_LAYER_ERROR"
         VALIDATOR_SYNTHETIC_JOB_SCHEDULED = "VALIDATOR_SYNTHETIC_JOB_SCHEDULED"
+        VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING = "VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -67,6 +68,8 @@ class SystemEvent(models.Model):
         SYNTHETIC_BATCH = "SYNTHETIC_BATCH"
         SYNTHETIC_JOB = "SYNTHETIC_JOB"
         OVERSLEPT = "OVERSLEPT"
+        WARNING = "WARNING"
+        FAILED_TO_WAIT = "FAILED_TO_WAIT"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)

@@ -225,6 +225,7 @@ class MockSubtensor:
         ),
         block_duration=timedelta(seconds=1),
         override_block_number=None,
+        increase_block_number_with_each_call=False,
         block_hash="0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464",
     ):
         self.mocked_set_weights = mocked_set_weights
@@ -239,6 +240,8 @@ class MockSubtensor:
         self.block_duration = block_duration
         self.override_block_number = override_block_number
         self.block_hash = block_hash
+        self.increase_block_number_with_each_call = increase_block_number_with_each_call
+        self.previously_returned_block = None
 
     def get_block_hash(self, block_id) -> str:
         return self.block_hash
@@ -291,6 +294,15 @@ class MockSubtensor:
         return False, "MockSubtensor doesn't support reveal_weights"
 
     def get_current_block(self) -> int:
+        if not self.increase_block_number_with_each_call:
+            return self._get_block_number()
+        if self.previously_returned_block is not None:
+            self.previously_returned_block += 1
+            return self.previously_returned_block
+        self.previously_returned_block = self._get_block_number()
+        return self.previously_returned_block
+
+    def _get_block_number(self) -> int:
         if self.override_block_number is not None:
             return self.override_block_number
         return 1000 + int((monotonic() - self.init_time) / self.block_duration.total_seconds())

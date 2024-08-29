@@ -30,6 +30,7 @@ from .helpers import (
     MockMetagraph,
     MockSubtensor,
     SingleExecutorMockMinerClient,
+    check_system_events,
     mock_get_miner_axon_info,
     throw_error,
 )
@@ -334,44 +335,94 @@ def test__run_synthetic_jobs__debug_dont_stagger_validators__false(settings):
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @patch(
-    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+    "compute_horde_validator.validator.tasks.get_subtensor",
+    lambda *args, **kwargs: MockSubtensor(
+        increase_block_number_with_each_call=True,
+        override_block_number=100,
+    ),
 )
-@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__run_synthetic_jobs__too_early(settings):
-    settings.CELERY_TASK_ALWAYS_EAGER = True
-
-    from bittensor import subtensor
-
-    current_block = subtensor().get_current_block()
-    SyntheticJobBatch.objects.create(block=current_block + 4)
-
-    run_synthetic_jobs(wait_in_advance_blocks=3)
-
-    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
-
-    assert _run_synthetic_jobs.apply_async.call_count == 0
-
-
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch(
-    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+@pytest.mark.parametrize(
+    ("trigger_block", "expected_logs", "expected_runs", "increase", "system_event"),
+    [
+        (96, 0, 0, True, None),
+        (
+            97,
+            0,
+            1,
+            True,
+            (
+                SystemEvent.EventType.VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING,
+                SystemEvent.EventSubType.WARNING,
+            ),
+        ),
+        (
+            98,
+            0,
+            1,
+            True,
+            (
+                SystemEvent.EventType.VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING,
+                SystemEvent.EventSubType.WARNING,
+            ),
+        ),
+        (
+            99,
+            0,
+            1,
+            True,
+            (
+                SystemEvent.EventType.VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING,
+                SystemEvent.EventSubType.WARNING,
+            ),
+        ),
+        (100, 0, 1, True, None),
+        (101, 0, 1, True, None),
+        (102, 1, 1, True, None),
+        (103, 2, 1, True, None),
+        (104, 0, 0, True, None),
+        (
+            101,
+            6,
+            0,
+            False,
+            (
+                SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
+                SystemEvent.EventSubType.FAILED_TO_WAIT,
+            ),
+        ),
+    ],
 )
-@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
-@pytest.mark.django_db(databases=["default", "default_alias"])
-def test__run_synthetic_jobs__in_time(settings):
-    settings.CELERY_TASK_ALWAYS_EAGER = True
+@patch("time.sleep", MagicMock())
+def test__run_synthetic_jobs__different_timings(
+    settings, caplog, trigger_block, expected_logs, expected_runs, increase, system_event
+):
+    with patch(
+        "compute_horde_validator.validator.tasks.get_subtensor",
+        lambda *args, **kwargs: MockSubtensor(
+            increase_block_number_with_each_call=increase,
+            override_block_number=100,
+        ),
+    ):
+        settings.CELERY_TASK_ALWAYS_EAGER = True
 
-    from bittensor import subtensor
+        SyntheticJobBatch.objects.create(block=trigger_block)
 
-    current_block = subtensor().get_current_block()
-    SyntheticJobBatch.objects.create(block=current_block + 3)
+        with patch(
+            "compute_horde_validator.validator.tasks._run_synthetic_jobs"
+        ) as _run_synthetic_jobs:
+            run_synthetic_jobs(wait_in_advance_blocks=3)
 
-    run_synthetic_jobs(wait_in_advance_blocks=3, poll_interval=timedelta(seconds=1))
+        assert (
+            len([r for r in caplog.records if "Waiting for block " in r.message]) == expected_logs
+        ), str([r.message for r in caplog.records])
 
-    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
+        if system_event:
+            check_system_events(*system_event)
+        else:
+            assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
-    assert _run_synthetic_jobs.apply_async.call_count == 1
+        assert _run_synthetic_jobs.apply_async.call_count == expected_runs
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())

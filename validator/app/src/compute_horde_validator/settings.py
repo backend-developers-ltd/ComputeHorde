@@ -176,6 +176,11 @@ CONSTANCE_CONFIG = {
         "This should be synced with the hyperparam",
         int,
     ),
+    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS": (
+        3,
+        "If the job running task wakes up late by this many blocks (or less), the jobs will still run",
+        int,
+    ),
 }
 
 # Content Security Policy
