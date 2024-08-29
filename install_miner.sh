@@ -1,50 +1,77 @@
 #!/bin/bash
 set -euxo pipefail
 
-if [ $# -ne 2 ]
+if [ $# -ne 3 ]
 then
-  >&2 echo "USAGE: ./install_miner.sh SSH_DESTINATION HOTKEY_PATH"
+  >&2 echo "USAGE: ./install_miner.sh MODE[production|local] SSH_DESTINATION HOTKEY_PATH|VALIDATOR_PUBLIC_KEY"
   exit 1
 fi
 
-SSH_DESTINATION="$1"
-LOCAL_HOTKEY_PATH=$(realpath "$2")
-LOCAL_COLDKEY_PUB_PATH=$(dirname "$(dirname "$LOCAL_HOTKEY_PATH")")/coldkeypub.txt
+MODE="$1"
+SSH_DESTINATION="$2"
 
-if [ ! -f "$LOCAL_HOTKEY_PATH" ]; then
-  >&2 echo "Given HOTKEY_PATH does not exist"
+if [ "$MODE" == "production" ]; then
+  LOCAL_HOTKEY_PATH=$(realpath "$3")
+  LOCAL_COLDKEY_PUB_PATH=$(dirname "$(dirname "$LOCAL_HOTKEY_PATH")")/coldkeypub.txt
+
+  if [ ! -f "$LOCAL_HOTKEY_PATH" ]; then
+    >&2 echo "Given HOTKEY_PATH does not exist"
+    exit 1
+  fi
+
+  HOTKEY_NAME=$(basename "$LOCAL_HOTKEY_PATH")
+  WALLET_NAME=$(basename "$(dirname "$(dirname "$LOCAL_HOTKEY_PATH")")")
+
+  # set default names if they contain special characters to avoid inconsistent behaviors by `.env` readers
+  [[ $HOTKEY_NAME =~ ['$#!;*?&()<>'\"\'] ]] && HOTKEY_NAME=default
+  [[ $WALLET_NAME =~ ['$#!;*?&()<>'\"\'] ]] && WALLET_NAME=mywallet
+
+  REMOTE_HOTKEY_PATH=".bittensor/wallets/$WALLET_NAME/hotkeys/$HOTKEY_NAME"
+  REMOTE_COLDKEY_PUB_PATH=".bittensor/wallets/$WALLET_NAME/coldkeypub.txt"
+  REMOTE_HOTKEY_DIR=$(dirname "$REMOTE_HOTKEY_PATH")
+
+  REMOTE_HOTKEY_NAME="$(basename "$REMOTE_HOTKEY_PATH")"
+  REMOTE_WALLET_NAME="$(basename "$(dirname "$REMOTE_HOTKEY_DIR")")"
+
+  VALIDATOR_PUBLIC_KEY=""
+
+  MINER_PORT=8000
+elif [ "$MODE" == "local" ]; then
+  VALIDATOR_PUBLIC_KEY="$3"
+  MINER_PORT=9898
+
+  REMOTE_HOTKEY_DIR=.bittensor/wallets/dummy/hotkeys
+  REMOTE_HOTKEY_NAME=dummy
+  REMOTE_WALLET_NAME=dummy
+else
+  >&2 echo "Invalid mode $MODE. Must be 'production' or 'local'"
   exit 1
 fi
-
-HOTKEY_NAME=$(basename "$LOCAL_HOTKEY_PATH")
-WALLET_NAME=$(basename "$(dirname "$(dirname "$LOCAL_HOTKEY_PATH")")")
-
-# set default names if they contain special characters to avoid inconsistent behaviors by `.env` readers
-[[ $HOTKEY_NAME =~ ['$#!;*?&()<>'\"\'] ]] && HOTKEY_NAME=default
-[[ $WALLET_NAME =~ ['$#!;*?&()<>'\"\'] ]] && WALLET_NAME=mywallet
-
-REMOTE_HOTKEY_PATH=".bittensor/wallets/$WALLET_NAME/hotkeys/$HOTKEY_NAME"
-REMOTE_COLDKEY_PUB_PATH=".bittensor/wallets/$WALLET_NAME/coldkeypub.txt"
-REMOTE_HOTKEY_DIR=$(dirname "$REMOTE_HOTKEY_PATH")
 
 DEFAULT_ADMIN_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')
 : "${MIGRATING:=0}"
 
-# Copy the wallet files to the server
-# shellcheck disable=SC2087
+# Create tmpvars file on the server
 ssh "$SSH_DESTINATION" <<ENDSSH
 set -euxo pipefail
 
 mkdir -p $REMOTE_HOTKEY_DIR
 cat > tmpvars <<ENDCAT
-HOTKEY_NAME="$(basename "$REMOTE_HOTKEY_PATH")"
-WALLET_NAME="$(basename "$(dirname "$REMOTE_HOTKEY_DIR")")"
+HOTKEY_NAME=$REMOTE_HOTKEY_NAME
+WALLET_NAME=$REMOTE_WALLET_NAME
 DEFAULT_ADMIN_PASSWORD="$DEFAULT_ADMIN_PASSWORD"
 MIGRATING=$MIGRATING
+MINER_PORT=$MINER_PORT
+VALIDATOR_PUBLIC_KEY=$VALIDATOR_PUBLIC_KEY
 ENDCAT
 ENDSSH
-scp "$LOCAL_HOTKEY_PATH" "$SSH_DESTINATION:$REMOTE_HOTKEY_PATH"
-scp "$LOCAL_COLDKEY_PUB_PATH" "$SSH_DESTINATION:$REMOTE_COLDKEY_PUB_PATH"
+
+if [ "$MODE" == "production" ]; then
+  # Copy the wallet files to the server
+  # shellcheck disable=SC2087
+  scp "$LOCAL_HOTKEY_PATH" "$SSH_DESTINATION:$REMOTE_HOTKEY_PATH"
+  scp "$LOCAL_COLDKEY_PUB_PATH" "$SSH_DESTINATION:$REMOTE_COLDKEY_PUB_PATH"
+fi
 
 # install necessary software in the server
 ssh "$SSH_DESTINATION" <<'ENDSSH'
@@ -133,34 +160,50 @@ BITTENSOR_NETWORK=finney
 
 BITTENSOR_WALLET_NAME="$(. ~/tmpvars && echo "$WALLET_NAME")"
 BITTENSOR_WALLET_HOTKEY_NAME="$(. ~/tmpvars && echo "$HOTKEY_NAME")"
+
 HOST_WALLET_DIR=$HOME/.bittensor/wallets
 
 # for now, PORT_FOR_EXECUTORS has to be the same as BITTENSOR_MINER_PORT, unless you change nginx configuration yourself (we don't advise doing that)
-BITTENSOR_MINER_PORT=8000
+BITTENSOR_MINER_PORT=$(. ~/tmpvars && echo "$MINER_PORT")
 
 BITTENSOR_MINER_ADDRESS=auto
 COMPOSE_PROJECT_NAME=compute_horde_miner
 
 # make sure to unblock access to that port in your firewall
-PORT_FOR_EXECUTORS=8000
+PORT_FOR_EXECUTORS=$(. ~/tmpvars && echo "$MINER_PORT")
 
 ADDRESS_FOR_EXECUTORS=172.17.0.1
 DEFAULT_ADMIN_PASSWORD="$(. ~/tmpvars && echo "$DEFAULT_ADMIN_PASSWORD")"
 MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
 ENDENV
+ENDSSH
 
-rm ~/tmpvars
+if [ "$MODE" == "local" ]; then
+ssh "$SSH_DESTINATION" <<'ENDSSH'
+set -euxo pipefail
+cat >> ~/compute_horde_miner/.env <<ENDENV
+IS_LOCAL_MINER=1
+LOCAL_MINER_VALIDATOR_PUBLIC_KEY="$(. ~/tmpvars && echo "$VALIDATOR_PUBLIC_KEY")"
+ENDENV
+ENDSSH
+fi
+
+ssh "$SSH_DESTINATION" <<ENDSSH
+set -euxo pipefail
+
+cd ~/compute_horde_miner
 
 docker pull backenddevelopersltd/compute-horde-executor:v0-latest
 docker pull backenddevelopersltd/compute-horde-miner:v0-latest
 docker pull backenddevelopersltd/compute-horde-job:v0-latest
 docker compose up -d
 
+rm ~/tmpvars
 ENDSSH
 
 set +x
 MINER_HOSTNAME=$(ssh -G "$SSH_DESTINATION" | grep '^hostname' | cut -d' ' -f2)
-MINER_ADMIN_LOGIN_URL="http://$MINER_HOSTNAME:8000/admin/login/"
+MINER_ADMIN_LOGIN_URL="http://$MINER_HOSTNAME:$MINER_PORT/admin/login/"
 
 for run in {1..10}
 do
@@ -203,5 +246,5 @@ EOF
 done
 
 >&2 echo "Cannot connect to miner. Please check if everything is installed and running properly."
->&2 echo "Also make sure port 8000 is reachable from outside (i.e. not blocked in firewall)."
+>&2 echo "Also make sure port $MINER_PORT is reachable from outside (i.e. not blocked in firewall)."
 exit 1
