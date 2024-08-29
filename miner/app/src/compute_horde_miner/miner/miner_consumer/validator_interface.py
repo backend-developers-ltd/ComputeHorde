@@ -46,7 +46,7 @@ def get_miner_signature(msg: BaseValidatorRequest) -> str:
 class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
-        if settings.DEBUG_TURN_AUTHENTICATION_OFF:
+        if settings.DEBUG_TURN_AUTHENTICATION_OFF or settings.IS_LOCAL_MINER:
             self.my_hotkey = DONT_CHECK
         else:
             self.my_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
@@ -144,6 +144,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         msg: validator_requests.V0JobStartedReceiptRequest
         | validator_requests.V0JobFinishedReceiptRequest,
     ) -> bool:
+        if settings.IS_LOCAL_MINER:
+            return True
+
         if self.my_hotkey != DONT_CHECK and msg.payload.miner_hotkey != self.my_hotkey:
             logger.warning(
                 f"Miner hotkey mismatch in receipt for job_uuid {msg.payload.job_uuid} ({msg.payload.miner_hotkey!r} != {self.my_hotkey!r})"
@@ -321,6 +324,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
                 f" max_timeout={msg.payload.max_timeout}"
             )
+
+            if settings.IS_LOCAL_MINER:
+                return
+
             await JobStartedReceipt.objects.acreate(
                 validator_signature=msg.signature,
                 miner_signature=get_miner_signature(msg),
@@ -344,6 +351,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.time_took = msg.payload.time_took
             job.score = msg.payload.score
             await job.asave()
+
+            if settings.IS_LOCAL_MINER:
+                return
 
             await JobFinishedReceipt.objects.acreate(
                 validator_signature=msg.signature,
