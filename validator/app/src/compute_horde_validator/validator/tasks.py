@@ -33,7 +33,6 @@ from django.utils.timezone import now
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
-from compute_horde_validator.validator.miner_client import MinerClient
 from compute_horde_validator.validator.models import (
     Cycle,
     JobFinishedReceipt,
@@ -43,6 +42,8 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
     Weights,
 )
+from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
+from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
@@ -51,7 +52,6 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
 )
 
-from .miner_driver import execute_organic_job
 from .models import AdminJobRequest
 
 logger = get_task_logger(__name__)
@@ -506,15 +506,13 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             job_description="Validator Job from Admin Panel",
         )
 
-        keypair = get_keypair()
+        my_keypair = get_keypair()
         miner_client = MinerClient(
+            miner_hotkey=miner.hotkey,
             miner_address=miner_axon_info.ip,
             miner_port=miner_axon_info.port,
-            miner_hotkey=miner.hotkey,
-            my_hotkey=keypair.ss58_address,
             job_uuid=job.job_uuid,
-            batch_id=None,
-            keypair=keypair,
+            my_keypair=my_keypair,
         )
 
         job_request.status_message = "Job successfully triggered"

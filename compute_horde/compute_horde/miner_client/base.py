@@ -2,11 +2,14 @@ import abc
 import asyncio
 import logging
 import random
+from collections.abc import Awaitable, Callable
+from typing import TypeAlias
 
 from compute_horde.base_requests import BaseRequest, ValidationError
 from compute_horde.transport import AbstractTransport, TransportConnectionError
 
 logger = logging.getLogger(__name__)
+ErrorCallback: TypeAlias = Callable[[str], Awaitable[None]]
 
 
 class AbstractMinerClient(abc.ABC):
@@ -71,10 +74,14 @@ class AbstractMinerClient(abc.ABC):
 
         await self.transport.stop()
 
-    async def send_model(self, model: BaseRequest, error_event_callback=None):
+    async def send_model(
+        self, model: BaseRequest, error_event_callback: ErrorCallback | None = None
+    ) -> None:
         await self.send(model.model_dump_json(), error_event_callback)
 
-    async def send(self, data: str | bytes, error_event_callback=None):
+    async def send(
+        self, data: str | bytes, error_event_callback: ErrorCallback | None = None
+    ) -> None:
         while True:
             try:
                 await self.transport.send(data)

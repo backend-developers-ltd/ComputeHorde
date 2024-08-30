@@ -11,7 +11,12 @@ from channels.layers import get_channel_layer
 from django.conf import settings
 from pydantic import BaseModel
 
-from compute_horde_validator.validator.facilitator_api import (
+from compute_horde_validator.validator.metagraph_client import (
+    create_metagraph_refresh_task,
+    get_miner_axon_info,
+)
+from compute_horde_validator.validator.models import Miner, OrganicJob, SystemEvent
+from compute_horde_validator.validator.organic_jobs.facilitator_api import (
     AuthenticationRequest,
     Error,
     Heartbeat,
@@ -19,13 +24,8 @@ from compute_horde_validator.validator.facilitator_api import (
     MachineSpecsUpdate,
     Response,
 )
-from compute_horde_validator.validator.metagraph_client import (
-    create_metagraph_refresh_task,
-    get_miner_axon_info,
-)
-from compute_horde_validator.validator.miner_client import MinerClient
-from compute_horde_validator.validator.miner_driver import execute_organic_job
-from compute_horde_validator.validator.models import Miner, OrganicJob, SystemEvent
+from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
+from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
 from compute_horde_validator.validator.utils import (
     MACHINE_SPEC_GROUP_NAME,
 )
@@ -262,13 +262,11 @@ class FacilitatorClient:
         )
 
         miner_client = self.MINER_CLIENT_CLASS(
+            miner_hotkey=job_request.miner_hotkey,
             miner_address=miner_axon_info.ip,
             miner_port=miner_axon_info.port,
-            miner_hotkey=job_request.miner_hotkey,
-            my_hotkey=self.my_hotkey(),
             job_uuid=job_request.uuid,
-            batch_id=None,
-            keypair=self.keypair,
+            my_keypair=self.keypair,
         )
         await execute_organic_job(
             miner_client,

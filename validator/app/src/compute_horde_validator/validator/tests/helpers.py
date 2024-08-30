@@ -1,4 +1,3 @@
-import asyncio
 import numbers
 from datetime import timedelta
 from time import monotonic
@@ -9,7 +8,6 @@ import constance
 import numpy as np
 from bittensor import Balance
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.miner_client.base import BaseRequest
 from compute_horde.mv_protocol.miner_requests import (
     V0ExecutorReadyRequest,
     V0JobFinishedRequest,
@@ -18,12 +16,12 @@ from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 from django.conf import settings
 from substrateinterface.exceptions import SubstrateRequestException
 
-from compute_horde_validator.validator.facilitator_api import (
+from compute_horde_validator.validator.models import SystemEvent
+from compute_horde_validator.validator.organic_jobs.facilitator_api import (
     V0FacilitatorJobRequest,
     V1FacilitatorJobRequest,
 )
-from compute_horde_validator.validator.miner_client import JobState, MinerClient
-from compute_horde_validator.validator.models import SystemEvent
+from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.synthetic_jobs import batch_run
 
 NUM_NEURONS = 5
@@ -39,13 +37,11 @@ def get_keypair():
 
 def get_miner_client(MINER_CLIENT, job_uuid: str):
     return MINER_CLIENT(
-        miner_address="ignore",
-        my_hotkey="validator_hotkey",
         miner_hotkey="miner_hotkey",
+        miner_address="ignore",
         miner_port=9999,
         job_uuid=job_uuid,
-        batch_id=None,
-        keypair=get_keypair(),
+        my_keypair=get_keypair(),
     )
 
 
@@ -84,8 +80,8 @@ class MockSyntheticMinerClient(batch_run.MinerClient):
 
 
 class MockMinerClient(MinerClient):
-    def __init__(self, **args):
-        super().__init__(**args)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._sent_models = []
 
     def miner_url(self) -> str:
@@ -93,15 +89,6 @@ class MockMinerClient(MinerClient):
 
     async def connect(self):
         return
-
-    def accepted_request_type(self) -> type[BaseRequest]:
-        return BaseRequest
-
-    def incoming_generic_error_class(self) -> type[BaseRequest]:
-        return BaseRequest
-
-    def outgoing_generic_error_class(self) -> type[BaseRequest]:
-        return BaseRequest
 
     async def handle_message(self, msg):
         pass
@@ -120,25 +107,19 @@ class MockMinerClient(MinerClient):
         return result
 
 
-class SingleExecutorMockMinerClient(MockMinerClient):
-    def get_barrier(self):
-        return asyncio.Barrier(1)
-
-
-class MockJobStateMinerClient(SingleExecutorMockMinerClient):
-    def get_job_state(self, job_uuid):
-        job_state = JobState()
-        job_state.miner_ready_or_declining_future.set_result(
-            V0ExecutorReadyRequest(job_uuid=job_uuid)
+class MockJobStateMinerClient(MockMinerClient):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.miner_ready_or_declining_future.set_result(
+            V0ExecutorReadyRequest(job_uuid=self.job_uuid)
         )
-        job_state.miner_finished_or_failed_future.set_result(
+        self.miner_finished_or_failed_future.set_result(
             V0JobFinishedRequest(
-                job_uuid=job_uuid,
+                job_uuid=self.job_uuid,
                 docker_process_stdout="",
                 docker_process_stderr="",
             )
         )
-        return job_state
 
 
 def get_dummy_job_request_v0(uuid: str) -> V0FacilitatorJobRequest:

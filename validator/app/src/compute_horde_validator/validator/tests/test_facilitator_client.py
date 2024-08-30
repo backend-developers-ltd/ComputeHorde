@@ -6,13 +6,13 @@ import bittensor
 import pytest
 import websockets
 
-from compute_horde_validator.validator.facilitator_client import (
+from compute_horde_validator.validator.models import OrganicJob
+from compute_horde_validator.validator.organic_jobs.facilitator_client import (
     AuthenticationRequest,
     FacilitatorClient,
     Response,
 )
-from compute_horde_validator.validator.miner_driver import JobStatusUpdate
-from compute_horde_validator.validator.models import OrganicJob
+from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 
 from .helpers import (
     MockJobStateMinerClient,
