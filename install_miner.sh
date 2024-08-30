@@ -1,14 +1,16 @@
 #!/bin/bash
 set -euxo pipefail
 
-if [ $# -ne 3 ]
+if [ $# -lt 3 ] || [ $# -gt 4 ];
 then
-  >&2 echo "USAGE: ./install_miner.sh MODE[production|local] SSH_DESTINATION HOTKEY_PATH|VALIDATOR_PUBLIC_KEY"
+  >&2 echo "USAGE: ./install_miner.sh MODE[production|local] SSH_DESTINATION HOTKEY_PATH|VALIDATOR_PUBLIC_KEY MINER_PORT:8000"
   exit 1
 fi
 
 MODE="$1"
 SSH_DESTINATION="$2"
+
+MINER_PORT="${4:-8000}"
 
 if [ "$MODE" == "production" ]; then
   LOCAL_HOTKEY_PATH=$(realpath "$3")
@@ -35,10 +37,8 @@ if [ "$MODE" == "production" ]; then
 
   VALIDATOR_PUBLIC_KEY=""
 
-  MINER_PORT=8000
 elif [ "$MODE" == "local" ]; then
   VALIDATOR_PUBLIC_KEY="$3"
-  MINER_PORT=9898
 
   REMOTE_HOTKEY_DIR=.bittensor/wallets/dummy/hotkeys
   REMOTE_HOTKEY_NAME=dummy
