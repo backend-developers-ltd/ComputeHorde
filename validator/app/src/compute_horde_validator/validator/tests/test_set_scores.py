@@ -419,6 +419,8 @@ def test_set_scores__set_weight__reveal__in_time(settings):
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=723))
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
+# TODO: Address the unclosed socket warning
+@pytest.mark.filterwarnings("default:Exception ignored")
 async def test_set_scores__multiple_starts(settings):
     # to ensure the other tasks will be run at the same time
     settings.CELERY_TASK_ALWAYS_EAGER = False
