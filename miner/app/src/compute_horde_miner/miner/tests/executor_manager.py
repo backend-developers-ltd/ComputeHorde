@@ -53,7 +53,7 @@ async def fake_executor(token):
 fake_executor.job_uuid = None
 
 
-class TestExecutorManager(v1.BaseExecutorManager):
+class StubExecutorManager(v1.BaseExecutorManager):
     async def start_new_executor(self, token, executor_class, timeout):
         asyncio.get_running_loop().create_task(fake_executor(token))
         return object()
