@@ -66,6 +66,7 @@ def test__get_miner_receipts__happy_path(mocked_responses, receipts, miner_keypa
         assert got_receipt == receipt
 
 
+@pytest.mark.filterwarnings("ignore:Pydantic serializer warnings")
 def test__get_miner_receipts__invalid_receipt_skipped(mocked_responses, receipts, miner_keypair):
     """
     Invalidate one receipt payload fields to make it invalid
