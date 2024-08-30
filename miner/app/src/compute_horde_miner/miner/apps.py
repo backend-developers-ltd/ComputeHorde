@@ -27,8 +27,27 @@ def maybe_create_default_admin(sender, **kwargs):
             )
 
 
+def create_local_miner_validator(sender, **kwargs):
+    if not settings.IS_LOCAL_MINER:
+        return
+
+    assert (
+        settings.LOCAL_MINER_VALIDATOR_PUBLIC_KEY
+    ), "LOCAL_MINER_VALIDATOR_PUBLIC_KEY needs to be set to run miner in local mode"
+
+    from .models import Validator
+
+    instance, created = Validator.objects.get_or_create(
+        public_key=settings.LOCAL_MINER_VALIDATOR_PUBLIC_KEY,
+        defaults={"active": True, "debug": False},
+    )
+    if created:
+        logger.info("Created validator with public key %s", instance.public_key)
+
+
 class MinerConfig(AppConfig):
     name = "compute_horde_miner.miner"
 
     def ready(self):
         post_migrate.connect(maybe_create_default_admin, sender=self)
+        post_migrate.connect(create_local_miner_validator, sender=self)
