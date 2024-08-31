@@ -359,6 +359,7 @@ class Celery:
     Able to start celery on a remote host (useful for macs, because workers dying there issue error dialogs). To start
     remotely, use the `REMOTE_HOST`, `REMOTE_VENV` and `REMOTE_CELERY_START_SCRIPT` env vars.
     """
+
     def __init__(self, hook_script_file_path=None, run_id=None):
         self.celery_script = os.getenv(
             "REMOTE_CELERY_START_SCRIPT",

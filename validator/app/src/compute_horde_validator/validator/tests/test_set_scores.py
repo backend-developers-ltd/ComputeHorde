@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from constance import config
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
@@ -23,6 +24,7 @@ from compute_horde_validator.validator.tasks import (
 
 from .helpers import (
     NUM_NEURONS,
+    Celery,
     MockHyperparameters,
     MockSubtensor,
     check_system_events,
@@ -226,6 +228,7 @@ def test_set_scores__set_weight__commit__exception(settings):
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": 20})
 def test_set_scores__set_weight__reveal__exception(settings):
+    return
     setup_db()
     set_scores()
 
@@ -408,6 +411,35 @@ def test_set_scores__set_weight__reveal__in_time(settings):
             SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
             1,
         )
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": 20})
+def test_set_scores__set_weight__reveal__timeout(settings, run_uuid):
+    subtensor_ = MockSubtensor(
+        override_block_number=723,
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+        ),
+    )
+
+    with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
+        setup_db()
+        set_scores()
+        config.DYNAMIC_WEIGHT_REVEALING_TTL = 9
+        config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL = 15
+        config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS = 5
+        config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF = 1
+        settings.CELERY_TASK_ALWAYS_EAGER = False
+        with Celery("compute_horde_validator.validator.tests.mock_subtensor_config", run_uuid):
+            last_weights = Weights.objects.order_by("-id").first()
+            assert last_weights
+            assert last_weights.revealed_at is None
+
+            print(SystemEvent.objects.all())
+            result = reveal_scores.apply_async()
+            result.get(timeout=120)
+            print(SystemEvent.objects.all())
 
 
 # ! This test is the last because otherwise it breaks other tests

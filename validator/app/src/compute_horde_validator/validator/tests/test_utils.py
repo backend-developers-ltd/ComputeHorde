@@ -566,7 +566,8 @@ mocked_metagraph_1 = MagicMock(side_effect=[ValueError, TypeError, MockMetagraph
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch(
-    "bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_metagraph=mocked_metagraph_1)
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(mocked_metagraph=mocked_metagraph_1),
 )
 def test_create_and_run_synthetic_job_batch_metagraph_retries():
     with (
@@ -586,7 +587,8 @@ mocked_metagraph_2 = MagicMock(side_effect=[ValueError, TypeError, AttributeErro
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch(
-    "bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(mocked_metagraph=mocked_metagraph_2)
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(mocked_metagraph=mocked_metagraph_2),
 )
 def test_create_and_run_synthetic_job_batch_metagraph_retries_fail():
     with (
