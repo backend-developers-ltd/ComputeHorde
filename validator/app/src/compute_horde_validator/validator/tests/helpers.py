@@ -1,6 +1,11 @@
 import asyncio
+import glob
 import numbers
+import os
+import shlex
+import subprocess
 from datetime import timedelta
+from pathlib import Path
 from time import monotonic
 from typing import NamedTuple
 from unittest import mock
@@ -365,3 +370,116 @@ def patch_constance(config_overlay: dict):
         return config_overlay[key] if key in config_overlay else old_getattr(s, key)
 
     return mock.patch.object(constance.base.Config, "__getattr__", new_getattr)
+
+
+class Celery:
+    """
+    Context manager for starting in test. Able to perform patches before celery start (via hook_script_file_path).
+    Able to start celery on a remote host (useful for macs, because workers dying there issue error dialogs). To start
+    remotely, use the `REMOTE_HOST`, `REMOTE_VENV` and `REMOTE_CELERY_START_SCRIPT` env vars.
+    """
+    def __init__(self, hook_script_file_path=None, run_id=None):
+        self.celery_script = os.getenv(
+            "REMOTE_CELERY_START_SCRIPT",
+            Path(__file__).parents[5] / "dev_env_setup" / "start_celery.sh",
+        )
+        self.celery_process = None
+        self.pid_files_pattern = "/tmp/celery-validator-*.pid"
+        self.remote_host = os.getenv("REMOTE_HOST", None)
+        self.remote_venv = os.getenv("REMOTE_VENV", None)
+        if bool(self.remote_host) != bool(self.remote_venv):
+            raise ValueError(
+                f"Provide both REMOTE_HOST and REMOTE_VENV or neither. Currently REMOTE_HOST={self.remote_host}, REMOTE_VENV={self.remote_venv}"
+            )
+        self.hook_script_file_path = hook_script_file_path
+        self.run_id = run_id
+
+    def read_pid(self, filename):
+        if self.remote_host:
+            result = subprocess.run(
+                ["ssh", self.remote_host, f"cat {filename}"], stdout=subprocess.PIPE
+            )
+            pid = int(result.stdout.decode().strip())
+        else:
+            with open(filename) as f:
+                pid = int(f.read().strip())
+        return pid
+
+    def get_pid_files(self):
+        if self.remote_host:
+            result = subprocess.run(
+                ["ssh", self.remote_host, f"ls {self.pid_files_pattern}"], stdout=subprocess.PIPE
+            )
+            return result.stdout.decode().split()
+        else:
+            return glob.glob(self.pid_files_pattern)
+
+    def kill_pids(self):
+        for pid_filename in self.get_pid_files():
+            try:
+                pid = self.read_pid(pid_filename)
+                kill_command = f"kill -9 {pid}"
+                if self.remote_host:
+                    subprocess.Popen(["ssh", self.remote_host, kill_command])
+                else:
+                    os.kill(pid, 9)
+            except (FileNotFoundError, ValueError, ProcessLookupError):
+                continue
+
+    def __enter__(self):
+        self.kill_pids()
+        env = {
+            **os.environ,
+            **(
+                {"DEBUG_CELERY_HOOK_SCRIPT_FILE": self.hook_script_file_path}
+                if self.hook_script_file_path
+                else {}
+            ),
+        }
+        if self.remote_host:
+            remote_host = shlex.quote(self.remote_host)
+            remote_venv = shlex.quote(self.remote_venv)
+            hook_script_file_path = shlex.quote(self.hook_script_file_path)
+            celery_script = shlex.quote(self.celery_script)
+            test_database_name = shlex.quote(settings.DATABASES["default"]["NAME"])
+
+            command = shlex.join(
+                [
+                    "ssh",
+                    remote_host,
+                    f"source {remote_venv} && DEBUG_CELERY_HOOK_SCRIPT_FILE={hook_script_file_path or ''} DEBUG_OVERRIDE_DATABASE_NAME={test_database_name} PYTEST_RUN_ID={self.run_id or ''} {celery_script}",
+                ]
+            )
+            self.celery_process = subprocess.Popen(
+                command,
+                shell=True,
+                env=env,
+            )
+        else:
+            self.celery_process = subprocess.Popen(self.celery_script, shell=True, env=env)
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.kill_pids()
+
+        try:
+            if self.remote_host:
+                stop_command = f"pkill -f '{self.celery_script}'"
+                subprocess.Popen(["ssh", self.remote_host, stop_command])
+            else:
+                self.celery_process.kill()
+
+            self.celery_process.wait(3)
+        except Exception:
+            pass
+
+        # Delete the pid files
+        for pid_filename in self.get_pid_files():
+            try:
+                if self.remote_host:
+                    subprocess.Popen(["ssh", self.remote_host, f"rm {pid_filename}"])
+                else:
+                    os.remove(pid_filename)
+            except OSError:
+                pass

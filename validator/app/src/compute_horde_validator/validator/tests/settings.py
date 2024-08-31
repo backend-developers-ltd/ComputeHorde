@@ -13,7 +13,6 @@ from compute_horde_validator.settings import *  # noqa: E402,F403
 
 PROMETHEUS_EXPORT_MIGRATIONS = False
 
-
 BITTENSOR_NETUID = 12
 BITTENSOR_NETWORK = "local"
 

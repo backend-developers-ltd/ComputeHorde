@@ -250,6 +250,11 @@ DEFAULT_DB_ALIAS = (
 DATABASES[DEFAULT_DB_ALIAS] = DATABASES["default"]
 
 
+if new_name := env.str("DEBUG_OVERRIDE_DATABASE_NAME", default=None):
+    DATABASES["default"]["NAME"] = new_name
+    DATABASES[DEFAULT_DB_ALIAS]["NAME"] = new_name
+
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
