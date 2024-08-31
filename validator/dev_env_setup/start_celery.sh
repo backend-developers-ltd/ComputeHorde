@@ -10,14 +10,14 @@ cd ../app/src
 # below we define two workers types (each may have any concurrency);
 # each worker may have its own settings
 WORKERS="master worker"
-OPTIONS="-A compute_horde_validator -E -l DEBUG --pidfile=/tmp/celery-validator-%n.pid --logfile=/tmp/celery-validator-%n.log"
+OPTIONS="-E -l DEBUG --pidfile=/tmp/celery-validator-%n.pid --logfile=/tmp/celery-validator-%n.log"
 
 CELERY_MASTER_CONCURRENCY=2
 CELERY_WORKER_CONCURRENCY=2
 
-celery multi start "$WORKERS" "$OPTIONS" \
-    -Q:master celery --autoscale:master=$CELERY_MASTER_CONCURRENCY,0 \
-    -Q:worker worker --autoscale:worker=$CELERY_WORKER_CONCURRENCY,0
+celery -A compute_horde_validator multi start $WORKERS $OPTIONS \
+    -Q:master celery --autoscale:master=$CELERY_MASTER_CONCURRENCY,$CELERY_MASTER_CONCURRENCY \
+    -Q:worker worker --autoscale:worker=$CELERY_WORKER_CONCURRENCY,$CELERY_WORKER_CONCURRENCY
 
 # shellcheck disable=2064
 trap "celery multi stop $WORKERS $OPTIONS; exit 0" INT TERM
