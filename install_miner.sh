@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euxo pipefail
 
-if [ $# -lt 3 ] || [ $# -gt 4 ];
+if [ $# -lt 3 ] || [ $# -gt 5 ];
 then
-  >&2 echo "USAGE: ./install_miner.sh MODE[production|local] SSH_DESTINATION HOTKEY_PATH|VALIDATOR_PUBLIC_KEY MINER_PORT:8000"
+  >&2 echo "USAGE: ./install_miner.sh MODE[production|local] SSH_DESTINATION HOTKEY_PATH|VALIDATOR_PUBLIC_KEY MINER_PORT:8000(optional) DEFAULT_EXECUTOR_CLASS(optional, local mode only)"
   exit 1
 fi
 
@@ -36,6 +36,7 @@ if [ "$MODE" == "production" ]; then
   REMOTE_WALLET_NAME="$(basename "$(dirname "$REMOTE_HOTKEY_DIR")")"
 
   VALIDATOR_PUBLIC_KEY=""
+  DEFAULT_EXECUTOR_CLASS=
 
 elif [ "$MODE" == "local" ]; then
   VALIDATOR_PUBLIC_KEY="$3"
@@ -43,6 +44,8 @@ elif [ "$MODE" == "local" ]; then
   REMOTE_HOTKEY_DIR=.bittensor/wallets/dummy/hotkeys
   REMOTE_HOTKEY_NAME=dummy
   REMOTE_WALLET_NAME=dummy
+
+  DEFAULT_EXECUTOR_CLASS="${5:-}"
 else
   >&2 echo "Invalid mode $MODE. Must be 'production' or 'local'"
   exit 1
@@ -63,6 +66,7 @@ DEFAULT_ADMIN_PASSWORD="$DEFAULT_ADMIN_PASSWORD"
 MIGRATING=$MIGRATING
 MINER_PORT=$MINER_PORT
 VALIDATOR_PUBLIC_KEY=$VALIDATOR_PUBLIC_KEY
+DEFAULT_EXECUTOR_CLASS=$DEFAULT_EXECUTOR_CLASS
 ENDCAT
 ENDSSH
 
@@ -168,6 +172,8 @@ BITTENSOR_MINER_PORT=$(. ~/tmpvars && echo "$MINER_PORT")
 
 BITTENSOR_MINER_ADDRESS=auto
 COMPOSE_PROJECT_NAME=compute_horde_miner
+
+DEFAULT_EXECUTOR_CLASS=$(. ~/tmpvars && echo "$DEFAULT_EXECUTOR_CLASS")
 
 # make sure to unblock access to that port in your firewall
 PORT_FOR_EXECUTORS=$(. ~/tmpvars && echo "$MINER_PORT")
