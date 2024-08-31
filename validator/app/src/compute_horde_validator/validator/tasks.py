@@ -598,6 +598,15 @@ def save_weight_setting_failure(subtype: str, long_description: str, data: dict)
     )
 
 
+def save_weight_revealing_failure(subtype: str, long_description: str, data: dict):
+    save_weight_setting_event(
+        type_=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
+    )
+
+
 @contextlib.contextmanager
 def save_event_on_error(subtype):
     try:
@@ -765,7 +774,7 @@ def set_scores():
                         )
                         continue
                 except Exception:
-                    logger.warning("Encountered when setting weights: ")
+                    logger.warning("Encountered when setting weights: ", exc_info=True)
                     save_weight_setting_failure(
                         subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
                         long_description=traceback.format_exc(),
@@ -786,78 +795,133 @@ def set_scores():
 
 
 @app.task()
-def reveal_scores(reveal_in_advance_num_blocks: int = -5) -> None:  # FIXME: -(-5) is 5
+def reveal_scores() -> None:
     """
     Select latest Weights that are older than `commit_reveal_weights_interval`
     and haven't been revealed yet, and reveal them.
     """
+    WEIGHT_REVEALING_TTL = config.DYNAMIC_WEIGHT_REVEALING_TTL
+    WEIGHT_REVEALING_HARD_TTL = config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL
+    WEIGHT_REVEALING_ATTEMPTS = config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS
+    WEIGHT_REVEALING_FAILURE_BACKOFF = config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF
+
     commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
 
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
     last_weights = Weights.objects.order_by("-created_at").first()
-    if (
-        last_weights
-        and last_weights.revealed_at is None
-        and last_weights.block
-        <= current_block - (commit_reveal_weights_interval - reveal_in_advance_num_blocks)
-    ):
-        logger.debug(
-            "Scheduling revealing weights record %s created at %s",
-            last_weights.id,
-            last_weights.created_at,
-        )
-        do_reveal_weights.delay(weights_id=last_weights.id)
+    if not last_weights:
+        return
+    if last_weights.revealed_at is not None:
+        return
+    if last_weights.block > current_block - commit_reveal_weights_interval:
+        return
 
-
-@app.task()
-def do_reveal_weights(weights_id: int) -> None:
+    weights_id = last_weights.id
     with transaction.atomic():
-        weights = (
+        last_weights = (
             Weights.objects.filter(id=weights_id, revealed_at=None)
             .select_for_update(skip_locked=True)
             .first()
         )
-        if not weights:
+        if not last_weights:
             logger.debug(
                 "Weights have already been revealed or are being revealed at this moment: %s",
                 weights_id,
             )
             return
 
-        wallet = settings.BITTENSOR_WALLET()
-        subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-        try:
-            is_success, message = subtensor_.reveal_weights(
-                wallet=wallet,
-                netuid=settings.BITTENSOR_NETUID,
-                uids=weights.uids,
-                weights=weights.weights,
-                salt=weights.salt,
-                version_key=weights.version_key,
-                wait_for_inclusion=True,
-                wait_for_finalization=True,
-                max_retries=2,
-            )
-        except Exception as e:
-            is_success = False
-            message = str(e)
-        if is_success:
-            save_weight_setting_event(
-                type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
-                subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
-                long_description=message,
-                data={"weights_id": weights.id},
-            )
-            weights.revealed_at = now()
-            weights.save()
+        for try_number in range(WEIGHT_REVEALING_ATTEMPTS):
+            logger.debug(f"Revealing weights (attempt #{try_number}): weights_id={weights_id}")
+            success = False
+
+            try:
+                result = do_reveal_weights.apply_async(
+                    kwargs=dict(
+                        weights_id=last_weights.id,
+                    ),
+                    soft_time_limit=WEIGHT_REVEALING_TTL,
+                    time_limit=WEIGHT_REVEALING_HARD_TTL,
+                )
+                logger.info(f"Revealing weights task id: {result.id}")
+                try:
+                    with allow_join_result():
+                        success, msg = result.get(timeout=WEIGHT_REVEALING_TTL)
+                except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
+                    result.revoke(terminate=True)
+                    logger.info(f"Revealing weights timed out (attempt #{try_number})")
+                    save_weight_setting_failure(
+                        subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
+                        long_description=traceback.format_exc(),
+                        data={"try_number": try_number},
+                    )
+                    continue
+            except Exception:
+                logger.warning("Encountered when revealing weights: ")
+                save_weight_setting_failure(
+                    subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+                    long_description=traceback.format_exc(),
+                    data={"try_number": try_number},
+                )
+                continue
+            if success:
+                last_weights.revealed_at = now()
+                last_weights.save()
+                break
+            time.sleep(WEIGHT_REVEALING_FAILURE_BACKOFF)
         else:
+            msg = f"Failed to set weights after {WEIGHT_REVEALING_ATTEMPTS} attempts"
+            logger.warning(msg)
             save_weight_setting_failure(
-                subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
-                long_description=message,
-                data={"weights_id": weights.id},
+                subtype=SystemEvent.EventSubType.GIVING_UP,
+                long_description=msg,
+                data={"try_number": WEIGHT_REVEALING_ATTEMPTS},
             )
+
+
+@app.task()
+def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
+    weights = Weights.objects.filter(id=weights_id, revealed_at=None).first()
+    if not weights:
+        logger.debug(
+            "Weights have already been revealed or are being revealed at this moment: %s",
+            weights_id,
+        )
+        return True, "nothing_to_do"
+
+    wallet = settings.BITTENSOR_WALLET()
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    try:
+        is_success, message = subtensor_.reveal_weights(
+            wallet=wallet,
+            netuid=settings.BITTENSOR_NETUID,
+            uids=weights.uids,
+            weights=weights.weights,
+            salt=weights.salt,
+            version_key=weights.version_key,
+            wait_for_inclusion=True,
+            wait_for_finalization=True,
+            max_retries=2,
+        )
+    except Exception:
+        logger.warning("Encountered when setting weights: ", exc_info=True)
+        is_success = False
+        message = traceback.format_exc()
+    if is_success:
+        save_weight_setting_event(
+            type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+            subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
+            long_description=message,
+            data={"weights_id": weights.id},
+        )
+    else:
+        save_weight_setting_failure(
+            subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
+            long_description=message,
+            data={"weights_id": weights.id},
+        )
+    return is_success, message
 
 
 @app.task

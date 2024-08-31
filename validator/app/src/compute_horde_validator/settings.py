@@ -181,6 +181,26 @@ CONSTANCE_CONFIG = {
         "If the job running task wakes up late by this many blocks (or less), the jobs will still run",
         int,
     ),
+    "DYNAMIC_WEIGHT_REVEALING_TTL": (
+        120,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_HARD_TTL": (
+        125,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_ATTEMPTS": (
+        50,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF": (
+        5,
+        "in seconds",
+        int,
+    ),
 }
 
 # Content Security Policy
