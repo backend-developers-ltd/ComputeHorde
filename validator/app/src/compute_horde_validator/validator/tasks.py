@@ -462,9 +462,9 @@ def do_set_weights(
                 wait_for_finalization=wait_for_finalization,
                 max_retries=2,
             )
-        except Exception as e:
+        except Exception:
             is_success = False
-            message = str(e)
+            message = traceback.format_exc()
 
         if is_success:
             logger.info("Successfully committed weights!!!")
@@ -496,9 +496,9 @@ def do_set_weights(
                 wait_for_finalization=wait_for_finalization,
                 max_retries=2,
             )
-        except Exception as e:
+        except Exception:
             is_success = False
-            message = str(e)
+            message = traceback.format_exc()
         if is_success:
             logger.info("Successfully set weights!!!")
             save_weight_setting_event(
@@ -613,6 +613,7 @@ def save_event_on_error(subtype):
         yield
     except Exception:
         save_weight_setting_failure(subtype, traceback.format_exc(), {})
+        raise
 
 
 def get_subtensor(network):
@@ -770,7 +771,7 @@ def set_scores():
                         save_weight_setting_failure(
                             subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
                             long_description=traceback.format_exc(),
-                            data={"try_number": try_number},
+                            data={"try_number": try_number, "operation": "setting/committing"},
                         )
                         continue
                 except Exception:
@@ -778,7 +779,7 @@ def set_scores():
                     save_weight_setting_failure(
                         subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
                         long_description=traceback.format_exc(),
-                        data={"try_number": try_number},
+                        data={"try_number": try_number, "operation": "setting/committing"},
                     )
                     continue
                 if success:
@@ -790,7 +791,7 @@ def set_scores():
                 save_weight_setting_failure(
                     subtype=SystemEvent.EventSubType.GIVING_UP,
                     long_description=msg,
-                    data={"try_number": WEIGHT_SETTING_ATTEMPTS},
+                    data={"try_number": WEIGHT_SETTING_ATTEMPTS, "operation": "setting/committing"},
                 )
 
 
@@ -854,7 +855,7 @@ def reveal_scores() -> None:
                     save_weight_setting_failure(
                         subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
                         long_description=traceback.format_exc(),
-                        data={"try_number": try_number},
+                        data={"try_number": try_number, "operation": "revealing"},
                     )
                     continue
             except Exception:
@@ -862,7 +863,7 @@ def reveal_scores() -> None:
                 save_weight_setting_failure(
                     subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
                     long_description=traceback.format_exc(),
-                    data={"try_number": try_number},
+                    data={"try_number": try_number, "operation": "revealing"},
                 )
                 continue
             if success:
@@ -876,7 +877,7 @@ def reveal_scores() -> None:
             save_weight_setting_failure(
                 subtype=SystemEvent.EventSubType.GIVING_UP,
                 long_description=msg,
-                data={"try_number": WEIGHT_REVEALING_ATTEMPTS},
+                data={"try_number": WEIGHT_REVEALING_ATTEMPTS, "operation": "revealing"},
             )
 
 
