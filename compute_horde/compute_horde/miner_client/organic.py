@@ -8,7 +8,11 @@ import bittensor
 
 from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import ExecutorClass
-from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
+from compute_horde.miner_client.base import (
+    AbstractMinerClient,
+    ErrorCallback,
+    UnsupportedMessageReceived,
+)
 from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.miner_requests import (
     BaseMinerRequest,
@@ -36,8 +40,28 @@ from compute_horde.utils import MachineSpecs
 logger = logging.getLogger(__name__)
 
 
-# TODO: write docs at class level and method level
 class OrganicMinerClient(AbstractMinerClient):
+    """
+    Miner client to run organic job on a miner.
+    This client is used by validators to connect to prod miners.
+    Others can use this client to connect to their locally running miners to run jobs.
+
+    The usual usage of this miner client is as follows::
+
+        client = OrganicMinerClient(...)
+        async with client:
+            await client.send_model(V0InitialJobRequest(...))
+            msg = await client.miner_ready_or_declining_future
+            # handle msg
+
+            await client.send_model(V0JobRequest(...))
+            msg = client.miner_finished_or_failed_future
+            # handle msg
+
+    Note that the waiting on the response futures should properly be handled with timeouts
+    (with ``asyncio.timeout()``, ``asyncio.wait_for()`` etc.).
+    """
+
     def __init__(
         self,
         miner_hotkey: str,
@@ -59,11 +83,15 @@ class OrganicMinerClient(AbstractMinerClient):
         self.online_executor_count = 0
 
         # for waiting on miner responses (replaces JobState)
-        self.miner_ready_or_declining_future = loop.create_future()
+        self.miner_ready_or_declining_future: asyncio.Future[
+            V0DeclineJobRequest | V0ExecutorFailedRequest | V0ExecutorReadyRequest
+        ] = loop.create_future()
         self.miner_ready_or_declining_timestamp: int = 0
-        self.miner_finished_or_failed_future = loop.create_future()
+        self.miner_finished_or_failed_future: asyncio.Future[
+            V0JobFailedRequest | V0JobFinishedRequest
+        ] = loop.create_future()
         self.miner_finished_or_failed_timestamp: int = 0
-        self.miner_machine_specs: MachineSpecs | None = None  # what should we do with this???
+        self.miner_machine_specs: MachineSpecs | None = None
 
         name = f"{miner_hotkey}({miner_address}:{miner_port})"
         transport = transport or WSTransport(name, self.miner_url())
@@ -88,16 +116,16 @@ class OrganicMinerClient(AbstractMinerClient):
         return validator_requests.GenericError
 
     async def notify_generic_error(self, msg: BaseRequest) -> None:
-        pass
+        """This method is called when miner sends a generic error message"""
 
     async def notify_unauthorized_error(self, msg: UnauthorizedError) -> None:
-        pass
+        """This method is called when miner refuses the authentication message"""
 
     async def notify_receipt_failure(self, comment: str) -> None:
-        pass
+        """This method is called when sending receipts to miner fails"""
 
-    async def job_error_event_callback(self, msg: str) -> None:
-        pass
+    async def notify_send_failure(self, msg: str) -> None:
+        """This method is called when sending messages to miner fails"""
 
     async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
         try:
@@ -122,6 +150,11 @@ class OrganicMinerClient(AbstractMinerClient):
         elif isinstance(msg, V0ExecutorManifestRequest):
             await self.handle_manifest_request(msg)
             return
+
+        if getattr(msg, "job_uuid", self.job_uuid) != self.job_uuid:
+            logger.warning(
+                f"Received msg from {self.miner_name} for a different job (expected {self.job_uuid=}): {msg}"
+            )
 
         if isinstance(msg, V0AcceptJobRequest):
             logger.info(f"Miner {self.miner_name} accepted job")
@@ -186,10 +219,7 @@ class OrganicMinerClient(AbstractMinerClient):
                 accepted_timestamp,
                 max_timeout,
             )
-            await self.send_model(
-                receipt_message,
-                error_event_callback=self.job_error_event_callback,
-            )
+            await self.send_model(receipt_message)
             logger.debug(f"Sent job started receipt for {self.job_uuid}")
         except Exception as e:
             comment = f"Failed to send job started receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
@@ -226,15 +256,20 @@ class OrganicMinerClient(AbstractMinerClient):
             receipt_message = self.generate_job_finished_receipt_message(
                 started_timestamp, time_took_seconds, score
             )
-            await self.send_model(
-                receipt_message,
-                error_event_callback=self.job_error_event_callback,
-            )
+            await self.send_model(receipt_message)
             logger.debug(f"Sent job finished receipt for {self.job_uuid}")
         except Exception as e:
             comment = f"Failed to send job finished receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
             logger.warning(comment)
             await self.notify_receipt_failure(comment)
+
+    async def send_model(
+        self, model: BaseRequest, error_event_callback: ErrorCallback | None = None
+    ) -> None:
+        if error_event_callback is None:
+            error_event_callback = self.notify_send_failure
+
+        await super().send_model(model, error_event_callback)
 
     async def connect(self) -> None:
         await super().connect()

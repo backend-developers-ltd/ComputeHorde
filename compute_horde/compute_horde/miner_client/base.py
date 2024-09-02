@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 ErrorCallback: TypeAlias = Callable[[str], Awaitable[None]]
 
 
-class AbstractMinerClient(abc.ABC):
+class AbstractMinerClient(metaclass=abc.ABCMeta):
     def __init__(self, miner_name: str, transport: AbstractTransport):
         self.miner_name = miner_name
         self.read_messages_task: asyncio.Task | None = None
@@ -48,6 +48,7 @@ class AbstractMinerClient(abc.ABC):
 
     async def __aenter__(self):
         await self.connect()
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()

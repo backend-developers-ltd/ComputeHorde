@@ -37,7 +37,7 @@ class MinerClient(OrganicMinerClient):
             data={"job_uuid": self.job_uuid, "miner_hotkey": self.miner_hotkey},
         )
 
-    async def job_error_event_callback(self, msg: str) -> None:
+    async def notify_send_failure(self, msg: str) -> None:
         await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
             type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
             subtype=SystemEvent.EventSubType.MINER_SEND_ERROR,
