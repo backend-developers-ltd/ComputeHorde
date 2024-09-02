@@ -57,3 +57,17 @@ def _json_dumps_default(obj):
         return obj.isoformat()
 
     raise TypeError
+
+
+class Timer:
+    def __init__(self, timeout=None):
+        self.start_time = datetime.datetime.now()
+        self.timeout = timeout
+
+    def passed_time(self):
+        return (datetime.datetime.now() - self.start_time).total_seconds()
+
+    def time_left(self):
+        if self.timeout is None:
+            raise ValueError("timeout was not specified")
+        return self.timeout - self.passed_time()

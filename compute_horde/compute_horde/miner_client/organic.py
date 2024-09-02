@@ -1,11 +1,17 @@
 import asyncio
+import contextlib
 import datetime
+import enum
 import logging
 import time
+from dataclasses import dataclass, field
 from functools import cached_property
+from typing import Literal
 
 import bittensor
 
+from compute_horde.base.output_upload import OutputUpload
+from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.miner_client.base import (
@@ -31,11 +37,13 @@ from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
     V0AuthenticateRequest,
+    V0InitialJobRequest,
     V0JobFinishedReceiptRequest,
+    V0JobRequest,
     V0JobStartedReceiptRequest,
 )
-from compute_horde.transport import AbstractTransport, WSTransport
-from compute_horde.utils import MachineSpecs
+from compute_horde.transport import AbstractTransport, TransportConnectionError, WSTransport
+from compute_horde.utils import MachineSpecs, Timer
 
 logger = logging.getLogger(__name__)
 
@@ -274,3 +282,144 @@ class OrganicMinerClient(AbstractMinerClient):
     async def connect(self) -> None:
         await super().connect()
         await self.transport.send(self.generate_authentication_message().model_dump_json())
+
+
+class FailureReason(enum.Enum):
+    MINER_CONNECTION_FAILED = enum.auto()
+    INITIAL_RESPONSE_TIMED_OUT = enum.auto()
+    FINAL_RESPONSE_TIMED_OUT = enum.auto()
+    JOB_DECLINED = enum.auto()
+    EXECUTOR_FAILED = enum.auto()
+    JOB_FAILED = enum.auto()
+
+
+class OrganicJobError(Exception):
+    def __init__(self, reason: FailureReason, received: BaseRequest | None = None):
+        self.reason = reason
+        self.received = received
+
+    def __str__(self):
+        s = f"Organic job failed, {self.reason=}"
+        if self.received:
+            s += f", {self.received=}"
+        return s
+
+    def __repr__(self):
+        return f"{type(self).__name__}: {str(self)}"
+
+
+@dataclass
+class OrganicJobDetails:
+    job_uuid: str
+
+    miner_hotkey: str
+    miner_address: str
+    miner_port: int
+
+    executor_class: ExecutorClass = ExecutorClass.spin_up_4min__gpu_24gb
+    base_docker_image_name: str | None = None
+    docker_image: str | None = None
+    raw_script: str | None = None
+    docker_run_options_preset: Literal["nvidia_all", "none"] = "nvidia_all"
+    docker_run_cmd: list[str] = field(default_factory=list)
+    total_job_timeout: int = 300
+    volume: Volume | None = None
+    output: OutputUpload | None = None
+
+    def __post_init__(self):
+        if self.base_docker_image_name is None:
+            self.base_docker_image_name = self.docker_image
+
+        if (self.docker_image, self.raw_script) == (None, None):
+            raise ValueError("At least of of `docker_image` or `raw_script` must be not None")
+
+
+async def run_organic_job(
+    job_details: OrganicJobDetails,
+    my_keypair: bittensor.Keypair,
+    wait_timeout: int = 300,
+):
+    """
+    Run an organic job. This is a simpler way to use OrganicMinerClient.
+
+    :param job_details: details specific to the job that needs to be run
+    :param my_keypair: the hotkey keypair of the validator
+    :param wait_timeout: maximum timeout for waiting for miner responses
+    :return: standard out and standard error of the job container
+    """
+    client = OrganicMinerClient(
+        miner_hotkey=job_details.miner_hotkey,
+        miner_address=job_details.miner_address,
+        miner_port=job_details.miner_port,
+        job_uuid=job_details.job_uuid,
+        my_keypair=my_keypair,
+    )
+
+    async with contextlib.AsyncExitStack() as exit_stack:
+        try:
+            await exit_stack.enter_async_context(client)
+        except TransportConnectionError as exc:
+            raise OrganicJobError(FailureReason.MINER_CONNECTION_FAILED) from exc
+
+        job_timer = Timer(timeout=job_details.total_job_timeout)
+
+        await client.send_model(
+            V0InitialJobRequest(
+                job_uuid=job_details.job_uuid,
+                executor_class=job_details.executor_class,
+                base_docker_image_name=job_details.base_docker_image_name,
+                timeout_seconds=job_details.total_job_timeout,
+                volume_type=job_details.volume.volume_type if job_details.volume else None,
+            ),
+        )
+
+        try:
+            initial_response = await asyncio.wait_for(
+                client.miner_ready_or_declining_future,
+                timeout=min(job_timer.time_left(), wait_timeout),
+            )
+        except TimeoutError as exc:
+            raise OrganicJobError(FailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
+
+        if isinstance(initial_response, V0DeclineJobRequest):
+            raise OrganicJobError(FailureReason.JOB_DECLINED, initial_response)
+        elif isinstance(initial_response, V0ExecutorFailedRequest):
+            raise OrganicJobError(FailureReason.EXECUTOR_FAILED, initial_response)
+
+        await client.send_job_started_receipt_message(
+            executor_class=job_details.executor_class,
+            accepted_timestamp=time.time(),
+            max_timeout=int(job_timer.time_left()),
+        )
+
+        await client.send_model(
+            V0JobRequest(
+                job_uuid=job_details.job_uuid,
+                executor_class=job_details.executor_class,
+                docker_image_name=job_details.docker_image,
+                raw_script=job_details.raw_script,
+                docker_run_options_preset=job_details.docker_run_options_preset,
+                docker_run_cmd=job_details.docker_run_cmd,
+                volume=job_details.volume,
+                output_upload=job_details.output,
+            )
+        )
+
+        try:
+            final_response = await asyncio.wait_for(
+                client.miner_finished_or_failed_future,
+                timeout=job_timer.time_left(),
+            )
+        except TimeoutError as exc:
+            raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
+
+        if isinstance(final_response, V0JobFailedRequest):
+            raise OrganicJobError(FailureReason.JOB_FAILED, final_response)
+
+        await client.send_job_finished_receipt_message(
+            started_timestamp=job_timer.start_time.timestamp(),
+            time_took_seconds=job_timer.passed_time(),
+            score=0,  # no score for organic jobs (at least right now)
+        )
+
+        return final_response.docker_process_stdout, final_response.docker_process_stderr

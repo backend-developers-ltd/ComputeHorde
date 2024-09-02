@@ -17,6 +17,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 from compute_horde.mv_protocol.validator_requests import V0InitialJobRequest, V0JobRequest
+from compute_horde.utils import Timer
 from django.conf import settings
 from pydantic import BaseModel
 
@@ -27,7 +28,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.organic_jobs.facilitator_api import V0FacilitatorJobRequest
-from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_volume
+from compute_horde_validator.validator.utils import get_dummy_inline_zip_volume
 
 logger = logging.getLogger(__name__)
 
