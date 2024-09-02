@@ -613,6 +613,7 @@ def save_event_on_error(subtype):
         yield
     except Exception:
         save_weight_setting_failure(subtype, traceback.format_exc(), {})
+        raise
 
 
 def get_subtensor(network):
