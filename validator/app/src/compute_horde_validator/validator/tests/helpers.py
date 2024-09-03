@@ -363,7 +363,7 @@ class Celery:
     def __init__(self, hook_script_file_path=None, run_id=None):
         self.celery_script = os.getenv(
             "REMOTE_CELERY_START_SCRIPT",
-            Path(__file__).parents[5] / "dev_env_setup" / "start_celery.sh",
+            (Path(__file__).parents[5] / "dev_env_setup" / "start_celery.sh").as_posix(),
         )
         self.celery_process = None
         self.pid_files_pattern = "/tmp/celery-validator-*.pid"
@@ -410,34 +410,35 @@ class Celery:
 
     def __enter__(self):
         self.kill_pids()
-        env = {
-            **os.environ,
-            **(
-                {"DEBUG_CELERY_HOOK_SCRIPT_FILE": self.hook_script_file_path}
-                if self.hook_script_file_path
-                else {}
-            ),
-        }
+        test_database_name = shlex.quote(settings.DATABASES["default"]["NAME"])
         if self.remote_host:
             remote_host = shlex.quote(self.remote_host)
             remote_venv = shlex.quote(self.remote_venv)
             hook_script_file_path = shlex.quote(self.hook_script_file_path)
             celery_script = shlex.quote(self.celery_script)
-            test_database_name = shlex.quote(settings.DATABASES["default"]["NAME"])
 
             command = shlex.join(
                 [
                     "ssh",
                     remote_host,
-                    f"source {remote_venv} && DEBUG_CELERY_HOOK_SCRIPT_FILE={hook_script_file_path or ''} DEBUG_OVERRIDE_DATABASE_NAME={test_database_name} PYTEST_RUN_ID={self.run_id or ''} {celery_script}",
+                    f"source {remote_venv}/bin/activate && DEBUG_CELERY_HOOK_SCRIPT_FILE={hook_script_file_path or ''} DEBUG_OVERRIDE_DATABASE_NAME={test_database_name} PYTEST_RUN_ID={self.run_id or ''} {celery_script}",
                 ]
             )
             self.celery_process = subprocess.Popen(
                 command,
                 shell=True,
-                env=env,
             )
         else:
+            env = {
+                **os.environ,
+                "PYTEST_RUN_ID": self.run_id,
+                "DEBUG_OVERRIDE_DATABASE_NAME": test_database_name,
+                **(
+                    {"DEBUG_CELERY_HOOK_SCRIPT_FILE": self.hook_script_file_path}
+                    if self.hook_script_file_path
+                    else {}
+                ),
+            }
             self.celery_process = subprocess.Popen(self.celery_script, shell=True, env=env)
 
         return self

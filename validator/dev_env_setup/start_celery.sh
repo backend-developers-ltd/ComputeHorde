@@ -15,6 +15,7 @@ OPTIONS="-E -l DEBUG --pidfile=/tmp/celery-validator-%n.pid --logfile=/tmp/celer
 CELERY_MASTER_CONCURRENCY=2
 CELERY_WORKER_CONCURRENCY=2
 
+# shellcheck disable=SC2086
 celery -A compute_horde_validator multi start $WORKERS $OPTIONS \
     -Q:master celery --autoscale:master=$CELERY_MASTER_CONCURRENCY,$CELERY_MASTER_CONCURRENCY \
     -Q:worker worker --autoscale:worker=$CELERY_WORKER_CONCURRENCY,$CELERY_WORKER_CONCURRENCY
