@@ -161,8 +161,9 @@ class OrganicMinerClient(AbstractMinerClient):
 
         if getattr(msg, "job_uuid", self.job_uuid) != self.job_uuid:
             logger.warning(
-                f"Received msg from {self.miner_name} for a different job (expected {self.job_uuid=}): {msg}"
+                f"Received msg from {self.miner_name} for a different job (expected job {self.job_uuid}, got job {msg.job_uuid}): {msg}"
             )
+            return
 
         if isinstance(msg, V0AcceptJobRequest):
             logger.info(f"Miner {self.miner_name} accepted job")
