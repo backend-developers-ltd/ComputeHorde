@@ -5,6 +5,7 @@ from datetime import timedelta
 from os import urandom
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import UniqueConstraint
@@ -297,3 +298,52 @@ class Weights(models.Model):
 
     def __str__(self) -> str:
         return str(self.weights)
+
+
+class PromptSeries(models.Model):
+    """
+    A series of prompts generated in a single run of the prompt generator.
+    """
+
+    series_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
+    s3_url = models.URLField(max_length=1000)
+    created_at = models.DateTimeField(default=now)
+    generator_version = models.PositiveSmallIntegerField(default=settings.PROMPT_GENERATOR_VERSION)
+
+
+class SolveWorkload(models.Model):
+    """
+    A collective workload of prompt samples to be solved together.
+    """
+
+    workload_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
+    seed = models.BigIntegerField()
+    s3_url = models.URLField(max_length=1000)
+    created_at = models.DateTimeField(default=now)
+    finished_at = models.DateTimeField(null=True, default=None, db_index=True)
+
+
+class PromptSample(models.Model):
+    """
+    A sample of prompts to be solved from a particular series.
+    Each sample is used to generate a single synthetic job after being solved.
+    """
+
+    series = models.ForeignKey(PromptSeries, on_delete=models.CASCADE, related_name="samples")
+    workload = models.ForeignKey(SolveWorkload, on_delete=models.CASCADE, related_name="samples")
+    synthetic_job = models.ForeignKey(SyntheticJob, on_delete=models.CASCADE, null=True)
+    created_at = models.DateTimeField(default=now)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=["series", "workload"],
+                name="unique_series_workload",
+            ),
+        ]
+
+
+class Prompt(models.Model):
+    sample = models.ForeignKey(PromptSample, on_delete=models.CASCADE, related_name="prompts")
+    content = models.TextField()
+    answer = models.TextField(null=True)
