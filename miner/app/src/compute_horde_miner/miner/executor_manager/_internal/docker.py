@@ -3,7 +3,6 @@ import logging
 import os
 import subprocess
 
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
@@ -114,4 +113,4 @@ class DockerExecutorManager(BaseExecutorManager):
             pass
 
     async def get_manifest(self):
-        return {DEFAULT_EXECUTOR_CLASS: 1}
+        return {settings.DEFAULT_EXECUTOR_CLASS: 1}

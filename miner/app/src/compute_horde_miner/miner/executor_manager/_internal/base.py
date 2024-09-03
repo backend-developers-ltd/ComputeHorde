@@ -5,8 +5,6 @@ import logging
 import time
 
 from compute_horde.executor_class import (
-    DEFAULT_EXECUTOR_CLASS,
-    DEFAULT_EXECUTOR_TIMEOUT,
     MAX_EXECUTOR_TIMEOUT,
     ExecutorClass,
 )
@@ -131,10 +129,6 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
             else:
                 pool.set_count(executor_count)
         return self._executor_class_pools[executor_class]
-
-    async def reserve_executor(self, token):
-        # TODO: deprecated - new code should use `reserve_executor_class`
-        await self.reserve_executor_class(token, DEFAULT_EXECUTOR_CLASS, DEFAULT_EXECUTOR_TIMEOUT)
 
     async def reserve_executor_class(self, token, executor_class, timeout):
         pool = await self.get_executor_class_pool(executor_class)

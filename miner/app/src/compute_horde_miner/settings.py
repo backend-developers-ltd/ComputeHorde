@@ -3,6 +3,7 @@ Django settings for compute_horde_miner project.
 """
 
 from compute_horde import base  # noqa
+from compute_horde import executor_class
 
 import inspect
 import ipaddress
@@ -354,6 +355,10 @@ EXECUTOR_MANAGER_CLASS_PATH = env.str(
 EXECUTOR_IMAGE = env.str(
     "EXECUTOR_IMAGE", default="backenddevelopersltd/compute-horde-executor:v0-latest"
 )
+DEFAULT_EXECUTOR_CLASS = (
+    env.str("DEFAULT_EXECUTOR_CLASS", None) or executor_class.DEFAULT_EXECUTOR_CLASS
+)
+
 DEBUG_SKIP_PULLING_EXECUTOR_IMAGE = env.bool("DEBUG_SKIP_PULLING_EXECUTOR_IMAGE", default=False)
 ADDRESS_FOR_EXECUTORS = env.str("ADDRESS_FOR_EXECUTORS", default="")
 PORT_FOR_EXECUTORS = env.int("PORT_FOR_EXECUTORS")
