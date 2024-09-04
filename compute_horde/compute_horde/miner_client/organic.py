@@ -159,9 +159,9 @@ class OrganicMinerClient(AbstractMinerClient):
             await self.handle_manifest_request(msg)
             return
 
-        if getattr(msg, "job_uuid", self.job_uuid) != self.job_uuid:
+        if (received_job_uuid := getattr(msg, "job_uuid", self.job_uuid)) != self.job_uuid:
             logger.warning(
-                f"Received msg from {self.miner_name} for a different job (expected job {self.job_uuid}, got job {msg.job_uuid}): {msg}"
+                f"Received msg from {self.miner_name} for a different job (expected job {self.job_uuid}, got job {received_job_uuid}): {msg}"
             )
             return
 
@@ -172,13 +172,13 @@ class OrganicMinerClient(AbstractMinerClient):
         ):
             try:
                 self.miner_ready_or_declining_future.set_result(msg)
-                self.miner_ready_or_declining_timestamp = time.time()
+                self.miner_ready_or_declining_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
         elif isinstance(msg, V0JobFailedRequest | V0JobFinishedRequest):
             try:
                 self.miner_finished_or_failed_future.set_result(msg)
-                self.miner_finished_or_failed_timestamp = time.time()
+                self.miner_finished_or_failed_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
         elif isinstance(msg, V0MachineSpecsRequest):
