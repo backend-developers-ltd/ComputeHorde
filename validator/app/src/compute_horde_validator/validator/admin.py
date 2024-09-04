@@ -13,6 +13,10 @@ from compute_horde_validator.validator.models import (
     JobStartedReceipt,
     SystemEvent,
     Weights,
+    Prompt,
+    PromptSeries,
+    PromptSample,
+    SolveWorkload,
 )  # noqa
 from rangefilter.filters import DateTimeRangeFilter
 
@@ -145,6 +149,42 @@ class WeightsReadOnlyAdmin(ReadOnlyAdmin):
     ordering = ["-created_at"]
 
 
+class PromptSeriesAdmin(ReadOnlyAdmin):
+    list_display = [
+        "series_uuid",
+        "s3_url",
+        "created_at",
+        "generator_version",
+    ]
+
+
+class SolveWorkloadAdmin(ReadOnlyAdmin):
+    list_display = [
+        "workload_uuid",
+        "seed",
+        "s3_url",
+        "created_at",
+        "finished_at",
+    ]
+
+
+class PromptSampleAdmin(ReadOnlyAdmin):
+    list_display = [
+        "pk",
+        "series",
+        "workload",
+        "synthetic_job",
+        "created_at",
+    ]
+
+
+class PromptAdmin(ReadOnlyAdmin):
+    list_display = [
+        "pk",
+        "sample",
+    ]
+
+
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
@@ -154,3 +194,7 @@ admin.site.register(MinerBlacklist)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)
 admin.site.register(SystemEvent, admin_class=SystemEventAdmin)
 admin.site.register(Weights, admin_class=WeightsReadOnlyAdmin)
+admin.site.register(PromptSeries, admin_class=PromptSeriesAdmin)
+admin.site.register(SolveWorkload, admin_class=SolveWorkloadAdmin)
+admin.site.register(PromptSample, admin_class=PromptSampleAdmin)
+admin.site.register(Prompt, admin_class=PromptAdmin)
