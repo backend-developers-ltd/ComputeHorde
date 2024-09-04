@@ -312,11 +312,6 @@ class OrganicJobError(Exception):
 @dataclass
 class OrganicJobDetails:
     job_uuid: str
-
-    miner_hotkey: str
-    miner_address: str
-    miner_port: int
-
     executor_class: ExecutorClass = ExecutorClass.spin_up_4min__gpu_24gb
     docker_image: str | None = None
     raw_script: str | None = None
@@ -332,25 +327,19 @@ class OrganicJobDetails:
 
 
 async def run_organic_job(
+    client: OrganicMinerClient,
     job_details: OrganicJobDetails,
-    my_keypair: bittensor.Keypair,
     wait_timeout: int = 300,
 ):
     """
     Run an organic job. This is a simpler way to use OrganicMinerClient.
 
+    :param client: the organic miner client
     :param job_details: details specific to the job that needs to be run
-    :param my_keypair: the hotkey keypair of the validator
     :param wait_timeout: maximum timeout for waiting for miner responses
     :return: standard out and standard error of the job container
     """
-    client = OrganicMinerClient(
-        miner_hotkey=job_details.miner_hotkey,
-        miner_address=job_details.miner_address,
-        miner_port=job_details.miner_port,
-        job_uuid=job_details.job_uuid,
-        my_keypair=my_keypair,
-    )
+    assert client.job_uuid == job_details.job_uuid
 
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
