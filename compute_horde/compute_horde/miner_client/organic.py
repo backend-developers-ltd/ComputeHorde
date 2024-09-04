@@ -318,7 +318,6 @@ class OrganicJobDetails:
     miner_port: int
 
     executor_class: ExecutorClass = ExecutorClass.spin_up_4min__gpu_24gb
-    base_docker_image_name: str | None = None
     docker_image: str | None = None
     raw_script: str | None = None
     docker_run_options_preset: Literal["nvidia_all", "none"] = "nvidia_all"
@@ -328,9 +327,6 @@ class OrganicJobDetails:
     output: OutputUpload | None = None
 
     def __post_init__(self):
-        if self.base_docker_image_name is None:
-            self.base_docker_image_name = self.docker_image
-
         if (self.docker_image, self.raw_script) == (None, None):
             raise ValueError("At least of of `docker_image` or `raw_script` must be not None")
 
@@ -368,7 +364,7 @@ async def run_organic_job(
             V0InitialJobRequest(
                 job_uuid=job_details.job_uuid,
                 executor_class=job_details.executor_class,
-                base_docker_image_name=job_details.base_docker_image_name,
+                base_docker_image_name=job_details.docker_image,
                 timeout_seconds=job_details.total_job_timeout,
                 volume_type=job_details.volume.volume_type if job_details.volume else None,
             ),
