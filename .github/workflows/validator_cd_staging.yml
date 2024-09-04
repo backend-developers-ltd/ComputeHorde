@@ -36,21 +36,11 @@ jobs:
 
           docker push "${IMAGE_NAME}"
           docker push "${SHA_IMAGE_NAME}"
-      - name: Get current date
-        id: date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-      - name: Set Dist Version
-        run: |
-          BUILD_NUMBER="${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
-          echo "DIST_VERSION=${DIST_VERSION_PREFIX}-${{ steps.date.outputs.date }}-${BUILD_NUMBER}" >> $GITHUB_ENV
-      - name: Create Tag
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const {DIST_VERSION} = process.env
-            github.rest.git.createRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: `refs/tags/${DIST_VERSION}`,
-                sha: context.sha
-            })
+  
+  tagging:
+    needs: deploy
+    uses: ./.github/workflows/common_tagging.yml
+    with:
+      DIST_VERSION_PREFIX: "validator-staging"
+    secrets:
+      ACTIONS_PAT: ${{ secrets.ACTIONS_PAT }}

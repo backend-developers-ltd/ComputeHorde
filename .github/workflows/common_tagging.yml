@@ -1,0 +1,49 @@
+name: Common Tagging Tasks
+
+on:
+  workflow_call:
+    inputs:
+      DIST_VERSION_PREFIX:
+        required: true
+        type: string
+    secrets:
+      ACTIONS_PAT:
+        required: true
+
+env:
+  CHANGE_LOG_BRANCH: "staging"
+
+jobs:
+  tagging:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.ACTIONS_PAT }}
+
+      - name: Determine Next Tag
+        id: determine_tag
+        run: |
+          YEAR=$(date +"%y")   
+          MONTH=$(date +"%-m") 
+          DAY=$(date +"%-d")   
+          DATE_TAG="v${YEAR}.${MONTH}.${DAY}"
+          
+          git fetch --tags
+          
+          LATEST_TAG=$(git tag -l "${{ inputs.DIST_VERSION_PREFIX }}-${DATE_TAG}-*" | sort -V | tail -n 1)
+
+          if [ -z "$LATEST_TAG" ]; then
+            NEXT_TAG="${DATE_TAG}-1"
+          else
+            COUNTER=$(echo "$LATEST_TAG" | awk -F '-' '{print $NF}')
+            NEXT_TAG="${DATE_TAG}-$((COUNTER + 1))"
+          fi
+
+          echo "NEXT_TAG=$NEXT_TAG" >> $GITHUB_ENV
+      
+      - name: Create and Push Tag
+        run: |
+          git tag "${{ inputs.DIST_VERSION_PREFIX }}-$NEXT_TAG"
+          git push origin "${{ inputs.DIST_VERSION_PREFIX }}-$NEXT_TAG"
