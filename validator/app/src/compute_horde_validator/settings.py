@@ -467,6 +467,13 @@ CHANNEL_LAYERS = {
     },
 }
 
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
+AWS_ENDPOINT_URL = env("AWS_ENDPOINT_URL", default=None)
+
+S3_BUCKET_NAME_PROMPTS = env("S3_BUCKET_NAME_PROMPTS", default=None)
+S3_BUCKET_NAME_ANSWERS = env("S3_BUCKET_NAME_ANSWERS", default=None)
+
 # Sentry
 if SENTRY_DSN := env("SENTRY_DSN", default=""):
     import sentry_sdk
