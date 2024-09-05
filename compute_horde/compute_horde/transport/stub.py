@@ -11,7 +11,7 @@ class StubTransport(AbstractTransport):
 
     def __init__(self, name: str, messages: list[str], *args, **kwargs):
         self.sent: list[str] = []
-        self.messages = messages
+        self.messages = iter(messages)
         self.sent_messages: list[str] = []
 
     async def start(self): ...
