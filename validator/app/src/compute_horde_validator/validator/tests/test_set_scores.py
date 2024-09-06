@@ -6,6 +6,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from constance import config
+from django.db.models import Max
 from django.test import override_settings
 from django.utils.timezone import now
 
@@ -389,7 +390,7 @@ def test_set_scores__set_weight__reveal__timeout(settings, run_uuid):
         last_weights = Weights.objects.order_by("-id").first()
         assert last_weights
         assert last_weights.revealed_at is None
-
+        max_system_event_id_before = SystemEvent.objects.all().aggregate(Max("id"))["id__max"]
         config.DYNAMIC_WEIGHT_REVEALING_TTL = 9
         config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL = 15
         config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS = 5
@@ -401,23 +402,24 @@ def test_set_scores__set_weight__reveal__timeout(settings, run_uuid):
                 result.get(timeout=120)
         last_weights.refresh_from_db()
         assert last_weights.revealed_at is not None
-        assert list(SystemEvent.objects.values_list("type", "subtype").order_by("id")) in [
+        assert list(
+            SystemEvent.objects.filter(id__gt=max_system_event_id_before or 0)
+            .values_list("type", "subtype")
+            .order_by("id")
+        ) in [
             [
-                ("WEIGHT_SETTING_SUCCESS", "COMMIT_WEIGHTS_SUCCESS"),
                 ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
                 ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
                 ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
                 ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
             ],
             [
-                ("WEIGHT_SETTING_SUCCESS", "COMMIT_WEIGHTS_SUCCESS"),
                 ("WEIGHT_SETTING_FAILURE", "WRITING_TO_CHAIN_TIMEOUT"),
                 ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
                 ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
                 ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
             ],
             [
-                ("WEIGHT_SETTING_SUCCESS", "COMMIT_WEIGHTS_SUCCESS"),
                 ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
                 ("WEIGHT_SETTING_FAILURE", "WRITING_TO_CHAIN_TIMEOUT"),
                 ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
