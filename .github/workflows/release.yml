@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out the repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Install Towncrier
+      run: pip install towncrier
+
+    - name: Generate changelog for validator
+      run: |
+        cd validator
+        towncrier build --version 1.0.0 --yes
+
+    - name: Generate changelog for miner
+      run: |
+        cd miner
+        towncrier build --version 1.0.0 --yes
+
+    - name: Generate changelog for executor
+      run: |
+        cd executor
+        towncrier build --version 1.0.0 --yes
+
+    - name: Commit and push changelog
+      run: |
+        git config --global user.name "GitHub Action"
+        git config --global user.email "actions@github.com"
+        git add .
+        git commit -m "Update CHANGELOG.md for version 1.0.0" || echo "No changes to commit"
+
+      # Push changes to the current branch
+      git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+    - name: Notify Discord
+      run: |
+        curl -H "Content-Type: application/json" \
+        -X POST \
+        -d "{\"content\": \"New release: $(git describe --tags). Changelogs: Validator: $(cat validator/CHANGELOG.md), Miner: $(cat miner/CHANGELOG.md), Executor: $(cat executor/CHANGELOG.md)\"}" \
+        ${{ secrets.DISCORD_WEBHOOK }}

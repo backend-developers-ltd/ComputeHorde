@@ -1,0 +1,19 @@
+Validator Changelog
+====================
+
+{% for section, categories in sections.items() %}
+{% if section %}
+## {{ section }}
+{% else %}
+## General
+{% endif %}
+
+{% for category, changes in categories.items() %}
+### {{ category.capitalize() }}
+
+{% for change, details in changes.items() %}
+- {{ change }} {% if details %}{{ details | join(', ') }}{% endif %}
+{% endfor %}
+
+{% endfor %}
+{% endfor %}
