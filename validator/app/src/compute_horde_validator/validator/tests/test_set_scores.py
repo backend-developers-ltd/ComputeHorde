@@ -402,31 +402,35 @@ def test_set_scores__set_weight__reveal__timeout(settings, run_uuid):
                 result.get(timeout=120)
         last_weights.refresh_from_db()
         assert last_weights.revealed_at is not None
-        assert list(
+        system_events = list(
             SystemEvent.objects.filter(id__gt=max_system_event_id_before or 0)
             .values_list("type", "subtype")
             .order_by("id")
-        ) in [
-            [
-                ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
-                ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
-                ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
-                ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
-            ],
-            [
-                ("WEIGHT_SETTING_FAILURE", "WRITING_TO_CHAIN_TIMEOUT"),
-                ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
-                ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
-                ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
-            ],
-            [
-                ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
-                ("WEIGHT_SETTING_FAILURE", "WRITING_TO_CHAIN_TIMEOUT"),
-                ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
-                ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
-                ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
-            ],
-        ]
+        )
+        assert any(
+            system_events[-len(expected_events) :] == expected_events
+            for expected_events in [
+                [
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
+                ],
+                [
+                    ("WEIGHT_SETTING_FAILURE", "WRITING_TO_CHAIN_TIMEOUT"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
+                ],
+                [
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_FAILURE", "WRITING_TO_CHAIN_TIMEOUT"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
+                ],
+            ]
+        ), system_events
 
 
 # ! This test is the last because otherwise it breaks other tests

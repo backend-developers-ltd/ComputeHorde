@@ -1,4 +1,5 @@
 import glob
+import logging
 import numbers
 import os
 import shlex
@@ -30,6 +31,9 @@ from compute_horde_validator.validator.organic_jobs.miner_client import MinerCli
 from compute_horde_validator.validator.synthetic_jobs import batch_run
 
 NUM_NEURONS = 5
+
+
+logger = logging.getLogger(__name__)
 
 
 def throw_error(*args):
@@ -402,7 +406,7 @@ class Celery:
                 pid = self.read_pid(pid_filename)
                 kill_command = f"kill -9 {pid}"
                 if self.remote_host:
-                    subprocess.Popen(["ssh", self.remote_host, kill_command])
+                    subprocess.check_call(["ssh", self.remote_host, kill_command])
                 else:
                     os.kill(pid, 9)
             except (FileNotFoundError, ValueError, ProcessLookupError):
@@ -444,24 +448,19 @@ class Celery:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.kill_pids()
-
         try:
-            if self.remote_host:
-                stop_command = f"pkill -f '{self.celery_script}'"
-                subprocess.Popen(["ssh", self.remote_host, stop_command])
-            else:
-                self.celery_process.kill()
-
-            self.celery_process.wait(3)
+            self.celery_process.terminate()
+            self.celery_process.wait(15)
         except Exception:
-            pass
+            logger.exception("Encountered when killing celery")
+
+        self.kill_pids()
 
         # Delete the pid files
         for pid_filename in self.get_pid_files():
             try:
                 if self.remote_host:
-                    subprocess.Popen(["ssh", self.remote_host, f"rm {pid_filename}"])
+                    subprocess.check_call(["ssh", self.remote_host, f"rm {pid_filename}"])
                 else:
                     os.remove(pid_filename)
             except OSError:
