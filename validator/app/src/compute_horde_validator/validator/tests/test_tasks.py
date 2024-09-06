@@ -16,6 +16,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.tasks import (
+    ScheduleError,
     calculate_job_start_block,
     check_missed_synthetic_jobs,
     get_cycle_containing_block,
@@ -203,7 +204,8 @@ def test__schedule_validation_run__not_in_validators(validators):
         "compute_horde_validator.validator.tasks.get_validators", lambda *args, **kwargs: validators
     ):
         assert SyntheticJobBatch.objects.count() == 0
-        schedule_synthetic_jobs()
+        with pytest.raises(ScheduleError):
+            schedule_synthetic_jobs()
         assert SyntheticJobBatch.objects.count() == 0
 
 
@@ -211,7 +213,8 @@ def test__schedule_validation_run__not_in_validators(validators):
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test__schedule_validation_run__unable_to_fetch_metagraph(validators):
     assert SyntheticJobBatch.objects.count() == 0
-    schedule_synthetic_jobs()
+    with pytest.raises(ScheduleError):
+        schedule_synthetic_jobs()
     assert SyntheticJobBatch.objects.count() == 0
 
 
