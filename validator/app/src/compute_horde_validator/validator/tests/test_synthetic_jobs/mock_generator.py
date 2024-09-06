@@ -1,5 +1,6 @@
 import uuid
 
+from compute_horde.base.volume import InlineVolume, Volume
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
@@ -36,8 +37,8 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def docker_run_cmd(self) -> list[str]:
         return ["mock"]
 
-    async def volume_contents(self) -> str:
-        return "mock"
+    async def volume(self) -> Volume:
+        return InlineVolume(contents="mock")
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         return True, "mock", MOCK_SCORE

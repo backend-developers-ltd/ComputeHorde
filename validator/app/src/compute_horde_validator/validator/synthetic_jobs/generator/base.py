@@ -1,6 +1,7 @@
 import abc
 import uuid
 
+from compute_horde.base.volume import Volume
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
@@ -37,7 +38,7 @@ class BaseSyntheticJobGenerator(abc.ABC):
         return None
 
     @abc.abstractmethod
-    async def volume_contents(self) -> str: ...
+    async def volume(self) -> Volume: ...
 
     @abc.abstractmethod
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]: ...

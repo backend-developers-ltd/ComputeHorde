@@ -13,7 +13,7 @@ from typing import Any
 import bittensor
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
-from compute_horde.base.volume import InlineVolume
+from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
@@ -228,7 +228,7 @@ class Job:
     miner_hotkey: str
     executor_class: ExecutorClass
     job_generator: BaseSyntheticJobGenerator
-    volume_contents: str
+    volume: Volume
 
     # responses
 
@@ -344,7 +344,6 @@ class Job:
             docker_image_name=self.job_generator.docker_image_name(),
             docker_run_options_preset=self.job_generator.docker_run_options_preset(),
             timeout_seconds=self.job_generator.timeout_seconds(),
-            volume_contents_size=len(self.volume_contents),
             exception=repr(self.exception) if self.exception is not None else None,
             exception_time=_datetime_dump(self.exception_time),
             exception_stage=self.exception_stage,
@@ -739,7 +738,7 @@ async def _generate_jobs(ctx: BatchContext) -> None:
                     miner_hotkey=hotkey,
                     executor_class=executor_class,
                     job_generator=job_generator,
-                    volume_contents=await job_generator.volume_contents(),
+                    volume=await job_generator.volume(),
                 )
                 ctx.job_uuids.append(job_uuid)
                 job_generators.append(job_generator)
@@ -824,7 +823,7 @@ async def _send_job_request(
         docker_run_options_preset=job.job_generator.docker_run_options_preset(),
         docker_run_cmd=job.job_generator.docker_run_cmd(),
         raw_script=job.job_generator.raw_script(),
-        volume=InlineVolume(contents=job.volume_contents),
+        volume=job.volume,
         output_upload=None,
     )
     request_json = request.model_dump_json()
