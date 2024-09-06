@@ -21,7 +21,7 @@ class SystemEvent(models.Model):
     class EventType(models.TextChoices):
         WEIGHT_SETTING_SUCCESS = "WEIGHT_SETTING_SUCCESS"
         WEIGHT_SETTING_FAILURE = "WEIGHT_SETTING_FAILURE"
-        # the two above are blankets for setting, commiting and revealing
+        # the two above are blankets for setting, committing and revealing
         MINER_ORGANIC_JOB_FAILURE = "MINER_ORGANIC_JOB_FAILURE"
         MINER_ORGANIC_JOB_SUCCESS = "MINER_ORGANIC_JOB_SUCCESS"
         MINER_SYNTHETIC_JOB_SUCCESS = "MINER_SYNTHETIC_JOB_SUCCESS"

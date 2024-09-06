@@ -32,7 +32,7 @@ def child_exit(pid, **kw):
 
 @signals.worker_process_init.connect
 def apply_startup_hook(*args, **kwargs):
-    print("Worker is ready. Bootstraping...")
+    print("Worker is ready. Bootstrapping...")
     hook_script_file = os.environ.get("DEBUG_CELERY_HOOK_SCRIPT_FILE")
     if hook_script_file:
         print("Loading startup hook: ", hook_script_file)
