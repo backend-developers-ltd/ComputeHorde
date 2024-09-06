@@ -30,7 +30,6 @@ from .helpers import (
     MockMetagraph,
     MockMinerClient,
     MockSubtensor,
-    SingleExecutorMockMinerClient,
     check_system_events,
     mock_get_miner_axon_info,
     throw_error,
