@@ -70,6 +70,8 @@ from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
 
 logger = logging.getLogger(__name__)
 
+_GIVE_AVERAGE_JOB_SEND_TIME_BONUS = False
+
 # always-on executor classes have spin_up_time=0, but realistically
 # we need a bit more for all the back-and-forth messaging, especially
 # when we talk with a lot of executors
@@ -92,7 +94,7 @@ _GET_MANIFEST_TIMEOUT = 35
 _MAX_MINER_CLIENT_DEBOUNCE_COUNT = 4  # approximately 32 seconds
 
 # Celery job timeouts
-SYNTHETIC_JOBS_SOFT_LIMIT = 12 * 60
+SYNTHETIC_JOBS_SOFT_LIMIT = 20 * 60
 SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
 
 
@@ -274,6 +276,7 @@ class Job:
     score: float = 0
     # dancing bonus
     score_manifest_multiplier: float | None = None
+    average_job_send_time_bonus: timedelta | None = None
 
     def handle_message(self, msg: BaseRequest) -> None:
         # !!! it is very important to not allow a newer message of a
@@ -367,6 +370,7 @@ class Job:
             comment=self.comment,
             score=self.score,
             score_manifest_multiplier=self.score_manifest_multiplier,
+            average_job_send_time_bonus=_timedelta_dump(self.average_job_send_time_bonus),
         )
         return self.ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
@@ -378,6 +382,9 @@ class Job:
 
 @dataclass
 class BatchContext:
+    # an already existing SyntheticJobBatch model can be optionally passed in
+    batch_id: int | None
+
     uuid: str
     own_keypair: bittensor.Keypair
 
@@ -407,13 +414,18 @@ class BatchContext:
     jobs: dict[str, Job]
 
     # telemetry
+
+    # system events, periodically flushed to database, which is why
+    # we need a separate event_count field to track how many we
+    # created during a batch run
     events: list[SystemEvent]
+    event_count: int
+
     stage_start_time: dict[str, datetime]
     average_job_send_time: timedelta | None = None
 
     # for tests
     _loop: asyncio.AbstractEventLoop | None = None
-    batch_id: int | None = None
 
     def system_event(
         self,
@@ -425,6 +437,7 @@ class BatchContext:
         job_uuid: str | None = None,
         miner_hotkey: str | None = None,
         func: str | None = None,
+        append: bool = True,
     ) -> SystemEvent | None:
         if data is None:
             data = {}
@@ -451,11 +464,39 @@ class BatchContext:
                 long_description=description,
                 data=data,
             )
-            self.events.append(event)
+            # checkpoint events are sent directly to the database,
+            # don't append them to avoid duplication
+            if append:
+                self.events.append(event)
+            self.event_count += 1
             return event
         except Exception as exc:
             logger.error("Failed to emit system event: %r", exc)
             return None
+
+    # sync_to_async is needed since we use the sync Django ORM
+    @sync_to_async
+    def checkpoint_system_event(self, stage: str, *, dt: datetime | None = None) -> None:
+        try:
+            if dt is None:
+                dt = datetime.now(tz=UTC)
+            logger.info("STAGE: %s", stage)
+            self.stage_start_time[stage] = dt
+
+            event = self.system_event(
+                type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+                subtype=SystemEvent.EventSubType.CHECKPOINT,
+                description=stage,
+                data=dict(
+                    time=_datetime_dump(dt),
+                    stage=stage,
+                ),
+                append=False,
+            )
+            if event is not None:
+                event.save()
+        except Exception as exc:
+            logger.error("Failed to checkpoint system event: %r", exc)
 
     def emit_telemetry_event(self) -> SystemEvent | None:
         messages_count: dict[str, int] = defaultdict(int)
@@ -485,7 +526,7 @@ class BatchContext:
             manifests=sum(1 for manifest in self.manifests.values() if manifest is not None),
             messages=messages_count,
             jobs=job_count,
-            system_events=len(self.events),
+            system_events=self.event_count,
         )
 
         manifests = {}
@@ -561,13 +602,12 @@ def _init_context(
     batch_id: int | None = None,
     create_miner_client: Callable | None = None,
 ) -> BatchContext:
-    start_time = datetime.now(tz=UTC)
-
     own_wallet = settings.BITTENSOR_WALLET()
     own_keypair = own_wallet.get_hotkey()
     create_miner_client = create_miner_client or MinerClient
 
     ctx = BatchContext(
+        batch_id=batch_id,
         uuid=str(uuid.uuid4()),
         own_keypair=own_keypair,
         hotkeys=[],
@@ -584,9 +624,9 @@ def _init_context(
         job_uuids=[],
         jobs={},
         events=[],
-        stage_start_time={"_init_context": start_time},
+        event_count=0,
+        stage_start_time={},
         _loop=asyncio.get_running_loop(),
-        batch_id=batch_id,
     )
 
     for miner in serving_miners:
@@ -900,6 +940,9 @@ async def _send_machine_specs(ctx: BatchContext) -> None:
     channel_layer = get_channel_layer()
     assert channel_layer is not None
 
+    send_exc: BaseException | None = None
+    send_exc_count = 0
+
     for job in ctx.jobs.values():
         # only take into account machine specs from executors which
         # finished the job successfully, to prevent fake executors
@@ -917,13 +960,18 @@ async def _send_machine_specs(ctx: BatchContext) -> None:
                         },
                     )
             except (Exception, asyncio.CancelledError) as exc:
+                send_exc = exc
+                send_exc_count += 1
                 logger.warning("%s failed to send machine specs: %r", job.name, exc)
-                job.system_event(
-                    type=SystemEvent.EventType.VALIDATOR_CHANNEL_LAYER_ERROR,
-                    subtype=SystemEvent.EventSubType.SPECS_SEND_ERROR,
-                    description=repr(exc),
-                    func="_send_machine_specs",
-                )
+
+    if send_exc_count:
+        msg = f"{send_exc_count} exceptions raised when trying to send machine specs. last one: {send_exc!r}"
+        ctx.system_event(
+            type=SystemEvent.EventType.VALIDATOR_CHANNEL_LAYER_ERROR,
+            subtype=SystemEvent.EventSubType.SPECS_SEND_ERROR,
+            description=msg,
+            func="_send_machine_specs",
+        )
 
 
 async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
@@ -1071,7 +1119,10 @@ def _compute_average_send_time(ctx: BatchContext) -> None:
         duration_sec = duration.total_seconds()
         durations_sec.append(duration_sec)
 
-    average_duration_sec = statistics.mean(durations_sec)
+    if durations_sec:
+        average_duration_sec = statistics.mean(durations_sec)
+    else:
+        average_duration_sec = 0
     assert average_duration_sec >= 0
     ctx.average_job_send_time = timedelta(seconds=average_duration_sec)
     logger.info("Average job send time: %.6f seconds", average_duration_sec)
@@ -1080,6 +1131,7 @@ def _compute_average_send_time(ctx: BatchContext) -> None:
 async def _score_job(ctx: BatchContext, job: Job) -> None:
     job.score = 0
     job.score_manifest_multiplier = None
+    job.average_job_send_time_bonus = None
     job.success = False
     job.comment = "failed"
 
@@ -1113,13 +1165,16 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
         )
         return
 
-    # subtract the average time to send a job request. this will normalize
-    # the timing between validators with different upload speeds.
-    # if the time becomes negative, set it to 1 sec
-    assert ctx.average_job_send_time is not None
-    job.time_took -= ctx.average_job_send_time
-    if job.time_took.total_seconds() <= 0:
-        job.time_took = timedelta(seconds=1)
+    if _GIVE_AVERAGE_JOB_SEND_TIME_BONUS:
+        # subtract the average time to send a job request. this will normalize
+        # the timing between validators with different upload speeds.
+        # if the time becomes negative, set it to 1 sec
+        assert ctx.average_job_send_time is not None
+        job.average_job_send_time_bonus = ctx.average_job_send_time
+        job.time_took -= ctx.average_job_send_time
+        if job.time_took.total_seconds() <= 0:
+            job.time_took = timedelta(seconds=1)
+
     time_took_sec = job.time_took.total_seconds()
 
     # TODO separate correctness check from scoring in job generator
@@ -1221,26 +1276,42 @@ def _db_get_previous_online_executor_count(ctx: BatchContext) -> None:
 
 # sync_to_async is needed since we use the sync Django ORM
 @sync_to_async
+def _db_persist_system_events(ctx: BatchContext) -> None:
+    if not ctx.events:
+        return
+
+    logger.info("Persisting %d system events", len(ctx.events))
+    try:
+        # it's possible some events were already inserted during
+        # a previous call, but the operation failed before clearing
+        # the events list, so ignore insert conflicts
+        SystemEvent.objects.bulk_create(ctx.events, ignore_conflicts=True)
+        # we call this function multiple times during a batch,
+        # clear the list to avoid persisting the same event
+        # multiple times
+        ctx.events.clear()
+    except Exception as exc:
+        logger.error("Failed to persist system events: %r", exc)
+
+
+# sync_to_async is needed since we use the sync Django ORM
+@sync_to_async
 def _db_persist(ctx: BatchContext) -> None:
     start_time = time.time()
-
-    # persist the system events first, this function can be called
-    # after an exception, the rest of the data might not be consistent
-    SystemEvent.objects.bulk_create(ctx.events)
 
     # persist the batch and the jobs in the same transaction, to
     # prevent a situation where because of a crash only some of
     # the jobs are saved, which would generate incorrect weights
     with transaction.atomic():
-        # accepting_results_until is not used anywhere, it doesn't
-        # matter that we pick a somewhat arbitrary time for it
-        now = datetime.now(tz=UTC)
         if ctx.batch_id is not None:
             batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
         else:
             batch = SyntheticJobBatch(
-                started_at=ctx.stage_start_time["_init_context"],
+                started_at=ctx.stage_start_time["BATCH_BEGIN"],
             )
+        # accepting_results_until is not used anywhere, it doesn't
+        # matter that we pick a somewhat arbitrary time for it
+        now = datetime.now(tz=UTC)
         batch.accepting_results_until = ctx.stage_start_time.get("_multi_send_job_request", now)
         batch.save()
 
@@ -1324,75 +1395,68 @@ async def execute_synthetic_batch_run(
     if not axons or not serving_miners:
         logger.warning("No miners provided")
         return
+
+    start_time = datetime.now(tz=UTC)
     logger.info("Executing synthetic jobs batch for %d miners", len(serving_miners))
 
     # randomize the order of miners each batch to avoid systemic bias
     random.shuffle(serving_miners)
 
-    logger.info("STAGE: _init_context")
     ctx = _init_context(axons, serving_miners, batch_id, create_miner_client)
+    await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
     try:
-        logger.info("STAGE: _db_get_previous_online_executor_count")
-        ctx.stage_start_time["_db_get_previous_online_executor_count"] = datetime.now(tz=UTC)
+        await ctx.checkpoint_system_event("_db_get_previous_online_executor_count")
         await _db_get_previous_online_executor_count(ctx)
 
-        logger.info("STAGE: _multi_get_miner_manifest")
-        ctx.stage_start_time["_multi_get_miner_manifest"] = datetime.now(tz=UTC)
+        await ctx.checkpoint_system_event("_multi_get_miner_manifest")
         await _multi_get_miner_manifest(ctx)
 
-        logger.info("STAGE: _get_total_executor_count")
-        ctx.stage_start_time["_get_total_executor_count"] = datetime.now(tz=UTC)
+        await ctx.checkpoint_system_event("_get_total_executor_count")
         total_executor_count = _get_total_executor_count(ctx)
 
         if total_executor_count != 0:
-            logger.info("STAGE: _generate_jobs")
-            ctx.stage_start_time["_generate_jobs"] = datetime.now(tz=UTC)
+            await ctx.checkpoint_system_event("_generate_jobs")
             await _generate_jobs(ctx)
 
             # randomize the order of jobs each batch to avoid systemic bias
             random.shuffle(ctx.job_uuids)
 
-            logger.info("STAGE: _multi_send_initial_job_request")
-            ctx.stage_start_time["_multi_send_initial_job_request"] = datetime.now(tz=UTC)
+            await ctx.checkpoint_system_event("_multi_send_initial_job_request")
             await _multi_send_initial_job_request(ctx)
 
             if any(
                 isinstance(job.accept_response, V0AcceptJobRequest) for job in ctx.jobs.values()
             ):
-                logger.info("STAGE: _multi_send_job_request")
-                ctx.stage_start_time["_multi_send_job_request"] = datetime.now(tz=UTC)
+                await ctx.checkpoint_system_event("_multi_send_job_request")
                 await _multi_send_job_request(ctx)
 
-                logger.info("STAGE: _compute_average_send_time")
-                ctx.stage_start_time["_compute_average_send_time"] = datetime.now(tz=UTC)
+                # don't persist system events before this point, we want to minimize
+                # any extra interactions which could slow down job processing before
+                # we get the responses from the miners
+                await _db_persist_system_events(ctx)
+
+                await ctx.checkpoint_system_event("_compute_average_send_time")
                 _compute_average_send_time(ctx)
 
-                logger.info("STAGE: _score_jobs")
-                ctx.stage_start_time["_score_jobs"] = datetime.now(tz=UTC)
+                await ctx.checkpoint_system_event("_score_jobs")
                 await _score_jobs(ctx)
 
-                logger.info("STAGE: _send_job_finished_receipts")
-                ctx.stage_start_time["_send_job_finished_receipts"] = datetime.now(tz=UTC)
+                await _db_persist_system_events(ctx)
+
+                await ctx.checkpoint_system_event("_send_job_finished_receipts")
                 await _send_job_finished_receipts(ctx)
 
             else:
                 logger.warning("No jobs accepted")
 
-            logger.info("STAGE: _emit_decline_or_failure_events")
-            ctx.stage_start_time["_emit_decline_or_failure_events"] = datetime.now(tz=UTC)
+            await _db_persist_system_events(ctx)
+
+            await ctx.checkpoint_system_event("_emit_decline_or_failure_events")
             _emit_decline_or_failure_events(ctx)
 
         else:
             logger.warning("No executors available")
-
-        logger.info("STAGE: _multi_close_client")
-        ctx.stage_start_time["_multi_close_client"] = datetime.now(tz=UTC)
-        await _multi_close_client(ctx)
-
-        logger.info("STAGE: _send_machine_specs")
-        ctx.stage_start_time["_send_machine_specs"] = datetime.now(tz=UTC)
-        await _send_machine_specs(ctx)
 
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
@@ -1403,9 +1467,22 @@ async def execute_synthetic_batch_run(
             func="execute_synthetic_batch_run",
         )
 
+    await _db_persist_system_events(ctx)
+
+    await ctx.checkpoint_system_event("_multi_close_client")
     try:
-        logger.info("STAGE: _emit_telemetry_events")
-        ctx.stage_start_time["_emit_telemetry_events"] = datetime.now(tz=UTC)
+        await _multi_close_client(ctx)
+    except (Exception, asyncio.CancelledError) as exc:
+        logger.error("Synthetic jobs batch failure: %r", exc)
+        ctx.system_event(
+            type=SystemEvent.EventType.VALIDATOR_FAILURE,
+            subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+            description=repr(exc),
+            func="_multi_close_client",
+        )
+
+    await ctx.checkpoint_system_event("_emit_telemetry_events")
+    try:
         _emit_telemetry_events(ctx)
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
@@ -1413,11 +1490,21 @@ async def execute_synthetic_batch_run(
             type=SystemEvent.EventType.VALIDATOR_FAILURE,
             subtype=SystemEvent.EventSubType.GENERIC_ERROR,
             description=repr(exc),
-            func="execute_synthetic_batch_run",
+            func="_emit_telemetry_events",
         )
 
-    logger.info("STAGE: _db_persist")
-    ctx.stage_start_time["_db_persist"] = datetime.now(tz=UTC)
+    await _db_persist_system_events(ctx)
+
+    await ctx.checkpoint_system_event("_db_persist")
     await _db_persist(ctx)
 
-    logger.info("BATCH DONE")
+    # send the machine specs after the batch is done, it can fail or take a long time
+    await ctx.checkpoint_system_event("_send_machine_specs")
+    try:
+        await _send_machine_specs(ctx)
+    except (Exception, asyncio.CancelledError) as exc:
+        logger.error("Synthetic jobs batch failure: %r", exc)
+
+    await _db_persist_system_events(ctx)
+
+    await ctx.checkpoint_system_event("BATCH_END")
