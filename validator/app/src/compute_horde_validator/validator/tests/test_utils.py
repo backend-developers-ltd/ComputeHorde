@@ -42,6 +42,8 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from .helpers import (
+    MockMetagraph,
+    MockSubtensor,
     check_system_events,
 )
 
@@ -557,3 +559,49 @@ def test_create_and_run_synthetic_job_batch(
         )[0]
         time_took = receipt.payload.time_took_us / 1_000_000
         assert abs(job.score * time_took - expected_multiplier) < 0.0001
+
+
+mocked_metagraph_1 = MagicMock(side_effect=[ValueError, TypeError, MockMetagraph()])
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(mocked_metagraph=mocked_metagraph_1),
+)
+def test_create_and_run_synthetic_job_batch_metagraph_retries():
+    with (
+        patch(
+            "compute_horde_validator.validator.synthetic_jobs.utils.execute_synthetic_batch_run"
+        ) as execute,
+        patch("time.sleep") as sleep,
+    ):
+        create_and_run_synthetic_job_batch(12, "none", 100)
+
+    assert execute.call_count == 1
+    assert sleep.call_count == 2
+
+
+mocked_metagraph_2 = MagicMock(side_effect=[ValueError, TypeError, AttributeError])
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(mocked_metagraph=mocked_metagraph_2),
+)
+def test_create_and_run_synthetic_job_batch_metagraph_retries_fail():
+    with (
+        patch(
+            "compute_horde_validator.validator.synthetic_jobs.utils.execute_synthetic_batch_run"
+        ) as execute,
+        patch("time.sleep") as sleep,
+    ):
+        create_and_run_synthetic_job_batch(12, "none", 100)
+
+    assert execute.call_count == 0
+    assert sleep.call_count == 2
+    check_system_events(
+        SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
+        SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+    )

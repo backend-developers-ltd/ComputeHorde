@@ -1,5 +1,11 @@
+import glob
+import logging
 import numbers
+import os
+import shlex
+import subprocess
 from datetime import timedelta
+from pathlib import Path
 from time import monotonic
 from typing import NamedTuple
 from unittest import mock
@@ -25,6 +31,9 @@ from compute_horde_validator.validator.organic_jobs.miner_client import MinerCli
 from compute_horde_validator.validator.synthetic_jobs import batch_run
 
 NUM_NEURONS = 5
+
+
+logger = logging.getLogger(__name__)
 
 
 def throw_error(*args):
@@ -206,6 +215,7 @@ class MockSubtensor:
         ),
         block_duration=timedelta(seconds=1),
         override_block_number=None,
+        increase_block_number_with_each_call=False,
         block_hash="0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464",
     ):
         self.mocked_set_weights = mocked_set_weights
@@ -220,6 +230,8 @@ class MockSubtensor:
         self.block_duration = block_duration
         self.override_block_number = override_block_number
         self.block_hash = block_hash
+        self.increase_block_number_with_each_call = increase_block_number_with_each_call
+        self.previously_returned_block = None
 
     def get_block_hash(self, block_id) -> str:
         return self.block_hash
@@ -272,6 +284,15 @@ class MockSubtensor:
         return False, "MockSubtensor doesn't support reveal_weights"
 
     def get_current_block(self) -> int:
+        if not self.increase_block_number_with_each_call:
+            return self._get_block_number()
+        if self.previously_returned_block is not None:
+            self.previously_returned_block += 1
+            return self.previously_returned_block
+        self.previously_returned_block = self._get_block_number()
+        return self.previously_returned_block
+
+    def _get_block_number(self) -> int:
         if self.override_block_number is not None:
             return self.override_block_number
         return 1000 + int((monotonic() - self.init_time) / self.block_duration.total_seconds())
@@ -282,6 +303,7 @@ class MockNeuron:
         self.hotkey = hotkey
         self.uid = uid
         self.stake = Balance((uid + 1) * 1001.0)
+        self.axon_info = MockedAxonInfo(True, f"127.0.0.{uid}", 4, 8000 + uid)
 
 
 class MockBlock:
@@ -333,3 +355,113 @@ def patch_constance(config_overlay: dict):
         return config_overlay[key] if key in config_overlay else old_getattr(s, key)
 
     return mock.patch.object(constance.base.Config, "__getattr__", new_getattr)
+
+
+class Celery:
+    """
+    Context manager for starting in test. Able to perform patches before celery start (via hook_script_file_path).
+    Able to start celery on a remote host (useful for macs, because workers dying there issue error dialogs). To start
+    remotely, use the `REMOTE_HOST`, `REMOTE_VENV` and `REMOTE_CELERY_START_SCRIPT` env vars.
+    """
+
+    def __init__(self, hook_script_file_path=None, run_id=None):
+        self.celery_script = os.getenv(
+            "REMOTE_CELERY_START_SCRIPT",
+            (Path(__file__).parents[5] / "dev_env_setup" / "start_celery.sh").as_posix(),
+        )
+        self.celery_process = None
+        self.pid_files_pattern = "/tmp/celery-validator-*.pid"
+        self.remote_host = os.getenv("REMOTE_HOST", None)
+        self.remote_venv = os.getenv("REMOTE_VENV", None)
+        if bool(self.remote_host) != bool(self.remote_venv):
+            raise ValueError(
+                f"Provide both REMOTE_HOST and REMOTE_VENV or neither. Currently REMOTE_HOST={self.remote_host}, REMOTE_VENV={self.remote_venv}"
+            )
+        self.hook_script_file_path = hook_script_file_path
+        self.run_id = run_id
+
+    def read_pid(self, filename):
+        if self.remote_host:
+            result = subprocess.run(
+                ["ssh", self.remote_host, f"cat {filename}"], stdout=subprocess.PIPE
+            )
+            pid = int(result.stdout.decode().strip())
+        else:
+            with open(filename) as f:
+                pid = int(f.read().strip())
+        return pid
+
+    def get_pid_files(self):
+        if self.remote_host:
+            result = subprocess.run(
+                ["ssh", self.remote_host, f"ls {self.pid_files_pattern}"], stdout=subprocess.PIPE
+            )
+            return result.stdout.decode().split()
+        else:
+            return glob.glob(self.pid_files_pattern)
+
+    def kill_pids(self):
+        for pid_filename in self.get_pid_files():
+            try:
+                pid = self.read_pid(pid_filename)
+                kill_command = f"kill -9 {pid}"
+                if self.remote_host:
+                    subprocess.check_call(["ssh", self.remote_host, kill_command])
+                else:
+                    os.kill(pid, 9)
+            except (FileNotFoundError, ValueError, ProcessLookupError):
+                continue
+
+    def __enter__(self):
+        self.kill_pids()
+        test_database_name = shlex.quote(settings.DATABASES["default"]["NAME"])
+        if self.remote_host:
+            remote_host = shlex.quote(self.remote_host)
+            remote_venv = shlex.quote(self.remote_venv)
+            hook_script_file_path = shlex.quote(self.hook_script_file_path)
+            celery_script = shlex.quote(self.celery_script)
+
+            command = shlex.join(
+                [
+                    "ssh",
+                    remote_host,
+                    f"source {remote_venv}/bin/activate && DEBUG_CELERY_HOOK_SCRIPT_FILE={hook_script_file_path or ''} DEBUG_OVERRIDE_DATABASE_NAME={test_database_name} PYTEST_RUN_ID={self.run_id or ''} {celery_script}",
+                ]
+            )
+            self.celery_process = subprocess.Popen(
+                command,
+                shell=True,
+            )
+        else:
+            env = {
+                **os.environ,
+                "PYTEST_RUN_ID": self.run_id,
+                "DEBUG_OVERRIDE_DATABASE_NAME": test_database_name,
+                **(
+                    {"DEBUG_CELERY_HOOK_SCRIPT_FILE": self.hook_script_file_path}
+                    if self.hook_script_file_path
+                    else {}
+                ),
+            }
+            self.celery_process = subprocess.Popen(self.celery_script, shell=True, env=env)
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            self.celery_process.terminate()
+            self.celery_process.wait(15)
+        except Exception:
+            logger.exception("Encountered when killing celery")
+
+        self.kill_pids()
+
+        # Delete the pid files
+        for pid_filename in self.get_pid_files():
+            try:
+                if self.remote_host:
+                    subprocess.check_call(["ssh", self.remote_host, f"rm {pid_filename}"])
+                else:
+                    os.remove(pid_filename)
+            except OSError:
+                pass

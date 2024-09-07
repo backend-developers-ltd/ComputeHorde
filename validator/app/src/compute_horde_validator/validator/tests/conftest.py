@@ -1,4 +1,5 @@
 import logging
+import uuid
 from collections.abc import Generator
 from unittest.mock import patch
 
@@ -70,3 +71,8 @@ def validators():
 def validators_with_this_hotkey(settings, validators):
     this_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
     return [*validators, MockNeuron(hotkey=this_hotkey, uid=17)]
+
+
+@pytest.fixture(scope="session")
+def run_uuid():
+    return str(uuid.uuid4())

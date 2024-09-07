@@ -5,6 +5,9 @@ from unittest.mock import patch
 import pytest
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from constance import config
+from django.db.models import Max
+from django.test import override_settings
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
@@ -23,6 +26,7 @@ from compute_horde_validator.validator.tasks import (
 
 from .helpers import (
     NUM_NEURONS,
+    Celery,
     MockHyperparameters,
     MockSubtensor,
     check_system_events,
@@ -213,46 +217,6 @@ def test_set_scores__set_weight__commit__exception(settings):
 
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
-@patch(
-    "bittensor.subtensor",
-    lambda *args, **kwargs: MockSubtensor(
-        override_block_number=723,
-        mocked_reveal_weights=lambda: throw_error(),
-        hyperparameters=MockHyperparameters(
-            commit_reveal_weights_enabled=True,
-        ),
-    ),
-)
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": 20})
-def test_set_scores__set_weight__reveal__exception(settings):
-    setup_db()
-    set_scores()
-
-    last_weights = Weights.objects.order_by("-id").first()
-    assert last_weights
-    assert last_weights.revealed_at is None
-
-    with patch(
-        "compute_horde_validator.validator.tests.helpers.MockSubtensor.get_current_block",
-        lambda _: 1020,
-    ):
-        from bittensor import subtensor
-
-        assert subtensor().get_current_block() == 1020
-        reveal_scores()
-
-    last_weights.refresh_from_db()
-    assert last_weights.revealed_at is None
-    check_system_events(
-        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-        SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
-        1,
-    )
-
-
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
-@patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=723))
@@ -408,6 +372,65 @@ def test_set_scores__set_weight__reveal__in_time(settings):
             SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
             1,
         )
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": 20})
+def test_set_scores__set_weight__reveal__timeout(settings, run_uuid):
+    subtensor_ = MockSubtensor(
+        override_block_number=723,
+        hyperparameters=MockHyperparameters(
+            commit_reveal_weights_enabled=True,
+        ),
+    )
+
+    with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
+        setup_db()
+        set_scores()
+        last_weights = Weights.objects.order_by("-id").first()
+        assert last_weights
+        assert last_weights.revealed_at is None
+        max_system_event_id_before = SystemEvent.objects.all().aggregate(Max("id"))["id__max"]
+        config.DYNAMIC_WEIGHT_REVEALING_TTL = 9
+        config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL = 15
+        config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS = 5
+        config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF = 1
+
+        with override_settings(CELERY_TASK_ALWAYS_EAGER=False):
+            with Celery("compute_horde_validator.validator.tests.mock_subtensor_config", run_uuid):
+                result = reveal_scores.apply_async()
+                result.get(timeout=120)
+        last_weights.refresh_from_db()
+        assert last_weights.revealed_at is not None
+        system_events = list(
+            SystemEvent.objects.filter(id__gt=max_system_event_id_before or 0)
+            .values_list("type", "subtype")
+            .order_by("id")
+        )
+        assert any(
+            system_events[-len(expected_events) :] == expected_events
+            for expected_events in [
+                [
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
+                ],
+                [
+                    ("WEIGHT_SETTING_FAILURE", "WRITING_TO_CHAIN_TIMEOUT"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
+                ],
+                [
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_FAILURE", "WRITING_TO_CHAIN_TIMEOUT"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_FAILURE", "REVEAL_WEIGHTS_ERROR"),
+                    ("WEIGHT_SETTING_SUCCESS", "REVEAL_WEIGHTS_SUCCESS"),
+                ],
+            ]
+        ), system_events
 
 
 # ! This test is the last because otherwise it breaks other tests

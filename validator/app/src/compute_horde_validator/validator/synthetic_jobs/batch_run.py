@@ -1262,7 +1262,11 @@ async def _score_jobs(ctx: BatchContext) -> None:
 # sync_to_async is needed since we use the sync Django ORM
 @sync_to_async
 def _db_get_previous_online_executor_count(ctx: BatchContext) -> None:
-    previous_batch = SyntheticJobBatch.objects.order_by("-id").first()
+    previous_batch_qs = SyntheticJobBatch.objects.order_by("-id")
+    if ctx.batch_id is not None:
+        previous_batch_qs = previous_batch_qs.exclude(id=ctx.batch_id)
+    previous_batch = previous_batch_qs.first()
+
     if previous_batch is None:
         return
 

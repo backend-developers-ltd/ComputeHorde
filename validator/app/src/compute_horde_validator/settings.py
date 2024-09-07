@@ -176,6 +176,31 @@ CONSTANCE_CONFIG = {
         "This should be synced with the hyperparam",
         int,
     ),
+    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS": (
+        3,
+        "If the job running task wakes up late by this many blocks (or less), the jobs will still run",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_TTL": (
+        120,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_HARD_TTL": (
+        125,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_ATTEMPTS": (
+        50,
+        "the number of attempts",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF": (
+        5,
+        "in seconds",
+        int,
+    ),
 }
 
 # Content Security Policy
@@ -243,6 +268,11 @@ DEFAULT_DB_ALIAS = (
     "default_alias"  # useful for bypassing transaction while connecting to the same db
 )
 DATABASES[DEFAULT_DB_ALIAS] = DATABASES["default"]
+
+
+if new_name := env.str("DEBUG_OVERRIDE_DATABASE_NAME", default=None):
+    DATABASES["default"]["NAME"] = new_name
+    DATABASES[DEFAULT_DB_ALIAS]["NAME"] = new_name
 
 
 AUTH_PASSWORD_VALIDATORS = [

@@ -21,6 +21,7 @@ class SystemEvent(models.Model):
     class EventType(models.TextChoices):
         WEIGHT_SETTING_SUCCESS = "WEIGHT_SETTING_SUCCESS"
         WEIGHT_SETTING_FAILURE = "WEIGHT_SETTING_FAILURE"
+        # the two above are blankets for setting, committing and revealing
         MINER_ORGANIC_JOB_FAILURE = "MINER_ORGANIC_JOB_FAILURE"
         MINER_ORGANIC_JOB_SUCCESS = "MINER_ORGANIC_JOB_SUCCESS"
         MINER_SYNTHETIC_JOB_SUCCESS = "MINER_SYNTHETIC_JOB_SUCCESS"
@@ -33,6 +34,7 @@ class SystemEvent(models.Model):
         VALIDATOR_TELEMETRY = "VALIDATOR_TELEMETRY"
         VALIDATOR_CHANNEL_LAYER_ERROR = "VALIDATOR_CHANNEL_LAYER_ERROR"
         VALIDATOR_SYNTHETIC_JOB_SCHEDULED = "VALIDATOR_SYNTHETIC_JOB_SCHEDULED"
+        VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING = "VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -47,7 +49,6 @@ class SystemEvent(models.Model):
         SET_WEIGHTS_ERROR = "SET_WEIGHTS_ERROR"
         GENERIC_ERROR = "GENERIC_ERROR"
         WRITING_TO_CHAIN_TIMEOUT = "WRITING_TO_CHAIN_TIMEOUT"
-        WRITING_TO_CHAIN_FAILED = "WRITING_TO_CHAIN_FAILED"
         WRITING_TO_CHAIN_GENERIC_ERROR = "WRITING_TO_CHAIN_GENERIC_ERROR"
         GIVING_UP = "GIVING_UP"
         MANIFEST_ERROR = "MANIFEST_ERROR"
@@ -68,6 +69,8 @@ class SystemEvent(models.Model):
         SYNTHETIC_JOB = "SYNTHETIC_JOB"
         CHECKPOINT = "CHECKPOINT"
         OVERSLEPT = "OVERSLEPT"
+        WARNING = "WARNING"
+        FAILED_TO_WAIT = "FAILED_TO_WAIT"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
