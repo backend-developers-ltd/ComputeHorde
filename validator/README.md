@@ -46,7 +46,7 @@ workers being killed on MacOS yield an insufferable amount of error dialogs disp
 open. To save developers from suffering this fate, tests support running celery on a remote host, via ssh. A common case
 would be a local VM, also running postgres and redis. In such a case, make sure postgres and redis ports are forwarded
 so they are accessible from the host, which runs your code/tests. To make tests start celery on the remote host, define
-the following env vars (the author if this note suggests using direnv or PyCharm Run/Debug configuration templates for
+the following env vars (the author of this note suggests using direnv or PyCharm Run/Debug configuration templates for
 ease):
 
 ```shell

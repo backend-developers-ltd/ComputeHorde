@@ -193,7 +193,7 @@ CONSTANCE_CONFIG = {
     ),
     "DYNAMIC_WEIGHT_REVEALING_ATTEMPTS": (
         50,
-        "in seconds",
+        "the number of attempts",
         int,
     ),
     "DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF": (
