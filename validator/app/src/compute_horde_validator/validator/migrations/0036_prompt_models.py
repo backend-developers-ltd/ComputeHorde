@@ -9,7 +9,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("validator", "0034_alter_systemevent_subtype"),
+        ("validator", "0035_alter_systemevent_subtype"),
     ]
 
     operations = [
