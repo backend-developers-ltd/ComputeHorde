@@ -8,10 +8,14 @@ from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
 from pydantic import BaseModel
 
-from compute_horde_validator.validator.models import PromptSample
+from compute_horde_validator.validator.models import Prompt, PromptSample
 from compute_horde_validator.validator.s3 import generate_upload_url, get_public_url
 
 from .base import BaseSyntheticJobGenerator
+
+_PROMPT_SAMPLE_RELATED_NOT_CACHED = (
+    "The related objects of PromptSample needs to be cached before passing to this class"
+)
 
 
 class PromptAnswer(BaseModel):
@@ -19,10 +23,21 @@ class PromptAnswer(BaseModel):
     answer: str
 
 
+PromptAnswerList = pydantic.TypeAdapter(list[PromptAnswer])
+
+
 class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def __init__(self, prompt_sample: PromptSample):
         super().__init__()
+
+        assert PromptSample.series.is_cached(prompt_sample), _PROMPT_SAMPLE_RELATED_NOT_CACHED
+        assert PromptSample.workload.is_cached(prompt_sample), _PROMPT_SAMPLE_RELATED_NOT_CACHED
+        assert (
+            getattr(prompt_sample, "_prefetched_objects_cache", {}).get("prompts") is not None
+        ), _PROMPT_SAMPLE_RELATED_NOT_CACHED
+
         self.prompt_sample: PromptSample = prompt_sample
+        self.prompts: list[Prompt] = list(self.prompt_sample.prompts.all())
 
         self.s3_output_key = str(uuid.uuid4()) + ".json"
         self.s3_output_prefix = "solved/"
@@ -69,15 +84,13 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
     async def _download_answers(self):
         async with httpx.AsyncClient() as client:
             response = await client.get(self._url_for_download(), timeout=5)
-            self.prompt_answers = pydantic.TypeAdapter(list[PromptAnswer]).validate_json(
-                response.content
-            )
+            self.prompt_answers = PromptAnswerList.validate_json(response.content)
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
-        if not self.prompt_answers:
+        if self.prompt_answers is None:
             raise RuntimeError("_download_answers must be called before calling verify")
 
-        for prompt in self.prompt_sample.prompts.all():
+        for prompt in self.prompts:
             for prompt_answer in self.prompt_answers:
                 if prompt_answer.prompt != prompt.content:
                     continue
