@@ -9,10 +9,6 @@ from django.conf import settings
 from compute_horde_validator.validator.models import Miner, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 
-# new synchronized flow waits longer for job responses
-SYNTHETIC_JOBS_SOFT_LIMIT = 20 * 60
-SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
-
 logger = logging.getLogger(__name__)
 
 
