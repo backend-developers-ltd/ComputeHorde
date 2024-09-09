@@ -13,7 +13,8 @@ from typing import Any
 import bittensor
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
-from compute_horde.base.volume import InlineVolume
+from compute_horde.base.output_upload import OutputUpload
+from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
@@ -57,6 +58,7 @@ from compute_horde_validator.validator.models import (
     JobStartedReceipt,
     Miner,
     MinerManifest,
+    PromptSample,
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
@@ -230,7 +232,8 @@ class Job:
     miner_hotkey: str
     executor_class: ExecutorClass
     job_generator: BaseSyntheticJobGenerator
-    volume_contents: str
+    volume: Volume | None
+    output_upload: OutputUpload | None
 
     # responses
 
@@ -347,7 +350,6 @@ class Job:
             docker_image_name=self.job_generator.docker_image_name(),
             docker_run_options_preset=self.job_generator.docker_run_options_preset(),
             timeout_seconds=self.job_generator.timeout_seconds(),
-            volume_contents_size=len(self.volume_contents),
             exception=repr(self.exception) if self.exception is not None else None,
             exception_time=_datetime_dump(self.exception_time),
             exception_stage=self.exception_stage,
@@ -764,12 +766,36 @@ async def _generate_jobs(ctx: BatchContext) -> None:
     start_time = time.time()
     generated_job_count = 0
 
+    llama_executor_count = sum(
+        count
+        for executors in ctx.executors.values()
+        for executor_class, count in executors.items()
+        if executor_class == ExecutorClass.always_on__llama
+    )
+    llama_prompt_samples = (
+        PromptSample.objects.select_related("series", "workload")
+        .prefetch_related("prompts")
+        .filter(
+            synthetic_job__isnull=True,
+            workload__finished_at__isnull=False,
+        )[:llama_executor_count]
+    )
+    llama_prompt_samples = [ps async for ps in llama_prompt_samples]
+    assert len(llama_prompt_samples) == llama_executor_count
+    llama_prompt_samples_iter = iter(llama_prompt_samples)
+
     for hotkey, executors in ctx.executors.items():
         miner_name = ctx.names[hotkey]
         for executor_class, count in executors.items():
             job_generators = []
             for _ in range(count):
-                job_generator = await current.synthetic_job_generator_factory.create(executor_class)
+                args = []
+                if executor_class == ExecutorClass.always_on__llama:
+                    args.append(next(llama_prompt_samples_iter))
+
+                job_generator = await current.synthetic_job_generator_factory.create(
+                    executor_class, *args
+                )
                 await job_generator.ainit()
                 job_uuid = str(job_generator.uuid())
                 ctx.jobs[job_uuid] = Job(
@@ -779,7 +805,8 @@ async def _generate_jobs(ctx: BatchContext) -> None:
                     miner_hotkey=hotkey,
                     executor_class=executor_class,
                     job_generator=job_generator,
-                    volume_contents=await job_generator.volume_contents(),
+                    volume=await job_generator.volume(),
+                    output_upload=await job_generator.output_upload(),
                 )
                 ctx.job_uuids.append(job_uuid)
                 job_generators.append(job_generator)
@@ -864,8 +891,8 @@ async def _send_job_request(
         docker_run_options_preset=job.job_generator.docker_run_options_preset(),
         docker_run_cmd=job.job_generator.docker_run_cmd(),
         raw_script=job.job_generator.raw_script(),
-        volume=InlineVolume(contents=job.volume_contents),
-        output_upload=None,
+        volume=job.volume,
+        output_upload=job.output_upload,
     )
     request_json = request.model_dump_json()
 
@@ -1221,6 +1248,16 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
 
 async def _score_jobs(ctx: BatchContext) -> None:
+    # NOTE: download the answers for llama jobs before scoring
+    tasks = [
+        asyncio.create_task(job.job_generator._download_answers())
+        for job in ctx.jobs.values()
+        if job.executor_class == ExecutorClass.always_on__llama
+        and job.job_response is not None
+        and isinstance(job.job_response, V0JobFinishedRequest)
+    ]
+    await asyncio.gather(*tasks, return_exceptions=True)
+
     for job in ctx.jobs.values():
         try:
             await _score_job(ctx, job)

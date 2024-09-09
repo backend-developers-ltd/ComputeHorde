@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import bittensor
 import pytest
 from asgiref.sync import sync_to_async
+from compute_horde.base.volume import InlineVolume, Volume
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from compute_horde.mv_protocol.miner_requests import (
     ExecutorClassManifest,
@@ -75,8 +76,8 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def docker_run_cmd(self) -> list[str]:
         return ["mock"]
 
-    async def volume_contents(self) -> str:
-        return "mock"
+    async def volume(self) -> Volume | None:
+        return InlineVolume(contents="mock")
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         return True, "mock", MOCK_SCORE
@@ -231,7 +232,7 @@ def syntethic_batch_scheme_single_miner(
 
 
 class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
-    async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
+    async def create(self, executor_class: ExecutorClass, *args) -> BaseSyntheticJobGenerator:
         return MockSyntheticJobGenerator()
 
 
@@ -366,7 +367,7 @@ async def create_mock_job_batches(miner):
 
 
 class TimeToookScoreMockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
-    async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
+    async def create(self, executor_class: ExecutorClass, *args) -> BaseSyntheticJobGenerator:
         return TimeToookScoreMockSyntheticJobGenerator()
 
 
