@@ -35,3 +35,10 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
     )
     wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
     return wallet
+
+
+AWS_ACCESS_KEY_ID = "fake_access_key_id"
+AWS_SECRET_ACCESS_KEY = "fake_secret_access_key"
+
+S3_BUCKET_NAME_PROMPTS = "fake_bucket_prompts"
+S3_BUCKET_NAME_ANSWERS = "fake_bucket_answers"
