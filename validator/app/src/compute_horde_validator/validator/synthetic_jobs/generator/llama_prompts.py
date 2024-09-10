@@ -1,4 +1,3 @@
-import uuid
 from dataclasses import dataclass
 
 import httpx
@@ -36,7 +35,7 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         self.prompt_sample: PromptSample = prompt_sample
         self.prompts: list[Prompt] = list(self.prompt_sample.prompts.all())
 
-        base_filename = str(uuid.uuid4()) + "-" + str(self.prompt_sample.workload.seed)
+        base_filename = f"{prompt_sample.series.series_uuid}-{prompt_sample.workload.seed}"
         self.input_filename = base_filename + ".txt"
         self.s3_output_key = base_filename + ".json"
         self.s3_output_prefix = "solved/"
