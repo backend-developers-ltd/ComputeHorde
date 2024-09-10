@@ -1,8 +1,9 @@
 import uuid
 
 import pytest
-from compute_horde.base.output_upload import SingleFilePutUpload
-from compute_horde.base.volume import SingleFileVolume
+from compute_horde.base.output_upload import MultiUpload, SingleFilePutUpload
+from compute_horde.base.volume import MultiVolume, SingleFileVolume
+from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.utils.timezone import now
 from pytest_httpx import HTTPXMock
 
@@ -14,6 +15,12 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts import (
     LlamaPromptsSyntheticJobGenerator,
+)
+
+_JOB_FINISHED_REQUEST = V0JobFinishedRequest(
+    job_uuid="CF8753B2-C86C-45A3-A01F-84295C3BAD8F",
+    docker_process_stdout="",
+    docker_process_stderr="",
 )
 
 
@@ -61,22 +68,26 @@ async def _prepare_models():
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_llama_prompts_generator_basic(httpx_mock: HTTPXMock):
     prompt_sample = await _prepare_models()
-    httpx_mock.add_response(json=[{"prompt": str(i), "answer": str(i)} for i in range(240)])
+    httpx_mock.add_response(json={str(i): str(i) for i in range(240)})
 
     job_generator = LlamaPromptsSyntheticJobGenerator(prompt_sample)
     await job_generator.ainit()
 
     volume = await job_generator.volume()
-    assert isinstance(volume, SingleFileVolume)
+    assert isinstance(volume, MultiVolume)
+    assert len(volume.volumes) == 1
+    assert isinstance(volume.volumes[0], SingleFileVolume)
 
     output_upload = await job_generator.output_upload()
-    assert isinstance(output_upload, SingleFilePutUpload)
+    assert isinstance(output_upload, MultiUpload)
+    assert len(output_upload.uploads) == 1
+    assert isinstance(output_upload.uploads[0], SingleFilePutUpload)
 
     with pytest.raises(RuntimeError):
-        assert job_generator.verify(None, 0) == (True, "", 1)
+        assert job_generator.verify(_JOB_FINISHED_REQUEST, 0) == (True, "", 1)
 
     await job_generator._download_answers()
-    correct, _, score = job_generator.verify(None, 0)
+    correct, _, score = job_generator.verify(_JOB_FINISHED_REQUEST, 0)
     assert correct
     assert score == 1.0
 
@@ -85,13 +96,13 @@ async def test_llama_prompts_generator_basic(httpx_mock: HTTPXMock):
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_llama_prompts_generator_missing_prompts(httpx_mock: HTTPXMock):
     prompt_sample = await _prepare_models()
-    httpx_mock.add_response(json=[{"prompt": str(i), "answer": str(i)} for i in range(9, 249)])
+    httpx_mock.add_response(json={str(i): str(i) for i in range(9, 249)})
 
     job_generator = LlamaPromptsSyntheticJobGenerator(prompt_sample)
     await job_generator.ainit()
 
     await job_generator._download_answers()
-    correct, _, score = job_generator.verify(None, 0)
+    correct, _, score = job_generator.verify(_JOB_FINISHED_REQUEST, 0)
     assert not correct
     assert score == 0.0
 
@@ -100,12 +111,12 @@ async def test_llama_prompts_generator_missing_prompts(httpx_mock: HTTPXMock):
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_llama_prompts_generator_wrong_answers(httpx_mock: HTTPXMock):
     prompt_sample = await _prepare_models()
-    httpx_mock.add_response(json=[{"prompt": str(i), "answer": "wrong"} for i in range(240)])
+    httpx_mock.add_response(json={str(i): "wrong" for i in range(240)})
 
     job_generator = LlamaPromptsSyntheticJobGenerator(prompt_sample)
     await job_generator.ainit()
 
     await job_generator._download_answers()
-    correct, _, score = job_generator.verify(None, 0)
+    correct, _, score = job_generator.verify(_JOB_FINISHED_REQUEST, 0)
     assert not correct
     assert score == 0.0

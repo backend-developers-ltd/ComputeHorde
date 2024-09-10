@@ -1,12 +1,11 @@
 import uuid
+from dataclasses import dataclass
 
 import httpx
-import pydantic
-from compute_horde.base.output_upload import OutputUpload, SingleFilePutUpload
-from compute_horde.base.volume import SingleFileVolume, Volume
+from compute_horde.base.output_upload import MultiUpload, OutputUpload, SingleFilePutUpload
+from compute_horde.base.volume import MultiVolume, SingleFileVolume, Volume
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
-from pydantic import BaseModel
 
 from compute_horde_validator.validator.models import Prompt, PromptSample
 from compute_horde_validator.validator.s3 import generate_upload_url, get_public_url
@@ -18,12 +17,10 @@ _PROMPT_SAMPLE_RELATED_NOT_CACHED = (
 )
 
 
-class PromptAnswer(BaseModel):
+@dataclass(frozen=True, slots=True)
+class PromptAnswer:
     prompt: str
     answer: str
-
-
-PromptAnswerList = pydantic.TypeAdapter(list[PromptAnswer])
 
 
 class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
@@ -39,7 +36,9 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         self.prompt_sample: PromptSample = prompt_sample
         self.prompts: list[Prompt] = list(self.prompt_sample.prompts.all())
 
-        self.s3_output_key = str(uuid.uuid4()) + ".json"
+        base_filename = str(uuid.uuid4()) + "-" + str(self.prompt_sample.workload.seed)
+        self.input_filename = base_filename + ".txt"
+        self.s3_output_key = base_filename + ".json"
         self.s3_output_prefix = "solved/"
         self.s3_output_bucket = settings.S3_BUCKET_NAME_ANSWERS
 
@@ -73,18 +72,41 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         return "nvidia_all"
 
     def docker_run_cmd(self) -> list[str]:
-        return ["--seed", str(self.prompt_sample.workload.seed)]
+        return [
+            "--temperature=0.5",
+            "--top-p=0.8",
+            "--max-tokens=256",
+            "--seed",
+            str(self.prompt_sample.workload.seed),
+            f"/volume/{self.input_filename}",
+        ]
 
     async def volume(self) -> Volume | None:
-        return SingleFileVolume(url=self.prompt_sample.series.s3_url, relative_path="prompts.txt")
+        return MultiVolume(
+            volumes=[
+                SingleFileVolume(
+                    url=self.prompt_sample.series.s3_url,
+                    relative_path=self.input_filename,
+                ),
+            ]
+        )
 
     async def output_upload(self) -> OutputUpload | None:
-        return SingleFilePutUpload(url=self._url_for_upload(), relative_path="answers.json")
+        return MultiUpload(
+            uploads=[
+                SingleFilePutUpload(
+                    url=self._url_for_upload(),
+                    relative_path=self.s3_output_key,
+                ),
+            ]
+        )
 
     async def _download_answers(self):
         async with httpx.AsyncClient() as client:
             response = await client.get(self._url_for_download(), timeout=5)
-            self.prompt_answers = PromptAnswerList.validate_json(response.content)
+            self.prompt_answers = [
+                PromptAnswer(prompt, answer) for prompt, answer in response.json().items()
+            ]
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         if self.prompt_answers is None:
