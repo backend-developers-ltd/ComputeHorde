@@ -650,7 +650,7 @@ def _init_context(
 
 
 def _get_max_spin_up_time(ctx: BatchContext) -> int:
-    max_spin_up_time = 0
+    max_spin_up_time = _MIN_SPIN_UP_TIME
     for executors in ctx.executors.values():
         for executor_class in executors.keys():
             spin_up_time = EXECUTOR_CLASS[executor_class].spin_up_time
