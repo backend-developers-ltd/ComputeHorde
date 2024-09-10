@@ -1375,7 +1375,7 @@ def _db_persist(ctx: BatchContext) -> None:
                 score=job.score,
             )
             synthetic_jobs.append(synthetic_job)
-        SyntheticJob.objects.bulk_create(synthetic_jobs)
+        synthetic_jobs = SyntheticJob.objects.bulk_create(synthetic_jobs)
 
     miner_manifests: list[MinerManifest] = []
     for miner in ctx.miners.values():
@@ -1390,6 +1390,18 @@ def _db_persist(ctx: BatchContext) -> None:
                 )
             )
     MinerManifest.objects.bulk_create(miner_manifests)
+
+    synthetic_jobs_map: dict[str, SyntheticJob] = {
+        synthetic_job.job_uuid: synthetic_job for synthetic_job in synthetic_jobs
+    }
+    prompt_samples: list[PromptSample] = []
+    for job in ctx.jobs.values():
+        if job.executor_class != ExecutorClass.always_on__llama:
+            continue
+        prompt_sample = job.job_generator.prompt_sample
+        prompt_sample.synthetic_job = synthetic_jobs_map.get(job.uuid)
+        prompt_samples.append(prompt_sample)
+    PromptSample.objects.bulk_update(prompt_samples, fields=["synthetic_job"])
 
     job_started_receipts: list[JobStartedReceipt] = []
     for job in ctx.jobs.values():
