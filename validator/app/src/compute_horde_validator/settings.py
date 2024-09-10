@@ -502,7 +502,6 @@ DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE = env.int(
 # we start them from some offset because scheduling takes some time
 SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
 
-PROMPT_GENERATOR_VERSION = env.int("PROMPT_GENERATOR_VERSION", default=1)
 PROMPT_JOB_GENERATOR = env.str(
     "PROMPT_JOB_GENERATOR",
     default="compute_horde_validator.validator.cross_validation.generator.v0:PromptJobGenerator",
