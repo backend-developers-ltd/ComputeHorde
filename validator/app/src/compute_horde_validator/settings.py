@@ -201,6 +201,16 @@ CONSTANCE_CONFIG = {
         "in seconds",
         int,
     ),
+    "DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES": (
+        10,
+        "how many prompts to sample and validate from a series",
+        int,
+    ),
+    "DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE": (
+        100,
+        "how many workloads are needed before running local inference",
+        int,
+    ),
 }
 
 # Content Security Policy

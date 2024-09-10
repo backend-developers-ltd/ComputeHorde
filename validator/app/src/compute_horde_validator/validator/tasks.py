@@ -15,8 +15,8 @@ import celery.exceptions
 import numpy as np
 import requests
 from app.src.compute_horde_validator.validator.dynamic_config import (
-    aget_number_of_prompts_to_validate_from_series,
-    aget_number_of_workloads_to_trigger_local_inference,
+    get_number_of_prompts_to_validate_from_series,
+    get_number_of_workloads_to_trigger_local_inference,
 )
 from asgiref.sync import async_to_sync
 from bittensor.utils.weight_utils import process_weights_for_netuid
@@ -1083,8 +1083,8 @@ def create_workload(seed: int):
 
 @app.task()
 def create_sample_workloads():
-    total_workloads_needed = async_to_sync(aget_number_of_workloads_to_trigger_local_inference)()
-    prompts_per_sample = async_to_sync(aget_number_of_prompts_to_validate_from_series)()
+    total_workloads_needed = get_number_of_workloads_to_trigger_local_inference()
+    prompts_per_sample = get_number_of_prompts_to_validate_from_series()
 
     # set seed for the current synthetic jobs run
     seed = random.randint(0, 1000000)
