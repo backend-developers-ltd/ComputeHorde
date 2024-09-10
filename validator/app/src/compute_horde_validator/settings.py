@@ -211,6 +211,16 @@ CONSTANCE_CONFIG = {
         "how many workloads are needed before running local inference",
         int,
     ),
+    "DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO": (
+        5,
+        "Number of batches that prompt generator will process in a single go",
+        int,
+    ),
+    "DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH": (
+        240,
+        "Number of prompts to generate in a single batch",
+        int,
+    ),
 }
 
 # Content Security Policy
@@ -493,6 +503,10 @@ DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE = env.int(
 SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
 
 PROMPT_GENERATOR_VERSION = env.int("PROMPT_GENERATOR_VERSION", default=1)
+PROMPT_JOB_GENERATOR = env.str(
+    "PROMPT_JOB_GENERATOR",
+    default="compute_horde_validator.validator.cross_validation.generator.v0:PromptJobGenerator",
+)
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
@@ -505,6 +519,12 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
     )
     wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
     return wallet
+
+
+# Local miner generating prompts
+GENERATION_MINER_KEY = env.str("GENERATION_MINER_KEY", default="")
+GENERATION_MINER_ADDRESS = env.str("GENERATION_MINER_ADDRESS", default="")
+GENERATION_MINER_PORT = env.int("GENERATION_MINER_PORT", default=0)
 
 
 CHANNEL_LAYERS = {
