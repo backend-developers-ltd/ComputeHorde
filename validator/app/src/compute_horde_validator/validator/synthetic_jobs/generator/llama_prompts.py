@@ -103,6 +103,7 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
     async def _download_answers(self):
         async with httpx.AsyncClient() as client:
             response = await client.get(self._url_for_download(), timeout=5)
+            response.raise_for_status()
             self.prompt_answers = [
                 PromptAnswer(prompt, answer) for prompt, answer in response.json().items()
             ]
@@ -116,13 +117,13 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
                 if prompt_answer.prompt != prompt.content:
                     continue
                 if prompt_answer.answer != prompt.answer:
-                    return False, "results does not match expected answers", 0
+                    return False, "results does not match expected answers", 0.0
                 break
             else:
                 # did not find answer for this prompt
-                return False, "result does not contain all answers", 0
+                return False, "result does not contain all answers", 0.0
 
-        return True, "", 1
+        return True, "", 1.0
 
     def job_description(self) -> str:
         return "LLAMA prompts synthetic job"

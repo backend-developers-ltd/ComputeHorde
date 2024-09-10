@@ -172,5 +172,5 @@ async def prompt_sample_prefetched(prompt_series, solve_workload, prompt_sample,
     return (
         await PromptSample.objects.select_related("series", "workload")
         .prefetch_related("prompts")
-        .aget(id=prompt_sample.id)
+        .aget()
     )
