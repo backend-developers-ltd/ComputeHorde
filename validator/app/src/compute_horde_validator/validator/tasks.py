@@ -14,10 +14,6 @@ import bittensor
 import celery.exceptions
 import numpy as np
 import requests
-from app.src.compute_horde_validator.validator.dynamic_config import (
-    get_number_of_prompts_to_validate_from_series,
-    get_number_of_workloads_to_trigger_local_inference,
-)
 from asgiref.sync import async_to_sync
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
@@ -34,9 +30,12 @@ from constance import config
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
-from s3 import generate_upload_url, get_prompts_from_s3_url
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.dynamic_config import (
+    get_number_of_prompts_to_validate_from_series,
+    get_number_of_workloads_to_trigger_local_inference,
+)
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
@@ -54,6 +53,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
+from compute_horde_validator.validator.s3 import generate_upload_url, get_prompts_from_s3_url
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
@@ -1077,7 +1077,7 @@ def fetch_dynamic_config() -> None:
 def create_workload(seed: int):
     # generate an s3 url to upload sample batch job result in
     workload_uuid = uuid.uuid4()
-    s3_url = generate_upload_url(key=workload_uuid, bucket_name="upload-bucket-{sample_batch.uuid}")
+    s3_url = generate_upload_url(key=workload_uuid, bucket_name=settings.S3_BUCKET_NAME_ANSWERS)
     return SolveWorkload.objects.create(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url)
 
 
@@ -1121,9 +1121,16 @@ def create_sample_workloads():
         sampled_lines = random.sample(lines, prompts_per_sample)
         current_workload_fill += len(sampled_lines)
 
-        prompt_sample = PromptSample.objects.create(series=prompt_series, workload=current_workload)
+        with transaction.atomic():
+            prompt_sample = PromptSample.objects.create(
+                series=prompt_series, workload=current_workload
+            )
 
-        # save the sampled prompts as unanswered in the db
-        Prompt.objects.bulk_create(
-            [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
-        )
+            # save the sampled prompts as unanswered in the db
+            Prompt.objects.bulk_create(
+                [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
+            )
+
+    # delete remaining empty workload
+    if current_workload_fill == 0:
+        current_workload.delete()

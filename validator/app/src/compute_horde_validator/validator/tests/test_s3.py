@@ -1,9 +1,12 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from moto import mock_aws
 
 from compute_horde_validator.validator.s3 import (
     generate_download_url,
     generate_upload_url,
+    get_prompts_from_s3_url,
     get_public_url,
     get_s3_client,
 )
@@ -80,3 +83,26 @@ def test_get_public_url(
     settings.AWS_ENDPOINT_URL = endpoint_url
 
     assert get_public_url(key, prefix=prefix, bucket_name=bucket_name) == expected
+
+
+@pytest.mark.parametrize(
+    "status_code, content, expected",
+    [
+        (200, "prompt1\nprompt2\nprompt3", ["prompt1", "prompt2", "prompt3"]),
+        (200, "single_prompt", ["single_prompt"]),
+        (200, "", [""]),
+        (404, "Not Found", []),
+    ],
+)
+def test_get_prompts_from_s3_url(status_code, content, expected):
+    with patch("requests.get") as mock_get:
+        # Mock the requests.get response
+        mock_response = MagicMock()
+        mock_response.status_code = status_code
+        mock_response.text = content
+        mock_get.return_value = mock_response
+
+        result = get_prompts_from_s3_url("https://fake-s3-url.com/prompts.txt")
+        assert result == expected
+
+        mock_get.assert_called_once_with("https://fake-s3-url.com/prompts.txt")

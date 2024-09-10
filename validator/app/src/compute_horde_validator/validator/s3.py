@@ -1,5 +1,6 @@
 import functools
 import logging
+from collections.abc import Generator
 
 import boto3
 import requests
@@ -44,7 +45,7 @@ def get_public_url(key: str, *, bucket_name: str, prefix: str = "") -> str:
     return f"{endpoint_url}/{bucket_name}/{prefix}{key}"
 
 
-def get_prompts_from_s3_url(s3_url):
+def get_prompts_from_s3_url(s3_url: str) -> Generator[tuple[str, list[str]]]:
     response = requests.get(s3_url)
     if response.status_code != 200:
         logger.warning(f"Failed to download prompts from {s3_url}")
