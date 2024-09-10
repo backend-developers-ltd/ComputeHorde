@@ -1,13 +1,63 @@
 from collections.abc import Iterable
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from faker import Faker
 
-from compute_horde_miner.miner.models import Validator
-from compute_horde_miner.miner.tasks import fetch_validators
+from compute_horde_miner.miner.models import (
+    Prompt,
+    PromptSample,
+    PromptSeries,
+    SolveWorkload,
+    Validator,
+)
+from compute_horde_miner.miner.tasks import create_sample_workloads, fetch_validators
 
-pytestmark = [pytest.mark.django_db]
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@patch("your_module.get_number_of_workloads_to_trigger_local_inference", 2)
+@patch("your_module.get_number_of_prompts_to_validate_from_series", 3)
+@patch("your_module.get_prompts_from_s3_url", return_value=[f"prompt{i}" for i in range(5)])
+@patch("your_module.random.sample", return_value=[f"prompt{i}" for i in range(3)])
+def test_create_sample_workloads(self):
+    # Create test data
+    for i in range(3):
+        PromptSeries.objects.create(uuid=f"test-uuid-{i}", s3_url=f"s3://test-bucket/test-key-{i}")
+
+    create_sample_workloads()
+
+    self.assertEqual(SolveWorkload.objects.count(), 2)
+    self.assertEqual(PromptSample.objects.count(), 2)
+    self.assertEqual(Prompt.objects.count(), 6)
+
+
+@patch("your_module.get_number_of_workloads_to_trigger_local_inference", 1)
+@patch("your_module.get_number_of_prompts_to_validate_from_series", 3)
+@patch("your_module.get_prompts_from_s3_url", return_value=[f"prompt{i}" for i in range(2)])
+def test_create_sample_workloads_not_enough_prompts(self):
+    PromptSeries.objects.create(uuid="test-uuid", s3_url="s3://test-bucket/test-key")
+
+    create_sample_workloads()
+
+    self.assertEqual(SolveWorkload.objects.count(), 1)
+    self.assertEqual(PromptSample.objects.count(), 0)
+    self.assertEqual(Prompt.objects.count(), 0)
+
+
+@patch("your_module.get_number_of_workloads_to_trigger_local_inference", 1)
+@patch("your_module.get_number_of_prompts_to_validate_from_series", 3)
+@patch("your_module.get_prompts_from_s3_url", return_value=[f"prompt{i}" for i in range(5)])
+@patch("your_module.random.sample", return_value=[f"prompt{i}" for i in range(3)])
+def test_create_sample_workloads_delete_empty_workload(self):
+    PromptSeries.objects.create(uuid="test-uuid", s3_url="s3://test-bucket/test-key")
+
+    create_sample_workloads()
+
+    self.assertEqual(SolveWorkload.objects.count(), 1)
+    self.assertEqual(PromptSample.objects.count(), 1)
+    self.assertEqual(Prompt.objects.count(), 3)
+
+    self.assertEqual(SolveWorkload.objects.filter(prompt_sample__isnull=True).count(), 0)
 
 
 @pytest.fixture(autouse=True)

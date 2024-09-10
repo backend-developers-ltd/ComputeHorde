@@ -4,6 +4,7 @@ import numbers
 import random
 import time
 import traceback
+import uuid
 from collections import defaultdict
 from datetime import timedelta
 from math import ceil, floor
@@ -31,6 +32,10 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.dynamic_config import (
+    get_number_of_prompts_to_validate_from_series,
+    get_number_of_workloads_to_trigger_local_inference,
+)
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
@@ -38,12 +43,17 @@ from compute_horde_validator.validator.models import (
     JobFinishedReceipt,
     JobStartedReceipt,
     OrganicJob,
+    Prompt,
+    PromptSample,
+    PromptSeries,
+    SolveWorkload,
     SyntheticJobBatch,
     SystemEvent,
     Weights,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
+from compute_horde_validator.validator.s3 import generate_upload_url, get_prompts_from_s3_url
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
@@ -1062,3 +1072,65 @@ def fetch_dynamic_config() -> None:
         config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/validator-config-{settings.DYNAMIC_CONFIG_ENV}.json",
         namespace=config,
     )
+
+
+def create_workload(seed: int):
+    # generate an s3 url to upload sample batch job result in
+    workload_uuid = uuid.uuid4()
+    s3_url = generate_upload_url(key=workload_uuid, bucket_name=settings.S3_BUCKET_NAME_ANSWERS)
+    return SolveWorkload.objects.create(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url)
+
+
+@app.task()
+def create_sample_workloads():
+    total_workloads_needed = get_number_of_workloads_to_trigger_local_inference()
+    prompts_per_sample = get_number_of_prompts_to_validate_from_series()
+
+    # set seed for the current synthetic jobs run
+    seed = random.randint(0, 1000000)
+
+    # workload we are currently sampling for
+    current_workload = create_workload(seed)
+
+    # how many prompts we have sampled for current_workload so far
+    current_workload_fill = 0
+
+    # how many workloads we have finished (have enough samples)
+    workloads_done = 0
+
+    # assume we have sufficient prompt series in the db to make all the prompt_samples needed
+    # take a random order of prompt series to avoid using the same series at each synthetic jobs run
+    for prompt_series in PromptSeries.objects.order_by("?").all():
+        if current_workload_fill >= prompts_per_sample:
+            current_workload = create_workload(seed)
+            current_workload_fill = 0
+            workloads_done += 1
+
+        if workloads_done >= total_workloads_needed:
+            break
+
+        # get all prompts
+        lines = get_prompts_from_s3_url(prompt_series.uuid, prompt_series.s3_url)
+
+        # should always have enough prompts
+        if len(lines) <= prompts_per_sample:
+            logger.error("Skipping bucket %s, not enough prompts", prompt_series.s3_url)
+            continue
+
+        # sample prompts
+        sampled_lines = random.sample(lines, prompts_per_sample)
+        current_workload_fill += len(sampled_lines)
+
+        with transaction.atomic():
+            prompt_sample = PromptSample.objects.create(
+                series=prompt_series, workload=current_workload
+            )
+
+            # save the sampled prompts as unanswered in the db
+            Prompt.objects.bulk_create(
+                [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
+            )
+
+    # delete remaining empty workload
+    if current_workload_fill == 0:
+        current_workload.delete()

@@ -1,7 +1,12 @@
 import functools
+import logging
+from collections.abc import Generator
 
 import boto3
+import requests
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 def get_s3_client() -> boto3.client:
@@ -38,3 +43,11 @@ def get_public_url(key: str, *, bucket_name: str, prefix: str = "") -> str:
     endpoint_url = settings.AWS_ENDPOINT_URL or "https://s3.amazonaws.com"
 
     return f"{endpoint_url}/{bucket_name}/{prefix}{key}"
+
+
+def get_prompts_from_s3_url(s3_url: str) -> Generator[tuple[str, list[str]]]:
+    response = requests.get(s3_url)
+    if response.status_code != 200:
+        logger.warning(f"Failed to download prompts from {s3_url}")
+        return []
+    return response.text.split("\n")
