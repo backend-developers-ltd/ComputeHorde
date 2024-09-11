@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 from compute_horde.base.output_upload import MultiUpload
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.miner_client.organic import OrganicJobError, OrganicMinerClient
 from compute_horde.mv_protocol import miner_requests
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 
@@ -65,6 +65,15 @@ def job_finish_message(job_uuid: uuid.UUID):
     ).model_dump_json()
 
 
+@pytest.fixture
+def job_failed_message(job_uuid: uuid.UUID):
+    return miner_requests.V0JobFailedRequest(
+        job_uuid=str(job_uuid),
+        docker_process_stdout="",
+        docker_process_stderr="",
+    ).model_dump_json()
+
+
 @pytest.mark.override_config(
     DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO=3,
     DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH=99,
@@ -117,3 +126,49 @@ async def test_generate_prompts(
 
     assert "99" in job_request.docker_run_cmd
     assert ",".join(series_uuids) in job_request.docker_run_cmd
+
+
+@pytest.mark.override_config(
+    DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO=3,
+    DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH=99,
+)
+async def test_generate_prompts_job_failed(
+    transport: MinerSimulationTransport,
+    create_miner_client: Callable,
+    manifest_message: str,
+    executor_ready_message: str,
+    accept_job_message: str,
+    job_failed_message: str,
+    job_uuid: uuid.UUID,
+):
+    await transport.add_message(manifest_message, send_before=1)
+    await transport.add_message(accept_job_message, send_before=1)
+    await transport.add_message(executor_ready_message, send_before=0)
+    await transport.add_message(job_failed_message, send_before=2)
+
+    with pytest.raises(OrganicJobError):
+        await generate_prompts(
+            create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
+        )
+
+    assert not await PromptSeries.objects.aexists()
+
+
+@pytest.mark.override_config(
+    DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO=3,
+    DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH=99,
+)
+async def test_generate_prompts_timeout(
+    transport: MinerSimulationTransport,
+    create_miner_client: Callable,
+    manifest_message: str,
+    job_uuid: uuid.UUID,
+):
+    await transport.add_message(manifest_message, send_before=1)
+
+    with pytest.raises(OrganicJobError):
+        await generate_prompts(
+            create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=0.5
+        )
+
+    assert not await PromptSeries.objects.aexists()
