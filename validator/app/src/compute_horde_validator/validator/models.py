@@ -285,6 +285,9 @@ class Weights(models.Model):
     block = models.BigIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
     revealed_at = models.DateTimeField(null=True, default=None)
+    cycle = models.ForeignKey(
+        Cycle, null=True, default=None, related_name="weights", on_delete=models.CASCADE
+    )
 
     class Meta:
         constraints = [
