@@ -74,7 +74,7 @@ SCORING_ALGO_VERSION = 2
 
 WEIGHT_SETTING_TTL = 60
 WEIGHT_SETTING_HARD_TTL = 65
-WEIGHT_SETTING_ATTEMPTS = 100
+WEIGHT_SETTING_ATTEMPTS = 720
 WEIGHT_SETTING_FAILURE_BACKOFF = 5
 
 
@@ -434,11 +434,12 @@ def do_set_weights(
     max_weight = config.DYNAMIC_MAX_WEIGHT
 
     def _commit_weights() -> tuple[bool, str]:
+        cycle = Cycle.objects.get(id=cycle_id)
         last_weights = Weights.objects.order_by("-created_at").first()
         if (
             last_weights
             and last_weights.revealed_at is None
-            and last_weights.block >= current_block - commit_reveal_weights_interval * 1.5
+            and cycle.start - last_weights.cycle.stop <= 1
         ):
             # ___|______________________|______________________|____________________
             #    ^-commit weights       ^-time to reveal       ^-2x time to reveal
@@ -458,7 +459,6 @@ def do_set_weights(
             )
             return False, "Cannot commit new weights before revealing old ones"
         normalized_weights = _normalize_weights_for_committing(weights, max_weight)
-        cycle = Cycle.objects.get(id=cycle_id)
         weights_in_db = Weights(
             uids=uids,
             weights=normalized_weights,
