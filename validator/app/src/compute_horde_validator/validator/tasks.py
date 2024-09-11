@@ -14,6 +14,8 @@ import celery.exceptions
 import numpy as np
 import requests
 from asgiref.sync import async_to_sync
+from bittensor.metagraph import MetagraphMixin
+from bittensor.subtensor import Subtensor
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
@@ -634,12 +636,12 @@ def save_event_on_error(subtype):
         raise
 
 
-def get_subtensor(network):
+def get_subtensor(network) -> Subtensor:
     with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
         return bittensor.subtensor(network=network)
 
 
-def get_metagraph(subtensor, netuid):
+def get_metagraph(subtensor: Subtensor, netuid) -> MetagraphMixin:
     with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
         return subtensor.metagraph(netuid=netuid)
 
