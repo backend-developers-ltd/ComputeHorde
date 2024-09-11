@@ -419,6 +419,7 @@ def do_set_weights(
     wait_for_inclusion: bool,
     wait_for_finalization: bool,
     version_key: int,
+    cycle_id: int,
 ) -> tuple[bool, str]:
     """
     Set weights. To be used in other celery tasks in order to facilitate a timeout,
@@ -457,11 +458,13 @@ def do_set_weights(
             )
             return False, "Cannot commit new weights before revealing old ones"
         normalized_weights = _normalize_weights_for_committing(weights, max_weight)
+        cycle = Cycle.objects.get(id=cycle_id)
         weights_in_db = Weights(
             uids=uids,
             weights=normalized_weights,
             block=current_block,
             version_key=version_key,
+            cycle=cycle,
         )
         try:
             is_success, message = subtensor_.commit_weights(
@@ -777,6 +780,7 @@ def set_scores():
                             wait_for_inclusion=True,
                             wait_for_finalization=False,
                             version_key=SCORING_ALGO_VERSION,
+                            cycle_id=batches[-1].cycle.id,
                         ),
                         soft_time_limit=WEIGHT_SETTING_TTL,
                         time_limit=WEIGHT_SETTING_HARD_TTL,
