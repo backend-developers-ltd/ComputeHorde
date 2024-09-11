@@ -68,13 +68,15 @@ from .scoring import score_batches
 
 logger = get_task_logger(__name__)
 
+TEMPO = 360
+
 JOB_WINDOW = 2 * 60 * 60
 
 SCORING_ALGO_VERSION = 2
 
 WEIGHT_SETTING_TTL = 60
 WEIGHT_SETTING_HARD_TTL = 65
-WEIGHT_SETTING_ATTEMPTS = 100
+WEIGHT_SETTING_ATTEMPTS = 720
 WEIGHT_SETTING_FAILURE_BACKOFF = 5
 
 
@@ -148,7 +150,7 @@ def calculate_job_start_block(cycle: range, total: int, index_: int, offset: int
     return cycle.start + offset + floor(blocks_between_runs * index_)
 
 
-def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
+def get_epoch_containing_block(block: int, netuid: int, tempo: int = TEMPO) -> range:
     """
     Reimplementing the logic from subtensor's Rust function:
         pub fn blocks_until_next_epoch(netuid: u16, tempo: u16, block_number: u64) -> u64
@@ -168,7 +170,7 @@ def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
     return range(last_epoch, next_tempo_block_start)
 
 
-def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
+def get_cycle_containing_block(block: int, netuid: int, tempo: int = TEMPO) -> range:
     """
     A cycle contains two epochs, starts on an even one. A cycle is the basic unit of passage of time in compute horde,
     and validators testing miners are synchronised to cycles.
@@ -430,21 +432,22 @@ def do_set_weights(
     current_block = subtensor_.get_current_block()
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
-    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
     max_weight = config.DYNAMIC_MAX_WEIGHT
 
     def _commit_weights() -> tuple[bool, str]:
+        cycle = Cycle.objects.get(id=cycle_id)
         last_weights = Weights.objects.order_by("-created_at").first()
         if (
             last_weights
             and last_weights.revealed_at is None
-            and last_weights.block >= current_block - commit_reveal_weights_interval * 1.5
+            # weights for the prev cycle are not revealed yet
+            and cycle.start - last_weights.cycle.stop <= 1
         ):
             # ___|______________________|______________________|____________________
-            #    ^-commit weights       ^-time to reveal       ^-2x time to reveal
+            #    ^- cycle 2             ^- cycle 3             ^- cycle 4
             #    |_________________________________|_______________________________
-            #     impossible to commit new weights     can commit new weights
-            #     unless last weights are revealed     no matter what
+            #                ^-commit 1 ^-reveal 1 ^-commit 2  ^-reveal 2 ^-commit 3
+
             save_weight_setting_failure(
                 subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_UNREVEALED_ERROR,
                 long_description="Cannot commit new weights before revealing old ones",
@@ -453,12 +456,12 @@ def do_set_weights(
                     "created_at": str(last_weights.created_at),
                     "block": last_weights.block,
                     "current_block": current_block,
-                    "commit_reveal_weights_interval": commit_reveal_weights_interval,
+                    "cycle_start": cycle.start,
+                    "cycle_stop": cycle.stop,
                 },
             )
             return False, "Cannot commit new weights before revealing old ones"
         normalized_weights = _normalize_weights_for_committing(weights, max_weight)
-        cycle = Cycle.objects.get(id=cycle_id)
         weights_in_db = Weights(
             uids=uids,
             weights=normalized_weights,
@@ -687,7 +690,21 @@ def set_scores():
                     batch.save()
                 batches = [batches[-1]]
 
-            if subtensor.get_current_block() <= batches[-1].cycle.stop:
+            current_block = subtensor.get_current_block()
+
+            last_weights = Weights.objects.order_by("-created_at").first()
+            if (
+                last_weights
+                and last_weights.revealed_at is None
+                # weights for the prev cycle are not revealed yet
+                and batches[-1].cycle.start - last_weights.cycle.stop <= 1
+            ):
+                logger.debug(
+                    "Weights for the previous cycle are not revealed yet, skipping scoring"
+                )
+                return
+
+            if current_block <= batches[-1].cycle.stop:
                 logger.debug(
                     "There is a batch ready to be scored but we're "
                     "waiting for the beginning of next cycle to set weights"
@@ -787,17 +804,24 @@ def reveal_scores() -> None:
     WEIGHT_REVEALING_ATTEMPTS = config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS
     WEIGHT_REVEALING_FAILURE_BACKOFF = config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF
 
-    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
-
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
+    current_cycle = get_cycle_containing_block(
+        block=current_block, netuid=settings.BITTENSOR_NETUID
+    )
 
     last_weights = Weights.objects.order_by("-created_at").first()
     if not last_weights:
+        logger.debug("No weights to reveal")
         return
     if last_weights.revealed_at is not None:
+        logger.debug("Last weights have already been revealed")
         return
-    if last_weights.block > current_block - commit_reveal_weights_interval:
+    if current_cycle.start - last_weights.cycle.stop <= 1:
+        logger.debug("It's too early to reveal weights")
+        return
+    if current_block > last_weights.cycle.stop + 3 * (TEMPO + 1):
+        logger.error("Too late to reveal weights: %s at block %s", last_weights.id, current_block)
         return
 
     weights_id = last_weights.id
