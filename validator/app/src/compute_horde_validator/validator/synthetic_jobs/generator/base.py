@@ -8,7 +8,7 @@ from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 
 class BaseSyntheticJobGenerator(abc.ABC):
-    def __init__(self):
+    def __init__(self, **kwargs):
         self._uuid = uuid.uuid4()
 
     def __repr__(self):
@@ -53,4 +53,6 @@ class BaseSyntheticJobGenerator(abc.ABC):
 
 class BaseSyntheticJobGeneratorFactory(abc.ABC):
     @abc.abstractmethod
-    async def create(self, executor_class: ExecutorClass, *args) -> BaseSyntheticJobGenerator: ...
+    async def create(
+        self, executor_class: ExecutorClass, **kwargs
+    ) -> BaseSyntheticJobGenerator: ...

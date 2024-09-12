@@ -12,24 +12,22 @@ from compute_horde_validator.validator.s3 import generate_upload_url, get_public
 
 from .base import BaseSyntheticJobGenerator
 
-_PROMPT_SAMPLE_RELATED_NOT_CACHED = (
-    "The related objects of PromptSample needs to be cached before passing to this class"
-)
-
 
 class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
-    def __init__(self, prompt_sample: PromptSample):
-        super().__init__()
-
-        assert PromptSample.series.is_cached(prompt_sample), _PROMPT_SAMPLE_RELATED_NOT_CACHED
-        assert PromptSample.workload.is_cached(prompt_sample), _PROMPT_SAMPLE_RELATED_NOT_CACHED
-        assert (
-            getattr(prompt_sample, "_prefetched_objects_cache", {}).get("prompts") is not None
-        ), _PROMPT_SAMPLE_RELATED_NOT_CACHED
+    def __init__(
+        self,
+        prompt_sample: PromptSample,
+        expected_prompts: list[Prompt],
+        s3_url: str,
+        seed: int,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
 
         self.prompt_sample: PromptSample = prompt_sample
-        self.prompts: list[Prompt] = list(self.prompt_sample.prompts.all())
-
+        self.seed = seed
+        self.expected_prompts: list[Prompt] = expected_prompts
+        self.s3_url = s3_url
         self.input_filename = str(uuid.uuid4()) + ".txt"
         self.s3_output_key = str(uuid.uuid4()) + ".json"
         self.s3_output_prefix = "solved/"
@@ -70,7 +68,7 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
             "--top-p=0.8",
             "--max-tokens=256",
             "--seed",
-            str(self.prompt_sample.workload.seed),
+            str(self.seed),
             f"/volume/{self.input_filename}",
         ]
 
@@ -78,7 +76,7 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         return MultiVolume(
             volumes=[
                 SingleFileVolume(
-                    url=self.prompt_sample.series.s3_url,
+                    url=self.s3_url,
                     relative_path=self.input_filename,
                 ),
             ]
@@ -103,10 +101,10 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
             )
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
-        for prompt in self.prompts:
-            if prompt.content not in self.prompt_answers:
+        for expected_prompt in self.expected_prompts:
+            if expected_prompt.content not in self.prompt_answers:
                 return False, "result does not contain all answers", 0.0
-            if prompt.answer != self.prompt_answers[prompt.content]:
+            if expected_prompt.answer != self.prompt_answers[expected_prompt.content]:
                 return False, "results does not match expected answers", 0.0
 
         return True, "", 1.0

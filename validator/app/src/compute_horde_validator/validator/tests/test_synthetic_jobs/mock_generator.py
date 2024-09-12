@@ -16,7 +16,8 @@ NOT_SCORED = 0.0
 
 
 class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
-    def __init__(self, _uuid: uuid.UUID):
+    def __init__(self, _uuid: uuid.UUID, **kwargs):
+        super().__init__(**kwargs)
         self._uuid = _uuid
 
     async def ainit(self):
@@ -53,12 +54,13 @@ class TimeTookScoreMockSyntheticJobGenerator(MockSyntheticJobGenerator):
 
 
 class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
-    def __init__(self, uuids: list[uuid.UUID] = None):
+    def __init__(self, uuids: list[uuid.UUID] = None, **kwargs):
+        super().__init__(**kwargs)
         self._uuids = uuids or []
 
-    async def create(self, executor_class: ExecutorClass, *args) -> BaseSyntheticJobGenerator:
+    async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
         _uuid = self._uuids.pop(0)
-        return MockSyntheticJobGenerator(_uuid)
+        return MockSyntheticJobGenerator(_uuid, **kwargs)
 
 
 class TimeTookScoreMockSyntheticJobGeneratorFactory(MockSyntheticJobGeneratorFactory):

@@ -16,6 +16,9 @@ from compute_horde_validator.validator.models import (
     SolveWorkload,
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import BatchContext, MinerClient
+from compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts import (
+    LlamaPromptsSyntheticJobGenerator,
+)
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
 
@@ -169,9 +172,17 @@ async def prompts(prompt_sample):
 
 
 @pytest_asyncio.fixture
-async def prompt_sample_prefetched(prompt_series, solve_workload, prompt_sample, prompts):
-    return (
-        await PromptSample.objects.select_related("series", "workload")
-        .prefetch_related("prompts")
-        .aget()
+async def llama_job_generator(
+    prompt_series: PromptSeries,
+    solve_workload: SolveWorkload,
+    prompt_sample: PromptSample,
+    prompts: list[Prompt],
+) -> LlamaPromptsSyntheticJobGenerator:
+    job_generator = LlamaPromptsSyntheticJobGenerator(
+        prompt_sample=prompt_sample,
+        expected_prompts=prompts,
+        s3_url=prompt_series.s3_url,
+        seed=solve_workload.seed,
     )
+    await job_generator.ainit()
+    return job_generator

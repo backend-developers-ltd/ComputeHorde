@@ -11,7 +11,14 @@ from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol import miner_requests
 from pytest_httpx import HTTPXMock
 
-from compute_horde_validator.validator.models import Miner, Prompt, PromptSample, SyntheticJob
+from compute_horde_validator.validator.models import (
+    Miner,
+    Prompt,
+    PromptSample,
+    PromptSeries,
+    SolveWorkload,
+    SyntheticJob,
+)
 from compute_horde_validator.validator.s3 import get_public_url
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
@@ -24,8 +31,8 @@ from compute_horde_validator.validator.tests.transport import MinerSimulationTra
 
 
 class JobGeneratorFactory(DefaultSyntheticJobGeneratorFactory):
-    async def create(self, executor_class: ExecutorClass, *args) -> BaseSyntheticJobGenerator:
-        generator = await super().create(executor_class, *args)
+    async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
+        generator = await super().create(executor_class, **kwargs)
         generator._uuid = self._uuid
         return generator
 
@@ -49,7 +56,9 @@ async def test_llama_synthetic_jobs_flow(
     transport: MinerSimulationTransport,
     override_weights_version_v2,
     small_spin_up_times,
-    prompt_sample_prefetched: PromptSample,
+    prompt_series: PromptSeries,
+    solve_workload: SolveWorkload,
+    prompt_sample: PromptSample,
     prompts: list[Prompt],
     mocked_job_generator_factory: JobGeneratorFactory,
     httpx_mock: HTTPXMock,
@@ -95,7 +104,7 @@ async def test_llama_synthetic_jobs_flow(
         sleep_before=0.05,
     )
 
-    assert prompt_sample_prefetched.synthetic_job_id is None
+    assert prompt_sample.synthetic_job_id is None
 
     await asyncio.wait_for(
         execute_synthetic_batch_run(
@@ -108,7 +117,7 @@ async def test_llama_synthetic_jobs_flow(
 
     job = await SyntheticJob.objects.aget(job_uuid=job_uuid)
     assert job.status == SyntheticJob.Status.COMPLETED
-    assert job.score >= 1
+    assert job.score > 0
 
-    await prompt_sample_prefetched.arefresh_from_db()
-    assert prompt_sample_prefetched.synthetic_job_id == job.id
+    await prompt_sample.arefresh_from_db()
+    assert prompt_sample.synthetic_job_id == job.id

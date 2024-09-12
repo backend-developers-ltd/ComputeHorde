@@ -13,7 +13,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts im
 
 
 class DefaultSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
-    async def create(self, executor_class: ExecutorClass, *args) -> BaseSyntheticJobGenerator:
+    async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
         if executor_class == ExecutorClass.always_on__llama:
-            return LlamaPromptsSyntheticJobGenerator(*args)
-        return GPUHashcatSyntheticJobGenerator(*args)
+            return LlamaPromptsSyntheticJobGenerator(**kwargs)
+        return GPUHashcatSyntheticJobGenerator(**kwargs)

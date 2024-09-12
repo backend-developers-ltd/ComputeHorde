@@ -789,12 +789,18 @@ async def _generate_jobs(ctx: BatchContext) -> None:
         for executor_class, count in executors.items():
             job_generators = []
             for _ in range(count):
-                args = []
+                kwargs = {}
                 if executor_class == ExecutorClass.always_on__llama:
-                    args.append(next(llama_prompt_samples_iter))
+                    prompt_sample = next(llama_prompt_samples_iter)
+                    kwargs = {
+                        "prompt_sample": prompt_sample,
+                        "expected_prompts": list(prompt_sample.prompts.all()),
+                        "s3_url": prompt_sample.series.s3_url,
+                        "seed": prompt_sample.workload.seed,
+                    }
 
                 job_generator = await current.synthetic_job_generator_factory.create(
-                    executor_class, *args
+                    executor_class, **kwargs
                 )
                 await job_generator.ainit()
                 job_uuid = str(job_generator.uuid())

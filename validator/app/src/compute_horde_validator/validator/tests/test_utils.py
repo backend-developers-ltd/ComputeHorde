@@ -232,8 +232,8 @@ def syntethic_batch_scheme_single_miner(
 
 
 class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
-    async def create(self, executor_class: ExecutorClass, *args) -> BaseSyntheticJobGenerator:
-        return MockSyntheticJobGenerator()
+    async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
+        return MockSyntheticJobGenerator(**kwargs)
 
 
 mock_synthetic_job_generator_factory = MagicMock(name="MockSyntheticJobGeneratorFactory")
@@ -367,8 +367,8 @@ async def create_mock_job_batches(miner):
 
 
 class TimeToookScoreMockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
-    async def create(self, executor_class: ExecutorClass, *args) -> BaseSyntheticJobGenerator:
-        return TimeToookScoreMockSyntheticJobGenerator()
+    async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
+        return TimeToookScoreMockSyntheticJobGenerator(**kwargs)
 
 
 time_took_mock_synthetic_job_generator_factory = MagicMock(
