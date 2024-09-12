@@ -56,10 +56,10 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         return 80
 
     def base_docker_image_name(self) -> str:
-        return "TODO"
+        return "docker.io/backenddevelopersltd/compute-horde-prompt-solver:v0-latest"
 
     def docker_image_name(self) -> str:
-        return "TODO"
+        return "docker.io/backenddevelopersltd/compute-horde-prompt-solver:v0-latest"
 
     def docker_run_options_preset(self) -> str:
         return "nvidia_all"
