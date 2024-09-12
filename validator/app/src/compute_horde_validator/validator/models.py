@@ -5,7 +5,6 @@ from datetime import timedelta
 from os import urandom
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import UniqueConstraint
@@ -311,7 +310,7 @@ class PromptSeries(models.Model):
     series_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
     s3_url = models.URLField(max_length=1000)
     created_at = models.DateTimeField(default=now)
-    generator_version = models.PositiveSmallIntegerField(default=settings.PROMPT_GENERATOR_VERSION)
+    generator_version = models.PositiveSmallIntegerField()
 
 
 class SolveWorkload(models.Model):
