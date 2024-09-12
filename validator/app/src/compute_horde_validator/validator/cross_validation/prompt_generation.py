@@ -24,6 +24,16 @@ async def generate_prompts(
     job_uuid: uuid.UUID | None = None,
     wait_timeout: int | None = None,
 ) -> None:
+    if not all(
+        [
+            settings.GENERATION_MINER_KEY,
+            settings.GENERATION_MINER_ADDRESS,
+            settings.GENERATION_MINER_PORT,
+        ]
+    ):
+        logger.warning("Prompt generation miner not configured, skipping prompt generation")
+        return
+
     limit = await aget_config("DYNAMIC_MAX_PROMPT_BATCHES")
     if current_count := await PromptSeries.objects.acount() >= limit:
         logger.warning(
