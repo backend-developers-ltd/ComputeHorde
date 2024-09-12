@@ -6,9 +6,6 @@ on:
       DIST_VERSION_PREFIX:
         required: true
         type: string
-    secrets:
-      ACTIONS_PAT:
-        required: true
 
 env:
   CHANGE_LOG_BRANCH: "staging"
@@ -20,7 +17,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.ACTIONS_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine Next Tag
         id: determine_tag
@@ -47,3 +44,5 @@ jobs:
         run: |
           git tag "${{ inputs.DIST_VERSION_PREFIX }}-$NEXT_TAG"
           git push origin "${{ inputs.DIST_VERSION_PREFIX }}-$NEXT_TAG"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

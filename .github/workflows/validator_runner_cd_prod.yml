@@ -43,5 +43,3 @@ jobs:
     uses: ./.github/workflows/common_tagging.yml
     with:
       DIST_VERSION_PREFIX: "validator-runner-prod"
-    secrets:
-      ACTIONS_PAT: ${{ secrets.ACTIONS_PAT }}

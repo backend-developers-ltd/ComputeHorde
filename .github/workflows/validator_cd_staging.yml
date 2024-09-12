@@ -42,5 +42,3 @@ jobs:
     uses: ./.github/workflows/common_tagging.yml
     with:
       DIST_VERSION_PREFIX: "validator-staging"
-    secrets:
-      ACTIONS_PAT: ${{ secrets.ACTIONS_PAT }}

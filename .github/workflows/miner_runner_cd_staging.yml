@@ -62,5 +62,3 @@ jobs:
     uses: ./.github/workflows/common_tagging.yml
     with:
       DIST_VERSION_PREFIX: "miner-runner-staging"
-    secrets:
-      ACTIONS_PAT: ${{ secrets.ACTIONS_PAT }}
