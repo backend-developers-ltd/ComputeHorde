@@ -5,6 +5,7 @@ import logging
 import time
 
 from compute_horde.executor_class import (
+    EXECUTOR_CLASS,
     MAX_EXECUTOR_TIMEOUT,
     ExecutorClass,
 )
@@ -29,6 +30,9 @@ class ReservedExecutor:
 
 
 class ExecutorClassPool:
+    RESERVATION_TIMEOUT = MAX_EXECUTOR_TIMEOUT
+    POOL_CLEANUP_PERIOD = 10
+
     def __init__(self, manager, executor_class: ExecutorClass, executor_count: int):
         self.manager = manager
         self.executor_class = executor_class
@@ -42,7 +46,7 @@ class ExecutorClassPool:
         async with self._reservation_lock:
             while True:
                 if self.get_availability() == 0:
-                    if time.time() - start < MAX_EXECUTOR_TIMEOUT:
+                    if time.time() - start < self.RESERVATION_TIMEOUT:
                         await asyncio.sleep(1)
                     else:
                         logger.warning("Error unavailable after timeout")
@@ -71,26 +75,30 @@ class ExecutorClassPool:
                 await self._pool_cleanup()
             except Exception as exc:
                 logger.error("Error occurred", exc_info=exc)
-            await asyncio.sleep(10)
+            await asyncio.sleep(self.POOL_CLEANUP_PERIOD)
 
     async def _pool_cleanup(self):
-        executors_to_drop = set()
-        for reserved_executor in self._executors:
+        async def check_executor(reserved_executor):
             status = await self.manager.wait_for_executor(reserved_executor.executor, 1)
             if status is not None:
-                executors_to_drop.add(reserved_executor)
-            else:
-                if reserved_executor.is_expired():
-                    await self.manager.kill_executor(reserved_executor.executor)
-                    executors_to_drop.add(reserved_executor)
-        still_running_executors = []
-        for reserved_executor in self._executors:
-            if reserved_executor not in executors_to_drop:
-                still_running_executors.append(reserved_executor)
-        self._executors = still_running_executors
+                return reserved_executor, True
+            elif reserved_executor.is_expired():
+                await self.manager.kill_executor(reserved_executor.executor)
+                return reserved_executor, True
+            return reserved_executor, False
+
+        results = await asyncio.gather(
+            *[check_executor(reserved_executor) for reserved_executor in self._executors]
+        )
+
+        self._executors = [
+            reserved_executor for reserved_executor, should_drop in results if not should_drop
+        ]
 
 
 class BaseExecutorManager(metaclass=abc.ABCMeta):
+    EXECUTOR_TIMEOUT_LEEWAY = dt.timedelta(seconds=30).total_seconds()
+
     def __init__(self):
         self._executor_class_pools = {}
 
@@ -132,4 +140,11 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
 
     async def reserve_executor_class(self, token, executor_class, timeout):
         pool = await self.get_executor_class_pool(executor_class)
-        await pool.reserve_executor(token, timeout)
+        await pool.reserve_executor(token, self.get_total_timeout(executor_class, timeout))
+
+    def get_total_timeout(self, executor_class, job_timeout):
+        spec = EXECUTOR_CLASS.get(executor_class)
+        spin_up_time = 0
+        if spec is not None:
+            spin_up_time = spec.spin_up_time
+        return spin_up_time + job_timeout + self.EXECUTOR_TIMEOUT_LEEWAY
