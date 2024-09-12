@@ -1,7 +1,7 @@
 import uuid
-from dataclasses import dataclass
 
 import httpx
+import pydantic
 from compute_horde.base.output_upload import MultiUpload, OutputUpload, SingleFilePutUpload
 from compute_horde.base.volume import MultiVolume, SingleFileVolume, Volume
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
@@ -15,12 +15,6 @@ from .base import BaseSyntheticJobGenerator
 _PROMPT_SAMPLE_RELATED_NOT_CACHED = (
     "The related objects of PromptSample needs to be cached before passing to this class"
 )
-
-
-@dataclass(frozen=True, slots=True)
-class PromptAnswer:
-    prompt: str
-    answer: str
 
 
 class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
@@ -41,7 +35,7 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         self.s3_output_prefix = "solved/"
         self.s3_output_bucket = settings.S3_BUCKET_NAME_ANSWERS
 
-        self.prompt_answers: list[PromptAnswer] | None = None
+        self.prompt_answers: dict[str, str] = {}
 
     def _url_for_upload(self) -> str:
         return generate_upload_url(
@@ -104,24 +98,16 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         async with httpx.AsyncClient() as client:
             response = await client.get(self._url_for_download(), timeout=5)
             response.raise_for_status()
-            self.prompt_answers = [
-                PromptAnswer(prompt, answer) for prompt, answer in response.json().items()
-            ]
+            self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(
+                response.content
+            )
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
-        if self.prompt_answers is None:
-            raise RuntimeError("_download_answers must be called before calling verify")
-
         for prompt in self.prompts:
-            for prompt_answer in self.prompt_answers:
-                if prompt_answer.prompt != prompt.content:
-                    continue
-                if prompt_answer.answer != prompt.answer:
-                    return False, "results does not match expected answers", 0.0
-                break
-            else:
-                # did not find answer for this prompt
+            if prompt.content not in self.prompt_answers:
                 return False, "result does not contain all answers", 0.0
+            if prompt.answer != self.prompt_answers[prompt.content]:
+                return False, "results does not match expected answers", 0.0
 
         return True, "", 1.0
 
