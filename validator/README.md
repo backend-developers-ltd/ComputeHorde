@@ -39,7 +39,22 @@ Typically, when developing validator, you want to test:
 2. Settings weights
 3. Passing organic jobs from a facilitator to a miner
 
-Some of these actions may require launching celery locally, which you can achieve by running TODO.
+Some of these actions may require launching celery locally, which you can achieve by running [start_celery.sh](dev_env_setup%2Fstart_celery.sh).
+
+Some tests start celery in order to test obscure interprocess timeouts. That is generally automated, however celery 
+workers being killed on MacOS yield an insufferable amount of error dialogs displayed on top of everything you have 
+open. To save developers from suffering this fate, tests support running celery on a remote host, via ssh. A common case
+would be a local VM, also running postgres and redis. In such a case, make sure postgres and redis ports are forwarded
+so they are accessible from the host, which runs your code/tests. To make tests start celery on the remote host, define
+the following env vars (the author of this note suggests using direnv or PyCharm Run/Debug configuration templates for
+ease):
+
+```shell
+REMOTE_HOST=ubuntu-dev  # ssh config entry name
+REMOTE_VENV=/path/to/remote/venv  # on the remote
+REMOTE_CELERY_START_SCRIPT=/project/mount/ComputeHorde/validator/dev_env_setup/start_celery.sh  #  adjust the beginning
+# to match your synced folders configuration
+```
 
 ## Scheduling synthetic jobs
 

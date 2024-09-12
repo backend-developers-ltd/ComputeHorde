@@ -176,6 +176,41 @@ CONSTANCE_CONFIG = {
         "This should be synced with the hyperparam",
         int,
     ),
+    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS": (
+        3,
+        "If the job running task wakes up late by this many blocks (or less), the jobs will still run",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_TTL": (
+        120,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_HARD_TTL": (
+        125,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_ATTEMPTS": (
+        50,
+        "the number of attempts",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF": (
+        5,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES": (
+        10,
+        "how many prompts to sample and validate from a series",
+        int,
+    ),
+    "DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE": (
+        100,
+        "how many workloads are needed before running local inference",
+        int,
+    ),
 }
 
 # Content Security Policy
@@ -243,6 +278,11 @@ DEFAULT_DB_ALIAS = (
     "default_alias"  # useful for bypassing transaction while connecting to the same db
 )
 DATABASES[DEFAULT_DB_ALIAS] = DATABASES["default"]
+
+
+if new_name := env.str("DEBUG_OVERRIDE_DATABASE_NAME", default=None):
+    DATABASES["default"]["NAME"] = new_name
+    DATABASES[DEFAULT_DB_ALIAS]["NAME"] = new_name
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -437,9 +477,22 @@ DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 
+# prompt gen sampling
+DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES = env.int(
+    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES", default=None
+)
+DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES = env.int(
+    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_IN_BATCH", default=None
+)
+DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE = env.int(
+    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE", default=None
+)
+
 # synthetic jobs are evenly distributed through the cycle, however
 # we start them from some offset because scheduling takes some time
 SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
+
+PROMPT_GENERATOR_VERSION = env.int("PROMPT_GENERATOR_VERSION", default=1)
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
@@ -464,6 +517,13 @@ CHANNEL_LAYERS = {
         },
     },
 }
+
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
+AWS_ENDPOINT_URL = env("AWS_ENDPOINT_URL", default=None)
+
+S3_BUCKET_NAME_PROMPTS = env("S3_BUCKET_NAME_PROMPTS", default=None)
+S3_BUCKET_NAME_ANSWERS = env("S3_BUCKET_NAME_ANSWERS", default=None)
 
 # Sentry
 if SENTRY_DSN := env("SENTRY_DSN", default=""):

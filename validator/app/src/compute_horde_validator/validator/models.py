@@ -5,6 +5,7 @@ from datetime import timedelta
 from os import urandom
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import UniqueConstraint
@@ -21,6 +22,7 @@ class SystemEvent(models.Model):
     class EventType(models.TextChoices):
         WEIGHT_SETTING_SUCCESS = "WEIGHT_SETTING_SUCCESS"
         WEIGHT_SETTING_FAILURE = "WEIGHT_SETTING_FAILURE"
+        # the two above are blankets for setting, committing and revealing
         MINER_ORGANIC_JOB_FAILURE = "MINER_ORGANIC_JOB_FAILURE"
         MINER_ORGANIC_JOB_SUCCESS = "MINER_ORGANIC_JOB_SUCCESS"
         MINER_SYNTHETIC_JOB_SUCCESS = "MINER_SYNTHETIC_JOB_SUCCESS"
@@ -33,6 +35,7 @@ class SystemEvent(models.Model):
         VALIDATOR_TELEMETRY = "VALIDATOR_TELEMETRY"
         VALIDATOR_CHANNEL_LAYER_ERROR = "VALIDATOR_CHANNEL_LAYER_ERROR"
         VALIDATOR_SYNTHETIC_JOB_SCHEDULED = "VALIDATOR_SYNTHETIC_JOB_SCHEDULED"
+        VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING = "VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -47,7 +50,6 @@ class SystemEvent(models.Model):
         SET_WEIGHTS_ERROR = "SET_WEIGHTS_ERROR"
         GENERIC_ERROR = "GENERIC_ERROR"
         WRITING_TO_CHAIN_TIMEOUT = "WRITING_TO_CHAIN_TIMEOUT"
-        WRITING_TO_CHAIN_FAILED = "WRITING_TO_CHAIN_FAILED"
         WRITING_TO_CHAIN_GENERIC_ERROR = "WRITING_TO_CHAIN_GENERIC_ERROR"
         GIVING_UP = "GIVING_UP"
         MANIFEST_ERROR = "MANIFEST_ERROR"
@@ -66,7 +68,10 @@ class SystemEvent(models.Model):
         UNAUTHORIZED = "UNAUTHORIZED"
         SYNTHETIC_BATCH = "SYNTHETIC_BATCH"
         SYNTHETIC_JOB = "SYNTHETIC_JOB"
+        CHECKPOINT = "CHECKPOINT"
         OVERSLEPT = "OVERSLEPT"
+        WARNING = "WARNING"
+        FAILED_TO_WAIT = "FAILED_TO_WAIT"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
@@ -296,3 +301,55 @@ class Weights(models.Model):
 
     def __str__(self) -> str:
         return str(self.weights)
+
+
+class PromptSeries(models.Model):
+    """
+    A series of prompts generated in a single run of the prompt generator.
+    """
+
+    series_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
+    s3_url = models.URLField(max_length=1000)
+    created_at = models.DateTimeField(default=now)
+    generator_version = models.PositiveSmallIntegerField(default=settings.PROMPT_GENERATOR_VERSION)
+
+
+class SolveWorkload(models.Model):
+    """
+    A collective workload of prompt samples to be solved together.
+    """
+
+    workload_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
+    seed = models.BigIntegerField()
+    s3_url = models.URLField(max_length=1000)
+    created_at = models.DateTimeField(default=now)
+    finished_at = models.DateTimeField(null=True, default=None, db_index=True)
+
+    def __str__(self):
+        return f"uuid: {self.batch_uuid} - synthetic_job_batch: {self.synthetic_job_batch} - seed: {self.seed}"
+
+
+class PromptSample(models.Model):
+    """
+    A sample of prompts to be solved from a particular series.
+    Each sample is used to generate a single synthetic job after being solved.
+    """
+
+    series = models.ForeignKey(PromptSeries, on_delete=models.CASCADE, related_name="samples")
+    workload = models.ForeignKey(SolveWorkload, on_delete=models.CASCADE, related_name="samples")
+    synthetic_job = models.ForeignKey(SyntheticJob, on_delete=models.CASCADE, null=True)
+    created_at = models.DateTimeField(default=now)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=["series", "workload"],
+                name="unique_series_workload",
+            ),
+        ]
+
+
+class Prompt(models.Model):
+    sample = models.ForeignKey(PromptSample, on_delete=models.CASCADE, related_name="prompts")
+    content = models.TextField()
+    answer = models.TextField(null=True)

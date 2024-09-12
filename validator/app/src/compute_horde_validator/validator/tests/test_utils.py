@@ -2,20 +2,17 @@ import asyncio
 import logging
 import threading
 import time
-import uuid
 from unittest.mock import MagicMock, patch
 
 import bittensor
 import pytest
 from asgiref.sync import sync_to_async
-from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from compute_horde.mv_protocol.miner_requests import (
     ExecutorClassManifest,
     ExecutorManifest,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
-    V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
@@ -33,7 +30,6 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
     SystemEvent,
 )
-from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     execute_synthetic_batch_run,
 )
@@ -46,8 +42,9 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from .helpers import (
+    MockMetagraph,
+    MockSubtensor,
     check_system_events,
-    get_miner_client,
 )
 
 MOCK_SCORE = 0.8
@@ -358,50 +355,6 @@ async def test_execute_synthetic_job(
         assert await SystemEvent.objects.aget() == 0
 
 
-# TODO: move to organic job tests
-@pytest.mark.asyncio
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.parametrize(
-    "msg",
-    [
-        V0ExecutorReadyRequest(job_uuid=str(uuid.uuid4())),
-        V0ExecutorFailedRequest(job_uuid=str(uuid.uuid4())),
-        V0ExecutorReadyRequest(job_uuid=str(uuid.uuid4())),
-    ],
-)
-async def test_miner_client__handle_message__set_ready_or_declining_future(msg: BaseRequest):
-    miner_client = get_miner_client(MinerClient, msg.job_uuid)
-    assert not miner_client.miner_ready_or_declining_future.done()
-    await miner_client.handle_message(msg)
-    assert await miner_client.miner_ready_or_declining_future == msg
-
-
-# TODO: move to organic job tests
-@pytest.mark.asyncio
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.parametrize(
-    "msg",
-    [
-        V0JobFailedRequest(
-            job_uuid=str(uuid.uuid4()),
-            docker_process_exit_status=1,
-            docker_process_stdout="stdout",
-            docker_process_stderr="stderr",
-        ),
-        V0JobFinishedRequest(
-            job_uuid=str(uuid.uuid4()),
-            docker_process_stdout="stdout",
-            docker_process_stderr="stderr",
-        ),
-    ],
-)
-async def test_miner_client__handle_message__set_other_msg(msg: BaseRequest):
-    miner_client = get_miner_client(MinerClient, msg.job_uuid)
-    assert not miner_client.miner_finished_or_failed_future.done()
-    await miner_client.handle_message(msg)
-    assert await miner_client.miner_finished_or_failed_future == msg
-
-
 async def create_mock_job_batches(miner):
     return [
         await SyntheticJobBatch.objects.acreate(
@@ -606,3 +559,49 @@ def test_create_and_run_synthetic_job_batch(
         )[0]
         time_took = receipt.payload.time_took_us / 1_000_000
         assert abs(job.score * time_took - expected_multiplier) < 0.0001
+
+
+mocked_metagraph_1 = MagicMock(side_effect=[ValueError, TypeError, MockMetagraph()])
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(mocked_metagraph=mocked_metagraph_1),
+)
+def test_create_and_run_synthetic_job_batch_metagraph_retries():
+    with (
+        patch(
+            "compute_horde_validator.validator.synthetic_jobs.utils.execute_synthetic_batch_run"
+        ) as execute,
+        patch("time.sleep") as sleep,
+    ):
+        create_and_run_synthetic_job_batch(12, "none", 100)
+
+    assert execute.call_count == 1
+    assert sleep.call_count == 2
+
+
+mocked_metagraph_2 = MagicMock(side_effect=[ValueError, TypeError, AttributeError])
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@patch(
+    "bittensor.subtensor",
+    lambda *args, **kwargs: MockSubtensor(mocked_metagraph=mocked_metagraph_2),
+)
+def test_create_and_run_synthetic_job_batch_metagraph_retries_fail():
+    with (
+        patch(
+            "compute_horde_validator.validator.synthetic_jobs.utils.execute_synthetic_batch_run"
+        ) as execute,
+        patch("time.sleep") as sleep,
+    ):
+        create_and_run_synthetic_job_batch(12, "none", 100)
+
+    assert execute.call_count == 0
+    assert sleep.call_count == 2
+    check_system_events(
+        SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
+        SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+    )

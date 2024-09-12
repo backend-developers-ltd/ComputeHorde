@@ -4,6 +4,7 @@ import numbers
 import random
 import time
 import traceback
+import uuid
 from collections import defaultdict
 from datetime import timedelta
 from math import ceil, floor
@@ -31,6 +32,10 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.dynamic_config import (
+    get_number_of_prompts_to_validate_from_series,
+    get_number_of_workloads_to_trigger_local_inference,
+)
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
@@ -38,12 +43,17 @@ from compute_horde_validator.validator.models import (
     JobFinishedReceipt,
     JobStartedReceipt,
     OrganicJob,
+    Prompt,
+    PromptSample,
+    PromptSeries,
+    SolveWorkload,
     SyntheticJobBatch,
     SystemEvent,
     Weights,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
+from compute_horde_validator.validator.s3 import generate_upload_url, get_prompts_from_s3_url
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
@@ -276,7 +286,8 @@ def run_synthetic_jobs(
         ongoing_synthetic_job_batches = list(
             SyntheticJobBatch.objects.select_for_update(skip_locked=True)
             .filter(
-                block__gte=current_block,
+                block__gte=current_block
+                - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
                 block__lte=current_block + wait_in_advance_blocks,
                 started_at__isnull=True,
             )
@@ -294,26 +305,68 @@ def run_synthetic_jobs(
 
         batch = ongoing_synthetic_job_batches[0]
         target_block = batch.block
-        blocks_to_wait = target_block - subtensor_.get_current_block()
-        for _ in range(
-            ceil(blocks_to_wait * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION * 2 / poll_interval)
-        ):
-            current_block = subtensor_.get_current_block()
-            if current_block >= target_block:
-                break
-            logger.debug(
-                "Waiting for block %s, current block is %s, sleeping for %s",
-                target_block,
+        blocks_to_wait = target_block - current_block
+        if blocks_to_wait < 0:
+            logger.info(
+                "Overslept a batch run, but still within acceptable margin, batch_id: %s, should_run_at_block: %s, current_block: %s",
+                batch.id,
+                batch.block,
                 current_block,
-                poll_interval,
             )
-            time.sleep(poll_interval.total_seconds())
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING,
+                subtype=SystemEvent.EventSubType.WARNING,
+                long_description="Overslept a batch run, but still within acceptable margin",
+                data={
+                    "batch_id": batch.id,
+                    "batch_created_at": str(batch.created_at),
+                    "should_run_at_block": batch.block,
+                    "current_block": current_block,
+                },
+            )
+        elif blocks_to_wait == 0:
+            logger.info(
+                "Woke up just in time to run batch, batch_id: %s, should_run_at_block: %s",
+                batch.id,
+                batch.block,
+            )
         else:
-            logger.error(
-                "Failed to wait for target block %s, current block is %s",
-                target_block,
-                current_block,
-            )
+            for _ in range(
+                ceil(
+                    blocks_to_wait
+                    * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
+                    * 2
+                    / poll_interval
+                )
+            ):
+                current_block = subtensor_.get_current_block()
+                if current_block >= target_block:
+                    break
+                logger.debug(
+                    "Waiting for block %s, current block is %s, sleeping for %s",
+                    target_block,
+                    current_block,
+                    poll_interval,
+                )
+                time.sleep(poll_interval.total_seconds())
+            else:
+                logger.error(
+                    "Failed to wait for target block %s, current block is %s",
+                    target_block,
+                    current_block,
+                )
+                SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                    type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
+                    subtype=SystemEvent.EventSubType.FAILED_TO_WAIT,
+                    long_description="Failed to await the right block to run at",
+                    data={
+                        "batch_id": batch.id,
+                        "batch_created_at": str(batch.created_at),
+                        "should_run_at_block": batch.block,
+                        "current_block": current_block,
+                    },
+                )
+                return
 
         batch.started_at = now()
         batch.save()
@@ -331,7 +384,9 @@ def check_missed_synthetic_jobs() -> None:
 
     with transaction.atomic():
         past_job_batches = SyntheticJobBatch.objects.select_for_update(skip_locked=True).filter(
-            block__lt=current_block, started_at__isnull=True, is_missed=False
+            block__lt=current_block - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
+            started_at__isnull=True,
+            is_missed=False,
         )
         for batch in past_job_batches:
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
@@ -418,9 +473,9 @@ def do_set_weights(
                 wait_for_finalization=wait_for_finalization,
                 max_retries=2,
             )
-        except Exception as e:
+        except Exception:
             is_success = False
-            message = str(e)
+            message = traceback.format_exc()
 
         if is_success:
             logger.info("Successfully committed weights!!!")
@@ -452,9 +507,9 @@ def do_set_weights(
                 wait_for_finalization=wait_for_finalization,
                 max_retries=2,
             )
-        except Exception as e:
+        except Exception:
             is_success = False
-            message = str(e)
+            message = traceback.format_exc()
         if is_success:
             logger.info("Successfully set weights!!!")
             save_weight_setting_event(
@@ -561,12 +616,22 @@ def save_weight_setting_failure(subtype: str, long_description: str, data: dict)
     )
 
 
+def save_weight_revealing_failure(subtype: str, long_description: str, data: dict):
+    save_weight_setting_event(
+        type_=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        subtype=subtype,
+        long_description=long_description,
+        data=data,
+    )
+
+
 @contextlib.contextmanager
 def save_event_on_error(subtype):
     try:
         yield
     except Exception:
         save_weight_setting_failure(subtype, traceback.format_exc(), {})
+        raise
 
 
 def get_subtensor(network):
@@ -724,15 +789,15 @@ def set_scores():
                         save_weight_setting_failure(
                             subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
                             long_description=traceback.format_exc(),
-                            data={"try_number": try_number},
+                            data={"try_number": try_number, "operation": "setting/committing"},
                         )
                         continue
                 except Exception:
-                    logger.warning("Encountered when setting weights: ")
+                    logger.warning("Encountered when setting weights: ", exc_info=True)
                     save_weight_setting_failure(
                         subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
                         long_description=traceback.format_exc(),
-                        data={"try_number": try_number},
+                        data={"try_number": try_number, "operation": "setting/committing"},
                     )
                     continue
                 if success:
@@ -744,83 +809,138 @@ def set_scores():
                 save_weight_setting_failure(
                     subtype=SystemEvent.EventSubType.GIVING_UP,
                     long_description=msg,
-                    data={"try_number": WEIGHT_SETTING_ATTEMPTS},
+                    data={"try_number": WEIGHT_SETTING_ATTEMPTS, "operation": "setting/committing"},
                 )
 
 
 @app.task()
-def reveal_scores(reveal_in_advance_num_blocks: int = 10) -> None:
+def reveal_scores() -> None:
     """
     Select latest Weights that are older than `commit_reveal_weights_interval`
     and haven't been revealed yet, and reveal them.
     """
+    WEIGHT_REVEALING_TTL = config.DYNAMIC_WEIGHT_REVEALING_TTL
+    WEIGHT_REVEALING_HARD_TTL = config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL
+    WEIGHT_REVEALING_ATTEMPTS = config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS
+    WEIGHT_REVEALING_FAILURE_BACKOFF = config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF
+
     commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
 
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
     last_weights = Weights.objects.order_by("-created_at").first()
-    if (
-        last_weights
-        and last_weights.revealed_at is None
-        and last_weights.block
-        <= current_block - (commit_reveal_weights_interval - reveal_in_advance_num_blocks)
-    ):
-        logger.debug(
-            "Scheduling revealing weights record %s created at %s",
-            last_weights.id,
-            last_weights.created_at,
-        )
-        do_reveal_weights.delay(weights_id=last_weights.id)
+    if not last_weights:
+        return
+    if last_weights.revealed_at is not None:
+        return
+    if last_weights.block > current_block - commit_reveal_weights_interval:
+        return
 
-
-@app.task()
-def do_reveal_weights(weights_id: int) -> None:
+    weights_id = last_weights.id
     with transaction.atomic():
-        weights = (
+        last_weights = (
             Weights.objects.filter(id=weights_id, revealed_at=None)
             .select_for_update(skip_locked=True)
             .first()
         )
-        if not weights:
+        if not last_weights:
             logger.debug(
                 "Weights have already been revealed or are being revealed at this moment: %s",
                 weights_id,
             )
             return
 
-        wallet = settings.BITTENSOR_WALLET()
-        subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-        try:
-            is_success, message = subtensor_.reveal_weights(
-                wallet=wallet,
-                netuid=settings.BITTENSOR_NETUID,
-                uids=weights.uids,
-                weights=weights.weights,
-                salt=weights.salt,
-                version_key=weights.version_key,
-                wait_for_inclusion=True,
-                wait_for_finalization=True,
-                max_retries=2,
-            )
-        except Exception as e:
-            is_success = False
-            message = str(e)
-        if is_success:
-            save_weight_setting_event(
-                type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
-                subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
-                long_description=message,
-                data={"weights_id": weights.id},
-            )
-            weights.revealed_at = now()
-            weights.save()
+        for try_number in range(WEIGHT_REVEALING_ATTEMPTS):
+            logger.debug(f"Revealing weights (attempt #{try_number}): weights_id={weights_id}")
+            success = False
+
+            try:
+                result = do_reveal_weights.apply_async(
+                    kwargs=dict(
+                        weights_id=last_weights.id,
+                    ),
+                    soft_time_limit=WEIGHT_REVEALING_TTL,
+                    time_limit=WEIGHT_REVEALING_HARD_TTL,
+                )
+                logger.info(f"Revealing weights task id: {result.id}")
+                try:
+                    with allow_join_result():
+                        success, msg = result.get(timeout=WEIGHT_REVEALING_TTL)
+                except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
+                    result.revoke(terminate=True)
+                    logger.info(f"Revealing weights timed out (attempt #{try_number})")
+                    save_weight_setting_failure(
+                        subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
+                        long_description=traceback.format_exc(),
+                        data={"try_number": try_number, "operation": "revealing"},
+                    )
+                    continue
+            except Exception:
+                logger.warning("Encountered when revealing weights: ")
+                save_weight_setting_failure(
+                    subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_GENERIC_ERROR,
+                    long_description=traceback.format_exc(),
+                    data={"try_number": try_number, "operation": "revealing"},
+                )
+                continue
+            if success:
+                last_weights.revealed_at = now()
+                last_weights.save()
+                break
+            time.sleep(WEIGHT_REVEALING_FAILURE_BACKOFF)
         else:
+            msg = f"Failed to set weights after {WEIGHT_REVEALING_ATTEMPTS} attempts"
+            logger.warning(msg)
             save_weight_setting_failure(
-                subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
-                long_description=message,
-                data={"weights_id": weights.id},
+                subtype=SystemEvent.EventSubType.GIVING_UP,
+                long_description=msg,
+                data={"try_number": WEIGHT_REVEALING_ATTEMPTS, "operation": "revealing"},
             )
+
+
+@app.task()
+def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
+    weights = Weights.objects.filter(id=weights_id, revealed_at=None).first()
+    if not weights:
+        logger.debug(
+            "Weights have already been revealed or are being revealed at this moment: %s",
+            weights_id,
+        )
+        return True, "nothing_to_do"
+
+    wallet = settings.BITTENSOR_WALLET()
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    try:
+        is_success, message = subtensor_.reveal_weights(
+            wallet=wallet,
+            netuid=settings.BITTENSOR_NETUID,
+            uids=weights.uids,
+            weights=weights.weights,
+            salt=weights.salt,
+            version_key=weights.version_key,
+            wait_for_inclusion=True,
+            wait_for_finalization=True,
+            max_retries=2,
+        )
+    except Exception:
+        logger.warning("Encountered when setting weights: ", exc_info=True)
+        is_success = False
+        message = traceback.format_exc()
+    if is_success:
+        save_weight_setting_event(
+            type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+            subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_SUCCESS,
+            long_description=message,
+            data={"weights_id": weights.id},
+        )
+    else:
+        save_weight_setting_failure(
+            subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
+            long_description=message,
+            data={"weights_id": weights.id},
+        )
+    return is_success, message
 
 
 @app.task
@@ -952,3 +1072,65 @@ def fetch_dynamic_config() -> None:
         config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/validator-config-{settings.DYNAMIC_CONFIG_ENV}.json",
         namespace=config,
     )
+
+
+def create_workload(seed: int):
+    # generate an s3 url to upload sample batch job result in
+    workload_uuid = uuid.uuid4()
+    s3_url = generate_upload_url(key=workload_uuid, bucket_name=settings.S3_BUCKET_NAME_ANSWERS)
+    return SolveWorkload.objects.create(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url)
+
+
+@app.task()
+def create_sample_workloads():
+    total_workloads_needed = get_number_of_workloads_to_trigger_local_inference()
+    prompts_per_sample = get_number_of_prompts_to_validate_from_series()
+
+    # set seed for the current synthetic jobs run
+    seed = random.randint(0, 1000000)
+
+    # workload we are currently sampling for
+    current_workload = create_workload(seed)
+
+    # how many prompts we have sampled for current_workload so far
+    current_workload_fill = 0
+
+    # how many workloads we have finished (have enough samples)
+    workloads_done = 0
+
+    # assume we have sufficient prompt series in the db to make all the prompt_samples needed
+    # take a random order of prompt series to avoid using the same series at each synthetic jobs run
+    for prompt_series in PromptSeries.objects.order_by("?").all():
+        if current_workload_fill >= prompts_per_sample:
+            current_workload = create_workload(seed)
+            current_workload_fill = 0
+            workloads_done += 1
+
+        if workloads_done >= total_workloads_needed:
+            break
+
+        # get all prompts
+        lines = get_prompts_from_s3_url(prompt_series.uuid, prompt_series.s3_url)
+
+        # should always have enough prompts
+        if len(lines) <= prompts_per_sample:
+            logger.error("Skipping bucket %s, not enough prompts", prompt_series.s3_url)
+            continue
+
+        # sample prompts
+        sampled_lines = random.sample(lines, prompts_per_sample)
+        current_workload_fill += len(sampled_lines)
+
+        with transaction.atomic():
+            prompt_sample = PromptSample.objects.create(
+                series=prompt_series, workload=current_workload
+            )
+
+            # save the sampled prompts as unanswered in the db
+            Prompt.objects.bulk_create(
+                [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
+            )
+
+    # delete remaining empty workload
+    if current_workload_fill == 0:
+        current_workload.delete()

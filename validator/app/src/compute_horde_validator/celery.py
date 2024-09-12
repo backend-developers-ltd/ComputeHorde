@@ -1,6 +1,7 @@
+import importlib
 import os
 
-from celery import Celery
+from celery import Celery, signals
 from celery.signals import worker_process_shutdown
 from django.conf import settings
 from prometheus_client import multiprocess
@@ -27,3 +28,14 @@ def route_task(name, args, kwargs, options, task=None, **kw):
 @worker_process_shutdown.connect
 def child_exit(pid, **kw):
     multiprocess.mark_process_dead(pid)
+
+
+@signals.worker_process_init.connect
+def apply_startup_hook(*args, **kwargs):
+    print("Worker is ready. Bootstrapping...")
+    hook_script_file = os.environ.get("DEBUG_CELERY_HOOK_SCRIPT_FILE")
+    if hook_script_file:
+        print("Loading startup hook: ", hook_script_file)
+        importlib.import_module(hook_script_file)
+    else:
+        print("Not loading any startup hook")
