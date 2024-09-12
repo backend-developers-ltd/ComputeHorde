@@ -1,3 +1,4 @@
+import logging
 import uuid
 from collections.abc import Callable, Iterable
 
@@ -14,13 +15,24 @@ from compute_horde_validator.validator.s3 import generate_upload_url, get_public
 
 from .generator.current import prompt_job_generator
 
+logger = logging.getLogger(__name__)
+
 
 async def generate_prompts(
     *,
     create_miner_client: Callable[..., OrganicMinerClient] | None = None,
     job_uuid: uuid.UUID | None = None,
     wait_timeout: int | None = None,
-) -> str:
+) -> None:
+    limit = await aget_config("DYNAMIC_MAX_PROMPT_BATCHES")
+    if current_count := await PromptSeries.objects.acount() >= limit:
+        logger.warning(
+            "There are %s series in the db exceeding the limit of %s, skipping prompt generation",
+            current_count,
+            limit,
+        )
+        return
+
     job_uuid = job_uuid or uuid.uuid4()
 
     num_batches = await aget_config("DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO")

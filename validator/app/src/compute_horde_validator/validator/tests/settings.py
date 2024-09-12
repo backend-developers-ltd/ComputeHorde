@@ -42,3 +42,5 @@ AWS_SECRET_ACCESS_KEY = "fake_secret_access_key"
 
 S3_BUCKET_NAME_PROMPTS = "fake_bucket_prompts"
 S3_BUCKET_NAME_ANSWERS = "fake_bucket_answers"
+
+DYNAMIC_CONFIG_CACHE_TIMEOUT = 0

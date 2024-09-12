@@ -211,6 +211,11 @@ CONSTANCE_CONFIG = {
         "how many workloads are needed before running local inference",
         int,
     ),
+    "DYNAMIC_MAX_PROMPT_BATCHES": (
+        10000,
+        "Maximum number of prompt batches upon which the prompt generator will not be triggered",
+        int,
+    ),
     "DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO": (
         5,
         "Number of batches that prompt generator will process in a single go",
@@ -222,6 +227,7 @@ CONSTANCE_CONFIG = {
         int,
     ),
 }
+DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 
 # Content Security Policy
 if CSP_ENABLED := env.bool("CSP_ENABLED", default=False):

@@ -13,7 +13,15 @@ from compute_horde_validator.validator.cross_validation.prompt_generation import
 from compute_horde_validator.validator.models import PromptSeries
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
-pytestmark = [pytest.mark.asyncio, pytest.mark.django_db(transaction=True)]
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.django_db(transaction=True),
+    pytest.mark.override_config(
+        DYNAMIC_MAX_PROMPT_BATCHES=5,
+        DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO=3,
+        DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH=99,
+    ),
+]
 
 
 @pytest_asyncio.fixture
@@ -74,10 +82,6 @@ def job_failed_message(job_uuid: uuid.UUID):
     ).model_dump_json()
 
 
-@pytest.mark.override_config(
-    DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO=3,
-    DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH=99,
-)
 async def test_generate_prompts(
     transport: MinerSimulationTransport,
     create_miner_client: Callable,
@@ -128,10 +132,6 @@ async def test_generate_prompts(
     assert ",".join(series_uuids) in job_request.docker_run_cmd
 
 
-@pytest.mark.override_config(
-    DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO=3,
-    DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH=99,
-)
 async def test_generate_prompts_job_failed(
     transport: MinerSimulationTransport,
     create_miner_client: Callable,
@@ -154,10 +154,6 @@ async def test_generate_prompts_job_failed(
     assert not await PromptSeries.objects.aexists()
 
 
-@pytest.mark.override_config(
-    DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO=3,
-    DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH=99,
-)
 async def test_generate_prompts_timeout(
     transport: MinerSimulationTransport,
     create_miner_client: Callable,
@@ -172,3 +168,19 @@ async def test_generate_prompts_timeout(
         )
 
     assert not await PromptSeries.objects.aexists()
+
+
+async def test_generate_prompts_max_batches_reached(
+    create_miner_client: Callable,
+    job_uuid: uuid.UUID,
+):
+    existing = []
+    for _ in range(5):
+        existing.append(PromptSeries(s3_url="", generator_version=1))
+    await PromptSeries.objects.abulk_create(existing)
+
+    await generate_prompts(
+        create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=0.5
+    )
+
+    assert await PromptSeries.objects.acount() == 5
