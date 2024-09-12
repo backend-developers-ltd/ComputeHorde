@@ -131,6 +131,7 @@ async def prompt_series():
     return await PromptSeries.objects.acreate(
         series_uuid=uuid.uuid4(),
         s3_url="http://localhost:9999/prompt-series-download-url",
+        generator_version=0,
     )
 
 

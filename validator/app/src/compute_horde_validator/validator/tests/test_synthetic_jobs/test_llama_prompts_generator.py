@@ -39,8 +39,10 @@ async def test_llama_prompts_generator_basic(
     assert len(output_upload.uploads) == 1
     assert isinstance(output_upload.uploads[0], SingleFilePutUpload)
 
-    with pytest.raises(RuntimeError):
-        assert job_generator.verify(_JOB_FINISHED_REQUEST, 0) == (True, "", 1)
+    # before downloading answers
+    correct, _, score = job_generator.verify(_JOB_FINISHED_REQUEST, 0)
+    assert not correct
+    assert score == 0.0
 
     await job_generator._download_answers()
     correct, _, score = job_generator.verify(_JOB_FINISHED_REQUEST, 0)
