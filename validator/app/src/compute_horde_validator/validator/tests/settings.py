@@ -45,6 +45,6 @@ S3_BUCKET_NAME_ANSWERS = "fake_bucket_answers"
 
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 0
 
-GENERATION_MINER_KEY = "fake_generation_miner_key"
-GENERATION_MINER_ADDRESS = "fakehost"
-GENERATION_MINER_PORT = 1234
+TRUSTED_MINER_KEY = "fake_generation_miner_key"
+TRUSTED_MINER_ADDRESS = "fakehost"
+TRUSTED_MINER_PORT = 1234

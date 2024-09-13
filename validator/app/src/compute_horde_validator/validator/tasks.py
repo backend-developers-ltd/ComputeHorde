@@ -5,6 +5,7 @@ import random
 import time
 import traceback
 import uuid
+from collections.abc import Callable
 from datetime import timedelta
 from math import ceil, floor
 
@@ -19,6 +20,11 @@ from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
+from compute_horde.miner_client.organic import (
+    OrganicJobDetails,
+    OrganicMinerClient,
+    run_organic_job,
+)
 from compute_horde.receipts import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
@@ -56,6 +62,9 @@ from compute_horde_validator.validator.s3 import generate_upload_url, get_prompt
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
+)
+from compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts import (
+    LlamaPromptsSyntheticJobGenerator,
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
@@ -1091,3 +1100,75 @@ def create_sample_workloads():
     # delete remaining empty workload
     if current_workload_fill == 0:
         current_workload.delete()
+
+
+async def get_workload_prompts(workload: SolveWorkload) -> list[Prompt]:
+    sample_prompts = PromptSample.objects.prefetch_related("prompts").filter(
+        workload=workload,
+        prompts__answer__isnull=True,
+    )
+    prompts = []
+    async for sample in sample_prompts:
+        prompts.extend(sample.prompts.all())
+    return prompts
+
+
+async def answer_prompts(
+    create_miner_client: Callable[..., OrganicMinerClient] | None = None,
+    job_uuid: uuid.UUID | None = None,
+    wait_timeout: int | None = None,
+):
+    workloads = SolveWorkload.objects.filter(
+        # workload was not ran before on this prompt_sample
+        finished_at__isnull=True,
+    )
+
+    async for workload in workloads:
+        seed = workload.seed
+        prompts = await get_workload_prompts(workload)
+
+        job_generator = LlamaPromptsSyntheticJobGenerator(None, prompts, workload.s3_url, seed)
+        await job_generator.ainit()
+
+        job_uuid = job_uuid or uuid.uuid4()
+        job_details = OrganicJobDetails(
+            job_uuid=str(job_uuid),
+            docker_image=job_generator.docker_image_name(),
+            raw_script=job_generator.raw_script(),
+            docker_run_options_preset=job_generator.docker_run_options_preset(),
+            docker_run_cmd=job_generator.docker_run_cmd(),
+            total_job_timeout=job_generator.timeout_seconds(),
+            volume=await job_generator.volume(),
+            output=await job_generator.output_upload(),
+        )
+
+        create_miner_client = create_miner_client or OrganicMinerClient
+        wait_timeout = wait_timeout or job_generator.timeout_seconds()
+
+        miner_client = create_miner_client(
+            miner_hotkey=settings.TRUST_MINER_KEY,
+            miner_address=settings.TRUST_MINER_ADDRESS,
+            miner_port=settings.TRUST_MINER_PORT,
+            job_uuid=str(job_uuid),
+            my_keypair=get_keypair(),
+        )
+
+        await run_organic_job(miner_client, job_details, wait_timeout=wait_timeout)
+
+        try:
+            prompt_answers: dict[str, str] = await job_generator.get_prompt_answers()
+        except Exception:
+            logger.error("Failed to download prompt answers", exc_info=True)
+            continue
+
+        # update the workload as finished
+        workload.finished_at = now()
+        await workload.asave()
+
+        # update the prompts with the answers
+        for prompt in prompts:
+            if prompt.content in prompt_answers:
+                prompt.answer = prompt_answers[prompt.content]
+            else:
+                logger.warning(f"Prompt {prompt} was not found in the prompt answers generated")
+        await Prompt.objects.abulk_update(prompts, ["answer"])

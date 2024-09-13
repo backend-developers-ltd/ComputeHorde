@@ -527,9 +527,9 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
 
 
 # Local miner generating prompts
-GENERATION_MINER_KEY = env.str("GENERATION_MINER_KEY", default="")
-GENERATION_MINER_ADDRESS = env.str("GENERATION_MINER_ADDRESS", default="")
-GENERATION_MINER_PORT = env.int("GENERATION_MINER_PORT", default=0)
+TRUST_MINER_KEY = env.str("TRUST_MINER_KEY", default="")
+TRUST_MINER_ADDRESS = env.str("TRUST_MINER_ADDRESS", default="")
+TRUST_MINER_PORT = env.int("TRUST_MINER_PORT", default=0)
 
 
 CHANNEL_LAYERS = {

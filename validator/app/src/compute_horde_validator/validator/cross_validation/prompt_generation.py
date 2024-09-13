@@ -26,9 +26,9 @@ async def generate_prompts(
 ) -> None:
     if not all(
         [
-            settings.GENERATION_MINER_KEY,
-            settings.GENERATION_MINER_ADDRESS,
-            settings.GENERATION_MINER_PORT,
+            settings.TRUSTED_MINER_KEY,
+            settings.TRUSTED_MINER_ADDRESS,
+            settings.TRUSTED_MINER_PORT,
         ]
     ):
         logger.warning("Prompt generation miner not configured, skipping prompt generation")
@@ -62,9 +62,9 @@ async def generate_prompts(
     wait_timeout = wait_timeout or job_generator.timeout_seconds()
 
     miner_client = create_miner_client(
-        miner_hotkey=settings.GENERATION_MINER_KEY,
-        miner_address=settings.GENERATION_MINER_ADDRESS,
-        miner_port=settings.GENERATION_MINER_PORT,
+        miner_hotkey=settings.TRUSTED_MINER_KEY,
+        miner_address=settings.TRUSTED_MINER_ADDRESS,
+        miner_port=settings.TRUSTED_MINER_PORT,
         job_uuid=str(job_uuid),
         my_keypair=_get_keypair(),
     )

@@ -1,6 +1,5 @@
 import uuid
 
-import httpx
 import pydantic
 from compute_horde.base.output_upload import MultiUpload, OutputUpload, SingleFilePutUpload
 from compute_horde.base.volume import MultiVolume, SingleFileVolume, Volume
@@ -8,7 +7,7 @@ from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
 
 from compute_horde_validator.validator.models import Prompt, PromptSample
-from compute_horde_validator.validator.s3 import generate_upload_url, get_public_url
+from compute_horde_validator.validator.s3 import download_json, generate_upload_url, get_public_url
 
 from .base import BaseSyntheticJobGenerator
 
@@ -16,15 +15,14 @@ from .base import BaseSyntheticJobGenerator
 class LlmPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def __init__(
         self,
-        prompt_sample: PromptSample,
+        prompt_sample: PromptSample | None,
         expected_prompts: list[Prompt],
         s3_url: str,
         seed: int,
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        self.prompt_sample: PromptSample = prompt_sample
+        self.prompt_sample: PromptSample | None = prompt_sample
         self.seed = seed
         self.expected_prompts: list[Prompt] = expected_prompts
         self.s3_url = s3_url
@@ -93,12 +91,8 @@ class LlmPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         )
 
     async def _download_answers(self):
-        async with httpx.AsyncClient() as client:
-            response = await client.get(self._url_for_download(), timeout=5)
-            response.raise_for_status()
-            self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(
-                response.content
-            )
+        response = await download_json(self._url_for_download())
+        self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(response)
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         for expected_prompt in self.expected_prompts:
@@ -108,6 +102,10 @@ class LlmPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
                 return False, "results does not match expected answers", 0.0
 
         return True, "", 1.0
+
+    async def get_prompt_answers(self) -> dict[str, str]:
+        await self._download_answers()
+        return self.prompt_answers
 
     def job_description(self) -> str:
         return "LLM prompts synthetic job"
