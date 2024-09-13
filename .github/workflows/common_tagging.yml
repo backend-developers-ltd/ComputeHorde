@@ -6,9 +6,10 @@ on:
       DIST_VERSION_PREFIX:
         required: true
         type: string
-
-env:
-  CHANGE_LOG_BRANCH: "staging"
+    outputs:
+      next_tag:
+        description: "The next tag outputs string"
+        value: ${{ jobs.tagging.outputs.next_tag }}
 
 jobs:
   tagging:
@@ -38,11 +39,17 @@ jobs:
             NEXT_TAG="${DATE_TAG}-$((COUNTER + 1))"
           fi
 
-          echo "NEXT_TAG=$NEXT_TAG" >> $GITHUB_ENV
+          FULL_TAG="${{ inputs.DIST_VERSION_PREFIX }}-$NEXT_TAG"
+
+          echo "NEXT_TAG=$FULL_TAG" >> $GITHUB_ENV
+          echo "next_tag=$FULL_TAG" >> $GITHUB_OUTPUT
       
       - name: Create and Push Tag
         run: |
-          git tag "${{ inputs.DIST_VERSION_PREFIX }}-$NEXT_TAG"
-          git push origin "${{ inputs.DIST_VERSION_PREFIX }}-$NEXT_TAG"
+          git tag "$NEXT_TAG"
+          git push origin "$NEXT_TAG"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    outputs:
+      next_tag: ${{ steps.determine_tag.outputs.next_tag }}
