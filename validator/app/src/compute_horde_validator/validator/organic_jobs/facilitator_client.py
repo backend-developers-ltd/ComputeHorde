@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from collections import deque
 from typing import NoReturn
 
 import bittensor
@@ -146,7 +147,7 @@ class FacilitatorClient:
             await self.handle_message(raw_msg)
 
     async def wait_for_specs(self):
-        specs_queue = []
+        specs_queue = deque()
         channel_layer = get_channel_layer()
 
         while True:
@@ -166,12 +167,12 @@ class FacilitatorClient:
 
                 specs_queue.append(specs)
                 if self.ws is not None:
-                    while len(specs_queue) > 0:
-                        spec_to_send = specs_queue.pop(0)
+                    while specs_queue:
+                        spec_to_send = specs_queue.popleft()
                         try:
                             await self.send_model(spec_to_send)
                         except Exception as exc:
-                            specs_queue.insert(0, spec_to_send)
+                            specs_queue.appendleft(spec_to_send)
                             msg = f"Error occurred while sending specs: {exc}"
                             await save_facilitator_event(
                                 subtype=SystemEvent.EventSubType.SPECS_SEND_ERROR,
