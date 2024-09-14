@@ -14,9 +14,9 @@ pytestmark = [
     pytest.mark.asyncio,
     pytest.mark.django_db(transaction=True),
     pytest.mark.override_config(
-        DYNAMIC_MAX_PROMPT_BATCHES=5,
-        DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO=3,
-        DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH=99,
+        DYNAMIC_MAX_PROMPT_SERIES=5,
+        DYNAMIC_PROMPTS_SERIES_IN_A_SINGLE_GENERATION=3,
+        DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES=99,
     ),
 ]
 

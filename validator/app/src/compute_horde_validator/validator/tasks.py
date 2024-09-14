@@ -14,7 +14,7 @@ import bittensor
 import celery.exceptions
 import numpy as np
 import requests
-from asgiref.sync import async_to_sync
+from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
@@ -37,10 +37,6 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator.dynamic_config import (
-    get_number_of_prompts_to_validate_from_series,
-    get_number_of_workloads_to_trigger_local_inference,
-)
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
@@ -1049,8 +1045,8 @@ def create_workload(seed: int):
 
 @app.task()
 def create_sample_workloads():
-    total_workloads_needed = get_number_of_workloads_to_trigger_local_inference()
-    prompts_per_sample = get_number_of_prompts_to_validate_from_series()
+    total_workloads_needed = config.DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE
+    prompts_per_sample = config.DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES
 
     # set seed for the current synthetic jobs run
     seed = random.randint(0, 1000000)
@@ -1103,14 +1099,12 @@ def create_sample_workloads():
 
 
 async def get_workload_prompts(workload: SolveWorkload) -> list[Prompt]:
-    sample_prompts = PromptSample.objects.prefetch_related("prompts").filter(
-        workload=workload,
-        prompts__answer__isnull=True,
-    )
-    prompts = []
-    async for sample in sample_prompts:
-        prompts.extend(sample.prompts.all())
-    return prompts
+    return [
+        x
+        async for x in Prompt.objects.select_related("sample").filter(
+            sample__workload_id=workload.id, answer__isnull=True
+        )
+    ]
 
 
 async def answer_prompts(
@@ -1118,10 +1112,21 @@ async def answer_prompts(
     job_uuid: uuid.UUID | None = None,
     wait_timeout: int | None = None,
 ):
+    # TODO: this logic will be replaced
     workloads = SolveWorkload.objects.filter(
         # workload was not ran before on this prompt_sample
         finished_at__isnull=True,
     )
+
+    if not all(
+        [
+            settings.TRUSTED_MINER_KEY,
+            settings.TRUSTED_MINER_ADDRESS,
+            settings.TRUSTED_MINER_PORT,
+        ]
+    ):
+        logger.warning("Prompt generation miner not configured, skipping prompt generation")
+        return
 
     async for workload in workloads:
         seed = workload.seed
@@ -1146,9 +1151,9 @@ async def answer_prompts(
         wait_timeout = wait_timeout or job_generator.timeout_seconds()
 
         miner_client = create_miner_client(
-            miner_hotkey=settings.TRUST_MINER_KEY,
-            miner_address=settings.TRUST_MINER_ADDRESS,
-            miner_port=settings.TRUST_MINER_PORT,
+            miner_hotkey=settings.TRUSTED_MINER_KEY,
+            miner_address=settings.TRUSTED_MINER_ADDRESS,
+            miner_port=settings.TRUSTED_MINER_PORT,
             job_uuid=str(job_uuid),
             my_keypair=get_keypair(),
         )
@@ -1161,9 +1166,14 @@ async def answer_prompts(
             logger.error("Failed to download prompt answers", exc_info=True)
             continue
 
+        await sync_to_async(save_workload_answers)(workload, prompts, prompt_answers)
+
+
+def save_workload_answers(workload, prompts, prompt_answers):
+    with transaction.atomic():
         # update the workload as finished
         workload.finished_at = now()
-        await workload.asave()
+        workload.save()
 
         # update the prompts with the answers
         for prompt in prompts:
@@ -1171,4 +1181,4 @@ async def answer_prompts(
                 prompt.answer = prompt_answers[prompt.content]
             else:
                 logger.warning(f"Prompt {prompt} was not found in the prompt answers generated")
-        await Prompt.objects.abulk_update(prompts, ["answer"])
+        Prompt.objects.bulk_update(prompts, ["answer"])

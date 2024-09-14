@@ -54,7 +54,7 @@ def get_prompts_from_s3_url(s3_url: str) -> Generator[tuple[str, list[str]]]:
     return response.text.split("\n")
 
 
-async def download_json(s3_url: str):
+async def download_file_content(s3_url: str):
     async with httpx.AsyncClient() as client:
         response = await client.get(s3_url, timeout=5)
         response.raise_for_status()

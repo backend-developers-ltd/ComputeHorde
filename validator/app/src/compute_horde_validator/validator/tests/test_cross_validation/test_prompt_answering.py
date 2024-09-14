@@ -18,11 +18,6 @@ from compute_horde_validator.validator.tests.transport import MinerSimulationTra
 pytestmark = [
     pytest.mark.asyncio,
     pytest.mark.django_db(transaction=True),
-    pytest.mark.override_config(
-        DYNAMIC_MAX_PROMPT_BATCHES=5,
-        DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO=3,
-        DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH=99,
-    ),
 ]
 
 
@@ -46,7 +41,7 @@ async def db_setup():
     return prompts, workload
 
 
-async def mock_download_json(*args, **kwargs):
+async def mock_download_file_content(*args, **kwargs):
     return json.dumps({f"prompt{i}": f"answer{i}" for i in range(1, 4)})
 
 
@@ -55,8 +50,8 @@ async def mock_throw_error(*args, **kwargs):
 
 
 @patch(
-    "compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts.download_json",
-    mock_download_json,
+    "compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts.download_file_content",
+    mock_download_file_content,
 )
 async def test_answer_prompts(
     settings,
@@ -115,7 +110,7 @@ async def test_answer_prompts_job_failed(
 
 
 @patch(
-    "compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts.download_json",
+    "compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts.download_file_content",
     mock_throw_error,
 )
 async def test_answer_prompts_download_failed(

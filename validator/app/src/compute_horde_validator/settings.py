@@ -201,9 +201,10 @@ CONSTANCE_CONFIG = {
         "in seconds",
         int,
     ),
-    "DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES": (
-        10,
-        "how many prompts to sample and validate from a series",
+    # llama params
+    "DYNAMIC_MAX_PROMPT_SERIES": (
+        10000,
+        "Maximum number of prompt series upon which the prompt generator will not be triggered",
         int,
     ),
     "DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE": (
@@ -211,19 +212,21 @@ CONSTANCE_CONFIG = {
         "how many workloads are needed before running local inference",
         int,
     ),
-    "DYNAMIC_MAX_PROMPT_BATCHES": (
-        10000,
-        "Maximum number of prompt batches upon which the prompt generator will not be triggered",
-        int,
-    ),
-    "DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO": (
+    # prompt generation params
+    "DYNAMIC_PROMPTS_SERIES_IN_A_SINGLE_GENERATION": (
         5,
         "Number of batches that prompt generator will process in a single go",
         int,
     ),
-    "DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH": (
+    "DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES": (
         240,
-        "Number of prompts to generate in a single batch",
+        "Number of prompts to generate in a single series",
+        int,
+    ),
+    # prompts answering params
+    "DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES": (
+        10,
+        "how many prompts to sample and answer from a series",
         int,
     ),
 }
@@ -493,17 +496,6 @@ DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 
-# prompt gen sampling
-DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES = env.int(
-    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES", default=None
-)
-DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES = env.int(
-    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_IN_BATCH", default=None
-)
-DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE = env.int(
-    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE", default=None
-)
-
 # synthetic jobs are evenly distributed through the cycle, however
 # we start them from some offset because scheduling takes some time
 SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
@@ -527,9 +519,9 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
 
 
 # Local miner generating prompts
-TRUST_MINER_KEY = env.str("TRUST_MINER_KEY", default="")
-TRUST_MINER_ADDRESS = env.str("TRUST_MINER_ADDRESS", default="")
-TRUST_MINER_PORT = env.int("TRUST_MINER_PORT", default=0)
+TRUSTED_MINER_KEY = env.str("TRUSTED_MINER_KEY", default="")
+TRUSTED_MINER_ADDRESS = env.str("TRUSTED_MINER_ADDRESS", default="")
+TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
 
 CHANNEL_LAYERS = {

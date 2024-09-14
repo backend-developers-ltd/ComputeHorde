@@ -7,7 +7,11 @@ from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
 
 from compute_horde_validator.validator.models import Prompt, PromptSample
-from compute_horde_validator.validator.s3 import download_json, generate_upload_url, get_public_url
+from compute_horde_validator.validator.s3 import (
+    download_file_content,
+    generate_upload_url,
+    get_public_url,
+)
 
 from .base import BaseSyntheticJobGenerator
 
@@ -91,7 +95,7 @@ class LlmPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         )
 
     async def _download_answers(self):
-        response = await download_json(self._url_for_download())
+        response = await download_file_content(self._url_for_download())
         self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(response)
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:

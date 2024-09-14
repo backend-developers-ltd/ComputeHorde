@@ -34,7 +34,7 @@ async def generate_prompts(
         logger.warning("Prompt generation miner not configured, skipping prompt generation")
         return
 
-    limit = await aget_config("DYNAMIC_MAX_PROMPT_BATCHES")
+    limit = await aget_config("DYNAMIC_MAX_PROMPT_SERIES")
     if current_count := await PromptSeries.objects.acount() >= limit:
         logger.warning(
             "There are %s series in the db exceeding the limit of %s, skipping prompt generation",
@@ -45,8 +45,8 @@ async def generate_prompts(
 
     job_uuid = job_uuid or uuid.uuid4()
 
-    num_batches = await aget_config("DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO")
-    num_prompts_per_batch = await aget_config("DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH")
+    num_batches = await aget_config("DYNAMIC_PROMPTS_SERIES_IN_A_SINGLE_GENERATION")
+    num_prompts_per_batch = await aget_config("DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES")
 
     series_uuids, upload_urls, public_urls = _generate_uuids_and_urls(num_batches)
 
