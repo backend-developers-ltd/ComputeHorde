@@ -15,9 +15,7 @@ from compute_horde_validator.validator.organic_jobs.facilitator_client import (
     Response,
 )
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
-from compute_horde_validator.validator.utils import (
-    MACHINE_SPEC_GROUP_NAME,
-)
+from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 from .helpers import (
     MockJobStateMinerClient,
@@ -168,7 +166,7 @@ def specs_msg():
     }
 
 
-class FacilitatorMachineSpecsWs(FacilitatorWs):
+class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
     async def serve(self, ws, path):
         response = await asyncio.wait_for(ws.recv(), timeout=5)
         try:
@@ -194,7 +192,9 @@ class FacilitatorMachineSpecsWs(FacilitatorWs):
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_wait_for_specs(specs_msg: dict):
     layer = get_channel_layer()
-    ws_server = FacilitatorMachineSpecsWs()
+    await layer.send(MACHINE_SPEC_CHANNEL, specs_msg)
+
+    ws_server = FacilitatorExpectMachineSpecsWs()
 
     async with websockets.serve(ws_server.serve, "127.0.0.1", 0) as server:
         host, port = server.sockets[0].getsockname()
@@ -205,11 +205,7 @@ async def test_wait_for_specs(specs_msg: dict):
 
         async with ws_server.condition:
             task = asyncio.create_task(facilitator_client.run_forever())
-            await asyncio.sleep(0.1)
-
-            await layer.group_send(MACHINE_SPEC_GROUP_NAME, specs_msg)
-
-            await asyncio.wait_for(ws_server.condition.wait(), timeout=2)
+            await asyncio.wait_for(ws_server.condition.wait(), timeout=5)
 
         facilitator_client.miner_driver_awaiter_task.cancel()
         facilitator_client.heartbeat_task.cancel()

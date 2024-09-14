@@ -66,7 +66,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
 )
 from compute_horde_validator.validator.synthetic_jobs.scoring import get_manifest_multiplier
-from compute_horde_validator.validator.utils import MACHINE_SPEC_GROUP_NAME
+from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
 
@@ -950,8 +950,8 @@ async def _send_machine_specs(ctx: BatchContext) -> None:
         if job.success and job.machine_specs is not None:
             try:
                 async with asyncio.timeout(_SEND_MACHINE_SPECS_TIMEOUT):
-                    await channel_layer.group_send(
-                        MACHINE_SPEC_GROUP_NAME,
+                    await channel_layer.send(
+                        MACHINE_SPEC_CHANNEL,
                         {
                             "type": "machine.specs",
                             "batch_id": ctx.uuid,

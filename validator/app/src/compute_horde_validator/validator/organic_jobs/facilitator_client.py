@@ -26,9 +26,7 @@ from compute_horde_validator.validator.organic_jobs.facilitator_api import (
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
-from compute_horde_validator.validator.utils import (
-    MACHINE_SPEC_GROUP_NAME,
-)
+from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +61,6 @@ class FacilitatorClient:
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
         self.refresh_metagraph_task = self.create_metagraph_refresh_task()
-        self.channel_layer = get_channel_layer()
-        self.channel_name = None
 
     def connect(self):
         """Create an awaitable/async-iterable websockets.connect() object"""
@@ -98,10 +94,6 @@ class FacilitatorClient:
 
     async def run_forever(self) -> NoReturn:
         """connect (and re-connect) to facilitator and keep reading messages ... forever"""
-
-        # setup channel for receiving machine specs
-        self.channel_name = await self.channel_layer.new_channel()
-        await self.channel_layer.group_add(MACHINE_SPEC_GROUP_NAME, self.channel_name)
 
         # send machine specs to facilitator
         self.specs_task = asyncio.create_task(self.wait_for_specs())
@@ -155,11 +147,13 @@ class FacilitatorClient:
 
     async def wait_for_specs(self):
         specs_queue = []
+        channel_layer = get_channel_layer()
+
         while True:
             validator_hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address
             try:
                 msg = await asyncio.wait_for(
-                    self.channel_layer.receive(self.channel_name), timeout=20 * 60
+                    channel_layer.receive(MACHINE_SPEC_CHANNEL), timeout=20 * 60
                 )
 
                 specs = MachineSpecsUpdate(
