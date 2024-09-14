@@ -539,6 +539,11 @@ CHANNEL_LAYERS = {
             "hosts": [
                 (env.str("REDIS_HOST", default="redis"), env.int("REDIS_PORT", default="6379"))
             ],
+            # we need some buffer here to handle synthetic job batch messages
+            "capacity": 50_000,
+            # machine spec messages can take time to process and pile up, so we need a
+            # larger expiration time. One hour should be plenty.
+            "expiry": 3600,
         },
     },
 }
