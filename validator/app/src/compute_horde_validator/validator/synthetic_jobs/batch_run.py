@@ -762,10 +762,7 @@ async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
         await client.close()
 
 
-async def _generate_jobs(ctx: BatchContext) -> None:
-    start_time = time.time()
-    generated_job_count = 0
-
+async def get_llama_prompt_samples(ctx: BatchContext) -> PromptSample | None:
     # TODO: refactor into nicer abstraction
     llm_executor_count = sum(
         count
@@ -782,8 +779,24 @@ async def _generate_jobs(ctx: BatchContext) -> None:
         )[:llm_executor_count]
     )
     prompt_samples = [ps async for ps in prompt_samples]
-    assert len(prompt_samples) == llm_executor_count
-    prompt_samples_iter = iter(prompt_samples)
+    if len(prompt_samples) < llm_executor_count:
+        logger.warning(
+            "Not enough prompt samples for llama executors: %d < %d - will NOT run llama synthetic prompt jobs",
+            len(prompt_samples),
+            llm_executor_count,
+        )
+        return None
+    return prompt_samples
+
+
+async def _generate_jobs(ctx: BatchContext) -> None:
+    start_time = time.time()
+    generated_job_count = 0
+
+    prompt_samples = await get_llama_prompt_samples(ctx)
+    prompt_samples_iter = (
+        iter(prompt_samples) if prompt_samples is not None else None
+    )
 
     for hotkey, executors in ctx.executors.items():
         miner_name = ctx.names[hotkey]
@@ -792,6 +805,9 @@ async def _generate_jobs(ctx: BatchContext) -> None:
             for _ in range(count):
                 kwargs = {}
                 if executor_class == ExecutorClass.always_on__llm__a6000:
+                    if prompt_samples_iter is None:
+                        logger.warning("No llm prompt samples available, skipping llm job")
+                        continue
                     prompt_sample = next(prompt_samples_iter)
                     kwargs = {
                         "prompt_sample": prompt_sample,
@@ -1414,6 +1430,7 @@ def _db_persist(ctx: BatchContext) -> None:
         synthetic_job.job_uuid: synthetic_job for synthetic_job in synthetic_jobs
     }
     prompt_samples: list[PromptSample] = []
+
     for job in ctx.jobs.values():
         if job.executor_class != ExecutorClass.always_on__llm__a6000:
             continue

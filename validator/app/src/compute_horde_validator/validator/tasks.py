@@ -5,7 +5,6 @@ import random
 import time
 import traceback
 import uuid
-from collections.abc import Callable
 from datetime import timedelta
 from math import ceil, floor
 
@@ -14,17 +13,12 @@ import bittensor
 import celery.exceptions
 import numpy as np
 import requests
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import async_to_sync
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
-from compute_horde.miner_client.organic import (
-    OrganicJobDetails,
-    OrganicMinerClient,
-    run_organic_job,
-)
 from compute_horde.receipts import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
@@ -37,6 +31,8 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
+from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
@@ -58,9 +54,6 @@ from compute_horde_validator.validator.s3 import generate_upload_url, get_prompt
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
-)
-from compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts import (
-    LlamaPromptsSyntheticJobGenerator,
 )
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
@@ -1044,9 +1037,50 @@ def create_workload(seed: int):
 
 
 @app.task()
-def create_sample_workloads():
-    total_workloads_needed = config.DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE
+def llama_prompt_generation():
+    num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES
+    num_prompt_series = PromptSeries.objects.count()
+    if num_prompt_series < num_expected_prompt_series:
+        logger.info("There are %s series in the db, generating prompts", num_prompt_series)
+        async_to_sync(generate_prompts)()
+    else:
+        logger.warning(
+            "There are %s series in the db - skipping prompt generation",
+            num_prompt_series,
+        )
+
+
+# prompt_sample is ready for synthetic job when associated workload is finished (all prompts are answered)
+@app.task()
+def llama_prompt_answering():
+    # prioritize answering all the workloads before generating new samples
+    unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
+    for workload in unprocessed_workloads:
+        async_to_sync(answer_prompts)(workload)
+
+    # generate new prompt samples if needed
+    num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()
+    num_needed_prompt_samples = (
+        config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY - num_unused_prompt_samples
+    )
+
+    if num_needed_prompt_samples > 0:
+        logger.info(
+            "There are %s prompt samples in the db, generating more",
+            num_unused_prompt_samples,
+        )
+        create_sample_workloads(num_needed_prompt_samples)
+        return
+    else:
+        logger.warning(
+            "There are %s prompt samples - skipping prompt sampling",
+            num_unused_prompt_samples,
+        )
+
+
+def create_sample_workloads(num_needed_prompt_samples):
     prompts_per_sample = config.DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES
+    prompts_per_workload = config.DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD
 
     # set seed for the current synthetic jobs run
     seed = random.randint(0, 1000000)
@@ -1057,19 +1091,18 @@ def create_sample_workloads():
     # how many prompts we have sampled for current_workload so far
     current_workload_fill = 0
 
-    # how many workloads we have finished (have enough samples)
-    workloads_done = 0
+    prompt_samples_created = 0
 
     # assume we have sufficient prompt series in the db to make all the prompt_samples needed
     # take a random order of prompt series to avoid using the same series at each synthetic jobs run
     for prompt_series in PromptSeries.objects.order_by("?").all():
-        if current_workload_fill >= prompts_per_sample:
+        if current_workload_fill >= prompts_per_workload:
+            # finished creating all needed prompt samples so exit after last batch is filled
+            if prompt_samples_created >= num_needed_prompt_samples:
+                break
+
             current_workload = create_workload(seed)
             current_workload_fill = 0
-            workloads_done += 1
-
-        if workloads_done >= total_workloads_needed:
-            break
 
         # get all prompts
         lines = get_prompts_from_s3_url(prompt_series.uuid, prompt_series.s3_url)
@@ -1087,98 +1120,9 @@ def create_sample_workloads():
             prompt_sample = PromptSample.objects.create(
                 series=prompt_series, workload=current_workload
             )
+            prompt_samples_created += 1
 
             # save the sampled prompts as unanswered in the db
             Prompt.objects.bulk_create(
                 [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
             )
-
-    # delete remaining empty workload
-    if current_workload_fill == 0:
-        current_workload.delete()
-
-
-async def get_workload_prompts(workload: SolveWorkload) -> list[Prompt]:
-    return [
-        x
-        async for x in Prompt.objects.select_related("sample").filter(
-            sample__workload_id=workload.id, answer__isnull=True
-        )
-    ]
-
-
-async def answer_prompts(
-    create_miner_client: Callable[..., OrganicMinerClient] | None = None,
-    job_uuid: uuid.UUID | None = None,
-    wait_timeout: int | None = None,
-):
-    # TODO: this logic will be replaced
-    workloads = SolveWorkload.objects.filter(
-        # workload was not ran before on this prompt_sample
-        finished_at__isnull=True,
-    )
-
-    if not all(
-        [
-            settings.TRUSTED_MINER_KEY,
-            settings.TRUSTED_MINER_ADDRESS,
-            settings.TRUSTED_MINER_PORT,
-        ]
-    ):
-        logger.warning("Prompt generation miner not configured, skipping prompt generation")
-        return
-
-    async for workload in workloads:
-        seed = workload.seed
-        prompts = await get_workload_prompts(workload)
-
-        job_generator = LlamaPromptsSyntheticJobGenerator(None, prompts, workload.s3_url, seed)
-        await job_generator.ainit()
-
-        job_uuid = job_uuid or uuid.uuid4()
-        job_details = OrganicJobDetails(
-            job_uuid=str(job_uuid),
-            docker_image=job_generator.docker_image_name(),
-            raw_script=job_generator.raw_script(),
-            docker_run_options_preset=job_generator.docker_run_options_preset(),
-            docker_run_cmd=job_generator.docker_run_cmd(),
-            total_job_timeout=job_generator.timeout_seconds(),
-            volume=await job_generator.volume(),
-            output=await job_generator.output_upload(),
-        )
-
-        create_miner_client = create_miner_client or OrganicMinerClient
-        wait_timeout = wait_timeout or job_generator.timeout_seconds()
-
-        miner_client = create_miner_client(
-            miner_hotkey=settings.TRUSTED_MINER_KEY,
-            miner_address=settings.TRUSTED_MINER_ADDRESS,
-            miner_port=settings.TRUSTED_MINER_PORT,
-            job_uuid=str(job_uuid),
-            my_keypair=get_keypair(),
-        )
-
-        await run_organic_job(miner_client, job_details, wait_timeout=wait_timeout)
-
-        try:
-            prompt_answers: dict[str, str] = await job_generator.get_prompt_answers()
-        except Exception:
-            logger.error("Failed to download prompt answers", exc_info=True)
-            continue
-
-        await sync_to_async(save_workload_answers)(workload, prompts, prompt_answers)
-
-
-def save_workload_answers(workload, prompts, prompt_answers):
-    with transaction.atomic():
-        # update the workload as finished
-        workload.finished_at = now()
-        workload.save()
-
-        # update the prompts with the answers
-        for prompt in prompts:
-            if prompt.content in prompt_answers:
-                prompt.answer = prompt_answers[prompt.content]
-            else:
-                logger.warning(f"Prompt {prompt} was not found in the prompt answers generated")
-        Prompt.objects.bulk_update(prompts, ["answer"])

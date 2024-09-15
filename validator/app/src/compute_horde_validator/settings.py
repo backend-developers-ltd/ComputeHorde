@@ -207,9 +207,14 @@ CONSTANCE_CONFIG = {
         "Maximum number of prompt series upon which the prompt generator will not be triggered",
         int,
     ),
-    "DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE": (
+    "DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY": (
+        250,
+        "how many prompt samples to generate (should be larger than how many prompts series we use per synthetic run)",
+        int,
+    ),
+    "DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD": (
         100,
-        "how many workloads are needed before running local inference",
+        "how many prompts to answer in a single workload",
         int,
     ),
     # prompt generation params
@@ -393,6 +398,16 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
     "fetch_dynamic_config": {
         "task": "compute_horde_validator.validator.tasks.fetch_dynamic_config",
         "schedule": timedelta(minutes=5),
+        "options": {},
+    },
+    "llama_prompt_generation": {
+        "task": "compute_horde_validator.validator.tasks.llama_prompt_generation",
+        "schedule": timedelta(minutes=10),
+        "options": {},
+    },
+    "llama_prompt_answering": {
+        "task": "compute_horde_validator.validator.tasks.llama_prompt_answering",
+        "schedule": timedelta(minutes=10),
         "options": {},
     },
 }
