@@ -762,7 +762,7 @@ async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
         await client.close()
 
 
-async def get_llama_prompt_samples(ctx: BatchContext) -> PromptSample | None:
+async def get_llama_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None:
     # TODO: refactor into nicer abstraction
     llm_executor_count = sum(
         count
