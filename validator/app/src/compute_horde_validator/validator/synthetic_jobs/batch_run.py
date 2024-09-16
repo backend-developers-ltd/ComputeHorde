@@ -794,9 +794,7 @@ async def _generate_jobs(ctx: BatchContext) -> None:
     generated_job_count = 0
 
     prompt_samples = await get_llama_prompt_samples(ctx)
-    prompt_samples_iter = (
-        iter(prompt_samples) if prompt_samples is not None else None
-    )
+    prompt_samples_iter = iter(prompt_samples) if prompt_samples is not None else None
 
     for hotkey, executors in ctx.executors.items():
         miner_name = ctx.names[hotkey]
