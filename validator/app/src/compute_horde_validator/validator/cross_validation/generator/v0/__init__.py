@@ -11,7 +11,7 @@ class PromptJobGenerator(BasePromptJobGenerator):
         return 3600
 
     def docker_image_name(self) -> str:
-        return "backenddevelopersltd/compute-horde-prompt-gen:v0-latest"
+        return "backenddevelopersltd/compute-horde-prompt-gen-phi:v0-latest"
 
     def docker_run_cmd(self) -> list[str]:
         return [

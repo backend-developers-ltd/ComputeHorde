@@ -1032,7 +1032,9 @@ def fetch_dynamic_config() -> None:
 def create_workload(seed: int):
     # generate an s3 url to upload sample batch job result in
     workload_uuid = uuid.uuid4()
-    s3_url = generate_upload_url(key=workload_uuid, bucket_name=settings.S3_BUCKET_NAME_ANSWERS)
+    s3_url = generate_upload_url(
+        key=str(workload_uuid), bucket_name=settings.S3_BUCKET_NAME_ANSWERS
+    )
     return SolveWorkload.objects.create(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url)
 
 
@@ -1105,7 +1107,7 @@ def create_sample_workloads(num_needed_prompt_samples):
             current_workload_fill = 0
 
         # get all prompts
-        lines = get_prompts_from_s3_url(prompt_series.uuid, prompt_series.s3_url)
+        lines = get_prompts_from_s3_url(prompt_series.s3_url)
 
         # should always have enough prompts
         if len(lines) <= prompts_per_sample:
@@ -1126,3 +1128,7 @@ def create_sample_workloads(num_needed_prompt_samples):
             Prompt.objects.bulk_create(
                 [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
             )
+
+    # delete the current workload if it's not filled
+    if current_workload_fill < prompts_per_workload:
+        current_workload.delete()
