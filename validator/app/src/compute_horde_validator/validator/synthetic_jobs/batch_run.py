@@ -1254,8 +1254,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     )
 
 
-async def _score_jobs(ctx: BatchContext) -> None:
-    # NOTE: download the answers for llm prompts jobs before scoring
+async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
     tasks = [
         asyncio.create_task(job.job_generator._download_answers())
         for job in ctx.jobs.values()
@@ -1263,7 +1262,19 @@ async def _score_jobs(ctx: BatchContext) -> None:
         and job.job_response is not None
         and isinstance(job.job_response, V0JobFinishedRequest)
     ]
-    await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for i, result in enumerate(results):
+        if isinstance(result, BaseException):
+            hotkey = ctx.hotkeys[i]
+            name = ctx.names[hotkey]
+            logger.warning("%s failed to get llm prompt answers: %r", name, result)
+        else:
+            assert result is None
+
+
+async def _score_jobs(ctx: BatchContext) -> None:
+    # NOTE: download the answers for llm prompts jobs before scoring
+    await _download_llm_prompts_answers(ctx)
 
     for job in ctx.jobs.values():
         try:
