@@ -77,7 +77,7 @@ If you want to trigger jobs from the validator see [Validator README](validator/
 To quickly start a miner, create an Ubuntu Server and execute the following command from your local machine (where you have your wallet files).
 
 ```shell
-curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/install_miner.sh | bash -s - SSH_DESTINATION HOTKEY_PATH
+curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/install_miner.sh | bash -s - production SSH_DESTINATION HOTKEY_PATH
 ```
 
 Replace `SSH_DESTINATION` with your server's connection info (i.e. `username@1.2.3.4`)
