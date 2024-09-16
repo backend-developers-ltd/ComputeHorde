@@ -13,7 +13,7 @@ from compute_horde_validator.validator.s3 import generate_upload_url, get_public
 from .base import BaseSyntheticJobGenerator
 
 
-class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
+class LlmPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def __init__(
         self,
         prompt_sample: PromptSample,
@@ -110,4 +110,4 @@ class LlamaPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         return True, "", 1.0
 
     def job_description(self) -> str:
-        return "LLAMA prompts synthetic job"
+        return "LLM prompts synthetic job"

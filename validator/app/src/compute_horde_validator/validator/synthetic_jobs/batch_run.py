@@ -766,23 +766,24 @@ async def _generate_jobs(ctx: BatchContext) -> None:
     start_time = time.time()
     generated_job_count = 0
 
-    llama_executor_count = sum(
+    # TODO: refactor into nicer abstraction
+    llm_executor_count = sum(
         count
         for executors in ctx.executors.values()
         for executor_class, count in executors.items()
-        if executor_class == ExecutorClass.always_on__llama
+        if executor_class == ExecutorClass.always_on__llm__a6000
     )
-    llama_prompt_samples = (
+    prompt_samples = (
         PromptSample.objects.select_related("series", "workload")
         .prefetch_related("prompts")
         .filter(
             synthetic_job__isnull=True,
             workload__finished_at__isnull=False,
-        )[:llama_executor_count]
+        )[:llm_executor_count]
     )
-    llama_prompt_samples = [ps async for ps in llama_prompt_samples]
-    assert len(llama_prompt_samples) == llama_executor_count
-    llama_prompt_samples_iter = iter(llama_prompt_samples)
+    prompt_samples = [ps async for ps in prompt_samples]
+    assert len(prompt_samples) == llm_executor_count
+    prompt_samples_iter = iter(prompt_samples)
 
     for hotkey, executors in ctx.executors.items():
         miner_name = ctx.names[hotkey]
@@ -790,8 +791,8 @@ async def _generate_jobs(ctx: BatchContext) -> None:
             job_generators = []
             for _ in range(count):
                 kwargs = {}
-                if executor_class == ExecutorClass.always_on__llama:
-                    prompt_sample = next(llama_prompt_samples_iter)
+                if executor_class == ExecutorClass.always_on__llm__a6000:
+                    prompt_sample = next(prompt_samples_iter)
                     kwargs = {
                         "prompt_sample": prompt_sample,
                         "expected_prompts": list(prompt_sample.prompts.all()),
@@ -1254,11 +1255,11 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
 
 async def _score_jobs(ctx: BatchContext) -> None:
-    # NOTE: download the answers for llama jobs before scoring
+    # NOTE: download the answers for llm prompts jobs before scoring
     tasks = [
         asyncio.create_task(job.job_generator._download_answers())
         for job in ctx.jobs.values()
-        if job.executor_class == ExecutorClass.always_on__llama
+        if job.executor_class == ExecutorClass.always_on__llm__a6000
         and job.job_response is not None
         and isinstance(job.job_response, V0JobFinishedRequest)
     ]
@@ -1397,12 +1398,13 @@ def _db_persist(ctx: BatchContext) -> None:
             )
     MinerManifest.objects.bulk_create(miner_manifests)
 
+    # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {
         synthetic_job.job_uuid: synthetic_job for synthetic_job in synthetic_jobs
     }
     prompt_samples: list[PromptSample] = []
     for job in ctx.jobs.values():
-        if job.executor_class != ExecutorClass.always_on__llama:
+        if job.executor_class != ExecutorClass.always_on__llm__a6000:
             continue
         prompt_sample = job.job_generator.prompt_sample
         prompt_sample.synthetic_job = synthetic_jobs_map.get(job.uuid)

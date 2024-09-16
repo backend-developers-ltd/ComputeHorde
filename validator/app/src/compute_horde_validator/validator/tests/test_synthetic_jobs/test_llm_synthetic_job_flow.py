@@ -49,7 +49,7 @@ def mocked_job_generator_factory(prompts):
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-async def test_llama_synthetic_jobs_flow(
+async def test_llm_synthetic_jobs_flow(
     miner: Miner,
     axon_dict: dict[str, bittensor.AxonInfo],
     create_simulation_miner_client: Callable,
@@ -77,7 +77,7 @@ async def test_llama_synthetic_jobs_flow(
         manifest=miner_requests.ExecutorManifest(
             executor_classes=[
                 miner_requests.ExecutorClassManifest(
-                    executor_class=ExecutorClass.always_on__llama,
+                    executor_class=ExecutorClass.always_on__llm__a6000,
                     count=1,
                 )
             ]
