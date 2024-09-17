@@ -43,6 +43,8 @@ if env("ENV", default=None) is None:
 
 ENV = env("ENV", default="prod")
 
+PROMPT_GENERATION_MODEL = env("PROMPT_GENERATION_MODEL", default="phi3")
+
 DEFAULT_ADMIN_PASSWORD = env("DEFAULT_ADMIN_PASSWORD", default=None)
 DEFAULT_ADMIN_USERNAME = env("DEFAULT_ADMIN_USERNAME", default="admin")
 DEFAULT_ADMIN_EMAIL = env("DEFAULT_ADMIN_EMAIL", default="admin@admin.com")

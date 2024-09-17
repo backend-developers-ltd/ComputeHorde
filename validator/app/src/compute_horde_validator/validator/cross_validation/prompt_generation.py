@@ -31,7 +31,7 @@ async def generate_prompts(
             settings.TRUSTED_MINER_PORT,
         ]
     ):
-        logger.warning("Prompt generation miner not configured, skipping prompt generation")
+        logger.warning("Trusted miner not configured, skipping prompt generation")
         return
 
     job_uuid = job_uuid or uuid.uuid4()

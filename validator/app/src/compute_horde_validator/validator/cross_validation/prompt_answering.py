@@ -47,7 +47,7 @@ async def answer_prompts(
             settings.TRUSTED_MINER_PORT,
         ]
     ):
-        logger.warning("Prompt generation miner not configured, skipping prompt generation")
+        logger.warning("Trusted generation miner not configured, skipping prompt generation")
         return
 
     ts = datetime.now()
@@ -105,5 +105,5 @@ def save_workload_answers(workload, prompts, prompt_answers):
             if prompt.content in prompt_answers:
                 prompt.answer = prompt_answers[prompt.content]
             else:
-                logger.warning(f"Prompt {prompt} was not found in the prompt answers generated")
+                logger.error(f"Prompt {prompt} was not found in the prompt answers generated")
         Prompt.objects.bulk_update(prompts, ["answer"])

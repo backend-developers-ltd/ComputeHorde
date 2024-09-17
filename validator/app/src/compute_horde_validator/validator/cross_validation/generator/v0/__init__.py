@@ -1,6 +1,7 @@
 from compute_horde.base.output_upload import MultiUpload, SingleFilePutUpload
 
 from ..base import BasePromptJobGenerator
+from django.conf import settings
 
 
 class PromptJobGenerator(BasePromptJobGenerator):
@@ -11,12 +12,12 @@ class PromptJobGenerator(BasePromptJobGenerator):
         return 3600
 
     def docker_image_name(self) -> str:
-        return "backenddevelopersltd/compute-horde-prompt-gen-phi:v0-latest"
+        return f"backenddevelopersltd/compute-horde-prompt-gen-{settings.PROMPT_GENERATION_MODEL}:v0-latest"
 
     def docker_run_cmd(self) -> list[str]:
         return [
             "--model_name",
-            "phi3",
+            settings.PROMPT_GENERATION_MODEL,
             "--number_of_prompts_per_batch",
             str(self.num_prompts_per_batch),
             "--uuids",
