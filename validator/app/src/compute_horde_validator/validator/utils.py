@@ -3,7 +3,7 @@ import io
 import zipfile
 from functools import cache
 
-MACHINE_SPEC_GROUP_NAME = "machine_spec_sending"
+MACHINE_SPEC_CHANNEL = "machine_spec_sending"
 
 
 def single_file_zip(filename: str, contents: str) -> str:
