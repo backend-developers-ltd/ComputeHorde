@@ -26,8 +26,9 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         super().__init__(**kwargs)
         self.seed = seed
         self.s3_url = s3_url
-        self.input_filename = str(uuid.uuid4()) + ".txt"
-        self.s3_output_key = str(uuid.uuid4()) + ".json"
+        file_uuid = str(uuid.uuid4())
+        self.input_filename = file_uuid + ".txt"
+        self.s3_output_key = file_uuid + ".json"
         self.s3_output_prefix = "solved/"
         self.s3_output_bucket = settings.S3_BUCKET_NAME_ANSWERS
 

@@ -21,15 +21,6 @@ from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts impo
 logger = logging.getLogger(__name__)
 
 
-async def get_workload_prompts(workload: SolveWorkload) -> list[Prompt]:
-    return [
-        x
-        async for x in Prompt.objects.select_related("sample").filter(
-            sample__workload_id=workload.id, answer__isnull=True
-        )
-    ]
-
-
 def _get_keypair() -> bittensor.Keypair:
     return settings.BITTENSOR_WALLET().get_hotkey()
 
@@ -52,7 +43,6 @@ async def answer_prompts(
 
     ts = datetime.now()
     seed = workload.seed
-    prompts = await get_workload_prompts(workload)
 
     job_generator = LlmPromptsJobGenerator(workload.s3_url, seed)
     await job_generator.ainit()
@@ -88,14 +78,23 @@ async def answer_prompts(
         logger.error("Failed to download prompt answers", exc_info=True)
         return
 
-    await sync_to_async(save_workload_answers)(workload, prompts, prompt_answers)
+    await sync_to_async(save_workload_answers)(workload, prompt_answers)
     duration_seconds = (datetime.now() - ts).total_seconds()
-    logger.info(
-        f"Workload {workload} answered {len(prompts)} prompts in {duration_seconds} seconds"
-    )
+    logger.info(f"Workload {workload} finished in {duration_seconds} seconds")
 
 
-def save_workload_answers(workload, prompts, prompt_answers):
+def get_workload_prompts(workload: SolveWorkload) -> list[Prompt]:
+    return [
+        x
+        for x in Prompt.objects.select_related("sample").filter(
+            sample__workload_id=workload.id, answer__isnull=True
+        )
+    ]
+
+
+def save_workload_answers(workload, prompt_answers):
+    prompts = get_workload_prompts(workload)
+
     with transaction.atomic():
         # update the workload as finished
         workload.finished_at = now()
