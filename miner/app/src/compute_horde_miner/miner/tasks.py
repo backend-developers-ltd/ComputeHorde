@@ -65,19 +65,17 @@ def fetch_validators():
     )
 
 
-@app.task
-def prepare_receipts():
+async def prepare_receipts():
     receipts = []
-
     job_started_receipts = JobStartedReceipt.objects.order_by("time_accepted").filter(
         time_accepted__gt=now() - RECEIPTS_MAX_SERVED_PERIOD
     )
-    receipts += [jr.to_receipt() for jr in job_started_receipts]
+    receipts += [jr.to_receipt() async for jr in job_started_receipts]
 
     job_finished_receipts = JobFinishedReceipt.objects.order_by("time_started").filter(
         time_started__gt=now() - RECEIPTS_MAX_SERVED_PERIOD
     )
-    receipts += [jr.to_receipt() for jr in job_finished_receipts]
+    receipts += [jr.to_receipt() async for jr in job_finished_receipts]
 
     receipts_store.store(receipts)
 

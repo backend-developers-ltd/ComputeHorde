@@ -367,7 +367,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 time_took_us=msg.payload.time_took_us,
                 score_str=msg.payload.score_str,
             )
-            prepare_receipts.delay()
+            await prepare_receipts()
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
