@@ -151,15 +151,13 @@ async def test_executor_class_pool(dummy_manager):
 async def test_manager_reserve_executor_class(dummy_manager):
     await dummy_manager.reserve_executor_class("token1", ExecutorClass.always_on__gpu_24gb, 10)
     assert (
-        dummy_manager._executor_class_pools[ExecutorClass.always_on__gpu_24gb].get_availability()
-        == 1
-    )
+        await dummy_manager.get_executor_class_pool(ExecutorClass.always_on__gpu_24gb)
+    ).get_availability() == 1
 
     await dummy_manager.reserve_executor_class("token2", ExecutorClass.always_on__gpu_24gb, 10)
     assert (
-        dummy_manager._executor_class_pools[ExecutorClass.always_on__gpu_24gb].get_availability()
-        == 0
-    )
+        await dummy_manager.get_executor_class_pool(ExecutorClass.always_on__gpu_24gb)
+    ).get_availability() == 0
 
     with pytest.raises(ExecutorUnavailable):
         await dummy_manager.reserve_executor_class("token3", ExecutorClass.always_on__gpu_24gb, 10)
