@@ -236,6 +236,17 @@ CONSTANCE_CONFIG = {
         "how many prompts to sample and answer from a series",
         int,
     ),
+    "DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS": (
+        "always_on.llm.a6000=2",
+        (
+            "The maximum number of executor for an executor class that miners are allowed to have. "
+            "Executor classes not mentioned here have no limits. "
+            "The format should be: 'key1=value1,key2=value2', "
+            "where the keys are executor class enum values, and the values are integers. "
+            "Setting 0 will disable an executor class."
+        ),
+        str,
+    ),
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 

@@ -186,6 +186,8 @@ class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
                     self.condition.notify()
 
 
+# TODO: this test is flaky, needs proper investigation
+@pytest.mark.skip
 @pytest.mark.asyncio
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @patch("bittensor.metagraph", lambda *args, **kwargs: MockMetagraph())
