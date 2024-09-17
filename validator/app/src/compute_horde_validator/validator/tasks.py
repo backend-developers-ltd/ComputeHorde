@@ -1050,6 +1050,7 @@ def llm_prompt_generation():
 
 @app.task()
 def llm_prompt_answering():
+    # TODO: handle parallelism
     unprocessed_workloads = SolveWorkload.objects.filter(
         finished_at__isnull=True
     )

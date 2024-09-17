@@ -4,9 +4,9 @@ import pytest
 from moto import mock_aws
 
 from compute_horde_validator.validator.s3 import (
+    download_prompts_from_s3_url,
     generate_download_url,
     generate_upload_url,
-    download_prompts_from_s3_url,
     get_public_url,
     get_s3_client,
 )
