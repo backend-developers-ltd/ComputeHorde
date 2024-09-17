@@ -1,8 +1,10 @@
 import asyncio
 import time
+from contextlib import suppress
 
 import constance.utils
 from asgiref.sync import sync_to_async
+from compute_horde.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
 
@@ -60,3 +62,19 @@ def get_synthetic_jobs_flow_version():
     if settings.DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION is not None:
         return settings.DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION
     return config.DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION
+
+
+async def get_miner_max_executors_per_class() -> dict[ExecutorClass, int]:
+    miner_max_executors_per_class: str = await aget_config("DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS")
+    result = {}
+    for pair in miner_max_executors_per_class.split(","):
+        # ignore errors for misconfiguration, i,e. non-existent executor classes,
+        # non-integer/negative counts etc.
+        with suppress(ValueError):
+            executor_class_str, count_str = pair.split("=")
+            executor_class = ExecutorClass(executor_class_str)
+            count = int(count_str)
+            if count >= 0:
+                result[executor_class] = count
+
+    return result

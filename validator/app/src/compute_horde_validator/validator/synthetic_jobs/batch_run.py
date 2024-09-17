@@ -53,6 +53,7 @@ from django.conf import settings
 from django.db import transaction
 from pydantic import BaseModel
 
+from compute_horde_validator.validator.dynamic_config import get_miner_max_executors_per_class
 from compute_horde_validator.validator.models import (
     JobFinishedReceipt,
     JobStartedReceipt,
@@ -1042,6 +1043,24 @@ async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
             assert result is None
 
 
+async def _adjust_miner_max_executors_per_class(ctx: BatchContext) -> None:
+    max_executors_per_class = await get_miner_max_executors_per_class()
+    for hotkey, executors in ctx.executors.items():
+        for executor_class, count in executors.items():
+            if executor_class not in max_executors_per_class:
+                continue
+            if count > max_executors_per_class[executor_class]:
+                logger.warning(
+                    "%s manifest for executor class %s has more count (%s) than the max limit (%s), capping at limit",
+                    ctx.names[hotkey],
+                    executor_class,
+                    count,
+                    max_executors_per_class[executor_class],
+                )
+                ctx.executors[hotkey][executor_class] = max_executors_per_class[executor_class]
+                # TODO: add a system event?
+
+
 async def _multi_close_client(ctx: BatchContext) -> None:
     tasks = [
         asyncio.create_task(
@@ -1483,6 +1502,7 @@ async def execute_synthetic_batch_run(
 
         await ctx.checkpoint_system_event("_multi_get_miner_manifest")
         await _multi_get_miner_manifest(ctx)
+        await _adjust_miner_max_executors_per_class(ctx)
 
         await ctx.checkpoint_system_event("_get_total_executor_count")
         total_executor_count = _get_total_executor_count(ctx)
