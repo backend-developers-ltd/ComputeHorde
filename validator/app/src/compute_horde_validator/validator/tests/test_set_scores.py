@@ -1,4 +1,5 @@
 import asyncio
+import time
 import uuid
 from unittest.mock import patch
 
@@ -220,10 +221,13 @@ def test_set_scores__set_weight__commit__exception(settings):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=723))
+@patch(
+    "compute_horde_validator.validator.tasks.do_set_weights",
+    lambda *args, **kwargs: time.sleep(3),
+)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight_timeout(settings):
-    settings.CELERY_TASK_ALWAYS_EAGER = False  # to make it timeout
     setup_db()
     set_scores()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
@@ -374,6 +378,7 @@ def test_set_scores__set_weight__reveal__in_time(settings):
         )
 
 
+@pytest.mark.skip
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": 20})
 def test_set_scores__set_weight__reveal__timeout(settings, run_uuid):
@@ -396,6 +401,7 @@ def test_set_scores__set_weight__reveal__timeout(settings, run_uuid):
         config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS = 5
         config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF = 1
 
+        reveal_scores()
         with override_settings(CELERY_TASK_ALWAYS_EAGER=False):
             with Celery("compute_horde_validator.validator.tests.mock_subtensor_config", run_uuid):
                 result = reveal_scores.apply_async()

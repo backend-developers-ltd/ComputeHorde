@@ -2,6 +2,7 @@ import contextlib
 import json
 import numbers
 import random
+import signal
 import time
 import traceback
 import uuid
@@ -722,6 +723,11 @@ def set_scores():
                 batch.scored = True
                 batch.save()
 
+            def _signal_handler(signum, frame):
+                raise TimeoutError
+
+            signal.signal(signal.SIGALRM, _signal_handler)
+
             for try_number in range(WEIGHT_SETTING_ATTEMPTS):
                 logger.debug(
                     f"Setting weights (attempt #{try_number}):\nuids={uids}\nscores={weights}"
@@ -729,32 +735,24 @@ def set_scores():
                 success = False
 
                 try:
-                    result = do_set_weights.apply_async(
-                        kwargs=dict(
-                            netuid=settings.BITTENSOR_NETUID,
-                            uids=uids.tolist(),
-                            weights=weights.tolist(),
-                            wait_for_inclusion=True,
-                            wait_for_finalization=False,
-                            version_key=SCORING_ALGO_VERSION,
-                            cycle_id=batches[-1].cycle.id,
-                        ),
-                        soft_time_limit=WEIGHT_SETTING_TTL,
-                        time_limit=WEIGHT_SETTING_HARD_TTL,
+                    signal.alarm(WEIGHT_SETTING_TTL)
+                    success, msg = do_set_weights(
+                        netuid=settings.BITTENSOR_NETUID,
+                        uids=uids.tolist(),
+                        weights=weights.tolist(),
+                        wait_for_inclusion=True,
+                        wait_for_finalization=False,
+                        version_key=SCORING_ALGO_VERSION,
+                        cycle_id=batches[-1].cycle.id,
                     )
-                    logger.info(f"Setting weights task id: {result.id}")
-                    try:
-                        with allow_join_result():
-                            success, msg = result.get(timeout=WEIGHT_SETTING_TTL)
-                    except (celery.exceptions.TimeoutError, billiard.exceptions.TimeLimitExceeded):
-                        result.revoke(terminate=True)
-                        logger.info(f"Setting weights timed out (attempt #{try_number})")
-                        save_weight_setting_failure(
-                            subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
-                            long_description=traceback.format_exc(),
-                            data={"try_number": try_number, "operation": "setting/committing"},
-                        )
-                        continue
+                except TimeoutError:
+                    logger.info(f"Setting weights timed out (attempt #{try_number})")
+                    save_weight_setting_failure(
+                        subtype=SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
+                        long_description=traceback.format_exc(),
+                        data={"try_number": try_number, "operation": "setting/committing"},
+                    )
+                    continue
                 except Exception:
                     logger.warning("Encountered when setting weights: ", exc_info=True)
                     save_weight_setting_failure(
