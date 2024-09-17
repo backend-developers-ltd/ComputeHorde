@@ -1050,12 +1050,17 @@ def llm_prompt_generation():
 
 @app.task()
 def llm_prompt_answering():
-    # TODO: handle parallelism
-    unprocessed_workloads = SolveWorkload.objects.filter(
-        finished_at__isnull=True
-    )
-    for workload in unprocessed_workloads:
-        async_to_sync(answer_prompts)(workload)
+    with transaction.atomic():
+        try:
+            get_advisory_lock(LockType.ANSWERING_PROMPTS)
+        except Locked:
+            logger.debug("Another thread already answering prompts")
+            return
+
+        unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
+
+        for workload in unprocessed_workloads:
+            async_to_sync(answer_prompts)(workload)
 
 
 def init_workload(seed: int):

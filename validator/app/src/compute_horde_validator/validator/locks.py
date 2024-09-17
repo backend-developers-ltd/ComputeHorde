@@ -4,6 +4,7 @@ from django.db import connection
 class LockType:
     WEIGHT_SETTING = 1
     VALIDATION_SCHEDULING = 2
+    ANSWERING_PROMPTS = 3
 
 
 class Locked(Exception):
