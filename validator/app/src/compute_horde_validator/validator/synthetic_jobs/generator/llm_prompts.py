@@ -16,19 +16,15 @@ from compute_horde_validator.validator.s3 import (
 from .base import BaseSyntheticJobGenerator
 
 
-class LlmPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
+class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
     def __init__(
         self,
-        prompt_sample: PromptSample | None,
-        expected_prompts: list[Prompt],
         s3_url: str,
         seed: int,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.prompt_sample: PromptSample | None = prompt_sample
         self.seed = seed
-        self.expected_prompts: list[Prompt] = expected_prompts
         self.s3_url = s3_url
         self.input_filename = str(uuid.uuid4()) + ".txt"
         self.s3_output_key = str(uuid.uuid4()) + ".json"
@@ -99,6 +95,33 @@ class LlmPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(response)
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
+        # just check if there are any answers
+        if self.prompt_answers == {}:
+            return False, "no answers", 0.0
+        return True, "answers exist", 1.0
+
+    def job_description(self) -> str:
+        return "LLM prompts job"
+
+
+class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
+    def __init__(
+        self,
+        prompt_sample: PromptSample,
+        expected_prompts: list[Prompt],
+        s3_url: str,
+        seed: int,
+        **kwargs,
+    ):
+        super().__init__(
+            s3_url=s3_url,
+            seed=seed,
+            **kwargs,
+        )
+        self.prompt_sample: PromptSample = prompt_sample
+        self.expected_prompts: list[Prompt] = expected_prompts
+
+    def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         for expected_prompt in self.expected_prompts:
             if expected_prompt.content not in self.prompt_answers:
                 return False, "result does not contain all answers", 0.0
@@ -106,10 +129,6 @@ class LlmPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
                 return False, "results does not match expected answers", 0.0
 
         return True, "", 1.0
-
-    async def get_prompt_answers(self) -> dict[str, str]:
-        await self._download_answers()
-        return self.prompt_answers
 
     def job_description(self) -> str:
         return "LLM prompts synthetic job"

@@ -14,8 +14,8 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import Prompt, SolveWorkload
-from compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts import (
-    LlamaPromptsSyntheticJobGenerator,
+from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
+    LlmPromptsJobGenerator,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ async def answer_prompts(
     seed = workload.seed
     prompts = await get_workload_prompts(workload)
 
-    job_generator = LlamaPromptsSyntheticJobGenerator(None, prompts, workload.s3_url, seed)
+    job_generator = LlmPromptsJobGenerator(workload.s3_url, seed)
     await job_generator.ainit()
 
     job_uuid = job_uuid or uuid.uuid4()
@@ -82,7 +82,8 @@ async def answer_prompts(
     await run_organic_job(miner_client, job_details, wait_timeout=wait_timeout)
 
     try:
-        prompt_answers: dict[str, str] = await job_generator.get_prompt_answers()
+        await job_generator._download_answers()
+        prompt_answers: dict[str, str] = job_generator.prompt_answers
     except Exception:
         logger.error("Failed to download prompt answers", exc_info=True)
         return
