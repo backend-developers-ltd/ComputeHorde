@@ -50,7 +50,12 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
-from compute_horde_validator.validator.s3 import generate_upload_url, get_prompts_from_s3_url
+from compute_horde_validator.validator.s3 import (
+    download_prompts_from_s3_url,
+    generate_download_url,
+    generate_upload_url,
+    upload_prompts_to_s3_url,
+)
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
@@ -1029,17 +1034,8 @@ def fetch_dynamic_config() -> None:
     )
 
 
-def create_workload(seed: int):
-    # generate an s3 url to upload sample batch job result in
-    workload_uuid = uuid.uuid4()
-    s3_url = generate_upload_url(
-        key=str(workload_uuid), bucket_name=settings.S3_BUCKET_NAME_ANSWERS
-    )
-    return SolveWorkload.objects.create(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url)
-
-
 @app.task()
-def llama_prompt_generation():
+def llm_prompt_generation():
     num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES
     num_prompt_series = PromptSeries.objects.count()
     if num_prompt_series < num_expected_prompt_series:
@@ -1052,14 +1048,31 @@ def llama_prompt_generation():
         )
 
 
-# prompt_sample is ready for synthetic job when associated workload is finished (all prompts are answered)
 @app.task()
-def llama_prompt_answering():
-    # prioritize answering all the workloads before generating new samples
-    unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
+def llm_prompt_answering():
+    unprocessed_workloads = SolveWorkload.objects.filter(
+        finished_at__isnull=True
+    )
     for workload in unprocessed_workloads:
         async_to_sync(answer_prompts)(workload)
 
+
+def init_workload(seed: int):
+    workload_uuid = uuid.uuid4()
+    # generate an s3 url to upload workload prompts to
+    s3_upload_url = generate_upload_url(
+        key=str(workload_uuid), bucket_name=settings.S3_BUCKET_NAME_ANSWERS
+    )
+    # generate an s3 url to download workload prompts to be answered
+    s3_url = generate_download_url(
+        key=str(workload_uuid),
+        bucket_name=settings.S3_BUCKET_NAME_ANSWERS,
+    )
+    return SolveWorkload(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url), s3_upload_url
+
+
+@app.task()
+def llm_prompt_sampling():
     # generate new prompt samples if needed
     num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()
     num_needed_prompt_samples = (
@@ -1080,6 +1093,17 @@ def llama_prompt_answering():
         )
 
 
+def persist_workload(
+    workload: SolveWorkload, prompt_samples: list[PromptSample], prompts: list[Prompt]
+):
+    logger.info(f"Saving workload {workload}")
+    # save the sampled prompts as unanswered in the db
+    with transaction.atomic():
+        workload.save()
+        PromptSample.objects.bulk_create(prompt_samples)
+        Prompt.objects.bulk_create(prompts)
+
+
 def create_sample_workloads(num_needed_prompt_samples):
     prompts_per_sample = config.DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES
     prompts_per_workload = config.DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD
@@ -1088,47 +1112,48 @@ def create_sample_workloads(num_needed_prompt_samples):
     seed = random.randint(0, 1000000)
 
     # workload we are currently sampling for
-    current_workload = create_workload(seed)
+    current_workload, current_upload_url = init_workload(seed)
 
-    # how many prompts we have sampled for current_workload so far
-    current_workload_fill = 0
+    # how many prompts series we sampled so far
+    # for each prompt series there is one prompt sample
+    num_prompt_series_sampled = 0
 
-    prompt_samples_created = 0
+    current_prompt_samples = []
+    current_prompts = []
 
     # assume we have sufficient prompt series in the db to make all the prompt_samples needed
     # take a random order of prompt series to avoid using the same series at each synthetic jobs run
     for prompt_series in PromptSeries.objects.order_by("?").all():
-        if current_workload_fill >= prompts_per_workload:
-            # finished creating all needed prompt samples so exit after last batch is filled
-            if prompt_samples_created >= num_needed_prompt_samples:
-                break
-
-            current_workload = create_workload(seed)
-            current_workload_fill = 0
-
         # get all prompts
-        lines = get_prompts_from_s3_url(prompt_series.s3_url)
+        lines = download_prompts_from_s3_url(prompt_series.s3_url)
 
         # should always have enough prompts
         if len(lines) <= prompts_per_sample:
-            logger.error("Skipping bucket %s, not enough prompts", prompt_series.s3_url)
+            logger.error(f"Skipping bucket {prompt_series.s3_url}, not enough prompts")
             continue
 
         # sample prompts
         sampled_lines = random.sample(lines, prompts_per_sample)
-        current_workload_fill += len(sampled_lines)
 
-        with transaction.atomic():
-            prompt_sample = PromptSample.objects.create(
-                series=prompt_series, workload=current_workload
-            )
-            prompt_samples_created += 1
+        prompt_sample = PromptSample(series=prompt_series, workload=current_workload)
+        current_prompt_samples += [prompt_sample]
+        current_prompts += [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
 
-            # save the sampled prompts as unanswered in the db
-            Prompt.objects.bulk_create(
-                [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
-            )
+        if len(current_prompts) >= prompts_per_workload:
+            content = "\n".join([p.content for p in current_prompts])
+            if upload_prompts_to_s3_url(current_upload_url, content):
+                # save the workload in the db
+                persist_workload(current_workload, current_prompt_samples, current_prompts)
+                num_prompt_series_sampled += len(current_prompt_samples)
+            else:
+                logger.error(f"Failed to create workload {current_workload} - skipping")
 
-    # delete the current workload if it's not filled
-    if current_workload_fill < prompts_per_workload:
-        current_workload.delete()
+            # finished creating all needed prompt samples so exit after last batch is filled
+            if num_prompt_series_sampled >= num_needed_prompt_samples:
+                logger.info(f"Created {num_prompt_series_sampled} new prompt samples")
+                break
+
+            # reset for next workload
+            current_workload, current_upload_url = init_workload(seed)
+            current_prompt_samples = []
+            current_prompts = []

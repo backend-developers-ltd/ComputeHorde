@@ -402,16 +402,21 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         "schedule": timedelta(minutes=5),
         "options": {},
     },
-    "llama_prompt_generation": {
-        "task": "compute_horde_validator.validator.tasks.llama_prompt_generation",
-        "schedule": timedelta(minutes=10),
-        "options": {},
-    },
-    "llama_prompt_answering": {
-        "task": "compute_horde_validator.validator.tasks.llama_prompt_answering",
-        "schedule": timedelta(minutes=10),
-        "options": {},
-    },
+    # "llm_prompt_generation": {
+    #     "task": "compute_horde_validator.validator.tasks.llm_prompt_generation",
+    #     "schedule": timedelta(minutes=10),
+    #     "options": {},
+    # },
+    # "llm_prompt_sampling": {
+    #     "task": "compute_horde_validator.validator.tasks.llm_prompt_sampling",
+    #     "schedule": timedelta(minutes=10),
+    #     "options": {},
+    # },
+    # "llm_prompt_answering": {
+    #     "task": "compute_horde_validator.validator.tasks.llm_prompt_answering",
+    #     "schedule": timedelta(minutes=10),
+    #     "options": {},
+    # },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")

@@ -46,7 +46,16 @@ def get_public_url(key: str, *, bucket_name: str, prefix: str = "") -> str:
     return f"{endpoint_url}/{bucket_name}/{prefix}{key}"
 
 
-def get_prompts_from_s3_url(s3_url: str) -> Generator[tuple[str, list[str]]]:
+# TODO: retries etc
+def upload_prompts_to_s3_url(s3_url: str, content: str) -> bool:
+    response = requests.put(s3_url, data=content)
+    if response.status_code != 200:
+        logger.warning(f"Failed to upload prompts to {s3_url}")
+        return False
+    return True
+
+
+def download_prompts_from_s3_url(s3_url: str) -> Generator[tuple[str, list[str]]]:
     response = requests.get(s3_url)
     if response.status_code != 200:
         logger.warning(f"Failed to download prompts from {s3_url}")

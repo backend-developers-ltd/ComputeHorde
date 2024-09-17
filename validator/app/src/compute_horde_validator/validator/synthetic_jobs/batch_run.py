@@ -762,7 +762,7 @@ async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
         await client.close()
 
 
-async def get_llama_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None:
+async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None:
     # TODO: refactor into nicer abstraction
     llm_executor_count = sum(
         count
@@ -781,7 +781,7 @@ async def get_llama_prompt_samples(ctx: BatchContext) -> list[PromptSample] | No
     prompt_samples = [ps async for ps in prompt_samples]
     if len(prompt_samples) < llm_executor_count:
         logger.warning(
-            "Not enough prompt samples for llama executors: %d < %d - will NOT run llama synthetic prompt jobs",
+            "Not enough prompt samples for llm executors: %d < %d - will NOT run llm synthetic prompt jobs",
             len(prompt_samples),
             llm_executor_count,
         )
@@ -793,7 +793,7 @@ async def _generate_jobs(ctx: BatchContext) -> None:
     start_time = time.time()
     generated_job_count = 0
 
-    prompt_samples = await get_llama_prompt_samples(ctx)
+    prompt_samples = await get_llm_prompt_samples(ctx)
     prompt_samples_iter = iter(prompt_samples) if prompt_samples is not None else None
 
     for hotkey, executors in ctx.executors.items():

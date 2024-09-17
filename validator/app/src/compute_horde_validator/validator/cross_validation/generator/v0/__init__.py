@@ -1,7 +1,7 @@
 from compute_horde.base.output_upload import MultiUpload, SingleFilePutUpload
+from django.conf import settings
 
 from ..base import BasePromptJobGenerator
-from django.conf import settings
 
 
 class PromptJobGenerator(BasePromptJobGenerator):

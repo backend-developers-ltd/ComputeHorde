@@ -50,7 +50,7 @@ async def mock_throw_error(*args, **kwargs):
 
 
 @patch(
-    "compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts.download_file_content",
+    "compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts.download_file_content",
     mock_download_file_content,
 )
 async def test_answer_prompts(
@@ -112,7 +112,7 @@ async def test_answer_prompts_job_failed(
 
 
 @patch(
-    "compute_horde_validator.validator.synthetic_jobs.generator.llama_prompts.download_file_content",
+    "compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts.download_file_content",
     mock_throw_error,
 )
 async def test_answer_prompts_download_failed(

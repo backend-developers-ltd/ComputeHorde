@@ -107,19 +107,3 @@ async def test_generate_prompts_timeout(
         )
 
     assert not await PromptSeries.objects.aexists()
-
-
-# async def test_generate_prompts_max_batches_reached(
-#     create_miner_client: Callable,
-#     job_uuid: uuid.UUID,
-# ):
-#     existing = []
-#     for _ in range(5):
-#         existing.append(PromptSeries(s3_url="", generator_version=1))
-#     await PromptSeries.objects.abulk_create(existing)
-#
-#     await generate_prompts(
-#         create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=0.5
-#     )
-#
-#     assert await PromptSeries.objects.acount() == 5
