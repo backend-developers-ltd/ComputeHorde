@@ -91,8 +91,11 @@ class ExecutorClassPool:
             *[check_executor(reserved_executor) for reserved_executor in self._executors]
         )
 
+        executors_to_drop = set(reserved_executor for reserved_executor, should_drop in results if should_drop)
+
         self._executors = [
-            reserved_executor for reserved_executor, should_drop in results if not should_drop
+            reserved_executor for reserved_executor in self._executors
+            if reserved_executor not in executors_to_drop
         ]
 
 
