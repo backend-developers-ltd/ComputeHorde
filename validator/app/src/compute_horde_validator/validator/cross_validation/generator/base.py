@@ -29,7 +29,7 @@ class BasePromptJobGenerator(abc.ABC):
     def docker_image_name(self) -> str: ...
 
     def docker_run_options_preset(self) -> str:
-        return "none"
+        return "nvidia_all"
 
     def docker_run_cmd(self) -> list[str]:
         return []
