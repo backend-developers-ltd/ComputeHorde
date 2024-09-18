@@ -3,7 +3,6 @@ from collections.abc import Callable
 
 import pytest
 from compute_horde.base.output_upload import MultiUpload
-from compute_horde.miner_client.organic import OrganicJobError
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts

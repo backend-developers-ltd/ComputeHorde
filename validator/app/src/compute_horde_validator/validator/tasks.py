@@ -1036,31 +1036,41 @@ def fetch_dynamic_config() -> None:
 
 
 @app.task()
-def llm_prompt_generation():
+def llm_prompt_generation(task_time_limit=config.PROMPT_GENERATION_TIMEOUT):
     num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES
     num_prompt_series = PromptSeries.objects.count()
-    if num_prompt_series < num_expected_prompt_series:
-        logger.info("There are %s series in the db, generating prompts", num_prompt_series)
-        async_to_sync(generate_prompts)()
-    else:
+
+    if num_prompt_series >= num_expected_prompt_series:
         logger.warning(
             "There are %s series in the db - skipping prompt generation",
             num_prompt_series,
         )
+        return
 
+    logger.info("There are %s series in the db, generating prompts", num_prompt_series)
 
-@app.task()
-def llm_prompt_answering():
     with transaction.atomic():
         try:
-            get_advisory_lock(LockType.ANSWERING_PROMPTS)
+            get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
         except Locked:
-            logger.debug("Another thread already answering prompts")
+            logger.debug("Another thread already using the trusted miner")
             return
 
-        unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
+        async_to_sync(generate_prompts)()
 
-        for workload in unprocessed_workloads:
+
+@app.task(task_time_limit=config.PROMPT_ANSWERING_TIMEOUT)
+def llm_prompt_answering():
+    unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
+
+    for workload in unprocessed_workloads:
+        with transaction.atomic():
+            try:
+                get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
+            except Locked:
+                logger.debug("Another thread already using the trusted miner")
+                return
+
             async_to_sync(answer_prompts)(workload)
 
 
@@ -1078,7 +1088,7 @@ def init_workload(seed: int) -> tuple[SolveWorkload, str]:
     return SolveWorkload(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url), s3_upload_url
 
 
-@app.task()
+@app.task(task_time_limit=config.PROMPT_SAMPLING_TIMEOUT)
 def llm_prompt_sampling():
     # generate new prompt samples if needed
     num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()
