@@ -123,6 +123,10 @@ services:
     command: --interval 60 --cleanup --label-enable --no-pull
 ENDDOCKERCOMPOSE
 
+# Pull images, verifying they are signed
+export DOCKER_CONTENT_TRUST=1
+docker compose convert --images | sort -u | xargs -n 1 docker pull
+
 cat > .env <<ENDENV
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')
 POSTGRES_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
@@ -151,10 +155,7 @@ ENDENV
 
 rm ~/tmpvars
 
-export DOCKER_CONTENT_TRUST=1
-docker pull backenddevelopersltd/compute-horde-executor:v0-latest
-docker pull backenddevelopersltd/compute-horde-miner:v0-latest
-docker pull backenddevelopersltd/compute-horde-job:v0-latest
+# Start runner and watchtower containers
 docker compose up -d
 
 ENDSSH

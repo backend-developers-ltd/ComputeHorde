@@ -100,6 +100,10 @@ services:
     command: --interval 60 --cleanup --label-enable --no-pull
 ENDDOCKERCOMPOSE
 
+# Pull images, verifying they are signed
+export DOCKER_CONTENT_TRUST=1
+docker compose convert --images | sort -u | xargs -n 1 docker pull
+
 cat > .env <<ENDENV
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')
 POSTGRES_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
@@ -113,8 +117,7 @@ FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
 MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
 ENDENV
 
-export DOCKER_CONTENT_TRUST=1
-docker pull backenddevelopersltd/compute-horde-validator:v0-latest
+# Start runner and watchtower containers
 docker compose up -d
 
 ENDSSH
