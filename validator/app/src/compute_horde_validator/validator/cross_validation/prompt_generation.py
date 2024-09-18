@@ -60,7 +60,11 @@ async def generate_prompts(
         my_keypair=_get_keypair(),
     )
 
-    await run_organic_job(miner_client, job_details, wait_timeout=wait_timeout)
+    try:
+        await run_organic_job(miner_client, job_details, wait_timeout=wait_timeout)
+    except Exception:
+        logger.error("Failed to run organic job", exc_info=True)
+        return
 
     await _persist_series_list(series_uuids, public_urls, job_generator.generator_version())
 

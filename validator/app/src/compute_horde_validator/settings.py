@@ -215,7 +215,7 @@ CONSTANCE_CONFIG = {
         int,
     ),
     "DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD": (
-        100,
+        240,
         "how many prompts to answer in a single workload",
         int,
     ),
@@ -232,7 +232,7 @@ CONSTANCE_CONFIG = {
     ),
     # prompts answering params
     "DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES": (
-        10,
+        1,
         "how many prompts to sample and answer from a series",
         int,
     ),

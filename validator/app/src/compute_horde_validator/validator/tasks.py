@@ -70,6 +70,7 @@ from .scoring import score_batches
 logger = get_task_logger(__name__)
 
 JOB_WINDOW = 2 * 60 * 60
+MAX_SEED = (1 << 63) - 1
 
 SCORING_ALGO_VERSION = 2
 
@@ -1063,7 +1064,7 @@ def llm_prompt_answering():
             async_to_sync(answer_prompts)(workload)
 
 
-def init_workload(seed: int):
+def init_workload(seed: int) -> tuple[SolveWorkload, str]:
     workload_uuid = uuid.uuid4()
     # generate an s3 url to upload workload prompts to
     s3_upload_url = generate_upload_url(
@@ -1115,10 +1116,14 @@ def create_sample_workloads(num_needed_prompt_samples):
     prompts_per_workload = config.DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD
 
     # set seed for the current synthetic jobs run
-    seed = random.randint(0, 1000000)
+    seed = random.randint(0, MAX_SEED)
 
     # workload we are currently sampling for
-    current_workload, current_upload_url = init_workload(seed)
+    try:
+        current_workload, current_upload_url = init_workload(seed)
+    except Exception as e:
+        logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
+        return
 
     # how many prompts series we sampled so far
     # for each prompt series there is one prompt sample
@@ -1160,6 +1165,10 @@ def create_sample_workloads(num_needed_prompt_samples):
                 break
 
             # reset for next workload
-            current_workload, current_upload_url = init_workload(seed)
             current_prompt_samples = []
             current_prompts = []
+            try:
+                current_workload, current_upload_url = init_workload(seed)
+            except Exception as e:
+                logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
+                continue

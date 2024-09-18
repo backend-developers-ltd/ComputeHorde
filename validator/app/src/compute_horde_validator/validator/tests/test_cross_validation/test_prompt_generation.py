@@ -85,10 +85,9 @@ async def test_generate_prompts_job_failed(
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(job_failed_message, send_before=2)
 
-    with pytest.raises(OrganicJobError):
-        await generate_prompts(
-            create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
-        )
+    await generate_prompts(
+        create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
+    )
 
     assert not await PromptSeries.objects.aexists()
 
@@ -101,9 +100,8 @@ async def test_generate_prompts_timeout(
 ):
     await transport.add_message(manifest_message, send_before=1)
 
-    with pytest.raises(OrganicJobError):
-        await generate_prompts(
-            create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=0.5
-        )
+    await generate_prompts(
+        create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=0.5
+    )
 
     assert not await PromptSeries.objects.aexists()

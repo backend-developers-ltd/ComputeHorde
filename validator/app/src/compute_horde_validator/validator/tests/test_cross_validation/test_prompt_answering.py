@@ -4,7 +4,6 @@ from collections.abc import Callable
 from unittest.mock import patch
 
 import pytest
-from compute_horde.miner_client.organic import OrganicJobError
 
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.models import (
@@ -98,10 +97,9 @@ async def test_answer_prompts_job_failed(
 
     prompts, workload = await db_setup()
 
-    with pytest.raises(OrganicJobError):
-        await answer_prompts(
-            workload, create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
-        )
+    await answer_prompts(
+        workload, create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
+    )
 
     await workload.arefresh_from_db()
     assert workload.finished_at is None

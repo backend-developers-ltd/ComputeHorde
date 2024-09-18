@@ -69,7 +69,11 @@ async def answer_prompts(
         my_keypair=_get_keypair(),
     )
 
-    await run_organic_job(miner_client, job_details, wait_timeout=wait_timeout)
+    try:
+        await run_organic_job(miner_client, job_details, wait_timeout=wait_timeout)
+    except Exception:
+        logger.error("Failed to run organic job", exc_info=True)
+        return
 
     try:
         await job_generator._download_answers()
