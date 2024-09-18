@@ -75,8 +75,8 @@ sudo usermod -aG docker $USER
 # install cuda
 sudo apt-get install -y linux-headers-$(uname -r)
 DISTRIBUTION=$(. /etc/os-release; echo $ID$VERSION_ID | sed -e 's/\.//g')
-wget "https://developer.download.nvidia.com/compute/cuda/repos/$DISTRIBUTION/x86_64/cuda-keyring_1.0-1_all.deb"
-sudo dpkg -i cuda-keyring_1.0-1_all.deb
+wget "https://developer.download.nvidia.com/compute/cuda/repos/$DISTRIBUTION/x86_64/cuda-keyring_1.1-1_all.deb"
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
 sudo apt-get update
 sudo apt-get -y install cuda-drivers
 
