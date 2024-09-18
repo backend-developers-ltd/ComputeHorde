@@ -1,4 +1,5 @@
 from compute_horde.base.output_upload import MultiUpload, SingleFilePutUpload
+from compute_horde.executor_class import ExecutorClass
 from django.conf import settings
 
 from ..base import BasePromptJobGenerator
@@ -13,6 +14,9 @@ class PromptJobGenerator(BasePromptJobGenerator):
 
     def docker_image_name(self) -> str:
         return f"backenddevelopersltd/compute-horde-prompt-gen-{settings.PROMPT_GENERATION_MODEL}:v0-latest"
+
+    def executor_class(self) -> ExecutorClass:
+        return ExecutorClass.always_on__llm__a6000
 
     def docker_run_cmd(self) -> list[str]:
         return [
