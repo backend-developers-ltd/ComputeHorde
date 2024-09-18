@@ -74,7 +74,7 @@ ENDSSH
 # start a new ssh connection so that usermod changes are effective
 ssh "$SSH_DESTINATION" <<'ENDSSH'
 set -euxo pipefail
-mkdir ~/compute_horde_validator
+mkdir -p ~/compute_horde_validator
 cd ~/compute_horde_validator
 
 cat > docker-compose.yml <<'ENDDOCKERCOMPOSE'
