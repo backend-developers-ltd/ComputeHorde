@@ -238,15 +238,25 @@ def test_set_scores__set_weight_timeout(settings):
     )
 
 
+@pytest.mark.parametrize(
+    ("current_block", "expected_block"),
+    [
+        (723, 722),
+        (1443, 722),
+        (1444, 1444),
+        (1444, 1444),
+        (1678, 1444),
+    ],
+)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": 20})
-def test_set_scores__set_weight__commit(settings):
+@patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": 722})
+def test_set_scores__set_weight__commit(current_block: int, expected_block: int, settings):
     subtensor_ = MockSubtensor(
-        override_block_number=723,
+        override_block_number=current_block,
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
         ),
@@ -254,9 +264,7 @@ def test_set_scores__set_weight__commit(settings):
     with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
         setup_db()
         set_scores()
-        assert (
-            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
-        ), SystemEvent.objects.all()
+
         assert subtensor_.weights_committed == [
             [
                 16384,
@@ -265,12 +273,19 @@ def test_set_scores__set_weight__commit(settings):
                 65535,
             ]
         ]
+
+        from_db = Weights.objects.get()
+        assert from_db.block == expected_block
+        assert from_db.revealed_at is None
+
+        assert (
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
+        ), SystemEvent.objects.all()
         check_system_events(
             SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
             SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
             1,
         )
-        assert Weights.objects.count() == 1
 
 
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)

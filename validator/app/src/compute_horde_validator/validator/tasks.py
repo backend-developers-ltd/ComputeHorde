@@ -454,11 +454,15 @@ def do_set_weights(
                 },
             )
             return False, "Cannot commit new weights before revealing old ones"
+        interval_start = _get_commit_reveal_interval_start_for_block(
+            current_block, commit_reveal_weights_interval
+        )
+
         normalized_weights = _normalize_weights_for_committing(weights, max_weight)
         weights_in_db = Weights(
             uids=uids,
             weights=normalized_weights,
-            block=current_block,
+            block=interval_start,
             version_key=version_key,
         )
         try:
@@ -642,6 +646,12 @@ def get_subtensor(network):
 def get_metagraph(subtensor, netuid):
     with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
         return subtensor.metagraph(netuid=netuid)
+
+
+def _get_commit_reveal_interval_start_for_block(block: int, interval: int) -> int:
+    assert interval > 0
+
+    return block - block % interval
 
 
 @app.task
