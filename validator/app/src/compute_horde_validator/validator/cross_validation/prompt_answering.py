@@ -4,6 +4,7 @@ from datetime import datetime
 
 import bittensor
 from asgiref.sync import sync_to_async
+from compute_horde.executor_class import ExecutorClass
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
     OrganicMinerClient,
@@ -47,9 +48,13 @@ async def answer_prompts(
     job_generator = LlmPromptsJobGenerator(workload.s3_url, seed)
     await job_generator.ainit()
 
+    # TODO: Should be generated for all the llm executor classes.
+    #       SolveWorkload/PromptSample should have a executor_class field saying which
+    #       executor_class this sample is for.
     job_uuid = job_uuid or uuid.uuid4()
     job_details = OrganicJobDetails(
         job_uuid=str(job_uuid),
+        executor_class=ExecutorClass.always_on__llm__a6000,
         docker_image=job_generator.docker_image_name(),
         raw_script=job_generator.raw_script(),
         docker_run_options_preset=job_generator.docker_run_options_preset(),
