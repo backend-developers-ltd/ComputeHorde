@@ -7,6 +7,7 @@ from typing import Literal
 
 from compute_horde.base.output_upload import ZipAndHttpPutUpload
 from compute_horde.base.volume import InlineVolume, ZipUrlVolume
+from compute_horde.executor_class import ExecutorClass
 from compute_horde.miner_client.base import TransportConnectionError
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
@@ -15,23 +16,19 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
     V0JobFinishedRequest,
 )
-from compute_horde.mv_protocol.validator_requests import (
-    V0InitialJobRequest,
-    V0JobRequest,
-)
+from compute_horde.mv_protocol.validator_requests import V0InitialJobRequest, V0JobRequest
+from compute_horde.utils import Timer
 from django.conf import settings
 from pydantic import BaseModel
 
-from compute_horde_validator.validator.facilitator_api import (
-    V0FacilitatorJobRequest,
-)
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
     JobBase,
     OrganicJob,
     SystemEvent,
 )
-from compute_horde_validator.validator.utils import Timer, get_dummy_inline_zip_volume
+from compute_horde_validator.validator.organic_jobs.facilitator_api import V0FacilitatorJobRequest
+from compute_horde_validator.validator.utils import get_dummy_inline_zip_volume
 
 logger = logging.getLogger(__name__)
 
@@ -77,14 +74,16 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
         return job_status
 
 
-async def save_job_execution_event(subtype: str, long_description: str, data={}, success=False):
+async def save_job_execution_event(
+    subtype: str, long_description: str, data: dict | None = None, success: bool = False
+):
     await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
         type=SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS
         if success
         else SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
         subtype=subtype,
         long_description=long_description,
-        data=data,
+        data=data or {},
     )
 
 
@@ -102,7 +101,6 @@ async def execute_organic_job(
     async def handle_send_error_event(msg: str):
         await save_event(subtype=SystemEvent.EventSubType.MINER_SEND_ERROR, long_description=msg)
 
-    job_state = miner_client.get_job_state(job.job_uuid)
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
             await exit_stack.enter_async_context(miner_client)
@@ -145,7 +143,7 @@ async def execute_organic_job(
 
         try:
             msg = await asyncio.wait_for(
-                job_state.miner_ready_or_declining_future,
+                miner_client.miner_ready_or_declining_future,
                 timeout=min(job_timer.time_left(), wait_timeout),
             )
         except TimeoutError:
@@ -183,6 +181,11 @@ async def execute_organic_job(
                 await notify_callback(
                     JobStatusUpdate.from_job(job, "accepted", msg.message_type.value)
                 )
+            await miner_client.send_job_started_receipt_message(
+                executor_class=ExecutorClass(job.executor_class),
+                accepted_timestamp=time.time(),
+                max_timeout=int(job_timer.time_left()),
+            )
         else:
             raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
 
@@ -214,10 +217,10 @@ async def execute_organic_job(
         full_job_sent = time.time()
         try:
             msg = await asyncio.wait_for(
-                job_state.miner_finished_or_failed_future,
+                miner_client.miner_finished_or_failed_future,
                 timeout=job_timer.time_left(),
             )
-            time_took = job_state.miner_finished_or_failed_timestamp - full_job_sent
+            time_took = miner_client.miner_finished_or_failed_timestamp - full_job_sent
             logger.info(f"Miner took {time_took} seconds to finish {job.job_uuid}")
         except TimeoutError:
             comment = f"Miner {miner_client.miner_name} timed out after {total_job_timeout} seconds"
@@ -263,6 +266,11 @@ async def execute_organic_job(
                 await notify_callback(
                     JobStatusUpdate.from_job(job, "completed", msg.message_type.value)
                 )
+            await miner_client.send_job_finished_receipt_message(
+                started_timestamp=job_timer.start_time.timestamp(),
+                time_took_seconds=job_timer.passed_time(),
+                score=0,  # no score for organic jobs (at least right now)
+            )
             return
         else:
             comment = f"Unexpected msg from miner {miner_client.miner_name}: {msg}"

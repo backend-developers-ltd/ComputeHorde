@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from collections import deque
 from typing import NoReturn
 
 import bittensor
@@ -11,7 +12,12 @@ from channels.layers import get_channel_layer
 from django.conf import settings
 from pydantic import BaseModel
 
-from compute_horde_validator.validator.facilitator_api import (
+from compute_horde_validator.validator.metagraph_client import (
+    create_metagraph_refresh_task,
+    get_miner_axon_info,
+)
+from compute_horde_validator.validator.models import Miner, OrganicJob, SystemEvent
+from compute_horde_validator.validator.organic_jobs.facilitator_api import (
     AuthenticationRequest,
     Error,
     Heartbeat,
@@ -19,16 +25,9 @@ from compute_horde_validator.validator.facilitator_api import (
     MachineSpecsUpdate,
     Response,
 )
-from compute_horde_validator.validator.metagraph_client import (
-    create_metagraph_refresh_task,
-    get_miner_axon_info,
-)
-from compute_horde_validator.validator.miner_driver import execute_organic_job
-from compute_horde_validator.validator.models import Miner, OrganicJob, SystemEvent
-from compute_horde_validator.validator.synthetic_jobs.utils import MinerClient
-from compute_horde_validator.validator.utils import (
-    MACHINE_SPEC_GROUP_NAME,
-)
+from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
+from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
+from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +62,6 @@ class FacilitatorClient:
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
         self.refresh_metagraph_task = self.create_metagraph_refresh_task()
-        self.channel_layer = get_channel_layer()
-        self.channel_name = None
 
     def connect(self):
         """Create an awaitable/async-iterable websockets.connect() object"""
@@ -98,10 +95,6 @@ class FacilitatorClient:
 
     async def run_forever(self) -> NoReturn:
         """connect (and re-connect) to facilitator and keep reading messages ... forever"""
-
-        # setup channel for receiving machine specs
-        self.channel_name = await self.channel_layer.new_channel()
-        await self.channel_layer.group_add(MACHINE_SPEC_GROUP_NAME, self.channel_name)
 
         # send machine specs to facilitator
         self.specs_task = asyncio.create_task(self.wait_for_specs())
@@ -154,12 +147,14 @@ class FacilitatorClient:
             await self.handle_message(raw_msg)
 
     async def wait_for_specs(self):
-        specs_queue = []
+        specs_queue = deque()
+        channel_layer = get_channel_layer()
+
         while True:
             validator_hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address
             try:
                 msg = await asyncio.wait_for(
-                    self.channel_layer.receive(self.channel_name), timeout=20 * 60
+                    channel_layer.receive(MACHINE_SPEC_CHANNEL), timeout=20 * 60
                 )
 
                 specs = MachineSpecsUpdate(
@@ -172,12 +167,12 @@ class FacilitatorClient:
 
                 specs_queue.append(specs)
                 if self.ws is not None:
-                    while len(specs_queue) > 0:
-                        spec_to_send = specs_queue.pop(0)
+                    while specs_queue:
+                        spec_to_send = specs_queue.popleft()
                         try:
                             await self.send_model(spec_to_send)
                         except Exception as exc:
-                            specs_queue.insert(0, spec_to_send)
+                            specs_queue.appendleft(spec_to_send)
                             msg = f"Error occurred while sending specs: {exc}"
                             await save_facilitator_event(
                                 subtype=SystemEvent.EventSubType.SPECS_SEND_ERROR,
@@ -262,13 +257,11 @@ class FacilitatorClient:
         )
 
         miner_client = self.MINER_CLIENT_CLASS(
+            miner_hotkey=job_request.miner_hotkey,
             miner_address=miner_axon_info.ip,
             miner_port=miner_axon_info.port,
-            miner_hotkey=job_request.miner_hotkey,
-            my_hotkey=self.my_hotkey(),
             job_uuid=job_request.uuid,
-            batch_id=None,
-            keypair=self.keypair,
+            my_keypair=self.keypair,
         )
         await execute_organic_job(
             miner_client,

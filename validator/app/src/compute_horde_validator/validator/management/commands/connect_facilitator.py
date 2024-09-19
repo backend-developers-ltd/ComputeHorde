@@ -4,7 +4,7 @@ from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from compute_horde_validator.validator.facilitator_client import FacilitatorClient
+from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import io
 import json
@@ -11,7 +10,7 @@ from functools import partial
 from unittest import mock
 
 import httpx
-from compute_horde.transport import AbstractTransport
+from compute_horde.transport import StubTransport
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
 
@@ -55,35 +54,15 @@ def get_file_from_request(request):
     return parsed_data
 
 
-class MockTransport(AbstractTransport):
-    def __init__(self, messages: list[str]):
-        self.sent: list[str] = []
-        self.messages = messages
-        self.sent_messages: list[str] = []
-
-    async def start(self): ...
-
-    async def stop(self): ...
-
-    async def send(self, message):
-        self.sent_messages.append(message)
-
-    async def receive(self):
-        try:
-            return next(self.messages)
-        except StopIteration:
-            await asyncio.Future()
-
-
-class TestCommand(Command):
+class CommandTested(Command):
     def __init__(self, messages, *args, **kwargs):
-        transport = MockTransport(messages)
+        transport = StubTransport("test", messages)
         self.MINER_CLIENT_CLASS = partial(MinerClient, transport=transport)
         super().__init__(*args, **kwargs)
 
 
 def test_main_loop():
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -135,7 +114,7 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
     zip_url = "https://localhost/payload.txt"
     httpx_mock.add_response(url=zip_url, content=zip_contents)
 
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -189,7 +168,7 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
     zip_url = "https://localhost/payload.txt"
     httpx_mock.add_response(url=zip_url, content=zip_contents)
 
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -248,7 +227,7 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
 
     httpx_mock.add_callback(response_callback, url=zip_url)
 
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -312,7 +291,7 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
 
     httpx_mock.add_callback(response_callback, url=zip_url)
 
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -363,7 +342,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     url = "http://localhost/bucket/file.zip?hash=blabla"
     form_fields = {"a": "b", "c": "d"}
 
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -430,7 +409,7 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     httpx_mock.add_response()
     url = "http://localhost/bucket/file.zip?hash=blabla"
 
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -494,7 +473,7 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
 def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
     # Arrange
     httpx_mock.add_response(status_code=400)
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -553,7 +532,7 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
     httpx_mock.add_response(status_code=400)
     httpx_mock.add_response(status_code=400)
     httpx_mock.add_response(status_code=200)
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -618,7 +597,7 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
 
 
 def test_raw_script_job():
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -680,7 +659,7 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
     relative_path1 = "file1.txt"
     relative_path2 = "file2.txt"
 
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -786,7 +765,7 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
     url = "http://localhost/bucket/payload.txt"
     relative_path = "payload.txt"
 
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(
@@ -854,7 +833,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     relative_path2 = "input/file2.zip"
     relative_path3 = "payload.txt"
 
-    command = TestCommand(
+    command = CommandTested(
         iter(
             [
                 json.dumps(

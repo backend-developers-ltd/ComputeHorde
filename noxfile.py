@@ -24,8 +24,6 @@ def test(session):
     session.run("pdm", "install", "--check", external=True)
     session.run(
         "pytest",
-        "-W",
-        "ignore::DeprecationWarning",
         "-s",
         "-x",
         "-vv",

@@ -122,6 +122,8 @@ if CORS_ENABLED := env.bool("CORS_ENABLED", default=True):
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+BITTENSOR_APPROXIMATE_BLOCK_DURATION = timedelta(seconds=12)
+
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_CONFIG = {
     "SERVING": (
@@ -145,7 +147,88 @@ CONSTANCE_CONFIG = {
         "The synthetic jobs flow version",
         int,
     ),
+    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_WAIT_IN_ADVANCE_BLOCKS": (
+        3,
+        "How many blocks in advance to start waiting before synthetic jobs spawn",
+        int,
+    ),
+    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL": (
+        (BITTENSOR_APPROXIMATE_BLOCK_DURATION / 3).total_seconds(),
+        "How often (in seconds) to poll for block change",
+        float,
+    ),
+    "DYNAMIC_BLOCK_FINALIZATION_NUMBER": (
+        3,
+        "After this many blocks pass, a block can be considered final",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": (
+        True,
+        "This should be synced with the hyperparam",
+        bool,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": (
+        370,
+        "In blocks. This should be synced with the hyperparam",
+        int,
+    ),
+    "DYNAMIC_MAX_WEIGHT": (
+        65535,
+        "This should be synced with the hyperparam",
+        int,
+    ),
+    "DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS": (
+        3,
+        "If the job running task wakes up late by this many blocks (or less), the jobs will still run",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_TTL": (
+        120,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_HARD_TTL": (
+        125,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_ATTEMPTS": (
+        50,
+        "the number of attempts",
+        int,
+    ),
+    "DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF": (
+        5,
+        "in seconds",
+        int,
+    ),
+    "DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES": (
+        10,
+        "how many prompts to sample and validate from a series",
+        int,
+    ),
+    "DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE": (
+        100,
+        "how many workloads are needed before running local inference",
+        int,
+    ),
+    "DYNAMIC_MAX_PROMPT_BATCHES": (
+        10000,
+        "Maximum number of prompt batches upon which the prompt generator will not be triggered",
+        int,
+    ),
+    "DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO": (
+        5,
+        "Number of batches that prompt generator will process in a single go",
+        int,
+    ),
+    "DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH": (
+        240,
+        "Number of prompts to generate in a single batch",
+        int,
+    ),
 }
+DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 
 # Content Security Policy
 if CSP_ENABLED := env.bool("CSP_ENABLED", default=False):
@@ -214,6 +297,11 @@ DEFAULT_DB_ALIAS = (
 DATABASES[DEFAULT_DB_ALIAS] = DATABASES["default"]
 
 
+if new_name := env.str("DEBUG_OVERRIDE_DATABASE_NAME", default=None):
+    DATABASES["default"]["NAME"] = new_name
+    DATABASES[DEFAULT_DB_ALIAS]["NAME"] = new_name
+
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -261,12 +349,19 @@ CELERY_COMPRESSION = "gzip"  # task compression
 CELERY_MESSAGE_COMPRESSION = "gzip"  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {  # type: ignore
+    "schedule_synthetic_jobs": {
+        "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
+        "schedule": timedelta(minutes=1),
+        "options": {},
+    },
     "run_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.run_synthetic_jobs",
-        "schedule": crontab(
-            minute=env("DEBUG_RUN_SYNTHETIC_JOBS_MINUTE", default="0"),
-            hour=env("DEBUG_RUN_SYNTHETIC_JOBS_HOUR", default="*/2"),
-        ),
+        "schedule": timedelta(seconds=30),
+        "options": {},
+    },
+    "check_missed_synthetic_jobs": {
+        "task": "compute_horde_validator.validator.tasks.check_missed_synthetic_jobs",
+        "schedule": timedelta(minutes=10),
         "options": {},
     },
     "set_scores": {
@@ -399,6 +494,26 @@ DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 
+# prompt gen sampling
+DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES = env.int(
+    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES", default=None
+)
+DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES = env.int(
+    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_IN_BATCH", default=None
+)
+DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE = env.int(
+    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE", default=None
+)
+
+# synthetic jobs are evenly distributed through the cycle, however
+# we start them from some offset because scheduling takes some time
+SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
+
+PROMPT_JOB_GENERATOR = env.str(
+    "PROMPT_JOB_GENERATOR",
+    default="compute_horde_validator.validator.cross_validation.generator.v0:PromptJobGenerator",
+)
+
 
 def BITTENSOR_WALLET() -> bittensor.wallet:
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
@@ -412,6 +527,12 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
     return wallet
 
 
+# Local miner generating prompts
+GENERATION_MINER_KEY = env.str("GENERATION_MINER_KEY", default="")
+GENERATION_MINER_ADDRESS = env.str("GENERATION_MINER_ADDRESS", default="")
+GENERATION_MINER_PORT = env.int("GENERATION_MINER_PORT", default=0)
+
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -419,9 +540,21 @@ CHANNEL_LAYERS = {
             "hosts": [
                 (env.str("REDIS_HOST", default="redis"), env.int("REDIS_PORT", default="6379"))
             ],
+            # we need some buffer here to handle synthetic job batch messages
+            "capacity": 50_000,
+            # machine spec messages can take time to process and pile up, so we need a
+            # larger expiration time. One hour should be plenty.
+            "expiry": 3600,
         },
     },
 }
+
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
+AWS_ENDPOINT_URL = env("AWS_ENDPOINT_URL", default=None)
+
+S3_BUCKET_NAME_PROMPTS = env("S3_BUCKET_NAME_PROMPTS", default=None)
+S3_BUCKET_NAME_ANSWERS = env("S3_BUCKET_NAME_ANSWERS", default=None)
 
 # Sentry
 if SENTRY_DSN := env("SENTRY_DSN", default=""):

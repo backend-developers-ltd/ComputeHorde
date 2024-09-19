@@ -36,7 +36,7 @@ def lint(session: nox.Session):
     install(session, "lint")
     session.run("ruff", "check", "--diff", ".")
     session.run("codespell", ".", "--skip='*.lock'")
-    session.run("ruff", "format", ".")
+    session.run("ruff", "format", "--diff", ".")
 
 
 @nox.session(python=PYTHON_VERSION)
@@ -44,8 +44,6 @@ def test(session):
     install(session, "test")
     session.run(
         "pytest",
-        "-W",
-        "ignore::DeprecationWarning",
         "-s",
         "-x",
         "-vv",
