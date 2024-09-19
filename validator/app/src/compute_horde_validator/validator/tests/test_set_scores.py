@@ -286,6 +286,7 @@ def test_set_scores__set_weight__commit(current_block: int, expected_block: int,
 
         from_db = Weights.objects.get()
         assert from_db.block == expected_block
+        assert from_db.commit_block == current_block
         assert from_db.revealed_at is None
 
         assert (

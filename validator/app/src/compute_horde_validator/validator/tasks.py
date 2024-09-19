@@ -463,6 +463,7 @@ def do_set_weights(
             uids=uids,
             weights=normalized_weights,
             block=current_interval.start,
+            commit_block=current_block,
             version_key=version_key,
         )
         try:

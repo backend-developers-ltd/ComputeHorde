@@ -283,6 +283,7 @@ class Weights(models.Model):
     salt = ArrayField(models.IntegerField(), default=get_random_salt)
     version_key = models.IntegerField()
     block = models.BigIntegerField()
+    commit_block = models.BigIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
     revealed_at = models.DateTimeField(null=True, default=None)
 
