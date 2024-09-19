@@ -345,7 +345,7 @@ def check_system_events(
         )
         .count()
         == count
-    )
+    ), SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).all()
 
 
 def patch_constance(config_overlay: dict):
