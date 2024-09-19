@@ -167,7 +167,7 @@ CONSTANCE_CONFIG = {
         bool,
     ),
     "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": (
-        370,
+        722,
         "In blocks. This should be synced with the hyperparam",
         int,
     ),
