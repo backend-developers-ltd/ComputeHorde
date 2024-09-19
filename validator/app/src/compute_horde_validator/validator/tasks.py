@@ -431,29 +431,6 @@ def do_set_weights(
     max_weight = config.DYNAMIC_MAX_WEIGHT
 
     def _commit_weights() -> tuple[bool, str]:
-        last_weights = Weights.objects.order_by("-created_at").first()
-        if (
-            last_weights
-            and last_weights.revealed_at is None
-            and last_weights.block >= current_block - commit_reveal_weights_interval * 1.5
-        ):
-            # ___|______________________|______________________|____________________
-            #    ^-commit weights       ^-time to reveal       ^-2x time to reveal
-            #    |_________________________________|_______________________________
-            #     impossible to commit new weights     can commit new weights
-            #     unless last weights are revealed     no matter what
-            save_weight_setting_failure(
-                subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_UNREVEALED_ERROR,
-                long_description="Cannot commit new weights before revealing old ones",
-                data={
-                    "uncommited_weights_id": last_weights.id,
-                    "created_at": str(last_weights.created_at),
-                    "block": last_weights.block,
-                    "current_block": current_block,
-                    "commit_reveal_weights_interval": commit_reveal_weights_interval,
-                },
-            )
-            return False, "Cannot commit new weights before revealing old ones"
         current_interval = _get_commit_reveal_interval_for_block(
             current_block, commit_reveal_weights_interval
         )
