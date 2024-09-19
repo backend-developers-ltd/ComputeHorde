@@ -454,7 +454,7 @@ def do_set_weights(
                 },
             )
             return False, "Cannot commit new weights before revealing old ones"
-        interval_start = _get_commit_reveal_interval_start_for_block(
+        current_interval = _get_commit_reveal_interval_for_block(
             current_block, commit_reveal_weights_interval
         )
 
@@ -462,7 +462,7 @@ def do_set_weights(
         weights_in_db = Weights(
             uids=uids,
             weights=normalized_weights,
-            block=interval_start,
+            block=current_interval.start,
             version_key=version_key,
         )
         try:
@@ -648,14 +648,46 @@ def get_metagraph(subtensor, netuid):
         return subtensor.metagraph(netuid=netuid)
 
 
-def _get_commit_reveal_interval_start_for_block(block: int, interval: int) -> int:
+def _get_commit_reveal_interval_for_block(block: int, interval: int) -> range:
     assert interval > 0
 
-    return block - block % interval
+    start = block - block % interval
+
+    return range(start, start + interval)
 
 
 @app.task
 def set_scores():
+    if not config.SERVING:
+        logger.warning("Not setting scores, SERVING is disabled in constance config")
+        return
+
+    commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
+
+    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor.get_current_block()
+
+    if commit_reveal_weights_enabled:
+        commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
+        commit_start_offset = config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
+        commit_end_buffer = config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER
+        current_interval = _get_commit_reveal_interval_for_block(
+            current_block, commit_reveal_weights_interval
+        )
+
+        commit_window_start = current_interval.start + commit_start_offset
+        commit_window_end = current_interval.stop - commit_end_buffer
+
+        if not commit_window_start <= current_block < commit_window_end:
+            logger.debug(
+                "Outside of commit window, skipping, current block: %s, interval: %s, offset: %s, buffer: %s",
+                current_block,
+                current_interval,
+                commit_start_offset,
+                commit_end_buffer,
+            )
+            return
+
     with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR):
         with transaction.atomic():
             try:
@@ -663,11 +695,7 @@ def set_scores():
             except Locked:
                 logger.debug("Another thread already setting weights")
                 return
-            if not config.SERVING:
-                logger.warning("Not setting scores, SERVING is disabled in constance config")
-                return
 
-            subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
             metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
             neurons = metagraph.neurons
             hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
@@ -692,7 +720,7 @@ def set_scores():
                     batch.save()
                 batches = [batches[-1]]
 
-            if subtensor.get_current_block() <= batches[-1].cycle.stop:
+            if current_block <= batches[-1].cycle.stop:
                 logger.debug(
                     "There is a batch ready to be scored but we're "
                     "waiting for the beginning of next cycle to set weights"

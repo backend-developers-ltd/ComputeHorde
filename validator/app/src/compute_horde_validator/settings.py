@@ -171,6 +171,16 @@ CONSTANCE_CONFIG = {
         "In blocks. This should be synced with the hyperparam",
         int,
     ),
+    "DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET": (
+        361,
+        "Do not commit weights for this many blocks from the start of the interval",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER": (
+        15,
+        "Do not commit weights if there are less than this many blocks left in the interval",
+        int,
+    ),
     "DYNAMIC_MAX_WEIGHT": (
         65535,
         "This should be synced with the hyperparam",
