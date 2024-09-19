@@ -322,25 +322,33 @@ def test_set_scores__set_weight__commit__too_early_or_too_late(current_block: in
         assert not SystemEvent.objects.exists()
 
 
-@patch(
-    "bittensor.subtensor",
-    lambda *args, **kwargs: MockSubtensor(
-        override_block_number=1200,
+@pytest.mark.parametrize(
+    "current_block",
+    [
+        1345,  # too early
+        1806,  # too late
+    ],
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_set_scores__set_weight__reveal__out_of_window(current_block: int):
+    subtensor_ = MockSubtensor(
+        override_block_number=1234,
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
         ),
-    ),
-)
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight__reveal__too_early(settings):
-    setup_db()
-    set_scores()
+    )
+    with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
+        setup_db()
+        set_scores()
 
-    last_weights = Weights.objects.order_by("-id").first()
-    assert last_weights
-    assert last_weights.revealed_at is None
+        last_weights = Weights.objects.get()
+        assert last_weights
+        assert last_weights.revealed_at is None
+        assert last_weights.block == 722
 
-    reveal_scores()
+        subtensor_.get_current_block = lambda: current_block
+
+        reveal_scores()
 
     last_weights.refresh_from_db()
     assert last_weights.revealed_at is None
@@ -366,6 +374,7 @@ def test_set_scores__set_weight__reveal__in_time(settings):
         last_weights = Weights.objects.order_by("-id").first()
         assert last_weights
         assert last_weights.revealed_at is None
+        assert last_weights.block == 722
 
         subtensor_.get_current_block = lambda: 1445
         reveal_scores()
