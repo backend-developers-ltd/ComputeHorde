@@ -21,8 +21,6 @@ env:
   MNEMONIC_VALIDATOR_HOTKEY: "syrup ill organ rigid supreme pen menu range tonight letter pear blind"
   MINER_HOTKEY_SS58: "5FqSEa5kHZgwKMMuC7WsHLoXcf3UN9gCpDZ7iDifa2sTLBSB"
   VALIDATOR_HOTKEY_SS58: "5GHikjqiHD1pUyCf3mzrjbEJgJvGnCp5FNKTXTtGkzhaJ37R"
-  DOCKER_CONTENT_TRUST: 1
-  DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "not_relevant"
 
 jobs:
   e2e:
@@ -40,12 +38,6 @@ jobs:
       - name: Docker login
         run: |
           echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-
-          DELEGATION_KEY_FILE="$HOME/.docker/trust/private/${{ secrets.DOCKERHUB_DELEGATED_KEY_ID }}.key"
-          mkdir -p $(dirname "$DELEGATION_KEY_FILE")
-          echo "${{ secrets.DOCKERHUB_DELEGATED_KEY }}" > "$DELEGATION_KEY_FILE"
-          chmod 600 "$DELEGATION_KEY_FILE"
-
 
       - name: Build executor image
         run: |
