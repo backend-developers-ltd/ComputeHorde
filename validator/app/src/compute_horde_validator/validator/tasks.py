@@ -815,6 +815,10 @@ def reveal_scores() -> None:
     Select latest Weights that are older than `commit_reveal_weights_interval`
     and haven't been revealed yet, and reveal them.
     """
+    last_weights = Weights.objects.order_by("-created_at").first()
+    if not last_weights or last_weights.revealed_at is not None:
+        return
+
     WEIGHT_REVEALING_TTL = config.DYNAMIC_WEIGHT_REVEALING_TTL
     WEIGHT_REVEALING_HARD_TTL = config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL
     WEIGHT_REVEALING_ATTEMPTS = config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS
@@ -826,9 +830,6 @@ def reveal_scores() -> None:
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
-    last_weights = Weights.objects.order_by("-created_at").first()
-    if not last_weights or last_weights.revealed_at is not None:
-        return
     target_block = last_weights.block + commit_reveal_weights_interval
     if current_block < target_block:
         logger.debug(
