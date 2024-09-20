@@ -189,6 +189,28 @@ def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
     return range(first_epoch.start, second_epoch.stop)
 
 
+def get_commit_reveal_interval_for_block(block: int, interval: int) -> range:
+    """
+    Calculate the commit-reveal interval for a given block.
+
+    722                                    1444                                   2166
+    |______________________________________|______________________________________|
+    ^-1                                    ^-2                                    ^-3
+
+    ^                     ^                ^                                      ^
+    interval start        actual commit    interval end / reveal starts           ends
+
+    Subtensor uses the actual subnet hyperparam to determine the interval:
+    https://github.com/opentensor/subtensor/blob/af585b9b8a17d27508431257052da502055477b7/pallets/subtensor/src/subnets/weights.rs#L482
+    """
+
+    assert interval > 0
+
+    start = block - block % interval
+
+    return range(start, start + interval)
+
+
 @app.task
 def schedule_synthetic_jobs() -> None:
     """
@@ -431,7 +453,7 @@ def do_set_weights(
     max_weight = config.DYNAMIC_MAX_WEIGHT
 
     def _commit_weights() -> tuple[bool, str]:
-        current_interval = _get_commit_reveal_interval_for_block(
+        current_interval = get_commit_reveal_interval_for_block(
             current_block, commit_reveal_weights_interval
         )
 
@@ -626,14 +648,6 @@ def get_metagraph(subtensor, netuid):
         return subtensor.metagraph(netuid=netuid)
 
 
-def _get_commit_reveal_interval_for_block(block: int, interval: int) -> range:
-    assert interval > 0
-
-    start = block - block % interval
-
-    return range(start, start + interval)
-
-
 @app.task
 def set_scores():
     if not config.SERVING:
@@ -649,7 +663,7 @@ def set_scores():
         commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
         commit_start_offset = config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
         commit_end_buffer = config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER
-        current_interval = _get_commit_reveal_interval_for_block(
+        current_interval = get_commit_reveal_interval_for_block(
             current_block, commit_reveal_weights_interval
         )
 
