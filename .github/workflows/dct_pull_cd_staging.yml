@@ -1,0 +1,63 @@
+name: "CD: dct_pull (staging)"
+
+on:
+  push:
+    branches:
+      - 'deploy-dct-pull-staging'
+
+env:
+  TAG_VERSION: "v0-latest"
+  BUILD_DIRECTORY: "dct_pull"
+  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-dct-pull-staging"
+  DIST_VERSION_PREFIX: "dct-pull-staging"
+  DOCKER_CONTENT_TRUST: 1
+  DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: ${{ secrets.DOCKERHUB_DELEGATED_KEY_PASS }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Install DCT key
+        uses: ./.github/actions/install-dct-key
+        with:
+          key-id: "${{ secrets.DOCKERHUB_DELEGATED_KEY_ID }}"
+          key-content: "${{ secrets.DOCKERHUB_DELEGATED_KEY }}"
+
+      - name: Docker build, sign and push
+        run: |
+          IMAGE_NAME="${DOCKER_REPO_NAME}:${TAG_VERSION}"
+          SHA_IMAGE_NAME="${DOCKER_REPO_NAME}:git-${GITHUB_SHA}"
+
+          cd "${BUILD_DIRECTORY}" && docker build --build-context compute-horde=../compute_horde -t "${IMAGE_NAME}" -f app/envs/prod/Dockerfile .
+
+          docker image tag "${IMAGE_NAME}" "${SHA_IMAGE_NAME}"
+
+          echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+          docker push "${IMAGE_NAME}"
+          docker push "${SHA_IMAGE_NAME}"
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Set Dist Version
+        run: |
+          BUILD_NUMBER="${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
+          echo "DIST_VERSION=${DIST_VERSION_PREFIX}-${{ steps.date.outputs.date }}-${BUILD_NUMBER}" >> $GITHUB_ENV
+
+      - name: Create Tag
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const {DIST_VERSION} = process.env
+            github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `refs/tags/${DIST_VERSION}`,
+                sha: context.sha
+            })

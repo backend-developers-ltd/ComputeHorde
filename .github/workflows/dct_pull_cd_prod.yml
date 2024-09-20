@@ -1,0 +1,61 @@
+name: "CD: dct_pull (prod)"
+
+on:
+  push:
+    branches:
+      - 'deploy-dct-pull-prod'
+
+env:
+  TAG_VERSION: "v0-latest"
+  STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-dct-pull-staging"
+  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-dct-pull"
+  DIST_VERSION_PREFIX: "dct-pull-prod"
+  DOCKER_CONTENT_TRUST: 1
+  DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: ${{ secrets.DOCKERHUB_DELEGATED_KEY_PASS }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Install DCT key
+        uses: ./.github/actions/install-dct-key
+        with:
+          key-id: "${{ secrets.DOCKERHUB_DELEGATED_KEY_ID }}"
+          key-content: "${{ secrets.DOCKERHUB_DELEGATED_KEY }}"
+
+      - name: Promote image
+        run: |
+          IMAGE_NAME="${DOCKER_REPO_NAME}:${TAG_VERSION}"
+          SHA_IMAGE_NAME="${STAGING_DOCKER_REPO_NAME}:git-${GITHUB_SHA}"
+
+          docker pull "${SHA_IMAGE_NAME}"
+          docker image tag "${SHA_IMAGE_NAME}" "${IMAGE_NAME}"
+
+          echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+          docker push "${IMAGE_NAME}"
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Set Dist Version
+        run: |
+          BUILD_NUMBER="${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
+          echo "DIST_VERSION=${DIST_VERSION_PREFIX}-${{ steps.date.outputs.date }}-${BUILD_NUMBER}" >> $GITHUB_ENV
+
+      - name: Create Tag
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const {DIST_VERSION} = process.env
+            github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `refs/tags/${DIST_VERSION}`,
+                sha: context.sha
+            })
