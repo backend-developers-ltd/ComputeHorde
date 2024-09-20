@@ -13,6 +13,8 @@ env:
   MINER_IMAGE_REPO: "compute-horde-miner-staging"
   MINER_NGINX_IMAGE_REPO: "compute-horde-miner-nginx-staging"
   DIST_VERSION_PREFIX: "miner-runner-staging"
+  DOCKER_CONTENT_TRUST: 1
+  DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: ${{ secrets.DOCKERHUB_DELEGATED_KEY_PASS }}
 
 jobs:
   deploy:
@@ -21,6 +23,13 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
+      - uses: ./.github/actions/install-dct-key
+        name: Install DCT key
+        with:
+          key-id: "${{ secrets.DOCKERHUB_DELEGATED_KEY_ID }}"
+          key-content: "${{ secrets.DOCKERHUB_DELEGATED_KEY }}"
+
       - name: Docker build and push
         run: |
           IMAGE_NAME="${DOCKER_REPO_NAME}:${TAG_VERSION}"
