@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 60 --cleanup --label-enable
+    command: --interval 60 --cleanup --label-enable --no-pull
 
 ```
 

@@ -129,6 +129,17 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
+  dct-pull:
+    image: backenddevelopersltd/compute-horde-dct-pull:v0-latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: backenddevelopersltd/compute-horde-dct-pull:v0-latest backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest backenddevelopersltd/compute-horde-validator-nginx:v0-latest
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
 
 volumes:
   redis:

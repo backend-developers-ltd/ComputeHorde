@@ -10,6 +10,8 @@ env:
   STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-executor-staging"
   DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-executor"
   DIST_VERSION_PREFIX: "executor-preprod"
+  DOCKER_CONTENT_TRUST: 1
+  DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: ${{ secrets.DOCKERHUB_DELEGATED_KEY_PASS }}
 
 jobs:
   deploy:
@@ -18,7 +20,14 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: Docker build and push
+
+      - name: Install DCT key
+        uses: ./.github/actions/install-dct-key
+        with:
+          key-id: "${{ secrets.DOCKERHUB_DELEGATED_KEY_ID }}"
+          key-content: "${{ secrets.DOCKERHUB_DELEGATED_KEY }}"
+
+      - name: Promote image
         run: |
           IMAGE_NAME="${DOCKER_REPO_NAME}:${TAG_VERSION}"
           SHA_IMAGE_NAME="${STAGING_DOCKER_REPO_NAME}:git-${GITHUB_SHA}"
@@ -29,13 +38,16 @@ jobs:
           echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
           docker push "${IMAGE_NAME}"
+
       - name: Get current date
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
       - name: Set Dist Version
         run: |
           BUILD_NUMBER="${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
           echo "DIST_VERSION=${DIST_VERSION_PREFIX}-${{ steps.date.outputs.date }}-${BUILD_NUMBER}" >> $GITHUB_ENV
+
       - name: Create Tag
         uses: actions/github-script@v6
         with:

@@ -106,8 +106,8 @@ sudo usermod -aG docker $USER
 # install cuda
 sudo apt-get install -y linux-headers-$(uname -r)
 DISTRIBUTION=$(. /etc/os-release; echo $ID$VERSION_ID | sed -e 's/\.//g')
-wget "https://developer.download.nvidia.com/compute/cuda/repos/$DISTRIBUTION/x86_64/cuda-keyring_1.0-1_all.deb"
-sudo dpkg -i cuda-keyring_1.0-1_all.deb
+wget "https://developer.download.nvidia.com/compute/cuda/repos/$DISTRIBUTION/x86_64/cuda-keyring_1.1-1_all.deb"
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
 sudo apt-get update
 sudo apt-get -y install cuda-drivers
 
@@ -128,7 +128,7 @@ ENDSSH
 # start a new ssh connection so that usermod changes are effective
 ssh "$SSH_DESTINATION" <<'ENDSSH'
 set -euxo pipefail
-mkdir ~/compute_horde_miner
+mkdir -p ~/compute_horde_miner
 cd ~/compute_horde_miner
 
 cat > docker-compose.yml <<'ENDDOCKERCOMPOSE'
@@ -151,8 +151,12 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 60 --cleanup --label-enable
+    command: --interval 60 --cleanup --label-enable --no-pull
 ENDDOCKERCOMPOSE
+
+# Pull images, verifying they are signed
+export DOCKER_CONTENT_TRUST=1
+docker compose convert --images | sort -u | xargs -n 1 docker pull
 
 cat > .env <<ENDENV
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')
@@ -199,9 +203,7 @@ set -euxo pipefail
 
 cd ~/compute_horde_miner
 
-docker pull backenddevelopersltd/compute-horde-executor:v0-latest
-docker pull backenddevelopersltd/compute-horde-miner:v0-latest
-docker pull backenddevelopersltd/compute-horde-job:v0-latest
+# Start runner and watchtower containers
 docker compose up -d
 
 rm ~/tmpvars

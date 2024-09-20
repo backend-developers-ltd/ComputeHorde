@@ -1,15 +1,15 @@
-name: "CD: miner (pre-prod)"
+name: "CD: dct_pull (pre-prod)"
 
 on:
   push:
     branches:
-      - 'deploy-miner-preprod'
+      - 'deploy-dct-pull-preprod'
 
 env:
-  TAG_VERSION: "v0-latest"
-  STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-staging"
-  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-miner-preprod"
-  DIST_VERSION_PREFIX: "miner-preprod"
+  TAG_VERSION: "v0-preprod"
+  STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-executor-staging"
+  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-executor"
+  DIST_VERSION_PREFIX: "executor-preprod"
   DOCKER_CONTENT_TRUST: 1
   DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: ${{ secrets.DOCKERHUB_DELEGATED_KEY_PASS }}
 

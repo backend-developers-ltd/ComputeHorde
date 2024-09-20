@@ -2,9 +2,9 @@ name: Run Executor linter and tests
 
 on:
   push:
-    branches: [master, main]
+    branches: [ master, main ]
   pull_request:
-    branches: [master, main]
+    branches: [ master, main ]
 
 env:
   PYTHON_DEFAULT_VERSION: "3.11"
@@ -19,15 +19,19 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
           cache: "pip"
+
       - name: Install dependencies
         run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
+
       - name: Run linters
         run: nox -vs lint
+
   test:
     timeout-minutes: 10
     runs-on: ubuntu-latest
@@ -38,13 +42,16 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
           cache: "pip"
+
       - name: Install dependencies
         run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
+
       - name: Setup common virtualenv
         # In order not to exhaust disk on GitHub runner, we use one single
         # virtualenv for all pdm projects: miner, executor, validator.
@@ -54,10 +61,13 @@ jobs:
           echo "$.venv/bin" >> $GITHUB_PATH
           echo "VIRTUAL_ENV=${{ github.workspace }}/.venv" >> $GITHUB_ENV
           echo "PDM_IGNORE_SAVED_PYTHON=1" >> $GITHUB_ENV
+
       - name: Prepare environment
         run: ./setup-dev.sh
+
       - name: Build backenddevelopersltd/compute-horde-job-echo:v0-latest image
         run: docker build . -t backenddevelopersltd/compute-horde-job-echo:v0-latest
         working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_tests
+
       - name: Run unit tests
         run: pdm run nox -vs test --no-venv

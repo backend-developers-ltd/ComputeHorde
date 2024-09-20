@@ -1,0 +1,22 @@
+name: Install DCT Key
+description: Installs a key file to use with DCT into the local DCT store.
+
+inputs:
+  key-id:
+    description: 'The ID of the key'
+    required: true
+  key-content:
+    description: 'The content of the key'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install DCT key
+      shell: bash
+      run: |
+        DELEGATION_KEY_FILE="$HOME/.docker/trust/private/${{ inputs.key-id }}.key"
+        mkdir -p $(dirname "$DELEGATION_KEY_FILE")
+        touch "$DELEGATION_KEY_FILE"
+        chmod 600 "$DELEGATION_KEY_FILE"
+        echo "${{ inputs.key-content }}" > "$DELEGATION_KEY_FILE"

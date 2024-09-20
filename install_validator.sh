@@ -74,7 +74,7 @@ ENDSSH
 # start a new ssh connection so that usermod changes are effective
 ssh "$SSH_DESTINATION" <<'ENDSSH'
 set -euxo pipefail
-mkdir ~/compute_horde_validator
+mkdir -p ~/compute_horde_validator
 cd ~/compute_horde_validator
 
 cat > docker-compose.yml <<'ENDDOCKERCOMPOSE'
@@ -97,8 +97,12 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 60 --cleanup --label-enable
+    command: --interval 60 --cleanup --label-enable --no-pull
 ENDDOCKERCOMPOSE
+
+# Pull images, verifying they are signed
+export DOCKER_CONTENT_TRUST=1
+docker compose convert --images | sort -u | xargs -n 1 docker pull
 
 cat > .env <<ENDENV
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')
@@ -113,7 +117,7 @@ FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
 MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
 ENDENV
 
-docker pull backenddevelopersltd/compute-horde-validator:v0-latest
+# Start runner and watchtower containers
 docker compose up -d
 
 ENDSSH

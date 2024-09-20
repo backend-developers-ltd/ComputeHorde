@@ -144,6 +144,18 @@ services:
     logging:
       <<: *logging
 
+  dct-pull:
+    image: backenddevelopersltd/compute-horde-dct-pull:v0-latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: backenddevelopersltd/compute-horde-dct-pull:v0-latest backenddevelopersltd/${MINER_IMAGE_REPO}:${MINER_IMAGE_TAG:-v0-latest} backenddevelopersltd/${MINER_NGINX_IMAGE_REPO}:${MINER_IMAGE_TAG:-v0-latest}
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+
 volumes:
   redis:
   db:
