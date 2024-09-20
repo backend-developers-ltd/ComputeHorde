@@ -178,7 +178,12 @@ CONSTANCE_CONFIG = {
     ),
     "DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER": (
         15,
-        "Do not commit weights if there are less than this many blocks left in the interval",
+        "Do not commit weights if there are less than this many blocks left in the commit window",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER": (
+        15,
+        "Do not reveal weights if there are less than this many blocks left in the reveal window",
         int,
     ),
     "DYNAMIC_MAX_WEIGHT": (

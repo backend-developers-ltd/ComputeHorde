@@ -803,11 +803,13 @@ def reveal_scores() -> None:
 
     commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
     commit_start_offset = config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
+    reveal_end_buffer = config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER
 
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor_.get_current_block()
 
+    current_block = subtensor_.get_current_block()
     target_block = last_weights.block + commit_reveal_weights_interval
+
     if current_block < target_block:
         logger.debug(
             "Too early to reveal weights weights_id: %s, target block: %s, current block: %s",
@@ -816,8 +818,10 @@ def reveal_scores() -> None:
             current_block,
         )
         return
-    if current_block > last_weights.block + commit_reveal_weights_interval + commit_start_offset:
-        logger.error("There are unrevealed weights that are too old %s", last_weights)
+
+    reveal_window_end = target_block + commit_start_offset - reveal_end_buffer
+    if current_block > reveal_window_end:
+        logger.error("There are unrevealed weights that are too old weights_id=%s", last_weights.pk)
         return
 
     weights_id = last_weights.id
