@@ -993,7 +993,7 @@ def send_events_to_facilitator():
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
             .filter(sent=False)
             .select_for_update(skip_locked=True)
-        )[:50_000]
+        )[:10_000]
         if events.count() == 0:
             return
 
