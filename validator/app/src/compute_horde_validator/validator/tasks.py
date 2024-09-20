@@ -211,6 +211,51 @@ def get_commit_reveal_interval_for_block(block: int, interval: int) -> range:
     return range(start, start + interval)
 
 
+def get_reveal_window(current_block: int) -> range:
+    """
+    Get reveal window inside the commit-reveal interval for the current block
+
+    722                                                                          1443
+    |______________________________________|_______________________________________|
+    ^                                      ^                              ^
+    |-----------------------------|--------|------------------------------|-------_|
+    |       REVEAL WINDOW         | BUFFER |        COMMIT WINDOW         | BUFFER |
+    |                                      |
+    |            COMMIT OFFSET             |
+
+    """
+    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
+    commit_start_offset = config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
+    reveal_end_buffer = config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER
+
+    current_interval = get_commit_reveal_interval_for_block(
+        current_block, commit_reveal_weights_interval
+    )
+
+    start = current_interval.start
+    stop = start + commit_start_offset - reveal_end_buffer
+
+    return range(start, stop)
+
+
+def get_commit_window(current_block: int) -> range:
+    """
+    Get commit window inside the commit-reveal interval for the current block
+    """
+    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
+    commit_start_offset = config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
+    commit_end_buffer = config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER
+
+    current_interval = get_commit_reveal_interval_for_block(
+        current_block, commit_reveal_weights_interval
+    )
+
+    start = current_interval.start + commit_start_offset
+    stop = current_interval.stop - commit_end_buffer
+
+    return range(start, stop)
+
+
 @app.task
 def schedule_synthetic_jobs() -> None:
     """
@@ -660,23 +705,13 @@ def set_scores():
     current_block = subtensor.get_current_block()
 
     if commit_reveal_weights_enabled:
-        commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
-        commit_start_offset = config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
-        commit_end_buffer = config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER
-        current_interval = get_commit_reveal_interval_for_block(
-            current_block, commit_reveal_weights_interval
-        )
+        window = get_commit_window(current_block)
 
-        commit_window_start = current_interval.start + commit_start_offset
-        commit_window_end = current_interval.stop - commit_end_buffer
-
-        if not commit_window_start <= current_block < commit_window_end:
+        if not window.start <= current_block < window.stop:
             logger.debug(
-                "Outside of commit window, skipping, current block: %s, interval: %s, offset: %s, buffer: %s",
+                "Outside of commit window, skipping, current block: %s, window: %s",
                 current_block,
-                current_interval,
-                commit_start_offset,
-                commit_end_buffer,
+                window,
             )
             return
 
@@ -810,22 +845,22 @@ def reveal_scores() -> None:
     if not last_weights or last_weights.revealed_at is not None:
         return
 
-    WEIGHT_REVEALING_TTL = config.DYNAMIC_WEIGHT_REVEALING_TTL
-    WEIGHT_REVEALING_HARD_TTL = config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL
-    WEIGHT_REVEALING_ATTEMPTS = config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS
-    WEIGHT_REVEALING_FAILURE_BACKOFF = config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor_.get_current_block()
+    reveal_window = get_reveal_window(current_block)
+    if not reveal_window.start <= current_block < reveal_window.stop:
+        logger.debug(
+            "Outside of reveal window, skipping, current block: %s, window: %s",
+            current_block,
+            reveal_window,
+        )
+        return
 
     commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
-    commit_start_offset = config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
-    reveal_end_buffer = config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER
-
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-
-    current_block = subtensor_.get_current_block()
     target_block = last_weights.block + commit_reveal_weights_interval
 
     if current_block < target_block:
-        logger.debug(
+        logger.warning(
             "Too early to reveal weights weights_id: %s, target block: %s, current block: %s",
             last_weights.pk,
             target_block,
@@ -833,10 +868,14 @@ def reveal_scores() -> None:
         )
         return
 
-    reveal_window_end = target_block + commit_start_offset - reveal_end_buffer
-    if current_block > reveal_window_end:
-        logger.error("There are unrevealed weights that are too old weights_id=%s", last_weights.pk)
+    if current_block > target_block + commit_reveal_weights_interval:
+        logger.error("Weights are too old to be revealed weights_id=%s", last_weights.pk)
         return
+
+    WEIGHT_REVEALING_TTL = config.DYNAMIC_WEIGHT_REVEALING_TTL
+    WEIGHT_REVEALING_HARD_TTL = config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL
+    WEIGHT_REVEALING_ATTEMPTS = config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS
+    WEIGHT_REVEALING_FAILURE_BACKOFF = config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF
 
     weights_id = last_weights.id
     with transaction.atomic():
