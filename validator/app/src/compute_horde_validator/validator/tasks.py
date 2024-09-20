@@ -1034,7 +1034,7 @@ def send_events_to_facilitator():
             sort_keys=True,
         )
         signature = f"0x{keypair.sign(to_sign).hex()}"
-
+        events = list(events)
         data = [event.to_dict() for event in events]
         url = settings.STATS_COLLECTOR_URL + f"validator/{hotkey}/system_events"
         response = requests.post(
@@ -1048,7 +1048,9 @@ def send_events_to_facilitator():
 
         if response.status_code == 201:
             logger.info(f"Sent {len(data)} system events to facilitator")
-            events.update(sent=True)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(
+                id__in=[event.id for event in events]
+            ).update(sent=True)
         else:
             logger.error(f"Failed to send system events to facilitator: {response}")
 
