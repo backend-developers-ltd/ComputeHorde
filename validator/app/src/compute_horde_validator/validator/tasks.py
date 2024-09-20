@@ -988,7 +988,7 @@ def fetch_receipts():
 
 @shared_task
 def send_events_to_facilitator():
-    with transaction.atomic():
+    with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
         events = (
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
             .filter(sent=False)
