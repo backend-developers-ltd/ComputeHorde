@@ -6,6 +6,7 @@ import time
 import traceback
 import uuid
 from datetime import timedelta
+from functools import cached_property
 from math import ceil, floor
 
 import billiard.exceptions
@@ -189,9 +190,9 @@ def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
     return range(first_epoch.start, second_epoch.stop)
 
 
-def get_commit_reveal_interval_for_block(block: int, interval: int) -> range:
+class CommitRevealInterval:
     """
-    Calculate the commit-reveal interval for a given block.
+    Commit-reveal interval for a given block.
 
     722                                    1444                                   2166
     |______________________________________|______________________________________|
@@ -202,18 +203,8 @@ def get_commit_reveal_interval_for_block(block: int, interval: int) -> range:
 
     Subtensor uses the actual subnet hyperparam to determine the interval:
     https://github.com/opentensor/subtensor/blob/af585b9b8a17d27508431257052da502055477b7/pallets/subtensor/src/subnets/weights.rs#L482
-    """
 
-    assert interval > 0
-
-    start = block - block % interval
-
-    return range(start, start + interval)
-
-
-def get_reveal_window(current_block: int) -> range:
-    """
-    Get reveal window inside the commit-reveal interval for the current block
+    Each interval is divided into reveal and commit windows based on dynamic parameters:
 
     722                                                                          1443
     |______________________________________|_______________________________________|
@@ -224,36 +215,58 @@ def get_reveal_window(current_block: int) -> range:
     |            COMMIT OFFSET             |
 
     """
-    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
-    commit_start_offset = config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
-    reveal_end_buffer = config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER
 
-    current_interval = get_commit_reveal_interval_for_block(
-        current_block, commit_reveal_weights_interval
-    )
+    def __init__(
+        self,
+        current_block: int,
+        *,
+        length: int | None = None,
+        commit_start_offset: int | None = None,
+        commit_end_buffer: int | None = None,
+        reveal_end_buffer: int | None = None,
+    ):
+        self.current_block = current_block
+        self.length = length or config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
+        self.commit_start_offset = (
+            commit_start_offset or config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
+        )
+        self.commit_end_buffer = commit_end_buffer or config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER
+        self.reveal_end_buffer = reveal_end_buffer or config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER
 
-    start = current_interval.start
-    stop = start + commit_start_offset - reveal_end_buffer
+    @cached_property
+    def start(self):
+        """
+        https://github.com/opentensor/subtensor/blob/af585b9b8a17d27508431257052da502055477b7/pallets/subtensor/src/subnets/weights.rs#L488
+        """
+        return self.current_block - self.current_block % self.length
 
-    return range(start, stop)
+    @cached_property
+    def stop(self):
+        return self.start + self.length
 
+    @property
+    def reveal_start(self):
+        return self.start
 
-def get_commit_window(current_block: int) -> range:
-    """
-    Get commit window inside the commit-reveal interval for the current block
-    """
-    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
-    commit_start_offset = config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
-    commit_end_buffer = config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER
+    @cached_property
+    def reveal_stop(self):
+        return self.start + self.commit_start_offset - self.reveal_end_buffer
 
-    current_interval = get_commit_reveal_interval_for_block(
-        current_block, commit_reveal_weights_interval
-    )
+    @property
+    def reveal_window(self):
+        return range(self.reveal_start, self.reveal_stop)
 
-    start = current_interval.start + commit_start_offset
-    stop = current_interval.stop - commit_end_buffer
+    @cached_property
+    def commit_start(self):
+        return self.start + self.commit_start_offset
 
-    return range(start, stop)
+    @cached_property
+    def commit_stop(self):
+        return self.stop - self.commit_end_buffer
+
+    @property
+    def commit_window(self):
+        return range(self.commit_start, self.commit_stop)
 
 
 @app.task
@@ -699,13 +712,13 @@ def set_scores():
     current_block = subtensor.get_current_block()
 
     if commit_reveal_weights_enabled:
-        window = get_commit_window(current_block)
+        interval = CommitRevealInterval(current_block)
 
-        if not window.start <= current_block < window.stop:
+        if current_block not in interval.commit_window:
             logger.debug(
                 "Outside of commit window, skipping, current block: %s, window: %s",
                 current_block,
-                window,
+                interval.commit_window,
             )
             return
 
@@ -841,21 +854,19 @@ def reveal_scores() -> None:
 
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
-    reveal_window = get_reveal_window(current_block)
-    if not reveal_window.start <= current_block < reveal_window.stop:
+    interval = CommitRevealInterval(current_block)
+    if current_block not in interval.reveal_window:
         logger.debug(
             "Outside of reveal window, skipping, current block: %s, window: %s",
             current_block,
-            reveal_window,
+            interval.reveal_window,
         )
         return
 
-    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
     # find the interval in which the commit occurred
-    block_commit_interval = get_commit_reveal_interval_for_block(
-        last_weights.block, commit_reveal_weights_interval
-    )
-    reveal_start = block_commit_interval.stop
+    block_interval = CommitRevealInterval(last_weights.block)
+    # revealing starts in the next interval
+    reveal_start = block_interval.stop
 
     if current_block < reveal_start:
         logger.warning(
@@ -866,7 +877,7 @@ def reveal_scores() -> None:
         )
         return
 
-    reveal_end = reveal_start + commit_reveal_weights_interval
+    reveal_end = reveal_start + block_interval.length
     if current_block > reveal_end:
         logger.error(
             "Weights are too old to be revealed weights_id: %s, reveal_ended: %s, current block: %s",
