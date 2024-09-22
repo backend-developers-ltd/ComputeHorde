@@ -494,20 +494,14 @@ def do_set_weights(
     current_block = subtensor_.get_current_block()
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
-    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
     max_weight = config.DYNAMIC_MAX_WEIGHT
 
     def _commit_weights() -> tuple[bool, str]:
-        current_interval = get_commit_reveal_interval_for_block(
-            current_block, commit_reveal_weights_interval
-        )
-
         normalized_weights = _normalize_weights_for_committing(weights, max_weight)
         weights_in_db = Weights(
             uids=uids,
             weights=normalized_weights,
-            block=current_interval.start,
-            commit_block=current_block,
+            block=current_block,
             version_key=version_key,
         )
         try:
@@ -857,19 +851,29 @@ def reveal_scores() -> None:
         return
 
     commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
-    target_block = last_weights.block + commit_reveal_weights_interval
+    # find the interval in which the commit occurred
+    block_commit_interval = get_commit_reveal_interval_for_block(
+        last_weights.block, commit_reveal_weights_interval
+    )
+    reveal_start = block_commit_interval.stop
 
-    if current_block < target_block:
+    if current_block < reveal_start:
         logger.warning(
-            "Too early to reveal weights weights_id: %s, target block: %s, current block: %s",
+            "Too early to reveal weights weights_id: %s, reveal starts: %s, current block: %s",
             last_weights.pk,
-            target_block,
+            reveal_start,
             current_block,
         )
         return
 
-    if current_block > target_block + commit_reveal_weights_interval:
-        logger.error("Weights are too old to be revealed weights_id=%s", last_weights.pk)
+    reveal_end = reveal_start + commit_reveal_weights_interval
+    if current_block > reveal_end:
+        logger.error(
+            "Weights are too old to be revealed weights_id: %s, reveal_ended: %s, current block: %s",
+            last_weights.pk,
+            reveal_end,
+            current_block,
+        )
         return
 
     WEIGHT_REVEALING_TTL = config.DYNAMIC_WEIGHT_REVEALING_TTL

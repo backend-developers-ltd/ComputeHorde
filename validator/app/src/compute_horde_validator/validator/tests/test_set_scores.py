@@ -251,21 +251,15 @@ def test_set_scores__set_weight_timeout(settings):
     )
 
 
-@pytest.mark.parametrize(
-    ("current_block", "expected_block"),
-    [
-        (1084, 722),
-        (1428, 722),
-        (1806, 1444),
-    ],
-)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_ATTEMPTS", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_FAILURE_BACKOFF", 0)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": 722})
-def test_set_scores__set_weight__commit(current_block: int, expected_block: int, settings):
+def test_set_scores__set_weight__commit(settings):
+    current_block = 1084
+
     subtensor_ = MockSubtensor(
         override_block_number=current_block,
         hyperparameters=MockHyperparameters(
@@ -286,8 +280,7 @@ def test_set_scores__set_weight__commit(current_block: int, expected_block: int,
         ]
 
         from_db = Weights.objects.get()
-        assert from_db.block == expected_block
-        assert from_db.commit_block == current_block
+        assert from_db.block == current_block
         assert from_db.revealed_at is None
 
         assert (
@@ -325,7 +318,7 @@ def test_set_scores__set_weight__commit__too_early_or_too_late(current_block: in
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
-    "current_block",
+    "reveal_block",
     [
         # interval start is 722
         # reveal window is 1444 - 1790 (722 + 722 + 361 - 15 end buffer)
@@ -334,9 +327,10 @@ def test_set_scores__set_weight__commit__too_early_or_too_late(current_block: in
         1789,
     ],
 )
-def test_set_scores__set_weight__reveal__in_time(current_block: int):
+def test_set_scores__set_weight__reveal__in_time(reveal_block: int):
+    current_block = 1234
     subtensor_ = MockSubtensor(
-        override_block_number=1234,
+        override_block_number=current_block,
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
         ),
@@ -348,9 +342,9 @@ def test_set_scores__set_weight__reveal__in_time(current_block: int):
         last_weights = Weights.objects.order_by("-id").first()
         assert last_weights
         assert last_weights.revealed_at is None
-        assert last_weights.block == 722
+        assert last_weights.block == current_block
 
-        subtensor_.override_block_number = current_block
+        subtensor_.override_block_number = reveal_block
         reveal_scores()
 
         assert subtensor_.weights_revealed == [
@@ -371,7 +365,7 @@ def test_set_scores__set_weight__reveal__in_time(current_block: int):
 
 
 @pytest.mark.parametrize(
-    "current_block",
+    "reveal_block",
     [
         # interval start is 722
         # reveal window is 1444 - 1790 (722 + 722 + 361 - 15 end buffer)
@@ -380,9 +374,11 @@ def test_set_scores__set_weight__reveal__in_time(current_block: int):
     ],
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__set_weight__reveal__out_of_window(current_block: int):
+def test_set_scores__set_weight__reveal__out_of_window(reveal_block: int):
+    current_block = 1234
+
     subtensor_ = MockSubtensor(
-        override_block_number=1234,
+        override_block_number=current_block,
         hyperparameters=MockHyperparameters(
             commit_reveal_weights_enabled=True,
         ),
@@ -394,9 +390,9 @@ def test_set_scores__set_weight__reveal__out_of_window(current_block: int):
         last_weights = Weights.objects.get()
         assert last_weights
         assert last_weights.revealed_at is None
-        assert last_weights.block == 722
+        assert last_weights.block == current_block
 
-        subtensor_.get_current_block = lambda: current_block
+        subtensor_.override_block_number = reveal_block
 
         reveal_scores()
 

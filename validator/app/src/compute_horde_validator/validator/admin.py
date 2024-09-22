@@ -145,7 +145,7 @@ class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
 
 
 class WeightsReadOnlyAdmin(ReadOnlyAdmin):
-    list_display = ["block", "commit_block", "created_at", "revealed_at"]
+    list_display = ["block", "created_at", "revealed_at"]
     ordering = ["-created_at"]
 
 
