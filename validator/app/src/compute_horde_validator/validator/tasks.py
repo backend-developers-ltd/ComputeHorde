@@ -988,39 +988,46 @@ def fetch_receipts():
 
 @shared_task
 def send_events_to_facilitator():
-    events = SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(sent=False)
-    if events.count() == 0:
-        return
+    with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
+        events = (
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
+            .filter(sent=False)
+            .select_for_update(skip_locked=True)
+        )[:10_000]
+        if events.count() == 0:
+            return
 
-    if settings.STATS_COLLECTOR_URL == "":
-        logger.warning("STATS_COLLECTOR_URL is not set, not sending system events")
-        return
+        if settings.STATS_COLLECTOR_URL == "":
+            logger.warning("STATS_COLLECTOR_URL is not set, not sending system events")
+            return
 
-    keypair = get_keypair()
-    hotkey = keypair.ss58_address
-    signing_timestamp = int(time.time())
-    to_sign = json.dumps(
-        {"signing_timestamp": signing_timestamp, "validator_ss58_address": hotkey},
-        sort_keys=True,
-    )
-    signature = f"0x{keypair.sign(to_sign).hex()}"
+        keypair = get_keypair()
+        hotkey = keypair.ss58_address
+        signing_timestamp = int(time.time())
+        to_sign = json.dumps(
+            {"signing_timestamp": signing_timestamp, "validator_ss58_address": hotkey},
+            sort_keys=True,
+        )
+        signature = f"0x{keypair.sign(to_sign).hex()}"
+        events = list(events)
+        data = [event.to_dict() for event in events]
+        url = settings.STATS_COLLECTOR_URL + f"validator/{hotkey}/system_events"
+        response = requests.post(
+            url,
+            json=data,
+            headers={
+                "Validator-Signature": signature,
+                "Validator-Signing-Timestamp": str(signing_timestamp),
+            },
+        )
 
-    data = [event.to_dict() for event in events]
-    url = settings.STATS_COLLECTOR_URL + f"validator/{hotkey}/system_events"
-    response = requests.post(
-        url,
-        json=data,
-        headers={
-            "Validator-Signature": signature,
-            "Validator-Signing-Timestamp": str(signing_timestamp),
-        },
-    )
-
-    if response.status_code == 201:
-        logger.info(f"Sent {len(data)} system events to facilitator")
-        events.update(sent=True)
-    else:
-        logger.error(f"Failed to send system events to facilitator: {response}")
+        if response.status_code == 201:
+            logger.info(f"Sent {len(data)} system events to facilitator")
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(
+                id__in=[event.id for event in events]
+            ).update(sent=True)
+        else:
+            logger.error(f"Failed to send system events to facilitator: {response}")
 
 
 @app.task
