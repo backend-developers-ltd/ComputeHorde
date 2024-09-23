@@ -71,6 +71,7 @@ from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 logger = logging.getLogger(__name__)
 
 _GIVE_AVERAGE_JOB_SEND_TIME_BONUS = False
+_SEND_MACHINE_SPECS = False
 
 # always-on executor classes have spin_up_time=0, but realistically
 # we need a bit more for all the back-and-forth messaging, especially
@@ -1502,12 +1503,16 @@ async def execute_synthetic_batch_run(
     await ctx.checkpoint_system_event("_db_persist")
     await _db_persist(ctx)
 
-    # send the machine specs after the batch is done, it can fail or take a long time
-    await ctx.checkpoint_system_event("_send_machine_specs")
-    try:
-        await _send_machine_specs(ctx)
-    except (Exception, asyncio.CancelledError) as exc:
-        logger.error("Synthetic jobs batch failure: %r", exc)
+    # we turn off specs cause it is unreliable to send them over channels and we
+    # have already this data in telemetry event - but processing telemetry is slow
+    # so we might try this way another time - just turn it of as hotfix
+    if _SEND_MACHINE_SPECS:
+        # send the machine specs after the batch is done, it can fail or take a long time
+        await ctx.checkpoint_system_event("_send_machine_specs")
+        try:
+            await _send_machine_specs(ctx)
+        except (Exception, asyncio.CancelledError) as exc:
+            logger.error("Synthetic jobs batch failure: %r", exc)
 
     await _db_persist_system_events(ctx)
 
