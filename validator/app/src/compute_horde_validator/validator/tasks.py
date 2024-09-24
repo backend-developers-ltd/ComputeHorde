@@ -70,7 +70,7 @@ from .scoring import score_batches
 logger = get_task_logger(__name__)
 
 JOB_WINDOW = 2 * 60 * 60
-MAX_SEED = (1 << 63) - 1
+MAX_SEED = (1 << 32) - 1
 
 SCORING_ALGO_VERSION = 2
 
