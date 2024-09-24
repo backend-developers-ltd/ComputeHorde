@@ -221,7 +221,7 @@ CONSTANCE_CONFIG = {
     ),
     # prompt generation params
     "DYNAMIC_PROMPTS_SERIES_IN_A_SINGLE_GENERATION": (
-        5,
+        25,
         "Number of batches that prompt generator will process in a single go",
         int,
     ),

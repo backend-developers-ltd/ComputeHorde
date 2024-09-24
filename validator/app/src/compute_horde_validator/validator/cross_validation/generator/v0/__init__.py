@@ -23,10 +23,11 @@ class PromptJobGenerator(BasePromptJobGenerator):
             "--quantize",
             "--model_name",
             settings.PROMPT_GENERATION_MODEL,
-            "--batch_size",
-            "256",  # on A6000 we want 240 prompts generated in single file, but not all results are valid
-            "--max_new_tokens",
-            "40",  # 40 new tokens is enough for reasonable length prompt - 30 caused too much cut off prompts
+            "--batch_size=250",  # on A6000 we want 240 prompts generated in single file, but not all results are valid
+            "--num_return_sequences=1",
+            "--max_new_tokens=40",  # 40 new tokens is enough for reasonable length prompt - 30 caused too much cut off prompts
+            "--number_of_prompts_per_batch",
+            str(self.num_prompts_per_batch),
             "--uuids",
             str(",".join(map(str, self.batch_uuids))),
         ]
