@@ -59,7 +59,7 @@ def download_prompts_from_s3_url(s3_url: str) -> list[str]:
     if response.status_code != 200:
         logger.warning(f"Failed to download prompts from {s3_url}")
         return []
-    return response.text.split("\n")
+    return response.text.splitlines()
 
 
 async def download_file_content(s3_url: str) -> bytes:
