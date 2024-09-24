@@ -740,7 +740,6 @@ def set_scores():
                 .filter(
                     scored=False,
                     started_at__gte=now() - timedelta(days=1),
-                    accepting_results_until__lt=now(),
                     cycle__stop__lt=current_block,
                 )
                 .order_by("-started_at")
