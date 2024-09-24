@@ -20,10 +20,9 @@ class PromptJobGenerator(BasePromptJobGenerator):
 
     def docker_run_cmd(self) -> list[str]:
         return [
+            "--quantize",
             "--model_name",
             settings.PROMPT_GENERATION_MODEL,
-            "--number_of_prompts_per_batch",
-            str(self.num_prompts_per_batch),
             "--uuids",
             str(",".join(map(str, self.batch_uuids))),
         ]
