@@ -759,7 +759,7 @@ def set_scores():
                 uid = hotkey_to_uid.get(hotkey)
                 if uid is None:
                     continue
-                score_per_uid[uid] = uid
+                score_per_uid[uid] = score
 
             if not score_per_uid:
                 logger.info("No miners on the subnet to score")
