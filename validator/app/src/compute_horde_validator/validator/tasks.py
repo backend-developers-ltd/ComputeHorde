@@ -735,12 +735,13 @@ def set_scores():
             hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
             score_per_uid = {}
             batches = list(
-                SyntheticJobBatch.objects.prefetch_related("synthetic_jobs")
+                SyntheticJobBatch.objects.select_related("cycle")
+                .prefetch_related("synthetic_jobs")
                 .filter(
                     scored=False,
                     started_at__gte=now() - timedelta(days=1),
                     accepting_results_until__lt=now(),
-                    cycle__isnull=False,
+                    cycle__stop__lt=current_block,
                 )
                 .order_by("-started_at")
             )
@@ -753,13 +754,6 @@ def set_scores():
                     batch.scored = True
                     batch.save()
                 batches = [batches[-1]]
-
-            if current_block <= batches[-1].cycle.stop:
-                logger.debug(
-                    "There is a batch ready to be scored but we're "
-                    "waiting for the beginning of next cycle to set weights"
-                )
-                return
 
             hotkey_scores = score_batches(batches)
             for hotkey, score in hotkey_scores.items():
