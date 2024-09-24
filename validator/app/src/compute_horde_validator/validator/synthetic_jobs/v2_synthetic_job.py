@@ -37,7 +37,11 @@ class V2SyntheticJob(SyntheticJob):
 
     @classmethod
     def generate(
-        cls, algorithms: list[Algorithm], params: list[JobParams], salt_length_bytes: int = 8
+        cls,
+        algorithms: list[Algorithm],
+        params: list[JobParams],
+        miner_hotkey: str,
+        salt_length_bytes: int = 8,
     ) -> Self:
         # generate distinct passwords for each algorithm
         passwords = []
@@ -51,10 +55,12 @@ class V2SyntheticJob(SyntheticJob):
                 )
             passwords.append(sorted(list(_passwords)))
 
+        first_password = f"{miner_hotkey}-{cls.random_string(num_letters=48, num_digits=0)}"
+
         return cls(
             algorithms=algorithms,
             params=params,
-            first_password=cls.random_string(num_letters=100, num_digits=0),
+            first_password=first_password,
             passwords=passwords,
             salts=[secrets.token_bytes(salt_length_bytes) for _ in range(len(algorithms))],
         )

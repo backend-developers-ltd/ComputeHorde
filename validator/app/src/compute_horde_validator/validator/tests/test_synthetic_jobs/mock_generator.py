@@ -18,7 +18,7 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def __init__(self, _uuid: uuid.UUID):
         self._uuid = _uuid
 
-    async def ainit(self):
+    async def ainit(self, miner_hotkey: str):
         pass
 
     def timeout_seconds(self) -> int:

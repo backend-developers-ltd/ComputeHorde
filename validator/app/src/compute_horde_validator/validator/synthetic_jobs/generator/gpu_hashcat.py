@@ -24,9 +24,11 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
         self.weights_version = None
         self.hash_job = None
         self.expected_answer = None
+        self.miner_hotkey = None
 
-    async def ainit(self):
+    async def ainit(self, miner_hotkey: str):
         """Allow to initialize generator in asyncio and non blocking"""
+        self.miner_hotkey = miner_hotkey
         self.weights_version = await aget_weights_version()
         self.hash_job, self.expected_answer = await self._get_hash_job()
 
@@ -44,7 +46,7 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
         elif self.weights_version == 4:
             algorithms = Algorithm.get_all_algorithms()
             params = [HASHJOB_PARAMS[self.weights_version][algorithm] for algorithm in algorithms]
-            hash_job = V2SyntheticJob.generate(algorithms, params)
+            hash_job = V2SyntheticJob.generate(algorithms, params, self.miner_hotkey)
         else:
             raise RuntimeError(f"No SyntheticJob for weights_version: {self.weights_version}")
 
