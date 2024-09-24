@@ -1036,7 +1036,7 @@ def fetch_dynamic_config() -> None:
 
 
 @app.task()
-def llm_prompt_generation(task_time_limit=config.PROMPT_GENERATION_TIMEOUT):
+def llm_prompt_generation():
     num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES
     num_prompt_series = PromptSeries.objects.count()
 
@@ -1059,7 +1059,7 @@ def llm_prompt_generation(task_time_limit=config.PROMPT_GENERATION_TIMEOUT):
         async_to_sync(generate_prompts)()
 
 
-@app.task(task_time_limit=config.PROMPT_ANSWERING_TIMEOUT)
+@app.task()
 def llm_prompt_answering():
     unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
 
@@ -1088,7 +1088,7 @@ def init_workload(seed: int) -> tuple[SolveWorkload, str]:
     return SolveWorkload(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url), s3_upload_url
 
 
-@app.task(task_time_limit=config.PROMPT_SAMPLING_TIMEOUT)
+@app.task()
 def llm_prompt_sampling():
     # generate new prompt samples if needed
     num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()

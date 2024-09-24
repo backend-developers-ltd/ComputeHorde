@@ -247,22 +247,6 @@ CONSTANCE_CONFIG = {
         ),
         str,
     ),
-    # TODO: move to executor config
-    "PROMPT_GENERATION_TIMEOUT": (
-        600,
-        "How many seconds to wait for prompt generation to finish",
-        int,
-    ),
-    "PROMPT_ANSWERING_TIMEOUT": (
-        600,
-        "How many seconds to wait for prompt answering to finish",
-        int,
-    ),
-    "PROMPT_SAMPLING_TIMEOUT": (
-        600,
-        "How many seconds to wait for prompt sampling to finish",
-        int,
-    ),
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 

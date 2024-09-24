@@ -1,6 +1,5 @@
 import functools
 import logging
-from collections.abc import Generator
 
 import boto3
 import httpx
@@ -55,7 +54,7 @@ def upload_prompts_to_s3_url(s3_url: str, content: str) -> bool:
     return True
 
 
-def download_prompts_from_s3_url(s3_url: str) -> Generator[tuple[str, list[str]]]:
+def download_prompts_from_s3_url(s3_url: str) -> list[str]:
     response = requests.get(s3_url)
     if response.status_code != 200:
         logger.warning(f"Failed to download prompts from {s3_url}")
@@ -63,7 +62,7 @@ def download_prompts_from_s3_url(s3_url: str) -> Generator[tuple[str, list[str]]
     return response.text.split("\n")
 
 
-async def download_file_content(s3_url: str):
+async def download_file_content(s3_url: str) -> bytes:
     async with httpx.AsyncClient() as client:
         response = await client.get(s3_url, timeout=5)
         response.raise_for_status()
