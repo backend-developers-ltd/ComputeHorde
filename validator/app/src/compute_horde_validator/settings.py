@@ -167,8 +167,23 @@ CONSTANCE_CONFIG = {
         bool,
     ),
     "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": (
-        370,
+        722,
         "In blocks. This should be synced with the hyperparam",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET": (
+        361,
+        "Do not commit weights for this many blocks from the start of the interval",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER": (
+        15,
+        "Do not commit weights if there are less than this many blocks left in the commit window",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER": (
+        15,
+        "Do not reveal weights if there are less than this many blocks left in the reveal window",
         int,
     ),
     "DYNAMIC_MAX_WEIGHT": (
