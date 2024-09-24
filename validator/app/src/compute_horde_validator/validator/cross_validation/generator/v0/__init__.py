@@ -10,7 +10,7 @@ class PromptJobGenerator(BasePromptJobGenerator):
         return 0
 
     def timeout_seconds(self) -> int:
-        return 3600
+        return 5 * 60
 
     def docker_image_name(self) -> str:
         return f"backenddevelopersltd/compute-horde-prompt-gen-{settings.PROMPT_GENERATION_MODEL}:v0-latest"
