@@ -82,10 +82,11 @@ HASHJOB_PARAMS = {
         Algorithm.SHA512: JobParams(timeout=45, num_letters=5, num_digits=0, num_hashes=1),
     },
     1: {
-        Algorithm.SHA256: JobParams(timeout=53, num_letters=6, num_digits=0, num_hashes=100),
-        Algorithm.SHA384: JobParams(timeout=53, num_letters=5, num_digits=1, num_hashes=100),
-        Algorithm.SHA512: JobParams(timeout=53, num_letters=5, num_digits=1, num_hashes=100),
+        Algorithm.SHA256: JobParams(timeout=153, num_letters=5, num_digits=0, num_hashes=3),
+        Algorithm.SHA384: JobParams(timeout=153, num_letters=5, num_digits=0, num_hashes=3),
+        Algorithm.SHA512: JobParams(timeout=153, num_letters=5, num_digits=0, num_hashes=3),
     },
 }
 HASHJOB_PARAMS[2] = HASHJOB_PARAMS[1]
 HASHJOB_PARAMS[3] = HASHJOB_PARAMS[1]
+HASHJOB_PARAMS[4] = HASHJOB_PARAMS[1]
