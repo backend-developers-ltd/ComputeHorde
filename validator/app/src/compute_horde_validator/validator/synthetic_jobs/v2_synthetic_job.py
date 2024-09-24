@@ -21,6 +21,7 @@ from compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
 @dataclass
 class V2SyntheticJob(SyntheticJob):
     algorithms: list[Algorithm]
+    first_password: str
     passwords: list[list[str]]
     salts: list[bytes]
     params: list[JobParams]
@@ -53,6 +54,7 @@ class V2SyntheticJob(SyntheticJob):
         return cls(
             algorithms=algorithms,
             params=params,
+            first_password=cls.random_string(num_letters=100, num_digits=0),
             passwords=passwords,
             salts=[secrets.token_bytes(salt_length_bytes) for _ in range(len(algorithms))],
         )
@@ -83,13 +85,14 @@ class V2SyntheticJob(SyntheticJob):
     def _payloads(self) -> list[str]:
         payloads = []
         for i in range(len(self.algorithms)):
-            # start with unencrypted payload
             if i == 0:
-                payloads.append(self._payload(i))
-                continue
-            # encrypt subsequent payloads with previous payload's passwords
-            prev_passwords = "\n".join(self.passwords[i - 1])
-            encrypted_payload = self._encrypt(prev_passwords, self._payload(i))
+                # encrypt first payload with key passed in the actual job request
+                key = self.first_password
+            else:
+                # encrypt subsequent payloads with previous payload's passwords
+                key = "\n".join(self.passwords[i - 1])
+
+            encrypted_payload = self._encrypt(key, self._payload(i))
             payloads.append(encrypted_payload)
         return payloads
 
@@ -108,7 +111,7 @@ class V2SyntheticJob(SyntheticJob):
         return pickle.dumps(data)
 
     def docker_run_cmd(self) -> list[str]:
-        return ["/script.py"]
+        return ["/script.py", self.first_password]
 
     def raw_script(self) -> str:
         with open(Path(__file__).parent / "v2_decrypt.py") as file:

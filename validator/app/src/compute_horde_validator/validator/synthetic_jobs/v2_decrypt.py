@@ -2,6 +2,7 @@ import hashlib
 import pickle
 import subprocess
 from base64 import b64encode
+from sys import argv
 
 from cryptography.fernet import Fernet
 
@@ -20,6 +21,7 @@ def hash(s: bytes) -> bytes:
 
 
 with open("/volume/payload.txt", "rb") as file:
+    first_key = argv[1]
     data = pickle.load(file)
 
     answers = []
@@ -28,11 +30,15 @@ with open("/volume/payload.txt", "rb") as file:
         mask = data["masks"][i]
         algorithm = data["algorithms"][i]
 
-        if i > 0:
+        if i == 0:
+            # decrypt first payload with received key
+            key = b64encode(hashlib.sha256(first_key.encode("utf-8")).digest(), altchars=b"-_")
+        else:
             # decrypt payload with previous cracked passwords
             passwords = "\n".join(answers[-1]).encode("utf-8")
             key = b64encode(hashlib.sha256(passwords).digest(), altchars=b"-_")
-            payload = Fernet(key).decrypt(payload).decode("utf-8")
+
+        payload = Fernet(key).decrypt(payload).decode("utf-8")
 
         with open("_payload.txt", mode="wb") as f:
             f.write(payload.encode("utf-8"))
@@ -42,6 +48,7 @@ with open("/volume/payload.txt", "rb") as file:
         passwords = [p for p in sorted(passwords.split("\n")) if p != ""]
         answers.append(passwords)
 
+    # The answer to the job is the whole stdout, so this should be the only thing that prints anything in this script.
     print(
         hash("".join(["".join(passwords) for passwords in answers]).encode("utf-8")).decode("utf-8")
     )
