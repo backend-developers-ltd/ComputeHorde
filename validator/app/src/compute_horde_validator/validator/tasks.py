@@ -52,8 +52,8 @@ from compute_horde_validator.validator.organic_jobs.miner_client import MinerCli
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
 from compute_horde_validator.validator.s3 import (
     download_prompts_from_s3_url,
-    generate_download_url,
     generate_upload_url,
+    get_public_url,
     upload_prompts_to_s3_url,
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
@@ -1081,7 +1081,7 @@ def init_workload(seed: int) -> tuple[SolveWorkload, str]:
         key=str(workload_uuid), bucket_name=settings.S3_BUCKET_NAME_ANSWERS
     )
     # generate an s3 url to download workload prompts to be answered
-    s3_url = generate_download_url(
+    s3_url = get_public_url(
         key=str(workload_uuid),
         bucket_name=settings.S3_BUCKET_NAME_ANSWERS,
     )
