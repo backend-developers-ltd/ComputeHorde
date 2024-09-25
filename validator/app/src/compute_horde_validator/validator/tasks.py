@@ -6,6 +6,7 @@ import time
 import traceback
 import uuid
 from datetime import timedelta
+from functools import cached_property
 from math import ceil, floor
 
 import billiard.exceptions
@@ -191,6 +192,85 @@ def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
         )
 
     return range(first_epoch.start, second_epoch.stop)
+
+
+class CommitRevealInterval:
+    """
+    Commit-reveal interval for a given block.
+
+    722                                    1444                                   2166
+    |______________________________________|______________________________________|
+    ^-1                                    ^-2                                    ^-3
+
+    ^                     ^                ^                                      ^
+    interval start        actual commit    interval end / reveal starts           ends
+
+    Subtensor uses the actual subnet hyperparam to determine the interval:
+    https://github.com/opentensor/subtensor/blob/af585b9b8a17d27508431257052da502055477b7/pallets/subtensor/src/subnets/weights.rs#L482
+
+    Each interval is divided into reveal and commit windows based on dynamic parameters:
+
+    722                                                                          1443
+    |______________________________________|_______________________________________|
+    ^                                      ^                              ^
+    |-----------------------------|--------|------------------------------|-------_|
+    |       REVEAL WINDOW         | BUFFER |        COMMIT WINDOW         | BUFFER |
+    |                                      |
+    |            COMMIT OFFSET             |
+
+    """
+
+    def __init__(
+        self,
+        current_block: int,
+        *,
+        length: int | None = None,
+        commit_start_offset: int | None = None,
+        commit_end_buffer: int | None = None,
+        reveal_end_buffer: int | None = None,
+    ):
+        self.current_block = current_block
+        self.length = length or config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
+        self.commit_start_offset = (
+            commit_start_offset or config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
+        )
+        self.commit_end_buffer = commit_end_buffer or config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER
+        self.reveal_end_buffer = reveal_end_buffer or config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER
+
+    @cached_property
+    def start(self):
+        """
+        https://github.com/opentensor/subtensor/blob/af585b9b8a17d27508431257052da502055477b7/pallets/subtensor/src/subnets/weights.rs#L488
+        """
+        return self.current_block - self.current_block % self.length
+
+    @cached_property
+    def stop(self):
+        return self.start + self.length
+
+    @property
+    def reveal_start(self):
+        return self.start
+
+    @cached_property
+    def reveal_stop(self):
+        return self.start + self.commit_start_offset - self.reveal_end_buffer
+
+    @property
+    def reveal_window(self):
+        return range(self.reveal_start, self.reveal_stop)
+
+    @cached_property
+    def commit_start(self):
+        return self.start + self.commit_start_offset
+
+    @cached_property
+    def commit_stop(self):
+        return self.stop - self.commit_end_buffer
+
+    @property
+    def commit_window(self):
+        return range(self.commit_start, self.commit_stop)
 
 
 @app.task
@@ -431,33 +511,9 @@ def do_set_weights(
     current_block = subtensor_.get_current_block()
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
-    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
     max_weight = config.DYNAMIC_MAX_WEIGHT
 
     def _commit_weights() -> tuple[bool, str]:
-        last_weights = Weights.objects.order_by("-created_at").first()
-        if (
-            last_weights
-            and last_weights.revealed_at is None
-            and last_weights.block >= current_block - commit_reveal_weights_interval * 1.5
-        ):
-            # ___|______________________|______________________|____________________
-            #    ^-commit weights       ^-time to reveal       ^-2x time to reveal
-            #    |_________________________________|_______________________________
-            #     impossible to commit new weights     can commit new weights
-            #     unless last weights are revealed     no matter what
-            save_weight_setting_failure(
-                subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_UNREVEALED_ERROR,
-                long_description="Cannot commit new weights before revealing old ones",
-                data={
-                    "uncommited_weights_id": last_weights.id,
-                    "created_at": str(last_weights.created_at),
-                    "block": last_weights.block,
-                    "current_block": current_block,
-                    "commit_reveal_weights_interval": commit_reveal_weights_interval,
-                },
-            )
-            return False, "Cannot commit new weights before revealing old ones"
         normalized_weights = _normalize_weights_for_committing(weights, max_weight)
         weights_in_db = Weights(
             uids=uids,
@@ -650,6 +706,26 @@ def get_metagraph(subtensor, netuid):
 
 @app.task
 def set_scores():
+    if not config.SERVING:
+        logger.warning("Not setting scores, SERVING is disabled in constance config")
+        return
+
+    commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
+
+    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor.get_current_block()
+
+    if commit_reveal_weights_enabled:
+        interval = CommitRevealInterval(current_block)
+
+        if current_block not in interval.commit_window:
+            logger.debug(
+                "Outside of commit window, skipping, current block: %s, window: %s",
+                current_block,
+                interval.commit_window,
+            )
+            return
+
     with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR):
         with transaction.atomic():
             try:
@@ -657,22 +733,18 @@ def set_scores():
             except Locked:
                 logger.debug("Another thread already setting weights")
                 return
-            if not config.SERVING:
-                logger.warning("Not setting scores, SERVING is disabled in constance config")
-                return
 
-            subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
             metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
             neurons = metagraph.neurons
             hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
             score_per_uid = {}
             batches = list(
-                SyntheticJobBatch.objects.prefetch_related("synthetic_jobs")
+                SyntheticJobBatch.objects.select_related("cycle")
+                .prefetch_related("synthetic_jobs")
                 .filter(
                     scored=False,
                     started_at__gte=now() - timedelta(days=1),
-                    accepting_results_until__lt=now(),
-                    cycle__isnull=False,
+                    cycle__stop__lt=current_block,
                 )
                 .order_by("-started_at")
             )
@@ -686,19 +758,12 @@ def set_scores():
                     batch.save()
                 batches = [batches[-1]]
 
-            if subtensor.get_current_block() <= batches[-1].cycle.stop:
-                logger.debug(
-                    "There is a batch ready to be scored but we're "
-                    "waiting for the beginning of next cycle to set weights"
-                )
-                return
-
             hotkey_scores = score_batches(batches)
             for hotkey, score in hotkey_scores.items():
                 uid = hotkey_to_uid.get(hotkey)
                 if uid is None:
                     continue
-                score_per_uid[uid] = uid
+                score_per_uid[uid] = score
 
             if not score_per_uid:
                 logger.info("No miners on the subnet to score")
@@ -780,23 +845,49 @@ def reveal_scores() -> None:
     Select latest Weights that are older than `commit_reveal_weights_interval`
     and haven't been revealed yet, and reveal them.
     """
+    last_weights = Weights.objects.order_by("-created_at").first()
+    if not last_weights or last_weights.revealed_at is not None:
+        return
+
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor_.get_current_block()
+    interval = CommitRevealInterval(current_block)
+    if current_block not in interval.reveal_window:
+        logger.debug(
+            "Outside of reveal window, skipping, current block: %s, window: %s",
+            current_block,
+            interval.reveal_window,
+        )
+        return
+
+    # find the interval in which the commit occurred
+    block_interval = CommitRevealInterval(last_weights.block)
+    # revealing starts in the next interval
+    reveal_start = block_interval.stop
+
+    if current_block < reveal_start:
+        logger.warning(
+            "Too early to reveal weights weights_id: %s, reveal starts: %s, current block: %s",
+            last_weights.pk,
+            reveal_start,
+            current_block,
+        )
+        return
+
+    reveal_end = reveal_start + block_interval.length
+    if current_block > reveal_end:
+        logger.error(
+            "Weights are too old to be revealed weights_id: %s, reveal_ended: %s, current block: %s",
+            last_weights.pk,
+            reveal_end,
+            current_block,
+        )
+        return
+
     WEIGHT_REVEALING_TTL = config.DYNAMIC_WEIGHT_REVEALING_TTL
     WEIGHT_REVEALING_HARD_TTL = config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL
     WEIGHT_REVEALING_ATTEMPTS = config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS
     WEIGHT_REVEALING_FAILURE_BACKOFF = config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF
-
-    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
-
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor_.get_current_block()
-
-    last_weights = Weights.objects.order_by("-created_at").first()
-    if not last_weights:
-        return
-    if last_weights.revealed_at is not None:
-        return
-    if last_weights.block > current_block - commit_reveal_weights_interval:
-        return
 
     weights_id = last_weights.id
     with transaction.atomic():
@@ -992,39 +1083,46 @@ def fetch_receipts():
 
 @shared_task
 def send_events_to_facilitator():
-    events = SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(sent=False)
-    if events.count() == 0:
-        return
+    with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
+        events = (
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
+            .filter(sent=False)
+            .select_for_update(skip_locked=True)
+        )[:10_000]
+        if events.count() == 0:
+            return
 
-    if settings.STATS_COLLECTOR_URL == "":
-        logger.warning("STATS_COLLECTOR_URL is not set, not sending system events")
-        return
+        if settings.STATS_COLLECTOR_URL == "":
+            logger.warning("STATS_COLLECTOR_URL is not set, not sending system events")
+            return
 
-    keypair = get_keypair()
-    hotkey = keypair.ss58_address
-    signing_timestamp = int(time.time())
-    to_sign = json.dumps(
-        {"signing_timestamp": signing_timestamp, "validator_ss58_address": hotkey},
-        sort_keys=True,
-    )
-    signature = f"0x{keypair.sign(to_sign).hex()}"
+        keypair = get_keypair()
+        hotkey = keypair.ss58_address
+        signing_timestamp = int(time.time())
+        to_sign = json.dumps(
+            {"signing_timestamp": signing_timestamp, "validator_ss58_address": hotkey},
+            sort_keys=True,
+        )
+        signature = f"0x{keypair.sign(to_sign).hex()}"
+        events = list(events)
+        data = [event.to_dict() for event in events]
+        url = settings.STATS_COLLECTOR_URL + f"validator/{hotkey}/system_events"
+        response = requests.post(
+            url,
+            json=data,
+            headers={
+                "Validator-Signature": signature,
+                "Validator-Signing-Timestamp": str(signing_timestamp),
+            },
+        )
 
-    data = [event.to_dict() for event in events]
-    url = settings.STATS_COLLECTOR_URL + f"validator/{hotkey}/system_events"
-    response = requests.post(
-        url,
-        json=data,
-        headers={
-            "Validator-Signature": signature,
-            "Validator-Signing-Timestamp": str(signing_timestamp),
-        },
-    )
-
-    if response.status_code == 201:
-        logger.info(f"Sent {len(data)} system events to facilitator")
-        events.update(sent=True)
-    else:
-        logger.error(f"Failed to send system events to facilitator: {response}")
+        if response.status_code == 201:
+            logger.info(f"Sent {len(data)} system events to facilitator")
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(
+                id__in=[event.id for event in events]
+            ).update(sent=True)
+        else:
+            logger.error(f"Failed to send system events to facilitator: {response}")
 
 
 @app.task
