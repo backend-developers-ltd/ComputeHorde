@@ -543,18 +543,20 @@ class JobRunner:
             elif path.is_dir():
                 shutil.rmtree(path)
 
-        if job_request.volume is not None:
-            if isinstance(job_request.volume, InlineVolume):
-                await self._unpack_inline_volume(job_request.volume)
-            elif isinstance(job_request.volume, ZipUrlVolume):
-                await self._unpack_zip_url_volume(job_request.volume)
-            elif isinstance(job_request.volume, SingleFileVolume):
-                await self._unpack_single_file_volume(job_request.volume)
-            elif isinstance(job_request.volume, MultiVolume):
-                await self._unpack_multi_volume(job_request.volume)
+        volume = job_request.volume or self.initial_job_request.volume
+
+        if volume is not None:
+            if isinstance(volume, InlineVolume):
+                await self._unpack_inline_volume(volume)
+            elif isinstance(volume, ZipUrlVolume):
+                await self._unpack_zip_url_volume(volume)
+            elif isinstance(volume, SingleFileVolume):
+                await self._unpack_single_file_volume(volume)
+            elif isinstance(volume, MultiVolume):
+                await self._unpack_multi_volume(volume)
             else:
                 raise NotImplementedError(
-                    f"Unsupported volume_type: {job_request.volume.volume_type}"
+                    f"Unsupported volume_type: {volume.volume_type}"
                 )
 
         chmod_proc = await asyncio.create_subprocess_exec(

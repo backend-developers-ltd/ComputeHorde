@@ -316,7 +316,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                     ).model_dump_json()
                 )
                 return
-            if job.initial_job_details.get("volume") is not None:
+            if job.initial_job_details.get("volume") is not None and msg.volume is not None:
                 # The volume may have been already sent in the initial job request.
                 error_msg = f"Received job volume twice job_uuid: {msg.job_uuid}"
                 logger.error(error_msg)
