@@ -4,9 +4,9 @@ import pytest
 from moto import mock_aws
 
 from compute_horde_validator.validator.s3 import (
+    download_prompts_from_s3_url,
     generate_download_url,
     generate_upload_url,
-    get_prompts_from_s3_url,
     get_public_url,
     get_s3_client,
 )
@@ -94,7 +94,7 @@ def test_get_public_url(
         (404, "Not Found", []),
     ],
 )
-def test_get_prompts_from_s3_url(status_code, content, expected):
+def test_download_prompts_from_s3_url(status_code, content, expected):
     with patch("requests.get") as mock_get:
         # Mock the requests.get response
         mock_response = MagicMock()
@@ -102,7 +102,7 @@ def test_get_prompts_from_s3_url(status_code, content, expected):
         mock_response.text = content
         mock_get.return_value = mock_response
 
-        result = get_prompts_from_s3_url("https://fake-s3-url.com/prompts.txt")
+        result = download_prompts_from_s3_url("https://fake-s3-url.com/prompts.txt")
         assert result == expected
 
         mock_get.assert_called_once_with("https://fake-s3-url.com/prompts.txt")

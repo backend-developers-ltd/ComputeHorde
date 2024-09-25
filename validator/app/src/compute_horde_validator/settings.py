@@ -43,6 +43,8 @@ if env("ENV", default=None) is None:
 
 ENV = env("ENV", default="prod")
 
+PROMPT_GENERATION_MODEL = env("PROMPT_GENERATION_MODEL", default="phi3")
+
 DEFAULT_ADMIN_PASSWORD = env("DEFAULT_ADMIN_PASSWORD", default=None)
 DEFAULT_ADMIN_USERNAME = env("DEFAULT_ADMIN_USERNAME", default="admin")
 DEFAULT_ADMIN_EMAIL = env("DEFAULT_ADMIN_EMAIL", default="admin@admin.com")
@@ -201,29 +203,37 @@ CONSTANCE_CONFIG = {
         "in seconds",
         int,
     ),
-    "DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES": (
-        10,
-        "how many prompts to sample and validate from a series",
-        int,
-    ),
-    "DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE": (
-        100,
-        "how many workloads are needed before running local inference",
-        int,
-    ),
-    "DYNAMIC_MAX_PROMPT_BATCHES": (
+    # llama params
+    "DYNAMIC_MAX_PROMPT_SERIES": (
         10000,
-        "Maximum number of prompt batches upon which the prompt generator will not be triggered",
+        "Maximum number of prompt series upon which the prompt generator will not be triggered",
         int,
     ),
-    "DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO": (
-        5,
+    "DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY": (
+        250,
+        "how many prompt samples to generate (should be larger than how many prompts series we use per synthetic run)",
+        int,
+    ),
+    "DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD": (
+        240,
+        "how many prompts to answer in a single workload",
+        int,
+    ),
+    # prompt generation params
+    "DYNAMIC_PROMPTS_SERIES_IN_A_SINGLE_GENERATION": (
+        25,
         "Number of batches that prompt generator will process in a single go",
         int,
     ),
-    "DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH": (
+    "DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES": (
         240,
-        "Number of prompts to generate in a single batch",
+        "Number of prompts to generate in a single series",
+        int,
+    ),
+    # prompts answering params
+    "DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES": (
+        1,
+        "how many prompts to sample and answer from a series",
         int,
     ),
     "DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS": (
@@ -403,6 +413,21 @@ CELERY_BEAT_SCHEDULE = {  # type: ignore
         "schedule": timedelta(minutes=5),
         "options": {},
     },
+    # "llm_prompt_generation": {
+    #     "task": "compute_horde_validator.validator.tasks.llm_prompt_generation",
+    #     "schedule": timedelta(minutes=10),
+    #     "options": {},
+    # },
+    # "llm_prompt_sampling": {
+    #     "task": "compute_horde_validator.validator.tasks.llm_prompt_sampling",
+    #     "schedule": timedelta(minutes=10),
+    #     "options": {},
+    # },
+    # "llm_prompt_answering": {
+    #     "task": "compute_horde_validator.validator.tasks.llm_prompt_answering",
+    #     "schedule": timedelta(minutes=10),
+    #     "options": {},
+    # },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
@@ -504,17 +529,6 @@ DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 
-# prompt gen sampling
-DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES = env.int(
-    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES", default=None
-)
-DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES = env.int(
-    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_IN_BATCH", default=None
-)
-DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE = env.int(
-    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE", default=None
-)
-
 # synthetic jobs are evenly distributed through the cycle, however
 # we start them from some offset because scheduling takes some time
 SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
@@ -538,9 +552,9 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
 
 
 # Local miner generating prompts
-GENERATION_MINER_KEY = env.str("GENERATION_MINER_KEY", default="")
-GENERATION_MINER_ADDRESS = env.str("GENERATION_MINER_ADDRESS", default="")
-GENERATION_MINER_PORT = env.int("GENERATION_MINER_PORT", default=0)
+TRUSTED_MINER_KEY = env.str("TRUSTED_MINER_KEY", default="")
+TRUSTED_MINER_ADDRESS = env.str("TRUSTED_MINER_ADDRESS", default="")
+TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
 
 CHANNEL_LAYERS = {

@@ -2,11 +2,7 @@ import uuid
 from collections.abc import Callable
 
 import pytest
-import pytest_asyncio
 from compute_horde.base.output_upload import MultiUpload
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.miner_client.organic import OrganicJobError, OrganicMinerClient
-from compute_horde.mv_protocol import miner_requests
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
@@ -17,69 +13,11 @@ pytestmark = [
     pytest.mark.asyncio,
     pytest.mark.django_db(transaction=True),
     pytest.mark.override_config(
-        DYNAMIC_MAX_PROMPT_BATCHES=5,
-        DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO=3,
-        DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH=99,
+        DYNAMIC_MAX_PROMPT_SERIES=5,
+        DYNAMIC_PROMPTS_SERIES_IN_A_SINGLE_GENERATION=3,
+        DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES=99,
     ),
 ]
-
-
-@pytest_asyncio.fixture
-async def transport():
-    return MinerSimulationTransport("miner_hotkey")
-
-
-@pytest.fixture
-def job_uuid():
-    return uuid.uuid4()
-
-
-@pytest.fixture
-def create_miner_client(transport: MinerSimulationTransport):
-    def _create(*args, **kwargs):
-        kwargs["transport"] = transport
-        return OrganicMinerClient(*args, **kwargs)
-
-    return _create
-
-
-@pytest.fixture
-def manifest_message():
-    return miner_requests.V0ExecutorManifestRequest(
-        manifest=miner_requests.ExecutorManifest(
-            executor_classes=[
-                miner_requests.ExecutorClassManifest(executor_class=DEFAULT_EXECUTOR_CLASS, count=1)
-            ]
-        )
-    ).model_dump_json()
-
-
-@pytest.fixture
-def executor_ready_message(job_uuid: uuid.UUID):
-    return miner_requests.V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
-
-
-@pytest.fixture
-def accept_job_message(job_uuid: uuid.UUID):
-    return miner_requests.V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
-
-
-@pytest.fixture
-def job_finish_message(job_uuid: uuid.UUID):
-    return miner_requests.V0JobFinishedRequest(
-        job_uuid=str(job_uuid),
-        docker_process_stdout="",
-        docker_process_stderr="",
-    ).model_dump_json()
-
-
-@pytest.fixture
-def job_failed_message(job_uuid: uuid.UUID):
-    return miner_requests.V0JobFailedRequest(
-        job_uuid=str(job_uuid),
-        docker_process_stdout="",
-        docker_process_stderr="",
-    ).model_dump_json()
 
 
 async def test_generate_prompts(
@@ -146,10 +84,9 @@ async def test_generate_prompts_job_failed(
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(job_failed_message, send_before=2)
 
-    with pytest.raises(OrganicJobError):
-        await generate_prompts(
-            create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
-        )
+    await generate_prompts(
+        create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
+    )
 
     assert not await PromptSeries.objects.aexists()
 
@@ -162,25 +99,8 @@ async def test_generate_prompts_timeout(
 ):
     await transport.add_message(manifest_message, send_before=1)
 
-    with pytest.raises(OrganicJobError):
-        await generate_prompts(
-            create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=0.5
-        )
-
-    assert not await PromptSeries.objects.aexists()
-
-
-async def test_generate_prompts_max_batches_reached(
-    create_miner_client: Callable,
-    job_uuid: uuid.UUID,
-):
-    existing = []
-    for _ in range(5):
-        existing.append(PromptSeries(s3_url="", generator_version=1))
-    await PromptSeries.objects.abulk_create(existing)
-
     await generate_prompts(
         create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=0.5
     )
 
-    assert await PromptSeries.objects.acount() == 5
+    assert not await PromptSeries.objects.aexists()

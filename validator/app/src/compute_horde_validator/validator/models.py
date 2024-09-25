@@ -325,7 +325,7 @@ class SolveWorkload(models.Model):
     finished_at = models.DateTimeField(null=True, default=None, db_index=True)
 
     def __str__(self):
-        return f"uuid: {self.batch_uuid} - synthetic_job_batch: {self.synthetic_job_batch} - seed: {self.seed}"
+        return f"uuid: {self.workload_uuid} - seed: {self.seed}"
 
 
 class PromptSample(models.Model):

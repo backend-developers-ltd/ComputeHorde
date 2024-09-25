@@ -1,6 +1,5 @@
 import uuid
 
-import httpx
 import pydantic
 from compute_horde.base.output_upload import MultiUpload, OutputUpload, SingleFilePutUpload
 from compute_horde.base.volume import MultiVolume, SingleFileVolume, Volume
@@ -8,28 +7,28 @@ from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
 
 from compute_horde_validator.validator.models import Prompt, PromptSample
-from compute_horde_validator.validator.s3 import generate_upload_url, get_public_url
+from compute_horde_validator.validator.s3 import (
+    download_file_content,
+    generate_upload_url,
+    get_public_url,
+)
 
 from .base import BaseSyntheticJobGenerator
 
 
-class LlmPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
+class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
     def __init__(
         self,
-        prompt_sample: PromptSample,
-        expected_prompts: list[Prompt],
         s3_url: str,
         seed: int,
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        self.prompt_sample: PromptSample = prompt_sample
         self.seed = seed
-        self.expected_prompts: list[Prompt] = expected_prompts
         self.s3_url = s3_url
-        self.input_filename = str(uuid.uuid4()) + ".txt"
-        self.s3_output_key = str(uuid.uuid4()) + ".json"
+        file_uuid = str(uuid.uuid4())
+        self.input_filename = file_uuid + ".txt"
+        self.s3_output_key = file_uuid + ".json"
         self.s3_output_prefix = "solved/"
         self.s3_output_bucket = settings.S3_BUCKET_NAME_ANSWERS
 
@@ -93,12 +92,35 @@ class LlmPromptsSyntheticJobGenerator(BaseSyntheticJobGenerator):
         )
 
     async def _download_answers(self):
-        async with httpx.AsyncClient() as client:
-            response = await client.get(self._url_for_download(), timeout=5)
-            response.raise_for_status()
-            self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(
-                response.content
-            )
+        response = await download_file_content(self._url_for_download())
+        self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(response)
+
+    def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
+        # just check if there are any answers
+        if self.prompt_answers == {}:
+            return False, "no answers", 0.0
+        return True, "answers exist", 1.0
+
+    def job_description(self) -> str:
+        return "LLM prompts job"
+
+
+class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
+    def __init__(
+        self,
+        prompt_sample: PromptSample,
+        expected_prompts: list[Prompt],
+        s3_url: str,
+        seed: int,
+        **kwargs,
+    ):
+        super().__init__(
+            s3_url=s3_url,
+            seed=seed,
+            **kwargs,
+        )
+        self.prompt_sample: PromptSample = prompt_sample
+        self.expected_prompts: list[Prompt] = expected_prompts
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         for expected_prompt in self.expected_prompts:
