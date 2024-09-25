@@ -19,6 +19,10 @@ def route_task(name, args, kwargs, options, task=None, **kw):
         "compute_horde_validator.validator.tasks.fetch_receipts_from_miner",
         "compute_horde_validator.validator.tasks.send_events_to_facilitator",
         "compute_horde_validator.validator.tasks.fetch_dynamic_config",
+        # TODO: llm tasks should have dedicated workers, but just move them from default queue for now
+        "compute_horde_validator.validator.tasks.llm_prompt_generation",
+        "compute_horde_validator.validator.tasks.llm_prompt_sampling",
+        "compute_horde_validator.validator.tasks.llm_prompt_answering",
     }
     if name in worker_queue_names:
         return {"queue": "worker"}

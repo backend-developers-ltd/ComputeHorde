@@ -1133,8 +1133,17 @@ def fetch_dynamic_config() -> None:
     )
 
 
-@app.task()
+@app.task(
+    soft_time_limit=4 * 60 + 40,
+    time_limit=5 * 60,
+)
 def llm_prompt_generation():
+    unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True).count()
+    if unprocessed_workloads > 0:
+        # prevent any starvation issues
+        logger.info("Uprocessed workloads found - skipping prompt generation")
+        return
+
     num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES
     num_prompt_series = PromptSeries.objects.count()
 
@@ -1157,11 +1166,16 @@ def llm_prompt_generation():
         async_to_sync(generate_prompts)()
 
 
-@app.task()
+@app.task(
+    soft_time_limit=4 * 60 + 40,
+    time_limit=5 * 60,
+)
 def llm_prompt_answering():
     unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
 
+    times = []
     for workload in unprocessed_workloads:
+        start = time.time()
         with transaction.atomic():
             try:
                 get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
@@ -1170,6 +1184,11 @@ def llm_prompt_answering():
                 return
 
             async_to_sync(answer_prompts)(workload)
+        times.append(time.time() - start)
+        total_time = sum(time)
+        avg_time = total_time / len(times)
+        if total_time + avg_time > 4 * 60 + 20:
+            return
 
 
 def init_workload(seed: int) -> tuple[SolveWorkload, str]:
@@ -1189,6 +1208,15 @@ def init_workload(seed: int) -> tuple[SolveWorkload, str]:
 @app.task()
 def llm_prompt_sampling():
     # generate new prompt samples if needed
+
+    num_prompt_series = PromptSeries.objects.count()
+    required_series_to_start_sampling = min(config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY * 2, config.DYNAMIC_MAX_PROMPT_SERIES)
+    if num_prompt_series < required_series_to_start_sampling:
+        logger.warning(
+            "There are %s series in the db - expected %s for start sampling - skipping prompt sampling",
+            num_prompt_series, required_series_to_start_sampling
+        )
+        return
     num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()
     num_needed_prompt_samples = (
         config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY - num_unused_prompt_samples
