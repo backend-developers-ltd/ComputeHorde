@@ -90,7 +90,7 @@ def test_get_public_url(
     [
         (200, "prompt1\nprompt2\nprompt3", ["prompt1", "prompt2", "prompt3"]),
         (200, "single_prompt", ["single_prompt"]),
-        (200, "", [""]),
+        (200, "", []),
         (404, "Not Found", []),
     ],
 )
