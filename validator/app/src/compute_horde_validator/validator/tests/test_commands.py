@@ -85,7 +85,7 @@ def test_debug_run_organic_job_command__job_not_created():
     Miner.objects.create(hotkey="miner_client")
 
     with redirect_stdout(io.StringIO()) as buf:
-        with pytest.raises(BaseException):
+        with pytest.raises(SystemExit):
             management.call_command(
                 "debug_run_organic_job", docker_image="noop", timeout=4, cmd_args=""
             )
