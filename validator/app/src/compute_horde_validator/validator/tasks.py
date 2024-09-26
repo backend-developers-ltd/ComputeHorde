@@ -850,6 +850,7 @@ def reveal_scores() -> None:
     """
     last_weights = Weights.objects.order_by("-created_at").first()
     if not last_weights or last_weights.revealed_at is not None:
+        logger.debug("No weights to reveal")
         return
 
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
