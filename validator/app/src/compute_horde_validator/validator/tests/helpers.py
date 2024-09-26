@@ -208,11 +208,7 @@ class MockSubtensor:
         mocked_commit_weights=lambda: (True, ""),
         mocked_reveal_weights=lambda: (True, ""),
         mocked_metagraph=lambda: MockMetagraph(),
-        hyperparameters=MockHyperparameters(
-            commit_reveal_weights_enabled=False,
-            commit_reveal_weights_interval=1000,
-            max_weight_limit=65535,
-        ),
+        hyperparameters=None,
         block_duration=timedelta(seconds=1),
         override_block_number=None,
         increase_block_number_with_each_call=False,
@@ -222,7 +218,11 @@ class MockSubtensor:
         self.mocked_commit_weights = mocked_commit_weights
         self.mocked_reveal_weights = mocked_reveal_weights
         self.mocked_metagraph = mocked_metagraph
-        self.hyperparameters = hyperparameters
+        self.hyperparameters = hyperparameters or MockHyperparameters(
+            commit_reveal_weights_enabled=False,
+            commit_reveal_weights_interval=1000,
+            max_weight_limit=65535,
+        )
         self.weights_set: list[list[numbers.Number]] = []
         self.weights_committed: list[list[numbers.Number]] = []
         self.weights_revealed: list[list[numbers.Number]] = []

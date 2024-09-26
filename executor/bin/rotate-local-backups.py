@@ -18,7 +18,7 @@ def rotate_backups(path, file_count):
     files = files[:-file_count]
     if files:
         print(f"Removing {len(files)} old files")
-        for mtime, f in files:
+        for _mtime, f in files:
             f.unlink()
     else:
         print("No old files to remove")
