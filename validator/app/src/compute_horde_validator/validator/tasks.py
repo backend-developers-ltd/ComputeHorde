@@ -1210,11 +1210,14 @@ def llm_prompt_sampling():
     # generate new prompt samples if needed
 
     num_prompt_series = PromptSeries.objects.count()
-    required_series_to_start_sampling = min(config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY * 2, config.DYNAMIC_MAX_PROMPT_SERIES)
+    required_series_to_start_sampling = min(
+        config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY * 2, config.DYNAMIC_MAX_PROMPT_SERIES
+    )
     if num_prompt_series < required_series_to_start_sampling:
         logger.warning(
             "There are %s series in the db - expected %s for start sampling - skipping prompt sampling",
-            num_prompt_series, required_series_to_start_sampling
+            num_prompt_series,
+            required_series_to_start_sampling,
         )
         return
     num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()
