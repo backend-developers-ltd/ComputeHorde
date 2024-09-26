@@ -551,7 +551,10 @@ def do_set_weights(
             save_weight_setting_failure(
                 subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
                 long_description=f"message from chain: {message}",
-                data={"weights_id": weights_in_db.id},
+                data={
+                    "weights_id": weights_in_db.id,
+                    "current_block": current_block,
+                },
             )
         return is_success, message
 
@@ -987,11 +990,20 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
             data={"weights_id": weights.id},
         )
     else:
-        save_weight_setting_failure(
-            subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
-            long_description=message,
-            data={"weights_id": weights.id},
-        )
+        try:
+            current_block = subtensor_.get_current_block()
+        except Exception as e:
+            logger.warning("Failed to get current block: %s", e)
+            current_block = "unknown"
+        finally:
+            save_weight_setting_failure(
+                subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
+                long_description=message,
+                data={
+                    "weights_id": weights.id,
+                    "current_block": current_block,
+                },
+            )
     return is_success, message
 
 
