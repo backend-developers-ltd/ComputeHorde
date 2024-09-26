@@ -1,8 +1,10 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
 [project]
 name = "validator"
 requires-python = "==3.11.*"
-version = "0"
-
 dependencies = [
     "Django~=4.2.4",
     "django-cors-headers~=4.2.0",
@@ -31,10 +33,7 @@ dependencies = [
     "uvloop>=0.19.0",
     "boto3>=1.35.11",
 ]
-
-[build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+dynamic = ["version"]
 
 [tool.pdm]
 distribution = false
@@ -51,13 +50,8 @@ test = [
     "pytest-mock>=3.14.0",
     "moto[s3]>=5.0.13",
 ]
-format = [
-    "ruff",
-]
-lint = [
-    "ruff",
-    "codespell[toml]",
-]
+format = ["ruff"]
+lint = ["ruff", "codespell[toml]"]
 type_check = [
     "django-stubs[compatible-mypy]",
     "djangorestframework-stubs[compatible-mypy]",
@@ -66,9 +60,7 @@ type_check = [
     "types-python-dateutil",
     "types-requests",
 ]
-security_check = [
-    "bandit>=1.7.7",
-]
+security_check = ["bandit>=1.7.7"]
 
 [tool.ruff]
 src = ["app/src"]
@@ -76,14 +68,24 @@ line-length = 100
 
 [tool.ruff.lint]
 # TODO add D
-select = [
-    "E", "F", "I", "UP",
-    "TCH005",
-]
+select = ["E", "F", "I", "UP", "TCH005"]
 # TODO: remove E501 once docstrings are formatted
 ignore = [
-    "D100", "D105", "D107", "D200", "D202", "D203", "D205", "D212", "D400", "D401", "D415",
-    "D101", "D102","D103", "D104", # TODO remove once we have docstring for all public methods
+    "D100",
+    "D105",
+    "D107",
+    "D200",
+    "D202",
+    "D203",
+    "D205",
+    "D212",
+    "D400",
+    "D401",
+    "D415",
+    "D101",
+    "D102",
+    "D103",
+    "D104", # TODO remove once we have docstring for all public methods
     "E501", # TODO: remove E501 once docstrings are formatted
 ]
 
