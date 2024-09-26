@@ -1185,7 +1185,7 @@ def llm_prompt_answering():
 
             async_to_sync(answer_prompts)(workload)
         times.append(time.time() - start)
-        total_time = sum(time)
+        total_time = sum(times)
         avg_time = total_time / len(times)
         if total_time + avg_time > 4 * 60 + 20:
             return
