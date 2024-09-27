@@ -68,7 +68,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
     @cached_property
     def validator_key(self) -> str:
-        return self.scope["url_route"]["kwargs"]["validator_key"]
+        return str(self.scope["url_route"]["kwargs"]["validator_key"])
 
     @log_errors_explicitly
     async def connect(self):
