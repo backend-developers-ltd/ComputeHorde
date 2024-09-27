@@ -97,6 +97,7 @@ def test_set_scores__too_early(settings):
         assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
 
+@pytest.mark.override_config(DYNAMIC_EXECUTOR_CLASS_WEIGHTS="spin_up-4min.gpu-24gb=100")
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight_success(settings):

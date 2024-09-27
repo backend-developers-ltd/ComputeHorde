@@ -808,7 +808,14 @@ async def _generate_jobs(ctx: BatchContext) -> None:
                     if prompt_samples_iter is None:
                         logger.warning("No llm prompt samples available, skipping llm job")
                         continue
-                    prompt_sample = next(prompt_samples_iter)
+                    prompt_sample = next(prompt_samples_iter, None)
+                    if prompt_sample is None:
+                        # it means that there is some bug - we want to see it in sentry
+                        # and continue, so other executor classes are not affected
+                        logger.error(
+                            "Dried prompt_samples_iter, this should not happen, skipping llm job"
+                        )
+                        continue
                     kwargs = {
                         "prompt_sample": prompt_sample,
                         "expected_prompts": list(prompt_sample.prompts.all()),

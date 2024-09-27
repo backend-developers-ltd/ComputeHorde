@@ -1134,7 +1134,7 @@ def fetch_dynamic_config() -> None:
 
 
 @app.task(
-    soft_time_limit=4 * 60 + 40,
+    soft_time_limit=4 * 60 + 50,
     time_limit=5 * 60,
 )
 def llm_prompt_generation():
@@ -1167,7 +1167,7 @@ def llm_prompt_generation():
 
 
 @app.task(
-    soft_time_limit=4 * 60 + 40,
+    soft_time_limit=4 * 60 + 50,
     time_limit=5 * 60,
 )
 def llm_prompt_answering():
