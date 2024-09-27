@@ -15,8 +15,8 @@ ErrorCallback: TypeAlias = Callable[[str], Awaitable[None]]
 class AbstractMinerClient(metaclass=abc.ABCMeta):
     def __init__(self, miner_name: str, transport: AbstractTransport):
         self.miner_name = miner_name
-        self.read_messages_task: asyncio.Task | None = None
-        self.deferred_send_tasks: list[asyncio.Task] = []
+        self.read_messages_task: asyncio.Task[None] | None = None
+        self.deferred_send_tasks: list[asyncio.Task[None]] = []
         self.transport = transport
 
     @abc.abstractmethod

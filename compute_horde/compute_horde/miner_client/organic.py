@@ -107,7 +107,8 @@ class OrganicMinerClient(AbstractMinerClient):
 
     @cached_property
     def my_hotkey(self) -> str:
-        return self.my_keypair.ss58_address
+        # bittensor module is not enabled for type checking
+        return self.my_keypair.ss58_address  # type: ignore
 
     def miner_url(self) -> str:
         return (
