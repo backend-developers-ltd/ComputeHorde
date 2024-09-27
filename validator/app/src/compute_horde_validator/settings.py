@@ -220,12 +220,12 @@ CONSTANCE_CONFIG = {
     ),
     # llama params
     "DYNAMIC_MAX_PROMPT_SERIES": (
-        10000,
+        3500,
         "Maximum number of prompt series upon which the prompt generator will not be triggered",
         int,
     ),
     "DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY": (
-        250,
+        1536,  # 256 * 2 * 3 - we allow 2 executors per miner and want queue for 3 synthetic job batches
         "how many prompt samples to generate (should be larger than how many prompts series we use per synthetic run)",
         int,
     ),
@@ -259,6 +259,17 @@ CONSTANCE_CONFIG = {
             "The format should be: 'key1=value1,key2=value2', "
             "where the keys are executor class enum values, and the values are integers. "
             "Setting 0 will disable an executor class."
+        ),
+        str,
+    ),
+    "DYNAMIC_EXECUTOR_CLASS_WEIGHTS": (
+        "spin_up-4min.gpu-24gb=99,always_on.llm.a6000=1",
+        (
+            "Weights of executor classes that are used to normalize miners scores. "
+            "Executor classes not mentioned here are not taken into account when scoring. "
+            "The format should be: 'key1=value1,key2=value2', "
+            "where the keys are executor class enum values, and the values are floats, "
+            "but int values that sum up to 100 are encouraged"
         ),
         str,
     ),
