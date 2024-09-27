@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Self
+from typing import Self, Any, TypeVar
 
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -57,6 +57,7 @@ class ExecutorFailed(pydantic.BaseModel):
     docker_process_stdout: str
     docker_process_stderr: str
 
+TModel = TypeVar("TModel", bound=pydantic.BaseModel)
 
 class BaseMixin(AsyncWebsocketConsumer, abc.ABC):
     @classmethod
@@ -71,11 +72,12 @@ class BaseMixin(AsyncWebsocketConsumer, abc.ABC):
         group_name = self.group_name(executor_token)
         await self.channel_layer.group_discard(group_name, self.channel_name)
 
-    def validate_event(self, event_type, models_class: type[pydantic.BaseModel], event: dict):
+    def validate_event(self, event_type, models_class: type[TModel], event: dict[str, Any]) -> TModel | None:
         try:
             return models_class(**event)
         except Exception:
             logger.error(f"Encountered when processing {event_type} layer message:", exc_info=True)
+            return None
 
 
 class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
@@ -84,7 +86,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
         return f"validator_interface_{executor_token}"
 
     @log_errors_explicitly
-    async def executor_ready(self, event: dict):
+    async def executor_ready(self, event: dict[str, Any]):
         payload = self.validate_event("executor_ready", ExecutorReady, event)
         if payload:
             await self._executor_ready(payload)
@@ -93,7 +95,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
     async def _executor_ready(self, msg: ExecutorReady): ...
 
     @log_errors_explicitly
-    async def executor_failed_to_prepare(self, event: dict):
+    async def executor_failed_to_prepare(self, event: dict[str, Any]):
         payload = self.validate_event("executor_failed_to_prepare", ExecutorFailedToPrepare, event)
         if payload:
             await self._executor_failed_to_prepare(payload)
@@ -102,16 +104,16 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare): ...
 
     @log_errors_explicitly
-    async def executor_finished(self, event: dict):
+    async def executor_finished(self, event: dict[str, Any]):
         payload = self.validate_event("executor_finished", ExecutorFinished, event)
         if payload:
             await self._executor_finished(payload)
 
     @abc.abstractmethod
-    async def _executor_specs(self, event: dict): ...
+    async def _executor_specs(self, event: dict[str, Any]): ...
 
     @log_errors_explicitly
-    async def executor_specs(self, event: dict):
+    async def executor_specs(self, event: dict[str, Any]):
         payload = self.validate_event("executor_specs", ExecutorSpecs, event)
         if payload:
             await self._executor_specs(payload)
@@ -120,7 +122,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
     async def _executor_finished(self, msg: ExecutorFinished): ...
 
     @log_errors_explicitly
-    async def executor_failed(self, event: dict):
+    async def executor_failed(self, event: dict[str, Any]):
         payload = self.validate_event("executor_failed", ExecutorFailed, event)
         if payload:
             await self._executor_failed(payload)
@@ -221,7 +223,7 @@ class ExecutorInterfaceMixin(BaseMixin):
     async def _miner_job_request(self, msg: JobRequest): ...
 
     @log_errors_explicitly
-    async def miner_job_request(self, event: dict):
+    async def miner_job_request(self, event: dict[str, Any]):
         payload = self.validate_event("miner_job_request", JobRequest, event)
         if payload:
             await self._miner_job_request(payload)

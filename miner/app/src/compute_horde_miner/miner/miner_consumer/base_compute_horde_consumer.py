@@ -1,16 +1,19 @@
 import abc
 import functools
 import logging
+from typing import TypeVar, ParamSpec, Callable, Awaitable
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.base_requests import BaseRequest, ValidationError
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar('T')
+P = ParamSpec('P')
 
-def log_errors_explicitly(f):
+def log_errors_explicitly(f: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
     @functools.wraps(f)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         try:
             return await f(*args, **kwargs)
         except Exception as ex:
