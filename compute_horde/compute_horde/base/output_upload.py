@@ -83,6 +83,10 @@ class MultiUpload(pydantic.BaseModel):
 
 
 OutputUpload = Annotated[
-    ZipAndHttpPostUpload | ZipAndHttpPutUpload | MultiUpload,
+    SingleFilePostUpload
+    | SingleFilePutUpload
+    | ZipAndHttpPostUpload
+    | ZipAndHttpPutUpload
+    | MultiUpload,
     Field(discriminator="output_upload_type"),
 ]

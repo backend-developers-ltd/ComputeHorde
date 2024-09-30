@@ -32,10 +32,8 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator.dynamic_config import (
-    get_number_of_prompts_to_validate_from_series,
-    get_number_of_workloads_to_trigger_local_inference,
-)
+from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
+from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
@@ -53,7 +51,12 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
-from compute_horde_validator.validator.s3 import generate_upload_url, get_prompts_from_s3_url
+from compute_horde_validator.validator.s3 import (
+    download_prompts_from_s3_url,
+    generate_upload_url,
+    get_public_url,
+    upload_prompts_to_s3_url,
+)
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
@@ -68,6 +71,7 @@ from .scoring import score_batches
 logger = get_task_logger(__name__)
 
 JOB_WINDOW = 2 * 60 * 60
+MAX_SEED = (1 << 32) - 1
 
 SCORING_ALGO_VERSION = 2
 
@@ -1129,63 +1133,181 @@ def fetch_dynamic_config() -> None:
     )
 
 
-def create_workload(seed: int):
-    # generate an s3 url to upload sample batch job result in
+@app.task(
+    soft_time_limit=4 * 60 + 50,
+    time_limit=5 * 60,
+)
+def llm_prompt_generation():
+    unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True).count()
+    if unprocessed_workloads > 0:
+        # prevent any starvation issues
+        logger.info("Uprocessed workloads found - skipping prompt generation")
+        return
+
+    num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES
+    num_prompt_series = PromptSeries.objects.count()
+
+    if num_prompt_series >= num_expected_prompt_series:
+        logger.warning(
+            "There are %s series in the db - skipping prompt generation",
+            num_prompt_series,
+        )
+        return
+
+    logger.info("There are %s series in the db, generating prompts", num_prompt_series)
+
+    with transaction.atomic():
+        try:
+            get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
+        except Locked:
+            logger.debug("Another thread already using the trusted miner")
+            return
+
+        async_to_sync(generate_prompts)()
+
+
+@app.task(
+    soft_time_limit=4 * 60 + 50,
+    time_limit=5 * 60,
+)
+def llm_prompt_answering():
+    unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
+
+    times = []
+    for workload in unprocessed_workloads:
+        start = time.time()
+        with transaction.atomic():
+            try:
+                get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
+            except Locked:
+                logger.debug("Another thread already using the trusted miner")
+                return
+
+            async_to_sync(answer_prompts)(workload)
+        times.append(time.time() - start)
+        total_time = sum(times)
+        avg_time = total_time / len(times)
+        if total_time + avg_time > 4 * 60 + 20:
+            return
+
+
+def init_workload(seed: int) -> tuple[SolveWorkload, str]:
     workload_uuid = uuid.uuid4()
-    s3_url = generate_upload_url(key=workload_uuid, bucket_name=settings.S3_BUCKET_NAME_ANSWERS)
-    return SolveWorkload.objects.create(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url)
+    # generate an s3 url to upload workload prompts to
+    s3_upload_url = generate_upload_url(
+        key=str(workload_uuid), bucket_name=settings.S3_BUCKET_NAME_ANSWERS
+    )
+    # generate an s3 url to download workload prompts to be answered
+    s3_url = get_public_url(
+        key=str(workload_uuid),
+        bucket_name=settings.S3_BUCKET_NAME_ANSWERS,
+    )
+    return SolveWorkload(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url), s3_upload_url
 
 
 @app.task()
-def create_sample_workloads():
-    total_workloads_needed = get_number_of_workloads_to_trigger_local_inference()
-    prompts_per_sample = get_number_of_prompts_to_validate_from_series()
+def llm_prompt_sampling():
+    # generate new prompt samples if needed
+
+    num_prompt_series = PromptSeries.objects.count()
+    required_series_to_start_sampling = min(
+        config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY * 2, config.DYNAMIC_MAX_PROMPT_SERIES
+    )
+    if num_prompt_series < required_series_to_start_sampling:
+        logger.warning(
+            "There are %s series in the db - expected %s for start sampling - skipping prompt sampling",
+            num_prompt_series,
+            required_series_to_start_sampling,
+        )
+        return
+    num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()
+    num_needed_prompt_samples = (
+        config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY - num_unused_prompt_samples
+    )
+
+    if num_needed_prompt_samples > 0:
+        logger.info(
+            "There are %s prompt samples in the db, generating more",
+            num_unused_prompt_samples,
+        )
+        create_sample_workloads(num_needed_prompt_samples)
+        return
+    else:
+        logger.warning(
+            "There are %s prompt samples - skipping prompt sampling",
+            num_unused_prompt_samples,
+        )
+
+
+def persist_workload(
+    workload: SolveWorkload, prompt_samples: list[PromptSample], prompts: list[Prompt]
+):
+    logger.info(f"Saving workload {workload}")
+    # save the sampled prompts as unanswered in the db
+    with transaction.atomic():
+        workload.save()
+        PromptSample.objects.bulk_create(prompt_samples)
+        Prompt.objects.bulk_create(prompts)
+
+
+def create_sample_workloads(num_needed_prompt_samples):
+    prompts_per_sample = config.DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES
+    prompts_per_workload = config.DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD
 
     # set seed for the current synthetic jobs run
-    seed = random.randint(0, 1000000)
+    seed = random.randint(0, MAX_SEED)
 
     # workload we are currently sampling for
-    current_workload = create_workload(seed)
+    try:
+        current_workload, current_upload_url = init_workload(seed)
+    except Exception as e:
+        logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
+        return
 
-    # how many prompts we have sampled for current_workload so far
-    current_workload_fill = 0
+    # how many prompts series we sampled so far
+    # for each prompt series there is one prompt sample
+    num_prompt_series_sampled = 0
 
-    # how many workloads we have finished (have enough samples)
-    workloads_done = 0
+    current_prompt_samples = []
+    current_prompts = []
 
     # assume we have sufficient prompt series in the db to make all the prompt_samples needed
     # take a random order of prompt series to avoid using the same series at each synthetic jobs run
     for prompt_series in PromptSeries.objects.order_by("?").all():
-        if current_workload_fill >= prompts_per_sample:
-            current_workload = create_workload(seed)
-            current_workload_fill = 0
-            workloads_done += 1
-
-        if workloads_done >= total_workloads_needed:
-            break
-
         # get all prompts
-        lines = get_prompts_from_s3_url(prompt_series.uuid, prompt_series.s3_url)
+        lines = download_prompts_from_s3_url(prompt_series.s3_url)
 
         # should always have enough prompts
         if len(lines) <= prompts_per_sample:
-            logger.error("Skipping bucket %s, not enough prompts", prompt_series.s3_url)
+            logger.error(f"Skipping bucket {prompt_series.s3_url}, not enough prompts")
             continue
 
         # sample prompts
         sampled_lines = random.sample(lines, prompts_per_sample)
-        current_workload_fill += len(sampled_lines)
 
-        with transaction.atomic():
-            prompt_sample = PromptSample.objects.create(
-                series=prompt_series, workload=current_workload
-            )
+        prompt_sample = PromptSample(series=prompt_series, workload=current_workload)
+        current_prompt_samples += [prompt_sample]
+        current_prompts += [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
 
-            # save the sampled prompts as unanswered in the db
-            Prompt.objects.bulk_create(
-                [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
-            )
+        if len(current_prompts) >= prompts_per_workload:
+            content = "\n".join([p.content for p in current_prompts])
+            if upload_prompts_to_s3_url(current_upload_url, content):
+                # save the workload in the db
+                persist_workload(current_workload, current_prompt_samples, current_prompts)
+                num_prompt_series_sampled += len(current_prompt_samples)
+            else:
+                logger.error(f"Failed to create workload {current_workload} - skipping")
 
-    # delete remaining empty workload
-    if current_workload_fill == 0:
-        current_workload.delete()
+            # finished creating all needed prompt samples so exit after last batch is filled
+            if num_prompt_series_sampled >= num_needed_prompt_samples:
+                logger.info(f"Created {num_prompt_series_sampled} new prompt samples")
+                break
+
+            # reset for next workload
+            current_prompt_samples = []
+            current_prompts = []
+            try:
+                current_workload, current_upload_url = init_workload(seed)
+            except Exception as e:
+                logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
+                continue

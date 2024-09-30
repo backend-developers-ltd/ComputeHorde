@@ -2,6 +2,7 @@ import abc
 import uuid
 
 from compute_horde.base.volume import Volume
+from compute_horde.executor_class import ExecutorClass
 from compute_horde.miner_client.organic import OrganicJobDetails
 
 
@@ -28,8 +29,11 @@ class BasePromptJobGenerator(abc.ABC):
     @abc.abstractmethod
     def docker_image_name(self) -> str: ...
 
+    @abc.abstractmethod
+    def executor_class(self) -> ExecutorClass: ...
+
     def docker_run_options_preset(self) -> str:
-        return "none"
+        return "nvidia_all"
 
     def docker_run_cmd(self) -> list[str]:
         return []
@@ -49,6 +53,7 @@ class BasePromptJobGenerator(abc.ABC):
     def get_job_details(self) -> OrganicJobDetails:
         return OrganicJobDetails(
             job_uuid=str(self._uuid),
+            executor_class=self.executor_class(),
             docker_image=self.docker_image_name(),
             raw_script=self.raw_script(),
             docker_run_options_preset=self.docker_run_options_preset(),

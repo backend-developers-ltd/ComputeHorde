@@ -1,12 +1,14 @@
 import abc
 import uuid
 
+from compute_horde.base.output_upload import OutputUpload
+from compute_horde.base.volume import Volume
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 
 class BaseSyntheticJobGenerator(abc.ABC):
-    def __init__(self):
+    def __init__(self, **kwargs):
         self._uuid = uuid.uuid4()
 
     def __repr__(self):
@@ -37,7 +39,10 @@ class BaseSyntheticJobGenerator(abc.ABC):
         return None
 
     @abc.abstractmethod
-    async def volume_contents(self) -> str: ...
+    async def volume(self) -> Volume | None: ...
+
+    async def output_upload(self) -> OutputUpload | None:
+        return None
 
     @abc.abstractmethod
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]: ...
@@ -48,4 +53,6 @@ class BaseSyntheticJobGenerator(abc.ABC):
 
 class BaseSyntheticJobGeneratorFactory(abc.ABC):
     @abc.abstractmethod
-    async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator: ...
+    async def create(
+        self, executor_class: ExecutorClass, **kwargs
+    ) -> BaseSyntheticJobGenerator: ...

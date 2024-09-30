@@ -1,8 +1,8 @@
 import functools
 import logging
-from collections.abc import Generator
 
 import boto3
+import httpx
 import requests
 from django.conf import settings
 
@@ -45,9 +45,25 @@ def get_public_url(key: str, *, bucket_name: str, prefix: str = "") -> str:
     return f"{endpoint_url}/{bucket_name}/{prefix}{key}"
 
 
-def get_prompts_from_s3_url(s3_url: str) -> Generator[tuple[str, list[str]]]:
+# TODO: retries etc
+def upload_prompts_to_s3_url(s3_url: str, content: str) -> bool:
+    response = requests.put(s3_url, data=content)
+    if response.status_code != 200:
+        logger.warning(f"Failed to upload prompts to {s3_url}")
+        return False
+    return True
+
+
+def download_prompts_from_s3_url(s3_url: str) -> list[str]:
     response = requests.get(s3_url)
     if response.status_code != 200:
         logger.warning(f"Failed to download prompts from {s3_url}")
         return []
-    return response.text.split("\n")
+    return response.text.splitlines()
+
+
+async def download_file_content(s3_url: str) -> bytes:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(s3_url, timeout=5)
+        response.raise_for_status()
+        return response.content
