@@ -2,7 +2,7 @@
 *.sqlite3
 *~
 *.egg-info/
-/.idea/
+.idea/
 .env
 venv
 .hypothesis

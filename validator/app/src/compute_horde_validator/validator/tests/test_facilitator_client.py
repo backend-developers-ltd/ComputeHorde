@@ -150,7 +150,7 @@ async def test_facilitator_client(ws_server_cls):
         facilitator_client.specs_task.cancel()
         task.cancel()
         if ws_server.facilitator_error:
-            assert False, ws_server.facilitator_error
+            pytest.fail(str(ws_server.facilitator_error))
 
 
 @pytest.fixture
