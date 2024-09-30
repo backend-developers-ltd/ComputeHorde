@@ -133,7 +133,7 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         Keys are executor class ids and values are number of supported executors for given executor class.
         """
 
-    async def get_executor_class_pool(self, executor_class):
+    async def _sync_pools_with_manifest(self):
         manifest = await self.get_manifest()
         for executor_class, executor_count in manifest.items():
             pool = self._executor_class_pools.get(executor_class)
@@ -142,6 +142,9 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
                 self._executor_class_pools[executor_class] = pool
             else:
                 pool.set_count(executor_count)
+
+    async def get_executor_class_pool(self, executor_class):
+        await self._sync_pools_with_manifest()
         return self._executor_class_pools[executor_class]
 
     async def reserve_executor_class(self, token, executor_class, timeout):
