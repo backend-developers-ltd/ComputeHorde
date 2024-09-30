@@ -61,8 +61,9 @@ EXECUTOR_CLASS = {
 }
 
 
-# this leaves around 1 min for synthetic job to complete
-MAX_EXECUTOR_TIMEOUT = timedelta(minutes=4).total_seconds()
+# we split 144min 2 tempos window to 24 validators - this is total time after reservation,
+# validator may wait spin_up time of executor class to synchronize running synthetic batch
+MAX_EXECUTOR_TIMEOUT = timedelta(minutes=6).total_seconds()
 
 DEFAULT_EXECUTOR_CLASS = ExecutorClass.spin_up_4min__gpu_24gb
 DEFAULT_EXECUTOR_TIMEOUT = EXECUTOR_CLASS[DEFAULT_EXECUTOR_CLASS].spin_up_time
