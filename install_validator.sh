@@ -16,6 +16,21 @@ if [ ! -f "$LOCAL_HOTKEY_PATH" ]; then
   exit 1
 fi
 
+if [[ -z ${TRUSTED_MINER_KEY+x} ]] || [[ -z ${TRUSTED_MINER_ADDRESS+x} ]] || [[ -z ${TRUSTED_MINER_PORT+x} ]]; then
+  >&2 echo "ERROR: You need to set environment variables TRUSTED_MINER_KEY, TRUSTED_MINER_ADDRESS and TRUSTED_MINER_PORT to configure your local trusted miner."
+  exit 1
+fi
+
+if [[ -z ${S3_BUCKET_NAME_PROMPTS+x} ]] || [[ -z ${S3_BUCKET_NAME_ANSWERS+x} ]]; then
+  >&2 echo "ERROR: You need to set environment variables S3_BUCKET_NAME_PROMPTS and S3_BUCKET_NAME_ANSWERS to store prompts for synthetic jobs."
+  exit 1
+fi
+
+if [[ -z ${AWS_ACCESS_KEY_ID+x} ]] || [[ -z ${AWS_SECRET_ACCESS_KEY+x} ]] || [[ -z ${AWS_ENDPOINT_URL+x} ]]; then
+  >&2 echo "ERROR: You need to set environment variables AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_ENDPOINT_URL with AWS credentials that has access to the s3 buckets."
+  exit 1
+fi
+
 HOTKEY_NAME=$(basename "$LOCAL_HOTKEY_PATH")
 WALLET_NAME=$(basename "$(dirname "$(dirname "$LOCAL_HOTKEY_PATH")")")
 
@@ -39,6 +54,14 @@ cat > tmpvars <<ENDCAT
 HOTKEY_NAME="$(basename "$REMOTE_HOTKEY_PATH")"
 WALLET_NAME="$(basename "$(dirname "$REMOTE_HOTKEY_DIR")")"
 MIGRATING=$MIGRATING
+TRUSTED_MINER_KEY=$TRUSTED_MINER_KEY
+TRUSTED_MINER_ADDRESS=$TRUSTED_MINER_ADDRESS
+TRUSTED_MINER_PORT=$TRUSTED_MINER_PORT
+S3_BUCKET_NAME_PROMPTS=$S3_BUCKET_NAME_PROMPTS
+S3_BUCKET_NAME_ANSWERS=$S3_BUCKET_NAME_ANSWERS
+AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+AWS_ENDPOINT_URL=$AWS_ENDPOINT_URL
 ENDCAT
 ENDSSH
 scp "$LOCAL_HOTKEY_PATH" "$SSH_DESTINATION:$REMOTE_HOTKEY_PATH"
@@ -111,6 +134,14 @@ HOST_WALLET_DIR=$HOME/.bittensor/wallets
 COMPOSE_PROJECT_NAME=compute_horde_validator
 FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
 MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
+TRUSTED_MINER_KEY=$(. ~/tmpvars && echo $TRUSTED_MINER_KEY)
+TRUSTED_MINER_ADDRESS=$(. ~/tmpvars && echo $TRUSTED_MINER_ADDRESS)
+TRUSTED_MINER_PORT=$(. ~/tmpvars && echo $TRUSTED_MINER_PORT)
+S3_BUCKET_NAME_PROMPTS=$(. ~/tmpvars && echo $S3_BUCKET_NAME_PROMPTS)
+S3_BUCKET_NAME_ANSWERS=$(. ~/tmpvars && echo $S3_BUCKET_NAME_ANSWERS)
+AWS_ACCESS_KEY_ID=$(. ~/tmpvars && echo $AWS_ACCESS_KEY_ID)
+AWS_SECRET_ACCESS_KEY=$(. ~/tmpvars && echo $AWS_SECRET_ACCESS_KEY)
+AWS_ENDPOINT_URL=$(. ~/tmpvars && echo $AWS_ENDPOINT_URL)
 ENDENV
 
 docker pull backenddevelopersltd/compute-horde-validator:v0-latest
