@@ -7,6 +7,7 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.mv_protocol import miner_requests
 from django.utils.timezone import now
+from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.models import (
     Miner,
@@ -21,15 +22,12 @@ from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts impo
 )
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
+from .mock_generator import MockSyntheticJobGeneratorFactory
+
 
 @pytest.fixture
 def miner_hotkey():
     return "miner_hotkey"
-
-
-@pytest.fixture
-def validator_hotkey():
-    return "validator_hotkey"
 
 
 @pytest.fixture
@@ -72,6 +70,26 @@ def create_simulation_miner_client(transport: AbstractTransport):
 @pytest.fixture
 def job_uuid():
     return uuid.uuid4()
+
+
+@pytest.fixture
+def job_uuids(job_uuid: uuid.UUID):
+    return [job_uuid]
+
+
+@pytest.fixture
+def job_generator_factory(job_uuids: list[uuid.UUID]):
+    return MockSyntheticJobGeneratorFactory(uuids=job_uuids)
+
+
+@pytest.fixture(autouse=True)
+def _patch_generator_factory(
+    mocker: MockerFixture, job_generator_factory: MockSyntheticJobGeneratorFactory
+):
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
+        job_generator_factory,
+    )
 
 
 @pytest.fixture
