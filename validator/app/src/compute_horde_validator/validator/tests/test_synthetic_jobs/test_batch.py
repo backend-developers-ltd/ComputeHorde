@@ -2,7 +2,6 @@ import asyncio
 import json
 import uuid
 from collections.abc import Callable
-from unittest.mock import patch
 
 import bittensor
 import pytest
@@ -31,13 +30,12 @@ pytestmark = [
 MANIFEST_INCENTIVE_MULTIPLIER = 1.05
 MANIFEST_DANCE_RATIO_THRESHOLD = 1.4
 
-job_factory = TimeTookScoreMockSyntheticJobGeneratorFactory()
+
+@pytest.fixture
+def job_generator_factory():
+    return TimeTookScoreMockSyntheticJobGeneratorFactory()
 
 
-@patch(
-    "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
-    job_factory,
-)
 @pytest.mark.override_config(
     DYNAMIC_MANIFEST_SCORE_MULTIPLIER=MANIFEST_INCENTIVE_MULTIPLIER,
     DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=MANIFEST_DANCE_RATIO_THRESHOLD,
@@ -71,6 +69,7 @@ async def test_manifest_dance_incentives(
     curr_online_executor_count: int,
     prev_online_executor_count: int,
     expected_multiplier: float,
+    job_generator_factory: TimeTookScoreMockSyntheticJobGeneratorFactory,
     miner: Miner,
     axon_dict: dict[str, bittensor.AxonInfo],
     create_simulation_miner_client: Callable,
@@ -79,7 +78,7 @@ async def test_manifest_dance_incentives(
     small_spin_up_times,
 ):
     job_uuids = [uuid.uuid4() for _ in range(curr_online_executor_count)]
-    job_factory._uuids = job_uuids.copy()
+    job_generator_factory._uuids = job_uuids.copy()
 
     if prev_online_executor_count:
         batch = await SyntheticJobBatch.objects.acreate(
@@ -133,10 +132,6 @@ async def test_manifest_dance_incentives(
     await check_scores(job_uuids, transport, expected_multiplier)
 
 
-@patch(
-    "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
-    job_factory,
-)
 @pytest.mark.parametrize(
     "weights_version_override,expected_multiplier,curr_online_executor_count,prev_online_executor_count",
     [
@@ -154,6 +149,7 @@ async def test_synthetic_job_batch(
     curr_online_executor_count: int,
     prev_online_executor_count: int | None,
     request: pytest.FixtureRequest,
+    job_generator_factory: TimeTookScoreMockSyntheticJobGeneratorFactory,
     miner: Miner,
     axon_dict: dict[str, bittensor.AxonInfo],
     create_simulation_miner_client: Callable,
@@ -163,7 +159,7 @@ async def test_synthetic_job_batch(
     request.getfixturevalue(weights_version_override)
 
     job_uuids = [uuid.uuid4() for _ in range(curr_online_executor_count)]
-    job_factory._uuids = job_uuids.copy()
+    job_generator_factory._uuids = job_uuids.copy()
 
     if prev_online_executor_count:
         batch = await SyntheticJobBatch.objects.acreate(
