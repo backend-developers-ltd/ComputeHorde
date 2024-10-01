@@ -347,7 +347,7 @@ CELERY_RESULT_EXPIRES = int(timedelta(days=1).total_seconds())  # time until tas
 CELERY_COMPRESSION = "gzip"  # task compression
 CELERY_MESSAGE_COMPRESSION = "gzip"  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
-CELERY_BEAT_SCHEDULE = {  # type: ignore
+CELERY_BEAT_SCHEDULE = {
     "schedule_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
         "schedule": timedelta(minutes=1),
@@ -563,7 +563,7 @@ if SENTRY_DSN := env("SENTRY_DSN", default=""):
     from sentry_sdk.integrations.logging import LoggingIntegration
     from sentry_sdk.integrations.redis import RedisIntegration
 
-    sentry_sdk.init(  # type: ignore
+    sentry_sdk.init(
         dsn=SENTRY_DSN,
         environment=ENV,
         integrations=[

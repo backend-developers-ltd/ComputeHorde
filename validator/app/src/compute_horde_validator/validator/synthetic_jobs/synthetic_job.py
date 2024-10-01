@@ -3,6 +3,7 @@ import enum
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Protocol
 
 
 class SyntheticJob(ABC):
@@ -20,6 +21,9 @@ class SyntheticJob(ABC):
     def raw_script(self) -> str | None:
         return None
 
+
+class _HashProto(Protocol):
+    def hexdigest(self) -> str: ...
 
 class Algorithm(enum.Enum):
     SHA256 = "SHA256"
@@ -43,8 +47,8 @@ class Algorithm(enum.Enum):
             },
         }
 
-    def hash(self, *args, **kwargs):
-        return self.params[self]["hash_function"](*args, **kwargs)
+    def hash(self, *args, **kwargs) -> _HashProto:
+        return self.params[self]["hash_function"](*args, **kwargs)  # type: ignore
 
     @property
     def type(self):
