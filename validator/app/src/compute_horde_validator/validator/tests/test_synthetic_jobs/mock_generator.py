@@ -56,7 +56,7 @@ class TimeTookScoreMockSyntheticJobGenerator(MockSyntheticJobGenerator):
 class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
     def __init__(self, uuids: list[uuid.UUID] = None, **kwargs):
         super().__init__(**kwargs)
-        self._uuids = uuids or []
+        self._uuids = uuids.copy() if uuids else []
 
     async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
         _uuid = self._uuids.pop(0)

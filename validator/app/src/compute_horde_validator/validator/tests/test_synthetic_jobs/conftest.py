@@ -79,7 +79,7 @@ def job_uuids(job_uuid: uuid.UUID):
 
 @pytest.fixture
 def job_generator_factory(job_uuids: list[uuid.UUID]):
-    return MockSyntheticJobGeneratorFactory(uuids=job_uuids.copy())
+    return MockSyntheticJobGeneratorFactory(uuids=job_uuids)
 
 
 @pytest.fixture(autouse=True)
