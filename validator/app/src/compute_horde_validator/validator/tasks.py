@@ -743,7 +743,6 @@ def set_scores():
             score_per_uid = {}
             batches = list(
                 SyntheticJobBatch.objects.select_related("cycle")
-                .prefetch_related("synthetic_jobs")
                 .filter(
                     scored=False,
                     started_at__gte=now() - timedelta(days=1),
