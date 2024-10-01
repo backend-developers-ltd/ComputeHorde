@@ -63,7 +63,7 @@ def score_jobs(jobs, score_aggregation=sum, normalization_weight=1):
 def score_batch(batch):
     executor_class_weights = get_executor_class_weights()
     executor_class_jobs = defaultdict(list)
-    for job in batch.synthetic_jobs.all():
+    for job in batch.synthetic_jobs.select_related("miner"):
         if job.executor_class in executor_class_weights:
             executor_class_jobs[job.executor_class].append(job)
 
