@@ -17,7 +17,7 @@ admin.site.index_title = "Welcome to ComputeHorde Miner Administration"
 admin.site.index_template = "admin/miner_index.html"
 
 
-class ReadOnlyAdmin(admin.ModelAdmin):
+class ReadOnlyAdmin(admin.ModelAdmin):  # type: ignore
     change_form_template = "admin/read_only_view.html"
 
     def has_add_permission(self, *args, **kwargs):

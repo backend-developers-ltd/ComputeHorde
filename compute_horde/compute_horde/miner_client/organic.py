@@ -124,6 +124,9 @@ class OrganicMinerClient(AbstractMinerClient):
     def outgoing_generic_error_class(self) -> type[BaseRequest]:
         return validator_requests.GenericError
 
+    def build_outgoing_generic_error(self, msg: str):
+        return validator_requests.GenericError(details=msg)
+
     async def notify_generic_error(self, msg: BaseRequest) -> None:
         """This method is called when miner sends a generic error message"""
 

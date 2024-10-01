@@ -35,6 +35,10 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
+    def build_outgoing_generic_error(self, msg: str):
+        pass
+
+    @abc.abstractmethod
     async def handle_message(self, msg: BaseRequest):
         """
         Handle the message based on its type or raise UnsupportedMessageReceived
@@ -109,7 +113,7 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
             except ValidationError as ex:
                 error_msg = f"Malformed message from miner {self.miner_name}: {str(ex)}"
                 logger.info(error_msg)
-                self.deferred_send_model(self.outgoing_generic_error_class()(details=error_msg))
+                self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
                 continue
 
             try:
@@ -117,7 +121,7 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
             except UnsupportedMessageReceived:
                 error_msg = f"Unsupported message from miner {self.miner_name}"
                 logger.exception(error_msg)
-                self.deferred_send_model(self.outgoing_generic_error_class()(details=error_msg))
+                self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
 
 
 class UnsupportedMessageReceived(Exception):

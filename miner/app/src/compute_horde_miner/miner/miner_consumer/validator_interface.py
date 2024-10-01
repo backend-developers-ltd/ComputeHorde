@@ -3,6 +3,7 @@ import logging
 import time
 import uuid
 from functools import cached_property
+from typing import Protocol
 
 import bittensor
 from compute_horde.mv_protocol import miner_requests, validator_requests
@@ -39,7 +40,11 @@ AUTH_MESSAGE_MAX_AGE = 10
 DONT_CHECK = "DONT_CHECK"
 
 
-def get_miner_signature(msg: BaseValidatorRequest) -> str:
+class _RequestWithBlobForSigning(Protocol):
+    def blob_for_signing(self) -> str: ...
+
+
+def get_miner_signature(msg: _RequestWithBlobForSigning) -> str:
     keypair = settings.BITTENSOR_WALLET().get_hotkey()
     return f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
 
@@ -181,10 +186,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 f'"DEBUG_TURN_AUTHENTICATION_OFF" is on'
             )
         else:
-            authenticated, error_msg = self.verify_auth_msg(msg)
+            authenticated, auth_error_msg = self.verify_auth_msg(msg)
             if not authenticated:
-                msg = f"Validator {self.validator_key} not authenticated due to: {error_msg}"
-                await self.close_with_error_msg(msg)
+                close_error_msg = f"Validator {self.validator_key} not authenticated due to: {auth_error_msg}"
+                await self.close_with_error_msg(close_error_msg)
                 return
 
         self.validator_authenticated = True
@@ -303,7 +308,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         if isinstance(msg, validator_requests.V0JobRequest):
             pending_job = self.pending_jobs.get(msg.job_uuid)
             if msg.volume and not msg.volume.is_safe():
-                error_msg = f"Received JobRequest with unsafe volume: {msg.volume.contents}"
+                error_msg = f"Received JobRequest with unsafe volume"
                 logger.error(error_msg)
                 await self.send(
                     miner_requests.GenericError(
@@ -379,11 +384,12 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
-        self.pending_jobs[job.job_uuid] = job
+        job_uuid = job.job_uuid.hex
+        self.pending_jobs[job_uuid] = job
         await self.send(
-            miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).model_dump_json()
+            miner_requests.V0ExecutorReadyRequest(job_uuid=job_uuid).model_dump_json()
         )
-        logger.debug(f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}")
+        logger.debug(f"Readiness for job {job_uuid} reported to validator {self.validator_key}")
 
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):
         jobs = [
@@ -396,10 +402,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             k: v for k, v in self.pending_jobs.items() if v.executor_token != msg.executor_token
         }
         await self.send(
-            miner_requests.V0ExecutorFailedRequest(job_uuid=job.job_uuid).model_dump_json()
+            miner_requests.V0ExecutorFailedRequest(job_uuid=job.job_uuid.hex).model_dump_json()
         )
         logger.debug(
-            f"Failure in preparation for job {job.job_uuid} reported to validator {self.validator_key}"
+            f"Failure in preparation for job {job.job_uuid.hex} reported to validator {self.validator_key}"
         )
 
     async def _executor_finished(self, msg: ExecutorFinished):

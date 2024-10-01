@@ -33,7 +33,7 @@ class ExecutorClassPool:
         self.manager = manager
         self.executor_class = executor_class
         self._count = executor_count
-        self._executors = []
+        self._executors: list[ReservedExecutor] = []
         self._reservation_lock = asyncio.Lock()
         self._pool_cleanup_task = asyncio.create_task(self._pool_cleanup_loop())
 
