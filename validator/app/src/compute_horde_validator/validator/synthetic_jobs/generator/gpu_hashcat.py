@@ -1,4 +1,5 @@
 from asgiref.sync import sync_to_async
+from compute_horde.base.volume import InlineVolume, Volume
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
 from compute_horde_validator.validator.dynamic_config import aget_weights_version
@@ -18,8 +19,8 @@ MAX_SCORE = 2
 
 
 class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         # set synthetic_jobs based on subnet weights_version
         self.weights_version = None
         self.hash_job = None
@@ -80,8 +81,8 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
         return self.hash_job.raw_script()
 
     @sync_to_async(thread_sensitive=False)
-    def volume_contents(self) -> str:
-        return single_file_zip("payload.txt", self.hash_job.payload)
+    def volume(self) -> Volume | None:
+        return InlineVolume(contents=single_file_zip("payload.txt", self.hash_job.payload))
 
     def score(self, time_took: float) -> float:
         if self.weights_version == 0:

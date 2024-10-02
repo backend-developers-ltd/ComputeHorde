@@ -1,5 +1,6 @@
 import uuid
 
+from compute_horde.base.volume import InlineVolume, Volume
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
@@ -15,7 +16,8 @@ NOT_SCORED = 0.0
 
 
 class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
-    def __init__(self, _uuid: uuid.UUID):
+    def __init__(self, _uuid: uuid.UUID, **kwargs):
+        super().__init__(**kwargs)
         self._uuid = _uuid
 
     async def ainit(self, miner_hotkey: str):
@@ -36,8 +38,8 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def docker_run_cmd(self) -> list[str]:
         return ["mock"]
 
-    async def volume_contents(self) -> str:
-        return "mock"
+    async def volume(self) -> Volume | None:
+        return InlineVolume(contents="mock")
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         return True, "mock", MOCK_SCORE
@@ -52,15 +54,16 @@ class TimeTookScoreMockSyntheticJobGenerator(MockSyntheticJobGenerator):
 
 
 class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
-    def __init__(self, uuids: list[uuid.UUID] = None):
-        self._uuids = uuids or []
+    def __init__(self, uuids: list[uuid.UUID] = None, **kwargs):
+        super().__init__(**kwargs)
+        self._uuids = uuids.copy() if uuids else []
 
-    async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
+    async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
         _uuid = self._uuids.pop(0)
-        return MockSyntheticJobGenerator(_uuid)
+        return MockSyntheticJobGenerator(_uuid, **kwargs)
 
 
 class TimeTookScoreMockSyntheticJobGeneratorFactory(MockSyntheticJobGeneratorFactory):
-    async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
+    async def create(self, executor_class: ExecutorClass, *args) -> BaseSyntheticJobGenerator:
         _uuid = self._uuids.pop(0)
         return TimeTookScoreMockSyntheticJobGenerator(_uuid)
