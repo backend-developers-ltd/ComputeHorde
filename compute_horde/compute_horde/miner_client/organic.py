@@ -6,7 +6,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Literal
+from typing import Literal, TypeAlias
 
 import bittensor
 
@@ -312,6 +312,7 @@ class OrganicJobError(Exception):
     def __repr__(self):
         return f"{type(self).__name__}: {str(self)}"
 
+DockerRunOptionsPreset: TypeAlias = Literal["nvidia_all", "none"]
 
 @dataclass
 class OrganicJobDetails:
@@ -319,7 +320,7 @@ class OrganicJobDetails:
     executor_class: ExecutorClass = ExecutorClass.spin_up_4min__gpu_24gb
     docker_image: str | None = None
     raw_script: str | None = None
-    docker_run_options_preset: Literal["nvidia_all", "none"] = "nvidia_all"
+    docker_run_options_preset: DockerRunOptionsPreset = "nvidia_all"
     docker_run_cmd: list[str] = field(default_factory=list)
     total_job_timeout: int = 300
     volume: Volume | None = None

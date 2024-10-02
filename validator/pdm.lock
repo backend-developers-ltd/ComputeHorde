@@ -5,7 +5,7 @@
 groups = ["default", "format", "lint", "security_check", "test", "type_check"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:eb2731ad148ba6d8433b4fcdf234edb1395d9584a14c0c59de4bd1e81b800b69"
+content_hash = "sha256:d1abcbfcf60d0afb7d9797ce4061e0f0907ab239c5f9774d7b97a50e940a5d52"
 
 [[metadata.targets]]
 requires_python = "==3.11.*"
@@ -432,6 +432,20 @@ dependencies = [
 files = [
     {file = "celery-5.3.6-py3-none-any.whl", hash = "sha256:9da4ea0118d232ce97dff5ed4974587fb1c0ff5c10042eb15278487cdd27d1af"},
     {file = "celery-5.3.6.tar.gz", hash = "sha256:870cc71d737c0200c397290d730344cc991d13a057534353d124c9380267aab9"},
+]
+
+[[package]]
+name = "celery-types"
+version = "0.22.0"
+requires_python = ">=3.9,<4.0"
+summary = "Type stubs for Celery and its related packages"
+groups = ["type_check"]
+dependencies = [
+    "typing-extensions<5.0.0,>=4.9.0",
+]
+files = [
+    {file = "celery_types-0.22.0-py3-none-any.whl", hash = "sha256:79a66637d1d6af5992d1dc80259d9538869941325e966006f1e795220519b9ac"},
+    {file = "celery_types-0.22.0.tar.gz", hash = "sha256:0ecad2fa5a6eded0a1f919e5e1e381cc2ff0635fe4b21db53b4661b6876d5b30"},
 ]
 
 [[package]]

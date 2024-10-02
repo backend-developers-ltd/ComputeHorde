@@ -5,7 +5,7 @@ from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 from functools import lru_cache
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, Any
 
 from django.conf import settings
 from django.contrib.staticfiles import finders
@@ -36,7 +36,7 @@ def send_mail(
     subject: str,
     to: list[str],
     from_: str = f"<{settings.DEFAULT_FROM_EMAIL}>",
-    context: dict | None = None,
+    context: dict[str, Any] | None = None,
     attachments: list[str] | None = None,
     cc: list[str] | None = None,
 ):

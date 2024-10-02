@@ -1,10 +1,12 @@
 import logging
 from collections import defaultdict
 from functools import partial
+from typing import Callable
 
 import numpy as np
 from compute_horde.executor_class import ExecutorClass
 from django.conf import settings
+from mypy.nodes import REVEAL_LOCALS
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ def reversed_sigmoid(x, beta, delta):
     return sigmoid(-x, beta=beta, delta=-delta)
 
 
-def horde_score(benchmarks, alpha=0, beta=0, delta=0):
+def horde_score(benchmarks: list[float], alpha=0, beta=0, delta=0):
     """Proportionally scores horde benchmarks allowing increasing significance for chosen features
 
     By default scores are proportional to horde "strength" - having 10 executors would have the same
@@ -52,7 +54,7 @@ def horde_score(benchmarks, alpha=0, beta=0, delta=0):
     return scaled_avg_benchmark * sum_agent * scaled_inverted_n
 
 
-def score_jobs(jobs, score_aggregation=sum, normalization_weight=1):
+def score_jobs(jobs, score_aggregation: Callable[[list[float]], float] = sum, normalization_weight=1):
     batch_scores = defaultdict(list)
     score_per_hotkey = {}
     for job in jobs:
@@ -69,7 +71,7 @@ def score_batch(batch):
         if job.executor_class in EXECUTOR_CLASS_WEIGHTS:
             executor_class_jobs[job.executor_class].append(job)
 
-    parametriezed_horde_score = partial(
+    parametriezed_horde_score: Callable[[list[float]], float] = partial(
         horde_score,
         # scaling factor for avg_score of a horde - best in range [0, 1] (0 means no effect on score)
         alpha=settings.HORDE_SCORE_AVG_PARAM,
@@ -78,7 +80,7 @@ def score_batch(batch):
         # horde size for 0.5 value of sigmoid - sigmoid is for 1 / horde_size
         delta=1 / settings.HORDE_SCORE_CENTRAL_SIZE_PARAM,
     )
-    batch_scores = defaultdict(float)
+    batch_scores: dict[str, float] = defaultdict(float)
     for executor_class, jobs in executor_class_jobs.items():
         executor_class_weight = EXECUTOR_CLASS_WEIGHTS[executor_class]
         if executor_class == ExecutorClass.spin_up_4min__gpu_24gb:
@@ -97,7 +99,7 @@ def score_batch(batch):
 
 
 def score_batches(batches):
-    hotkeys_scores = defaultdict(float)
+    hotkeys_scores: dict[str, float] = defaultdict(float)
     for batch in batches:
         batch_scores = score_batch(batch)
         for hotkey, score in batch_scores.items():

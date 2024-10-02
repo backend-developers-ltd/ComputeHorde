@@ -7,7 +7,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
 )
 from compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
     HASHJOB_PARAMS,
-    Algorithm,
+    Algorithm, SyntheticJob,
 )
 from compute_horde_validator.validator.synthetic_jobs.v0_synthetic_job import V0SyntheticJob
 from compute_horde_validator.validator.synthetic_jobs.v1_synthetic_job import V1SyntheticJob
@@ -16,21 +16,32 @@ from compute_horde_validator.validator.utils import single_file_zip
 MAX_SCORE = 2
 
 
+class JobNotInitialized(Exception):
+    ...
+
+
 class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def __init__(self):
         super().__init__()
         # set synthetic_jobs based on subnet weights_version
-        self.weights_version = None
-        self.hash_job = None
-        self.expected_answer = None
+        self.weights_version: int | None = None
+        self._hash_job: SyntheticJob | None = None
+        self.expected_answer: str | None = None
 
     async def ainit(self):
         """Allow to initialize generator in asyncio and non blocking"""
         self.weights_version = await aget_weights_version()
-        self.hash_job, self.expected_answer = await self._get_hash_job()
+        self._hash_job, self.expected_answer = await self._get_hash_job()
+
+    @property
+    def hash_job(self) -> SyntheticJob:
+        if self._hash_job is None:
+            raise JobNotInitialized("ainit() must be called first")
+        return self._hash_job
 
     @sync_to_async(thread_sensitive=False)
-    def _get_hash_job(self):
+    def _get_hash_job(self) -> tuple[SyntheticJob, str]:
+        hash_job: SyntheticJob
         if self.weights_version == 0:
             algorithm = Algorithm.get_random_algorithm()
             hash_job = V0SyntheticJob.generate(

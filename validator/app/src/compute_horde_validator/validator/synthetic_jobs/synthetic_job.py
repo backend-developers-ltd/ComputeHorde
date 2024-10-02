@@ -15,6 +15,10 @@ class SyntheticJob(ABC):
     @abstractmethod
     def answer(self) -> str: ...
 
+    @property
+    @abstractmethod
+    def timeout_seconds(self) -> int: ...
+
     def docker_run_cmd(self) -> list[str]:
         return []
 

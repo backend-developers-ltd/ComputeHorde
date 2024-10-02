@@ -1,4 +1,4 @@
-from compute_horde.base.output_upload import MultiUpload, SingleFilePutUpload
+from compute_horde.base.output_upload import MultiUpload, SingleFilePutUpload, OutputUpload, SingleFileUpload
 
 from ..base import BasePromptJobGenerator
 
@@ -23,8 +23,8 @@ class PromptJobGenerator(BasePromptJobGenerator):
             str(",".join(map(str, self.batch_uuids))),
         ]
 
-    def output(self) -> str | None:
-        uploads = []
+    def output(self) -> OutputUpload | None:
+        uploads: list[SingleFileUpload] = []
 
         for batch_uuid, url in zip(self.batch_uuids, self.upload_urls):
             uploads.append(

@@ -19,16 +19,17 @@ from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
-from compute_horde.receipts import (
+from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
-    get_miner_receipts,
 )
+from compute_horde.receipts import get_miner_receipts
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
+from pydantic import JsonValue
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.dynamic_config import (
@@ -404,7 +405,7 @@ def check_missed_synthetic_jobs() -> None:
         past_job_batches.update(is_missed=True)
 
 
-def _normalize_weights_for_committing(weights: list[numbers.Number], max_: int):
+def _normalize_weights_for_committing(weights: list[float], max_: int):
     factor = max_ / max(weights)
     return [round(w * factor) for w in weights]
 
@@ -412,8 +413,8 @@ def _normalize_weights_for_committing(weights: list[numbers.Number], max_: int):
 @app.task()
 def do_set_weights(
     netuid: int,
-    uids: list,
-    weights: list,
+    uids: list[int],
+    weights: list[float],
     wait_for_inclusion: bool,
     wait_for_finalization: bool,
     version_key: int,
@@ -500,8 +501,8 @@ def do_set_weights(
             is_success, message = subtensor_.set_weights(
                 wallet=settings.BITTENSOR_WALLET(),
                 netuid=netuid,
-                uids=np.int64(uids),
-                weights=np.float32(weights),
+                uids=uids,
+                weights=weights,
                 version_key=version_key,
                 wait_for_inclusion=wait_for_inclusion,
                 wait_for_finalization=wait_for_finalization,
@@ -527,12 +528,10 @@ def do_set_weights(
             )
         return is_success, message
 
-    match commit_reveal_weights_enabled:
-        case True:
-            return _commit_weights()
-
-        case False:
-            return _set_weights()
+    if commit_reveal_weights_enabled:
+        return _commit_weights()
+    else:
+        return _set_weights()
 
 
 @shared_task
@@ -566,7 +565,7 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             miner_hotkey=miner.hotkey,
             miner_address=miner_axon_info.ip,
             miner_port=miner_axon_info.port,
-            job_uuid=job.job_uuid,
+            job_uuid=job.job_uuid.hex,
             my_keypair=my_keypair,
         )
 
@@ -589,7 +588,7 @@ async def run_admin_job_request(job_request_id: int, callback=None):
     )
 
 
-def save_receipt_event(subtype: str, long_description: str, data: dict):
+def save_receipt_event(subtype: str, long_description: str, data: JsonValue):
     SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
         type=SystemEvent.EventType.RECEIPT_FAILURE,
         subtype=subtype,
@@ -598,7 +597,7 @@ def save_receipt_event(subtype: str, long_description: str, data: dict):
     )
 
 
-def save_weight_setting_event(type_: str, subtype: str, long_description: str, data: dict):
+def save_weight_setting_event(type_: str, subtype: str, long_description: str, data: JsonValue):
     SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
         type=type_,
         subtype=subtype,
@@ -607,7 +606,7 @@ def save_weight_setting_event(type_: str, subtype: str, long_description: str, d
     )
 
 
-def save_weight_setting_failure(subtype: str, long_description: str, data: dict):
+def save_weight_setting_failure(subtype: str, long_description: str, data: JsonValue):
     save_weight_setting_event(
         type_=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         subtype=subtype,
@@ -616,7 +615,7 @@ def save_weight_setting_failure(subtype: str, long_description: str, data: dict)
     )
 
 
-def save_weight_revealing_failure(subtype: str, long_description: str, data: dict):
+def save_weight_revealing_failure(subtype: str, long_description: str, data: JsonValue):
     save_weight_setting_event(
         type_=SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         subtype=subtype,
@@ -682,6 +681,7 @@ def set_scores():
                     batch.save()
                 batches = [batches[-1]]
 
+            assert batches[-1].cycle is not None
             if subtensor.get_current_block() <= batches[-1].cycle.stop:
                 logger.debug(
                     "There is a batch ready to be scored but we're "
@@ -989,12 +989,12 @@ def fetch_receipts():
 @shared_task
 def send_events_to_facilitator():
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
-        events = (
+        events_qs = (
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
             .filter(sent=False)
             .select_for_update(skip_locked=True)
         )[:10_000]
-        if events.count() == 0:
+        if events_qs.count() == 0:
             return
 
         if settings.STATS_COLLECTOR_URL == "":
@@ -1009,7 +1009,7 @@ def send_events_to_facilitator():
             sort_keys=True,
         )
         signature = f"0x{keypair.sign(to_sign).hex()}"
-        events = list(events)
+        events = list(events_qs)
         data = [event.to_dict() for event in events]
         url = settings.STATS_COLLECTOR_URL + f"validator/{hotkey}/system_events"
         response = requests.post(
@@ -1041,7 +1041,7 @@ def fetch_dynamic_config() -> None:
 def create_workload(seed: int):
     # generate an s3 url to upload sample batch job result in
     workload_uuid = uuid.uuid4()
-    s3_url = generate_upload_url(key=workload_uuid, bucket_name=settings.S3_BUCKET_NAME_ANSWERS)
+    s3_url = generate_upload_url(key=workload_uuid.hex, bucket_name=settings.S3_BUCKET_NAME_ANSWERS)
     return SolveWorkload.objects.create(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url)
 
 
@@ -1074,7 +1074,7 @@ def create_sample_workloads():
             break
 
         # get all prompts
-        lines = get_prompts_from_s3_url(prompt_series.uuid, prompt_series.s3_url)
+        lines = get_prompts_from_s3_url(prompt_series.s3_url)
 
         # should always have enough prompts
         if len(lines) <= prompts_per_sample:

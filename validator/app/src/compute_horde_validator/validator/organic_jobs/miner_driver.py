@@ -6,9 +6,8 @@ from functools import partial
 from typing import Literal
 
 from compute_horde.base.output_upload import ZipAndHttpPutUpload
-from compute_horde.base.volume import InlineVolume, ZipUrlVolume
+from compute_horde.base.volume import InlineVolume, ZipUrlVolume, Volume
 from compute_horde.executor_class import ExecutorClass
-from compute_horde.miner_client.base import TransportConnectionError
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
@@ -17,9 +16,10 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 from compute_horde.mv_protocol.validator_requests import V0InitialJobRequest, V0JobRequest
+from compute_horde.transport.base import TransportConnectionError
 from compute_horde.utils import Timer
 from django.conf import settings
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
@@ -57,25 +57,28 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
 
     @staticmethod
     def from_job(job: JobBase, status, message_type=None) -> "JobStatusUpdate":
-        job_status = JobStatusUpdate(
-            uuid=str(job.job_uuid),
-            status=status,
-            metadata=JobStatusMetadata(
-                comment=job.comment,
-            ),
-        )
         if isinstance(job, OrganicJob):
-            job_status.metadata.miner_response = MinerResponse(
+            miner_response = MinerResponse(
                 job_uuid=str(job.job_uuid),
                 message_type=message_type,
                 docker_process_stdout=job.stdout,
                 docker_process_stderr=job.stderr,
             )
+        else:
+            miner_response = None
+        job_status = JobStatusUpdate(
+            uuid=str(job.job_uuid),
+            status=status,
+            metadata=JobStatusMetadata(
+                comment=job.comment,
+                miner_response=miner_response,
+            ),
+        )
         return job_status
 
 
 async def save_job_execution_event(
-    subtype: str, long_description: str, data: dict | None = None, success: bool = False
+    subtype: str, long_description: str, data: JsonValue | None = None, success: bool = False
 ):
     await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
         type=SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS
@@ -120,6 +123,7 @@ async def execute_organic_job(
 
         job_timer = Timer(timeout=total_job_timeout)
 
+        volume: Volume
         if isinstance(job_request, V0FacilitatorJobRequest | AdminJobRequest):
             if job_request.input_url:
                 volume = ZipUrlVolume(contents=str(job_request.input_url))

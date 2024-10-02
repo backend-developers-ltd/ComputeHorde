@@ -1,8 +1,9 @@
 import abc
 import uuid
 
+from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
-from compute_horde.miner_client.organic import OrganicJobDetails
+from compute_horde.miner_client.organic import OrganicJobDetails, DockerRunOptionsPreset
 
 
 class BasePromptJobGenerator(abc.ABC):
@@ -28,7 +29,7 @@ class BasePromptJobGenerator(abc.ABC):
     @abc.abstractmethod
     def docker_image_name(self) -> str: ...
 
-    def docker_run_options_preset(self) -> str:
+    def docker_run_options_preset(self) -> DockerRunOptionsPreset:
         return "none"
 
     def docker_run_cmd(self) -> list[str]:
@@ -37,13 +38,10 @@ class BasePromptJobGenerator(abc.ABC):
     def raw_script(self) -> str | None:
         return None
 
-    def volume_contents(self) -> str:
-        return None
-
     def volume(self) -> Volume | None:
         return None
 
-    def output(self) -> str | None:
+    def output(self) -> OutputUpload | None:
         return None
 
     def get_job_details(self) -> OrganicJobDetails:
