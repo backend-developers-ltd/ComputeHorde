@@ -21,6 +21,7 @@ async def fake_executor(token):
         "base_docker_image_name": "it's teeeeests",
         "timeout_seconds": 60,
         "volume_type": "inline",
+        "volume": None,
     }, response
     await communicator.send_json_to(
         {
