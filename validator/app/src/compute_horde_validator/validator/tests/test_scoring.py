@@ -1,11 +1,12 @@
 from datetime import timedelta
-from unittest.mock import patch
 
 import pytest
 from django.utils import timezone
 
 from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
 from compute_horde_validator.validator.scoring import ExecutorClass, score_batches
+
+EXECUTOR_CLASS_WEIGHTS_OVERRIDE = "spin_up-4min.gpu-24gb=8,always_on.gpu-24gb=2"
 
 
 @pytest.fixture
@@ -72,18 +73,9 @@ def setup_data():
     return batch
 
 
-@pytest.fixture
-def mocked_executor_class_weights():
-    mocked_weights = {
-        ExecutorClass.spin_up_4min__gpu_24gb: 8,
-        ExecutorClass.always_on__gpu_24gb: 2,
-    }
-    with patch("compute_horde_validator.validator.scoring.EXECUTOR_CLASS_WEIGHTS", mocked_weights):
-        yield mocked_weights
-
-
+@pytest.mark.override_config(DYNAMIC_EXECUTOR_CLASS_WEIGHTS=EXECUTOR_CLASS_WEIGHTS_OVERRIDE)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_score_batches_basic(setup_data, mocked_executor_class_weights):
+def test_score_batches_basic(setup_data):
     batch = setup_data
     scores = score_batches([batch])
 
@@ -101,8 +93,9 @@ def test_score_batches_basic(setup_data, mocked_executor_class_weights):
     assert scores["hotkey1"] > scores["hotkey4"]
 
 
+@pytest.mark.override_config(DYNAMIC_EXECUTOR_CLASS_WEIGHTS=EXECUTOR_CLASS_WEIGHTS_OVERRIDE)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_score_batches_with_changed_params_avg(setup_data, settings, mocked_executor_class_weights):
+def test_score_batches_with_changed_params_avg(setup_data, settings):
     batch = setup_data
 
     settings.HORDE_SCORE_AVG_PARAM = (
@@ -117,10 +110,9 @@ def test_score_batches_with_changed_params_avg(setup_data, settings, mocked_exec
     assert changed_scores["hotkey2"] > changed_scores["hotkey4"]
 
 
+@pytest.mark.override_config(DYNAMIC_EXECUTOR_CLASS_WEIGHTS=EXECUTOR_CLASS_WEIGHTS_OVERRIDE)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_score_batches_with_changed_params_horde_size(
-    setup_data, settings, mocked_executor_class_weights
-):
+def test_score_batches_with_changed_params_horde_size(setup_data, settings):
     batch = setup_data
 
     settings.HORDE_SCORE_SIZE_PARAM = 1.75
@@ -133,8 +125,9 @@ def test_score_batches_with_changed_params_horde_size(
     assert changed_scores["hotkey4"] > changed_scores["hotkey3"]
 
 
+@pytest.mark.override_config(DYNAMIC_EXECUTOR_CLASS_WEIGHTS=EXECUTOR_CLASS_WEIGHTS_OVERRIDE)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_score_batches_executor_classes_weights(mocked_executor_class_weights):
+def test_score_batches_executor_classes_weights():
     miner1 = Miner.objects.create(hotkey="hotkey1")
     miner2 = Miner.objects.create(hotkey="hotkey2")
 

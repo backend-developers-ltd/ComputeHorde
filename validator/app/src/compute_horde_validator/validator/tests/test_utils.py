@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import bittensor
 import pytest
 from asgiref.sync import sync_to_async
+from compute_horde.base.volume import InlineVolume, Volume
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from compute_horde.mv_protocol.miner_requests import (
     ExecutorClassManifest,
@@ -75,8 +76,8 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def docker_run_cmd(self) -> list[str]:
         return ["mock"]
 
-    async def volume_contents(self) -> str:
-        return "mock"
+    async def volume(self) -> Volume | None:
+        return InlineVolume(contents="mock")
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         return True, "mock", MOCK_SCORE
@@ -231,8 +232,8 @@ def syntethic_batch_scheme_single_miner(
 
 
 class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
-    async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
-        return MockSyntheticJobGenerator()
+    async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
+        return MockSyntheticJobGenerator(**kwargs)
 
 
 mock_synthetic_job_generator_factory = MagicMock(name="MockSyntheticJobGeneratorFactory")
@@ -366,8 +367,8 @@ async def create_mock_job_batches(miner):
 
 
 class TimeToookScoreMockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
-    async def create(self, executor_class: ExecutorClass) -> BaseSyntheticJobGenerator:
-        return TimeToookScoreMockSyntheticJobGenerator()
+    async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
+        return TimeToookScoreMockSyntheticJobGenerator(**kwargs)
 
 
 time_took_mock_synthetic_job_generator_factory = MagicMock(
@@ -468,7 +469,7 @@ async def test_manifest_dance_incentives(
     miner_client = mocked_synthetic_miner_client.instance
     async for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
         receipt = miner_client._query_sent_models(
-            lambda m: m.payload.job_uuid == str(job.job_uuid), V0JobFinishedReceiptRequest
+            lambda m, j=job: m.payload.job_uuid == str(j.job_uuid), V0JobFinishedReceiptRequest
         )[0]
         time_took = receipt.payload.time_took_us / 1_000_000
         assert abs(job.score * time_took - expected_multiplier) < 0.0001
@@ -555,7 +556,7 @@ def test_create_and_run_synthetic_job_batch(
     miner_client = mocked_synthetic_miner_client.instance
     for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
         receipt = miner_client._query_sent_models(
-            lambda m: m.payload.job_uuid == str(job.job_uuid), V0JobFinishedReceiptRequest
+            lambda m, j=job: m.payload.job_uuid == str(j.job_uuid), V0JobFinishedReceiptRequest
         )[0]
         time_took = receipt.payload.time_took_us / 1_000_000
         assert abs(job.score * time_took - expected_multiplier) < 0.0001

@@ -120,8 +120,7 @@ class V2SyntheticJob(SyntheticJob):
         return ["/script.py", self.first_password]
 
     def raw_script(self) -> str:
-        with open(Path(__file__).parent / "v2_decrypt.py") as file:
-            return file.read()
+        return (Path(__file__).parent / "v2_decrypt.py").read_text()
 
     @property
     def answer(self) -> str:
@@ -130,13 +129,13 @@ class V2SyntheticJob(SyntheticJob):
         ).decode("utf-8")
 
     def __str__(self) -> str:
-        return f"V2SyntheticJob {self.algorithms} {self.params}"
+        return f"{self.__class__.__name__} {self.algorithms} {self.params}"
 
 
 if __name__ == "__main__":
     algorithms = Algorithm.get_all_algorithms()
-    params = [HASHJOB_PARAMS[1][algorithm] for algorithm in algorithms]
-    job = V2SyntheticJob.generate(algorithms, params)
+    params = [HASHJOB_PARAMS[4][algorithm] for algorithm in algorithms]
+    job = V2SyntheticJob.generate(algorithms, params, "dummy-hotkey")
     # print(job.raw_script())
     print(f"Payload: {job.payload}")
     print(f"Answer: {job.answer}")

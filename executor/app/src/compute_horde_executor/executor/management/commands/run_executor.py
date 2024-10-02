@@ -484,26 +484,26 @@ class JobRunner:
 
         success = exit_status == 0
 
-        # upload the output if requested
-        if job_request.output_upload:
-            try:
-                output_uploader = OutputUploader.for_upload_output(job_request.output_upload)
-                await output_uploader.upload(self.output_volume_mount_dir)
-            except OutputUploadFailed as ex:
-                logger.warning(
-                    f"Uploading output failed for job {self.initial_job_request.job_uuid} with error: {ex!r}"
-                )
-                success = False
-                stdout = ex.description
-                stderr = ""
-
-        time_took = time.time() - t1
-
         if success:
+            # upload the output if requested and job succeeded
+            if job_request.output_upload:
+                try:
+                    output_uploader = OutputUploader.for_upload_output(job_request.output_upload)
+                    await output_uploader.upload(self.output_volume_mount_dir)
+                except OutputUploadFailed as ex:
+                    logger.warning(
+                        f"Uploading output failed for job {self.initial_job_request.job_uuid} with error: {ex!r}"
+                    )
+                    success = False
+                    stdout = ex.description
+                    stderr = ""
+
+            time_took = time.time() - t1
             logger.info(
                 f'Job "{self.initial_job_request.job_uuid}" finished successfully in {time_took:0.2f} seconds'
             )
         else:
+            time_took = time.time() - t1
             logger.error(
                 f'"{" ".join(cmd)}" (job_uuid={self.initial_job_request.job_uuid})'
                 f' failed after {time_took:0.2f} seconds with status={process.returncode}'
@@ -668,6 +668,12 @@ class Command(BaseCommand):
         async with miner_client:
             logger.debug(f"Connected to miner: {settings.MINER_ADDRESS}")
             initial_message: V0InitialJobRequest = await miner_client.initial_msg
+            if (
+                initial_message.base_docker_image_name
+                and not initial_message.base_docker_image_name.startswith("backenddevelopersltd/")
+            ):
+                await miner_client.send_failed_to_prepare()
+                return
             logger.debug("Checking for CVE-2022-0492 vulnerability")
             if not await self.is_system_safe_for_cve_2022_0492():
                 await miner_client.send_failed_to_prepare()
@@ -689,6 +695,11 @@ class Command(BaseCommand):
                 logger.debug(f"Informed miner that I'm ready for job {initial_message.job_uuid}")
 
                 job_request = await miner_client.full_payload
+                if job_request.docker_image_name and not job_request.docker_image_name.startswith(
+                    "backenddevelopersltd/"
+                ):
+                    await miner_client.send_failed_to_prepare()
+                    return
                 logger.debug(f"Running job {initial_message.job_uuid}")
                 result = await job_runner.run_job(job_request)
                 result.specs = specs
