@@ -19,8 +19,8 @@ from compute_horde.base.volume import (
     InlineVolume,
     MultiVolume,
     SingleFileVolume,
-    ZipUrlVolume,
     Volume,
+    ZipUrlVolume,
 )
 from compute_horde.base_requests import BaseRequest
 from compute_horde.em_protocol import executor_requests, miner_requests
@@ -555,9 +555,7 @@ class JobRunner:
             elif isinstance(volume, MultiVolume):
                 await self._unpack_multi_volume(volume)
             else:
-                raise NotImplementedError(
-                    f"Unsupported volume_type: {volume.volume_type}"
-                )
+                raise NotImplementedError(f"Unsupported volume_type: {volume.volume_type}")
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()
@@ -609,7 +607,8 @@ class JobRunner:
     async def unpack_volume(self):
         try:
             await asyncio.wait_for(
-                self._unpack_volume(await self.get_job_volume()), timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS
+                self._unpack_volume(await self.get_job_volume()),
+                timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS,
             )
         except JobError:
             raise
