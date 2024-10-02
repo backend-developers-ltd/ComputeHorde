@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 
 class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
-    async def ainit(self):
+    async def ainit(self, miner_hotkey: str):
         return
 
     def timeout_seconds(self) -> int:
