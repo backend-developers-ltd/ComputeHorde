@@ -46,7 +46,6 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobFinishedReceiptRequest,
     V0JobRequest,
     V0JobStartedReceiptRequest,
-    VolumeType,
 )
 from compute_horde.transport import AbstractTransport, WSTransport
 from django.conf import settings

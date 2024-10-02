@@ -250,7 +250,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             self.msg_queue.append(msg)
             return
 
-        if isinstance(msg, validator_requests.V0InitialJobRequest) or isinstance(msg, validator_requests.V0JobRequest):
+        if isinstance(msg, validator_requests.V0InitialJobRequest) or isinstance(
+            msg, validator_requests.V0JobRequest
+        ):
             # Proactively check volume safety in both requests that may contain a volume
             if msg.volume and not msg.volume.is_safe():
                 error_msg = f"Received JobRequest with unsafe volume: {msg.volume.contents}"
