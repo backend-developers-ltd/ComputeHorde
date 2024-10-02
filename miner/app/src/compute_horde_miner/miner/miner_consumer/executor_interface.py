@@ -63,6 +63,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 job_uuid=initial_job_details.job_uuid,
                 base_docker_image_name=initial_job_details.base_docker_image_name,
                 timeout_seconds=initial_job_details.timeout_seconds,
+                volume=initial_job_details.volume,
                 volume_type=initial_job_details.volume_type.value
                 if initial_job_details.volume_type
                 else None,

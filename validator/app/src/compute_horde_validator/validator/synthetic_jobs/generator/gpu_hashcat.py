@@ -106,3 +106,11 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
 
     def job_description(self) -> str:
         return f"Hashcat {self.hash_job}"
+
+    def volume_in_initial_req(self) -> bool:
+        if self.weights_version in [0, 1, 2, 3]:
+            return False
+        elif self.weights_version == 4:
+            return True
+        else:
+            raise RuntimeError(f"No score function for weights_version: {self.weights_version}")

@@ -103,6 +103,9 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
     def job_description(self) -> str:
         return "LLM prompts job"
 
+    def volume_in_initial_req(self) -> bool:
+        return True
+
 
 class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
     def __init__(

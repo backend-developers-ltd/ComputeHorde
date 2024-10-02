@@ -19,6 +19,7 @@ from compute_horde.base.volume import (
     InlineVolume,
     MultiVolume,
     SingleFileVolume,
+    Volume,
     ZipUrlVolume,
 )
 from compute_horde.base_requests import BaseRequest
@@ -399,8 +400,9 @@ class JobRunner:
             docker_run_options = RunConfigManager.preset_to_docker_run_args(
                 job_request.docker_run_options_preset
             )
-            await self.unpack_volume(job_request)
+            await self.unpack_volume()
         except JobError as ex:
+            logger.error("Job error: %s", ex.description)
             return JobResult(
                 success=False,
                 exit_status=None,
@@ -535,7 +537,7 @@ class JobRunner:
         await process.wait()
         self.temp_dir.rmdir()
 
-    async def _unpack_volume(self, job_request: V0JobRequest):
+    async def _unpack_volume(self, volume: Volume | None):
         assert str(self.volume_mount_dir) not in {"~", "/"}
         for path in self.volume_mount_dir.glob("*"):
             if path.is_file():
@@ -543,19 +545,17 @@ class JobRunner:
             elif path.is_dir():
                 shutil.rmtree(path)
 
-        if job_request.volume is not None:
-            if isinstance(job_request.volume, InlineVolume):
-                await self._unpack_inline_volume(job_request.volume)
-            elif isinstance(job_request.volume, ZipUrlVolume):
-                await self._unpack_zip_url_volume(job_request.volume)
-            elif isinstance(job_request.volume, SingleFileVolume):
-                await self._unpack_single_file_volume(job_request.volume)
-            elif isinstance(job_request.volume, MultiVolume):
-                await self._unpack_multi_volume(job_request.volume)
+        if volume is not None:
+            if isinstance(volume, InlineVolume):
+                await self._unpack_inline_volume(volume)
+            elif isinstance(volume, ZipUrlVolume):
+                await self._unpack_zip_url_volume(volume)
+            elif isinstance(volume, SingleFileVolume):
+                await self._unpack_single_file_volume(volume)
+            elif isinstance(volume, MultiVolume):
+                await self._unpack_multi_volume(volume)
             else:
-                raise NotImplementedError(
-                    f"Unsupported volume_type: {job_request.volume.volume_type}"
-                )
+                raise NotImplementedError(f"Unsupported volume_type: {volume.volume_type}")
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()
@@ -598,10 +598,17 @@ class JobRunner:
             else:
                 raise NotImplementedError(f"Unsupported sub-volume type: {type(sub_volume)}")
 
-    async def unpack_volume(self, job_request: V0JobRequest):
+    async def get_job_volume(self) -> Volume | None:
+        if self.full_job_request.volume and self.initial_job_request.volume:
+            raise JobError("Received multiple volumes")
+
+        return self.full_job_request.volume or self.initial_job_request.volume or None
+
+    async def unpack_volume(self):
         try:
             await asyncio.wait_for(
-                self._unpack_volume(job_request), timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS
+                self._unpack_volume(await self.get_job_volume()),
+                timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS,
             )
         except JobError:
             raise
