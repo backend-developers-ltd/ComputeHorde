@@ -868,7 +868,7 @@ async def _send_initial_job_request(
         executor_class=job.executor_class,
         base_docker_image_name=job.job_generator.base_docker_image_name(),
         timeout_seconds=job.job_generator.timeout_seconds(),
-        volume=InlineVolume(contents=job.volume_contents),
+        volume=job.volume if job.job_generator.volume_in_initial_req() else None,
     )
     request_json = request.model_dump_json()
 
@@ -921,7 +921,7 @@ async def _send_job_request(
         docker_run_options_preset=job.job_generator.docker_run_options_preset(),
         docker_run_cmd=job.job_generator.docker_run_cmd(),
         raw_script=job.job_generator.raw_script(),
-        volume=job.volume,
+        volume=job.volume if not job.job_generator.volume_in_initial_req() else None,
         output_upload=job.output_upload,
     )
     request_json = request.model_dump_json()

@@ -50,6 +50,9 @@ class BaseSyntheticJobGenerator(abc.ABC):
     @abc.abstractmethod
     def job_description(self) -> str: ...
 
+    def volume_in_initial_req(self) -> bool:
+        return False
+
 
 class BaseSyntheticJobGeneratorFactory(abc.ABC):
     @abc.abstractmethod
