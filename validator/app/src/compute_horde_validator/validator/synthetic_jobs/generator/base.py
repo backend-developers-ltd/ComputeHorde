@@ -14,7 +14,7 @@ class BaseSyntheticJobGenerator(abc.ABC):
     def __repr__(self):
         return f"{self.__class__.__name__}({self._uuid})"
 
-    async def ainit(self):
+    async def ainit(self, miner_hotkey: str):
         """Allow to initialize generator in asyncio and non blocking"""
 
     def uuid(self) -> uuid.UUID:

@@ -46,7 +46,7 @@ async def answer_prompts(
     seed = workload.seed
 
     job_generator = LlmPromptsJobGenerator(workload.s3_url, seed)
-    await job_generator.ainit()
+    await job_generator.ainit(miner_hotkey=settings.TRUSTED_MINER_KEY)
 
     # TODO: Should be generated for all the llm executor classes.
     #       SolveWorkload/PromptSample should have a executor_class field saying which

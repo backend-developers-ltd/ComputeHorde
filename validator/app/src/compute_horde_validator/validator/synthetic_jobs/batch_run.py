@@ -826,7 +826,7 @@ async def _generate_jobs(ctx: BatchContext) -> None:
                 job_generator = await current.synthetic_job_generator_factory.create(
                     executor_class, **kwargs
                 )
-                await job_generator.ainit()
+                await job_generator.ainit(miner_hotkey=hotkey)
                 job_uuid = str(job_generator.uuid())
                 ctx.jobs[job_uuid] = Job(
                     ctx=ctx,

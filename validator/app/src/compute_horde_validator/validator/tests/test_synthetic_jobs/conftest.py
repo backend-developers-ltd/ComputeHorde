@@ -202,5 +202,5 @@ async def llm_prompts_job_generator(
         s3_url=prompt_series.s3_url,
         seed=solve_workload.seed,
     )
-    await job_generator.ainit()
+    await job_generator.ainit(miner_hotkey="test-dummy-hotkey")
     return job_generator
