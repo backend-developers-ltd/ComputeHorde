@@ -278,7 +278,7 @@ if SENTRY_DSN := env("SENTRY_DSN", default=""):
     from sentry_sdk.integrations.logging import LoggingIntegration
     from sentry_sdk.integrations.redis import RedisIntegration
 
-    sentry_sdk.init(  # type: ignore
+    sentry_sdk.init(
         dsn=SENTRY_DSN,
         environment=ENV,
         integrations=[
