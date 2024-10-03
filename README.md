@@ -75,6 +75,8 @@ export AWS_SECRET_ACCESS_KEY=...
 export AWS_ENDPOINT_URL=...
 ```
 
+Note: setting `AWS_ENDPOINT_URL` is optional. If not given, the default AWS S3 endpoint will be used.
+
 Then execute the following command from the same terminal session:
 
 ```shell

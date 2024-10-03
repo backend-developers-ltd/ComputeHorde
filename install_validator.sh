@@ -26,7 +26,9 @@ if [[ -z ${S3_BUCKET_NAME_PROMPTS+x} ]] || [[ -z ${S3_BUCKET_NAME_ANSWERS+x} ]];
   exit 1
 fi
 
-if [[ -z ${AWS_ACCESS_KEY_ID+x} ]] || [[ -z ${AWS_SECRET_ACCESS_KEY+x} ]] || [[ -z ${AWS_ENDPOINT_URL+x} ]]; then
+: "${AWS_ENDPOINT_URL:=}"
+
+if [[ -z ${AWS_ACCESS_KEY_ID+x} ]] || [[ -z ${AWS_SECRET_ACCESS_KEY+x} ]]; then
   >&2 echo "ERROR: You need to set environment variables AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_ENDPOINT_URL with AWS credentials that has access to the s3 buckets."
   exit 1
 fi
