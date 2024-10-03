@@ -1307,19 +1307,26 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
     start_time = time.time()
 
-    tasks = [
-        asyncio.create_task(job.job_generator._download_answers())
+    jobs = [
+        job
         for job in ctx.jobs.values()
         if job.executor_class == ExecutorClass.always_on__llm__a6000
         and job.job_response is not None
         and isinstance(job.job_response, V0JobFinishedRequest)
     ]
+    tasks = [asyncio.create_task(job.job_generator._download_answers()) for job in jobs]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     for i, result in enumerate(results):
         if isinstance(result, BaseException):
-            hotkey = ctx.hotkeys[i]
-            name = ctx.names[hotkey]
-            logger.warning("%s failed to get llm prompt answers: %r", name, result)
+            job = jobs[i]
+            logger.warning("failed to get llm prompt answers of %s: %r", job.name, result)
+            ctx.system_event(
+                type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+                subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED,
+                description=repr(result),
+                miner_hotkey=job.miner_hotkey,
+                func="_download_llm_prompts_answers",
+            )
         else:
             assert result is None
 
