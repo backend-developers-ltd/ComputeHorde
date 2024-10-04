@@ -67,6 +67,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
 )
+from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import LlmPromptsSyntheticJobGenerator
 from compute_horde_validator.validator.synthetic_jobs.scoring import get_manifest_multiplier
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
@@ -775,7 +776,7 @@ async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None
         for executor_class, count in executors.items()
         if executor_class == ExecutorClass.always_on__llm__a6000
     )
-    prompt_samples = (
+    prompt_samples_qs = (
         PromptSample.objects.select_related("series", "workload")
         .prefetch_related("prompts")
         .filter(
@@ -783,7 +784,7 @@ async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None
             workload__finished_at__isnull=False,
         )[:llm_executor_count]
     )
-    prompt_samples = [ps async for ps in prompt_samples]
+    prompt_samples = [ps async for ps in prompt_samples_qs]
     if len(prompt_samples) < llm_executor_count:
         logger.warning(
             "Not enough prompt samples for llm executors: %d < %d - will NOT run llm synthetic prompt jobs",
@@ -1300,11 +1301,12 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
 async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
     tasks = [
-        asyncio.create_task(job.job_generator._download_answers())
+        asyncio.create_task(job.job_generator.download_answers())
         for job in ctx.jobs.values()
         if job.executor_class == ExecutorClass.always_on__llm__a6000
         and job.job_response is not None
         and isinstance(job.job_response, V0JobFinishedRequest)
+        and isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator)
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     for i, result in enumerate(results):
@@ -1455,16 +1457,20 @@ def _db_persist(ctx: BatchContext) -> None:
 
     # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {
-        synthetic_job.job_uuid: synthetic_job for synthetic_job in synthetic_jobs
+        str(synthetic_job.job_uuid): synthetic_job for synthetic_job in synthetic_jobs
     }
     prompt_samples: list[PromptSample] = []
 
     for job in ctx.jobs.values():
         if job.executor_class != ExecutorClass.always_on__llm__a6000:
             continue
+        if not isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator):
+            logger.warning(f"Skipped non-LLM job: {job.job_generator.__class__.__name__}")
+            continue
         prompt_sample = job.job_generator.prompt_sample
         prompt_sample.synthetic_job = synthetic_jobs_map.get(job.uuid)
         prompt_samples.append(prompt_sample)
+
     PromptSample.objects.bulk_update(prompt_samples, fields=["synthetic_job"])
 
     job_started_receipts: list[JobStartedReceipt] = []

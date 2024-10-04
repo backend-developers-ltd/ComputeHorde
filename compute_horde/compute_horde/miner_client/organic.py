@@ -6,10 +6,10 @@ import logging
 import time
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Literal, TypeAlias
 
 import bittensor
 
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
@@ -311,8 +311,6 @@ class OrganicJobError(Exception):
 
     def __repr__(self):
         return f"{type(self).__name__}: {str(self)}"
-
-DockerRunOptionsPreset: TypeAlias = Literal["nvidia_all", "none"]
 
 @dataclass
 class OrganicJobDetails:

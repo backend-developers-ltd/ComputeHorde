@@ -1,10 +1,11 @@
 import abc
 import uuid
 
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
 from compute_horde.executor_class import ExecutorClass
-from compute_horde.miner_client.organic import OrganicJobDetails, DockerRunOptionsPreset
+from compute_horde.miner_client.organic import OrganicJobDetails
 
 
 class BasePromptJobGenerator(abc.ABC):

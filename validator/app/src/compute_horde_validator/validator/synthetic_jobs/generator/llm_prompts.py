@@ -1,11 +1,11 @@
 import uuid
 
 import pydantic
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import MultiUpload, OutputUpload, SingleFilePutUpload
 from compute_horde.base.volume import MultiVolume, SingleFileVolume, Volume
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
-
 from compute_horde_validator.validator.models import Prompt, PromptSample
 from compute_horde_validator.validator.s3 import (
     download_file_content,
@@ -57,7 +57,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
     def docker_image_name(self) -> str:
         return "docker.io/backenddevelopersltd/compute-horde-prompt-solver:v0-latest"
 
-    def docker_run_options_preset(self) -> str:
+    def docker_run_options_preset(self) -> DockerRunOptionsPreset:
         return "nvidia_all"
 
     def docker_run_cmd(self) -> list[str]:
@@ -90,7 +90,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
             ]
         )
 
-    async def _download_answers(self):
+    async def download_answers(self):
         response = await download_file_content(self._url_for_download())
         self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(response)
 

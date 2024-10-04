@@ -29,11 +29,11 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
         self.weights_version: int | None = None
         self._hash_job: SyntheticJob | None = None
         self.expected_answer: str | None = None
-        self.miner_hotkey = None
+        self._miner_hotkey: str | None = None
 
     async def ainit(self, miner_hotkey: str):
         """Allow to initialize generator in asyncio and non blocking"""
-        self.miner_hotkey = miner_hotkey
+        self._miner_hotkey = miner_hotkey
         self.weights_version = await aget_weights_version()
         self._hash_job, self.expected_answer = await self._get_hash_job()
 
@@ -43,9 +43,16 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
             raise JobNotInitialized("ainit() must be called first")
         return self._hash_job
 
+    @property
+    def miner_hotkey(self) -> str:
+        if self._miner_hotkey is None:
+            raise JobNotInitialized("ainit() must be called first")
+        return self._miner_hotkey
+
     @sync_to_async(thread_sensitive=False)
     def _get_hash_job(self) -> tuple[SyntheticJob, str]:
         hash_job: SyntheticJob
+
         if self.weights_version == 0:
             algorithm = Algorithm.get_random_algorithm()
             hash_job = V0SyntheticJob.generate(
@@ -62,7 +69,7 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
         else:
             raise RuntimeError(f"No SyntheticJob for weights_version: {self.weights_version}")
 
-        # precompute anwer when already in thread
+        # precompute answer when already in thread
         return hash_job, hash_job.answer
 
     def timeout_seconds(self) -> int:

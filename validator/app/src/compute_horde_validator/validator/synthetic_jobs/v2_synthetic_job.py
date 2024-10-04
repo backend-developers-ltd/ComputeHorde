@@ -44,16 +44,16 @@ class V2SyntheticJob(SyntheticJob):
         salt_length_bytes: int = 8,
     ) -> Self:
         # generate distinct passwords for each algorithm
-        passwords = []
+        password_batches = []
         for _params in params:
-            _passwords = set()
-            while len(_passwords) < _params.num_hashes:
-                _passwords.add(
+            passwords: set[str] = set()
+            while len(passwords) < _params.num_hashes:
+                passwords.add(
                     cls.random_string(
                         num_letters=_params.num_letters, num_digits=_params.num_digits
                     )
                 )
-            passwords.append(sorted(list(_passwords)))
+            password_batches.append(sorted(list(passwords)))
 
         first_password = f"{miner_hotkey}-{cls.random_string(num_letters=48, num_digits=0)}"
 
@@ -61,7 +61,7 @@ class V2SyntheticJob(SyntheticJob):
             algorithms=algorithms,
             params=params,
             first_password=first_password,
-            passwords=passwords,
+            passwords=password_batches,
             salts=[secrets.token_bytes(salt_length_bytes) for _ in range(len(algorithms))],
         )
 
@@ -137,5 +137,5 @@ if __name__ == "__main__":
     params = [HASHJOB_PARAMS[4][algorithm] for algorithm in algorithms]
     job = V2SyntheticJob.generate(algorithms, params, "dummy-hotkey")
     # print(job.raw_script())
-    print(f"Payload: {job.payload}")
+    print(f"Payload: {job.payload!r}")
     print(f"Answer: {job.answer}")

@@ -9,7 +9,7 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def get_s3_client() -> boto3.client:
+def get_s3_client():
     return boto3.client(
         "s3",
         aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
@@ -25,10 +25,10 @@ def _generate_presigned_url(
     bucket_name: str,
     prefix: str = "",
     expiration: int = 3600,
-):
+) -> str:
     s3_client = get_s3_client()
 
-    return s3_client.generate_presigned_url(
+    return s3_client.generate_presigned_url(  # type: ignore
         method,
         Params={"Bucket": bucket_name, "Key": prefix + key},
         ExpiresIn=expiration,

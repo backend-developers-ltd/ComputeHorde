@@ -81,7 +81,7 @@ async def answer_prompts(
         return
 
     try:
-        await job_generator._download_answers()
+        await job_generator.download_answers()
         prompt_answers: dict[str, str] = job_generator.prompt_answers
     except Exception:
         logger.error("Failed to download prompt answers", exc_info=True)
