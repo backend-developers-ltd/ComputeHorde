@@ -158,7 +158,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "compute_horde_executor.wsgi.application"
 
-DATABASES = {}
+DATABASES = {}  # type: ignore
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
