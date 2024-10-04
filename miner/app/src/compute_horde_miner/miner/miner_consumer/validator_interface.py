@@ -189,7 +189,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         else:
             authenticated, auth_error_msg = self.verify_auth_msg(msg)
             if not authenticated:
-                close_error_msg = f"Validator {self.validator_key} not authenticated due to: {auth_error_msg}"
+                close_error_msg = (
+                    f"Validator {self.validator_key} not authenticated due to: {auth_error_msg}"
+                )
                 await self.close_with_error_msg(close_error_msg)
                 return
 
@@ -332,9 +334,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await job.adelete()
             self.pending_jobs.pop(msg.job_uuid)
             return
-        await self.send(
-            miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json()
-        )
+        await self.send(miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json())
 
     async def handle_job_request(self, msg: validator_requests.V0JobRequest):
         job = self.pending_jobs.get(msg.job_uuid)
@@ -386,7 +386,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             max_timeout=msg.payload.max_timeout,
         )
 
-    async def handle_job_finished_receipt(self, msg: validator_requests.V0JobFinishedReceiptRequest):
+    async def handle_job_finished_receipt(
+        self, msg: validator_requests.V0JobFinishedReceiptRequest
+    ):
         logger.info(
             f"Received job finished receipt for"
             f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
@@ -416,9 +418,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
         job_uuid = job.job_uuid.hex
         self.pending_jobs[job_uuid] = job
-        await self.send(
-            miner_requests.V0ExecutorReadyRequest(job_uuid=job_uuid).model_dump_json()
-        )
+        await self.send(miner_requests.V0ExecutorReadyRequest(job_uuid=job_uuid).model_dump_json())
         logger.debug(f"Readiness for job {job_uuid} reported to validator {self.validator_key}")
 
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):

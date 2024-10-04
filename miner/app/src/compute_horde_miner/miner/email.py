@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 from functools import lru_cache
 from pathlib import Path
-from typing import TypeVar, Mapping, Any
+from typing import Any, TypeVar
 
 from django.conf import settings
 from django.contrib.staticfiles import finders

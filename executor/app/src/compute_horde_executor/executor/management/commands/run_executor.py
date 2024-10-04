@@ -42,7 +42,7 @@ from compute_horde.miner_client.base import (
     AbstractMinerClient,
     UnsupportedMessageReceived,
 )
-from compute_horde.transport import WSTransport, AbstractTransport
+from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.core.management.base import BaseCommand

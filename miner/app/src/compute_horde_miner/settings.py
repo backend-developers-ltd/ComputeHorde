@@ -1,9 +1,6 @@
 """
 Django settings for compute_horde_miner project.
 """
-from bittensor import wallet
-from compute_horde import base  # noqa
-from compute_horde import executor_class
 
 import inspect
 import ipaddress
@@ -14,7 +11,11 @@ from functools import wraps
 
 import bittensor
 import environ
-
+from bittensor import wallet
+from compute_horde import (
+    base,  # noqa
+    executor_class,
+)
 
 # from celery.schedules import crontab
 

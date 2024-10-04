@@ -1,12 +1,11 @@
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 from functools import partial
-from typing import Callable
 
 import numpy as np
 from compute_horde.executor_class import ExecutorClass
 from django.conf import settings
-from mypy.nodes import REVEAL_LOCALS
 
 from .dynamic_config import get_executor_class_weights
 
@@ -51,7 +50,9 @@ def horde_score(benchmarks: list[float], alpha=0, beta=0, delta=0):
     return scaled_avg_benchmark * sum_agent * scaled_inverted_n
 
 
-def score_jobs(jobs, score_aggregation: Callable[[list[float]], float] = sum, normalization_weight=1):
+def score_jobs(
+    jobs, score_aggregation: Callable[[list[float]], float] = sum, normalization_weight=1
+):
     batch_scores = defaultdict(list)
     score_per_hotkey = {}
     for job in jobs:

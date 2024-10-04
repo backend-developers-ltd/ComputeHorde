@@ -8,7 +8,8 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
 )
 from compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
     HASHJOB_PARAMS,
-    Algorithm, SyntheticJob,
+    Algorithm,
+    SyntheticJob,
 )
 from compute_horde_validator.validator.synthetic_jobs.v0_synthetic_job import V0SyntheticJob
 from compute_horde_validator.validator.synthetic_jobs.v1_synthetic_job import V1SyntheticJob
@@ -18,8 +19,7 @@ from compute_horde_validator.validator.utils import single_file_zip
 MAX_SCORE = 2
 
 
-class JobNotInitialized(Exception):
-    ...
+class JobNotInitialized(Exception): ...
 
 
 class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):

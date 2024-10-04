@@ -29,6 +29,7 @@ class SyntheticJob(ABC):
 class _HashProto(Protocol):
     def hexdigest(self) -> str: ...
 
+
 class Algorithm(enum.Enum):
     SHA256 = "SHA256"
     SHA384 = "SHA384"

@@ -44,7 +44,9 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
         await super().connect()
         try:
             # TODO maybe one day tokens will be reused, then we will have to add filtering here
-            self._maybe_job = job = await AcceptedJob.objects.aget(executor_token=self.executor_token)
+            self._maybe_job = job = await AcceptedJob.objects.aget(
+                executor_token=self.executor_token
+            )
         except AcceptedJob.DoesNotExist:
             await self.send(
                 miner_requests.GenericError(

@@ -92,11 +92,11 @@ async def check_publicly_accessible(axon_info: bittensor.AxonInfo):
             "details": "Unknown validator: fake-hotkey",
         }
     except (
-            AssertionError,
-            ConnectionError,
-            TimeoutError,
-            websockets.WebSocketException,
-            json.JSONDecodeError,
+        AssertionError,
+        ConnectionError,
+        TimeoutError,
+        websockets.WebSocketException,
+        json.JSONDecodeError,
     ) as exc:
         raise CheckError(
             "Your miner is not accessible publicly. Check if your port is open in the firewall."

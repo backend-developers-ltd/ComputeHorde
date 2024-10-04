@@ -312,6 +312,7 @@ class OrganicJobError(Exception):
     def __repr__(self):
         return f"{type(self).__name__}: {str(self)}"
 
+
 @dataclass
 class OrganicJobDetails:
     job_uuid: str

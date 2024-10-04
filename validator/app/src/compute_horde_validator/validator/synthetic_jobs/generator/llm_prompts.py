@@ -6,6 +6,7 @@ from compute_horde.base.output_upload import MultiUpload, OutputUpload, SingleFi
 from compute_horde.base.volume import MultiVolume, SingleFileVolume, Volume
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 from django.conf import settings
+
 from compute_horde_validator.validator.models import Prompt, PromptSample
 from compute_horde_validator.validator.s3 import (
     download_file_content,

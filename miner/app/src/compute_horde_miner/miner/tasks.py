@@ -2,7 +2,10 @@ import datetime
 
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
-from compute_horde.mv_protocol.validator_requests import JobStartedReceiptPayload, JobFinishedReceiptPayload
+from compute_horde.mv_protocol.validator_requests import (
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+)
 from compute_horde.receipts import get_miner_receipts
 from compute_horde.utils import get_validators
 from constance import config

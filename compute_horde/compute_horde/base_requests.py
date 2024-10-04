@@ -1,7 +1,8 @@
 import abc
 import enum
 import json
-from typing import Type, TypeVar, Generator
+from collections.abc import Generator
+from typing import TypeVar
 
 import pydantic
 
@@ -24,13 +25,16 @@ class ValidationError(Exception):
 
 T = TypeVar("T", bound=type)
 
+
 def all_subclasses(cls: T) -> Generator[T, None, None]:
     for subclass in cls.__subclasses__():
         yield subclass
         yield from all_subclasses(subclass)
 
 
-_base_class_to_request_type_mapping: dict[Type["BaseRequest"], dict[enum.Enum, Type["BaseRequest"]]] = {}
+_base_class_to_request_type_mapping: dict[
+    type["BaseRequest"], dict[enum.Enum, type["BaseRequest"]]
+] = {}
 
 
 class BaseRequest(pydantic.BaseModel, abc.ABC):

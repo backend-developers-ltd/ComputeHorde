@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 from collections import deque
-from typing import NoReturn
 
 import bittensor
 import pydantic

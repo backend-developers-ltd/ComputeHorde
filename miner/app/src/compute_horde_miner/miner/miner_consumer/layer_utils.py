@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Self, Any, TypeVar
+from typing import Any, Self, TypeVar
 
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -58,7 +58,9 @@ class ExecutorFailed(pydantic.BaseModel):
     docker_process_stdout: str
     docker_process_stderr: str
 
+
 TModel = TypeVar("TModel", bound=pydantic.BaseModel)
+
 
 class BaseMixin(AsyncWebsocketConsumer, abc.ABC):
     @classmethod
@@ -73,7 +75,9 @@ class BaseMixin(AsyncWebsocketConsumer, abc.ABC):
         group_name = self.group_name(executor_token)
         await self.channel_layer.group_discard(group_name, self.channel_name)
 
-    def validate_event(self, event_type, models_class: type[TModel], event: dict[str, Any]) -> TModel | None:
+    def validate_event(
+        self, event_type, models_class: type[TModel], event: dict[str, Any]
+    ) -> TModel | None:
         try:
             return models_class(**event)
         except Exception:

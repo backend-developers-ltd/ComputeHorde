@@ -5,7 +5,6 @@ import statistics
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
@@ -14,7 +13,7 @@ import bittensor
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.base.output_upload import OutputUpload
-from compute_horde.base.volume import Volume, InlineVolume, VolumeType
+from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
@@ -67,7 +66,9 @@ from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
 )
-from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import LlmPromptsSyntheticJobGenerator
+from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
+    LlmPromptsSyntheticJobGenerator,
+)
 from compute_horde_validator.validator.synthetic_jobs.scoring import get_manifest_multiplier
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 

@@ -7,12 +7,17 @@ import logging
 import pathlib
 import tempfile
 import zipfile
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable
 
 import httpx
-from compute_horde.base.output_upload import ZipAndHttpPostUpload, ZipAndHttpPutUpload, MultiUpload, OutputUpload, \
-    OutputUploadType
+from compute_horde.base.output_upload import (
+    MultiUpload,
+    OutputUpload,
+    OutputUploadType,
+    ZipAndHttpPostUpload,
+    ZipAndHttpPutUpload,
+)
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -73,7 +78,7 @@ class OutputUploader(metaclass=abc.ABCMeta):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls.__output_type_map[cls.handles_output_type()] = lambda upload: cls(upload) # type: ignore
+        cls.__output_type_map[cls.handles_output_type()] = lambda upload: cls(upload)  # type: ignore
 
     @classmethod
     def for_upload_output(cls, upload_output: OutputUpload) -> OutputUploader:
@@ -82,6 +87,7 @@ class OutputUploader(metaclass=abc.ABCMeta):
 
 class ZipAndHTTPPostOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP POST the zip file to the given URL"""
+
     def __init__(self, upload_output: ZipAndHttpPostUpload):
         self.upload_output = upload_output
 
@@ -103,6 +109,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
 
 class ZipAndHTTPPutOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP PUT the zip file to the given URL"""
+
     def __init__(self, upload_output: ZipAndHttpPutUpload):
         self.upload_output = upload_output
 
@@ -117,6 +124,7 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
 
 class MultiUploadOutputUploader(OutputUploader):
     """Upload multiple files to the specified URLs"""
+
     def __init__(self, upload_output: MultiUpload):
         self.upload_output = upload_output
 
