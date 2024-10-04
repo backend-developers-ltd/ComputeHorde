@@ -22,6 +22,7 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ExecutorFailedToPrepare,
     ExecutorFinished,
     ExecutorReady,
+    ExecutorSpecs,
     ValidatorInterfaceMixin,
 )
 from compute_horde_miner.miner.models import (
@@ -422,7 +423,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         job.result_reported_to_validator = timezone.now()
         await job.asave()
 
-    async def _executor_specs(self, msg: validator_requests.V0MachineSpecsRequest):
+    async def _executor_specs(self, msg: ExecutorSpecs):
         await self.send(
             miner_requests.V0MachineSpecsRequest(
                 job_uuid=msg.job_uuid,

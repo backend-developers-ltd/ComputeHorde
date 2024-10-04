@@ -111,7 +111,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
             await self._executor_finished(payload)
 
     @abc.abstractmethod
-    async def _executor_specs(self, event: dict[str, Any]): ...
+    async def _executor_specs(self, event: ExecutorSpecs): ...
 
     @log_errors_explicitly
     async def executor_specs(self, event: dict[str, Any]):
