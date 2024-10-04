@@ -8,12 +8,9 @@ from compute_horde.executor_class import ExecutorClass
 from django.conf import settings
 from mypy.nodes import REVEAL_LOCALS
 
+from .dynamic_config import get_executor_class_weights
+
 logger = logging.getLogger(__name__)
-
-
-EXECUTOR_CLASS_WEIGHTS = {
-    ExecutorClass.spin_up_4min__gpu_24gb: 100,
-}
 
 
 def normalize(scores, weight=1):
@@ -66,9 +63,10 @@ def score_jobs(jobs, score_aggregation: Callable[[list[float]], float] = sum, no
 
 
 def score_batch(batch):
+    executor_class_weights = get_executor_class_weights()
     executor_class_jobs = defaultdict(list)
-    for job in batch.synthetic_jobs.all():
-        if job.executor_class in EXECUTOR_CLASS_WEIGHTS:
+    for job in batch.synthetic_jobs.select_related("miner"):
+        if job.executor_class in executor_class_weights:
             executor_class_jobs[job.executor_class].append(job)
 
     parametriezed_horde_score: Callable[[list[float]], float] = partial(
@@ -82,7 +80,7 @@ def score_batch(batch):
     )
     batch_scores: dict[str, float] = defaultdict(float)
     for executor_class, jobs in executor_class_jobs.items():
-        executor_class_weight = EXECUTOR_CLASS_WEIGHTS[executor_class]
+        executor_class_weight = executor_class_weights[executor_class]
         if executor_class == ExecutorClass.spin_up_4min__gpu_24gb:
             score_aggregation = parametriezed_horde_score
         else:

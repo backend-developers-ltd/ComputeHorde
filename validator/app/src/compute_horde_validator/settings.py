@@ -43,6 +43,8 @@ if env("ENV", default=None) is None:
 
 ENV = env("ENV", default="prod")
 
+PROMPT_GENERATION_MODEL = env("PROMPT_GENERATION_MODEL", default="phi3")
+
 DEFAULT_ADMIN_PASSWORD = env("DEFAULT_ADMIN_PASSWORD", default=None)
 DEFAULT_ADMIN_USERNAME = env("DEFAULT_ADMIN_USERNAME", default="admin")
 DEFAULT_ADMIN_EMAIL = env("DEFAULT_ADMIN_EMAIL", default="admin@admin.com")
@@ -167,8 +169,23 @@ CONSTANCE_CONFIG = {
         bool,
     ),
     "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": (
-        370,
+        722,
         "In blocks. This should be synced with the hyperparam",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET": (
+        361,
+        "Do not commit weights for this many blocks from the start of the interval",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER": (
+        15,
+        "Do not commit weights if there are less than this many blocks left in the commit window",
+        int,
+    ),
+    "DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER": (
+        15,
+        "Do not reveal weights if there are less than this many blocks left in the reveal window",
         int,
     ),
     "DYNAMIC_MAX_WEIGHT": (
@@ -201,30 +218,60 @@ CONSTANCE_CONFIG = {
         "in seconds",
         int,
     ),
-    "DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES": (
-        10,
-        "how many prompts to sample and validate from a series",
+    # llama params
+    "DYNAMIC_MAX_PROMPT_SERIES": (
+        3500,
+        "Maximum number of prompt series upon which the prompt generator will not be triggered",
         int,
     ),
-    "DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE": (
-        100,
-        "how many workloads are needed before running local inference",
+    "DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY": (
+        1536,  # 256 * 2 * 3 - we allow 2 executors per miner and want queue for 3 synthetic job batches
+        "how many prompt samples to generate (should be larger than how many prompts series we use per synthetic run)",
         int,
     ),
-    "DYNAMIC_MAX_PROMPT_BATCHES": (
-        10000,
-        "Maximum number of prompt batches upon which the prompt generator will not be triggered",
+    "DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD": (
+        240,
+        "how many prompts to answer in a single workload",
         int,
     ),
-    "DYNAMIC_PROMPTS_BATCHES_IN_A_SINGLE_GO": (
-        5,
+    # prompt generation params
+    "DYNAMIC_PROMPTS_SERIES_IN_A_SINGLE_GENERATION": (
+        25,
         "Number of batches that prompt generator will process in a single go",
         int,
     ),
-    "DYNAMIC_NUMBER_OF_PROMPTS_IN_BATCH": (
+    "DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES": (
         240,
-        "Number of prompts to generate in a single batch",
+        "Number of prompts to generate in a single series",
         int,
+    ),
+    # prompts answering params
+    "DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES": (
+        1,
+        "how many prompts to sample and answer from a series",
+        int,
+    ),
+    "DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS": (
+        "always_on.llm.a6000=2",
+        (
+            "The maximum number of executor for an executor class that miners are allowed to have. "
+            "Executor classes not mentioned here have no limits. "
+            "The format should be: 'key1=value1,key2=value2', "
+            "where the keys are executor class enum values, and the values are integers. "
+            "Setting 0 will disable an executor class."
+        ),
+        str,
+    ),
+    "DYNAMIC_EXECUTOR_CLASS_WEIGHTS": (
+        "spin_up-4min.gpu-24gb=99,always_on.llm.a6000=1",
+        (
+            "Weights of executor classes that are used to normalize miners scores. "
+            "Executor classes not mentioned here are not taken into account when scoring. "
+            "The format should be: 'key1=value1,key2=value2', "
+            "where the keys are executor class enum values, and the values are floats, "
+            "but int values that sum up to 100 are encouraged"
+        ),
+        str,
     ),
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
@@ -392,6 +439,21 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(minutes=5),
         "options": {},
     },
+    "llm_prompt_generation": {
+        "task": "compute_horde_validator.validator.tasks.llm_prompt_generation",
+        "schedule": timedelta(minutes=5),
+        "options": {},
+    },
+    "llm_prompt_sampling": {
+        "task": "compute_horde_validator.validator.tasks.llm_prompt_sampling",
+        "schedule": timedelta(minutes=30),
+        "options": {},
+    },
+    "llm_prompt_answering": {
+        "task": "compute_horde_validator.validator.tasks.llm_prompt_answering",
+        "schedule": timedelta(minutes=5),
+        "options": {},
+    },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
@@ -493,17 +555,6 @@ DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 
-# prompt gen sampling
-DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES = env.int(
-    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES", default=None
-)
-DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_FROM_SERIES = env.int(
-    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_PROMPTS_TO_VALIDATE_IN_BATCH", default=None
-)
-DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE = env.int(
-    "DEBUG_OVERRIDE_DYNAMIC_NUMBER_OF_WORKLOADS_TO_TRIGGER_LOCAL_INFERENCE", default=None
-)
-
 # synthetic jobs are evenly distributed through the cycle, however
 # we start them from some offset because scheduling takes some time
 SYNTHETIC_JOBS_RUN_OFFSET = env.int("SYNTHETIC_JOBS_RUN_OFFSET", default=24)
@@ -527,9 +578,9 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
 
 
 # Local miner generating prompts
-GENERATION_MINER_KEY = env.str("GENERATION_MINER_KEY", default="")
-GENERATION_MINER_ADDRESS = env.str("GENERATION_MINER_ADDRESS", default="")
-GENERATION_MINER_PORT = env.int("GENERATION_MINER_PORT", default=0)
+TRUSTED_MINER_KEY = env.str("TRUSTED_MINER_KEY", default="")
+TRUSTED_MINER_ADDRESS = env.str("TRUSTED_MINER_ADDRESS", default="")
+TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
 
 CHANNEL_LAYERS = {

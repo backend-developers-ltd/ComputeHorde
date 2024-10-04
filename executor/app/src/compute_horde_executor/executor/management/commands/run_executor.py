@@ -20,6 +20,7 @@ from compute_horde.base.volume import (
     InlineVolume,
     MultiVolume,
     SingleFileVolume,
+    Volume,
     ZipUrlVolume,
 )
 from compute_horde.base_requests import BaseRequest
@@ -409,8 +410,9 @@ class JobRunner:
             docker_run_options = RunConfigManager.preset_to_docker_run_args(
                 job_request.docker_run_options_preset
             )
-            await self.unpack_volume(job_request)
+            await self.unpack_volume()
         except JobError as ex:
+            logger.error("Job error: %s", ex.description)
             return JobResult(
                 success=False,
                 exit_status=None,
@@ -504,26 +506,26 @@ class JobRunner:
 
         success = exit_status == 0
 
-        # upload the output if requested
-        if job_request.output_upload:
-            try:
-                output_uploader = OutputUploader.for_upload_output(job_request.output_upload)
-                await output_uploader.upload(self.output_volume_mount_dir)
-            except OutputUploadFailed as ex:
-                logger.warning(
-                    f"Uploading output failed for job {self.initial_job_request.job_uuid} with error: {ex!r}"
-                )
-                success = False
-                stdout = ex.description
-                stderr = ""
-
-        time_took = time.time() - t1
-
         if success:
+            # upload the output if requested and job succeeded
+            if job_request.output_upload:
+                try:
+                    output_uploader = OutputUploader.for_upload_output(job_request.output_upload)
+                    await output_uploader.upload(self.output_volume_mount_dir)
+                except OutputUploadFailed as ex:
+                    logger.warning(
+                        f"Uploading output failed for job {self.initial_job_request.job_uuid} with error: {ex!r}"
+                    )
+                    success = False
+                    stdout = ex.description
+                    stderr = ""
+
+            time_took = time.time() - t1
             logger.info(
                 f'Job "{self.initial_job_request.job_uuid}" finished successfully in {time_took:0.2f} seconds'
             )
         else:
+            time_took = time.time() - t1
             logger.error(
                 f'"{" ".join(cmd)}" (job_uuid={self.initial_job_request.job_uuid})'
                 f' failed after {time_took:0.2f} seconds with status={process.returncode}'
@@ -557,7 +559,7 @@ class JobRunner:
         await process.wait()
         self.temp_dir.rmdir()
 
-    async def _unpack_volume(self, job_request: V0JobRequest):
+    async def _unpack_volume(self, volume: Volume | None):
         assert str(self.volume_mount_dir) not in {"~", "/"}
         for path in self.volume_mount_dir.glob("*"):
             if path.is_file():
@@ -565,19 +567,17 @@ class JobRunner:
             elif path.is_dir():
                 shutil.rmtree(path)
 
-        if job_request.volume is not None:
-            if isinstance(job_request.volume, InlineVolume):
-                await self._unpack_inline_volume(job_request.volume)
-            elif isinstance(job_request.volume, ZipUrlVolume):
-                await self._unpack_zip_url_volume(job_request.volume)
-            elif isinstance(job_request.volume, SingleFileVolume):
-                await self._unpack_single_file_volume(job_request.volume)
-            elif isinstance(job_request.volume, MultiVolume):
-                await self._unpack_multi_volume(job_request.volume)
+        if volume is not None:
+            if isinstance(volume, InlineVolume):
+                await self._unpack_inline_volume(volume)
+            elif isinstance(volume, ZipUrlVolume):
+                await self._unpack_zip_url_volume(volume)
+            elif isinstance(volume, SingleFileVolume):
+                await self._unpack_single_file_volume(volume)
+            elif isinstance(volume, MultiVolume):
+                await self._unpack_multi_volume(volume)
             else:
-                raise NotImplementedError(
-                    f"Unsupported volume_type: {job_request.volume.volume_type}"
-                )
+                raise NotImplementedError(f"Unsupported volume_type: {volume.volume_type}")
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()
@@ -620,10 +620,17 @@ class JobRunner:
             else:
                 raise NotImplementedError(f"Unsupported sub-volume type: {type(sub_volume)}")
 
-    async def unpack_volume(self, job_request: V0JobRequest):
+    async def get_job_volume(self) -> Volume | None:
+        if self.full_job_request.volume and self.initial_job_request.volume:
+            raise JobError("Received multiple volumes")
+
+        return self.full_job_request.volume or self.initial_job_request.volume or None
+
+    async def unpack_volume(self):
         try:
             await asyncio.wait_for(
-                self._unpack_volume(job_request), timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS
+                self._unpack_volume(await self.get_job_volume()),
+                timeout=INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS,
             )
         except JobError:
             raise
@@ -682,6 +689,12 @@ class Command(BaseCommand):
         async with miner_client:
             logger.debug(f"Connected to miner: {settings.MINER_ADDRESS}")
             initial_message: V0InitialJobRequest = await miner_client.initial_msg
+            if (
+                initial_message.base_docker_image_name
+                and not initial_message.base_docker_image_name.startswith("backenddevelopersltd/")
+            ):
+                await miner_client.send_failed_to_prepare()
+                return
             logger.debug("Checking for CVE-2022-0492 vulnerability")
             if not await self.is_system_safe_for_cve_2022_0492():
                 await miner_client.send_failed_to_prepare()
@@ -703,6 +716,11 @@ class Command(BaseCommand):
                 logger.debug(f"Informed miner that I'm ready for job {initial_message.job_uuid}")
 
                 job_request = await miner_client.full_payload
+                if job_request.docker_image_name and not job_request.docker_image_name.startswith(
+                    "backenddevelopersltd/"
+                ):
+                    await miner_client.send_failed_to_prepare()
+                    return
                 logger.debug(f"Running job {initial_message.job_uuid}")
                 result = await job_runner.run_job(job_request)
                 result.specs = specs

@@ -1,3 +1,5 @@
+from compute_horde.executor_class import ExecutorClass
+from django.conf import settings
 from compute_horde.base.output_upload import MultiUpload, SingleFilePutUpload, OutputUpload, SingleFileUpload
 
 from ..base import BasePromptJobGenerator
@@ -8,15 +10,22 @@ class PromptJobGenerator(BasePromptJobGenerator):
         return 0
 
     def timeout_seconds(self) -> int:
-        return 3600
+        return 5 * 60
 
     def docker_image_name(self) -> str:
-        return "backenddevelopersltd/compute-horde-prompt-gen:v0-latest"
+        return f"backenddevelopersltd/compute-horde-prompt-gen-{settings.PROMPT_GENERATION_MODEL}:v0-latest"
+
+    def executor_class(self) -> ExecutorClass:
+        return ExecutorClass.always_on__llm__a6000
 
     def docker_run_cmd(self) -> list[str]:
         return [
+            "--quantize",
             "--model_name",
-            "phi3",
+            settings.PROMPT_GENERATION_MODEL,
+            "--batch_size=250",  # on A6000 we want 240 prompts generated in single file, but not all results are valid
+            "--num_return_sequences=1",
+            "--max_new_tokens=40",  # 40 new tokens is enough for reasonable length prompt - 30 caused too much cut off prompts
             "--number_of_prompts_per_batch",
             str(self.num_prompts_per_batch),
             "--uuids",

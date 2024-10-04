@@ -71,17 +71,18 @@ line-length = 100
 
 [tool.ruff.lint]
 # TODO add D
-select = ["E", "F", "I", "UP"]
+select = ["E", "F", "I", "UP", "B"]
 # TODO: remove E501 once docstrings are formatted
 ignore = [
     "D100", "D105", "D107", "D200", "D202", "D203", "D205", "D212", "D400", "D401", "D415",
     "D101", "D102","D103", "D104", # TODO remove once we have docstring for all public methods
     "E501", # TODO: remove E501 once docstrings are formatted
+    "B027", "B904", "B905",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"test/**" = ["D", "F403", "F405"]
+"**/tests/**" = ["D", "F403", "F405", "B018"]
 
 [tool.codespell]
 skip = '*.min.js,*.lock,*/monitoring_certs/*'

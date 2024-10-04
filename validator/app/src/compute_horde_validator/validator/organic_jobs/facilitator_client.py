@@ -41,12 +41,14 @@ class AuthenticationError(Exception):
         self.errors = errors
 
 
-async def save_facilitator_event(subtype: str, long_description: str, data={}, success=False):
+async def save_facilitator_event(
+    subtype: str, long_description: str, data: dict[str, str] | None = None, success=False
+):
     await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
         type=SystemEvent.EventType.FACILITATOR_CLIENT_ERROR,
         subtype=subtype,
         long_description=long_description,
-        data=data,
+        data=data or {},
     )
 
 

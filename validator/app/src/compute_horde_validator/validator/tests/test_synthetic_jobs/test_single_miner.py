@@ -6,7 +6,6 @@ from unittest.mock import patch
 import bittensor
 import pytest
 from asgiref.sync import sync_to_async
-from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.models import (
     Miner,
@@ -17,24 +16,16 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_s
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
 from ..helpers import check_system_events
+from .helpers import check_synthetic_job
 from .mock_generator import (
     MOCK_SCORE,
     NOT_SCORED,
-    MockSyntheticJobGeneratorFactory,
 )
 
 pytestmark = [
     pytest.mark.asyncio,
     pytest.mark.django_db(databases=["default", "default_alias"], transaction=True),
 ]
-
-
-@pytest.fixture(autouse=True)
-def _patch_generator_factory(mocker: MockerFixture, job_uuid: uuid.UUID):
-    mocker.patch(
-        "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
-        MockSyntheticJobGeneratorFactory(uuids=[job_uuid]),
-    )
 
 
 async def test_execute_miner_synthetic_jobs_success(
@@ -62,7 +53,7 @@ async def test_execute_miner_synthetic_jobs_success(
         timeout=1,
     )
 
-    await check_synthetic_job(job_uuid, miner, SyntheticJob.Status.COMPLETED, MOCK_SCORE)
+    await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, MOCK_SCORE)
     await sync_to_async(check_system_events)(
         SystemEvent.EventType.MINER_SYNTHETIC_JOB_SUCCESS, SystemEvent.EventSubType.SUCCESS
     )
@@ -96,7 +87,7 @@ async def test_execute_miner_synthetic_jobs_success_timeout(
         timeout=3,
     )
 
-    await check_synthetic_job(job_uuid, miner, SyntheticJob.Status.FAILED, NOT_SCORED)
+    await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.FAILED, NOT_SCORED)
     await sync_to_async(check_system_events)(
         SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
         SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT,
@@ -128,7 +119,7 @@ async def test_execute_miner_synthetic_jobs_job_failed(
         timeout=1,
     )
 
-    await check_synthetic_job(job_uuid, miner, SyntheticJob.Status.FAILED, NOT_SCORED)
+    await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.FAILED, NOT_SCORED)
     await sync_to_async(check_system_events)(
         SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE, SystemEvent.EventSubType.FAILURE
     )
@@ -155,7 +146,7 @@ async def test_execute_miner_synthetic_jobs_job_declined(
         timeout=1,
     )
 
-    await check_synthetic_job(job_uuid, miner, SyntheticJob.Status.FAILED, NOT_SCORED)
+    await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.FAILED, NOT_SCORED)
     await sync_to_async(check_system_events)(
         SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE, SystemEvent.EventSubType.JOB_NOT_STARTED
     )
@@ -180,11 +171,3 @@ async def test_execute_miner_synthetic_jobs_no_manifest(
     await sync_to_async(check_system_events)(
         SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE, SystemEvent.EventSubType.MANIFEST_TIMEOUT
     )
-
-
-async def check_synthetic_job(job_uuid: uuid.UUID, miner: Miner, status: str, score: float):
-    job = await SyntheticJob.objects.aget()
-    assert job.job_uuid == job_uuid
-    assert job.miner_id == miner.pk
-    assert job.status == status
-    assert job.score == score

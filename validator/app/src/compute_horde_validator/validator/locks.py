@@ -6,6 +6,7 @@ from django.db import connection
 class LockType(enum.Enum):
     WEIGHT_SETTING = 1
     VALIDATION_SCHEDULING = 2
+    TRUSTED_MINER_LOCK = 3
 
 
 class Locked(Exception):

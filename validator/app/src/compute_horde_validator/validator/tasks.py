@@ -6,6 +6,7 @@ import time
 import traceback
 import uuid
 from datetime import timedelta
+from functools import cached_property
 from math import ceil, floor
 
 import billiard.exceptions
@@ -32,10 +33,8 @@ from django.utils.timezone import now
 from pydantic import JsonValue
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator.dynamic_config import (
-    get_number_of_prompts_to_validate_from_series,
-    get_number_of_workloads_to_trigger_local_inference,
-)
+from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
+from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
@@ -53,7 +52,12 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
-from compute_horde_validator.validator.s3 import generate_upload_url, get_prompts_from_s3_url
+from compute_horde_validator.validator.s3 import (
+    download_prompts_from_s3_url,
+    generate_upload_url,
+    get_public_url,
+    upload_prompts_to_s3_url,
+)
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     SYNTHETIC_JOBS_HARD_LIMIT,
     SYNTHETIC_JOBS_SOFT_LIMIT,
@@ -68,6 +72,7 @@ from .scoring import score_batches
 logger = get_task_logger(__name__)
 
 JOB_WINDOW = 2 * 60 * 60
+MAX_SEED = (1 << 32) - 1
 
 SCORING_ALGO_VERSION = 2
 
@@ -188,6 +193,85 @@ def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
         )
 
     return range(first_epoch.start, second_epoch.stop)
+
+
+class CommitRevealInterval:
+    """
+    Commit-reveal interval for a given block.
+
+    722                                    1444                                   2166
+    |______________________________________|______________________________________|
+    ^-1                                    ^-2                                    ^-3
+
+    ^                     ^                ^                                      ^
+    interval start        actual commit    interval end / reveal starts           ends
+
+    Subtensor uses the actual subnet hyperparam to determine the interval:
+    https://github.com/opentensor/subtensor/blob/af585b9b8a17d27508431257052da502055477b7/pallets/subtensor/src/subnets/weights.rs#L482
+
+    Each interval is divided into reveal and commit windows based on dynamic parameters:
+
+    722                                                                          1443
+    |______________________________________|_______________________________________|
+    ^                                      ^                              ^
+    |-----------------------------|--------|------------------------------|-------_|
+    |       REVEAL WINDOW         | BUFFER |        COMMIT WINDOW         | BUFFER |
+    |                                      |
+    |            COMMIT OFFSET             |
+
+    """
+
+    def __init__(
+        self,
+        current_block: int,
+        *,
+        length: int | None = None,
+        commit_start_offset: int | None = None,
+        commit_end_buffer: int | None = None,
+        reveal_end_buffer: int | None = None,
+    ):
+        self.current_block = current_block
+        self.length = length or config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
+        self.commit_start_offset = (
+            commit_start_offset or config.DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET
+        )
+        self.commit_end_buffer = commit_end_buffer or config.DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER
+        self.reveal_end_buffer = reveal_end_buffer or config.DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER
+
+    @cached_property
+    def start(self):
+        """
+        https://github.com/opentensor/subtensor/blob/af585b9b8a17d27508431257052da502055477b7/pallets/subtensor/src/subnets/weights.rs#L488
+        """
+        return self.current_block - self.current_block % self.length
+
+    @cached_property
+    def stop(self):
+        return self.start + self.length
+
+    @property
+    def reveal_start(self):
+        return self.start
+
+    @cached_property
+    def reveal_stop(self):
+        return self.start + self.commit_start_offset - self.reveal_end_buffer
+
+    @property
+    def reveal_window(self):
+        return range(self.reveal_start, self.reveal_stop)
+
+    @cached_property
+    def commit_start(self):
+        return self.start + self.commit_start_offset
+
+    @cached_property
+    def commit_stop(self):
+        return self.stop - self.commit_end_buffer
+
+    @property
+    def commit_window(self):
+        return range(self.commit_start, self.commit_stop)
 
 
 @app.task
@@ -428,33 +512,9 @@ def do_set_weights(
     current_block = subtensor_.get_current_block()
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
-    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
     max_weight = config.DYNAMIC_MAX_WEIGHT
 
     def _commit_weights() -> tuple[bool, str]:
-        last_weights = Weights.objects.order_by("-created_at").first()
-        if (
-            last_weights
-            and last_weights.revealed_at is None
-            and last_weights.block >= current_block - commit_reveal_weights_interval * 1.5
-        ):
-            # ___|______________________|______________________|____________________
-            #    ^-commit weights       ^-time to reveal       ^-2x time to reveal
-            #    |_________________________________|_______________________________
-            #     impossible to commit new weights     can commit new weights
-            #     unless last weights are revealed     no matter what
-            save_weight_setting_failure(
-                subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_UNREVEALED_ERROR,
-                long_description="Cannot commit new weights before revealing old ones",
-                data={
-                    "uncommited_weights_id": last_weights.id,
-                    "created_at": str(last_weights.created_at),
-                    "block": last_weights.block,
-                    "current_block": current_block,
-                    "commit_reveal_weights_interval": commit_reveal_weights_interval,
-                },
-            )
-            return False, "Cannot commit new weights before revealing old ones"
         normalized_weights = _normalize_weights_for_committing(weights, max_weight)
         weights_in_db = Weights(
             uids=uids,
@@ -492,7 +552,10 @@ def do_set_weights(
             save_weight_setting_failure(
                 subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
                 long_description=f"message from chain: {message}",
-                data={"weights_id": weights_in_db.id},
+                data={
+                    "weights_id": weights_in_db.id,
+                    "current_block": current_block,
+                },
             )
         return is_success, message
 
@@ -565,7 +628,7 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             miner_hotkey=miner.hotkey,
             miner_address=miner_axon_info.ip,
             miner_port=miner_axon_info.port,
-            job_uuid=job.job_uuid.hex,
+            job_uuid=str(job.job_uuid),
             my_keypair=my_keypair,
         )
 
@@ -645,6 +708,26 @@ def get_metagraph(subtensor, netuid):
 
 @app.task
 def set_scores():
+    if not config.SERVING:
+        logger.warning("Not setting scores, SERVING is disabled in constance config")
+        return
+
+    commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
+
+    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor.get_current_block()
+
+    if commit_reveal_weights_enabled:
+        interval = CommitRevealInterval(current_block)
+
+        if current_block not in interval.commit_window:
+            logger.debug(
+                "Outside of commit window, skipping, current block: %s, window: %s",
+                current_block,
+                interval.commit_window,
+            )
+            return
+
     with save_event_on_error(SystemEvent.EventSubType.GENERIC_ERROR):
         with transaction.atomic():
             try:
@@ -652,22 +735,17 @@ def set_scores():
             except Locked:
                 logger.debug("Another thread already setting weights")
                 return
-            if not config.SERVING:
-                logger.warning("Not setting scores, SERVING is disabled in constance config")
-                return
 
-            subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
             metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
             neurons = metagraph.neurons
             hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
             score_per_uid = {}
             batches = list(
-                SyntheticJobBatch.objects.prefetch_related("synthetic_jobs")
+                SyntheticJobBatch.objects.select_related("cycle")
                 .filter(
                     scored=False,
                     started_at__gte=now() - timedelta(days=1),
-                    accepting_results_until__lt=now(),
-                    cycle__isnull=False,
+                    cycle__stop__lt=current_block,
                 )
                 .order_by("-started_at")
             )
@@ -681,20 +759,12 @@ def set_scores():
                     batch.save()
                 batches = [batches[-1]]
 
-            assert batches[-1].cycle is not None
-            if subtensor.get_current_block() <= batches[-1].cycle.stop:
-                logger.debug(
-                    "There is a batch ready to be scored but we're "
-                    "waiting for the beginning of next cycle to set weights"
-                )
-                return
-
             hotkey_scores = score_batches(batches)
             for hotkey, score in hotkey_scores.items():
                 uid = hotkey_to_uid.get(hotkey)
                 if uid is None:
                     continue
-                score_per_uid[uid] = uid
+                score_per_uid[uid] = score
 
             if not score_per_uid:
                 logger.info("No miners on the subnet to score")
@@ -776,23 +846,50 @@ def reveal_scores() -> None:
     Select latest Weights that are older than `commit_reveal_weights_interval`
     and haven't been revealed yet, and reveal them.
     """
+    last_weights = Weights.objects.order_by("-created_at").first()
+    if not last_weights or last_weights.revealed_at is not None:
+        logger.debug("No weights to reveal")
+        return
+
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor_.get_current_block()
+    interval = CommitRevealInterval(current_block)
+    if current_block not in interval.reveal_window:
+        logger.debug(
+            "Outside of reveal window, skipping, current block: %s, window: %s",
+            current_block,
+            interval.reveal_window,
+        )
+        return
+
+    # find the interval in which the commit occurred
+    block_interval = CommitRevealInterval(last_weights.block)
+    # revealing starts in the next interval
+    reveal_start = block_interval.stop
+
+    if current_block < reveal_start:
+        logger.warning(
+            "Too early to reveal weights weights_id: %s, reveal starts: %s, current block: %s",
+            last_weights.pk,
+            reveal_start,
+            current_block,
+        )
+        return
+
+    reveal_end = reveal_start + block_interval.length
+    if current_block > reveal_end:
+        logger.error(
+            "Weights are too old to be revealed weights_id: %s, reveal_ended: %s, current block: %s",
+            last_weights.pk,
+            reveal_end,
+            current_block,
+        )
+        return
+
     WEIGHT_REVEALING_TTL = config.DYNAMIC_WEIGHT_REVEALING_TTL
     WEIGHT_REVEALING_HARD_TTL = config.DYNAMIC_WEIGHT_REVEALING_HARD_TTL
     WEIGHT_REVEALING_ATTEMPTS = config.DYNAMIC_WEIGHT_REVEALING_ATTEMPTS
     WEIGHT_REVEALING_FAILURE_BACKOFF = config.DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF
-
-    commit_reveal_weights_interval = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL
-
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor_.get_current_block()
-
-    last_weights = Weights.objects.order_by("-created_at").first()
-    if not last_weights:
-        return
-    if last_weights.revealed_at is not None:
-        return
-    if last_weights.block > current_block - commit_reveal_weights_interval:
-        return
 
     weights_id = last_weights.id
     with transaction.atomic():
@@ -892,11 +989,20 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
             data={"weights_id": weights.id},
         )
     else:
-        save_weight_setting_failure(
-            subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
-            long_description=message,
-            data={"weights_id": weights.id},
-        )
+        try:
+            current_block = subtensor_.get_current_block()
+        except Exception as e:
+            logger.warning("Failed to get current block: %s", e)
+            current_block = "unknown"
+        finally:
+            save_weight_setting_failure(
+                subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
+                long_description=message,
+                data={
+                    "weights_id": weights.id,
+                    "current_block": current_block,
+                },
+            )
     return is_success, message
 
 
@@ -1038,63 +1144,181 @@ def fetch_dynamic_config() -> None:
     )
 
 
-def create_workload(seed: int):
-    # generate an s3 url to upload sample batch job result in
+@app.task(
+    soft_time_limit=4 * 60 + 50,
+    time_limit=5 * 60,
+)
+def llm_prompt_generation():
+    unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True).count()
+    if unprocessed_workloads > 0:
+        # prevent any starvation issues
+        logger.info("Uprocessed workloads found - skipping prompt generation")
+        return
+
+    num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES
+    num_prompt_series = PromptSeries.objects.count()
+
+    if num_prompt_series >= num_expected_prompt_series:
+        logger.warning(
+            "There are %s series in the db - skipping prompt generation",
+            num_prompt_series,
+        )
+        return
+
+    logger.info("There are %s series in the db, generating prompts", num_prompt_series)
+
+    with transaction.atomic():
+        try:
+            get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
+        except Locked:
+            logger.debug("Another thread already using the trusted miner")
+            return
+
+        async_to_sync(generate_prompts)()
+
+
+@app.task(
+    soft_time_limit=4 * 60 + 50,
+    time_limit=5 * 60,
+)
+def llm_prompt_answering():
+    unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
+
+    times = []
+    for workload in unprocessed_workloads:
+        start = time.time()
+        with transaction.atomic():
+            try:
+                get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
+            except Locked:
+                logger.debug("Another thread already using the trusted miner")
+                return
+
+            async_to_sync(answer_prompts)(workload)
+        times.append(time.time() - start)
+        total_time = sum(times)
+        avg_time = total_time / len(times)
+        if total_time + avg_time > 4 * 60 + 20:
+            return
+
+
+def init_workload(seed: int) -> tuple[SolveWorkload, str]:
     workload_uuid = uuid.uuid4()
-    s3_url = generate_upload_url(key=workload_uuid.hex, bucket_name=settings.S3_BUCKET_NAME_ANSWERS)
-    return SolveWorkload.objects.create(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url)
+    # generate an s3 url to upload workload prompts to
+    s3_upload_url = generate_upload_url(
+        key=str(workload_uuid), bucket_name=settings.S3_BUCKET_NAME_ANSWERS
+    )
+    # generate an s3 url to download workload prompts to be answered
+    s3_url = get_public_url(
+        key=str(workload_uuid),
+        bucket_name=settings.S3_BUCKET_NAME_ANSWERS,
+    )
+    return SolveWorkload(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url), s3_upload_url
 
 
 @app.task()
-def create_sample_workloads():
-    total_workloads_needed = get_number_of_workloads_to_trigger_local_inference()
-    prompts_per_sample = get_number_of_prompts_to_validate_from_series()
+def llm_prompt_sampling():
+    # generate new prompt samples if needed
+
+    num_prompt_series = PromptSeries.objects.count()
+    required_series_to_start_sampling = min(
+        config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY * 2, config.DYNAMIC_MAX_PROMPT_SERIES
+    )
+    if num_prompt_series < required_series_to_start_sampling:
+        logger.warning(
+            "There are %s series in the db - expected %s for start sampling - skipping prompt sampling",
+            num_prompt_series,
+            required_series_to_start_sampling,
+        )
+        return
+    num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()
+    num_needed_prompt_samples = (
+        config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY - num_unused_prompt_samples
+    )
+
+    if num_needed_prompt_samples > 0:
+        logger.info(
+            "There are %s prompt samples in the db, generating more",
+            num_unused_prompt_samples,
+        )
+        create_sample_workloads(num_needed_prompt_samples)
+        return
+    else:
+        logger.warning(
+            "There are %s prompt samples - skipping prompt sampling",
+            num_unused_prompt_samples,
+        )
+
+
+def persist_workload(
+    workload: SolveWorkload, prompt_samples: list[PromptSample], prompts: list[Prompt]
+):
+    logger.info(f"Saving workload {workload}")
+    # save the sampled prompts as unanswered in the db
+    with transaction.atomic():
+        workload.save()
+        PromptSample.objects.bulk_create(prompt_samples)
+        Prompt.objects.bulk_create(prompts)
+
+
+def create_sample_workloads(num_needed_prompt_samples):
+    prompts_per_sample = config.DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES
+    prompts_per_workload = config.DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD
 
     # set seed for the current synthetic jobs run
-    seed = random.randint(0, 1000000)
+    seed = random.randint(0, MAX_SEED)
 
     # workload we are currently sampling for
-    current_workload = create_workload(seed)
+    try:
+        current_workload, current_upload_url = init_workload(seed)
+    except Exception as e:
+        logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
+        return
 
-    # how many prompts we have sampled for current_workload so far
-    current_workload_fill = 0
+    # how many prompts series we sampled so far
+    # for each prompt series there is one prompt sample
+    num_prompt_series_sampled = 0
 
-    # how many workloads we have finished (have enough samples)
-    workloads_done = 0
+    current_prompt_samples = []
+    current_prompts = []
 
     # assume we have sufficient prompt series in the db to make all the prompt_samples needed
     # take a random order of prompt series to avoid using the same series at each synthetic jobs run
     for prompt_series in PromptSeries.objects.order_by("?").all():
-        if current_workload_fill >= prompts_per_sample:
-            current_workload = create_workload(seed)
-            current_workload_fill = 0
-            workloads_done += 1
-
-        if workloads_done >= total_workloads_needed:
-            break
-
         # get all prompts
-        lines = get_prompts_from_s3_url(prompt_series.s3_url)
+        lines = download_prompts_from_s3_url(prompt_series.s3_url)
 
         # should always have enough prompts
         if len(lines) <= prompts_per_sample:
-            logger.error("Skipping bucket %s, not enough prompts", prompt_series.s3_url)
+            logger.error(f"Skipping bucket {prompt_series.s3_url}, not enough prompts")
             continue
 
         # sample prompts
         sampled_lines = random.sample(lines, prompts_per_sample)
-        current_workload_fill += len(sampled_lines)
 
-        with transaction.atomic():
-            prompt_sample = PromptSample.objects.create(
-                series=prompt_series, workload=current_workload
-            )
+        prompt_sample = PromptSample(series=prompt_series, workload=current_workload)
+        current_prompt_samples += [prompt_sample]
+        current_prompts += [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
 
-            # save the sampled prompts as unanswered in the db
-            Prompt.objects.bulk_create(
-                [Prompt(sample=prompt_sample, content=line) for line in sampled_lines]
-            )
+        if len(current_prompts) >= prompts_per_workload:
+            content = "\n".join([p.content for p in current_prompts])
+            if upload_prompts_to_s3_url(current_upload_url, content):
+                # save the workload in the db
+                persist_workload(current_workload, current_prompt_samples, current_prompts)
+                num_prompt_series_sampled += len(current_prompt_samples)
+            else:
+                logger.error(f"Failed to create workload {current_workload} - skipping")
 
-    # delete remaining empty workload
-    if current_workload_fill == 0:
-        current_workload.delete()
+            # finished creating all needed prompt samples so exit after last batch is filled
+            if num_prompt_series_sampled >= num_needed_prompt_samples:
+                logger.info(f"Created {num_prompt_series_sampled} new prompt samples")
+                break
+
+            # reset for next workload
+            current_prompt_samples = []
+            current_prompts = []
+            try:
+                current_workload, current_upload_url = init_workload(seed)
+            except Exception as e:
+                logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
+                continue

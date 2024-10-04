@@ -263,6 +263,20 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             self.msg_queue.append(msg)
             return
 
+        if isinstance(msg, validator_requests.V0InitialJobRequest) or isinstance(
+            msg, validator_requests.V0JobRequest
+        ):
+            # Proactively check volume safety in both requests that may contain a volume
+            if msg.volume and not msg.volume.is_safe():
+                error_msg = f"Received JobRequest with unsafe volume: {msg.volume.contents}"
+                logger.error(error_msg)
+                await self.send(
+                    miner_requests.GenericError(
+                        details=error_msg,
+                    ).model_dump_json()
+                )
+                return
+
         if isinstance(msg, validator_requests.V0InitialJobRequest):
             validator_blacklisted = await ValidatorBlacklist.objects.filter(
                 validator=self.validator
@@ -307,17 +321,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             )
 
         if isinstance(msg, validator_requests.V0JobRequest):
-            pending_job = self.pending_jobs.get(msg.job_uuid)
-            if msg.volume and not msg.volume.is_safe():
-                error_msg = f"Received JobRequest with unsafe volume"
-                logger.error(error_msg)
-                await self.send(
-                    miner_requests.GenericError(
-                        details=error_msg,
-                    ).model_dump_json()
-                )
-                return
-            if pending_job is None:
+            job = self.pending_jobs.get(msg.job_uuid)
+            if job is None:
                 error_msg = f"Received JobRequest for unknown job_uuid: {msg.job_uuid}"
                 logger.error(error_msg)
                 await self.send(
@@ -326,11 +331,21 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                     ).model_dump_json()
                 )
                 return
-            await self.send_job_request(pending_job.executor_token, msg)
+            if job.initial_job_details.get("volume") is not None and msg.volume is not None:
+                # The volume may have been already sent in the initial job request.
+                error_msg = f"Received job volume twice job_uuid: {msg.job_uuid}"
+                logger.error(error_msg)
+                await self.send(
+                    miner_requests.GenericError(
+                        details=error_msg,
+                    ).model_dump_json()
+                )
+                return
+            await self.send_job_request(job.executor_token, msg)
             logger.debug(f"Passing job details to executor consumer job_uuid: {msg.job_uuid}")
-            pending_job.status = AcceptedJob.Status.RUNNING
-            pending_job.full_job_details = msg.model_dump()
-            await pending_job.asave()
+            job.status = AcceptedJob.Status.RUNNING
+            job.full_job_details = msg.model_dump()
+            await job.asave()
 
         if isinstance(
             msg, validator_requests.V0JobStartedReceiptRequest
