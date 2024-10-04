@@ -137,6 +137,9 @@ class MinerClient(AbstractMinerClient):
     def outgoing_generic_error_class(self) -> type[BaseRequest]:
         return validator_requests.GenericError
 
+    def build_outgoing_generic_error(self, msg: str):
+        return validator_requests.GenericError(details=msg)
+
     async def handle_message(self, msg: BaseRequest) -> None:
         if isinstance(msg, GenericError):
             logger.warning("%s error: %s", self.miner_name, msg.model_dump_json())
