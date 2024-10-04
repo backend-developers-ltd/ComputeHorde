@@ -477,9 +477,11 @@ class JobRunner:
 
         t1 = time.time()
         try:
-            await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 process.communicate(), timeout=self.initial_job_request.timeout_seconds
             )
+            stdout = result[0].decode()
+            stderr = result[1].decode()
 
         except TimeoutError:
             # If the process did not finish in time, kill it
@@ -489,12 +491,11 @@ class JobRunner:
             process.kill()
             timeout = True
             exit_status = None
+            stdout = (await process.stdout.read()).decode() if process.stdout else ""
+            stderr = (await process.stderr.read()).decode() if process.stderr else ""
         else:
             exit_status = process.returncode
             timeout = False
-
-        stdout = (await process.stdout.read()).decode() if process.stdout else ""
-        stderr = (await process.stderr.read()).decode() if process.stderr else ""
 
         # Save the streams in output volume and truncate them in response.
         with open(self.output_volume_mount_dir / "stdout.txt", "w") as f:
