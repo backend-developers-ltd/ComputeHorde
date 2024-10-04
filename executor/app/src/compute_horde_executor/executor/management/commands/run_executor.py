@@ -621,10 +621,13 @@ class JobRunner:
                 raise NotImplementedError(f"Unsupported sub-volume type: {type(sub_volume)}")
 
     async def get_job_volume(self) -> Volume | None:
-        if self.full_job_request.volume and self.initial_job_request.volume:
+        initial_volume = self.initial_job_request.volume
+        late_volume = self.full_job_request.volume if self.full_job_request else None
+
+        if initial_volume and late_volume:
             raise JobError("Received multiple volumes")
 
-        return self.full_job_request.volume or self.initial_job_request.volume or None
+        return initial_volume or late_volume
 
     async def unpack_volume(self):
         try:
