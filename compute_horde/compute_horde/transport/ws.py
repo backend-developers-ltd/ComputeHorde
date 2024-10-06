@@ -83,7 +83,7 @@ class WSTransport(AbstractTransport):
 
         while self.max_retries == 0 or attempt < self.max_retries:
             try:
-                self._ws = await websockets.connect(self.url, max_size=50 * (2**20))  # 50MB
+                self._ws = await websockets.connect(self.url, max_size=50 * (2**20), ping_timeout=120)  # 50MB - ping timeout 2min in case of blocking job sends
                 logger.info(f"Connected to {self.name} after {attempt} attempts")
                 return
             except (websockets.WebSocketException, OSError):
