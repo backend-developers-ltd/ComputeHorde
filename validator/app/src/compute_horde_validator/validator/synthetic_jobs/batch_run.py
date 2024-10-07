@@ -1324,7 +1324,7 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
         and isinstance(job.job_response, V0JobFinishedRequest)
         and isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator)
     ]
-    tasks = [asyncio.create_task(job.job_generator._download_answers()) for job in jobs]
+    tasks = [asyncio.create_task(job.job_generator.download_answers()) for job in jobs]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     for i, result in enumerate(results):
         if isinstance(result, BaseException):
