@@ -1315,6 +1315,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
 async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
     start_time = time.time()
+    expected_job_generator = LlmPromptsSyntheticJobGenerator
 
     jobs = [
         job
@@ -1322,9 +1323,16 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
         if job.executor_class == ExecutorClass.always_on__llm__a6000
         and job.job_response is not None
         and isinstance(job.job_response, V0JobFinishedRequest)
-        and isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator)
+        and isinstance(job.job_generator, expected_job_generator)
     ]
-    tasks = [asyncio.create_task(job.job_generator.download_answers()) for job in jobs]
+
+    tasks = [
+        asyncio.create_task(job.job_generator.download_answers())
+        if isinstance(job.job_generator, expected_job_generator)
+        else None
+        for job in jobs
+    ]
+
     results = await asyncio.gather(*tasks, return_exceptions=True)
     for i, result in enumerate(results):
         if isinstance(result, BaseException):
