@@ -258,8 +258,15 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await job.asave()
 
     async def handle(self, msg: BaseValidatorRequest):
+        if self._maybe_validator is None:
+            # An unknown validator should have received an error response from connect() by now.
+            # All further incoming messages can be ignored.
+            logger.warning(f"Dropping message {msg.__class__.__name__} from unknown validator {self.validator_key}")
+            return
+
         if isinstance(msg, validator_requests.V0AuthenticateRequest):
-            return await self.handle_authentication(msg)
+            await self.handle_authentication(msg)
+            return
 
         if not self.validator_authenticated:
             self.msg_queue.append(msg)
