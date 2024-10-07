@@ -14,7 +14,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
 
-from compute_horde_validator.validator.models import Prompt, SolveWorkload
+from compute_horde_validator.validator.models import Prompt, SolveWorkload, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
     LlmPromptsJobGenerator,
 )
@@ -31,7 +31,7 @@ async def answer_prompts(
     create_miner_client=OrganicMinerClient,
     job_uuid: uuid.UUID | None = None,
     wait_timeout: int | None = None,
-) -> None:
+) -> bool:
     if not all(
         [
             settings.TRUSTED_MINER_KEY,
@@ -39,8 +39,15 @@ async def answer_prompts(
             settings.TRUSTED_MINER_PORT,
         ]
     ):
+        await SystemEvent.objects.acreate(
+            type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
+            subtype=SystemEvent.EventSubType.TRUSTED_MINER_NOT_CONFIGURED,
+            timestamp=now(),
+            long_description="",
+            data={},
+        )
         logger.warning("Trusted generation miner not configured, skipping prompt generation")
-        return
+        return False
 
     ts = datetime.now()
     seed = workload.seed
@@ -76,20 +83,35 @@ async def answer_prompts(
 
     try:
         await run_organic_job(miner_client, job_details, wait_timeout=wait_timeout)
-    except Exception:
+    except Exception as e:
+        await SystemEvent.objects.acreate(
+            type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
+            subtype=SystemEvent.EventSubType.FAILURE,
+            timestamp=now(),
+            long_description=f"Trusted miner failed to run prompt answering job: {e!r}",
+            data={},
+        )
         logger.error("Failed to run organic job", exc_info=True)
-        return
+        return False
 
     try:
         await job_generator.download_answers()
         prompt_answers: dict[str, str] = job_generator.prompt_answers
-    except Exception:
+    except Exception as e:
+        await SystemEvent.objects.acreate(
+            type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
+            subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED,
+            timestamp=now(),
+            long_description=f"Failed to download prompt answers: {e!r}",
+            data={},
+        )
         logger.error("Failed to download prompt answers", exc_info=True)
-        return
+        return False
 
     await sync_to_async(save_workload_answers)(workload, prompt_answers)
     duration_seconds = (datetime.now() - ts).total_seconds()
     logger.info(f"Workload {workload} finished in {duration_seconds} seconds")
+    return True
 
 
 def get_workload_prompts(workload: SolveWorkload) -> list[Prompt]:

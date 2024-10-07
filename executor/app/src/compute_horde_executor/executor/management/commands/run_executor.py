@@ -693,9 +693,11 @@ class Command(BaseCommand):
         async with miner_client:
             logger.debug(f"Connected to miner: {settings.MINER_ADDRESS}")
             initial_message: V0InitialJobRequest = await miner_client.initial_msg
-            if (
-                initial_message.base_docker_image_name
-                and not initial_message.base_docker_image_name.startswith("backenddevelopersltd/")
+            if initial_message.base_docker_image_name and not (
+                initial_message.base_docker_image_name.startswith("backenddevelopersltd/")
+                or initial_message.base_docker_image_name.startswith(
+                    "docker.io/backenddevelopersltd/"
+                )
             ):
                 await miner_client.send_failed_to_prepare()
                 return
@@ -720,8 +722,9 @@ class Command(BaseCommand):
                 logger.debug(f"Informed miner that I'm ready for job {initial_message.job_uuid}")
 
                 job_request = await miner_client.full_payload
-                if job_request.docker_image_name and not job_request.docker_image_name.startswith(
-                    "backenddevelopersltd/"
+                if job_request.docker_image_name and not (
+                    job_request.docker_image_name.startswith("backenddevelopersltd/")
+                    or job_request.docker_image_name.startswith("docker.io/backenddevelopersltd/")
                 ):
                     await miner_client.send_failed_to_prepare()
                     return

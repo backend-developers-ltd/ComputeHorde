@@ -1151,7 +1151,7 @@ def llm_prompt_generation():
     unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True).count()
     if unprocessed_workloads > 0:
         # prevent any starvation issues
-        logger.info("Uprocessed workloads found - skipping prompt generation")
+        logger.info("Unprocessed workloads found - skipping prompt generation")
         return
 
     num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES
@@ -1181,9 +1181,12 @@ def llm_prompt_generation():
     time_limit=5 * 60,
 )
 def llm_prompt_answering():
+    started_at = now()
     unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
 
     times = []
+    success_count = 0
+    failure_count = 0
     for workload in unprocessed_workloads:
         start = time.time()
         with transaction.atomic():
@@ -1193,12 +1196,30 @@ def llm_prompt_answering():
                 logger.debug("Another thread already using the trusted miner")
                 return
 
-            async_to_sync(answer_prompts)(workload)
+            success = async_to_sync(answer_prompts)(workload)
+        success_count += success
+        failure_count += not success_count
         times.append(time.time() - start)
         total_time = sum(times)
         avg_time = total_time / len(times)
         if total_time + avg_time > 4 * 60 + 20:
-            return
+            break
+
+    completed_at = now()
+    SystemEvent.objects.create(
+        type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
+        subtype=SystemEvent.EventSubType.SUCCESS,
+        timestamp=now(),
+        long_description="",
+        data={
+            "started_at": started_at.isoformat(),
+            "completed_at": completed_at.isoformat(),
+            "task_duration": (completed_at - started_at).total_seconds(),
+            "times": times,
+            "success_count": success_count,
+            "failure_count": failure_count,
+        },
+    )
 
 
 def init_workload(seed: int) -> tuple[SolveWorkload, str]:

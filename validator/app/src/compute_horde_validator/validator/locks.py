@@ -20,7 +20,7 @@ def get_advisory_lock(type_: LockType) -> None:
     will be released automatically after transaction.atomic ends.
     """
     cursor = connection.cursor()
-    cursor.execute("SELECT pg_try_advisory_lock(%s)", [type_.value])
+    cursor.execute("SELECT pg_try_advisory_xact_lock(%s)", [type_.value])
     unlocked = cursor.fetchall()[0][0]
     if not unlocked:
         raise Locked

@@ -790,6 +790,16 @@ async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None
     )
     prompt_samples = [ps async for ps in prompt_samples_qs]
     if len(prompt_samples) < llm_executor_count:
+        ctx.system_event(
+            type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+            subtype=SystemEvent.EventSubType.INSUFFICIENT_PROMPTS,
+            description="not enough prompt samples available in database",
+            func="get_llm_prompt_samples",
+            data={
+                "llm_executor_count": llm_executor_count,
+                "prompt_samples": len(prompt_samples),
+            },
+        )
         logger.warning(
             "Not enough prompt samples for llm executors: %d < %d - will NOT run llm synthetic prompt jobs",
             len(prompt_samples),
@@ -1304,28 +1314,37 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
 
 async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
-    tasks = [
-        asyncio.create_task(job.job_generator.download_answers())
+    start_time = time.time()
+
+    jobs = [
+        job
         for job in ctx.jobs.values()
         if job.executor_class == ExecutorClass.always_on__llm__a6000
         and job.job_response is not None
         and isinstance(job.job_response, V0JobFinishedRequest)
         and isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator)
     ]
+    tasks = [asyncio.create_task(job.job_generator._download_answers()) for job in jobs]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     for i, result in enumerate(results):
         if isinstance(result, BaseException):
-            hotkey = ctx.hotkeys[i]
-            name = ctx.names[hotkey]
-            logger.warning("%s failed to get llm prompt answers: %r", name, result)
+            job = jobs[i]
+            logger.warning("failed to get llm prompt answers of %s: %r", job.name, result)
+            ctx.system_event(
+                type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+                subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED,
+                description=repr(result),
+                miner_hotkey=job.miner_hotkey,
+                func="_download_llm_prompts_answers",
+            )
         else:
             assert result is None
 
+    duration = time.time() - start_time
+    logger.info("Downloaded miners' llm prompt answers in %.2f seconds", duration)
+
 
 async def _score_jobs(ctx: BatchContext) -> None:
-    # NOTE: download the answers for llm prompts jobs before scoring
-    await _download_llm_prompts_answers(ctx)
-
     for job in ctx.jobs.values():
         try:
             await _score_job(ctx, job)
@@ -1566,6 +1585,10 @@ async def execute_synthetic_batch_run(
 
                 await ctx.checkpoint_system_event("_compute_average_send_time")
                 _compute_average_send_time(ctx)
+
+                # NOTE: download the answers for llm prompts jobs before scoring
+                await ctx.checkpoint_system_event("_download_llm_prompts_answers")
+                await _download_llm_prompts_answers(ctx)
 
                 await ctx.checkpoint_system_event("_score_jobs")
                 await _score_jobs(ctx)
