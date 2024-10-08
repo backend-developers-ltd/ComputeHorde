@@ -1,4 +1,4 @@
-name: Run Validator linter, static type checks and tests
+name: Run Validator QA
 
 on:
   push:

@@ -1,4 +1,4 @@
-name: Run library linter, static type checks and tests
+name: Run library QA
 
 on:
   push:

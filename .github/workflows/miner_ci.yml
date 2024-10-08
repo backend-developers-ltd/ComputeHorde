@@ -1,4 +1,4 @@
-name: Run Miner linter, static type checks and tests
+name: Run Miner QA
 
 on:
   push:

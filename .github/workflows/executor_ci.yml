@@ -1,4 +1,4 @@
-name: Run Executor linter, static type checks and tests
+name: Run Executor QA
 
 on:
   push:
