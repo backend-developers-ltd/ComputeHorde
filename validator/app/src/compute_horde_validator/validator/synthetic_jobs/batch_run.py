@@ -608,6 +608,7 @@ class _MinerClientFactoryProtocol(Protocol):
     """
     Something that returns a MinerClient given a BatchContext and a miner hotkey
     """
+
     def __call__(self, ctx: BatchContext, miner_hotkey: str) -> MinerClient: ...
 
 

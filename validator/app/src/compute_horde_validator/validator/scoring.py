@@ -1,15 +1,14 @@
 import logging
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import partial
-from typing import Sequence
 
 import numpy as np
 from compute_horde.executor_class import ExecutorClass
 from django.conf import settings
 
 from .dynamic_config import get_executor_class_weights
-from .models import SyntheticJobBatch, SyntheticJob
+from .models import SyntheticJob, SyntheticJobBatch
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,9 @@ def reversed_sigmoid(x: float, beta: float, delta: float) -> float:
     return sigmoid(-x, beta=beta, delta=-delta)
 
 
-def horde_score(benchmarks: list[float], alpha: float = 0, beta: float = 0, delta: float = 0) -> float:
+def horde_score(
+    benchmarks: list[float], alpha: float = 0, beta: float = 0, delta: float = 0
+) -> float:
     """Proportionally scores horde benchmarks allowing increasing significance for chosen features
 
     By default scores are proportional to horde "strength" - having 10 executors would have the same

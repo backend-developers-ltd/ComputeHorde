@@ -3,10 +3,10 @@ import contextlib
 import logging
 import time
 from functools import partial
-from typing import Literal, Protocol
+from typing import Literal
 
 from compute_horde.base.output_upload import ZipAndHttpPutUpload
-from compute_horde.base.volume import InlineVolume, Volume, ZipUrlVolume
+from compute_horde.base.volume import InlineVolume, ZipUrlVolume
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import (
     V0DeclineJobRequest,
