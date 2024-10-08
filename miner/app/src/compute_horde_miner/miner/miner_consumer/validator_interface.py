@@ -77,6 +77,12 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         ):
             msg = f"Inactive validator: {self.validator_key}"
             fail = True
+        validator_blacklisted = await ValidatorBlacklist.objects.filter(
+            validator=self.validator
+        ).aexists()
+        if validator_blacklisted:
+            msg = f"Blacklisted validator: {self.validator_key}"
+            fail = True
         if fail:
             await self.send(miner_requests.GenericError(details=msg).model_dump_json())
             logger.info(msg)
