@@ -127,7 +127,7 @@ class Test(ActiveSubnetworkBaseTest):
                         "message_type": "V0InitialJobRequest",
                         "job_uuid": job_uuid,
                         "executor_class": DEFAULT_EXECUTOR_CLASS,
-                        "base_docker_image_name": "alpine",
+                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "timeout_seconds": 60,
                         "volume_type": "inline",
                     }

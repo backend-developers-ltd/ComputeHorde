@@ -13,7 +13,8 @@ from typing import Any
 import bittensor
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
-from compute_horde.base.volume import InlineVolume
+from compute_horde.base.output_upload import OutputUpload
+from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
@@ -45,18 +46,19 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobFinishedReceiptRequest,
     V0JobRequest,
     V0JobStartedReceiptRequest,
-    VolumeType,
 )
 from compute_horde.transport import AbstractTransport, WSTransport
 from django.conf import settings
 from django.db import transaction
 from pydantic import BaseModel
 
+from compute_horde_validator.validator.dynamic_config import get_miner_max_executors_per_class
 from compute_horde_validator.validator.models import (
     JobFinishedReceipt,
     JobStartedReceipt,
     Miner,
     MinerManifest,
+    PromptSample,
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
@@ -231,7 +233,8 @@ class Job:
     miner_hotkey: str
     executor_class: ExecutorClass
     job_generator: BaseSyntheticJobGenerator
-    volume_contents: str
+    volume: Volume | None
+    output_upload: OutputUpload | None
 
     # responses
 
@@ -348,7 +351,6 @@ class Job:
             docker_image_name=self.job_generator.docker_image_name(),
             docker_run_options_preset=self.job_generator.docker_run_options_preset(),
             timeout_seconds=self.job_generator.timeout_seconds(),
-            volume_contents_size=len(self.volume_contents),
             exception=repr(self.exception) if self.exception is not None else None,
             exception_time=_datetime_dump(self.exception_time),
             exception_stage=self.exception_stage,
@@ -649,7 +651,7 @@ def _init_context(
 
 
 def _get_max_spin_up_time(ctx: BatchContext) -> int:
-    max_spin_up_time = 0
+    max_spin_up_time = _MIN_SPIN_UP_TIME
     for executors in ctx.executors.values():
         for executor_class in executors.keys():
             spin_up_time = EXECUTOR_CLASS[executor_class].spin_up_time
@@ -761,17 +763,79 @@ async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
         await client.close()
 
 
+async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None:
+    # TODO: refactor into nicer abstraction
+    llm_executor_count = sum(
+        count
+        for executors in ctx.executors.values()
+        for executor_class, count in executors.items()
+        if executor_class == ExecutorClass.always_on__llm__a6000
+    )
+    prompt_samples = (
+        PromptSample.objects.select_related("series", "workload")
+        .prefetch_related("prompts")
+        .filter(
+            synthetic_job__isnull=True,
+            workload__finished_at__isnull=False,
+        )[:llm_executor_count]
+    )
+    prompt_samples = [ps async for ps in prompt_samples]
+    if len(prompt_samples) < llm_executor_count:
+        ctx.system_event(
+            type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+            subtype=SystemEvent.EventSubType.INSUFFICIENT_PROMPTS,
+            description="not enough prompt samples available in database",
+            func="get_llm_prompt_samples",
+            data={
+                "llm_executor_count": llm_executor_count,
+                "prompt_samples": len(prompt_samples),
+            },
+        )
+        logger.warning(
+            "Not enough prompt samples for llm executors: %d < %d - will NOT run llm synthetic prompt jobs",
+            len(prompt_samples),
+            llm_executor_count,
+        )
+        return None
+    return prompt_samples
+
+
 async def _generate_jobs(ctx: BatchContext) -> None:
     start_time = time.time()
     generated_job_count = 0
+
+    prompt_samples = await get_llm_prompt_samples(ctx)
+    prompt_samples_iter = iter(prompt_samples) if prompt_samples is not None else None
 
     for hotkey, executors in ctx.executors.items():
         miner_name = ctx.names[hotkey]
         for executor_class, count in executors.items():
             job_generators = []
             for _ in range(count):
-                job_generator = await current.synthetic_job_generator_factory.create(executor_class)
-                await job_generator.ainit()
+                kwargs = {}
+                if executor_class == ExecutorClass.always_on__llm__a6000:
+                    if prompt_samples_iter is None:
+                        logger.warning("No llm prompt samples available, skipping llm job")
+                        continue
+                    prompt_sample = next(prompt_samples_iter, None)
+                    if prompt_sample is None:
+                        # it means that there is some bug - we want to see it in sentry
+                        # and continue, so other executor classes are not affected
+                        logger.error(
+                            "Dried prompt_samples_iter, this should not happen, skipping llm job"
+                        )
+                        continue
+                    kwargs = {
+                        "prompt_sample": prompt_sample,
+                        "expected_prompts": list(prompt_sample.prompts.all()),
+                        "s3_url": prompt_sample.series.s3_url,
+                        "seed": prompt_sample.workload.seed,
+                    }
+
+                job_generator = await current.synthetic_job_generator_factory.create(
+                    executor_class, **kwargs
+                )
+                await job_generator.ainit(miner_hotkey=hotkey)
                 job_uuid = str(job_generator.uuid())
                 ctx.jobs[job_uuid] = Job(
                     ctx=ctx,
@@ -780,7 +844,8 @@ async def _generate_jobs(ctx: BatchContext) -> None:
                     miner_hotkey=hotkey,
                     executor_class=executor_class,
                     job_generator=job_generator,
-                    volume_contents=await job_generator.volume_contents(),
+                    volume=await job_generator.volume(),
+                    output_upload=await job_generator.output_upload(),
                 )
                 ctx.job_uuids.append(job_uuid)
                 job_generators.append(job_generator)
@@ -812,7 +877,7 @@ async def _send_initial_job_request(
         executor_class=job.executor_class,
         base_docker_image_name=job.job_generator.base_docker_image_name(),
         timeout_seconds=job.job_generator.timeout_seconds(),
-        volume_type=VolumeType.inline,
+        volume=job.volume if job.job_generator.volume_in_initial_req() else None,
     )
     request_json = request.model_dump_json()
 
@@ -865,8 +930,8 @@ async def _send_job_request(
         docker_run_options_preset=job.job_generator.docker_run_options_preset(),
         docker_run_cmd=job.job_generator.docker_run_cmd(),
         raw_script=job.job_generator.raw_script(),
-        volume=InlineVolume(contents=job.volume_contents),
-        output_upload=None,
+        volume=job.volume if not job.job_generator.volume_in_initial_req() else None,
+        output_upload=job.output_upload,
     )
     request_json = request.model_dump_json()
 
@@ -1007,6 +1072,24 @@ async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
             )
         else:
             assert result is None
+
+
+async def _adjust_miner_max_executors_per_class(ctx: BatchContext) -> None:
+    max_executors_per_class = await get_miner_max_executors_per_class()
+    for hotkey, executors in ctx.executors.items():
+        for executor_class, count in executors.items():
+            if executor_class not in max_executors_per_class:
+                continue
+            if count > max_executors_per_class[executor_class]:
+                logger.warning(
+                    "%s manifest for executor class %s has more count (%s) than the max limit (%s), capping at limit",
+                    ctx.names[hotkey],
+                    executor_class,
+                    count,
+                    max_executors_per_class[executor_class],
+                )
+                ctx.executors[hotkey][executor_class] = max_executors_per_class[executor_class]
+                # TODO: add a system event?
 
 
 async def _multi_close_client(ctx: BatchContext) -> None:
@@ -1221,6 +1304,36 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     )
 
 
+async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
+    start_time = time.time()
+
+    jobs = [
+        job
+        for job in ctx.jobs.values()
+        if job.executor_class == ExecutorClass.always_on__llm__a6000
+        and job.job_response is not None
+        and isinstance(job.job_response, V0JobFinishedRequest)
+    ]
+    tasks = [asyncio.create_task(job.job_generator._download_answers()) for job in jobs]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for i, result in enumerate(results):
+        if isinstance(result, BaseException):
+            job = jobs[i]
+            logger.warning("failed to get llm prompt answers of %s: %r", job.name, result)
+            ctx.system_event(
+                type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+                subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED,
+                description=repr(result),
+                miner_hotkey=job.miner_hotkey,
+                func="_download_llm_prompts_answers",
+            )
+        else:
+            assert result is None
+
+    duration = time.time() - start_time
+    logger.info("Downloaded miners' llm prompt answers in %.2f seconds", duration)
+
+
 async def _score_jobs(ctx: BatchContext) -> None:
     for job in ctx.jobs.values():
         try:
@@ -1339,7 +1452,7 @@ def _db_persist(ctx: BatchContext) -> None:
                 score=job.score,
             )
             synthetic_jobs.append(synthetic_job)
-        SyntheticJob.objects.bulk_create(synthetic_jobs)
+        synthetic_jobs = SyntheticJob.objects.bulk_create(synthetic_jobs)
 
     miner_manifests: list[MinerManifest] = []
     for miner in ctx.miners.values():
@@ -1354,6 +1467,20 @@ def _db_persist(ctx: BatchContext) -> None:
                 )
             )
     MinerManifest.objects.bulk_create(miner_manifests)
+
+    # TODO: refactor into nicer abstraction
+    synthetic_jobs_map: dict[str, SyntheticJob] = {
+        synthetic_job.job_uuid: synthetic_job for synthetic_job in synthetic_jobs
+    }
+    prompt_samples: list[PromptSample] = []
+
+    for job in ctx.jobs.values():
+        if job.executor_class != ExecutorClass.always_on__llm__a6000:
+            continue
+        prompt_sample = job.job_generator.prompt_sample
+        prompt_sample.synthetic_job = synthetic_jobs_map.get(job.uuid)
+        prompt_samples.append(prompt_sample)
+    PromptSample.objects.bulk_update(prompt_samples, fields=["synthetic_job"])
 
     job_started_receipts: list[JobStartedReceipt] = []
     for job in ctx.jobs.values():
@@ -1416,6 +1543,7 @@ async def execute_synthetic_batch_run(
 
         await ctx.checkpoint_system_event("_multi_get_miner_manifest")
         await _multi_get_miner_manifest(ctx)
+        await _adjust_miner_max_executors_per_class(ctx)
 
         await ctx.checkpoint_system_event("_get_total_executor_count")
         total_executor_count = _get_total_executor_count(ctx)
@@ -1443,6 +1571,10 @@ async def execute_synthetic_batch_run(
 
                 await ctx.checkpoint_system_event("_compute_average_send_time")
                 _compute_average_send_time(ctx)
+
+                # NOTE: download the answers for llm prompts jobs before scoring
+                await ctx.checkpoint_system_event("_download_llm_prompts_answers")
+                await _download_llm_prompts_answers(ctx)
 
                 await ctx.checkpoint_system_event("_score_jobs")
                 await _score_jobs(ctx)

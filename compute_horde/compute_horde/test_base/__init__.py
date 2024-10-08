@@ -105,7 +105,7 @@ class ActiveSubnetworkBaseTest(abc.ABC):
 
     @classmethod
     def wait_for_process_start(cls, process_name, probe_function, process: subprocess.Popen):
-        for i in range(300):
+        for _ in range(300):
             if probe_function():
                 return
             if process.poll() is not None:
