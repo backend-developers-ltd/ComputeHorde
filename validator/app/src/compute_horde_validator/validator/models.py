@@ -5,7 +5,6 @@ from datetime import timedelta
 from os import urandom
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import UniqueConstraint
@@ -36,6 +35,8 @@ class SystemEvent(models.Model):
         VALIDATOR_CHANNEL_LAYER_ERROR = "VALIDATOR_CHANNEL_LAYER_ERROR"
         VALIDATOR_SYNTHETIC_JOB_SCHEDULED = "VALIDATOR_SYNTHETIC_JOB_SCHEDULED"
         VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING = "VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING"
+        LLM_PROMPT_GENERATION = "LLM_PROMPT_GENERATION"
+        LLM_PROMPT_ANSWERING = "LLM_PROMPT_ANSWERING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -72,6 +73,9 @@ class SystemEvent(models.Model):
         OVERSLEPT = "OVERSLEPT"
         WARNING = "WARNING"
         FAILED_TO_WAIT = "FAILED_TO_WAIT"
+        TRUSTED_MINER_NOT_CONFIGURED = "TRUSTED_MINER_NOT_CONFIGURED"
+        LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED = "LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED"
+        INSUFFICIENT_PROMPTS = "INSUFFICIENT_PROMPTS"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
@@ -311,7 +315,7 @@ class PromptSeries(models.Model):
     series_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
     s3_url = models.URLField(max_length=1000)
     created_at = models.DateTimeField(default=now)
-    generator_version = models.PositiveSmallIntegerField(default=settings.PROMPT_GENERATOR_VERSION)
+    generator_version = models.PositiveSmallIntegerField()
 
 
 class SolveWorkload(models.Model):
@@ -326,7 +330,7 @@ class SolveWorkload(models.Model):
     finished_at = models.DateTimeField(null=True, default=None, db_index=True)
 
     def __str__(self):
-        return f"uuid: {self.batch_uuid} - synthetic_job_batch: {self.synthetic_job_batch} - seed: {self.seed}"
+        return f"uuid: {self.workload_uuid} - seed: {self.seed}"
 
 
 class PromptSample(models.Model):

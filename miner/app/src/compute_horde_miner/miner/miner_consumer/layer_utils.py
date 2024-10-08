@@ -207,7 +207,7 @@ class ExecutorInterfaceMixin(BaseMixin):
         await self.channel_layer.group_send(
             group_name,
             {
-                "type": "executor.finished",
+                "type": "executor.failed",
                 **ExecutorFailed(
                     job_uuid=job_uuid,
                     docker_process_stdout=stdout,

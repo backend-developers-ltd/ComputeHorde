@@ -196,3 +196,30 @@ Set in `.env` file:
 - `EMAIL_HOST_USER`
 - `EMAIL_HOST_PASSWORD`
 - `EMAIL_TARGET`
+
+## Setting up a trusted miner for cross-validation
+
+### Set up a server
+
+Create an Ubuntu server and use the `install_miner.sh` script from the root of this repository to install the miner in a **local mode**:
+
+```sh
+curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/install_miner.sh | bash -s - local SSH_DESTINATION VALIDATOR_PUBLIC_KEY MINER_PORT DEFAULT_EXECUTOR_CLASS
+```
+
+Replace the placeholders in the command above:
+- SSH_DESTINATION: your server's connection info (i.e. `username@1.2.3.4`)
+- VALIDATOR_PUBLIC_KEY: the public key of your validator
+- MINER_PORT (optional): the port on which the miner will listen for incoming connections (default is 8000)
+- DEFAULT_EXECUTOR_CLASS (optional): specify a custom executor class to use
+
+### Provision S3 buckets for prompts and answers
+
+Trusted miners require S3 buckets to store prompts and answers. To provision these buckets conveniently with the correct permissions pre-configured, make sure you have [AWS CLI](https://aws.amazon.com/cli/) installed and configured.
+Then run the following script:
+
+```sh
+curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/validator/provision_s3.sh | bash -s - PROMPTS_BUCKET ANSWERS_BUCKET
+```
+
+Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets you want to use for prompts and answers respectively.
