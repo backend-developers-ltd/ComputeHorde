@@ -13,3 +13,33 @@ dev = [
     "-e file:///${PROJECT_ROOT}/executor",
     "-e file:///${PROJECT_ROOT}/validator",
 ]
+
+[tool.towncrier]
+directory = "changelog.d"
+filename = "CHANGELOG.md"
+version = "0.0.1"
+
+[[tool.towncrier.section]]
+name = "New Features"
+path = "features"
+showcontent = true
+
+[[tool.towncrier.section]]
+name = "Bug Fixes"
+path = "bugfixes"
+showcontent = true
+
+[[tool.towncrier.section]]
+name = "Documentation"
+path = "docs"
+showcontent = true
+
+[[tool.towncrier.section]]
+name = "Removals"
+path = "removals"
+showcontent = true
+
+[[tool.towncrier.section]]
+name = "Miscellaneous"
+path = "miscs"
+showcontent = true
