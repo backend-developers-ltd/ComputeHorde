@@ -27,6 +27,8 @@ class SyntheticJob(ABC):
 
 
 class _HashProto(Protocol):
+    # "hashlib._Hash" could be used instead, but as it doesn't exist outside of stubs
+    # PyCharm doesn't like it. This minimal protocol serves as a good enough stub.
     def hexdigest(self) -> str: ...
 
 

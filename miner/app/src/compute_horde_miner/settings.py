@@ -11,7 +11,6 @@ from functools import wraps
 
 import bittensor
 import environ
-from bittensor import wallet
 from compute_horde import (
     base,  # noqa
     executor_class,
@@ -395,16 +394,16 @@ DEBUG_TURN_AUTHENTICATION_OFF = env.bool("DEBUG_TURN_AUTHENTICATION_OFF", defaul
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 
 
-def BITTENSOR_WALLET() -> wallet:
+def BITTENSOR_WALLET() -> bittensor.wallet:
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
         raise RuntimeError("Wallet not configured")
-    w = bittensor.wallet(
+    wallet = bittensor.wallet(
         name=BITTENSOR_WALLET_NAME,
         hotkey=BITTENSOR_WALLET_HOTKEY_NAME,
         path=str(BITTENSOR_WALLET_DIRECTORY),
     )
-    w.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
-    return w
+    wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
+    return wallet
 
 
 CHANNEL_LAYERS = {

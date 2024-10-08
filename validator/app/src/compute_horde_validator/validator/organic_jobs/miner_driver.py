@@ -3,7 +3,7 @@ import contextlib
 import logging
 import time
 from functools import partial
-from typing import Literal
+from typing import Literal, Protocol
 
 from compute_horde.base.output_upload import ZipAndHttpPutUpload
 from compute_horde.base.volume import InlineVolume, Volume, ZipUrlVolume
@@ -122,8 +122,8 @@ async def execute_organic_job(
             return
 
         job_timer = Timer(timeout=total_job_timeout)
+        volume = job_request.volume
 
-        volume: Volume
         if isinstance(job_request, V0FacilitatorJobRequest | AdminJobRequest):
             if job_request.input_url:
                 volume = ZipUrlVolume(contents=str(job_request.input_url))
@@ -131,8 +131,6 @@ async def execute_organic_job(
                 # TODO: after release it can be changed to None - with this line new protocol
                 #       can be released in any order
                 volume = InlineVolume(contents=get_dummy_inline_zip_volume())
-        else:
-            volume = job_request.volume
 
         await miner_client.send_model(
             V0InitialJobRequest(

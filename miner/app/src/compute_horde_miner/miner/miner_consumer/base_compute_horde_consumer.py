@@ -2,20 +2,20 @@ import abc
 import functools
 import logging
 from collections.abc import Awaitable, Callable
-from typing import ParamSpec, TypeVar
+from typing import ParamSpec, TypeVar, TypeAlias
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.base_requests import BaseRequest, ValidationError
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
-P = ParamSpec("P")
+Params = ParamSpec("Params")
+TResult = TypeVar("TResult")
+AsyncCallable: TypeAlias = Callable[Params, Awaitable[TResult]]
 
-
-def log_errors_explicitly(f: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+def log_errors_explicitly(f: AsyncCallable[Params, TResult]) -> AsyncCallable[Params, TResult]:
     @functools.wraps(f)
-    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+    async def wrapper(*args: Params.args, **kwargs: Params.kwargs) -> TResult:
         try:
             return await f(*args, **kwargs)
         except Exception as ex:

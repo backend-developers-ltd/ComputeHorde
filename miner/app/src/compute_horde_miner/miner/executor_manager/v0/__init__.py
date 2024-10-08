@@ -17,7 +17,7 @@ ExecutorUnavailable = v1.ExecutorUnavailable
 
 class BaseExecutorManager(v1.BaseExecutorManager):
     @abc.abstractmethod
-    async def _reserve_executor(self, token):
+    async def reserve_executor(self, token):
         """Start spinning up an executor with `token` or raise ExecutorUnavailable if at capacity"""
 
     @abc.abstractmethod
@@ -29,7 +29,7 @@ class BaseExecutorManager(v1.BaseExecutorManager):
         """Wait for executor to finish the job for till timeout"""
 
     async def start_new_executor(self, token, executor_class, timeout):
-        return await self._reserve_executor(token)
+        return await self.reserve_executor(token)
 
     async def kill_executor(self, executor):
         return await self._kill_executor(executor)

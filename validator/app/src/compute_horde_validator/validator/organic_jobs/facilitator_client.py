@@ -243,7 +243,7 @@ class FacilitatorClient:
     async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
         return await get_miner_axon_info(hotkey)
 
-    async def miner_driver(self, job_request: JobRequest) -> None:
+    async def miner_driver(self, job_request: JobRequest):
         """drive a miner client from job start to completion, then close miner connection"""
         miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
         miner_axon_info = await self.get_miner_axon_info(job_request.miner_hotkey)
