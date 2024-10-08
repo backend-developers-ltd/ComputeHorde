@@ -8,9 +8,10 @@ from compute_horde.miner_client.organic import (
     run_organic_job,
 )
 from django.conf import settings
+from django.utils.timezone import now
 
 from compute_horde_validator.validator.dynamic_config import aget_config
-from compute_horde_validator.validator.models import PromptSeries
+from compute_horde_validator.validator.models import PromptSeries, SystemEvent
 from compute_horde_validator.validator.s3 import generate_upload_url, get_public_url
 
 from .generator.current import prompt_job_generator
@@ -24,6 +25,8 @@ async def generate_prompts(
     job_uuid: uuid.UUID | None = None,
     wait_timeout: int | None = None,
 ) -> None:
+    started_at = now()
+
     if not all(
         [
             settings.TRUSTED_MINER_KEY,
@@ -31,6 +34,13 @@ async def generate_prompts(
             settings.TRUSTED_MINER_PORT,
         ]
     ):
+        await SystemEvent.objects.acreate(
+            type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
+            subtype=SystemEvent.EventSubType.TRUSTED_MINER_NOT_CONFIGURED,
+            timestamp=now(),
+            long_description="",
+            data={},
+        )
         logger.warning("Trusted miner not configured, skipping prompt generation")
         return
 
@@ -62,11 +72,32 @@ async def generate_prompts(
 
     try:
         await run_organic_job(miner_client, job_details, wait_timeout=wait_timeout)
-    except Exception:
+    except Exception as e:
+        await SystemEvent.objects.acreate(
+            type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
+            subtype=SystemEvent.EventSubType.FAILURE,
+            timestamp=now(),
+            long_description=f"Trusted miner failed to run prompt generation job: {e!r}",
+            data={},
+        )
         logger.error("Failed to run organic job", exc_info=True)
         return
 
     await _persist_series_list(series_uuids, public_urls, job_generator.generator_version())
+
+    completed_at = now()
+    await SystemEvent.objects.acreate(
+        type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
+        subtype=SystemEvent.EventSubType.SUCCESS,
+        timestamp=now(),
+        long_description="",
+        data={
+            "started_at": started_at.isoformat(),
+            "completed_at": completed_at.isoformat(),
+            "duration": (completed_at - started_at).total_seconds(),
+            "count": len(series_uuids),
+        },
+    )
 
 
 def _generate_uuids_and_urls(num_batches: int) -> tuple[list[uuid.UUID], list[str], list[str]]:
