@@ -402,7 +402,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "run_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.run_synthetic_jobs",
-        "schedule": timedelta(seconds=30),
+        "schedule": timedelta(seconds=env.int("DEBUG_RUN_SYNTHETIC_JOBS_SECONDS", default=30)),
         "options": {},
     },
     "check_missed_synthetic_jobs": {
