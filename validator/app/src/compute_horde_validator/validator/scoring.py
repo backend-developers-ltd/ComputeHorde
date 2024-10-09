@@ -84,7 +84,8 @@ def score_batch(batch):
         # horde size for 0.5 value of sigmoid - sigmoid is for 1 / horde_size
         delta=1 / settings.HORDE_SCORE_CENTRAL_SIZE_PARAM,
     )
-    batch_scores: dict[str, float] = defaultdict(float)
+
+    batch_scores: defaultdict[str, float] = defaultdict(float)
     for executor_class, jobs in executor_class_jobs.items():
         executor_class_weight = executor_class_weights[executor_class]
         if executor_class == ExecutorClass.spin_up_4min__gpu_24gb:
@@ -99,7 +100,7 @@ def score_batch(batch):
         )
         for hotkey, score in executors_class_scores.items():
             batch_scores[hotkey] += score
-    return batch_scores
+    return dict(batch_scores)
 
 
 def score_batches(batches: Sequence[SyntheticJobBatch]) -> dict[str, float]:
