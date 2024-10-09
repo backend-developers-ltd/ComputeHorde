@@ -187,7 +187,7 @@ async def drive_executor() -> float:
         status=AcceptedJob.Status.WAITING_FOR_EXECUTOR,
     )
     await job.asave()
-    await current.executor_manager.reserve_executor(executor_token)
+    await current.executor_manager._reserve_executor(executor_token)
 
     # wait for executor to be ready
     msg = await asyncio.wait_for(channel_layer.receive(channel_name), PREPARATION_TIMEOUT_SECONDS)
