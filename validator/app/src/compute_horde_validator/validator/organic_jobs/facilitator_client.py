@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 from collections import deque
-from typing import NoReturn
 
 import bittensor
 import pydantic
@@ -60,7 +59,7 @@ class FacilitatorClient:
         self.keypair = keypair
         self.ws: websockets.WebSocketClientProtocol | None = None
         self.facilitator_uri = facilitator_uri
-        self.miner_drivers = asyncio.Queue()
+        self.miner_drivers: asyncio.Queue[asyncio.Task[None] | None] = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
         self.refresh_metagraph_task = self.create_metagraph_refresh_task()
@@ -93,9 +92,9 @@ class FacilitatorClient:
         await self.miner_driver_awaiter_task
 
     def my_hotkey(self) -> str:
-        return self.keypair.ss58_address
+        return str(self.keypair.ss58_address)
 
-    async def run_forever(self) -> NoReturn:
+    async def run_forever(self):
         """connect (and re-connect) to facilitator and keep reading messages ... forever"""
 
         # send machine specs to facilitator
@@ -149,7 +148,7 @@ class FacilitatorClient:
             await self.handle_message(raw_msg)
 
     async def wait_for_specs(self):
-        specs_queue = deque()
+        specs_queue: deque[MachineSpecsUpdate] = deque()
         channel_layer = get_channel_layer()
 
         while True:
@@ -231,7 +230,7 @@ class FacilitatorClient:
             return
 
         try:
-            job_request = pydantic.TypeAdapter(JobRequest).validate_json(raw_msg)
+            job_request: JobRequest = pydantic.TypeAdapter(JobRequest).validate_json(raw_msg)
         except pydantic.ValidationError as exc:
             logger.debug("could not parse raw message as JobRequest: %s", exc)
         else:

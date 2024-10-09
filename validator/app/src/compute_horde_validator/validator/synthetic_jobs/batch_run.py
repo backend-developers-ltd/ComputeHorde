@@ -5,10 +5,9 @@ import statistics
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 
 import bittensor
 from asgiref.sync import sync_to_async
@@ -19,7 +18,6 @@ from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
-    TransportConnectionError,
     UnsupportedMessageReceived,
 )
 from compute_horde.mv_protocol import miner_requests, validator_requests
@@ -48,9 +46,10 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobStartedReceiptRequest,
 )
 from compute_horde.transport import AbstractTransport, WSTransport
+from compute_horde.transport.base import TransportConnectionError
 from django.conf import settings
 from django.db import transaction
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from compute_horde_validator.validator.dynamic_config import get_miner_max_executors_per_class
 from compute_horde_validator.validator.models import (
@@ -66,6 +65,9 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
+)
+from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
+    LlmPromptsSyntheticJobGenerator,
 )
 from compute_horde_validator.validator.synthetic_jobs.scoring import get_manifest_multiplier
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
@@ -134,6 +136,9 @@ class MinerClient(AbstractMinerClient):
 
     def outgoing_generic_error_class(self) -> type[BaseRequest]:
         return validator_requests.GenericError
+
+    def build_outgoing_generic_error(self, msg: str):
+        return validator_requests.GenericError(details=msg)
 
     async def handle_message(self, msg: BaseRequest) -> None:
         if isinstance(msg, GenericError):
@@ -572,7 +577,7 @@ def _timedelta_dump(delta: timedelta | None) -> float | None:
     return delta.total_seconds()
 
 
-def _model_dump(model: BaseModel | None) -> dict | None:
+def _model_dump(model: BaseModel | None) -> JsonValue:
     if model is None:
         return None
     return model.model_dump(mode="json")
@@ -599,11 +604,19 @@ def _handle_exceptions(ctx: BatchContext, exceptions: list[ExceptionInfo]) -> No
         )
 
 
+class _MinerClientFactoryProtocol(Protocol):
+    """
+    Something that returns a MinerClient given a BatchContext and a miner hotkey
+    """
+
+    def __call__(self, ctx: BatchContext, miner_hotkey: str) -> MinerClient: ...
+
+
 def _init_context(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     batch_id: int | None = None,
-    create_miner_client: Callable | None = None,
+    create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> BatchContext:
     own_wallet = settings.BITTENSOR_WALLET()
     own_keypair = own_wallet.get_hotkey()
@@ -771,7 +784,7 @@ async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None
         for executor_class, count in executors.items()
         if executor_class == ExecutorClass.always_on__llm__a6000
     )
-    prompt_samples = (
+    prompt_samples_qs = (
         PromptSample.objects.select_related("series", "workload")
         .prefetch_related("prompts")
         .filter(
@@ -779,7 +792,7 @@ async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None
             workload__finished_at__isnull=False,
         )[:llm_executor_count]
     )
-    prompt_samples = [ps async for ps in prompt_samples]
+    prompt_samples = [ps async for ps in prompt_samples_qs]
     if len(prompt_samples) < llm_executor_count:
         ctx.system_event(
             type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
@@ -1307,18 +1320,23 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
     start_time = time.time()
 
-    jobs = [
-        job
-        for job in ctx.jobs.values()
-        if job.executor_class == ExecutorClass.always_on__llm__a6000
-        and job.job_response is not None
-        and isinstance(job.job_response, V0JobFinishedRequest)
-    ]
-    tasks = [asyncio.create_task(job.job_generator._download_answers()) for job in jobs]
+    finished_llm_jobs = []
+    tasks = []
+
+    for job in ctx.jobs.values():
+        if (
+            job.executor_class == ExecutorClass.always_on__llm__a6000
+            and isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator)
+            and isinstance(job.job_response, V0JobFinishedRequest)
+        ):
+            finished_llm_jobs.append(job)
+            tasks.append(asyncio.create_task(job.job_generator.download_answers()))
+
     results = await asyncio.gather(*tasks, return_exceptions=True)
+
     for i, result in enumerate(results):
         if isinstance(result, BaseException):
-            job = jobs[i]
+            job = finished_llm_jobs[i]
             logger.warning("failed to get llm prompt answers of %s: %r", job.name, result)
             ctx.system_event(
                 type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
@@ -1470,30 +1488,34 @@ def _db_persist(ctx: BatchContext) -> None:
 
     # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {
-        synthetic_job.job_uuid: synthetic_job for synthetic_job in synthetic_jobs
+        str(synthetic_job.job_uuid): synthetic_job for synthetic_job in synthetic_jobs
     }
     prompt_samples: list[PromptSample] = []
 
     for job in ctx.jobs.values():
         if job.executor_class != ExecutorClass.always_on__llm__a6000:
             continue
+        if not isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator):
+            logger.warning(f"Skipped non-LLM job: {job.job_generator.__class__.__name__}")
+            continue
         prompt_sample = job.job_generator.prompt_sample
         prompt_sample.synthetic_job = synthetic_jobs_map.get(job.uuid)
         prompt_samples.append(prompt_sample)
+
     PromptSample.objects.bulk_update(prompt_samples, fields=["synthetic_job"])
 
     job_started_receipts: list[JobStartedReceipt] = []
     for job in ctx.jobs.values():
         if job.job_started_receipt is not None:
-            payload = job.job_started_receipt.payload
+            started_payload = job.job_started_receipt.payload
             job_started_receipts.append(
                 JobStartedReceipt(
-                    job_uuid=payload.job_uuid,
-                    miner_hotkey=payload.miner_hotkey,
-                    validator_hotkey=payload.validator_hotkey,
-                    executor_class=payload.executor_class,
-                    time_accepted=payload.time_accepted,
-                    max_timeout=payload.max_timeout,
+                    job_uuid=started_payload.job_uuid,
+                    miner_hotkey=started_payload.miner_hotkey,
+                    validator_hotkey=started_payload.validator_hotkey,
+                    executor_class=started_payload.executor_class,
+                    time_accepted=started_payload.time_accepted,
+                    max_timeout=started_payload.max_timeout,
                 )
             )
     JobStartedReceipt.objects.bulk_create(job_started_receipts)
@@ -1501,15 +1523,15 @@ def _db_persist(ctx: BatchContext) -> None:
     job_finished_receipts: list[JobFinishedReceipt] = []
     for job in ctx.jobs.values():
         if job.job_finished_receipt is not None:
-            payload = job.job_finished_receipt.payload
+            finished_payload = job.job_finished_receipt.payload
             job_finished_receipts.append(
                 JobFinishedReceipt(
-                    job_uuid=payload.job_uuid,
-                    miner_hotkey=payload.miner_hotkey,
-                    validator_hotkey=payload.validator_hotkey,
-                    time_started=payload.time_started,
-                    time_took_us=payload.time_took_us,
-                    score_str=payload.score_str,
+                    job_uuid=finished_payload.job_uuid,
+                    miner_hotkey=finished_payload.miner_hotkey,
+                    validator_hotkey=finished_payload.validator_hotkey,
+                    time_started=finished_payload.time_started,
+                    time_took_us=finished_payload.time_took_us,
+                    score_str=finished_payload.score_str,
                 )
             )
     JobFinishedReceipt.objects.bulk_create(job_finished_receipts)
@@ -1522,7 +1544,7 @@ async def execute_synthetic_batch_run(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     batch_id: int | None = None,
-    create_miner_client: Callable | None = None,
+    create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> None:
     if not axons or not serving_miners:
         logger.warning("No miners provided")

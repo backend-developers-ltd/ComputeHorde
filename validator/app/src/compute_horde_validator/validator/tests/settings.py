@@ -25,7 +25,7 @@ BITTENSOR_WALLET_HOTKEY_NAME = "default"
 STATS_COLLECTOR_URL = "http://fakehost:8000"
 
 
-def BITTENSOR_WALLET() -> bittensor.wallet:
+def BITTENSOR_WALLET() -> bittensor.wallet:  # type: ignore
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
         raise RuntimeError("Wallet not configured")
     wallet = bittensor.wallet(

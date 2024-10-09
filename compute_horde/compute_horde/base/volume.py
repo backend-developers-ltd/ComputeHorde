@@ -30,7 +30,7 @@ class InlineVolume(pydantic.BaseModel):
 
 class ZipUrlVolume(pydantic.BaseModel):
     volume_type: Literal[VolumeType.zip_url] = VolumeType.zip_url
-    contents: str  # backwards compatible
+    contents: str  # backwards compatibility - this is the URL
     relative_path: str | None = Field(default=None)
 
     def is_safe(self) -> bool:

@@ -7,11 +7,17 @@ import logging
 import pathlib
 import tempfile
 import zipfile
+from collections.abc import Callable
 from functools import wraps
-from typing import Self
 
 import httpx
-from compute_horde.em_protocol.miner_requests import OutputUpload, OutputUploadType
+from compute_horde.base.output_upload import (
+    MultiUpload,
+    OutputUpload,
+    OutputUploadType,
+    ZipAndHttpPostUpload,
+    ZipAndHttpPutUpload,
+)
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -61,33 +67,33 @@ class OutputUploadFailed(Exception):
 class OutputUploader(metaclass=abc.ABCMeta):
     """Upload the output directory to JobRequest.OutputUpload"""
 
-    def __init__(self, upload_output: OutputUpload):
-        self.upload_output = upload_output
+    __output_type_map: dict[type[OutputUpload], Callable[[OutputUpload], OutputUploader]] = {}
 
     @classmethod
     @abc.abstractmethod
-    def handles_output_type(cls) -> OutputUploadType: ...
+    def handles_output_type(cls) -> type[OutputUpload]: ...
 
     @abc.abstractmethod
     async def upload(self, directory: pathlib.Path): ...
 
-    __output_type_map: dict[OutputUploadType, type[OutputUploader]] = {}
-
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls.__output_type_map[cls.handles_output_type()] = cls
+        cls.__output_type_map[cls.handles_output_type()] = lambda upload: cls(upload)  # type: ignore
 
     @classmethod
-    def for_upload_output(cls, upload_output: OutputUpload) -> Self:
-        return cls.__output_type_map[upload_output.output_upload_type](upload_output)
+    def for_upload_output(cls, upload_output: OutputUpload) -> OutputUploader:
+        return cls.__output_type_map[upload_output.__class__](upload_output)
 
 
 class ZipAndHTTPPostOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP POST the zip file to the given URL"""
 
+    def __init__(self, upload_output: ZipAndHttpPostUpload):
+        self.upload_output = upload_output
+
     @classmethod
-    def handles_output_type(cls) -> OutputUploadType:
-        return OutputUploadType.zip_and_http_post
+    def handles_output_type(cls) -> type[OutputUpload]:
+        return ZipAndHttpPostUpload
 
     async def upload(self, directory: pathlib.Path):
         with zipped_directory(directory) as (file_size, fp):
@@ -104,9 +110,12 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
 class ZipAndHTTPPutOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP PUT the zip file to the given URL"""
 
+    def __init__(self, upload_output: ZipAndHttpPutUpload):
+        self.upload_output = upload_output
+
     @classmethod
-    def handles_output_type(cls) -> OutputUploadType:
-        return OutputUploadType.zip_and_http_put
+    def handles_output_type(cls) -> type[OutputUpload]:
+        return ZipAndHttpPutUpload
 
     async def upload(self, directory: pathlib.Path):
         with zipped_directory(directory) as (file_size, fp):
@@ -116,9 +125,12 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
 class MultiUploadOutputUploader(OutputUploader):
     """Upload multiple files to the specified URLs"""
 
+    def __init__(self, upload_output: MultiUpload):
+        self.upload_output = upload_output
+
     @classmethod
-    def handles_output_type(cls) -> OutputUploadType:
-        return OutputUploadType.multi_upload
+    def handles_output_type(cls) -> type[OutputUpload]:
+        return MultiUpload
 
     async def upload(self, directory: pathlib.Path):
         single_file_uploads = []
@@ -131,7 +143,7 @@ class MultiUploadOutputUploader(OutputUploader):
 
             if upload.output_upload_type == OutputUploadType.single_file_post:
                 # we run those concurrently but for loop changes slots - we need to bind
-                async def _task(file_path, upload):
+                async def _single_post_upload_task(file_path, upload):
                     with file_path.open("rb") as fp:
                         await upload_post(
                             fp,
@@ -142,28 +154,26 @@ class MultiUploadOutputUploader(OutputUploader):
                             headers=upload.signed_headers,
                         )
 
-                tasks.append(limiter.wrap_task(_task(file_path, upload)))
+                tasks.append(limiter.wrap_task(_single_post_upload_task(file_path, upload)))
                 single_file_uploads.append(upload.relative_path)
             elif upload.output_upload_type == OutputUploadType.single_file_put:
                 # we run those concurrently but for loop changes slots - we need to bind
-                async def _task(file_path, upload):
+                async def _single_put_upload_task(file_path, upload):
                     with file_path.open("rb") as fp:
                         await upload_put(
                             fp, file_path.stat().st_size, upload.url, headers=upload.signed_headers
                         )
 
-                tasks.append(limiter.wrap_task(_task(file_path, upload)))
+                tasks.append(limiter.wrap_task(_single_put_upload_task(file_path, upload)))
                 single_file_uploads.append(upload.relative_path)
             else:
                 raise OutputUploadFailed(f"Unsupported upload type: {upload.output_upload_type}")
 
-        if self.upload_output.system_output:
-            if (
-                self.upload_output.system_output.output_upload_type
-                == OutputUploadType.zip_and_http_post
-            ):
+        system_output_upload = self.upload_output.system_output
+        if system_output_upload:
+            if isinstance(system_output_upload, ZipAndHttpPostUpload):
                 # we don't need to bind any vars because we don't run it in a loop
-                async def _task():
+                async def _output_post_upload_task(upload: ZipAndHttpPostUpload):
                     with zipped_directory(directory, exclude=single_file_uploads) as (
                         file_size,
                         fp,
@@ -172,18 +182,15 @@ class MultiUploadOutputUploader(OutputUploader):
                             fp,
                             "output.zip",
                             file_size,
-                            self.upload_output.system_output.url,
+                            upload.url,
                             content_type="application/zip",
-                            form_fields=self.upload_output.system_output.form_fields,
+                            form_fields=upload.form_fields,
                         )
 
-                tasks.append(limiter.wrap_task(_task()))
-            elif (
-                self.upload_output.system_output.output_upload_type
-                == OutputUploadType.zip_and_http_put
-            ):
+                tasks.append(limiter.wrap_task(_output_post_upload_task(system_output_upload)))
+            elif isinstance(system_output_upload, ZipAndHttpPutUpload):
                 # we don't need to bind any vars because we don't run it in a loop
-                async def _task():
+                async def _output_put_upload_task(upload: ZipAndHttpPutUpload):
                     with zipped_directory(directory, exclude=single_file_uploads) as (
                         file_size,
                         fp,
@@ -191,13 +198,13 @@ class MultiUploadOutputUploader(OutputUploader):
                         await upload_put(
                             fp,
                             file_size,
-                            self.upload_output.system_output.url,
+                            upload.url,
                         )
 
-                tasks.append(limiter.wrap_task(_task()))
+                tasks.append(limiter.wrap_task(_output_put_upload_task(system_output_upload)))
             else:
                 raise OutputUploadFailed(
-                    f"Unsupported system output upload type: {self.upload_output.system_output.output_upload_type}"
+                    f"Unsupported system output upload type: {system_output_upload.output_upload_type}"
                 )
         await asyncio.gather(*tasks)
 

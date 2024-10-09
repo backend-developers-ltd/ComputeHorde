@@ -1,4 +1,5 @@
 import logging
+from functools import cached_property
 
 from compute_horde.em_protocol import executor_requests, miner_requests
 from compute_horde.em_protocol.executor_requests import BaseExecutorRequest
@@ -15,10 +16,21 @@ logger = logging.getLogger(__name__)
 
 
 class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
-    def __init__(self, *a, **kw):
-        super().__init__(*a, **kw)
-        self.executor_token = ""
-        self.job: AcceptedJob | None = None
+    # Job is populated only after the connection initialization succeeds
+    _maybe_job: AcceptedJob | None = None
+
+    class NotInitialized(Exception):
+        pass
+
+    @cached_property
+    def job(self) -> AcceptedJob:
+        if self._maybe_job is None:
+            raise MinerExecutorConsumer.NotInitialized("Missing job")
+        return self._maybe_job
+
+    @cached_property
+    def executor_token(self):
+        return self.scope["url_route"]["kwargs"]["executor_token"]
 
     def accepted_request_type(self):
         return BaseExecutorRequest
@@ -33,10 +45,11 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
     async def connect(self):
         # TODO using advisory locks make sure that only one consumer per executor token exists
         await super().connect()
-        self.executor_token = self.scope["url_route"]["kwargs"]["executor_token"]
         try:
             # TODO maybe one day tokens will be reused, then we will have to add filtering here
-            job = await AcceptedJob.objects.aget(executor_token=self.executor_token)
+            self._maybe_job = job = await AcceptedJob.objects.aget(
+                executor_token=self.executor_token
+            )
         except AcceptedJob.DoesNotExist:
             await self.send(
                 miner_requests.GenericError(
@@ -55,7 +68,6 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             await self.websocket_disconnect({"code": msg})
             return
 
-        self.job = job
         await self.group_add(self.executor_token)
         initial_job_details = validator_requests.V0InitialJobRequest(**job.initial_job_details)
         await self.send(

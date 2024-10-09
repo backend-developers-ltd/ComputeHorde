@@ -22,8 +22,8 @@ class LocalReceiptStore(BaseReceiptStore):
             return
 
         payload_fields = set()
-        for payload_cls in [JobStartedReceiptPayload, JobFinishedReceiptPayload]:
-            payload_fields |= set(payload_cls.model_fields.keys())
+        payload_fields |= set(JobStartedReceiptPayload.model_fields.keys())
+        payload_fields |= set(JobFinishedReceiptPayload.model_fields.keys())
 
         buf = io.StringIO()
         csv_writer = csv.DictWriter(

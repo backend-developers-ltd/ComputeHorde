@@ -12,20 +12,20 @@ logger = logging.getLogger(__name__)
 
 class MinerClient(OrganicMinerClient):
     async def notify_generic_error(self, msg: BaseRequest) -> None:
-        msg = f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
+        desc = f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
         await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
             type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
             subtype=SystemEvent.EventSubType.GENERIC_ERROR,
-            long_description=msg,
+            long_description=desc,
             data={},
         )
 
     async def notify_unauthorized_error(self, msg: UnauthorizedError) -> None:
-        msg = f"Unauthorized in {self.miner_name}: {msg.code}, details: {msg.details}"
+        desc = f"Unauthorized in {self.miner_name}: {msg.code}, details: {msg.details}"
         await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
             type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
             subtype=SystemEvent.EventSubType.UNAUTHORIZED,
-            long_description=msg,
+            long_description=desc,
             data={},
         )
 

@@ -6,10 +6,10 @@ import logging
 import time
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Literal
 
 import bittensor
 
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
@@ -107,7 +107,7 @@ class OrganicMinerClient(AbstractMinerClient):
 
     @cached_property
     def my_hotkey(self) -> str:
-        return self.my_keypair.ss58_address
+        return str(self.my_keypair.ss58_address)
 
     def miner_url(self) -> str:
         return (
@@ -122,6 +122,9 @@ class OrganicMinerClient(AbstractMinerClient):
 
     def outgoing_generic_error_class(self) -> type[BaseRequest]:
         return validator_requests.GenericError
+
+    def build_outgoing_generic_error(self, msg: str):
+        return validator_requests.GenericError(details=msg)
 
     async def notify_generic_error(self, msg: BaseRequest) -> None:
         """This method is called when miner sends a generic error message"""
@@ -315,7 +318,7 @@ class OrganicJobDetails:
     executor_class: ExecutorClass = ExecutorClass.spin_up_4min__gpu_24gb
     docker_image: str | None = None
     raw_script: str | None = None
-    docker_run_options_preset: Literal["nvidia_all", "none"] = "nvidia_all"
+    docker_run_options_preset: DockerRunOptionsPreset = "nvidia_all"
     docker_run_cmd: list[str] = field(default_factory=list)
     total_job_timeout: int = 300
     volume: Volume | None = None

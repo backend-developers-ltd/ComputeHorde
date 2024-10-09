@@ -95,7 +95,7 @@ async def answer_prompts(
         return False
 
     try:
-        await job_generator._download_answers()
+        await job_generator.download_answers()
         prompt_answers: dict[str, str] = job_generator.prompt_answers
     except Exception as e:
         await SystemEvent.objects.acreate(

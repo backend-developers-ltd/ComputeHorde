@@ -1,7 +1,9 @@
+import enum
+
 from django.db import connection
 
 
-class LockType:
+class LockType(enum.Enum):
     WEIGHT_SETTING = 1
     VALIDATION_SCHEDULING = 2
     TRUSTED_MINER_LOCK = 3
@@ -18,7 +20,7 @@ def get_advisory_lock(type_: LockType) -> None:
     will be released automatically after transaction.atomic ends.
     """
     cursor = connection.cursor()
-    cursor.execute("SELECT pg_try_advisory_xact_lock(%s)", [type_])
+    cursor.execute("SELECT pg_try_advisory_xact_lock(%s)", [type_.value])
     unlocked = cursor.fetchall()[0][0]
     if not unlocked:
         raise Locked

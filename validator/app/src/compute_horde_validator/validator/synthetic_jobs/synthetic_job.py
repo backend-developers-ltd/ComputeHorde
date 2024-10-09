@@ -3,6 +3,7 @@ import enum
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Protocol
 
 
 class SyntheticJob(ABC):
@@ -14,11 +15,21 @@ class SyntheticJob(ABC):
     @abstractmethod
     def answer(self) -> str: ...
 
+    @property
+    @abstractmethod
+    def timeout_seconds(self) -> int: ...
+
     def docker_run_cmd(self) -> list[str]:
         return []
 
     def raw_script(self) -> str | None:
         return None
+
+
+class _HashProto(Protocol):
+    # "hashlib._Hash" could be used instead, but as it doesn't exist outside of stubs
+    # PyCharm doesn't like it. This minimal protocol serves as a good enough stub.
+    def hexdigest(self) -> str: ...
 
 
 class Algorithm(enum.Enum):
@@ -43,8 +54,8 @@ class Algorithm(enum.Enum):
             },
         }
 
-    def hash(self, *args, **kwargs):
-        return self.params[self]["hash_function"](*args, **kwargs)
+    def hash(self, *args, **kwargs) -> _HashProto:
+        return self.params[self]["hash_function"](*args, **kwargs)  # type: ignore
 
     @property
     def type(self):

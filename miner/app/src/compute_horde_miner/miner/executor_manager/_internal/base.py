@@ -37,7 +37,7 @@ class ExecutorClassPool:
         self.manager = manager
         self.executor_class = executor_class
         self._count = executor_count
-        self._executors = []
+        self._executors: list[ReservedExecutor] = []
         self._reservation_lock = asyncio.Lock()
         self._pool_cleanup_task = asyncio.create_task(self._pool_cleanup_loop())
 
@@ -154,6 +154,6 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
     def get_total_timeout(self, executor_class, job_timeout):
         spec = EXECUTOR_CLASS.get(executor_class)
         spin_up_time = 0
-        if spec is not None:
+        if spec is not None and spec.spin_up_time is not None:
             spin_up_time = spec.spin_up_time
         return spin_up_time + job_timeout + self.EXECUTOR_TIMEOUT_LEEWAY

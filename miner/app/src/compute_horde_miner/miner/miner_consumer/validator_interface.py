@@ -2,6 +2,8 @@ import datetime as dt
 import logging
 import time
 import uuid
+from functools import cached_property
+from typing import Protocol
 
 import bittensor
 from compute_horde.mv_protocol import miner_requests, validator_requests
@@ -20,6 +22,7 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ExecutorFailedToPrepare,
     ExecutorFinished,
     ExecutorReady,
+    ExecutorSpecs,
     ValidatorInterfaceMixin,
 )
 from compute_horde_miner.miner.models import (
@@ -38,49 +41,57 @@ AUTH_MESSAGE_MAX_AGE = 10
 DONT_CHECK = "DONT_CHECK"
 
 
-def get_miner_signature(msg: BaseValidatorRequest) -> str:
+class _RequestWithBlobForSigning(Protocol):
+    def blob_for_signing(self) -> str: ...
+
+
+def get_miner_signature(msg: _RequestWithBlobForSigning) -> str:
     keypair = settings.BITTENSOR_WALLET().get_hotkey()
     return f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
 
 
 class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
+    class NotInitialized(Exception):
+        pass
+
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         if settings.DEBUG_TURN_AUTHENTICATION_OFF or settings.IS_LOCAL_MINER:
             self.my_hotkey = DONT_CHECK
         else:
             self.my_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-        self.validator_key = ""
-        self.validator: Validator | None = None
         self.validator_authenticated = False
         self.msg_queue = []
         self.defer_saving_jobs = []
         self.defer_executor_ready = []
         self.pending_jobs: dict[str, AcceptedJob] = {}
 
+        # Validator is populated only after the connection initialization succeeds
+        self._maybe_validator: Validator | None = None
+
+    @cached_property
+    def validator(self) -> Validator:
+        if not self._maybe_validator:
+            raise MinerValidatorConsumer.NotInitialized("Missing validator")
+        return self._maybe_validator
+
+    @cached_property
+    def validator_key(self) -> str:
+        return str(self.scope["url_route"]["kwargs"]["validator_key"])
+
     @log_errors_explicitly
     async def connect(self):
         await super().connect()
         # TODO verify ssl cert
-        self.validator_key = self.scope["url_route"]["kwargs"]["validator_key"]
-        fail = False
-        msg = None
+
         try:
-            self.validator = await Validator.objects.aget(public_key=self.validator_key)
+            self._maybe_validator = await Validator.objects.aget(public_key=self.validator_key)
         except Validator.DoesNotExist:
-            msg = f"Unknown validator: {self.validator_key}"
-            fail = True
-        if (
-            not settings.DEBUG_TURN_AUTHENTICATION_OFF
-            and self.validator
-            and not self.validator.active
-        ):
-            msg = f"Inactive validator: {self.validator_key}"
-            fail = True
-        if fail:
-            await self.send(miner_requests.GenericError(details=msg).model_dump_json())
-            logger.info(msg)
-            await self.close(1000)
+            await self.close_with_error_msg(f"Unknown validator: {self.validator_key}")
+            return
+
+        if not (self.validator.active or settings.DEBUG_TURN_AUTHENTICATION_OFF):
+            await self.close_with_error_msg(f"Inactive validator: {self.validator_key}")
             return
 
         self.pending_jobs = await AcceptedJob.get_for_validator(self.validator)
@@ -112,6 +123,11 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 await self.group_add(job.executor_token)
                 # we don't send anything until we get authorization confirmation
                 self.defer_executor_ready.append(job)
+
+    async def close_with_error_msg(self, msg: str):
+        await self.send(miner_requests.GenericError(details=msg).model_dump_json())
+        logger.info(msg)
+        await self.close(1000)
 
     def accepted_request_type(self):
         return BaseValidatorRequest
@@ -174,15 +190,14 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 f'"DEBUG_TURN_AUTHENTICATION_OFF" is on'
             )
         else:
-            authenticated, error_msg = self.verify_auth_msg(msg)
+            authenticated, auth_error_msg = self.verify_auth_msg(msg)
             if not authenticated:
-                response_msg = (
-                    f"Validator {self.validator_key} not authenticated due to: {error_msg}"
+                close_error_msg = (
+                    f"Validator {self.validator_key} not authenticated due to: {auth_error_msg}"
                 )
-                logger.info(response_msg)
-                await self.send(miner_requests.GenericError(details=response_msg).model_dump_json())
-                await self.close(1000)
+                await self.close_with_error_msg(close_error_msg)
                 return
+
         self.validator_authenticated = True
         manifest = await current.executor_manager.get_manifest()
         await self.send(
@@ -197,6 +212,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 )
             ).model_dump_json()
         )
+
+        # Handle messages that may have arrived during the authentication
         for msg in self.msg_queue:
             await self.handle(msg)
 
@@ -244,8 +261,18 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await job.asave()
 
     async def handle(self, msg: BaseValidatorRequest):
+        if self._maybe_validator is None:
+            # An unknown validator should have received an error response from connect() by now.
+            # All further incoming messages can be ignored.
+            logger.warning(
+                f"Dropping message {msg.__class__.__name__} from unknown validator {self.validator_key}"
+            )
+            return
+
         if isinstance(msg, validator_requests.V0AuthenticateRequest):
-            return await self.handle_authentication(msg)
+            await self.handle_authentication(msg)
+            return
+
         if not self.validator_authenticated:
             self.msg_queue.append(msg)
             return
@@ -255,7 +282,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         ):
             # Proactively check volume safety in both requests that may contain a volume
             if msg.volume and not msg.volume.is_safe():
-                error_msg = f"Received JobRequest with unsafe volume: {msg.volume.contents}"
+                error_msg = f"Received JobRequest with unsafe volume: {msg.volume}"
                 logger.error(error_msg)
                 await self.send(
                     miner_requests.GenericError(
@@ -265,133 +292,146 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 return
 
         if isinstance(msg, validator_requests.V0InitialJobRequest):
-            validator_blacklisted = await ValidatorBlacklist.objects.filter(
-                validator=self.validator
-            ).aexists()
-            if validator_blacklisted:
-                logger.info(
-                    f"Declining job {msg.job_uuid} from blacklisted validator: {self.validator_key}"
-                )
-                await self.send(
-                    miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
-                )
-                return
-            # TODO add rate limiting per validator key here
-            token = f"{msg.job_uuid}-{uuid.uuid4()}"
-            await self.group_add(token)
-            # let's create the job object before spinning up the executor, so if this process dies before getting
-            # confirmation from the executor_manager the object is there and the executor will get the job details
-            job = AcceptedJob(
-                validator=self.validator,
-                job_uuid=msg.job_uuid,
-                executor_token=token,
-                initial_job_details=msg.model_dump(),
-                status=AcceptedJob.Status.WAITING_FOR_EXECUTOR,
-            )
-            await job.asave()
-            self.pending_jobs[msg.job_uuid] = job
-
-            try:
-                await current.executor_manager.reserve_executor_class(
-                    token, msg.executor_class, msg.timeout_seconds
-                )
-            except ExecutorUnavailable:
-                await self.send(
-                    miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
-                )
-                await self.group_discard(token)
-                await job.adelete()
-                self.pending_jobs.pop(msg.job_uuid)
-                return
-            await self.send(
-                miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json()
-            )
+            await self.handle_initial_job_request(msg)
 
         if isinstance(msg, validator_requests.V0JobRequest):
-            job = self.pending_jobs.get(msg.job_uuid)
-            if job is None:
-                error_msg = f"Received JobRequest for unknown job_uuid: {msg.job_uuid}"
-                logger.error(error_msg)
-                await self.send(
-                    miner_requests.GenericError(
-                        details=error_msg,
-                    ).model_dump_json()
-                )
-                return
-            if job.initial_job_details.get("volume") is not None and msg.volume is not None:
-                # The volume may have been already sent in the initial job request.
-                error_msg = f"Received job volume twice job_uuid: {msg.job_uuid}"
-                logger.error(error_msg)
-                await self.send(
-                    miner_requests.GenericError(
-                        details=error_msg,
-                    ).model_dump_json()
-                )
-                return
-            await self.send_job_request(job.executor_token, msg)
-            logger.debug(f"Passing job details to executor consumer job_uuid: {msg.job_uuid}")
-            job.status = AcceptedJob.Status.RUNNING
-            job.full_job_details = msg.model_dump()
-            await job.asave()
+            await self.handle_job_request(msg)
 
         if isinstance(
             msg, validator_requests.V0JobStartedReceiptRequest
         ) and self.verify_receipt_msg(msg):
-            logger.info(
-                f"Received job started receipt for"
-                f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
-                f" max_timeout={msg.payload.max_timeout}"
-            )
-
-            if settings.IS_LOCAL_MINER:
-                return
-
-            await JobStartedReceipt.objects.acreate(
-                validator_signature=msg.signature,
-                miner_signature=get_miner_signature(msg),
-                job_uuid=msg.payload.job_uuid,
-                miner_hotkey=msg.payload.miner_hotkey,
-                validator_hotkey=msg.payload.validator_hotkey,
-                executor_class=msg.payload.executor_class,
-                time_accepted=msg.payload.time_accepted,
-                max_timeout=msg.payload.max_timeout,
-            )
+            await self.handle_job_started_receipt(msg)
 
         if isinstance(
             msg, validator_requests.V0JobFinishedReceiptRequest
         ) and self.verify_receipt_msg(msg):
+            await self.handle_job_finished_receipt(msg)
+
+    async def handle_initial_job_request(self, msg: validator_requests.V0InitialJobRequest):
+        validator_blacklisted = await ValidatorBlacklist.objects.filter(
+            validator=self.validator
+        ).aexists()
+        if validator_blacklisted:
             logger.info(
-                f"Received job finished receipt for"
-                f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
-                f" time_took={msg.payload.time_took} score={msg.payload.score}"
+                f"Declining job {msg.job_uuid} from blacklisted validator: {self.validator_key}"
             )
-            job = await AcceptedJob.objects.aget(job_uuid=msg.payload.job_uuid)
-            job.time_took = msg.payload.time_took
-            job.score = msg.payload.score
-            await job.asave()
-
-            if settings.IS_LOCAL_MINER:
-                return
-
-            await JobFinishedReceipt.objects.acreate(
-                validator_signature=msg.signature,
-                miner_signature=get_miner_signature(msg),
-                job_uuid=msg.payload.job_uuid,
-                miner_hotkey=msg.payload.miner_hotkey,
-                validator_hotkey=msg.payload.validator_hotkey,
-                time_started=msg.payload.time_started,
-                time_took_us=msg.payload.time_took_us,
-                score_str=msg.payload.score_str,
+            await self.send(
+                miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
             )
-            prepare_receipts.delay()
+            return
+        # TODO add rate limiting per validator key here
+        token = f"{msg.job_uuid}-{uuid.uuid4()}"
+        await self.group_add(token)
+        # let's create the job object before spinning up the executor, so if this process dies before getting
+        # confirmation from the executor_manager the object is there and the executor will get the job details
+        job = AcceptedJob(
+            validator=self.validator,
+            job_uuid=msg.job_uuid,
+            executor_token=token,
+            initial_job_details=msg.model_dump(),
+            status=AcceptedJob.Status.WAITING_FOR_EXECUTOR,
+        )
+        await job.asave()
+        self.pending_jobs[msg.job_uuid] = job
+
+        try:
+            await current.executor_manager.reserve_executor_class(
+                token, msg.executor_class, msg.timeout_seconds
+            )
+        except ExecutorUnavailable:
+            await self.send(
+                miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
+            )
+            await self.group_discard(token)
+            await job.adelete()
+            self.pending_jobs.pop(msg.job_uuid)
+            return
+        await self.send(miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json())
+
+    async def handle_job_request(self, msg: validator_requests.V0JobRequest):
+        job = self.pending_jobs.get(msg.job_uuid)
+        if job is None:
+            error_msg = f"Received JobRequest for unknown job_uuid: {msg.job_uuid}"
+            logger.error(error_msg)
+            await self.send(
+                miner_requests.GenericError(
+                    details=error_msg,
+                ).model_dump_json()
+            )
+            return
+
+        if job.initial_job_details.get("volume") is not None and msg.volume is not None:
+            # The volume may have been already sent in the initial job request.
+            error_msg = f"Received job volume twice job_uuid: {msg.job_uuid}"
+            logger.error(error_msg)
+            await self.send(
+                miner_requests.GenericError(
+                    details=error_msg,
+                ).model_dump_json()
+            )
+            return
+
+        await self.send_job_request(job.executor_token, msg)
+        logger.debug(f"Passing job details to executor consumer job_uuid: {msg.job_uuid}")
+        job.status = AcceptedJob.Status.RUNNING
+        job.full_job_details = msg.model_dump()
+        await job.asave()
+
+    async def handle_job_started_receipt(self, msg: validator_requests.V0JobStartedReceiptRequest):
+        logger.info(
+            f"Received job started receipt for"
+            f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
+            f" max_timeout={msg.payload.max_timeout}"
+        )
+
+        if settings.IS_LOCAL_MINER:
+            return
+
+        await JobStartedReceipt.objects.acreate(
+            validator_signature=msg.signature,
+            miner_signature=get_miner_signature(msg),
+            job_uuid=msg.payload.job_uuid,
+            miner_hotkey=msg.payload.miner_hotkey,
+            validator_hotkey=msg.payload.validator_hotkey,
+            executor_class=msg.payload.executor_class,
+            time_accepted=msg.payload.time_accepted,
+            max_timeout=msg.payload.max_timeout,
+        )
+
+    async def handle_job_finished_receipt(
+        self, msg: validator_requests.V0JobFinishedReceiptRequest
+    ):
+        logger.info(
+            f"Received job finished receipt for"
+            f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
+            f" time_took={msg.payload.time_took} score={msg.payload.score}"
+        )
+        job = await AcceptedJob.objects.aget(job_uuid=msg.payload.job_uuid)
+        job.time_took = msg.payload.time_took
+        job.score = msg.payload.score
+        await job.asave()
+
+        if settings.IS_LOCAL_MINER:
+            return
+
+        await JobFinishedReceipt.objects.acreate(
+            validator_signature=msg.signature,
+            miner_signature=get_miner_signature(msg),
+            job_uuid=msg.payload.job_uuid,
+            miner_hotkey=msg.payload.miner_hotkey,
+            validator_hotkey=msg.payload.validator_hotkey,
+            time_started=msg.payload.time_started,
+            time_took_us=msg.payload.time_took_us,
+            score_str=msg.payload.score_str,
+        )
+        prepare_receipts.delay()
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
-        self.pending_jobs[job.job_uuid] = job
-        await self.send(
-            miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).model_dump_json()
-        )
-        logger.debug(f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}")
+        job_uuid = str(job.job_uuid)
+        self.pending_jobs[job_uuid] = job
+        await self.send(miner_requests.V0ExecutorReadyRequest(job_uuid=job_uuid).model_dump_json())
+        logger.debug(f"Readiness for job {job_uuid} reported to validator {self.validator_key}")
 
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):
         jobs = [
@@ -404,10 +444,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             k: v for k, v in self.pending_jobs.items() if v.executor_token != msg.executor_token
         }
         await self.send(
-            miner_requests.V0ExecutorFailedRequest(job_uuid=job.job_uuid).model_dump_json()
+            miner_requests.V0ExecutorFailedRequest(job_uuid=str(job.job_uuid)).model_dump_json()
         )
         logger.debug(
-            f"Failure in preparation for job {job.job_uuid} reported to validator {self.validator_key}"
+            f"Failure in preparation for job {str(job.job_uuid)} reported to validator {self.validator_key}"
         )
 
     async def _executor_finished(self, msg: ExecutorFinished):
@@ -424,7 +464,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         job.result_reported_to_validator = timezone.now()
         await job.asave()
 
-    async def _executor_specs(self, msg: validator_requests.V0MachineSpecsRequest):
+    async def _executor_specs(self, msg: ExecutorSpecs):
         await self.send(
             miner_requests.V0MachineSpecsRequest(
                 job_uuid=msg.job_uuid,

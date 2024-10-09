@@ -40,6 +40,12 @@ def lint(session: nox.Session):
 
 
 @nox.session(python=PYTHON_VERSION)
+def type_check(session):
+    install(session, "type_check")
+    session.run("mypy", "--config-file", "mypy.ini", ".", *session.posargs)
+
+
+@nox.session(python=PYTHON_VERSION)
 def test(session):
     install(session, "test")
     session.run(

@@ -1,6 +1,8 @@
 import abc
 import enum
 import json
+from collections.abc import Generator
+from typing import TypeVar
 
 import pydantic
 
@@ -21,13 +23,18 @@ class ValidationError(Exception):
         return f"{type(self).__name__}({self.msg})"
 
 
-def all_subclasses(cls: type):
-    for subcls in cls.__subclasses__():
-        yield subcls
-        yield from all_subclasses(subcls)
+T = TypeVar("T", bound=type)
 
 
-base_class_to_request_type_mapping = {}
+def all_subclasses(cls: T) -> Generator[T, None, None]:
+    for subclass in cls.__subclasses__():
+        yield subclass
+        yield from all_subclasses(subclass)
+
+
+_base_class_to_request_type_mapping: dict[
+    type["BaseRequest"], dict[enum.Enum, type["BaseRequest"]]
+] = {}
 
 
 class BaseRequest(pydantic.BaseModel, abc.ABC):
@@ -35,16 +42,17 @@ class BaseRequest(pydantic.BaseModel, abc.ABC):
 
     @classmethod
     def type_to_model(cls, type_: enum.Enum) -> type["BaseRequest"]:
-        mapping = base_class_to_request_type_mapping.get(cls)
+        mapping = _base_class_to_request_type_mapping.get(cls)
+
         if not mapping:
             mapping = {}
             for klass in all_subclasses(cls):
-                if not (message_type := klass.model_fields.get("message_type")):
+                if not (message_type_field_info := klass.model_fields.get("message_type")):
                     continue
-                if not message_type.default:
+                if not message_type_field_info.default:
                     continue
-                mapping[message_type.default] = klass
-            base_class_to_request_type_mapping[cls] = mapping
+                mapping[message_type_field_info.default] = klass
+            _base_class_to_request_type_mapping[cls] = mapping
 
         return mapping[type_]
 
