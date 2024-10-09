@@ -60,10 +60,15 @@ for miner in miners:
 
 To run a validator, first you need to [setup a trusted miner for cross-validation](/validator/README.md#setting-up-a-trusted-miner-for-cross-validation) and [provision S3 buckets for prompts and answers](/validator/README.md#provision-s3-buckets-for-prompts-and-answers) of LLM jobs.
 
+**If you are upgrading** your validator to support LLM jobs, prepare a trusted miner and S3 buckets (find out how using the links above). Then, set the environment variables directly in the .env file of your validator instance and restart your validator:
+
+```
+$ docker compose down --remove-orphans && docker compose up -d
+```
+
 Set the following environment variables in a terminal on your local machine (on the machine where you have your wallet files):
 
 ```sh
-export TRUSTED_MINER_KEY=...
 export TRUSTED_MINER_ADDRESS=...
 export TRUSTED_MINER_PORT=...
 
