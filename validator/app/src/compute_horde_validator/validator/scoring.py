@@ -104,9 +104,9 @@ def score_batch(batch):
 
 
 def score_batches(batches: Sequence[SyntheticJobBatch]) -> dict[str, float]:
-    hotkeys_scores: dict[str, float] = defaultdict(float)
+    hotkeys_scores: defaultdict[str, float] = defaultdict(float)
     for batch in batches:
         batch_scores = score_batch(batch)
         for hotkey, score in batch_scores.items():
             hotkeys_scores[hotkey] += score
-    return hotkeys_scores
+    return dict(hotkeys_scores)
