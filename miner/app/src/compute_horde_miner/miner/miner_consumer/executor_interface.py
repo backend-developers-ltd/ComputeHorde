@@ -19,10 +19,13 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
     # Job is populated only after the connection initialization succeeds
     _maybe_job: AcceptedJob | None = None
 
+    class NotInitialized(Exception):
+        pass
+
     @cached_property
     def job(self) -> AcceptedJob:
         if self._maybe_job is None:
-            raise Exception("Consumer not initialized: job is missing")
+            raise MinerExecutorConsumer.NotInitialized("Missing job")
         return self._maybe_job
 
     @cached_property

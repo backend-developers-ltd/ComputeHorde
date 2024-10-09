@@ -51,6 +51,9 @@ def get_miner_signature(msg: _RequestWithBlobForSigning) -> str:
 
 
 class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
+    class NotInitialized(Exception):
+        pass
+
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         if settings.DEBUG_TURN_AUTHENTICATION_OFF or settings.IS_LOCAL_MINER:
@@ -69,7 +72,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
     @cached_property
     def validator(self) -> Validator:
         if not self._maybe_validator:
-            raise Exception("Consumer not initialized: missing validator")
+            raise MinerValidatorConsumer.NotInitialized("Missing validator")
         return self._maybe_validator
 
     @cached_property

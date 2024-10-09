@@ -78,6 +78,9 @@ class RunConfigManager:
 
 
 class MinerClient(AbstractMinerClient):
+    class NotInitialized(Exception):
+        pass
+
     def __init__(self, miner_address: str, token: str, transport: AbstractTransport | None = None):
         self.miner_address = miner_address
         self.token = token
@@ -94,7 +97,7 @@ class MinerClient(AbstractMinerClient):
     @property
     def job_uuid(self) -> str:
         if self._maybe_job_uuid is None:
-            raise Exception("Miner client not initialized")
+            raise MinerClient.NotInitialized("Job UUID is missing")
         return self._maybe_job_uuid
 
     def miner_url(self) -> str:
