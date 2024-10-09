@@ -78,7 +78,7 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
 
 
 async def save_job_execution_event(
-    subtype: str, long_description: str, data: JsonValue | None = None, success: bool = False
+    subtype: str, long_description: str, data: JsonValue = None, success: bool = False
 ):
     await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
         type=SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS
