@@ -6,6 +6,7 @@ import pytest
 from compute_horde.base_requests import BaseRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.mv_protocol.miner_requests import (
+    V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
@@ -35,11 +36,12 @@ def get_miner_client(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "initial_msg,final_msg",
+    "initial_msg,executor_msg,final_msg",
     [
-        (V0DeclineJobRequest(job_uuid=JOB_UUID), None),
-        (V0ExecutorFailedRequest(job_uuid=JOB_UUID), None),
+        (V0DeclineJobRequest(job_uuid=JOB_UUID), None, None),
+        (V0AcceptJobRequest(job_uuid=JOB_UUID), V0ExecutorFailedRequest(job_uuid=JOB_UUID), None),
         (
+            V0AcceptJobRequest(job_uuid=JOB_UUID),
             V0ExecutorReadyRequest(job_uuid=JOB_UUID),
             V0JobFailedRequest(
                 job_uuid=JOB_UUID,
@@ -49,6 +51,7 @@ def get_miner_client(
             ),
         ),
         (
+            V0AcceptJobRequest(job_uuid=JOB_UUID),
             V0ExecutorReadyRequest(job_uuid=JOB_UUID),
             V0JobFinishedRequest(
                 job_uuid=JOB_UUID,
@@ -58,22 +61,41 @@ def get_miner_client(
         ),
     ],
 )
-async def test_organic_miner_client__futures__properly_set(initial_msg, final_msg, keypair):
+async def test_organic_miner_client__futures__properly_set(
+    initial_msg, executor_msg, final_msg, keypair
+):
     miner_client = get_miner_client(keypair)
 
-    assert not miner_client.miner_ready_or_declining_future.done()
-    assert miner_client.miner_ready_or_declining_timestamp == 0
+    assert not miner_client.miner_accepting_or_declining_future.done()
+    assert miner_client.miner_accepting_or_declining_timestamp == 0
 
     await miner_client.handle_message(initial_msg)
 
-    assert miner_client.miner_ready_or_declining_future.done()
-    assert miner_client.miner_ready_or_declining_timestamp != 0
-    assert await miner_client.miner_ready_or_declining_future == initial_msg
+    assert miner_client.miner_accepting_or_declining_future.done()
+    assert miner_client.miner_accepting_or_declining_timestamp != 0
+    assert await miner_client.miner_accepting_or_declining_future == initial_msg
 
     # should set only once
-    set_time = miner_client.miner_ready_or_declining_timestamp
+    set_time = miner_client.miner_accepting_or_declining_timestamp
     await miner_client.handle_message(initial_msg)
-    assert miner_client.miner_ready_or_declining_timestamp == set_time
+    assert miner_client.miner_accepting_or_declining_timestamp == set_time
+
+    if executor_msg is None:
+        return
+
+    assert not miner_client.executor_ready_or_failed_future.done()
+    assert miner_client.executor_ready_or_failed_timestamp == 0
+
+    await miner_client.handle_message(executor_msg)
+
+    assert miner_client.executor_ready_or_failed_future.done()
+    assert miner_client.executor_ready_or_failed_future != 0
+    assert await miner_client.executor_ready_or_failed_future == executor_msg
+
+    # should set only once
+    set_time = miner_client.executor_ready_or_failed_timestamp
+    await miner_client.handle_message(executor_msg)
+    assert miner_client.executor_ready_or_failed_timestamp == set_time
 
     if final_msg is None:
         return
@@ -97,21 +119,20 @@ async def test_organic_miner_client__futures__properly_set(initial_msg, final_ms
 @pytest.mark.parametrize(
     "initial_msg",
     [
+        V0AcceptJobRequest(job_uuid=str(uuid.uuid4())),
         V0DeclineJobRequest(job_uuid=str(uuid.uuid4())),
-        V0ExecutorFailedRequest(job_uuid=str(uuid.uuid4())),
-        V0ExecutorReadyRequest(job_uuid=str(uuid.uuid4())),
     ],
 )
 async def test_organic_miner_client__skip_different_job__initial_future(initial_msg, keypair):
     miner_client = get_miner_client(keypair)
 
-    assert not miner_client.miner_ready_or_declining_future.done()
-    assert miner_client.miner_ready_or_declining_timestamp == 0
+    assert not miner_client.miner_accepting_or_declining_future.done()
+    assert miner_client.miner_accepting_or_declining_timestamp == 0
 
     await miner_client.handle_message(initial_msg)
 
-    assert not miner_client.miner_ready_or_declining_future.done()
-    assert miner_client.miner_ready_or_declining_timestamp == 0
+    assert not miner_client.miner_accepting_or_declining_future.done()
+    assert miner_client.miner_accepting_or_declining_timestamp == 0
 
 
 @pytest.mark.asyncio
