@@ -5,7 +5,7 @@
 groups = ["default", "format", "lint", "release", "test", "type_check"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:f657e43907f918877250290da1a797a3d5e198422ae2e835bd326c4cb5caf3ae"
+content_hash = "sha256:6c0e95ad053091a2938575210bf10a2efa03ab8148a955d0227d0a8f2ebcdea4"
 
 [[metadata.targets]]
 requires_python = "==3.11.*"
@@ -151,7 +151,7 @@ name = "asgiref"
 version = "3.8.1"
 requires_python = ">=3.8"
 summary = "ASGI specs, helper code, and adapters"
-groups = ["type_check"]
+groups = ["default", "type_check"]
 dependencies = [
     "typing-extensions>=4; python_version < \"3.11\"",
 ]
@@ -449,18 +449,19 @@ files = [
 
 [[package]]
 name = "django"
-version = "5.1.1"
-requires_python = ">=3.10"
+version = "4.2.16"
+requires_python = ">=3.8"
 summary = "A high-level Python web framework that encourages rapid development and clean, pragmatic design."
-groups = ["type_check"]
+groups = ["default", "type_check"]
 dependencies = [
-    "asgiref<4,>=3.8.1",
+    "asgiref<4,>=3.6.0",
+    "backports-zoneinfo; python_version < \"3.9\"",
     "sqlparse>=0.3.1",
     "tzdata; sys_platform == \"win32\"",
 ]
 files = [
-    {file = "Django-5.1.1-py3-none-any.whl", hash = "sha256:71603f27dac22a6533fb38d83072eea9ddb4017fead6f67f2562a40402d61c3f"},
-    {file = "Django-5.1.1.tar.gz", hash = "sha256:021ffb7fdab3d2d388bc8c7c2434eb9c1f6f4d09e6119010bbb1694dda286bc2"},
+    {file = "Django-4.2.16-py3-none-any.whl", hash = "sha256:1ddc333a16fc139fd253035a1606bb24261951bbc3a6ca256717fa06cc41a898"},
+    {file = "Django-4.2.16.tar.gz", hash = "sha256:6f1616c2786c408ce86ab7e10f792b8f15742f7b7b7460243929cb371e7f1dad"},
 ]
 
 [[package]]
@@ -1470,7 +1471,7 @@ name = "sqlparse"
 version = "0.5.1"
 requires_python = ">=3.8"
 summary = "A non-validating SQL parser."
-groups = ["type_check"]
+groups = ["default", "type_check"]
 files = [
     {file = "sqlparse-0.5.1-py3-none-any.whl", hash = "sha256:773dcbf9a5ab44a090f3441e2180efe2560220203dc2f8c0b0fa141e18b505e4"},
     {file = "sqlparse-0.5.1.tar.gz", hash = "sha256:bb6b4df465655ef332548e24f08e205afc81b9ab86cb1c45657a7ff173a3a00e"},
@@ -1636,7 +1637,7 @@ name = "tzdata"
 version = "2024.2"
 requires_python = ">=2"
 summary = "Provider of IANA time zone data"
-groups = ["type_check"]
+groups = ["default", "type_check"]
 marker = "sys_platform == \"win32\""
 files = [
     {file = "tzdata-2024.2-py2.py3-none-any.whl", hash = "sha256:a48093786cdcde33cad18c2555e8532f34422074448fbc874186f0abd79565cd"},
