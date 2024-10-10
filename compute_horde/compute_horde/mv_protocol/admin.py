@@ -2,6 +2,7 @@ from django.contrib import admin  # noqa
 
 from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt
 
+
 class ReadOnlyAdmin(admin.ModelAdmin):
     def has_change_permission(self, *args, **kwargs):
         return False
