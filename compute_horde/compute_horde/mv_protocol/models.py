@@ -24,7 +24,9 @@ class AbstractReceipt(models.Model):
     class Meta:
         abstract = True
         constraints = [
-            models.UniqueConstraint(fields=["job_uuid"], name="unique_%(class)s_job_uuid"),
+            models.UniqueConstraint(
+                fields=["job_uuid"], name="mv_protocol_unique_%(class)s_job_uuid"
+            ),
         ]
 
     def __str__(self):
