@@ -1,4 +1,5 @@
-#!/bin/bash -eu
+#!/bin/bash
+set -eu
 
 if [ "$(basename "$0")" == 'bin' ]; then
   cd ..

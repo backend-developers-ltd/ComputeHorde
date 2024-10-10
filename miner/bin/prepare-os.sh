@@ -1,5 +1,5 @@
-#!/bin/sh
-set -eux pipefail
+#!/bin/bash
+set -euxo pipefail
 # Copyright 2020, Reef Technologies (reef.pl), All rights reserved.
 
 DOCKER_BIN="$(command -v docker || true)"

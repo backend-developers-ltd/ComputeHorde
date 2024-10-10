@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eux -o pipefail
+set -euxo pipefail
 
 source ./build-image.sh
 echo "$GITHUB_CR_PAT" | docker login ghcr.io -u USERNAME --password-stdin

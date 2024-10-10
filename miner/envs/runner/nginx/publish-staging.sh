@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eux -o pipefail
+set -euxo pipefail
 
 source build-staging.sh
 echo "$DOCKERHUB_PAT" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
