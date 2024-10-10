@@ -1,4 +1,5 @@
 from asgiref.sync import sync_to_async
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.volume import InlineVolume, Volume
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
 
@@ -89,7 +90,7 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
         else:
             raise RuntimeError(f"No docker_image for weights_version: {self.weights_version}")
 
-    def docker_run_options_preset(self) -> str:
+    def docker_run_options_preset(self) -> DockerRunOptionsPreset:
         return "nvidia_all"
 
     def docker_run_cmd(self) -> list[str]:

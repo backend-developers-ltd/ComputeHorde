@@ -7,6 +7,7 @@ from typing import Self
 import pydantic
 from pydantic import field_serializer, model_validator
 
+from ..base.docker import DockerRunOptionsPreset
 from ..base.output_upload import OutputUpload  # noqa
 from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
@@ -69,7 +70,7 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
     executor_class: ExecutorClass | None = None
     docker_image_name: str | None = None
     raw_script: str | None = None
-    docker_run_options_preset: str
+    docker_run_options_preset: DockerRunOptionsPreset
     docker_run_cmd: list[str]
     volume: Volume | None = None
     output_upload: OutputUpload | None = None

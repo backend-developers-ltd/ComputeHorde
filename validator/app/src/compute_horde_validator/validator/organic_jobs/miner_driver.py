@@ -5,6 +5,7 @@ import time
 from functools import partial
 from typing import Literal
 
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import ZipAndHttpPutUpload
 from compute_horde.base.volume import InlineVolume, Volume, ZipUrlVolume
 from compute_horde.executor_class import ExecutorClass
@@ -235,7 +236,9 @@ async def execute_organic_job(
         else:
             raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
 
-        docker_run_options_preset = "nvidia_all" if job_request.use_gpu else "none"
+        docker_run_options_preset: DockerRunOptionsPreset = (
+            "nvidia_all" if job_request.use_gpu else "none"
+        )
 
         if isinstance(job_request, V0FacilitatorJobRequest | AdminJobRequest):
             if job_request.output_url:
