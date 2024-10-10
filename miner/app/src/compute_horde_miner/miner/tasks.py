@@ -165,7 +165,12 @@ def get_receipts_from_old_miner():
 
 @app.task
 def fetch_dynamic_config() -> None:
+    # if same key exists in both places, common config wins
     sync_dynamic_config(
         config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/miner-config-{settings.DYNAMIC_CONFIG_ENV}.json",
+        namespace=config,
+    )
+    sync_dynamic_config(
+        config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/common-config-{settings.DYNAMIC_CONFIG_ENV}.json",
         namespace=config,
     )
