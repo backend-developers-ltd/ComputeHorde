@@ -1,6 +1,7 @@
 import abc
 import uuid
 
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
 from compute_horde.executor_class import ExecutorClass
@@ -30,7 +31,7 @@ class BaseSyntheticJobGenerator(abc.ABC):
     def docker_image_name(self) -> str: ...
 
     @abc.abstractmethod
-    def docker_run_options_preset(self) -> str: ...
+    def docker_run_options_preset(self) -> DockerRunOptionsPreset: ...
 
     def docker_run_cmd(self) -> list[str]:
         return []

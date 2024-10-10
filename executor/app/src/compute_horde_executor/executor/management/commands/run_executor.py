@@ -16,6 +16,8 @@ import zipfile
 
 import httpx
 import pydantic
+
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.volume import (
     InlineVolume,
     MultiVolume,
@@ -63,7 +65,7 @@ CVE_2022_0492_IMAGE = (
 
 class RunConfigManager:
     @classmethod
-    def preset_to_docker_run_args(cls, preset: str) -> list[str]:
+    def preset_to_docker_run_args(cls, preset: DockerRunOptionsPreset) -> list[str]:
         if preset == "none":
             return []
         elif preset == "nvidia_all":
