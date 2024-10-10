@@ -48,9 +48,13 @@ def type_check(session):
 @nox.session(python=PYTHON_VERSION)
 def check_missing_migrations(session):
     install(session, "check_missing_migrations")
-    session.run("django-admin", "makemigrations", "--dry-run", "--check", env={
-        "DJANGO_SETTINGS_MODULE": "compute_horde.settings"
-    })
+    session.run(
+        "django-admin",
+        "makemigrations",
+        "--dry-run",
+        "--check",
+        env={"DJANGO_SETTINGS_MODULE": "compute_horde.settings"},
+    )
 
 
 @nox.session(python=PYTHON_VERSION)
