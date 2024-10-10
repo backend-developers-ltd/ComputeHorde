@@ -2,6 +2,7 @@ import uuid
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.mv_protocol.models import JobStartedReceipt, JobFinishedReceipt
 from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
@@ -10,7 +11,6 @@ from compute_horde.receipts import Receipt
 from django.utils.timezone import now
 from pytest_mock import MockerFixture
 
-from compute_horde_miner.miner.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde_miner.miner.tasks import announce_address_and_port, get_receipts_from_old_miner
 
 

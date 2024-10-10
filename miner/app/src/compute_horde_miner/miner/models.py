@@ -1,14 +1,7 @@
 from collections.abc import Iterable
-from datetime import timedelta
 from enum import Enum
 from typing import Self
 
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
-from compute_horde.mv_protocol.validator_requests import (
-    JobFinishedReceiptPayload,
-    JobStartedReceiptPayload,
-)
-from compute_horde.receipts import Receipt
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
@@ -92,65 +85,3 @@ class AcceptedJob(models.Model):
                 result_reported_to_validator__isnull=True,
             )
         ]
-
-
-class AbstractReceipt(models.Model):
-    validator_signature = models.CharField(max_length=256)
-    miner_signature = models.CharField(max_length=256)
-
-    # payload fields
-    job_uuid = models.UUIDField()
-    miner_hotkey = models.CharField(max_length=256)
-    validator_hotkey = models.CharField(max_length=256)
-
-    def __str__(self):
-        return f"uuid: {self.job_uuid}"
-
-    class Meta:
-        abstract = True
-
-
-class JobFinishedReceipt(AbstractReceipt):
-    time_started = models.DateTimeField()
-    time_took_us = models.BigIntegerField()
-    score_str = models.CharField(max_length=256)
-
-    def time_took(self):
-        return timedelta(microseconds=self.time_took_us)
-
-    def score(self):
-        return float(self.score_str)
-
-    def to_receipt(self):
-        return Receipt(
-            payload=JobFinishedReceiptPayload(
-                job_uuid=str(self.job_uuid),
-                miner_hotkey=self.miner_hotkey,
-                validator_hotkey=self.validator_hotkey,
-                time_started=self.time_started,
-                time_took_us=self.time_took_us,
-                score_str=self.score_str,
-            ),
-            validator_signature=self.validator_signature,
-            miner_signature=self.miner_signature,
-        )
-
-
-class JobStartedReceipt(AbstractReceipt):
-    executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
-    time_accepted = models.DateTimeField()
-    max_timeout = models.IntegerField()
-
-    def to_receipt(self):
-        return Receipt(
-            payload=JobStartedReceiptPayload(
-                job_uuid=str(self.job_uuid),
-                miner_hotkey=self.miner_hotkey,
-                validator_hotkey=self.validator_hotkey,
-                executor_class=ExecutorClass(self.executor_class),
-                time_accepted=self.time_accepted,
-                max_timeout=self.max_timeout,
-            ),
-            validator_signature=self.validator_signature,
-            miner_signature=self.miner_signature,
-        )

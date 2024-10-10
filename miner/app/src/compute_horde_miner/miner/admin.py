@@ -5,8 +5,6 @@ from compute_horde_miner.miner.models import (
     AcceptedJob,
     Validator,
     ValidatorBlacklist,
-    JobFinishedReceipt,
-    JobStartedReceipt,
 )
 
 
@@ -65,6 +63,4 @@ class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
 
 admin.site.register(AcceptedJob, admin_class=AcceptedJobReadOnlyAdmin)
 admin.site.register(Validator, admin_class=ValidatorReadOnlyAdmin)
-admin.site.register(JobStartedReceipt, admin_class=JobStartedReceiptsReadOnlyAdmin)
-admin.site.register(JobFinishedReceipt, admin_class=JobFinishedReceiptsReadOnlyAdmin)
 admin.site.register(ValidatorBlacklist)

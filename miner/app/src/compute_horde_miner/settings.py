@@ -78,6 +78,7 @@ INSTALLED_APPS = [
     "django_extensions",
     "django_probes",
     "constance",
+    "compute_horde.mv_protocol",
     "compute_horde_miner.miner",
     "compute_horde_miner.miner.admin_config.MinerAdminConfig",
 ]
