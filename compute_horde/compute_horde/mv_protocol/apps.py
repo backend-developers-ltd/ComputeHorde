@@ -7,5 +7,5 @@ logger = logging.getLogger(__name__)
 
 class ComputeHordeMVProtocolConfig(AppConfig):
     name = "compute_horde.mv_protocol"
-    verbose_name = "Miner-Validator protocol dependencies"
+    verbose_name = "Miner-Validator communication"
     default_auto_field = "django.db.models.BigAutoField"

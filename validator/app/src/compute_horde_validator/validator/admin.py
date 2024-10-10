@@ -118,30 +118,6 @@ class SystemEventAdmin(ReadOnlyAdmin):
     ordering = ["-timestamp"]
 
 
-class JobStartedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
-    list_display = [
-        "job_uuid",
-        "miner_hotkey",
-        "validator_hotkey",
-        "executor_class",
-        "time_accepted",
-        "max_timeout",
-    ]
-    ordering = ["-time_accepted"]
-
-
-class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
-    list_display = [
-        "job_uuid",
-        "miner_hotkey",
-        "validator_hotkey",
-        "score",
-        "time_started",
-        "time_took",
-    ]
-    ordering = ["-time_started"]
-
-
 class WeightsReadOnlyAdmin(ReadOnlyAdmin):
     list_display = ["block", "created_at", "revealed_at"]
     ordering = ["-created_at"]
