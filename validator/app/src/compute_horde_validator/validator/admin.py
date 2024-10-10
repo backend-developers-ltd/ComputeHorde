@@ -9,8 +9,6 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
     MinerBlacklist,
     AdminJobRequest,
-    JobFinishedReceipt,
-    JobStartedReceipt,
     SystemEvent,
     Weights,
     Prompt,
@@ -188,8 +186,6 @@ class PromptAdmin(ReadOnlyAdmin):
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
-admin.site.register(JobFinishedReceipt, admin_class=JobFinishedReceiptsReadOnlyAdmin)
-admin.site.register(JobStartedReceipt, admin_class=JobStartedReceiptsReadOnlyAdmin)
 admin.site.register(MinerBlacklist)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)
 admin.site.register(SystemEvent, admin_class=SystemEventAdmin)

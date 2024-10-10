@@ -19,6 +19,7 @@ from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
+from compute_horde.mv_protocol.models import JobStartedReceipt, JobFinishedReceipt
 from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
@@ -38,8 +39,6 @@ from compute_horde_validator.validator.locks import Locked, LockType, get_adviso
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
     Cycle,
-    JobFinishedReceipt,
-    JobStartedReceipt,
     OrganicJob,
     Prompt,
     PromptSample,

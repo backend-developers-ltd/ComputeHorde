@@ -35,6 +35,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
     V0MachineSpecsRequest,
 )
+from compute_horde.mv_protocol.models import JobStartedReceipt, JobFinishedReceipt
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
     JobFinishedReceiptPayload,
@@ -53,8 +54,6 @@ from pydantic import BaseModel, JsonValue
 
 from compute_horde_validator.validator.dynamic_config import get_miner_max_executors_per_class
 from compute_horde_validator.validator.models import (
-    JobFinishedReceipt,
-    JobStartedReceipt,
     Miner,
     MinerManifest,
     PromptSample,
@@ -1513,6 +1512,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     job_uuid=started_payload.job_uuid,
                     miner_hotkey=started_payload.miner_hotkey,
                     validator_hotkey=started_payload.validator_hotkey,
+                    validator_signature=job.job_started_receipt.signature,
                     executor_class=started_payload.executor_class,
                     time_accepted=started_payload.time_accepted,
                     max_timeout=started_payload.max_timeout,
@@ -1529,6 +1529,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     job_uuid=finished_payload.job_uuid,
                     miner_hotkey=finished_payload.miner_hotkey,
                     validator_hotkey=finished_payload.validator_hotkey,
+                    validator_signature=job.job_finished_receipt.signature,
                     time_started=finished_payload.time_started,
                     time_took_us=finished_payload.time_took_us,
                     score_str=finished_payload.score_str,

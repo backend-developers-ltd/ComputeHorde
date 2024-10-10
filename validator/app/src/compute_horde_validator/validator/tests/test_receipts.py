@@ -3,6 +3,7 @@ from typing import NamedTuple
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.mv_protocol.models import JobStartedReceipt, JobFinishedReceipt
 from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
@@ -11,8 +12,6 @@ from compute_horde.receipts import Receipt
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
-    JobFinishedReceipt,
-    JobStartedReceipt,
     SystemEvent,
 )
 from compute_horde_validator.validator.tasks import fetch_receipts
