@@ -16,8 +16,8 @@ if [ ! -f "$LOCAL_HOTKEY_PATH" ]; then
   exit 1
 fi
 
-if [[ -z ${TRUSTED_MINER_KEY+x} ]] || [[ -z ${TRUSTED_MINER_ADDRESS+x} ]] || [[ -z ${TRUSTED_MINER_PORT+x} ]]; then
-  >&2 echo "ERROR: You need to set environment variables TRUSTED_MINER_KEY, TRUSTED_MINER_ADDRESS and TRUSTED_MINER_PORT to configure your local trusted miner."
+if [[ -z ${TRUSTED_MINER_ADDRESS+x} ]] || [[ -z ${TRUSTED_MINER_PORT+x} ]]; then
+  >&2 echo "ERROR: You need to set environment variables TRUSTED_MINER_ADDRESS and TRUSTED_MINER_PORT to configure your local trusted miner."
   exit 1
 fi
 
@@ -56,7 +56,6 @@ cat > tmpvars <<ENDCAT
 HOTKEY_NAME="$(basename "$REMOTE_HOTKEY_PATH")"
 WALLET_NAME="$(basename "$(dirname "$REMOTE_HOTKEY_DIR")")"
 MIGRATING=$MIGRATING
-TRUSTED_MINER_KEY=$TRUSTED_MINER_KEY
 TRUSTED_MINER_ADDRESS=$TRUSTED_MINER_ADDRESS
 TRUSTED_MINER_PORT=$TRUSTED_MINER_PORT
 S3_BUCKET_NAME_PROMPTS=$S3_BUCKET_NAME_PROMPTS
@@ -136,7 +135,6 @@ HOST_WALLET_DIR=$HOME/.bittensor/wallets
 COMPOSE_PROJECT_NAME=compute_horde_validator
 FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
 MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
-TRUSTED_MINER_KEY=$(. ~/tmpvars && echo $TRUSTED_MINER_KEY)
 TRUSTED_MINER_ADDRESS=$(. ~/tmpvars && echo $TRUSTED_MINER_ADDRESS)
 TRUSTED_MINER_PORT=$(. ~/tmpvars && echo $TRUSTED_MINER_PORT)
 S3_BUCKET_NAME_PROMPTS=$(. ~/tmpvars && echo $S3_BUCKET_NAME_PROMPTS)

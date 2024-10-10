@@ -90,15 +90,22 @@ class OrganicMinerClient(AbstractMinerClient):
         self.miner_manifest = loop.create_future()
         self.online_executor_count = 0
 
-        # for waiting on miner responses (replaces JobState)
-        self.miner_ready_or_declining_future: asyncio.Future[
-            V0DeclineJobRequest | V0ExecutorFailedRequest | V0ExecutorReadyRequest
+        # for waiting on miner responses
+        self.miner_accepting_or_declining_future: asyncio.Future[
+            V0AcceptJobRequest | V0DeclineJobRequest
         ] = loop.create_future()
-        self.miner_ready_or_declining_timestamp: int = 0
+        self.miner_accepting_or_declining_timestamp: int = 0
+
+        self.executor_ready_or_failed_future: asyncio.Future[
+            V0ExecutorReadyRequest | V0ExecutorFailedRequest
+        ] = loop.create_future()
+        self.executor_ready_or_failed_timestamp: int = 0
+
         self.miner_finished_or_failed_future: asyncio.Future[
             V0JobFailedRequest | V0JobFinishedRequest
         ] = loop.create_future()
         self.miner_finished_or_failed_timestamp: int = 0
+
         self.miner_machine_specs: MachineSpecs | None = None
 
         name = f"{miner_hotkey}({miner_address}:{miner_port})"
@@ -168,14 +175,16 @@ class OrganicMinerClient(AbstractMinerClient):
             )
             return
 
-        if isinstance(msg, V0AcceptJobRequest):
-            logger.info(f"Miner {self.miner_name} accepted job")
-        elif isinstance(
-            msg, V0DeclineJobRequest | V0ExecutorFailedRequest | V0ExecutorReadyRequest
-        ):
+        if isinstance(msg, V0AcceptJobRequest | V0DeclineJobRequest):
             try:
-                self.miner_ready_or_declining_future.set_result(msg)
-                self.miner_ready_or_declining_timestamp = int(time.time())
+                self.miner_accepting_or_declining_future.set_result(msg)
+                self.miner_accepting_or_declining_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
+        elif isinstance(msg, V0ExecutorReadyRequest | V0ExecutorFailedRequest):
+            try:
+                self.executor_ready_or_failed_future.set_result(msg)
+                self.executor_ready_or_failed_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
         elif isinstance(msg, V0JobFailedRequest | V0JobFinishedRequest):
@@ -291,6 +300,7 @@ class OrganicMinerClient(AbstractMinerClient):
 class FailureReason(enum.Enum):
     MINER_CONNECTION_FAILED = enum.auto()
     INITIAL_RESPONSE_TIMED_OUT = enum.auto()
+    EXECUTOR_READINESS_RESPONSE_TIMED_OUT = enum.auto()
     FINAL_RESPONSE_TIMED_OUT = enum.auto()
     JOB_DECLINED = enum.auto()
     EXECUTOR_FAILED = enum.auto()
@@ -364,15 +374,22 @@ async def run_organic_job(
 
         try:
             initial_response = await asyncio.wait_for(
-                client.miner_ready_or_declining_future,
+                client.miner_accepting_or_declining_future,
                 timeout=min(job_timer.time_left(), wait_timeout),
             )
         except TimeoutError as exc:
             raise OrganicJobError(FailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
-
         if isinstance(initial_response, V0DeclineJobRequest):
             raise OrganicJobError(FailureReason.JOB_DECLINED, initial_response)
-        elif isinstance(initial_response, V0ExecutorFailedRequest):
+
+        try:
+            executor_readiness_response = await asyncio.wait_for(
+                client.executor_ready_or_failed_future,
+                timeout=min(job_timer.time_left(), wait_timeout),
+            )
+        except TimeoutError as exc:
+            raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
+        if isinstance(executor_readiness_response, V0ExecutorFailedRequest):
             raise OrganicJobError(FailureReason.EXECUTOR_FAILED, initial_response)
 
         await client.send_job_started_receipt_message(
@@ -399,16 +416,14 @@ async def run_organic_job(
                 client.miner_finished_or_failed_future,
                 timeout=job_timer.time_left(),
             )
+            if isinstance(final_response, V0JobFailedRequest):
+                raise OrganicJobError(FailureReason.JOB_FAILED, final_response)
+            return final_response.docker_process_stdout, final_response.docker_process_stderr
         except TimeoutError as exc:
             raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
-
-        if isinstance(final_response, V0JobFailedRequest):
-            raise OrganicJobError(FailureReason.JOB_FAILED, final_response)
-
-        await client.send_job_finished_receipt_message(
-            started_timestamp=job_timer.start_time.timestamp(),
-            time_took_seconds=job_timer.passed_time(),
-            score=0,  # no score for organic jobs (at least right now)
-        )
-
-        return final_response.docker_process_stdout, final_response.docker_process_stderr
+        finally:
+            await client.send_job_finished_receipt_message(
+                started_timestamp=job_timer.start_time.timestamp(),
+                time_took_seconds=job_timer.passed_time(),
+                score=0,  # no score for organic jobs (at least right now)
+            )
