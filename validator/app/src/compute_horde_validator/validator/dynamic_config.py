@@ -15,7 +15,7 @@ class DynamicConfigHolder:
     CACHE_TIMEOUT = 300
 
     def __init__(self):
-        self._time_set = 0
+        self._time_set: float = 0
         self._lock = asyncio.Lock()
         self._config = {k: v[0] for k, v in settings.CONSTANCE_CONFIG.items()}
 
@@ -35,10 +35,10 @@ async def aget_config(key):
     return await dynamic_config_holder.get(key)
 
 
-async def aget_weights_version():
+async def aget_weights_version() -> int:
     if settings.DEBUG_OVERRIDE_WEIGHTS_VERSION is not None:
-        return settings.DEBUG_OVERRIDE_WEIGHTS_VERSION
-    return await aget_config("DYNAMIC_WEIGHTS_VERSION")
+        return int(settings.DEBUG_OVERRIDE_WEIGHTS_VERSION)
+    return int(await aget_config("DYNAMIC_WEIGHTS_VERSION"))
 
 
 # this is called from a sync context, and rarely, so we don't need caching

@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 import logging
+from asyncio import Future
 
 import bittensor
 from asgiref.sync import sync_to_async
@@ -14,15 +15,14 @@ logger = logging.getLogger(__name__)
 class AsyncMetagraphClient:
     def __init__(self, cache_time=dt.timedelta(minutes=5)):
         self.cache_time = cache_time
-        self._metagraph_future = None
+        self._metagraph_future: Future[None] | None = None
         self._future_lock = asyncio.Lock()
         self._cached_metagraph = None
         self._cache_timestamp = None
 
     async def get_metagraph(self, ignore_cache=False):
-        future = None
         set_result = False
-        if self._cached_metagraph is not None:
+        if self._cached_metagraph is not None and self._cache_timestamp is not None:
             if not ignore_cache and dt.datetime.now() - self._cache_timestamp < self.cache_time:
                 return self._cached_metagraph
         async with self._future_lock:

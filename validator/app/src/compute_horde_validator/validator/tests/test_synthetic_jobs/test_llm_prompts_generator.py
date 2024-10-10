@@ -38,7 +38,7 @@ async def test_llm_prompts_generator_basic(
     assert not correct
     assert score == 0.0
 
-    await llm_prompts_job_generator._download_answers()
+    await llm_prompts_job_generator.download_answers()
     correct, _, score = llm_prompts_job_generator.verify(_JOB_FINISHED_REQUEST, 0)
     assert correct
     assert score == 1.0
@@ -52,7 +52,7 @@ async def test_llm_prompts_generator_missing_prompts(
 ):
     httpx_mock.add_response(json={str(i): str(i) for i in range(9, 249)})
 
-    await llm_prompts_job_generator._download_answers()
+    await llm_prompts_job_generator.download_answers()
     correct, _, score = llm_prompts_job_generator.verify(_JOB_FINISHED_REQUEST, 0)
     assert not correct
     assert score == 0.0
@@ -66,7 +66,7 @@ async def test_llm_prompts_generator_wrong_answers(
 ):
     httpx_mock.add_response(json={str(i): "wrong" for i in range(240)})
 
-    await llm_prompts_job_generator._download_answers()
+    await llm_prompts_job_generator.download_answers()
     correct, _, score = llm_prompts_job_generator.verify(_JOB_FINISHED_REQUEST, 0)
     assert not correct
     assert score == 0.0

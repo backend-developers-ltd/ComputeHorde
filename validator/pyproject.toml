@@ -66,6 +66,7 @@ type_check = [
     "types-freezegun",
     "types-python-dateutil",
     "types-requests",
+    "celery-types>=0.22.0",
 ]
 security_check = [
     "bandit>=1.7.7",

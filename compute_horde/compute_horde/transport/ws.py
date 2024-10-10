@@ -53,7 +53,7 @@ class WSTransport(AbstractTransport):
         self.retry_jitter = retry_jitter
         self.max_retries = max_retries
         self.connect_lock = asyncio.Lock()
-        self._ws = None
+        self._ws: websockets.WebSocketClientProtocol | None = None
 
     @property
     def ws(self) -> websockets.WebSocketClientProtocol:

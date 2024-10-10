@@ -4,7 +4,7 @@ from datetime import datetime
 
 import bittensor
 from asgiref.sync import sync_to_async
-from compute_horde.executor_class import ExecutorClass
+from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
     OrganicMinerClient,
@@ -21,6 +21,8 @@ from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts impo
 
 logger = logging.getLogger(__name__)
 
+MIN_SPIN_UP_TIME = 10
+
 
 def _get_keypair() -> bittensor.Keypair:
     return settings.BITTENSOR_WALLET().get_hotkey()
@@ -34,7 +36,6 @@ async def answer_prompts(
 ) -> bool:
     if not all(
         [
-            settings.TRUSTED_MINER_KEY,
             settings.TRUSTED_MINER_ADDRESS,
             settings.TRUSTED_MINER_PORT,
         ]
@@ -66,7 +67,13 @@ async def answer_prompts(
         raw_script=job_generator.raw_script(),
         docker_run_options_preset=job_generator.docker_run_options_preset(),
         docker_run_cmd=job_generator.docker_run_cmd(),
-        total_job_timeout=job_generator.timeout_seconds(),
+        total_job_timeout=(
+            job_generator.timeout_seconds()
+            + max(
+                EXECUTOR_CLASS[ExecutorClass.always_on__llm__a6000].spin_up_time or 0,
+                MIN_SPIN_UP_TIME,
+            )
+        ),
         volume=await job_generator.volume(),
         output=await job_generator.output_upload(),
     )
@@ -95,7 +102,7 @@ async def answer_prompts(
         return False
 
     try:
-        await job_generator._download_answers()
+        await job_generator.download_answers()
         prompt_answers: dict[str, str] = job_generator.prompt_answers
     except Exception as e:
         await SystemEvent.objects.acreate(

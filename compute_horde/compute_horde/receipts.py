@@ -60,9 +60,11 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
         for raw_receipt in csv_reader:
             try:
                 receipt_type = ReceiptType(raw_receipt["type"])
+                receipt_payload: JobStartedReceiptPayload | JobFinishedReceiptPayload
+
                 match receipt_type:
                     case ReceiptType.JobStartedReceipt:
-                        payload = JobStartedReceiptPayload(
+                        receipt_payload = JobStartedReceiptPayload(
                             job_uuid=raw_receipt["job_uuid"],
                             miner_hotkey=raw_receipt["miner_hotkey"],
                             validator_hotkey=raw_receipt["validator_hotkey"],
@@ -74,7 +76,7 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                         )
 
                     case ReceiptType.JobFinishedReceipt:
-                        payload = JobFinishedReceiptPayload(
+                        receipt_payload = JobFinishedReceiptPayload(
                             job_uuid=raw_receipt["job_uuid"],
                             miner_hotkey=raw_receipt["miner_hotkey"],
                             validator_hotkey=raw_receipt["validator_hotkey"],
@@ -86,7 +88,7 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                         )
 
                 receipt = Receipt(
-                    payload=payload,
+                    payload=receipt_payload,
                     validator_signature=raw_receipt["validator_signature"],
                     miner_signature=raw_receipt["miner_signature"],
                 )

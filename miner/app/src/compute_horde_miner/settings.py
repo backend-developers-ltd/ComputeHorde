@@ -2,9 +2,6 @@
 Django settings for compute_horde_miner project.
 """
 
-from compute_horde import base  # noqa
-from compute_horde import executor_class
-
 import inspect
 import ipaddress
 import logging
@@ -14,7 +11,10 @@ from functools import wraps
 
 import bittensor
 import environ
-
+from compute_horde import (
+    base,  # noqa
+    executor_class,
+)
 
 # from celery.schedules import crontab
 
@@ -394,7 +394,7 @@ DEBUG_TURN_AUTHENTICATION_OFF = env.bool("DEBUG_TURN_AUTHENTICATION_OFF", defaul
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
 
 
-def BITTENSOR_WALLET():
+def BITTENSOR_WALLET() -> bittensor.wallet:
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
         raise RuntimeError("Wallet not configured")
     wallet = bittensor.wallet(
@@ -425,7 +425,7 @@ if SENTRY_DSN := env("SENTRY_DSN", default=""):
     from sentry_sdk.integrations.logging import LoggingIntegration
     from sentry_sdk.integrations.redis import RedisIntegration
 
-    sentry_sdk.init(  # type: ignore
+    sentry_sdk.init(
         dsn=SENTRY_DSN,
         environment=ENV,
         integrations=[

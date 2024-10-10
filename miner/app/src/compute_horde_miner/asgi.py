@@ -2,7 +2,7 @@ import os
 
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
-from django.urls import path, re_path
+from django.urls import path
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "compute_horde_miner.settings")
 import django  # noqa
@@ -15,11 +15,7 @@ from .miner.miner_consumer.validator_interface import MinerValidatorConsumer  # 
 
 application = ProtocolTypeRouter(
     {
-        "http": URLRouter(
-            [
-                re_path(r".*", get_asgi_application()),
-            ]
-        ),
+        "http": get_asgi_application(),
         "websocket": URLRouter(
             [
                 path(

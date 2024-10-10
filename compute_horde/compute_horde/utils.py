@@ -1,5 +1,5 @@
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import bittensor
 import pydantic
@@ -14,7 +14,7 @@ VALIDATORS_LIMIT = 24
 
 
 class MachineSpecs(pydantic.BaseModel):
-    specs: dict
+    specs: dict[Any, Any]
 
     def __str__(self) -> str:
         return str(self.specs)

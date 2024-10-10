@@ -83,7 +83,11 @@ class Command(BaseCommand):
                 raise ValueError(f"miner with hotkey {hotkey} is blacklisted")
         else:
             miner = Miner.objects.exclude(minerblacklist__isnull=False).first()
-            print(f"\nPicked miner: {miner} to run the job")
+
+        if miner is None:
+            raise ValueError("No miners found")
+
+        print(f"\nPicked miner: {miner} to run the job")
 
         job_request = AdminJobRequest.objects.create(
             miner=miner,

@@ -6,7 +6,7 @@ from functools import cache
 MACHINE_SPEC_CHANNEL = "machine_spec_sending"
 
 
-def single_file_zip(filename: str, contents: str) -> str:
+def single_file_zip(filename: str, contents: str | bytes) -> str:
     in_memory_output = io.BytesIO()
     zipf = zipfile.ZipFile(in_memory_output, "w")
     zipf.writestr(filename, contents)

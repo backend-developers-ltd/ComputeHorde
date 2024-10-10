@@ -16,9 +16,9 @@ class MinerSimulationTransport(AbstractTransport):
     def __init__(self, name: str, *args, **kwargs):
         super().__init__(name, *args, **kwargs)
         self.received: list[str] = []
-        self.sent = []
-        self.receive_at_counter = 0
-        self.to_receive: deque[tuple[int, str]] = deque()
+        self.sent: list[str] = []
+        self.receive_at_counter: int = 0
+        self.to_receive: deque[tuple[int, float, str]] = deque()
         self.receive_condition = asyncio.Condition()
         self.logger = logging.getLogger(f"transport.{name}")
 

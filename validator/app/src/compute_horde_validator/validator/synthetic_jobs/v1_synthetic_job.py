@@ -41,7 +41,7 @@ class V1SyntheticJob(SyntheticJob):
         # generate distinct passwords for each algorithm
         passwords = []
         for _params in params:
-            _passwords = set()
+            _passwords: set[str] = set()
             while len(_passwords) < _params.num_hashes:
                 _passwords.add(
                     cls.random_string(
@@ -129,5 +129,6 @@ if __name__ == "__main__":
     params = [HASHJOB_PARAMS[1][algorithm] for algorithm in algorithms]
     job = V1SyntheticJob.generate(algorithms, params)
     # print(job.raw_script())
-    print(f"Payload: {job.payload}")
+
+    print(f"Payload: {job.payload!r}")
     print(f"Answer: {job.answer}")

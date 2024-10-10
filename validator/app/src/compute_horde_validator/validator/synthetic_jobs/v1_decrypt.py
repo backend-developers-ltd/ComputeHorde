@@ -22,7 +22,7 @@ def hash(s: bytes) -> bytes:
 with open("/volume/payload.txt", "rb") as file:
     data = pickle.load(file)
 
-    answers = []
+    answers: list[list[str]] = []
     for i in range(int(data["n"])):
         payload = data["payloads"][i]
         mask = data["masks"][i]
@@ -30,16 +30,16 @@ with open("/volume/payload.txt", "rb") as file:
 
         if i > 0:
             # decrypt payload with previous cracked passwords
-            passwords = "\n".join(answers[-1]).encode("utf-8")
-            key = b64encode(hashlib.sha256(passwords).digest(), altchars=b"-_")
+            previous_passwords = "\n".join(answers[-1]).encode("utf-8")
+            key = b64encode(hashlib.sha256(previous_passwords).digest(), altchars=b"-_")
             payload = Fernet(key).decrypt(payload).decode("utf-8")
 
         with open("_payload.txt", mode="wb") as f:
             f.write(payload.encode("utf-8"))
 
         cmd = f'hashcat --potfile-disable --restore-disable --attack-mode 3 --workload-profile 3 --optimized-kernel-enable --hash-type {algorithm} --hex-salt -1 "?l?d?u" --outfile-format 2 --quiet _payload.txt "{mask}"'
-        passwords = subprocess.check_output(cmd, shell=True, text=True)
-        passwords = [p for p in sorted(passwords.split("\n")) if p != ""]
+        output = subprocess.check_output(cmd, shell=True, text=True)
+        passwords = [p for p in sorted(output.split("\n")) if p != ""]
         answers.append(passwords)
 
     print(

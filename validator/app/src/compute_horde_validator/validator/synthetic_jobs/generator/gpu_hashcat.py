@@ -9,6 +9,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
 from compute_horde_validator.validator.synthetic_jobs.synthetic_job import (
     HASHJOB_PARAMS,
     Algorithm,
+    SyntheticJob,
 )
 from compute_horde_validator.validator.synthetic_jobs.v0_synthetic_job import V0SyntheticJob
 from compute_horde_validator.validator.synthetic_jobs.v1_synthetic_job import V1SyntheticJob
@@ -18,23 +19,40 @@ from compute_horde_validator.validator.utils import single_file_zip
 MAX_SCORE = 2
 
 
+class JobNotInitialized(Exception): ...
+
+
 class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # set synthetic_jobs based on subnet weights_version
-        self.weights_version = None
-        self.hash_job = None
-        self.expected_answer = None
-        self.miner_hotkey = None
+        self.weights_version: int | None = None
+        self._hash_job: SyntheticJob | None = None
+        self.expected_answer: str | None = None
+        self._miner_hotkey: str | None = None
 
     async def ainit(self, miner_hotkey: str):
         """Allow to initialize generator in asyncio and non blocking"""
-        self.miner_hotkey = miner_hotkey
+        self._miner_hotkey = miner_hotkey
         self.weights_version = await aget_weights_version()
-        self.hash_job, self.expected_answer = await self._get_hash_job()
+        self._hash_job, self.expected_answer = await self._get_hash_job()
+
+    @property
+    def hash_job(self) -> SyntheticJob:
+        if self._hash_job is None:
+            raise JobNotInitialized("ainit() must be called first")
+        return self._hash_job
+
+    @property
+    def miner_hotkey(self) -> str:
+        if self._miner_hotkey is None:
+            raise JobNotInitialized("ainit() must be called first")
+        return self._miner_hotkey
 
     @sync_to_async(thread_sensitive=False)
-    def _get_hash_job(self):
+    def _get_hash_job(self) -> tuple[SyntheticJob, str]:
+        hash_job: SyntheticJob
+
         if self.weights_version == 0:
             algorithm = Algorithm.get_random_algorithm()
             hash_job = V0SyntheticJob.generate(
@@ -51,7 +69,7 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
         else:
             raise RuntimeError(f"No SyntheticJob for weights_version: {self.weights_version}")
 
-        # precompute anwer when already in thread
+        # precompute answer when already in thread
         return hash_job, hash_job.answer
 
     def timeout_seconds(self) -> int:

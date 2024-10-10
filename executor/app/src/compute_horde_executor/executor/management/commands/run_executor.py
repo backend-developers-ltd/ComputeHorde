@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import typing
 import zipfile
 
 import httpx
@@ -39,10 +40,9 @@ from compute_horde.em_protocol.miner_requests import (
 )
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
-    AbstractTransport,
     UnsupportedMessageReceived,
 )
-from compute_horde.transport import WSTransport
+from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -78,18 +78,27 @@ class RunConfigManager:
 
 
 class MinerClient(AbstractMinerClient):
+    class NotInitialized(Exception):
+        pass
+
     def __init__(self, miner_address: str, token: str, transport: AbstractTransport | None = None):
         self.miner_address = miner_address
         self.token = token
         transport = transport or WSTransport(miner_address, self.miner_url())
         super().__init__(miner_address, transport)
 
-        self.job_uuid: str | None = None
+        self._maybe_job_uuid: str | None = None
         loop = asyncio.get_running_loop()
         self.initial_msg = loop.create_future()
         self.initial_msg_lock = asyncio.Lock()
         self.full_payload = loop.create_future()
         self.full_payload_lock = asyncio.Lock()
+
+    @property
+    def job_uuid(self) -> str:
+        if self._maybe_job_uuid is None:
+            raise MinerClient.NotInitialized("Job UUID is missing")
+        return self._maybe_job_uuid
 
     def miner_url(self) -> str:
         return f"{self.miner_address}/v0.1/executor_interface/{self.token}"
@@ -103,6 +112,9 @@ class MinerClient(AbstractMinerClient):
     def outgoing_generic_error_class(self):
         return executor_requests.GenericError
 
+    def build_outgoing_generic_error(self, msg: str):
+        return executor_requests.GenericError(details=msg)
+
     async def handle_message(self, msg: BaseRequest):
         if isinstance(msg, V0InitialJobRequest):
             await self.handle_initial_job_request(msg)
@@ -114,28 +126,28 @@ class MinerClient(AbstractMinerClient):
     async def handle_initial_job_request(self, msg: V0InitialJobRequest):
         async with self.initial_msg_lock:
             if self.initial_msg.done():
-                msg = f"Received duplicate initial job request: first {self.job_uuid=} and then {msg.job_uuid=}"
-                logger.error(msg)
-                self.deferred_send_model(GenericError(details=msg))
+                details = f"Received duplicate initial job request: first {self.job_uuid=} and then {msg.job_uuid=}"
+                logger.error(details)
+                self.deferred_send_model(GenericError(details=details))
                 return
-            self.job_uuid = msg.job_uuid
+            self._maybe_job_uuid = msg.job_uuid
             logger.debug(f"Received initial job request: {msg.job_uuid=}")
             self.initial_msg.set_result(msg)
 
     async def handle_job_request(self, msg: V0JobRequest):
         async with self.full_payload_lock:
             if not self.initial_msg.done():
-                msg = f"Received job request before an initial job request {msg.job_uuid=}"
-                logger.error(msg)
-                await self.deferred_send_model(GenericError(details=msg))
+                details = f"Received job request before an initial job request {msg.job_uuid=}"
+                logger.error(details)
+                await self.deferred_send_model(GenericError(details=details))
                 return
             if self.full_payload.done():
-                msg = (
+                details = (
                     f"Received duplicate full job payload request: first "
                     f"{self.job_uuid=} and then {msg.job_uuid=}"
                 )
-                logger.error(msg)
-                await self.deferred_send_model(GenericError(details=msg))
+                logger.error(details)
+                await self.deferred_send_model(GenericError(details=details))
                 return
             logger.debug(f"Received full job payload request: {msg.job_uuid=}")
             self.full_payload.set_result(msg)
@@ -210,6 +222,7 @@ def run_cmd(cmd):
     return proc.stdout
 
 
+@typing.no_type_check
 def get_machine_specs() -> MachineSpecs:
     data = {}
 
@@ -427,6 +440,19 @@ class JobRunner:
             if not docker_run_cmd:
                 docker_run_cmd = ["python", "/script.py"]
 
+        if not docker_image:
+            logger.error(
+                f"(job_uuid={self.initial_job_request.job_uuid})"
+                f" could not determine Docker image to run"
+            )
+            return JobResult(
+                success=False,
+                timeout=False,
+                stdout="",
+                stderr="",
+                exit_status=None,
+            )
+
         cmd = [
             "docker",
             "run",
@@ -454,9 +480,11 @@ class JobRunner:
 
         t1 = time.time()
         try:
-            stdout, stderr = await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 process.communicate(), timeout=self.initial_job_request.timeout_seconds
             )
+            stdout = result[0].decode()
+            stderr = result[1].decode()
 
         except TimeoutError:
             # If the process did not finish in time, kill it
@@ -466,11 +494,9 @@ class JobRunner:
             process.kill()
             timeout = True
             exit_status = None
-            stdout = (await process.stdout.read()).decode()
-            stderr = (await process.stderr.read()).decode()
+            stdout = (await process.stdout.read()).decode() if process.stdout else ""
+            stderr = (await process.stderr.read()).decode() if process.stderr else ""
         else:
-            stdout = stdout.decode()
-            stderr = stderr.decode()
             exit_status = process.returncode
             timeout = False
 
@@ -599,10 +625,13 @@ class JobRunner:
                 raise NotImplementedError(f"Unsupported sub-volume type: {type(sub_volume)}")
 
     async def get_job_volume(self) -> Volume | None:
-        if self.full_job_request.volume and self.initial_job_request.volume:
+        initial_volume = self.initial_job_request.volume
+        late_volume = self.full_job_request.volume if self.full_job_request else None
+
+        if initial_volume and late_volume:
             raise JobError("Received multiple volumes")
 
-        return self.full_job_request.volume or self.initial_job_request.volume or None
+        return initial_volume or late_volume
 
     async def unpack_volume(self):
         try:

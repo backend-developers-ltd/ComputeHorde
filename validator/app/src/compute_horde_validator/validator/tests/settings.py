@@ -25,7 +25,7 @@ BITTENSOR_WALLET_HOTKEY_NAME = "default"
 STATS_COLLECTOR_URL = "http://fakehost:8000"
 
 
-def BITTENSOR_WALLET() -> bittensor.wallet:
+def BITTENSOR_WALLET() -> bittensor.wallet:  # type: ignore
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
         raise RuntimeError("Wallet not configured")
     wallet = bittensor.wallet(
@@ -45,6 +45,6 @@ S3_BUCKET_NAME_ANSWERS = "fake_bucket_answers"
 
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 0
 
-TRUSTED_MINER_KEY = "fake_generation_miner_key"
+TRUSTED_MINER_KEY = ""
 TRUSTED_MINER_ADDRESS = "fakehost"
 TRUSTED_MINER_PORT = 1234

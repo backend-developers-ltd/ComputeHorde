@@ -11,7 +11,7 @@ import zipfile
 import bittensor
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde.base.volume import InlineVolume
+from compute_horde.base.volume import InlineVolume, VolumeType
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol import validator_requests
 from django.conf import settings
@@ -29,7 +29,6 @@ if vendor_dir := os.getenv("VENDOR_DIRECTORY"):
     sys.path.insert(0, vendor_dir)
 
 from compute_horde_miner.miner.executor_manager import current  # noqa
-
 
 JOB_TIMEOUT_SECONDS = 60
 PREPARATION_TIMEOUT_SECONDS = 60
@@ -154,7 +153,7 @@ async def drive_executor() -> float:
         executor_class=DEFAULT_EXECUTOR_CLASS,
         base_docker_image_name=JOB_IMAGE_NAME,
         timeout_seconds=JOB_TIMEOUT_SECONDS,
-        volume_type=validator_requests.VolumeType.inline,
+        volume_type=VolumeType.inline,
     )
     job_request = validator_requests.V0JobRequest(
         job_uuid=job_uuid,
@@ -188,7 +187,7 @@ async def drive_executor() -> float:
         status=AcceptedJob.Status.WAITING_FOR_EXECUTOR,
     )
     await job.asave()
-    await current.executor_manager.reserve_executor(executor_token)
+    await current.executor_manager._reserve_executor(executor_token)
 
     # wait for executor to be ready
     msg = await asyncio.wait_for(channel_layer.receive(channel_name), PREPARATION_TIMEOUT_SECONDS)
@@ -210,17 +209,8 @@ async def drive_executor() -> float:
                 raw_script=job_request.raw_script,
                 docker_run_options_preset=job_request.docker_run_options_preset,
                 docker_run_cmd=job_request.docker_run_cmd,
-                volume={
-                    "volume_type": job_request.volume.volume_type.value,
-                    "contents": job_request.volume.contents,
-                },
-                output_upload={
-                    "output_upload_type": job_request.output_upload.output_upload_type.value,
-                    "url": job_request.output_upload.url,
-                    "form_fields": job_request.output_upload.form_fields,
-                }
-                if job_request.output_upload
-                else None,
+                volume=job_request.volume,
+                output_upload=job_request.output_upload,
             ).model_dump(),
         },
     )

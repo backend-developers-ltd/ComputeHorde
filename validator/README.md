@@ -219,7 +219,7 @@ Trusted miners require S3 buckets to store prompts and answers. To provision the
 Then run the following script:
 
 ```sh
-curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/validator/provision_s3.sh | bash -s - PROMPTS_BUCKET ANSWERS_BUCKET
+curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/validator/provision_s3.sh | bash -s - PROMPTS_BUCKET ANSWERS_BUCKET --create-user
 ```
 
-Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets you want to use for prompts and answers respectively.
+Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets you want to use for prompts and answers respectively. It will automatically create a dedicated user, assign permissions policy for created buckets, and add an access key, displaying it at the end so it can be copied to the validator env file. If you don't want to create a user and prefer to handle permissions manually, just skip the `--create-user` option.

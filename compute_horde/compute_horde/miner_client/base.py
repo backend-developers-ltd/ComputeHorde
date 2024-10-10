@@ -15,8 +15,8 @@ ErrorCallback: TypeAlias = Callable[[str], Awaitable[None]]
 class AbstractMinerClient(metaclass=abc.ABCMeta):
     def __init__(self, miner_name: str, transport: AbstractTransport):
         self.miner_name = miner_name
-        self.read_messages_task: asyncio.Task | None = None
-        self.deferred_send_tasks: list[asyncio.Task] = []
+        self.read_messages_task: asyncio.Task[None] | None = None
+        self.deferred_send_tasks: list[asyncio.Task[None]] = []
         self.transport = transport
 
     @abc.abstractmethod
@@ -32,6 +32,10 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def outgoing_generic_error_class(self) -> type[BaseRequest]:
+        pass
+
+    @abc.abstractmethod
+    def build_outgoing_generic_error(self, msg: str):
         pass
 
     @abc.abstractmethod
@@ -109,7 +113,7 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
             except ValidationError as ex:
                 error_msg = f"Malformed message from miner {self.miner_name}: {str(ex)}"
                 logger.info(error_msg)
-                self.deferred_send_model(self.outgoing_generic_error_class()(details=error_msg))
+                self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
                 continue
 
             try:
@@ -117,7 +121,7 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
             except UnsupportedMessageReceived:
                 error_msg = f"Unsupported message from miner {self.miner_name}"
                 logger.exception(error_msg)
-                self.deferred_send_model(self.outgoing_generic_error_class()(details=error_msg))
+                self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
 
 
 class UnsupportedMessageReceived(Exception):
