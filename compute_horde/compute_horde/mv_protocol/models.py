@@ -32,7 +32,10 @@ class JobStartedReceipt(AbstractReceipt):
     # https://github.com/typeddjango/django-stubs/issues/1684#issuecomment-1706446344
     objects: models.Manager["JobStartedReceipt"]
 
-    def to_receipt(self):
+    def to_receipt(self) -> Receipt:
+        if self.miner_signature is None:
+            raise ValueError("Miner signature is required")
+
         return Receipt(
             payload=JobStartedReceiptPayload(
                 job_uuid=str(self.job_uuid),
@@ -62,6 +65,9 @@ class JobFinishedReceipt(AbstractReceipt):
         return float(self.score_str)
 
     def to_receipt(self):
+        if self.miner_signature is None:
+            raise ValueError("Miner signature is required")
+
         return Receipt(
             payload=JobFinishedReceiptPayload(
                 job_uuid=str(self.job_uuid),
