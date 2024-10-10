@@ -11,6 +11,7 @@ dependencies = [
     "websockets>=11.0",
     "more-itertools>=10.2.0",
     "requests>=2.32.2",
+    "Django~=4.2.4",
 ]
 
 [build-system]
