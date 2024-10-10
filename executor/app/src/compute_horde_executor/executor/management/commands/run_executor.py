@@ -16,7 +16,6 @@ import zipfile
 
 import httpx
 import pydantic
-
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.volume import (
     InlineVolume,

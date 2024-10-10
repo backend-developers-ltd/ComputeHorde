@@ -4,6 +4,7 @@ from typing import Any, Self, TypeVar
 
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
 from compute_horde.mv_protocol import validator_requests
@@ -29,7 +30,7 @@ class JobRequest(pydantic.BaseModel):
     job_uuid: str
     docker_image_name: str | None = None
     raw_script: str | None = None
-    docker_run_options_preset: str
+    docker_run_options_preset: DockerRunOptionsPreset
     docker_run_cmd: list[str]
     volume: Volume | None = None
     output_upload: OutputUpload | None = None

@@ -34,7 +34,7 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
         return "mock"
 
     def docker_run_options_preset(self) -> DockerRunOptionsPreset:
-        return "mock"
+        return "none"
 
     def docker_run_cmd(self) -> list[str]:
         return ["mock"]
