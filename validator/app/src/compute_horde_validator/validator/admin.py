@@ -1,24 +1,26 @@
-from django.contrib import admin  # noqa
-from django.contrib import messages  # noqa
-from django.utils.safestring import mark_safe  # noqa
+from compute_horde.base.admin import AddOnlyAdminMixin, ReadOnlyAdminMixin
+from compute_horde.executor_class import EXECUTOR_CLASS
 from django import forms
-
-from compute_horde_validator.validator.models import (
-    Miner,
-    OrganicJob,
-    SyntheticJob,
-    MinerBlacklist,
-    AdminJobRequest,
-    SystemEvent,
-    Weights,
-    Prompt,
-    PromptSeries,
-    PromptSample,
-    SolveWorkload,
-)  # noqa
+from django.contrib import (
+    admin,  # noqa
+    messages,  # noqa
+)
+from django.utils.safestring import mark_safe  # noqa
 from rangefilter.filters import DateTimeRangeFilter
 
-from compute_horde.executor_class import EXECUTOR_CLASS
+from compute_horde_validator.validator.models import (
+    AdminJobRequest,
+    Miner,
+    MinerBlacklist,
+    OrganicJob,
+    Prompt,
+    PromptSample,
+    PromptSeries,
+    SolveWorkload,
+    SyntheticJob,
+    SystemEvent,
+    Weights,
+)  # noqa
 from compute_horde_validator.validator.tasks import trigger_run_admin_job_request  # noqa
 
 admin.site.site_header = "ComputeHorde Validator Administration"
@@ -26,19 +28,6 @@ admin.site.site_title = "compute_horde_validator"
 admin.site.index_title = "Welcome to ComputeHorde Validator Administration"
 
 admin.site.index_template = "admin/validator_index.html"
-
-
-class AddOnlyAdmin(admin.ModelAdmin):
-    def has_change_permission(self, *args, **kwargs):
-        return False
-
-    def has_delete_permission(self, *args, **kwargs):
-        return False
-
-
-class ReadOnlyAdmin(AddOnlyAdmin):
-    def has_add_permission(self, *args, **kwargs):
-        return False
 
 
 class AdminJobRequestForm(forms.ModelForm):
@@ -68,7 +57,7 @@ class AdminJobRequestForm(forms.ModelForm):
             self.fields["executor_class"].choices = [(name, name) for name in EXECUTOR_CLASS]
 
 
-class AdminJobRequestAddOnlyAdmin(AddOnlyAdmin):
+class AdminJobRequestAddOnlyAdmin(admin.ModelAdmin, AddOnlyAdminMixin):
     form = AdminJobRequestForm
     exclude = ["env"]  # not used ?
     list_display = ["uuid", "executor_class", "docker_image", "use_gpu", "miner", "created_at"]
@@ -88,13 +77,13 @@ class AdminJobRequestAddOnlyAdmin(AddOnlyAdmin):
         messages.add_message(request, messages.INFO, mark_safe(msg))
 
 
-class JobReadOnlyAdmin(ReadOnlyAdmin):
+class JobReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = ["job_uuid", "miner", "executor_class", "status", "updated_at"]
     search_fields = ["job_uuid", "miner__hotkey"]
     ordering = ["-updated_at"]
 
 
-class MinerReadOnlyAdmin(ReadOnlyAdmin):
+class MinerReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     change_form_template = "admin/read_only_view.html"
     search_fields = ["hotkey"]
 
@@ -112,18 +101,18 @@ class MinerReadOnlyAdmin(ReadOnlyAdmin):
         return queryset, use_distinct
 
 
-class SystemEventAdmin(ReadOnlyAdmin):
+class SystemEventAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = ["type", "subtype", "timestamp"]
     list_filter = ["type", "subtype", ("timestamp", DateTimeRangeFilter)]
     ordering = ["-timestamp"]
 
 
-class WeightsReadOnlyAdmin(ReadOnlyAdmin):
+class WeightsReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = ["block", "created_at", "revealed_at"]
     ordering = ["-created_at"]
 
 
-class PromptSeriesAdmin(ReadOnlyAdmin):
+class PromptSeriesAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = [
         "series_uuid",
         "s3_url",
@@ -132,7 +121,7 @@ class PromptSeriesAdmin(ReadOnlyAdmin):
     ]
 
 
-class SolveWorkloadAdmin(ReadOnlyAdmin):
+class SolveWorkloadAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = [
         "workload_uuid",
         "seed",
@@ -142,7 +131,7 @@ class SolveWorkloadAdmin(ReadOnlyAdmin):
     ]
 
 
-class PromptSampleAdmin(ReadOnlyAdmin):
+class PromptSampleAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = [
         "pk",
         "series",
@@ -152,7 +141,7 @@ class PromptSampleAdmin(ReadOnlyAdmin):
     ]
 
 
-class PromptAdmin(ReadOnlyAdmin):
+class PromptAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = [
         "pk",
         "sample",

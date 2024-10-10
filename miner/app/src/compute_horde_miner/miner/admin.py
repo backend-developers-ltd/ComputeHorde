@@ -1,6 +1,7 @@
 from django.contrib import admin  # noqa
 from django.contrib.admin import register, AdminSite  # noqa
 
+from compute_horde.base.admin import ReadOnlyAdminMixin
 from compute_horde_miner.miner.models import (
     AcceptedJob,
     Validator,
@@ -15,24 +16,11 @@ admin.site.index_title = "Welcome to ComputeHorde Miner Administration"
 admin.site.index_template = "admin/miner_index.html"
 
 
-class ReadOnlyAdmin(admin.ModelAdmin):
-    change_form_template = "admin/read_only_view.html"
-
-    def has_add_permission(self, *args, **kwargs):
-        return False
-
-    def has_change_permission(self, *args, **kwargs):
-        return False
-
-    def has_delete_permission(self, *args, **kwargs):
-        return False
-
-
-class ValidatorReadOnlyAdmin(ReadOnlyAdmin):
+class ValidatorReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     search_fields = ["public_key"]
 
 
-class AcceptedJobReadOnlyAdmin(ReadOnlyAdmin):
+class AcceptedJobReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = [
         "job_uuid",
         "validator",
@@ -45,7 +33,7 @@ class AcceptedJobReadOnlyAdmin(ReadOnlyAdmin):
     ordering = ["-created_at"]
 
 
-class JobStartedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+class JobStartedReceiptsReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = [
         "job_uuid",
         "validator_hotkey",
@@ -56,7 +44,7 @@ class JobStartedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
     ordering = ["-time_accepted"]
 
 
-class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+class JobFinishedReceiptsReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = ["job_uuid", "validator_hotkey", "score", "time_started", "time_took"]
     ordering = ["-time_started"]
 

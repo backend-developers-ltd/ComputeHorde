@@ -1,20 +1,10 @@
 from django.contrib import admin  # noqa
 
+from compute_horde.base.admin import ReadOnlyAdminMixin
 from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt
 
 
-class ReadOnlyAdmin(admin.ModelAdmin):
-    def has_change_permission(self, *args, **kwargs):
-        return False
-
-    def has_delete_permission(self, *args, **kwargs):
-        return False
-
-    def has_add_permission(self, *args, **kwargs):
-        return False
-
-
-class JobStartedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+class JobStartedReceiptsReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = [
         "job_uuid",
         "miner_hotkey",
@@ -26,7 +16,7 @@ class JobStartedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
     ordering = ["-time_accepted"]
 
 
-class JobFinishedReceiptsReadOnlyAdmin(ReadOnlyAdmin):
+class JobFinishedReceiptsReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     list_display = [
         "job_uuid",
         "miner_hotkey",
