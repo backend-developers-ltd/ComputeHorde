@@ -1,7 +1,6 @@
 import logging
 import shlex
 import uuid
-from datetime import timedelta
 from os import urandom
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS

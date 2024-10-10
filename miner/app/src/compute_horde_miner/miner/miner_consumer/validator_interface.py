@@ -8,7 +8,9 @@ from typing import Protocol
 import bittensor
 from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt
-from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest, V0JobStartedReceiptRequest
+from compute_horde.mv_protocol.validator_requests import (
+    BaseValidatorRequest,
+)
 from django.conf import settings
 from django.utils import timezone
 

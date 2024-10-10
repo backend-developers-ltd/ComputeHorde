@@ -4,16 +4,15 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('miner', '0008_jobstartedreceipt_and_more'),
+        ("miner", "0008_jobstartedreceipt_and_more"),
     ]
 
     operations = [
         migrations.DeleteModel(
-            name='JobFinishedReceipt',
+            name="JobFinishedReceipt",
         ),
         migrations.DeleteModel(
-            name='JobStartedReceipt',
+            name="JobStartedReceipt",
         ),
     ]

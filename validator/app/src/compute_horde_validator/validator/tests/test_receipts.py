@@ -3,7 +3,7 @@ from typing import NamedTuple
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.mv_protocol.models import JobStartedReceipt, JobFinishedReceipt
+from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,

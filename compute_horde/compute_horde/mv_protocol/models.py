@@ -3,7 +3,10 @@ from datetime import timedelta
 from django.db import models
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
-from compute_horde.mv_protocol.validator_requests import JobFinishedReceiptPayload, JobStartedReceiptPayload
+from compute_horde.mv_protocol.validator_requests import (
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+)
 from compute_horde.receipts import Receipt
 
 

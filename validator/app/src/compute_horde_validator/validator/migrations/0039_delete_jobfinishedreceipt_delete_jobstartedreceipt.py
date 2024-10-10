@@ -4,16 +4,15 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('validator', '0038_alter_systemevent_subtype_alter_systemevent_type'),
+        ("validator", "0038_alter_systemevent_subtype_alter_systemevent_type"),
     ]
 
     operations = [
         migrations.DeleteModel(
-            name='JobFinishedReceipt',
+            name="JobFinishedReceipt",
         ),
         migrations.DeleteModel(
-            name='JobStartedReceipt',
+            name="JobStartedReceipt",
         ),
     ]

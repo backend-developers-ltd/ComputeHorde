@@ -35,7 +35,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
     V0MachineSpecsRequest,
 )
-from compute_horde.mv_protocol.models import JobStartedReceipt, JobFinishedReceipt
+from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
     JobFinishedReceiptPayload,

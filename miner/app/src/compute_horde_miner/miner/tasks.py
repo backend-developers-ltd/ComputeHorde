@@ -2,7 +2,7 @@ import datetime
 
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
-from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt, ReceiptNotSigned
+from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
@@ -77,7 +77,9 @@ def prepare_receipts():
         try:
             receipts.append(job_started_receipt.to_receipt())
         except Exception as e:
-            logger.error(f"Skipping job started receipt for job {job_started_receipt.job_uuid}: {e}")
+            logger.error(
+                f"Skipping job started receipt for job {job_started_receipt.job_uuid}: {e}"
+            )
 
     job_finished_receipts = JobFinishedReceipt.objects.order_by("time_started").filter(
         time_started__gt=now() - RECEIPTS_MAX_SERVED_PERIOD
@@ -86,7 +88,9 @@ def prepare_receipts():
         try:
             receipts.append(job_finished_receipt.to_receipt())
         except Exception as e:
-            logger.error(f"Skipping job finished receipt for job {job_finished_receipt.job_uuid}: {e}")
+            logger.error(
+                f"Skipping job finished receipt for job {job_finished_receipt.job_uuid}: {e}"
+            )
 
     logger.info(f"Stored receipts: {len(receipts)}")
 
