@@ -7,6 +7,10 @@ from compute_horde.mv_protocol.validator_requests import JobFinishedReceiptPaylo
 from compute_horde.receipts import Receipt
 
 
+class ReceiptNotSigned(Exception):
+    pass
+
+
 class AbstractReceipt(models.Model):
     job_uuid = models.UUIDField()
     validator_hotkey = models.CharField(max_length=256)
@@ -34,7 +38,7 @@ class JobStartedReceipt(AbstractReceipt):
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:
-            raise ValueError("Miner signature is required")
+            raise ReceiptNotSigned("Miner signature is required")
 
         return Receipt(
             payload=JobStartedReceiptPayload(
@@ -64,9 +68,9 @@ class JobFinishedReceipt(AbstractReceipt):
     def score(self):
         return float(self.score_str)
 
-    def to_receipt(self):
+    def to_receipt(self) -> Receipt:
         if self.miner_signature is None:
-            raise ValueError("Miner signature is required")
+            raise ReceiptNotSigned("Miner signature is required")
 
         return Receipt(
             payload=JobFinishedReceiptPayload(
