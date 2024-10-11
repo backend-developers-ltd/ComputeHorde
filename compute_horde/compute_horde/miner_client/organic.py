@@ -390,7 +390,7 @@ async def run_organic_job(
         except TimeoutError as exc:
             raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
         if isinstance(executor_readiness_response, V0ExecutorFailedRequest):
-            raise OrganicJobError(FailureReason.EXECUTOR_FAILED, initial_response)
+            raise OrganicJobError(FailureReason.EXECUTOR_FAILED, executor_readiness_response)
 
         await client.send_job_started_receipt_message(
             executor_class=job_details.executor_class,
