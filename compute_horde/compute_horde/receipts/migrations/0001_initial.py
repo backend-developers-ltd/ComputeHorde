@@ -79,14 +79,14 @@ class Migration(migrations.Migration):
             model_name="jobstartedreceipt",
             constraint=models.UniqueConstraint(
                 fields=("job_uuid",),
-                name="mv_protocol_unique_jobstartedreceipt_job_uuid",
+                name="receipts_unique_jobstartedreceipt_job_uuid",
             ),
         ),
         migrations.AddConstraint(
             model_name="jobfinishedreceipt",
             constraint=models.UniqueConstraint(
                 fields=("job_uuid",),
-                name="mv_protocol_unique_jobfinishedreceipt_job_uuid",
+                name="receipts_unique_jobfinishedreceipt_job_uuid",
             ),
         ),
     ]

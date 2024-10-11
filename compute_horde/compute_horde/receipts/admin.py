@@ -1,7 +1,7 @@
 from django.contrib import admin  # noqa
 
 from compute_horde.base.admin import ReadOnlyAdminMixin
-from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 
 
 class JobStartedReceiptsReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):

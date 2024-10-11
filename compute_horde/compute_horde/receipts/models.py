@@ -7,7 +7,7 @@ from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts import Receipt
+from compute_horde.receipts.pydantic import Receipt
 
 
 class ReceiptNotSigned(Exception):
@@ -24,9 +24,7 @@ class AbstractReceipt(models.Model):
     class Meta:
         abstract = True
         constraints = [
-            models.UniqueConstraint(
-                fields=["job_uuid"], name="mv_protocol_unique_%(class)s_job_uuid"
-            ),
+            models.UniqueConstraint(fields=["job_uuid"], name="receipts_unique_%(class)s_job_uuid"),
         ]
 
     def __str__(self):

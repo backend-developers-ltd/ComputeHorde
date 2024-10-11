@@ -5,7 +5,7 @@ from django.apps import AppConfig
 logger = logging.getLogger(__name__)
 
 
-class ComputeHordeMVProtocolConfig(AppConfig):
-    name = "compute_horde.mv_protocol"
-    verbose_name = "Miner-Validator communication"
+class ComputeHordeReceiptsConfig(AppConfig):
+    name = "compute_horde.receipts"
+    verbose_name = "Receipts"
     default_auto_field = "django.db.models.BigAutoField"

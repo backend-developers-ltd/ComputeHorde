@@ -7,7 +7,11 @@ from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts import Receipt, ReceiptFetchError, ReceiptType, get_miner_receipts
+from compute_horde.receipts.pydantic import (
+    Receipt,
+    ReceiptType,
+)
+from compute_horde.receipts.transfer import ReceiptFetchError, get_miner_receipts
 
 
 def receipts_helper(mocked_responses, receipts: list[Receipt], miner_keypair):

@@ -19,12 +19,12 @@ from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
-from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts import get_miner_receipts
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.transfer import get_miner_receipts
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
 from django.conf import settings

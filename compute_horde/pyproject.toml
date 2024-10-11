@@ -23,6 +23,7 @@ distribution = true
 
 [tool.pdm.build]
 includes = ["compute_horde"]
+excludes = ["compute_horde/settings.py"]
 
 [tool.pdm.version]
 source = "scm"

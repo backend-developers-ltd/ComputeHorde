@@ -2,12 +2,12 @@ import uuid
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts import Receipt
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.pydantic import Receipt
 from django.utils.timezone import now
 from pytest_mock import MockerFixture
 

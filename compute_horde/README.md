@@ -1,12 +1,12 @@
 # compute-horde
 
 ## Common django models
-This library contains common Django models for the Validator <-> Miner communication.
+This library contains common Django models for the receipts.
 To use them, update your `INSTALLED_APPS`:
 ```python
 INSTALLED_APPS = [
     ...,
-    'compute_horde.mv_protocol',
+    'compute_horde.receipts',
     ...,
 ]
 ```

@@ -35,7 +35,6 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
     V0MachineSpecsRequest,
 )
-from compute_horde.mv_protocol.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
     JobFinishedReceiptPayload,
@@ -46,6 +45,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobRequest,
     V0JobStartedReceiptRequest,
 )
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
 from django.conf import settings
