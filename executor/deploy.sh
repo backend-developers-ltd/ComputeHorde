@@ -1,6 +1,6 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright 2020, Reef Technologies (reef.pl), All rights reserved.
-set -eux pipefail
+set -euxo pipefail
 
 if [ ! -f ".env" ]; then
     echo "\e[31mPlease setup the environment first!\e[0m";

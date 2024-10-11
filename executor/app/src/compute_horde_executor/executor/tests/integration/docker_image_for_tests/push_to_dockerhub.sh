@@ -1,4 +1,6 @@
-#!/bin/bash -e
+#!/bin/bash
+
+set -e
 
 # Define image
 IMAGE_NAME="backenddevelopersltd/compute-horde-job-echo:v0-latest"

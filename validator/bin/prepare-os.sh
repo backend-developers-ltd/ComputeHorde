@@ -1,6 +1,6 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright 2020, Reef Technologies (reef.pl), All rights reserved.
-set -eux pipefail
+set -euxo pipefail
 
 DOCKER_BIN="$(command -v docker || true)"
 DOCKER_COMPOSE_BIN="$(command -v docker-compose || true)"
