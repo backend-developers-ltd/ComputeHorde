@@ -7,7 +7,7 @@ from compute_horde.mv_protocol.validator_requests import (
     JobStartedReceiptPayload,
 )
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
-from compute_horde.receipts.pydantic import Receipt
+from compute_horde.receipts.schemas import Receipt
 from django.utils.timezone import now
 from pytest_mock import MockerFixture
 

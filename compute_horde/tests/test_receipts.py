@@ -7,7 +7,7 @@ from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts.pydantic import (
+from compute_horde.receipts.schemas import (
     Receipt,
     ReceiptType,
 )

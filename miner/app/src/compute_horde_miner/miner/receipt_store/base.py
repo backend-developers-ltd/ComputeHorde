@@ -1,6 +1,6 @@
 import abc
 
-from compute_horde.receipts.pydantic import Receipt
+from compute_horde.receipts.schemas import Receipt
 
 
 class BaseReceiptStore(metaclass=abc.ABCMeta):
