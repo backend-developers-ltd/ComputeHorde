@@ -29,7 +29,6 @@ async def generate_prompts(
 
     if not all(
         [
-            settings.TRUSTED_MINER_KEY,
             settings.TRUSTED_MINER_ADDRESS,
             settings.TRUSTED_MINER_PORT,
         ]

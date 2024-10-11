@@ -5,10 +5,12 @@ import time
 from functools import partial
 from typing import Literal
 
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import ZipAndHttpPutUpload
 from compute_horde.base.volume import InlineVolume, Volume, ZipUrlVolume
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import (
+    V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
@@ -147,7 +149,7 @@ async def execute_organic_job(
 
         try:
             msg = await asyncio.wait_for(
-                miner_client.miner_ready_or_declining_future,
+                miner_client.miner_accepting_or_declining_future,
                 timeout=min(job_timer.time_left(), wait_timeout),
             )
         except TimeoutError:
@@ -165,7 +167,7 @@ async def execute_organic_job(
                 await notify_callback(JobStatusUpdate.from_job(job, "failed"))
             return
 
-        if isinstance(msg, V0DeclineJobRequest | V0ExecutorFailedRequest):
+        if isinstance(msg, V0DeclineJobRequest):
             comment = f"Miner {miner_client.miner_name} won't do job: {msg.model_dump_json()}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
@@ -178,6 +180,47 @@ async def execute_organic_job(
             )
             if notify_callback:
                 await notify_callback(JobStatusUpdate.from_job(job, "rejected"))
+            return
+        elif isinstance(msg, V0AcceptJobRequest):
+            logger.debug(f"Miner {miner_client.miner_name} accepted job: {msg}")
+        else:
+            raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
+
+        try:
+            msg = await asyncio.wait_for(
+                miner_client.executor_ready_or_failed_future,
+                timeout=min(job_timer.time_left(), wait_timeout),
+            )
+        except TimeoutError:
+            comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid} after {wait_timeout} seconds"
+            job.status = OrganicJob.Status.FAILED
+            job.comment = comment
+            await job.asave()
+
+            logger.warning(comment)
+            await save_event(
+                subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
+                long_description=comment,
+            )
+            if notify_callback:
+                await notify_callback(JobStatusUpdate.from_job(job, "failed"))
+            return
+
+        if isinstance(msg, V0ExecutorFailedRequest):
+            comment = (
+                f"Miner {miner_client.miner_name} failed to start executor: {msg.model_dump_json()}"
+            )
+            job.status = OrganicJob.Status.FAILED
+            job.comment = comment
+            await job.asave()
+
+            logger.info(comment)
+            await save_event(
+                subtype=SystemEvent.EventSubType.JOB_REJECTED,
+                long_description=comment,
+            )
+            if notify_callback:
+                await notify_callback(JobStatusUpdate.from_job(job, "failed"))
             return
         elif isinstance(msg, V0ExecutorReadyRequest):
             logger.debug(f"Miner {miner_client.miner_name} ready for job: {msg}")
@@ -193,7 +236,9 @@ async def execute_organic_job(
         else:
             raise ValueError(f"Unexpected msg from miner {miner_client.miner_name}: {msg}")
 
-        docker_run_options_preset = "nvidia_all" if job_request.use_gpu else "none"
+        docker_run_options_preset: DockerRunOptionsPreset = (
+            "nvidia_all" if job_request.use_gpu else "none"
+        )
 
         if isinstance(job_request, V0FacilitatorJobRequest | AdminJobRequest):
             if job_request.output_url:

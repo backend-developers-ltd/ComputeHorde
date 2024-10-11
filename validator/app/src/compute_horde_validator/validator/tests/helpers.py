@@ -15,6 +15,7 @@ import numpy as np
 from bittensor import Balance
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol.miner_requests import (
+    V0AcceptJobRequest,
     V0ExecutorReadyRequest,
     V0JobFinishedRequest,
 )
@@ -119,7 +120,10 @@ class MockMinerClient(MinerClient):
 class MockJobStateMinerClient(MockMinerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.miner_ready_or_declining_future.set_result(
+        self.miner_accepting_or_declining_future.set_result(
+            V0AcceptJobRequest(job_uuid=self.job_uuid)
+        )
+        self.executor_ready_or_failed_future.set_result(
             V0ExecutorReadyRequest(job_uuid=self.job_uuid)
         )
         self.miner_finished_or_failed_future.set_result(

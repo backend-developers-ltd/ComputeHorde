@@ -1,5 +1,6 @@
 import uuid
 
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.volume import InlineVolume, Volume
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import (
@@ -32,8 +33,8 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def docker_image_name(self) -> str:
         return "mock"
 
-    def docker_run_options_preset(self) -> str:
-        return "mock"
+    def docker_run_options_preset(self) -> DockerRunOptionsPreset:
+        return "none"
 
     def docker_run_cmd(self) -> list[str]:
         return ["mock"]
