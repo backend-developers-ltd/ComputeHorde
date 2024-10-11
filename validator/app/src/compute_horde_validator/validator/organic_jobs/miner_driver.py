@@ -77,7 +77,7 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
 
 async def save_job_execution_event(
     subtype: str, long_description: str, data: JsonValue = None, success: bool = False
-):
+) -> None:
     await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
         type=SystemEvent.EventType.MINER_ORGANIC_JOB_SUCCESS
         if success
@@ -99,8 +99,8 @@ async def execute_organic_job(
     total_job_timeout: int = 300,
     wait_timeout: int = 300,
     notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] = _dummy_notify_callback,
-):
-    data = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
+) -> None:
+    data: JsonValue = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
     save_event = partial(save_job_execution_event, data=data)
 
     async def notify_job_accepted(msg: V0AcceptJobRequest) -> None:
