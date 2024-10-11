@@ -6,7 +6,8 @@ from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts import get_miner_receipts
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.transfer import get_miner_receipts
 from compute_horde.utils import get_validators
 from constance import config
 from django.conf import settings
@@ -14,7 +15,7 @@ from django.utils.timezone import now
 
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import quasi_axon
-from compute_horde_miner.miner.models import JobFinishedReceipt, JobStartedReceipt, Validator
+from compute_horde_miner.miner.models import Validator
 from compute_horde_miner.miner.receipt_store.current import receipts_store
 
 logger = get_task_logger(__name__)
@@ -72,12 +73,26 @@ def prepare_receipts():
     job_started_receipts = JobStartedReceipt.objects.order_by("time_accepted").filter(
         time_accepted__gt=now() - RECEIPTS_MAX_SERVED_PERIOD
     )
-    receipts += [jr.to_receipt() for jr in job_started_receipts]
+    for job_started_receipt in job_started_receipts:
+        try:
+            receipts.append(job_started_receipt.to_receipt())
+        except Exception as e:
+            logger.error(
+                f"Skipping job started receipt for job {job_started_receipt.job_uuid}: {e}"
+            )
 
     job_finished_receipts = JobFinishedReceipt.objects.order_by("time_started").filter(
         time_started__gt=now() - RECEIPTS_MAX_SERVED_PERIOD
     )
-    receipts += [jr.to_receipt() for jr in job_finished_receipts]
+    for job_finished_receipt in job_finished_receipts:
+        try:
+            receipts.append(job_finished_receipt.to_receipt())
+        except Exception as e:
+            logger.error(
+                f"Skipping job finished receipt for job {job_finished_receipt.job_uuid}: {e}"
+            )
+
+    logger.info(f"Stored receipts: {len(receipts)}")
 
     receipts_store.store(receipts)
 

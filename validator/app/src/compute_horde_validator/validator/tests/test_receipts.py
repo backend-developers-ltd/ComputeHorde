@@ -7,12 +7,11 @@ from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts import Receipt
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.schemas import Receipt
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
-    JobFinishedReceipt,
-    JobStartedReceipt,
     SystemEvent,
 )
 from compute_horde_validator.validator.tasks import fetch_receipts

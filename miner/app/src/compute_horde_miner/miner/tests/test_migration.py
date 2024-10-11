@@ -6,11 +6,11 @@ from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts import Receipt
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.schemas import Receipt
 from django.utils.timezone import now
 from pytest_mock import MockerFixture
 
-from compute_horde_miner.miner.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde_miner.miner.tasks import announce_address_and_port, get_receipts_from_old_miner
 
 

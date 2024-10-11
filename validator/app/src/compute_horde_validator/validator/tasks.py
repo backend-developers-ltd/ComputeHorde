@@ -23,7 +23,8 @@ from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts import get_miner_receipts
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.transfer import get_miner_receipts
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
 from django.conf import settings
@@ -38,8 +39,6 @@ from compute_horde_validator.validator.locks import Locked, LockType, get_adviso
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
     Cycle,
-    JobFinishedReceipt,
-    JobStartedReceipt,
     OrganicJob,
     Prompt,
     PromptSample,

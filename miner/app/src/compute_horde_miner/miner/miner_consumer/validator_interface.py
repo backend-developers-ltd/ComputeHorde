@@ -7,7 +7,10 @@ from typing import Protocol
 
 import bittensor
 from compute_horde.mv_protocol import miner_requests, validator_requests
-from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
+from compute_horde.mv_protocol.validator_requests import (
+    BaseValidatorRequest,
+)
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from django.conf import settings
 from django.utils import timezone
 
@@ -27,8 +30,6 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
 )
 from compute_horde_miner.miner.models import (
     AcceptedJob,
-    JobFinishedReceipt,
-    JobStartedReceipt,
     Validator,
     ValidatorBlacklist,
 )
@@ -388,11 +389,11 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             return
 
         await JobStartedReceipt.objects.acreate(
+            job_uuid=msg.payload.job_uuid,
+            validator_hotkey=msg.payload.validator_hotkey,
+            miner_hotkey=msg.payload.miner_hotkey,
             validator_signature=msg.signature,
             miner_signature=get_miner_signature(msg),
-            job_uuid=msg.payload.job_uuid,
-            miner_hotkey=msg.payload.miner_hotkey,
-            validator_hotkey=msg.payload.validator_hotkey,
             executor_class=msg.payload.executor_class,
             time_accepted=msg.payload.time_accepted,
             max_timeout=msg.payload.max_timeout,

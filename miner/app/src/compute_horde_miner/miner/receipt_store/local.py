@@ -8,7 +8,7 @@ from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts import Receipt, ReceiptType
+from compute_horde.receipts.schemas import Receipt, ReceiptType
 from django.conf import settings
 
 from compute_horde_miner.miner.receipt_store.base import BaseReceiptStore

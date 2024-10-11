@@ -1,7 +1,6 @@
 import logging
 import shlex
 import uuid
-from datetime import timedelta
 from os import urandom
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
@@ -238,39 +237,6 @@ class AdminJobRequest(models.Model):
 
     def __str__(self):
         return f"uuid: {self.uuid} - miner hotkey: {self.miner.hotkey}"
-
-
-class AbstractReceipt(models.Model):
-    job_uuid = models.UUIDField()
-    miner_hotkey = models.CharField(max_length=256)
-    validator_hotkey = models.CharField(max_length=256)
-
-    class Meta:
-        abstract = True
-        constraints = [
-            UniqueConstraint(fields=["job_uuid"], name="unique_%(class)s_job_uuid"),
-        ]
-
-    def __str__(self):
-        return f"job_uuid: {self.job_uuid}"
-
-
-class JobFinishedReceipt(AbstractReceipt):
-    time_started = models.DateTimeField()
-    time_took_us = models.BigIntegerField()
-    score_str = models.CharField(max_length=256)
-
-    def time_took(self):
-        return timedelta(microseconds=self.time_took_us)
-
-    def score(self):
-        return float(self.score_str)
-
-
-class JobStartedReceipt(AbstractReceipt):
-    executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
-    time_accepted = models.DateTimeField()
-    max_timeout = models.IntegerField()
 
 
 def get_random_salt() -> list[int]:
