@@ -213,6 +213,8 @@ Replace the placeholders in the command above:
 - MINER_PORT (optional): the port on which the miner will listen for incoming connections (default is 8000)
 - DEFAULT_EXECUTOR_CLASS (optional): specify a custom executor class to use; **to support A6000 synthetic job flow, setting `always_on.llm.a6000` is mandatory** 
 
+**Remeber to reboot miner machine after installation**
+
 ### Provision S3 buckets for prompts and answers
 
 Trusted miners require S3 buckets to store prompts and answers. To provision these buckets conveniently with the correct permissions pre-configured, make sure you have [AWS CLI](https://aws.amazon.com/cli/) installed and configured.
