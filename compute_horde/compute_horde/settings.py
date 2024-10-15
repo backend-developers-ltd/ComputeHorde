@@ -1,1 +1,1 @@
-INSTALLED_APPS = ["compute_horde.mv_protocol"]
+INSTALLED_APPS = ["compute_horde.receipts"]

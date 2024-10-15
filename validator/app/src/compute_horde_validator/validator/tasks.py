@@ -1036,6 +1036,7 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
             executor_class=receipt.payload.executor_class,
             time_accepted=receipt.payload.time_accepted,
             max_timeout=receipt.payload.max_timeout,
+            is_organic=receipt.payload.is_organic,
         )
         for receipt in receipts
         if isinstance(receipt.payload, JobStartedReceiptPayload)
