@@ -162,12 +162,15 @@ class MinerManifest(models.Model):
     miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
     batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
+    executor_class = models.CharField(max_length=255)
     executor_count = models.IntegerField(default=0)
     online_executor_count = models.IntegerField(default=0)
 
     class Meta:
         constraints = [
-            UniqueConstraint(fields=["miner", "batch"], name="unique_miner_manifest"),
+            UniqueConstraint(
+                fields=["miner", "batch", "executor_class"], name="unique_miner_manifest"
+            ),
         ]
 
 
