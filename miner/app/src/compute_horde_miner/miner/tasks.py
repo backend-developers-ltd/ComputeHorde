@@ -137,6 +137,7 @@ def get_receipts_from_old_miner():
             executor_class=receipt.payload.executor_class,
             time_accepted=receipt.payload.time_accepted,
             max_timeout=receipt.payload.max_timeout,
+            is_organic=receipt.payload.is_organic,
         )
         for receipt in receipts
         if isinstance(receipt.payload, JobStartedReceiptPayload)
