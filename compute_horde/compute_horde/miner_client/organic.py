@@ -222,6 +222,7 @@ class OrganicMinerClient(AbstractMinerClient):
             executor_class=executor_class,
             time_accepted=time_accepted,
             max_timeout=max_timeout,
+            is_organic=True,
         )
         return V0JobStartedReceiptRequest(
             payload=receipt_payload,

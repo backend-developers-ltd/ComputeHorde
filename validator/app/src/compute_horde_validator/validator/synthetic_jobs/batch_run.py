@@ -697,6 +697,7 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
         executor_class=ExecutorClass(job.executor_class),
         time_accepted=job.executor_response_time,
         max_timeout=max_timeout,
+        is_organic=False,
     )
     job.job_started_receipt = V0JobStartedReceiptRequest(
         payload=payload,
@@ -1516,6 +1517,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     executor_class=started_payload.executor_class,
                     time_accepted=started_payload.time_accepted,
                     max_timeout=started_payload.max_timeout,
+                    is_organic=False,
                 )
             )
     JobStartedReceipt.objects.bulk_create(job_started_receipts)

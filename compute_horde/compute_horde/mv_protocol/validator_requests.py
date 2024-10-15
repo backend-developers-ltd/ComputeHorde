@@ -133,6 +133,7 @@ class JobStartedReceiptPayload(ReceiptPayload):
     executor_class: ExecutorClass
     time_accepted: datetime.datetime
     max_timeout: int  # seconds
+    is_organic: bool = False
 
     @field_serializer("time_accepted")
     def serialize_dt(self, dt: datetime.datetime, _info):
