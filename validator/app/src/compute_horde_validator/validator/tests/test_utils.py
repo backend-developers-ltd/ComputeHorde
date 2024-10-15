@@ -427,6 +427,7 @@ async def test_manifest_dance_incentives(
         await MinerManifest.objects.acreate(
             miner=miner,
             batch=batch,
+            executor_class=DEFAULT_EXECUTOR_CLASS,
             executor_count=prev_online_executor_count,
             online_executor_count=prev_online_executor_count,
         )
@@ -511,6 +512,7 @@ def test_create_and_run_synthetic_job_batch(
         MinerManifest.objects.create(
             miner=miner,
             batch=batch,
+            executor_class=DEFAULT_EXECUTOR_CLASS,
             executor_count=previous_online_executors,
             online_executor_count=previous_online_executors,
         )
