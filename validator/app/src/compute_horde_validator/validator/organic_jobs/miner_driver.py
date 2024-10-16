@@ -105,6 +105,7 @@ async def execute_organic_job(
         await notify_callback(JobStatusUpdate.from_job(job, "accepted", msg.message_type.value))
 
     miner_client.notify_job_accepted = notify_job_accepted  # type: ignore[method-assign]
+    # TODO: remove method assignment above and properly handle notify_* cases
 
     job_details = OrganicJobDetails(
         job_uuid=str(job.job_uuid),
