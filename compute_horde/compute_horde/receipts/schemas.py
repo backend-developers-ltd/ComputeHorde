@@ -7,6 +7,7 @@ import pydantic
 from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
+    JobStillRunningReceiptPayload,
 )
 
 logger = logging.getLogger(__name__)
@@ -15,10 +16,11 @@ logger = logging.getLogger(__name__)
 class ReceiptType(enum.Enum):
     JobStartedReceipt = "JobStartedReceipt"
     JobFinishedReceipt = "JobFinishedReceipt"
+    JobStillRunningReceipt = "JobStillRunningReceipt"
 
 
 class Receipt(pydantic.BaseModel):
-    payload: JobStartedReceiptPayload | JobFinishedReceiptPayload
+    payload: JobStartedReceiptPayload | JobFinishedReceiptPayload | JobStillRunningReceiptPayload
     validator_signature: str
     miner_signature: str
 

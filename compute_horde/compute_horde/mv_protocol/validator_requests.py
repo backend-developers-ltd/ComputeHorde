@@ -24,6 +24,7 @@ class RequestType(enum.Enum):
     V0JobRequest = "V0JobRequest"
     V0JobFinishedReceiptRequest = "V0JobFinishedReceiptRequest"
     V0JobStartedReceiptRequest = "V0JobStartedReceiptRequest"
+    V0JobStillRunningReceiptRequest = "V0JobStillRunningReceiptRequest"
     GenericError = "GenericError"
 
 
@@ -155,3 +156,16 @@ class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
         if bool(self.volume) and bool(self.volume_type):
             raise ValueError("Expected either `volume` or `volume_type`, got both")
         return self
+
+
+class JobStillRunningReceiptPayload(ReceiptPayload):
+    pass
+
+
+class V0JobStillRunningReceiptRequest(BaseValidatorRequest):
+    message_type: RequestType = RequestType.V0JobStillRunningReceiptRequest
+    payload: JobStillRunningReceiptPayload
+    signature: str
+
+    def blob_for_signing(self):
+        return self.payload.blob_for_signing()

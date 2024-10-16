@@ -13,6 +13,7 @@ from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.validator_requests import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
+    JobStillRunningReceiptPayload,
 )
 from compute_horde.receipts.schemas import Receipt, ReceiptType
 
@@ -43,7 +44,11 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
         for raw_receipt in csv_reader:
             try:
                 receipt_type = ReceiptType(raw_receipt["type"])
-                receipt_payload: JobStartedReceiptPayload | JobFinishedReceiptPayload
+                receipt_payload: (
+                    JobStartedReceiptPayload
+                    | JobFinishedReceiptPayload
+                    | JobStillRunningReceiptPayload
+                )
 
                 match receipt_type:
                     case ReceiptType.JobStartedReceipt:
@@ -68,6 +73,14 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                             ),
                             time_took_us=int(raw_receipt["time_took_us"]),
                             score_str=raw_receipt["score_str"],
+                        )
+
+                    case ReceiptType.JobStillRunningReceipt:
+                        receipt_payload = JobStillRunningReceiptPayload(
+                            job_uuid=raw_receipt["job_uuid"],
+                            miner_hotkey=raw_receipt["miner_hotkey"],
+                            validator_hotkey=raw_receipt["validator_hotkey"],
+                            timestamp=datetime.datetime.fromisoformat(raw_receipt["timestamp"]),
                         )
 
                 receipt = Receipt(
