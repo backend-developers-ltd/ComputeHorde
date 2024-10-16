@@ -3,8 +3,6 @@ from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Literal
 
-from compute_horde.base.output_upload import OutputUpload, ZipAndHttpPutUpload
-from compute_horde.base.volume import Volume, ZipUrlVolume
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.miner_client.organic import (
     FailureReason,
@@ -108,17 +106,6 @@ async def execute_organic_job(
 
     miner_client.notify_job_accepted = notify_job_accepted  # type: ignore[method-assign]
 
-    volume: Volume | None = None
-    output_upload: OutputUpload | None = None
-    if isinstance(job_request, V0FacilitatorJobRequest | AdminJobRequest):
-        if job_request.input_url:
-            volume = ZipUrlVolume(contents=str(job_request.input_url))
-        if job_request.output_url:
-            output_upload = ZipAndHttpPutUpload(url=str(job_request.output_url))
-    else:
-        volume = job_request.volume
-        output_upload = job_request.output_upload
-
     job_details = OrganicJobDetails(
         job_uuid=str(job.job_uuid),
         executor_class=ExecutorClass(job_request.executor_class),
@@ -127,8 +114,8 @@ async def execute_organic_job(
         docker_run_options_preset="nvidia_all" if job_request.use_gpu else "none",
         docker_run_cmd=job_request.get_args(),
         total_job_timeout=total_job_timeout,
-        volume=volume,
-        output=output_upload,
+        volume=job_request.volume,
+        output=job_request.output_upload,
     )
 
     try:
