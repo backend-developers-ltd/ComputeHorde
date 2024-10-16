@@ -2,7 +2,7 @@ import datetime
 import enum
 import json
 import re
-from typing import Self
+from typing import Annotated, Self
 
 import pydantic
 from pydantic import field_serializer, model_validator
@@ -12,7 +12,7 @@ from ..base.output_upload import OutputUpload  # noqa
 from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
 from ..executor_class import ExecutorClass
-from ..utils import MachineSpecs, _json_dumps_default
+from ..utils import MachineSpecs, _json_dumps_default, empty_string_none
 
 SAFE_DOMAIN_REGEX = re.compile(r".*")
 
@@ -121,9 +121,9 @@ class V0JobFinishedReceiptRequest(BaseValidatorRequest):
 
 class JobStartedReceiptPayload(ReceiptPayload):
     executor_class: ExecutorClass
-    time_accepted: datetime.datetime | None
+    time_accepted: Annotated[datetime.datetime | None, empty_string_none]
     max_timeout: int  # seconds
-    ttl: int | None = None  # seconds
+    ttl: Annotated[int | None, empty_string_none] = None  # seconds
 
     @field_serializer("time_accepted", when_used="unless-none")
     def serialize_dt(self, dt: datetime.datetime, _info):
