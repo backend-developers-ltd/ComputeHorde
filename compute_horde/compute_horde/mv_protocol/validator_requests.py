@@ -116,10 +116,11 @@ class V0JobFinishedReceiptRequest(BaseValidatorRequest):
 
 class JobStartedReceiptPayload(ReceiptPayload):
     executor_class: ExecutorClass
-    time_accepted: datetime.datetime
+    time_accepted: datetime.datetime | None
     max_timeout: int  # seconds
+    ttl: int | None = None  # seconds
 
-    @field_serializer("time_accepted")
+    @field_serializer("time_accepted", when_used="unless-none")
     def serialize_dt(self, dt: datetime.datetime, _info):
         return dt.isoformat()
 
@@ -140,6 +141,9 @@ class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     timeout_seconds: int | None = None
     volume: Volume | None = None
     volume_type: VolumeType | None = None
+
+    job_started_receipt_payload: JobStartedReceiptPayload | None = None
+    job_started_receipt_signature: str | None = None
 
     @model_validator(mode="after")
     def validate_volume_or_volume_type(self) -> Self:
