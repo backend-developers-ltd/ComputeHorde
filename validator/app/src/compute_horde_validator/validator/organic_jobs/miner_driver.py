@@ -120,6 +120,19 @@ async def execute_organic_job(
 
     try:
         stdout, stderr = await run_organic_job(miner_client, job_details, wait_timeout)
+
+        comment = f"Miner {miner_client.miner_name} finished: {stdout=} {stderr=}"
+        job.stdout = stdout
+        job.stderr = stderr
+        job.status = OrganicJob.Status.COMPLETED
+        job.comment = comment
+        await job.asave()
+
+        logger.info(comment)
+        await save_event(
+            subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
+        )
+        await notify_callback(JobStatusUpdate.from_job(job, "completed", "V0JobFinishedRequest"))
     except OrganicJobError as exc:
         if exc.reason == FailureReason.MINER_CONNECTION_FAILED:
             comment = f"Miner connection error: {exc}"
@@ -205,16 +218,3 @@ async def execute_organic_job(
             logger.info(comment)
             await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
             await notify_callback(JobStatusUpdate.from_job(job, "failed", "V0JobFailedRequest"))
-    else:
-        comment = f"Miner {miner_client.miner_name} finished: {stdout=} {stderr=}"
-        job.stdout = stdout
-        job.stderr = stderr
-        job.status = OrganicJob.Status.COMPLETED
-        job.comment = comment
-        await job.asave()
-
-        logger.info(comment)
-        await save_event(
-            subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
-        )
-        await notify_callback(JobStatusUpdate.from_job(job, "completed", "V0JobFinishedRequest"))
