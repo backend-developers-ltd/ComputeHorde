@@ -8,6 +8,7 @@ import uuid
 import zipfile
 from functools import partial
 from unittest import mock
+from unittest.mock import patch
 
 import httpx
 from compute_horde.transport import StubTransport
@@ -91,6 +92,72 @@ def test_main_loop():
         )
     )
     command.handle()
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FinishedRequest",
+            "docker_process_stdout": payload,
+            "docker_process_stderr": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+    ]
+
+
+def test_huggingface_volume():
+    # Arrange
+    repo_id = "huggingface/model"
+    revision = "main"
+
+    def mock_download(local_dir, **kwargs):
+        with open(local_dir / "payload.txt", "w") as file:
+            file.write(payload)
+
+    with patch(
+        "compute_horde_executor.executor.management.commands.run_executor.snapshot_download",
+        mock_download,
+    ):
+        command = CommandTested(
+            iter(
+                [
+                    json.dumps(
+                        {
+                            "message_type": "V0PrepareJobRequest",
+                            "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "timeout_seconds": None,
+                            "volume_type": "huggingface_volume",
+                            "job_uuid": job_uuid,
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "message_type": "V0RunJobRequest",
+                            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "docker_run_cmd": [],
+                            "docker_run_options_preset": "none",
+                            "volume": {
+                                "volume_type": "huggingface_volume",
+                                "repo_id": repo_id,
+                                "revision": revision,
+                            },
+                            "job_uuid": job_uuid,
+                        }
+                    ),
+                ]
+            )
+        )
+
+        # Act
+        command.handle()
+
+    # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
             "message_type": "V0ReadyRequest",
