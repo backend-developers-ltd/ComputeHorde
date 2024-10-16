@@ -81,6 +81,11 @@ class ReceiptPayload(pydantic.BaseModel):
     job_uuid: str
     miner_hotkey: str
     validator_hotkey: str
+    timestamp: datetime.datetime  # when the receipt was generated
+
+    @field_serializer("timestamp")
+    def serialize_timestamp(self, dt: datetime.datetime, _info):
+        return dt.isoformat()
 
     def blob_for_signing(self):
         # pydantic v2 does not support sort_keys anymore.
