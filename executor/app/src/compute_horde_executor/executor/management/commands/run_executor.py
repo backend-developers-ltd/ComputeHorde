@@ -18,6 +18,7 @@ import httpx
 import pydantic
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.volume import (
+    HuggingfaceVolume,
     InlineVolume,
     MultiVolume,
     SingleFileVolume,
@@ -47,6 +48,7 @@ from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from huggingface_hub import snapshot_download
 
 from compute_horde_executor.executor.output_uploader import OutputUploader, OutputUploadFailed
 
@@ -316,6 +318,19 @@ class DownloadManager:
         self.semaphore = asyncio.Semaphore(concurrency)
         self.max_retries = max_retries
 
+    async def download_from_huggingface(
+        self, relative_path: pathlib.Path, repo_id: str, revision: str
+    ):
+        try:
+            snapshot_download(
+                repo_id=repo_id,
+                revision=revision,
+                token=settings.HF_ACCESS_TOKEN,
+                local_dir=relative_path,
+            )
+        except Exception as e:
+            logger.error(f"Failed to download model from Hugging Face: {e}")
+
     async def download(self, fp, url):
         async with self.semaphore:
             retries = 0
@@ -581,6 +596,8 @@ class JobRunner:
                 await self._unpack_single_file_volume(volume)
             elif isinstance(volume, MultiVolume):
                 await self._unpack_multi_volume(volume)
+            elif isinstance(volume, HuggingfaceVolume):
+                await self._unpack_huggingface_volume(volume)
             else:
                 raise NotImplementedError(f"Unsupported volume_type: {volume.volume_type}")
 
@@ -608,6 +625,15 @@ class JobRunner:
                 extraction_path /= volume.relative_path
             zip_file.extractall(extraction_path.as_posix())
 
+    async def _unpack_huggingface_volume(self, volume: HuggingfaceVolume):
+        with tempfile.NamedTemporaryFile():
+            extraction_path = self.volume_mount_dir
+            if volume.relative_path:
+                extraction_path /= volume.relative_path
+            await self.download_manager.download_from_huggingface(
+                extraction_path, volume.repo_id, volume.revision
+            )
+
     async def _unpack_single_file_volume(self, volume: SingleFileVolume):
         file_path = self.volume_mount_dir / volume.relative_path
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -622,6 +648,8 @@ class JobRunner:
                 await self._unpack_zip_url_volume(sub_volume)
             elif isinstance(sub_volume, SingleFileVolume):
                 await self._unpack_single_file_volume(sub_volume)
+            elif isinstance(sub_volume, HuggingfaceVolume):
+                await self._unpack_huggingface_volume(sub_volume)
             else:
                 raise NotImplementedError(f"Unsupported sub-volume type: {type(sub_volume)}")
 
