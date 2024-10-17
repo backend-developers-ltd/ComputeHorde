@@ -3,11 +3,10 @@ import io
 
 import pytest
 
-from compute_horde.mv_protocol.validator_requests import (
+from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
-)
-from compute_horde.receipts.schemas import (
+    JobStillRunningReceiptPayload,
     Receipt,
     ReceiptType,
 )

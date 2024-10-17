@@ -34,14 +34,13 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
-    JobFinishedReceiptPayload,
-    JobStartedReceiptPayload,
     V0AuthenticateRequest,
     V0InitialJobRequest,
     V0JobFinishedReceiptRequest,
     V0JobRequest,
     V0JobStartedReceiptRequest,
 )
+from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStartedReceiptPayload
 from compute_horde.transport import AbstractTransport, TransportConnectionError, WSTransport
 from compute_horde.utils import MachineSpecs, Timer
 

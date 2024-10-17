@@ -10,12 +10,13 @@ import pydantic
 import requests
 
 from compute_horde.executor_class import ExecutorClass
-from compute_horde.mv_protocol.validator_requests import (
+from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
     JobStillRunningReceiptPayload,
+    Receipt,
+    ReceiptType,
 )
-from compute_horde.receipts.schemas import Receipt, ReceiptType
 
 logger = logging.getLogger(__name__)
 
