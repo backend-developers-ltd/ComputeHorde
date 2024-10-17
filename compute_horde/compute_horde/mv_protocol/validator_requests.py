@@ -91,15 +91,6 @@ class V0JobFinishedReceiptRequest(BaseValidatorRequest):
         return self.payload.blob_for_signing()
 
 
-class V0JobStartedReceiptRequest(BaseValidatorRequest):
-    message_type: RequestType = RequestType.V0JobStartedReceiptRequest
-    payload: JobStartedReceiptPayload
-    signature: str
-
-    def blob_for_signing(self):
-        return self.payload.blob_for_signing()
-
-
 class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0InitialJobRequest
     executor_class: ExecutorClass | None = None
@@ -107,9 +98,8 @@ class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     timeout_seconds: int | None = None
     volume: Volume | None = None
     volume_type: VolumeType | None = None
-
-    job_started_receipt_payload: JobStartedReceiptPayload | None = None
-    job_started_receipt_signature: str | None = None
+    job_started_receipt_payload: JobStartedReceiptPayload
+    job_started_receipt_signature: str
 
     @model_validator(mode="after")
     def validate_volume_or_volume_type(self) -> Self:

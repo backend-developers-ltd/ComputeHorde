@@ -7,7 +7,6 @@ import bittensor
 from pydantic import Field, BaseModel
 
 from compute_horde.executor_class import ExecutorClass
-from compute_horde.utils import empty_string_none
 
 
 class ReceiptType(enum.Enum):
@@ -31,9 +30,8 @@ class BaseReceiptPayload(BaseModel):
 class JobStartedReceiptPayload(BaseReceiptPayload):
     receipt_type: ReceiptType = ReceiptType.JobStartedReceipt
     executor_class: ExecutorClass
-    time_accepted: Annotated[datetime.datetime | None, empty_string_none]
     max_timeout: int  # seconds
-    ttl: Annotated[int | None, empty_string_none] = None  # seconds
+    ttl: int
 
 
 class JobStillRunningReceiptPayload(BaseReceiptPayload):
