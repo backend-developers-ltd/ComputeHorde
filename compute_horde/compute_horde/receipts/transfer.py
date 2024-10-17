@@ -11,9 +11,9 @@ import requests
 
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.receipts.schemas import (
+    JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
-    JobStillRunningReceiptPayload,
     Receipt,
     ReceiptType,
 )
@@ -46,9 +46,7 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
             try:
                 receipt_type = ReceiptType(raw_receipt["type"])
                 receipt_payload: (
-                    JobStartedReceiptPayload
-                    | JobFinishedReceiptPayload
-                    | JobStillRunningReceiptPayload
+                    JobStartedReceiptPayload | JobFinishedReceiptPayload | JobAcceptedReceiptPayload
                 )
 
                 match receipt_type:
@@ -76,8 +74,8 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                             score_str=raw_receipt["score_str"],
                         )
 
-                    case ReceiptType.JobStillRunningReceipt:
-                        receipt_payload = JobStillRunningReceiptPayload(
+                    case ReceiptType.JobAcceptedReceipt:
+                        receipt_payload = JobAcceptedReceiptPayload(
                             job_uuid=raw_receipt["job_uuid"],
                             miner_hotkey=raw_receipt["miner_hotkey"],
                             validator_hotkey=raw_receipt["validator_hotkey"],

@@ -4,14 +4,14 @@ import json
 from typing import Annotated
 
 import bittensor
-from pydantic import Field, BaseModel
+from pydantic import BaseModel, Field
 
 from compute_horde.executor_class import ExecutorClass
 
 
 class ReceiptType(enum.Enum):
     JobStartedReceipt = "JobStartedReceipt"
-    JobStillRunningReceipt = "JobStillRunningReceipt"
+    JobAcceptedReceipt = "JobAcceptedReceipt"
     JobFinishedReceipt = "JobFinishedReceipt"
 
 
@@ -34,8 +34,10 @@ class JobStartedReceiptPayload(BaseReceiptPayload):
     ttl: int
 
 
-class JobStillRunningReceiptPayload(BaseReceiptPayload):
-    receipt_type: ReceiptType = ReceiptType.JobStillRunningReceipt
+class JobAcceptedReceiptPayload(BaseReceiptPayload):
+    receipt_type: ReceiptType = ReceiptType.JobAcceptedReceipt
+    time_accepted: datetime.datetime
+    ttl: int
 
 
 class JobFinishedReceiptPayload(BaseReceiptPayload):
@@ -54,7 +56,7 @@ class JobFinishedReceiptPayload(BaseReceiptPayload):
 
 
 ReceiptPayload = Annotated[
-    JobStartedReceiptPayload | JobFinishedReceiptPayload | JobStillRunningReceiptPayload,
+    JobStartedReceiptPayload | JobAcceptedReceiptPayload | JobFinishedReceiptPayload,
     Field(discriminator="receipt_type"),
 ]
 

@@ -12,9 +12,9 @@ from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
 from ..executor_class import ExecutorClass
 from ..receipts.schemas import (
+    JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
-    JobStillRunningReceiptPayload,
 )
 from ..utils import MachineSpecs
 
@@ -26,9 +26,8 @@ class RequestType(enum.Enum):
     V0InitialJobRequest = "V0InitialJobRequest"
     V0MachineSpecsRequest = "V0MachineSpecsRequest"
     V0JobRequest = "V0JobRequest"
+    V0JobAcceptedReceiptRequest = "V0JobAcceptedReceiptRequest"
     V0JobFinishedReceiptRequest = "V0JobFinishedReceiptRequest"
-    V0JobStartedReceiptRequest = "V0JobStartedReceiptRequest"
-    V0JobStillRunningReceiptRequest = "V0JobStillRunningReceiptRequest"
     GenericError = "GenericError"
 
 
@@ -108,9 +107,9 @@ class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
         return self
 
 
-class V0JobStillRunningReceiptRequest(BaseValidatorRequest):
-    message_type: RequestType = RequestType.V0JobStillRunningReceiptRequest
-    payload: JobStillRunningReceiptPayload
+class V0JobAcceptedReceiptRequest(BaseValidatorRequest):
+    message_type: RequestType = RequestType.V0JobAcceptedReceiptRequest
+    payload: JobAcceptedReceiptPayload
     signature: str
 
     def blob_for_signing(self):

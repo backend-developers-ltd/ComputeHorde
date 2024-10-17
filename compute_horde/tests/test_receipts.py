@@ -6,7 +6,6 @@ import pytest
 from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
-    JobStillRunningReceiptPayload,
     Receipt,
     ReceiptType,
 )
