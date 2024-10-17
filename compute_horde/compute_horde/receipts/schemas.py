@@ -6,7 +6,7 @@ from typing import Annotated
 
 import bittensor
 import pydantic
-from pydantic import field_serializer
+from pydantic import Field, field_serializer
 
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.utils import _json_dumps_default, empty_string_none
@@ -21,6 +21,7 @@ class ReceiptType(enum.Enum):
 
 
 class ReceiptPayload(pydantic.BaseModel):
+    receipt_type: ReceiptType
     job_uuid: str
     miner_hotkey: str
     validator_hotkey: str
@@ -36,6 +37,7 @@ class ReceiptPayload(pydantic.BaseModel):
 
 
 class JobStartedReceiptPayload(ReceiptPayload):
+    receipt_type: ReceiptType = ReceiptType.JobStartedReceipt
     executor_class: ExecutorClass
     time_accepted: Annotated[datetime.datetime | None, empty_string_none]
     max_timeout: int  # seconds
@@ -47,10 +49,11 @@ class JobStartedReceiptPayload(ReceiptPayload):
 
 
 class JobStillRunningReceiptPayload(ReceiptPayload):
-    pass
+    receipt_type: ReceiptType = ReceiptType.JobStillRunningReceipt
 
 
 class JobFinishedReceiptPayload(ReceiptPayload):
+    receipt_type: ReceiptType = ReceiptType.JobFinishedReceipt
     time_started: datetime.datetime
     time_took_us: int  # micro-seconds
     score_str: str
@@ -68,8 +71,14 @@ class JobFinishedReceiptPayload(ReceiptPayload):
         return dt.isoformat()
 
 
+ReceiptPayload = Annotated[
+    JobStartedReceiptPayload | JobFinishedReceiptPayload | JobStillRunningReceiptPayload,
+    Field(discriminator="receipt_type"),
+]
+
+
 class Receipt(pydantic.BaseModel):
-    payload: JobStartedReceiptPayload | JobFinishedReceiptPayload | JobStillRunningReceiptPayload
+    payload: ReceiptPayload
     validator_signature: str
     miner_signature: str
 
