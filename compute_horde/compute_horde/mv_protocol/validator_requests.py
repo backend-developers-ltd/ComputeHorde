@@ -54,6 +54,23 @@ class V0AuthenticateRequest(BaseValidatorRequest):
         return self.payload.blob_for_signing()
 
 
+class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
+    message_type: RequestType = RequestType.V0InitialJobRequest
+    executor_class: ExecutorClass | None = None
+    base_docker_image_name: str | None = None
+    timeout_seconds: int | None = None
+    volume: Volume | None = None
+    volume_type: VolumeType | None = None
+    job_started_receipt_payload: JobStartedReceiptPayload
+    job_started_receipt_signature: str
+
+    @model_validator(mode="after")
+    def validate_volume_or_volume_type(self) -> Self:
+        if bool(self.volume) and bool(self.volume_type):
+            raise ValueError("Expected either `volume` or `volume_type`, got both")
+        return self
+
+
 class V0JobRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0JobRequest
     executor_class: ExecutorClass | None = None
@@ -88,23 +105,6 @@ class V0JobFinishedReceiptRequest(BaseValidatorRequest):
 
     def blob_for_signing(self):
         return self.payload.blob_for_signing()
-
-
-class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
-    message_type: RequestType = RequestType.V0InitialJobRequest
-    executor_class: ExecutorClass | None = None
-    base_docker_image_name: str | None = None
-    timeout_seconds: int | None = None
-    volume: Volume | None = None
-    volume_type: VolumeType | None = None
-    job_started_receipt_payload: JobStartedReceiptPayload
-    job_started_receipt_signature: str
-
-    @model_validator(mode="after")
-    def validate_volume_or_volume_type(self) -> Self:
-        if bool(self.volume) and bool(self.volume_type):
-            raise ValueError("Expected either `volume` or `volume_type`, got both")
-        return self
 
 
 class V0JobAcceptedReceiptRequest(BaseValidatorRequest):
