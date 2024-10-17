@@ -1,7 +1,7 @@
 import datetime
 import enum
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 
 import bittensor
 from pydantic import BaseModel, Field
@@ -16,7 +16,6 @@ class ReceiptType(enum.Enum):
 
 
 class BaseReceiptPayload(BaseModel):
-    receipt_type: ReceiptType
     job_uuid: str
     miner_hotkey: str
     validator_hotkey: str
@@ -28,20 +27,20 @@ class BaseReceiptPayload(BaseModel):
 
 
 class JobStartedReceiptPayload(BaseReceiptPayload):
-    receipt_type: ReceiptType = ReceiptType.JobStartedReceipt
+    receipt_type: Literal[ReceiptType.JobStartedReceipt] = ReceiptType.JobStartedReceipt
     executor_class: ExecutorClass
     max_timeout: int  # seconds
     ttl: int
 
 
 class JobAcceptedReceiptPayload(BaseReceiptPayload):
-    receipt_type: ReceiptType = ReceiptType.JobAcceptedReceipt
+    receipt_type: Literal[ReceiptType.JobAcceptedReceipt] = ReceiptType.JobAcceptedReceipt
     time_accepted: datetime.datetime
     ttl: int
 
 
 class JobFinishedReceiptPayload(BaseReceiptPayload):
-    receipt_type: ReceiptType = ReceiptType.JobFinishedReceipt
+    receipt_type: Literal[ReceiptType.JobFinishedReceipt] = ReceiptType.JobFinishedReceipt
     time_started: datetime.datetime
     time_took_us: int  # micro-seconds
     score_str: str
