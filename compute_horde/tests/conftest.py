@@ -5,11 +5,11 @@ import responses
 from bittensor import Keypair
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.mv_protocol.validator_requests import (
+from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
+    Receipt,
 )
-from compute_horde.receipts.schemas import Receipt
 
 
 @pytest.fixture
