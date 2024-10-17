@@ -13,7 +13,7 @@ from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
-from compute_horde.executor_class import ExecutorClass
+from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     ErrorCallback,
@@ -36,15 +36,21 @@ from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
     V0AuthenticateRequest,
     V0InitialJobRequest,
+    V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
     V0JobRequest,
-    V0JobStartedReceiptRequest,
 )
-from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStartedReceiptPayload
+from compute_horde.receipts.schemas import (
+    JobAcceptedReceiptPayload,
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+)
 from compute_horde.transport import AbstractTransport, TransportConnectionError, WSTransport
 from compute_horde.utils import MachineSpecs, Timer
 
 logger = logging.getLogger(__name__)
+
+JOB_STARTED_RECEIPT_MIN_TTL = 30
 
 
 class OrganicMinerClient(AbstractMinerClient):
@@ -216,39 +222,54 @@ class OrganicMinerClient(AbstractMinerClient):
     def generate_job_started_receipt_message(
         self,
         executor_class: ExecutorClass,
-        accepted_timestamp: float,
         max_timeout: int,
-    ) -> V0JobStartedReceiptRequest:
-        time_accepted = datetime.datetime.fromtimestamp(accepted_timestamp, datetime.UTC)
+        ttl: int,
+    ) -> tuple[JobStartedReceiptPayload, str]:
         receipt_payload = JobStartedReceiptPayload(
             job_uuid=self.job_uuid,
             miner_hotkey=self.miner_hotkey,
             validator_hotkey=self.my_hotkey,
+            timestamp=datetime.datetime.now(datetime.UTC),
             executor_class=executor_class,
-            time_accepted=time_accepted,
             max_timeout=max_timeout,
+            ttl=ttl,
         )
-        return V0JobStartedReceiptRequest(
+        signature = f"0x{self.my_keypair.sign(receipt_payload.blob_for_signing()).hex()}"
+        return receipt_payload, signature
+
+    def generate_job_accepted_receipt_message(
+        self,
+        accepted_timestamp: float,
+        ttl: int,
+    ) -> V0JobAcceptedReceiptRequest:
+        time_accepted = datetime.datetime.fromtimestamp(accepted_timestamp, datetime.UTC)
+        receipt_payload = JobAcceptedReceiptPayload(
+            job_uuid=self.job_uuid,
+            miner_hotkey=self.miner_hotkey,
+            validator_hotkey=self.my_hotkey,
+            timestamp=datetime.datetime.now(datetime.UTC),
+            time_accepted=time_accepted,
+            ttl=ttl,
+        )
+        return V0JobAcceptedReceiptRequest(
             payload=receipt_payload,
             signature=f"0x{self.my_keypair.sign(receipt_payload.blob_for_signing()).hex()}",
         )
 
-    async def send_job_started_receipt_message(
+    async def send_job_accepted_receipt_message(
         self,
-        executor_class: ExecutorClass,
         accepted_timestamp: float,
-        max_timeout: int,
+        ttl: int,
     ) -> None:
         try:
-            receipt_message = self.generate_job_started_receipt_message(
-                executor_class,
+            receipt_message = self.generate_job_accepted_receipt_message(
                 accepted_timestamp,
-                max_timeout,
+                ttl,
             )
             await self.send_model(receipt_message)
-            logger.debug(f"Sent job started receipt for {self.job_uuid}")
+            logger.debug(f"Sent job accepted receipt for {self.job_uuid}")
         except Exception as e:
-            comment = f"Failed to send job started receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
+            comment = f"Failed to send job accepted receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
             logger.warning(comment)
             await self.notify_receipt_failure(comment)
 
@@ -263,6 +284,7 @@ class OrganicMinerClient(AbstractMinerClient):
             job_uuid=self.job_uuid,
             miner_hotkey=self.miner_hotkey,
             validator_hotkey=self.my_hotkey,
+            timestamp=datetime.datetime.now(datetime.UTC),
             time_started=time_started,
             time_took_us=int(time_took_seconds * 1_000_000),
             score_str=f"{score:.6f}",
@@ -318,9 +340,9 @@ class OrganicJobError(Exception):
         self.received = received
 
     def __str__(self):
-        s = f"Organic job failed, received: {self.received_str()}"
+        s = f"Organic job failed, {self.reason=}"
         if self.received:
-            s += f", {self.received=}"
+            s += f", received: {self.received_str()}"
         return s
 
     def __repr__(self):
@@ -372,6 +394,14 @@ async def run_organic_job(
 
         job_timer = Timer(timeout=job_details.total_job_timeout)
 
+        receipt_payload, receipt_signature = client.generate_job_started_receipt_message(
+            executor_class=job_details.executor_class,
+            max_timeout=int(job_timer.time_left()),
+            ttl=max(
+                JOB_STARTED_RECEIPT_MIN_TTL,
+                EXECUTOR_CLASS[job_details.executor_class].spin_up_time or 0,
+            ),
+        )
         await client.send_model(
             V0InitialJobRequest(
                 job_uuid=job_details.job_uuid,
@@ -379,6 +409,8 @@ async def run_organic_job(
                 base_docker_image_name=job_details.docker_image,
                 timeout_seconds=job_details.total_job_timeout,
                 volume_type=job_details.volume.volume_type if job_details.volume else None,
+                job_started_receipt_payload=receipt_payload,
+                job_started_receipt_signature=receipt_signature,
             ),
         )
 
@@ -406,10 +438,9 @@ async def run_organic_job(
 
         await client.notify_executor_ready(executor_readiness_response)
 
-        await client.send_job_started_receipt_message(
-            executor_class=job_details.executor_class,
+        await client.send_job_accepted_receipt_message(
             accepted_timestamp=time.time(),
-            max_timeout=int(job_timer.time_left()),
+            ttl=int(job_timer.time_left()),
         )
 
         await client.send_model(
