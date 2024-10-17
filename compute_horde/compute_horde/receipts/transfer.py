@@ -1,6 +1,5 @@
 import contextlib
 import csv
-import datetime
 import io
 import logging
 import shutil
@@ -15,6 +14,7 @@ from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
     Receipt,
+    ReceiptPayload,
     ReceiptType,
 )
 
@@ -45,9 +45,7 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
         for raw_receipt in csv_reader:
             try:
                 receipt_type = ReceiptType(raw_receipt["type"])
-                receipt_payload: (
-                    JobStartedReceiptPayload | JobFinishedReceiptPayload | JobAcceptedReceiptPayload
-                )
+                receipt_payload: ReceiptPayload
 
                 match receipt_type:
                     case ReceiptType.JobStartedReceipt:
@@ -55,11 +53,10 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                             job_uuid=raw_receipt["job_uuid"],
                             miner_hotkey=raw_receipt["miner_hotkey"],
                             validator_hotkey=raw_receipt["validator_hotkey"],
+                            timestamp=raw_receipt["timestamp"],  # type: ignore[arg-type]
                             executor_class=ExecutorClass(raw_receipt["executor_class"]),
-                            time_accepted=datetime.datetime.fromisoformat(
-                                raw_receipt["time_accepted"]
-                            ),
                             max_timeout=int(raw_receipt["max_timeout"]),
+                            ttl=int(raw_receipt["ttl"]),
                         )
 
                     case ReceiptType.JobFinishedReceipt:
@@ -67,9 +64,8 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                             job_uuid=raw_receipt["job_uuid"],
                             miner_hotkey=raw_receipt["miner_hotkey"],
                             validator_hotkey=raw_receipt["validator_hotkey"],
-                            time_started=datetime.datetime.fromisoformat(
-                                raw_receipt["time_started"]
-                            ),
+                            timestamp=raw_receipt["timestamp"],  # type: ignore[arg-type]
+                            time_started=raw_receipt["time_started"],  # type: ignore[arg-type]
                             time_took_us=int(raw_receipt["time_took_us"]),
                             score_str=raw_receipt["score_str"],
                         )
@@ -79,7 +75,9 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                             job_uuid=raw_receipt["job_uuid"],
                             miner_hotkey=raw_receipt["miner_hotkey"],
                             validator_hotkey=raw_receipt["validator_hotkey"],
-                            timestamp=datetime.datetime.fromisoformat(raw_receipt["timestamp"]),
+                            timestamp=raw_receipt["timestamp"],  # type: ignore[arg-type]
+                            time_accepted=raw_receipt["time_accepted"],  # type: ignore[arg-type]
+                            ttl=int(raw_receipt["ttl"]),
                         )
 
                 receipt = Receipt(
