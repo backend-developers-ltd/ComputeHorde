@@ -1,17 +1,13 @@
 import datetime
 import enum
 import json
-import logging
 from typing import Annotated
 
 import bittensor
-import pydantic
-from pydantic import Field, field_serializer
+from pydantic import Field, field_serializer, BaseModel
 
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.utils import _json_dumps_default, empty_string_none
-
-logger = logging.getLogger(__name__)
 
 
 class ReceiptType(enum.Enum):
@@ -20,7 +16,7 @@ class ReceiptType(enum.Enum):
     JobFinishedReceipt = "JobFinishedReceipt"
 
 
-class ReceiptPayload(pydantic.BaseModel):
+class BaseReceiptPayload(BaseModel):
     receipt_type: ReceiptType
     job_uuid: str
     miner_hotkey: str
@@ -36,7 +32,7 @@ class ReceiptPayload(pydantic.BaseModel):
         return json.dumps(self.model_dump(), sort_keys=True, default=_json_dumps_default)
 
 
-class JobStartedReceiptPayload(ReceiptPayload):
+class JobStartedReceiptPayload(BaseReceiptPayload):
     receipt_type: ReceiptType = ReceiptType.JobStartedReceipt
     executor_class: ExecutorClass
     time_accepted: Annotated[datetime.datetime | None, empty_string_none]
@@ -44,15 +40,15 @@ class JobStartedReceiptPayload(ReceiptPayload):
     ttl: Annotated[int | None, empty_string_none] = None  # seconds
 
     @field_serializer("time_accepted", when_used="unless-none")
-    def serialize_dt(self, dt: datetime.datetime, _info):
+    def serialize_time_accepted(self, dt: datetime.datetime, _info):
         return dt.isoformat()
 
 
-class JobStillRunningReceiptPayload(ReceiptPayload):
+class JobStillRunningReceiptPayload(BaseReceiptPayload):
     receipt_type: ReceiptType = ReceiptType.JobStillRunningReceipt
 
 
-class JobFinishedReceiptPayload(ReceiptPayload):
+class JobFinishedReceiptPayload(BaseReceiptPayload):
     receipt_type: ReceiptType = ReceiptType.JobFinishedReceipt
     time_started: datetime.datetime
     time_took_us: int  # micro-seconds
@@ -67,7 +63,7 @@ class JobFinishedReceiptPayload(ReceiptPayload):
         return float(self.score_str)
 
     @field_serializer("time_started")
-    def serialize_dt(self, dt: datetime.datetime, _info):
+    def serialize_time_started(self, dt: datetime.datetime, _info):
         return dt.isoformat()
 
 
@@ -77,7 +73,7 @@ ReceiptPayload = Annotated[
 ]
 
 
-class Receipt(pydantic.BaseModel):
+class Receipt(BaseModel):
     payload: ReceiptPayload
     validator_signature: str
     miner_signature: str
