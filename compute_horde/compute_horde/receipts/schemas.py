@@ -4,10 +4,10 @@ import json
 from typing import Annotated
 
 import bittensor
-from pydantic import Field, field_serializer, BaseModel
+from pydantic import Field, BaseModel
 
 from compute_horde.executor_class import ExecutorClass
-from compute_horde.utils import _json_dumps_default, empty_string_none
+from compute_horde.utils import empty_string_none
 
 
 class ReceiptType(enum.Enum):
@@ -23,13 +23,9 @@ class BaseReceiptPayload(BaseModel):
     validator_hotkey: str
     timestamp: datetime.datetime  # when the receipt was generated
 
-    @field_serializer("timestamp")
-    def serialize_timestamp(self, dt: datetime.datetime, _info):
-        return dt.isoformat()
-
     def blob_for_signing(self):
         # pydantic v2 does not support sort_keys anymore.
-        return json.dumps(self.model_dump(), sort_keys=True, default=_json_dumps_default)
+        return json.dumps(self.model_dump(mode="json"), sort_keys=True)
 
 
 class JobStartedReceiptPayload(BaseReceiptPayload):
@@ -38,10 +34,6 @@ class JobStartedReceiptPayload(BaseReceiptPayload):
     time_accepted: Annotated[datetime.datetime | None, empty_string_none]
     max_timeout: int  # seconds
     ttl: Annotated[int | None, empty_string_none] = None  # seconds
-
-    @field_serializer("time_accepted", when_used="unless-none")
-    def serialize_time_accepted(self, dt: datetime.datetime, _info):
-        return dt.isoformat()
 
 
 class JobStillRunningReceiptPayload(BaseReceiptPayload):
@@ -61,10 +53,6 @@ class JobFinishedReceiptPayload(BaseReceiptPayload):
     @property
     def score(self):
         return float(self.score_str)
-
-    @field_serializer("time_started")
-    def serialize_time_started(self, dt: datetime.datetime, _info):
-        return dt.isoformat()
 
 
 ReceiptPayload = Annotated[

@@ -53,13 +53,6 @@ def get_validators(netuid=12, network="finney", block: int | None = None) -> lis
     return neurons[:VALIDATORS_LIMIT]
 
 
-def _json_dumps_default(obj):
-    if isinstance(obj, datetime.datetime):
-        return obj.isoformat()
-
-    raise TypeError
-
-
 class Timer:
     def __init__(self, timeout=None):
         self.start_time = datetime.datetime.now()
