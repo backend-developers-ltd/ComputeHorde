@@ -10,7 +10,8 @@ from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.validator_requests import (
     BaseValidatorRequest,
 )
-from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.schemas import JobStartedReceiptPayload, ReceiptPayload
 from django.conf import settings
 from django.utils import timezone
 
@@ -156,32 +157,26 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
         return False, "Signature mismatches"
 
-    def verify_receipt_msg(
-        self,
-        msg: validator_requests.V0JobStartedReceiptRequest
-        | validator_requests.V0JobFinishedReceiptRequest,
-    ) -> bool:
+    def verify_receipt_payload(self, payload: ReceiptPayload, signature: str) -> bool:
         if settings.IS_LOCAL_MINER:
             return True
 
-        if self.my_hotkey != DONT_CHECK and msg.payload.miner_hotkey != self.my_hotkey:
+        if self.my_hotkey != DONT_CHECK and payload.miner_hotkey != self.my_hotkey:
             logger.warning(
-                f"Miner hotkey mismatch in receipt for job_uuid {msg.payload.job_uuid} ({msg.payload.miner_hotkey!r} != {self.my_hotkey!r})"
+                f"Miner hotkey mismatch in receipt for job_uuid {payload.job_uuid} ({payload.miner_hotkey!r} != {self.my_hotkey!r})"
             )
             return False
-        if msg.payload.validator_hotkey != self.validator_key:
+        if payload.validator_hotkey != self.validator_key:
             logger.warning(
-                f"Validator hotkey mismatch in receipt for job_uuid {msg.payload.job_uuid} ({msg.payload.validator_hotkey!r} != {self.validator_key!r})"
+                f"Validator hotkey mismatch in receipt for job_uuid {payload.job_uuid} ({payload.validator_hotkey!r} != {self.validator_key!r})"
             )
             return False
 
         keypair = bittensor.Keypair(ss58_address=self.validator_key)
-        if keypair.verify(msg.blob_for_signing(), msg.signature):
+        if keypair.verify(payload.blob_for_signing(), signature):
             return True
 
-        logger.warning(
-            f"Validator signature mismatch in receipt for job_uuid {msg.payload.job_uuid}"
-        )
+        logger.warning(f"Validator signature mismatch in receipt for job_uuid {payload.job_uuid}")
         return False
 
     async def handle_authentication(self, msg: validator_requests.V0AuthenticateRequest):
@@ -299,13 +294,13 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await self.handle_job_request(msg)
 
         if isinstance(
-            msg, validator_requests.V0JobStartedReceiptRequest
-        ) and self.verify_receipt_msg(msg):
-            await self.handle_job_started_receipt(msg)
+            msg, validator_requests.V0JobAcceptedReceiptRequest
+        ) and self.verify_receipt_payload(msg.payload, msg.signature):
+            await self.handle_job_accepted_receipt(msg)
 
         if isinstance(
             msg, validator_requests.V0JobFinishedReceiptRequest
-        ) and self.verify_receipt_msg(msg):
+        ) and self.verify_receipt_payload(msg.payload, msg.signature):
             await self.handle_job_finished_receipt(msg)
 
     async def handle_initial_job_request(self, msg: validator_requests.V0InitialJobRequest):
@@ -320,6 +315,11 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
             )
             return
+
+        await self.handle_job_started_receipt(
+            msg.job_started_receipt_payload, msg.job_started_receipt_signature
+        )
+
         # TODO add rate limiting per validator key here
         token = f"{msg.job_uuid}-{uuid.uuid4()}"
         await self.group_add(token)
@@ -378,26 +378,52 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         job.full_job_details = msg.model_dump()
         await job.asave()
 
-    async def handle_job_started_receipt(self, msg: validator_requests.V0JobStartedReceiptRequest):
+    async def handle_job_started_receipt(self, payload: JobStartedReceiptPayload, signature: str):
         logger.info(
             f"Received job started receipt for"
-            f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
-            f" max_timeout={msg.payload.max_timeout}"
+            f" job_uuid={payload.job_uuid} validator_hotkey={payload.validator_hotkey}"
+            f" max_timeout={payload.max_timeout}"
         )
 
         if settings.IS_LOCAL_MINER:
             return
 
+        if not self.verify_receipt_payload(payload, signature):
+            return
+
         await JobStartedReceipt.objects.acreate(
-            job_uuid=msg.payload.job_uuid,
-            validator_hotkey=msg.payload.validator_hotkey,
-            miner_hotkey=msg.payload.miner_hotkey,
+            job_uuid=payload.job_uuid,
+            validator_hotkey=payload.validator_hotkey,
+            miner_hotkey=payload.miner_hotkey,
+            validator_signature=signature,
+            miner_signature=get_miner_signature(payload),
+            timestamp=payload.timestamp,
+            executor_class=payload.executor_class,
+            max_timeout=payload.max_timeout,
+            ttl=payload.ttl,
+        )
+
+    async def handle_job_accepted_receipt(
+        self, msg: validator_requests.V0JobAcceptedReceiptRequest
+    ):
+        logger.info(
+            f"Received job accepted receipt for"
+            f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
+        )
+
+        if settings.IS_LOCAL_MINER:
+            return
+
+        await JobAcceptedReceipt.objects.acreate(
             validator_signature=msg.signature,
             miner_signature=get_miner_signature(msg),
-            executor_class=msg.payload.executor_class,
-            time_accepted=msg.payload.time_accepted,
-            max_timeout=msg.payload.max_timeout,
+            job_uuid=msg.payload.job_uuid,
+            miner_hotkey=msg.payload.miner_hotkey,
+            validator_hotkey=msg.payload.validator_hotkey,
+            timestamp=msg.payload.timestamp,
+            ttl=msg.payload.ttl,
         )
+        prepare_receipts.delay()
 
     async def handle_job_finished_receipt(
         self, msg: validator_requests.V0JobFinishedReceiptRequest
@@ -421,6 +447,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job_uuid=msg.payload.job_uuid,
             miner_hotkey=msg.payload.miner_hotkey,
             validator_hotkey=msg.payload.validator_hotkey,
+            timestamp=msg.payload.timestamp,
             time_started=msg.payload.time_started,
             time_took_us=msg.payload.time_took_us,
             score_str=msg.payload.score_str,
