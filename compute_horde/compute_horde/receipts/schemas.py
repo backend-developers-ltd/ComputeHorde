@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from compute_horde.executor_class import ExecutorClass
 
 
-class ReceiptType(enum.Enum):
+class ReceiptType(enum.StrEnum):
     JobStartedReceipt = "JobStartedReceipt"
     JobAcceptedReceipt = "JobAcceptedReceipt"
     JobFinishedReceipt = "JobFinishedReceipt"
