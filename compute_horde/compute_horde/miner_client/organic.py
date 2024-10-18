@@ -415,60 +415,69 @@ async def run_organic_job(
         )
 
         try:
-            initial_response = await asyncio.wait_for(
-                client.miner_accepting_or_declining_future,
-                timeout=min(job_timer.time_left(), wait_timeout),
+            try:
+                initial_response = await asyncio.wait_for(
+                    client.miner_accepting_or_declining_future,
+                    timeout=min(job_timer.time_left(), wait_timeout),
+                )
+            except TimeoutError as exc:
+                raise OrganicJobError(FailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
+            if isinstance(initial_response, V0DeclineJobRequest):
+                raise OrganicJobError(FailureReason.JOB_DECLINED, initial_response)
+
+            await client.notify_job_accepted(initial_response)
+
+            try:
+                executor_readiness_response = await asyncio.wait_for(
+                    client.executor_ready_or_failed_future,
+                    timeout=min(job_timer.time_left(), wait_timeout),
+                )
+            except TimeoutError as exc:
+                raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
+            if isinstance(executor_readiness_response, V0ExecutorFailedRequest):
+                raise OrganicJobError(FailureReason.EXECUTOR_FAILED, executor_readiness_response)
+
+            await client.notify_executor_ready(executor_readiness_response)
+
+            await client.send_job_accepted_receipt_message(
+                accepted_timestamp=time.time(),
+                ttl=int(job_timer.time_left()),
             )
-        except TimeoutError as exc:
-            raise OrganicJobError(FailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
-        if isinstance(initial_response, V0DeclineJobRequest):
-            raise OrganicJobError(FailureReason.JOB_DECLINED, initial_response)
 
-        await client.notify_job_accepted(initial_response)
-
-        try:
-            executor_readiness_response = await asyncio.wait_for(
-                client.executor_ready_or_failed_future,
-                timeout=min(job_timer.time_left(), wait_timeout),
+            await client.send_model(
+                V0JobRequest(
+                    job_uuid=job_details.job_uuid,
+                    executor_class=job_details.executor_class,
+                    docker_image_name=job_details.docker_image,
+                    raw_script=job_details.raw_script,
+                    docker_run_options_preset=job_details.docker_run_options_preset,
+                    docker_run_cmd=job_details.docker_run_cmd,
+                    volume=job_details.volume,
+                    output_upload=job_details.output,
+                )
             )
-        except TimeoutError as exc:
-            raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
-        if isinstance(executor_readiness_response, V0ExecutorFailedRequest):
-            raise OrganicJobError(FailureReason.EXECUTOR_FAILED, executor_readiness_response)
 
-        await client.notify_executor_ready(executor_readiness_response)
+            try:
+                final_response = await asyncio.wait_for(
+                    client.miner_finished_or_failed_future,
+                    timeout=job_timer.time_left(),
+                )
+                if isinstance(final_response, V0JobFailedRequest):
+                    raise OrganicJobError(FailureReason.JOB_FAILED, final_response)
 
-        await client.send_job_accepted_receipt_message(
-            accepted_timestamp=time.time(),
-            ttl=int(job_timer.time_left()),
-        )
+                await client.send_job_finished_receipt_message(
+                    started_timestamp=job_timer.start_time.timestamp(),
+                    time_took_seconds=job_timer.passed_time(),
+                    score=0,  # no score for organic jobs (at least right now)
+                )
 
-        await client.send_model(
-            V0JobRequest(
-                job_uuid=job_details.job_uuid,
-                executor_class=job_details.executor_class,
-                docker_image_name=job_details.docker_image,
-                raw_script=job_details.raw_script,
-                docker_run_options_preset=job_details.docker_run_options_preset,
-                docker_run_cmd=job_details.docker_run_cmd,
-                volume=job_details.volume,
-                output_upload=job_details.output,
-            )
-        )
-
-        try:
-            final_response = await asyncio.wait_for(
-                client.miner_finished_or_failed_future,
-                timeout=job_timer.time_left(),
-            )
-            if isinstance(final_response, V0JobFailedRequest):
-                raise OrganicJobError(FailureReason.JOB_FAILED, final_response)
-            return final_response.docker_process_stdout, final_response.docker_process_stderr
-        except TimeoutError as exc:
-            raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
-        finally:
+                return final_response.docker_process_stdout, final_response.docker_process_stderr
+            except TimeoutError as exc:
+                raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
+        except Exception:
             await client.send_job_finished_receipt_message(
                 started_timestamp=job_timer.start_time.timestamp(),
                 time_took_seconds=job_timer.passed_time(),
-                score=0,  # no score for organic jobs (at least right now)
+                score=0,
             )
+            raise
