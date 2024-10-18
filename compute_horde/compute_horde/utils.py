@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 import bittensor
 import pydantic
+from pydantic import BeforeValidator
 from substrateinterface.exceptions import SubstrateRequestException
 
 if TYPE_CHECKING:
@@ -52,13 +53,6 @@ def get_validators(netuid=12, network="finney", block: int | None = None) -> lis
     return neurons[:VALIDATORS_LIMIT]
 
 
-def _json_dumps_default(obj):
-    if isinstance(obj, datetime.datetime):
-        return obj.isoformat()
-
-    raise TypeError
-
-
 class Timer:
     def __init__(self, timeout=None):
         self.start_time = datetime.datetime.now()
@@ -71,3 +65,16 @@ class Timer:
         if self.timeout is None:
             raise ValueError("timeout was not specified")
         return self.timeout - self.passed_time()
+
+
+def _empty_string_none(value: Any) -> Any:
+    """
+    Converts value to None if it is empty-string, otherwise returns the same value.
+    Intended to be used with pydantic validators.
+    """
+    if value == "":
+        return None
+    return value
+
+
+empty_string_none = BeforeValidator(_empty_string_none)
