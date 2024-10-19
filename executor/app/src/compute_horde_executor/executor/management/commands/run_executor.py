@@ -322,11 +322,16 @@ class DownloadManager:
         self, relative_path: pathlib.Path, repo_id: str, revision: str
     ):
         try:
+            t1 = time.time()
             snapshot_download(
                 repo_id=repo_id,
                 revision=revision,
                 token=settings.HF_ACCESS_TOKEN,
                 local_dir=relative_path,
+            )
+            time_took = time.time() - t1
+            logger.info(
+                f"Downloaded Huggingface model in {time_took:.2f} seconds: {repo_id=}, {revision=}"
             )
         except Exception as e:
             logger.error(f"Failed to download model from Hugging Face: {e}")
