@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import datetime
 import io
 import json
 import os
@@ -14,6 +15,7 @@ from channels.layers import get_channel_layer
 from compute_horde.base.volume import InlineVolume, VolumeType
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol import validator_requests
+from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from django.conf import settings
 
 from compute_horde_miner.channel_layer.channel_layer import ECRedisChannelLayer
@@ -148,12 +150,25 @@ async def drive_executor() -> float:
     job_uuid = str(uuid.uuid4())
     executor_token = f"{job_uuid}-{uuid.uuid4()}"
 
+    keypair = settings.BITTENSOR_WALLET().get_hotkey()
+    receipt_payload = JobStartedReceiptPayload(
+        job_uuid=job_uuid,
+        miner_hotkey=keypair.ss58_address,
+        validator_hotkey=keypair.ss58_address,
+        timestamp=datetime.datetime.now(datetime.UTC),
+        executor_class=DEFAULT_EXECUTOR_CLASS,
+        max_timeout=JOB_TIMEOUT_SECONDS,
+        ttl=30,
+    )
+    receipt_signature = f"0x{keypair.sign(receipt_payload.blob_for_signing()).hex()}"
     initial_job_request = validator_requests.V0InitialJobRequest(
         job_uuid=job_uuid,
         executor_class=DEFAULT_EXECUTOR_CLASS,
         base_docker_image_name=JOB_IMAGE_NAME,
         timeout_seconds=JOB_TIMEOUT_SECONDS,
         volume_type=VolumeType.inline,
+        job_started_receipt_payload=receipt_payload,
+        job_started_receipt_signature=receipt_signature,
     )
     job_request = validator_requests.V0JobRequest(
         job_uuid=job_uuid,
