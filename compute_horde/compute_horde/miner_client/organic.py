@@ -145,6 +145,12 @@ class OrganicMinerClient(AbstractMinerClient):
     async def notify_send_failure(self, msg: str) -> None:
         """This method is called when sending messages to miner fails"""
 
+    async def notify_job_accepted(self, msg: V0AcceptJobRequest) -> None:
+        """This method is called when miner sends job accepted message"""
+
+    async def notify_executor_ready(self, msg: V0ExecutorReadyRequest) -> None:
+        """This method is called when miner sends executor ready message"""
+
     async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
         try:
             self.miner_manifest.set_result(msg.manifest)
@@ -314,13 +320,18 @@ class OrganicJobError(Exception):
         self.received = received
 
     def __str__(self):
-        s = f"Organic job failed, {self.reason=}"
+        s = f"Organic job failed, received: {self.received_str()}"
         if self.received:
             s += f", {self.received=}"
         return s
 
     def __repr__(self):
         return f"{type(self).__name__}: {str(self)}"
+
+    def received_str(self) -> str:
+        if not self.received:
+            return ""
+        return self.received.model_dump_json()
 
 
 @dataclass
@@ -383,6 +394,8 @@ async def run_organic_job(
         if isinstance(initial_response, V0DeclineJobRequest):
             raise OrganicJobError(FailureReason.JOB_DECLINED, initial_response)
 
+        await client.notify_job_accepted(initial_response)
+
         try:
             executor_readiness_response = await asyncio.wait_for(
                 client.executor_ready_or_failed_future,
@@ -391,7 +404,9 @@ async def run_organic_job(
         except TimeoutError as exc:
             raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
         if isinstance(executor_readiness_response, V0ExecutorFailedRequest):
-            raise OrganicJobError(FailureReason.EXECUTOR_FAILED, initial_response)
+            raise OrganicJobError(FailureReason.EXECUTOR_FAILED, executor_readiness_response)
+
+        await client.notify_executor_ready(executor_readiness_response)
 
         await client.send_job_started_receipt_message(
             executor_class=job_details.executor_class,
