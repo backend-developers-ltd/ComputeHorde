@@ -1034,9 +1034,12 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,
             validator_hotkey=receipt.payload.validator_hotkey,
+            miner_signature=receipt.miner_signature,
+            validator_signature=receipt.validator_signature,
             timestamp=receipt.payload.timestamp,
             executor_class=receipt.payload.executor_class,
             max_timeout=receipt.payload.max_timeout,
+            ttl=receipt.payload.ttl,
         )
         for receipt in receipts
         if isinstance(receipt.payload, JobStartedReceiptPayload)
@@ -1059,6 +1062,8 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,
             validator_hotkey=receipt.payload.validator_hotkey,
+            miner_signature=receipt.miner_signature,
+            validator_signature=receipt.validator_signature,
             timestamp=receipt.payload.timestamp,
             ttl=receipt.payload.ttl,
         )
@@ -1083,6 +1088,8 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,
             validator_hotkey=receipt.payload.validator_hotkey,
+            miner_signature=receipt.miner_signature,
+            validator_signature=receipt.validator_signature,
             timestamp=receipt.payload.timestamp,
             time_started=receipt.payload.time_started,
             time_took_us=receipt.payload.time_took_us,
