@@ -3,6 +3,8 @@ import shlex
 import uuid
 from os import urandom
 
+from compute_horde.base.output_upload import OutputUpload, ZipAndHttpPutUpload
+from compute_horde.base.volume import Volume, ZipUrlVolume
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
@@ -237,6 +239,18 @@ class AdminJobRequest(models.Model):
 
     def __str__(self):
         return f"uuid: {self.uuid} - miner hotkey: {self.miner.hotkey}"
+
+    @property
+    def volume(self) -> Volume | None:
+        if self.input_url:
+            return ZipUrlVolume(contents=self.input_url)
+        return None
+
+    @property
+    def output_upload(self) -> OutputUpload | None:
+        if self.output_url:
+            return ZipAndHttpPutUpload(url=self.output_url)
+        return None
 
 
 def get_random_salt() -> list[int]:

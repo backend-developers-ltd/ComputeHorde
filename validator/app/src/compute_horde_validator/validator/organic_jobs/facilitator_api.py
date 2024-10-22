@@ -2,8 +2,8 @@ from typing import Annotated, Any, Literal, Self
 
 import bittensor
 import pydantic
-from compute_horde.base.output_upload import OutputUpload
-from compute_horde.base.volume import Volume
+from compute_horde.base.output_upload import OutputUpload, ZipAndHttpPutUpload
+from compute_horde.base.volume import Volume, ZipUrlVolume
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from pydantic import BaseModel, model_validator
 
@@ -63,6 +63,18 @@ class V0FacilitatorJobRequest(BaseModel, extra="forbid"):
         if not (bool(self.docker_image) or bool(self.raw_script)):
             raise ValueError("Expected at least one of `docker_image` or `raw_script`")
         return self
+
+    @property
+    def volume(self) -> Volume | None:
+        if self.input_url:
+            return ZipUrlVolume(contents=self.input_url)
+        return None
+
+    @property
+    def output_upload(self) -> OutputUpload | None:
+        if self.output_url:
+            return ZipAndHttpPutUpload(url=self.output_url)
+        return None
 
 
 class V1FacilitatorJobRequest(BaseModel, extra="forbid"):

@@ -59,7 +59,7 @@ WEBSOCKET_TIMEOUT = 10
         ),
         (
             (V0AcceptJobRequest, V0ExecutorFailedRequest, None),
-            ["failed"],
+            ["accepted", "failed"],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v0,
             False,
