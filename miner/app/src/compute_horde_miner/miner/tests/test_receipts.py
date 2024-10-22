@@ -35,6 +35,7 @@ async def test_receipt_is_saved(
 ) -> None:
     mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.prepare_receipts")
     settings.DEBUG_TURN_AUTHENTICATION_OFF = True
+    settings.BITTENSOR_WALLET = lambda: miner_wallet
     job_uuid = str(uuid4())
     validator = await Validator.objects.acreate(
         public_key=validator_wallet.hotkey.ss58_address,
