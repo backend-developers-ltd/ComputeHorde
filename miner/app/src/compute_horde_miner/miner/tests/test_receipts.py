@@ -20,6 +20,10 @@ from compute_horde_miner.miner.models import AcceptedJob, Validator
 from compute_horde_miner.miner.tests.validator import fake_validator
 
 
+def _sign(msg, key: bittensor.Keypair):
+    return f"0x{key.sign(msg.blob_for_signing()).hex()}"
+
+
 @pytest.mark.parametrize(
     "organic_job",
     (True, False),
@@ -43,7 +47,7 @@ async def test_receipt_is_saved(
     )
 
     # 1. Authenticate to miner as test validator
-    # 2. Send JobStarted and JobFinished receiptss
+    # 2. Send JobStarted and JobFinished receipts
     async with fake_validator(validator_wallet) as fake_validator_channel:
         # Authenticate, otherwise the consumer will refuse to talk to us
         auth_payload = AuthenticationPayload(
@@ -54,7 +58,7 @@ async def test_receipt_is_saved(
         await fake_validator_channel.send_to(
             V0AuthenticateRequest(
                 payload=auth_payload,
-                signature=validator_wallet.hotkey.sign(auth_payload.blob_for_signing()).hex(),
+                signature=_sign(auth_payload, validator_wallet.hotkey),
             ).model_dump_json()
         )
         response = await fake_validator_channel.receive_json_from()
@@ -86,7 +90,7 @@ async def test_receipt_is_saved(
             V0JobStartedReceiptRequest(
                 job_uuid=job_uuid,
                 payload=job_started_receipt_payload,
-                signature=f"0x{validator_wallet.hotkey.sign(job_started_receipt_payload.blob_for_signing()).hex()}",
+                signature=_sign(job_started_receipt_payload, validator_wallet.hotkey),
             ).model_dump_json()
         )
 
@@ -102,7 +106,7 @@ async def test_receipt_is_saved(
             V0JobFinishedReceiptRequest(
                 job_uuid=job_uuid,
                 payload=job_finished_receipt_payload,
-                signature=f"0x{validator_wallet.hotkey.sign(job_finished_receipt_payload.blob_for_signing()).hex()}",
+                signature=_sign(job_finished_receipt_payload, validator_wallet.hotkey),
             ).model_dump_json()
         )
 
