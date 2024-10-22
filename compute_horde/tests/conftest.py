@@ -6,6 +6,7 @@ from bittensor import Keypair
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts.schemas import (
+    JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
     Receipt,
@@ -39,9 +40,10 @@ def receipts(validator_keypair, miner_keypair):
         job_uuid="3342460e-4a99-438b-8757-795f4cb348dd",
         miner_hotkey=miner_keypair.ss58_address,
         validator_hotkey=validator_keypair.ss58_address,
+        timestamp=datetime.datetime(2020, 1, 1, 0, 0, 0, tzinfo=datetime.UTC),
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        time_accepted=datetime.datetime(2024, 1, 2, 1, 55, 0, tzinfo=datetime.UTC),
         max_timeout=30,
+        ttl=30,
     )
     receipt1 = Receipt(
         payload=payload1,
@@ -49,13 +51,13 @@ def receipts(validator_keypair, miner_keypair):
         miner_signature=f"0x{miner_keypair.sign(payload1.blob_for_signing()).hex()}",
     )
 
-    payload2 = JobFinishedReceiptPayload(
+    payload2 = JobAcceptedReceiptPayload(
         job_uuid="3342460e-4a99-438b-8757-795f4cb348dd",
         miner_hotkey=miner_keypair.ss58_address,
         validator_hotkey=validator_keypair.ss58_address,
-        time_started=datetime.datetime(2024, 1, 2, 1, 57, 0, tzinfo=datetime.UTC),
-        time_took_us=2_000_000,
-        score_str="2.00",
+        timestamp=datetime.datetime(2020, 1, 1, 0, 5, 0, tzinfo=datetime.UTC),
+        time_accepted=datetime.datetime(2020, 1, 1, 0, 4, 0, tzinfo=datetime.UTC),
+        ttl=300,
     )
     receipt2 = Receipt(
         payload=payload2,
@@ -63,7 +65,22 @@ def receipts(validator_keypair, miner_keypair):
         miner_signature=f"0x{miner_keypair.sign(payload2.blob_for_signing()).hex()}",
     )
 
-    return [receipt1, receipt2]
+    payload3 = JobFinishedReceiptPayload(
+        job_uuid="3342460e-4a99-438b-8757-795f4cb348dd",
+        miner_hotkey=miner_keypair.ss58_address,
+        validator_hotkey=validator_keypair.ss58_address,
+        timestamp=datetime.datetime(2020, 1, 1, 0, 10, 0, tzinfo=datetime.UTC),
+        time_started=datetime.datetime(2020, 1, 1, 0, 9, 0, tzinfo=datetime.UTC),
+        time_took_us=60_000_000,
+        score_str="2.00",
+    )
+    receipt3 = Receipt(
+        payload=payload3,
+        validator_signature=f"0x{validator_keypair.sign(payload3.blob_for_signing()).hex()}",
+        miner_signature=f"0x{miner_keypair.sign(payload3.blob_for_signing()).hex()}",
+    )
+
+    return [receipt1, receipt2, receipt3]
 
 
 @pytest.fixture

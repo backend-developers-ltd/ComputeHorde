@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import NamedTuple
 
 import pytest
@@ -47,7 +47,7 @@ def mocked_get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                     job_uuid=str(uuid.uuid4()),
                     miner_hotkey="5G9qWBzLPVVu2fCPPvg3QgPPK5JaJmJKaJha95TPHH9NZWuL",
                     validator_hotkey="v1",
-                    timestamp=datetime(2020, 1, 1, 0, 0),
+                    timestamp=datetime(2020, 1, 1, 0, 0, tzinfo=UTC),
                     executor_class=DEFAULT_EXECUTOR_CLASS,
                     max_timeout=30,
                     ttl=5,
@@ -63,7 +63,7 @@ def mocked_get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                     job_uuid=str(uuid.uuid4()),
                     miner_hotkey="5CPhGRp4cdEG4KSui7VQixHhvN5eBUSnMYeUF5thdxm4sKtz",
                     validator_hotkey="v1",
-                    timestamp=datetime(2020, 1, 1, 1, 0),
+                    timestamp=datetime(2020, 1, 1, 1, 0, tzinfo=UTC),
                     time_started=now(),
                     time_took_us=30_000_000,
                     score_str="123.45",

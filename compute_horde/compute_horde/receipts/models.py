@@ -23,9 +23,6 @@ class AbstractReceipt(models.Model):
     miner_signature = models.CharField(max_length=256, null=True, blank=True)
     timestamp = models.DateTimeField()
 
-    # https://github.com/typeddjango/django-stubs/issues/1684#issuecomment-1706446344
-    objects: models.Manager["JobStartedReceipt"]
-
     class Meta:
         abstract = True
         constraints = [
@@ -66,6 +63,9 @@ class JobStartedReceipt(AbstractReceipt):
 class JobAcceptedReceipt(AbstractReceipt):
     time_accepted = models.DateTimeField()
     ttl = models.IntegerField()
+
+    # https://github.com/typeddjango/django-stubs/issues/1684#issuecomment-1706446344
+    objects: models.Manager["JobAcceptedReceipt"]
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:

@@ -14,9 +14,9 @@ from compute_horde.mv_protocol.validator_requests import (
     BaseValidatorRequest,
     V0AuthenticateRequest,
     V0InitialJobRequest,
+    V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
     V0JobRequest,
-    V0JobStartedReceiptRequest,
 )
 from compute_horde.transport import StubTransport
 
@@ -65,7 +65,7 @@ async def test_run_organic_job__success(keypair):
     assert sent_models_types == [
         V0AuthenticateRequest,
         V0InitialJobRequest,
-        V0JobStartedReceiptRequest,
+        V0JobAcceptedReceiptRequest,
         V0JobRequest,
         V0JobFinishedReceiptRequest,
     ]

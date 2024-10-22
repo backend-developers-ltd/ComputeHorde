@@ -4,17 +4,21 @@ import io
 import pytest
 
 from compute_horde.receipts.schemas import (
+    JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
     Receipt,
-    ReceiptType,
 )
 from compute_horde.receipts.transfer import ReceiptFetchError, get_miner_receipts
 
 
 def receipts_helper(mocked_responses, receipts: list[Receipt], miner_keypair):
     payload_fields = set()
-    for payload_cls in [JobStartedReceiptPayload, JobFinishedReceiptPayload]:
+    for payload_cls in [
+        JobStartedReceiptPayload,
+        JobAcceptedReceiptPayload,
+        JobFinishedReceiptPayload,
+    ]:
         payload_fields |= set(payload_cls.model_fields.keys())
 
     buf = io.StringIO()
@@ -29,11 +33,7 @@ def receipts_helper(mocked_responses, receipts: list[Receipt], miner_keypair):
     )
     csv_writer.writeheader()
     for receipt in receipts:
-        match receipt.payload:
-            case JobStartedReceiptPayload():
-                receipt_type = ReceiptType.JobStartedReceipt
-            case JobFinishedReceiptPayload():
-                receipt_type = ReceiptType.JobFinishedReceipt
+        receipt_type = receipt.payload.receipt_type
         row = (
             dict(
                 type=receipt_type.value,
@@ -51,13 +51,20 @@ def receipts_helper(mocked_responses, receipts: list[Receipt], miner_keypair):
 def receipts_one_skipped_helper(mocked_responses, receipts, miner_keypair):
     got_receipts = receipts_helper(mocked_responses, receipts, miner_keypair)
     # only the valid receipt should be stored
-    assert len(got_receipts) == 1
-    assert got_receipts[0] == receipts[0]
+    assert len(got_receipts) == len(receipts) - 1
+    for receipt in receipts[1:]:
+        got_receipt = [
+            x
+            for x in got_receipts
+            if x.payload.job_uuid == receipt.payload.job_uuid
+            and x.payload.__class__ is receipt.payload.__class__
+        ][0]
+        assert got_receipt == receipt
 
 
 def test__get_miner_receipts__happy_path(mocked_responses, receipts, miner_keypair):
     got_receipts = receipts_helper(mocked_responses, receipts, miner_keypair)
-    assert len(got_receipts) == 2
+    assert len(got_receipts) == len(receipts)
     for receipt in receipts:
         got_receipt = [
             x
@@ -74,29 +81,29 @@ def test__get_miner_receipts__invalid_receipt_skipped(mocked_responses, receipts
     Invalidate one receipt payload fields to make it invalid
     """
 
-    receipts[1].payload.miner_hotkey = 0
-    receipts[1].payload.validator_hotkey = None
+    receipts[0].payload.miner_hotkey = 0
+    receipts[0].payload.validator_hotkey = None
     receipts_one_skipped_helper(mocked_responses, receipts, miner_keypair)
 
 
 def test__get_miner_receipts__miner_hotkey_mismatch_skipped(
     mocked_responses, receipts, miner_keypair, keypair
 ):
-    receipts[1].payload.miner_hotkey = keypair.ss58_address
+    receipts[0].payload.miner_hotkey = keypair.ss58_address
     receipts_one_skipped_helper(mocked_responses, receipts, miner_keypair)
 
 
 def test__get_miner_receipts__invalid_miner_signature_skipped(
     mocked_responses, receipts, miner_keypair
 ):
-    receipts[1].miner_signature = f"0x{miner_keypair.sign('bla').hex()}"
+    receipts[0].miner_signature = f"0x{miner_keypair.sign('bla').hex()}"
     receipts_one_skipped_helper(mocked_responses, receipts, miner_keypair)
 
 
 def test__get_miner_receipts__invalid_validator_signature_skipped(
     mocked_responses, receipts, miner_keypair
 ):
-    receipts[1].validator_signature = f"0x{miner_keypair.sign('bla').hex()}"
+    receipts[0].validator_signature = f"0x{miner_keypair.sign('bla').hex()}"
     receipts_one_skipped_helper(mocked_responses, receipts, miner_keypair)
 
 
