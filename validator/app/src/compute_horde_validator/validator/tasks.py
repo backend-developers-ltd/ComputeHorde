@@ -19,8 +19,9 @@ from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
-from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import (
+    JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
@@ -1047,6 +1048,30 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
     logger.debug(f"Creating {len(job_started_receipt_to_create)} JobStartedReceipt. {hotkey=}")
     JobStartedReceipt.objects.bulk_create(job_started_receipt_to_create, ignore_conflicts=True)
 
+    latest_job_accepted_receipt = (
+        JobAcceptedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-timestamp").first()
+    )
+    job_accepted_receipt_cutoff_time = (
+        latest_job_accepted_receipt.timestamp - tolerance if latest_job_accepted_receipt else None
+    )
+    job_accepted_receipt_to_create = [
+        JobAcceptedReceipt(
+            job_uuid=receipt.payload.job_uuid,
+            miner_hotkey=receipt.payload.miner_hotkey,
+            validator_hotkey=receipt.payload.validator_hotkey,
+            timestamp=receipt.payload.timestamp,
+            ttl=receipt.payload.ttl,
+        )
+        for receipt in receipts
+        if isinstance(receipt.payload, JobAcceptedReceiptPayload)
+        and (
+            job_accepted_receipt_cutoff_time is None
+            or receipt.payload.timestamp > job_accepted_receipt_cutoff_time
+        )
+    ]
+    logger.debug(f"Creating {len(job_accepted_receipt_to_create)} JobAcceptedReceipt. {hotkey=}")
+    JobAcceptedReceipt.objects.bulk_create(job_accepted_receipt_to_create, ignore_conflicts=True)
+
     latest_job_finished_receipt = (
         JobFinishedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-timestamp").first()
     )
@@ -1079,6 +1104,7 @@ def fetch_receipts():
     """Fetch job receipts from the miners."""
     # Delete old receipts before fetching new ones
     JobStartedReceipt.objects.filter(timestamp__lt=now() - timedelta(days=7)).delete()
+    JobAcceptedReceipt.objects.filter(timestamp__lt=now() - timedelta(days=7)).delete()
     JobFinishedReceipt.objects.filter(timestamp__lt=now() - timedelta(days=7)).delete()
 
     metagraph = bittensor.metagraph(

@@ -39,11 +39,16 @@ from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
     V0AuthenticateRequest,
     V0InitialJobRequest,
+    V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
     V0JobRequest,
 )
-from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
-from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStartedReceiptPayload
+from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.schemas import (
+    JobAcceptedReceiptPayload,
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+)
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
 from django.conf import settings
@@ -268,6 +273,7 @@ class Job:
     # receipts
     job_started_receipt_payload: JobStartedReceiptPayload | None = None
     job_started_receipt_signature: str | None = None
+    job_accepted_receipt: V0JobAcceptedReceiptRequest | None = None
     job_finished_receipt: V0JobFinishedReceiptRequest | None = None
 
     # scoring
@@ -704,6 +710,24 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
     job.job_started_receipt_signature = signature
 
 
+def _generate_job_accepted_receipt(ctx: BatchContext, job: Job) -> None:
+    assert job.job_accepted_receipt is None
+    assert job.accept_response_time is not None
+
+    payload = JobAcceptedReceiptPayload(
+        job_uuid=job.uuid,
+        miner_hotkey=job.miner_hotkey,
+        validator_hotkey=ctx.own_keypair.ss58_address,
+        timestamp=datetime.now(tz=UTC),
+        time_accepted=job.accept_response_time,
+        ttl=300,  # FIXME: max time allowed to run the job
+    )
+    job.job_accepted_receipt = V0JobAcceptedReceiptRequest(
+        payload=payload,
+        signature=f"0x{ctx.own_keypair.sign(payload.blob_for_signing()).hex()}",
+    )
+
+
 def _generate_job_finished_receipt(ctx: BatchContext, job: Job) -> None:
     assert job.job_finished_receipt is None
     assert job.job_before_sent_time is not None
@@ -910,6 +934,21 @@ async def _send_initial_job_request(
 
         await job.accept_response_event.wait()
         if isinstance(job.accept_response, V0AcceptJobRequest):
+            _generate_job_accepted_receipt(ctx, job)
+            assert job.job_accepted_receipt is not None
+            try:
+                receipt_json = job.job_accepted_receipt.model_dump_json()
+                async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
+                    await client.send_check(receipt_json)
+            except (Exception, asyncio.CancelledError) as exc:
+                logger.warning("%s failed to send job accepted receipt: %r", job.name, exc)
+                job.system_event(
+                    type=SystemEvent.EventType.RECEIPT_FAILURE,
+                    subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
+                    description=repr(exc),
+                    func="_send_initial_job_request",
+                )
+
             await job.executor_response_event.wait()
 
 
@@ -1510,6 +1549,23 @@ def _db_persist(ctx: BatchContext) -> None:
                 )
             )
     JobStartedReceipt.objects.bulk_create(job_started_receipts)
+
+    job_accepted_receipts: list[JobAcceptedReceipt] = []
+    for job in ctx.jobs.values():
+        if job.job_accepted_receipt is not None:
+            accepted_payload = job.job_accepted_receipt.payload
+            job_accepted_receipts.append(
+                JobAcceptedReceipt(
+                    job_uuid=accepted_payload.job_uuid,
+                    miner_hotkey=accepted_payload.miner_hotkey,
+                    validator_hotkey=accepted_payload.validator_hotkey,
+                    validator_signature=job.job_accepted_receipt.signature,
+                    timestamp=accepted_payload.timestamp,
+                    time_accepted=accepted_payload.time_accepted,
+                    ttl=accepted_payload.ttl,
+                )
+            )
+    JobAcceptedReceipt.objects.bulk_create(job_accepted_receipts)
 
     job_finished_receipts: list[JobFinishedReceipt] = []
     for job in ctx.jobs.values():
