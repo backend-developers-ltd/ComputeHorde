@@ -1,32 +1,37 @@
 from datetime import datetime
-from datetime import datetime
 from uuid import uuid4
 
 import bittensor
 import pytest
 from compute_horde.executor_class import ExecutorClass
-from compute_horde.mv_protocol.validator_requests import V0AuthenticateRequest, \
-    AuthenticationPayload, V0JobStartedReceiptRequest, JobStartedReceiptPayload, JobFinishedReceiptPayload, \
-    V0JobFinishedReceiptRequest
-from compute_horde.receipts.models import JobStartedReceipt, JobFinishedReceipt
+from compute_horde.mv_protocol.validator_requests import (
+    AuthenticationPayload,
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+    V0AuthenticateRequest,
+    V0JobFinishedReceiptRequest,
+    V0JobStartedReceiptRequest,
+)
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from django.utils import timezone
 from pytest_mock import MockerFixture
 
-from compute_horde_miner.miner.models import Validator, AcceptedJob
+from compute_horde_miner.miner.models import AcceptedJob, Validator
 from compute_horde_miner.miner.tests.validator import fake_validator
 
 
 @pytest.mark.parametrize(
-    "organic_job", (True, False),
+    "organic_job",
+    (True, False),
 )
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_receipt_is_saved(
-        validator_wallet: bittensor.wallet,
-        miner_wallet: bittensor.wallet,
-        mocker: MockerFixture,
-        organic_job: bool,
-        settings,
+    validator_wallet: bittensor.wallet,
+    miner_wallet: bittensor.wallet,
+    mocker: MockerFixture,
+    organic_job: bool,
+    settings,
 ) -> None:
     mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.prepare_receipts")
     settings.DEBUG_TURN_AUTHENTICATION_OFF = True
@@ -45,11 +50,19 @@ async def test_receipt_is_saved(
             miner_hotkey=miner_wallet.hotkey.ss58_address,
             timestamp=int(datetime.now().timestamp()),
         )
-        await fake_validator_channel.send_to(V0AuthenticateRequest(
-            payload=auth_payload,
-            signature=validator_wallet.hotkey.sign(auth_payload.blob_for_signing()).hex(),
-        ).model_dump_json())
-        manifest = await fake_validator_channel.receive_json_from()
+        await fake_validator_channel.send_to(
+            V0AuthenticateRequest(
+                payload=auth_payload,
+                signature=validator_wallet.hotkey.sign(auth_payload.blob_for_signing()).hex(),
+            ).model_dump_json()
+        )
+        response = await fake_validator_channel.receive_json_from()
+        assert response == {
+            "message_type": "V0ExecutorManifestRequest",
+            "manifest": {
+                "executor_classes": [{"executor_class": "spin_up-4min.gpu-24gb", "count": 1}],
+            },
+        }
 
         # Skip doing the job
         await AcceptedJob.objects.acreate(
@@ -68,11 +81,13 @@ async def test_receipt_is_saved(
             time_accepted=timezone.now(),
             max_timeout=123,
         )
-        await fake_validator_channel.send_to(V0JobStartedReceiptRequest(
-            job_uuid=job_uuid,
-            payload=job_started_receipt_payload,
-            signature=f"0x{validator_wallet.hotkey.sign(job_started_receipt_payload.blob_for_signing()).hex()}",
-        ).model_dump_json())
+        await fake_validator_channel.send_to(
+            V0JobStartedReceiptRequest(
+                job_uuid=job_uuid,
+                payload=job_started_receipt_payload,
+                signature=f"0x{validator_wallet.hotkey.sign(job_started_receipt_payload.blob_for_signing()).hex()}",
+            ).model_dump_json()
+        )
 
         job_finished_receipt_payload = JobFinishedReceiptPayload(
             job_uuid=job_uuid,
@@ -82,11 +97,15 @@ async def test_receipt_is_saved(
             time_took_us=123,
             score_str="123.45",
         )
-        await fake_validator_channel.send_to(V0JobFinishedReceiptRequest(
-            job_uuid=job_uuid,
-            payload=job_finished_receipt_payload,
-            signature=f"0x{validator_wallet.hotkey.sign(job_finished_receipt_payload.blob_for_signing()).hex()}",
-        ).model_dump_json())
+        await fake_validator_channel.send_to(
+            V0JobFinishedReceiptRequest(
+                job_uuid=job_uuid,
+                payload=job_finished_receipt_payload,
+                signature=f"0x{validator_wallet.hotkey.sign(job_finished_receipt_payload.blob_for_signing()).hex()}",
+            ).model_dump_json()
+        )
 
-    assert await JobStartedReceipt.objects.filter(job_uuid=job_uuid, is_organic=organic_job).aexists()
+    assert await JobStartedReceipt.objects.filter(
+        job_uuid=job_uuid, is_organic=organic_job
+    ).aexists()
     assert await JobFinishedReceipt.objects.filter(job_uuid=job_uuid).aexists()
