@@ -427,6 +427,11 @@ async def run_organic_job(
 
             await client.notify_job_accepted(initial_response)
 
+            await client.send_job_accepted_receipt_message(
+                accepted_timestamp=time.time(),
+                ttl=int(job_timer.time_left()),
+            )
+
             try:
                 executor_readiness_response = await asyncio.wait_for(
                     client.executor_ready_or_failed_future,
@@ -438,11 +443,6 @@ async def run_organic_job(
                 raise OrganicJobError(FailureReason.EXECUTOR_FAILED, executor_readiness_response)
 
             await client.notify_executor_ready(executor_readiness_response)
-
-            await client.send_job_accepted_receipt_message(
-                accepted_timestamp=time.time(),
-                ttl=int(job_timer.time_left()),
-            )
 
             await client.send_model(
                 V0JobRequest(
