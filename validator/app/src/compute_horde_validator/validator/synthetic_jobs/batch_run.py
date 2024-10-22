@@ -693,8 +693,6 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
     assert job.job_started_receipt_payload is None
     assert job.job_started_receipt_signature is None
 
-    assert job.executor_response_time is not None
-
     max_timeout = job.job_generator.timeout_seconds()
     payload = JobStartedReceiptPayload(
         job_uuid=job.uuid,
@@ -902,6 +900,8 @@ async def _send_initial_job_request(
     job = ctx.jobs[job_uuid]
     job.accept_barrier_time = barrier_time
     client = ctx.clients[job.miner_hotkey]
+
+    _generate_job_started_receipt(ctx, job)
     assert job.job_started_receipt_payload is not None
     assert job.job_started_receipt_signature is not None
 
@@ -1546,6 +1546,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     timestamp=started_payload.timestamp,
                     executor_class=started_payload.executor_class,
                     max_timeout=started_payload.max_timeout,
+                    ttl=started_payload.ttl,
                 )
             )
     JobStartedReceipt.objects.bulk_create(job_started_receipts)
