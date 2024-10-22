@@ -37,15 +37,13 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
-    JobFinishedReceiptPayload,
-    JobStartedReceiptPayload,
     V0AuthenticateRequest,
     V0InitialJobRequest,
     V0JobFinishedReceiptRequest,
     V0JobRequest,
-    V0JobStartedReceiptRequest,
 )
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStartedReceiptPayload
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
 from django.conf import settings
@@ -268,7 +266,8 @@ class Job:
     machine_specs: V0MachineSpecsRequest | None = None
 
     # receipts
-    job_started_receipt: V0JobStartedReceiptRequest | None = None
+    job_started_receipt_payload: JobStartedReceiptPayload | None = None
+    job_started_receipt_signature: str | None = None
     job_finished_receipt: V0JobFinishedReceiptRequest | None = None
 
     # scoring
@@ -685,7 +684,8 @@ def _get_total_executor_count(ctx: BatchContext) -> int:
 
 
 def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
-    assert job.job_started_receipt is None
+    assert job.job_started_receipt_payload is None
+    assert job.job_started_receipt_signature is None
 
     assert job.executor_response_time is not None
 
@@ -694,14 +694,14 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
         job_uuid=job.uuid,
         miner_hotkey=job.miner_hotkey,
         validator_hotkey=ctx.own_keypair.ss58_address,
+        timestamp=datetime.now(tz=UTC),
         executor_class=ExecutorClass(job.executor_class),
-        time_accepted=job.executor_response_time,
         max_timeout=max_timeout,
+        ttl=30,  # FIXME: use spin up time
     )
-    job.job_started_receipt = V0JobStartedReceiptRequest(
-        payload=payload,
-        signature=f"0x{ctx.own_keypair.sign(payload.blob_for_signing()).hex()}",
-    )
+    signature = f"0x{ctx.own_keypair.sign(payload.blob_for_signing()).hex()}"
+    job.job_started_receipt_payload = payload
+    job.job_started_receipt_signature = signature
 
 
 def _generate_job_finished_receipt(ctx: BatchContext, job: Job) -> None:
@@ -720,6 +720,7 @@ def _generate_job_finished_receipt(ctx: BatchContext, job: Job) -> None:
         job_uuid=job.uuid,
         miner_hotkey=job.miner_hotkey,
         validator_hotkey=ctx.own_keypair.ss58_address,
+        timestamp=datetime.now(tz=UTC),
         time_started=job.job_before_sent_time,
         time_took_us=int(time_took_sec * 1_000_000),
         score_str=f"{job.score:.6g}",
@@ -877,6 +878,8 @@ async def _send_initial_job_request(
     job = ctx.jobs[job_uuid]
     job.accept_barrier_time = barrier_time
     client = ctx.clients[job.miner_hotkey]
+    assert job.job_started_receipt_payload is not None
+    assert job.job_started_receipt_signature is not None
 
     spin_up_time = EXECUTOR_CLASS[job.executor_class].spin_up_time
     assert spin_up_time is not None
@@ -890,6 +893,8 @@ async def _send_initial_job_request(
         base_docker_image_name=job.job_generator.base_docker_image_name(),
         timeout_seconds=job.job_generator.timeout_seconds(),
         volume=job.volume if job.job_generator.volume_in_initial_req() else None,
+        job_started_receipt_payload=job.job_started_receipt_payload,
+        job_started_receipt_signature=job.job_started_receipt_signature,
     )
     request_json = request.model_dump_json()
 
@@ -906,23 +911,6 @@ async def _send_initial_job_request(
         await job.accept_response_event.wait()
         if isinstance(job.accept_response, V0AcceptJobRequest):
             await job.executor_response_event.wait()
-
-    # send the receipt from outside the timeout
-    if isinstance(job.executor_response, V0ExecutorReadyRequest):
-        _generate_job_started_receipt(ctx, job)
-        assert job.job_started_receipt is not None
-        try:
-            receipt_json = job.job_started_receipt.model_dump_json()
-            async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
-                await client.send_check(receipt_json)
-        except (Exception, asyncio.CancelledError) as exc:
-            logger.warning("%s failed to send job started receipt: %r", job.name, exc)
-            job.system_event(
-                type=SystemEvent.EventType.RECEIPT_FAILURE,
-                subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
-                description=repr(exc),
-                func="_send_initial_job_request",
-            )
 
 
 async def _send_job_request(
@@ -1505,16 +1493,19 @@ def _db_persist(ctx: BatchContext) -> None:
 
     job_started_receipts: list[JobStartedReceipt] = []
     for job in ctx.jobs.values():
-        if job.job_started_receipt is not None:
-            started_payload = job.job_started_receipt.payload
+        if (
+            job.job_started_receipt_payload is not None
+            and job.job_started_receipt_signature is not None
+        ):
+            started_payload = job.job_started_receipt_payload
             job_started_receipts.append(
                 JobStartedReceipt(
                     job_uuid=started_payload.job_uuid,
                     miner_hotkey=started_payload.miner_hotkey,
                     validator_hotkey=started_payload.validator_hotkey,
-                    validator_signature=job.job_started_receipt.signature,
+                    validator_signature=job.job_started_receipt_signature,
+                    timestamp=started_payload.timestamp,
                     executor_class=started_payload.executor_class,
-                    time_accepted=started_payload.time_accepted,
                     max_timeout=started_payload.max_timeout,
                 )
             )
@@ -1530,6 +1521,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     miner_hotkey=finished_payload.miner_hotkey,
                     validator_hotkey=finished_payload.validator_hotkey,
                     validator_signature=job.job_finished_receipt.signature,
+                    timestamp=finished_payload.timestamp,
                     time_started=finished_payload.time_started,
                     time_took_us=finished_payload.time_took_us,
                     score_str=finished_payload.score_str,
