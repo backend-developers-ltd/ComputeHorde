@@ -1,5 +1,6 @@
 import datetime
 
+import bittensor
 import pytest
 import responses
 from bittensor import Keypair
@@ -31,6 +32,15 @@ def miner_keypair():
     return Keypair.create_from_mnemonic(
         "almost fatigue race slim picnic mass better clog deal solve already champion"
     )
+
+
+@pytest.fixture
+def signature_wallet():
+    wallet = bittensor.wallet(name="test_signature")
+    # workaround the overwrite flag
+    wallet.regenerate_coldkey(seed="8" * 64, use_password=False, overwrite=True)
+    wallet.regenerate_hotkey(seed="9" * 64, use_password=False, overwrite=True)
+    return wallet
 
 
 @pytest.fixture
