@@ -8,6 +8,12 @@ import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
+from compute_horde.fv_protocol.facilitator_requests import Error, JobRequest, Response
+from compute_horde.fv_protocol.validator_requests import (
+    AuthenticationRequest,
+    Heartbeat,
+    MachineSpecsUpdate,
+)
 from django.conf import settings
 from pydantic import BaseModel
 
@@ -16,14 +22,6 @@ from compute_horde_validator.validator.metagraph_client import (
     get_miner_axon_info,
 )
 from compute_horde_validator.validator.models import Miner, OrganicJob, SystemEvent
-from compute_horde_validator.validator.organic_jobs.facilitator_api import (
-    AuthenticationRequest,
-    Error,
-    Heartbeat,
-    JobRequest,
-    MachineSpecsUpdate,
-    Response,
-)
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL

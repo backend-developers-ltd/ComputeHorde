@@ -14,6 +14,10 @@ import constance
 import numpy as np
 from bittensor import Balance
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.fv_protocol.facilitator_requests import (
+    V0FacilitatorJobRequest,
+    V1FacilitatorJobRequest,
+)
 from compute_horde.mv_protocol.miner_requests import (
     V0AcceptJobRequest,
     V0ExecutorReadyRequest,
@@ -24,10 +28,6 @@ from django.conf import settings
 from substrateinterface.exceptions import SubstrateRequestException
 
 from compute_horde_validator.validator.models import SystemEvent
-from compute_horde_validator.validator.organic_jobs.facilitator_api import (
-    V0FacilitatorJobRequest,
-    V1FacilitatorJobRequest,
-)
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.synthetic_jobs import batch_run
 

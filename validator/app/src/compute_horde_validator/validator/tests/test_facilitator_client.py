@@ -6,14 +6,11 @@ import bittensor
 import pytest
 import websockets
 from channels.layers import get_channel_layer
+from compute_horde.fv_protocol.facilitator_requests import Response
+from compute_horde.fv_protocol.validator_requests import AuthenticationRequest, MachineSpecsUpdate
 
 from compute_horde_validator.validator.models import OrganicJob
-from compute_horde_validator.validator.organic_jobs.facilitator_api import MachineSpecsUpdate
-from compute_horde_validator.validator.organic_jobs.facilitator_client import (
-    AuthenticationRequest,
-    FacilitatorClient,
-    Response,
-)
+from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 

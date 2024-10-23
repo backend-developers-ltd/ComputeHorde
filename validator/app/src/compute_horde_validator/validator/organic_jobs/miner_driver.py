@@ -4,6 +4,10 @@ from functools import partial
 from typing import Literal
 
 from compute_horde.executor_class import ExecutorClass
+from compute_horde.fv_protocol.facilitator_requests import (
+    V0FacilitatorJobRequest,
+    V1FacilitatorJobRequest,
+)
 from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,
@@ -19,10 +23,6 @@ from compute_horde_validator.validator.models import (
     JobBase,
     OrganicJob,
     SystemEvent,
-)
-from compute_horde_validator.validator.organic_jobs.facilitator_api import (
-    V0FacilitatorJobRequest,
-    V1FacilitatorJobRequest,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 
