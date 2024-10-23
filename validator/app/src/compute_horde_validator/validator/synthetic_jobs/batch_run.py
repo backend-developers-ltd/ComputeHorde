@@ -391,6 +391,12 @@ class Job:
             data=data,
         )
 
+    def get_spin_up_time(self) -> int:
+        spin_up_time = EXECUTOR_CLASS[self.executor_class].spin_up_time
+        assert spin_up_time is not None
+        spin_up_time = max(spin_up_time, _MIN_SPIN_UP_TIME)
+        return spin_up_time
+
 
 @dataclass
 class BatchContext:
@@ -701,7 +707,7 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
         timestamp=datetime.now(tz=UTC),
         executor_class=ExecutorClass(job.executor_class),
         max_timeout=max_timeout,
-        ttl=30,  # FIXME: use spin up time
+        ttl=job.get_spin_up_time(),
     )
     signature = f"0x{ctx.own_keypair.sign(payload.blob_for_signing()).hex()}"
     job.job_started_receipt_payload = payload
@@ -718,7 +724,7 @@ def _generate_job_accepted_receipt(ctx: BatchContext, job: Job) -> None:
         validator_hotkey=ctx.own_keypair.ss58_address,
         timestamp=datetime.now(tz=UTC),
         time_accepted=job.accept_response_time,
-        ttl=300,  # FIXME: max time allowed to run the job
+        ttl=6 * 60,  # FIXME: max time allowed to run the job
     )
     job.job_accepted_receipt = V0JobAcceptedReceiptRequest(
         payload=payload,
@@ -905,10 +911,7 @@ async def _send_initial_job_request(
     assert job.job_started_receipt_payload is not None
     assert job.job_started_receipt_signature is not None
 
-    spin_up_time = EXECUTOR_CLASS[job.executor_class].spin_up_time
-    assert spin_up_time is not None
-    spin_up_time = max(spin_up_time, _MIN_SPIN_UP_TIME)
-    stagger_wait_interval = max_spin_up_time - spin_up_time
+    stagger_wait_interval = max_spin_up_time - job.get_spin_up_time()
     assert stagger_wait_interval >= 0
 
     request = V0InitialJobRequest(
