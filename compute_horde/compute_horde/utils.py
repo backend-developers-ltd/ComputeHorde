@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Any
 
 import bittensor
 import pydantic
-from pydantic import BeforeValidator
 from substrateinterface.exceptions import SubstrateRequestException
 
 if TYPE_CHECKING:
@@ -65,16 +64,3 @@ class Timer:
         if self.timeout is None:
             raise ValueError("timeout was not specified")
         return self.timeout - self.passed_time()
-
-
-def _empty_string_none(value: Any) -> Any:
-    """
-    Converts value to None if it is empty-string, otherwise returns the same value.
-    Intended to be used with pydantic validators.
-    """
-    if value == "":
-        return None
-    return value
-
-
-empty_string_none = BeforeValidator(_empty_string_none)
