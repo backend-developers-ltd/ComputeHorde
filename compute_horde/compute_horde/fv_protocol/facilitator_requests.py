@@ -21,7 +21,7 @@ class Response(BaseModel, extra="forbid"):
     errors: list[Error] = []
 
 
-class V0FacilitatorJobRequest(BaseModel, extra="forbid"):
+class V0JobRequest(BaseModel, extra="forbid"):
     """Message sent from facilitator to validator to request a job execution"""
 
     # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
@@ -62,7 +62,7 @@ class V0FacilitatorJobRequest(BaseModel, extra="forbid"):
         return None
 
 
-class V1FacilitatorJobRequest(BaseModel, extra="forbid"):
+class V1JobRequest(BaseModel, extra="forbid"):
     """Message sent from facilitator to validator to request a job execution"""
 
     # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
@@ -91,6 +91,6 @@ class V1FacilitatorJobRequest(BaseModel, extra="forbid"):
 
 
 JobRequest = Annotated[
-    V0FacilitatorJobRequest | V1FacilitatorJobRequest,
+    V0JobRequest | V1JobRequest,
     pydantic.Field(discriminator="message_type"),
 ]

@@ -15,8 +15,8 @@ import numpy as np
 from bittensor import Balance
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
-    V0FacilitatorJobRequest,
-    V1FacilitatorJobRequest,
+    V0JobRequest,
+    V1JobRequest,
 )
 from compute_horde.mv_protocol.miner_requests import (
     V0AcceptJobRequest,
@@ -135,8 +135,8 @@ class MockJobStateMinerClient(MockMinerClient):
         )
 
 
-def get_dummy_job_request_v0(uuid: str) -> V0FacilitatorJobRequest:
-    return V0FacilitatorJobRequest(
+def get_dummy_job_request_v0(uuid: str) -> V0JobRequest:
+    return V0JobRequest(
         type="job.new",
         uuid=uuid,
         miner_hotkey="miner_hotkey",
@@ -151,8 +151,8 @@ def get_dummy_job_request_v0(uuid: str) -> V0FacilitatorJobRequest:
     )
 
 
-def get_dummy_job_request_v1(uuid: str) -> V1FacilitatorJobRequest:
-    return V1FacilitatorJobRequest(
+def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
+    return V1JobRequest(
         type="job.new",
         uuid=uuid,
         miner_hotkey="miner_hotkey",

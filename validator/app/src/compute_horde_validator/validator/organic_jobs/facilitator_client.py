@@ -10,9 +10,9 @@ import websockets
 from channels.layers import get_channel_layer
 from compute_horde.fv_protocol.facilitator_requests import Error, JobRequest, Response
 from compute_horde.fv_protocol.validator_requests import (
-    AuthenticationRequest,
-    Heartbeat,
-    MachineSpecsUpdate,
+    V0AuthenticationRequest,
+    V0Heartbeat,
+    V0MachineSpecsUpdate,
 )
 from django.conf import settings
 from pydantic import BaseModel
@@ -128,14 +128,14 @@ class FacilitatorClient:
 
     async def handle_connection(self, ws: websockets.WebSocketClientProtocol):
         """handle a single websocket connection"""
-        await ws.send(AuthenticationRequest.from_keypair(self.keypair).model_dump_json())
+        await ws.send(V0AuthenticationRequest.from_keypair(self.keypair).model_dump_json())
 
         raw_msg = await ws.recv()
         try:
             response = Response.model_validate_json(raw_msg)
         except pydantic.ValidationError as exc:
             raise AuthenticationError(
-                "did not receive Response for AuthenticationRequest", []
+                "did not receive Response for V0AuthenticationRequest", []
             ) from exc
         if response.status != "success":
             raise AuthenticationError("auth request received failed response", response.errors)
@@ -146,7 +146,7 @@ class FacilitatorClient:
             await self.handle_message(raw_msg)
 
     async def wait_for_specs(self):
-        specs_queue: deque[MachineSpecsUpdate] = deque()
+        specs_queue: deque[V0MachineSpecsUpdate] = deque()
         channel_layer = get_channel_layer()
 
         while True:
@@ -156,7 +156,7 @@ class FacilitatorClient:
                     channel_layer.receive(MACHINE_SPEC_CHANNEL), timeout=20 * 60
                 )
 
-                specs = MachineSpecsUpdate(
+                specs = V0MachineSpecsUpdate(
                     specs=msg["specs"],
                     miner_hotkey=msg["miner_hotkey"],
                     batch_id=msg["batch_id"],
@@ -190,7 +190,7 @@ class FacilitatorClient:
         while True:
             if self.ws is not None:
                 try:
-                    await self.send_model(Heartbeat())
+                    await self.send_model(V0Heartbeat())
                 except Exception as exc:
                     msg = f"Error occurred while sending heartbeat: {exc}"
                     logger.warning(msg)

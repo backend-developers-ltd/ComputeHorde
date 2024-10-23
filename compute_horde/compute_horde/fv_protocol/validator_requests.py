@@ -4,13 +4,13 @@ import bittensor
 from pydantic import BaseModel
 
 
-class Heartbeat(BaseModel, extra="forbid"):
+class V0Heartbeat(BaseModel, extra="forbid"):
     """Message sent from validator to facilitator to keep connection alive"""
 
     message_type: str = "V0Heartbeat"
 
 
-class AuthenticationRequest(BaseModel, extra="forbid"):
+class V0AuthenticationRequest(BaseModel, extra="forbid"):
     """Message sent from validator to facilitator to authenticate itself"""
 
     message_type: str = "V0AuthenticationRequest"
@@ -25,7 +25,7 @@ class AuthenticationRequest(BaseModel, extra="forbid"):
         )
 
 
-class MachineSpecsUpdate(BaseModel, extra="forbid"):
+class V0MachineSpecsUpdate(BaseModel, extra="forbid"):
     """Message sent from validator to facilitator to update miner specs"""
 
     message_type: str = "V0MachineSpecsUpdate"
