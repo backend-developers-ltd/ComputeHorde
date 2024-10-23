@@ -707,6 +707,7 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
         timestamp=datetime.now(tz=UTC),
         executor_class=ExecutorClass(job.executor_class),
         max_timeout=max_timeout,
+        is_organic=False,
         ttl=job.get_spin_up_time(),
     )
     signature = f"0x{ctx.own_keypair.sign(payload.blob_for_signing()).hex()}"
@@ -1549,6 +1550,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     timestamp=started_payload.timestamp,
                     executor_class=started_payload.executor_class,
                     max_timeout=started_payload.max_timeout,
+                    is_organic=False,
                     ttl=started_payload.ttl,
                 )
             )

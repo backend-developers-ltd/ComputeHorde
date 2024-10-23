@@ -43,6 +43,7 @@ def receipts(validator_keypair, miner_keypair):
         timestamp=datetime.datetime(2020, 1, 1, 0, 0, 0, tzinfo=datetime.UTC),
         executor_class=DEFAULT_EXECUTOR_CLASS,
         max_timeout=30,
+        is_organic=False,
         ttl=30,
     )
     receipt1 = Receipt(

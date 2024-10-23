@@ -232,6 +232,7 @@ class OrganicMinerClient(AbstractMinerClient):
             timestamp=datetime.datetime.now(datetime.UTC),
             executor_class=executor_class,
             max_timeout=max_timeout,
+            is_organic=True,
             ttl=ttl,
         )
         signature = f"0x{self.my_keypair.sign(receipt_payload.blob_for_signing()).hex()}"

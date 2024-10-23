@@ -50,6 +50,7 @@ def mocked_get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                     timestamp=datetime(2020, 1, 1, 0, 0, tzinfo=UTC),
                     executor_class=DEFAULT_EXECUTOR_CLASS,
                     max_timeout=30,
+                    is_organic=False,
                     ttl=5,
                 ),
                 validator_signature="0xv1",

@@ -122,6 +122,7 @@ def get_receipts_from_old_miner():
             timestamp=receipt.payload.timestamp,
             executor_class=receipt.payload.executor_class,
             max_timeout=receipt.payload.max_timeout,
+            is_organic=receipt.payload.is_organic,
             ttl=receipt.payload.ttl,
         )
         for receipt in receipts

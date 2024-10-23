@@ -36,6 +36,7 @@ class AbstractReceipt(models.Model):
 class JobStartedReceipt(AbstractReceipt):
     executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
     max_timeout = models.IntegerField()
+    is_organic = models.BooleanField()
     ttl = models.IntegerField()
 
     # https://github.com/typeddjango/django-stubs/issues/1684#issuecomment-1706446344
@@ -53,6 +54,7 @@ class JobStartedReceipt(AbstractReceipt):
                 timestamp=self.timestamp,
                 executor_class=ExecutorClass(self.executor_class),
                 max_timeout=self.max_timeout,
+                is_organic=self.is_organic,
                 ttl=self.ttl,
             ),
             validator_signature=self.validator_signature,

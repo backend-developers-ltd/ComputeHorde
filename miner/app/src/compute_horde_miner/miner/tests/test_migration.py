@@ -51,6 +51,7 @@ def test_get_receipts_from_old_miner(mocker: MockerFixture):
                 timestamp=datetime(2020, 1, 1, tzinfo=UTC),
                 executor_class=DEFAULT_EXECUTOR_CLASS,
                 max_timeout=30,
+                is_organic=False,
                 ttl=5,
             ),
             validator_signature="0xv1",

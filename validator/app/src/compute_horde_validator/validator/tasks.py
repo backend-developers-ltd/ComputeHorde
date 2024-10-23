@@ -1039,6 +1039,7 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
             timestamp=receipt.payload.timestamp,
             executor_class=receipt.payload.executor_class,
             max_timeout=receipt.payload.max_timeout,
+            is_organic=receipt.payload.is_organic,
             ttl=receipt.payload.ttl,
         )
         for receipt in receipts

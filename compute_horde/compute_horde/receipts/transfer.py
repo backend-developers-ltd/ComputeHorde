@@ -56,6 +56,7 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                             timestamp=raw_receipt["timestamp"],  # type: ignore[arg-type]
                             executor_class=ExecutorClass(raw_receipt["executor_class"]),
                             max_timeout=int(raw_receipt["max_timeout"]),
+                            is_organic=raw_receipt.get("is_organic") == "True",
                             ttl=int(raw_receipt["ttl"]),
                         )
 

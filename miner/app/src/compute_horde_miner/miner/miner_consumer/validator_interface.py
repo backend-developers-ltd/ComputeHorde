@@ -400,6 +400,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             timestamp=payload.timestamp,
             executor_class=payload.executor_class,
             max_timeout=payload.max_timeout,
+            is_organic=msg.payload.is_organic,
             ttl=payload.ttl,
         )
 
