@@ -72,7 +72,7 @@ def prepare_receipts():
     receipts = []
 
     for model in [JobStartedReceipt, JobAcceptedReceipt, JobFinishedReceipt]:
-        db_objects = model.objects.order_by("timestamp").filter(
+        db_objects = model.objects.order_by("timestamp").filter(  # type: ignore[attr-defined]
             timestamp__gt=now() - RECEIPTS_MAX_SERVED_PERIOD
         )
         for db_object in db_objects:
@@ -89,7 +89,7 @@ def prepare_receipts():
 @app.task
 def clear_old_receipts():
     for model in [JobStartedReceipt, JobAcceptedReceipt, JobFinishedReceipt]:
-        model.objects.filter(timestamp__lt=now() - RECEIPTS_MAX_RETENTION_PERIOD).delete()
+        model.objects.filter(timestamp__lt=now() - RECEIPTS_MAX_RETENTION_PERIOD).delete()  # type: ignore[attr-defined]
 
 
 @app.task
