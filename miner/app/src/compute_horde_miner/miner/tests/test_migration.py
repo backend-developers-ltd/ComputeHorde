@@ -50,6 +50,7 @@ def test_get_receipts_from_old_miner(mocker: MockerFixture):
                 executor_class=DEFAULT_EXECUTOR_CLASS,
                 time_accepted=now(),
                 max_timeout=30,
+                is_organic=False,
             ),
             validator_signature="0xv1",
             miner_signature="0xm1",

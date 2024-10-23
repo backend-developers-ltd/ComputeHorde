@@ -42,6 +42,7 @@ def receipts(validator_keypair, miner_keypair):
         executor_class=DEFAULT_EXECUTOR_CLASS,
         time_accepted=datetime.datetime(2024, 1, 2, 1, 55, 0, tzinfo=datetime.UTC),
         max_timeout=30,
+        is_organic=False,
     )
     receipt1 = Receipt(
         payload=payload1,
