@@ -5,7 +5,7 @@ from pydantic import BaseModel, model_validator
 
 from compute_horde.base.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde.base.volume import Volume, ZipUrlVolume
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
+from compute_horde.executor_class import ExecutorClass
 
 
 class Error(BaseModel, extra="allow"):
@@ -30,8 +30,7 @@ class V0JobRequest(BaseModel, extra="forbid"):
 
     uuid: str
     miner_hotkey: str
-    # TODO: remove default after we add executor class support to facilitator
-    executor_class: ExecutorClass = DEFAULT_EXECUTOR_CLASS
+    executor_class: ExecutorClass
     docker_image: str
     raw_script: str
     args: list[str]
@@ -70,8 +69,7 @@ class V1JobRequest(BaseModel, extra="forbid"):
     message_type: Literal["V1JobRequest"] = "V1JobRequest"
     uuid: str
     miner_hotkey: str
-    # TODO: remove default after we add executor class support to facilitator
-    executor_class: ExecutorClass = DEFAULT_EXECUTOR_CLASS
+    executor_class: ExecutorClass
     docker_image: str
     raw_script: str
     args: list[str]

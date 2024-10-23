@@ -156,6 +156,7 @@ def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
         type="job.new",
         uuid=uuid,
         miner_hotkey="miner_hotkey",
+        executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="nvidia",
         raw_script="print('hello world')",
         args=[],
