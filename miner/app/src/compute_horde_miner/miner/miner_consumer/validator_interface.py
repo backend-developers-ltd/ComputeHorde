@@ -397,6 +397,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             executor_class=msg.payload.executor_class,
             time_accepted=msg.payload.time_accepted,
             max_timeout=msg.payload.max_timeout,
+            is_organic=msg.payload.is_organic,
         )
 
     async def handle_job_finished_receipt(

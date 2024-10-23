@@ -56,6 +56,7 @@ def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                                 raw_receipt["time_accepted"]
                             ),
                             max_timeout=int(raw_receipt["max_timeout"]),
+                            is_organic=raw_receipt.get("is_organic") == "True",
                         )
 
                     case ReceiptType.JobFinishedReceipt:
