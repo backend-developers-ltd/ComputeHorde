@@ -161,6 +161,7 @@ class Test(ActiveSubnetworkBaseTest):
                 "timestamp": datetime.now(tz=UTC).isoformat(),
                 "executor_class": DEFAULT_EXECUTOR_CLASS,
                 "max_timeout": 60,
+                "is_organic": True,
                 "ttl": 30,
             }
             blob = json.dumps(receipt_payload, sort_keys=True)
