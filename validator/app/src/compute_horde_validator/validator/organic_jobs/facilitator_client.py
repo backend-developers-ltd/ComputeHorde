@@ -243,6 +243,7 @@ class FacilitatorClient:
 
     async def miner_driver(self, job_request: JobRequest):
         """drive a miner client from job start to completion, then close miner connection"""
+        assert job_request.miner_hotkey is not None
         miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
         miner_axon_info = await self.get_miner_axon_info(job_request.miner_hotkey)
         job = await OrganicJob.objects.acreate(

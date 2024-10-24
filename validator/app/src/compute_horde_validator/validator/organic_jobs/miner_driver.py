@@ -4,10 +4,7 @@ from functools import partial
 from typing import Literal
 
 from compute_horde.executor_class import ExecutorClass
-from compute_horde.fv_protocol.facilitator_requests import (
-    V0JobRequest,
-    V1JobRequest,
-)
+from compute_horde.fv_protocol.facilitator_requests import JobRequest
 from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,
@@ -93,7 +90,7 @@ async def _dummy_notify_callback(_: JobStatusUpdate) -> None:
 async def execute_organic_job(
     miner_client: MinerClient,
     job: OrganicJob,
-    job_request: V0JobRequest | V1JobRequest | AdminJobRequest,
+    job_request: JobRequest | AdminJobRequest,
     total_job_timeout: int = 300,
     wait_timeout: int = 300,
     notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] = _dummy_notify_callback,

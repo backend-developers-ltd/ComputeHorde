@@ -125,6 +125,6 @@ class V2JobRequest(BaseModel, extra="forbid"):
 
 
 JobRequest = Annotated[
-    V0JobRequest | V1JobRequest,
+    V0JobRequest | V1JobRequest | V2JobRequest,
     pydantic.Field(discriminator="message_type"),
 ]
