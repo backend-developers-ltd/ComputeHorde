@@ -158,6 +158,7 @@ async def drive_executor() -> float:
         timestamp=datetime.datetime.now(datetime.UTC),
         executor_class=DEFAULT_EXECUTOR_CLASS,
         max_timeout=JOB_TIMEOUT_SECONDS,
+        is_organic=False,
         ttl=30,
     )
     receipt_signature = f"0x{keypair.sign(receipt_payload.blob_for_signing()).hex()}"

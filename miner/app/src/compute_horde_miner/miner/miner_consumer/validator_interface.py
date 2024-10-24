@@ -400,7 +400,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             timestamp=payload.timestamp,
             executor_class=payload.executor_class,
             max_timeout=payload.max_timeout,
-            is_organic=msg.payload.is_organic,
+            is_organic=payload.is_organic,
             ttl=payload.ttl,
         )
 
@@ -422,6 +422,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             miner_hotkey=msg.payload.miner_hotkey,
             validator_hotkey=msg.payload.validator_hotkey,
             timestamp=msg.payload.timestamp,
+            time_accepted=msg.payload.time_accepted,
             ttl=msg.payload.ttl,
         )
         prepare_receipts.delay()

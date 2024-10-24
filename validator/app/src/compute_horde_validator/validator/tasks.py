@@ -1066,6 +1066,7 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
             miner_signature=receipt.miner_signature,
             validator_signature=receipt.validator_signature,
             timestamp=receipt.payload.timestamp,
+            time_accepted=receipt.payload.time_accepted,
             ttl=receipt.payload.ttl,
         )
         for receipt in receipts

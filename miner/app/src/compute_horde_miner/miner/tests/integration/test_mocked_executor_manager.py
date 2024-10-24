@@ -100,6 +100,7 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
                     "timestamp": "2020-01-01T00:00Z",
                     "executor_class": DEFAULT_EXECUTOR_CLASS,
                     "max_timeout": 60,
+                    "is_organic": True,
                     "ttl": 5,
                 },
                 "job_started_receipt_signature": "gibberish",
