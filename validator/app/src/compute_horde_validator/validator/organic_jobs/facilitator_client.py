@@ -1,35 +1,38 @@
 import asyncio
+import base64
 import logging
 import os
 from collections import deque
+from datetime import timedelta
 
 import bittensor
 import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde.fv_protocol.facilitator_requests import Error, JobRequest, Response, V2JobRequest
+from compute_horde.fv_protocol.facilitator_requests import Error, JobRequest, Response
+from compute_horde.executor_class import ExecutorClass
 from compute_horde.fv_protocol.validator_requests import (
     V0AuthenticationRequest,
     V0Heartbeat,
     V0MachineSpecsUpdate,
 )
+from compute_horde.signature import Signature, verify_signature
 from django.conf import settings
+from django.utils import timezone
 from pydantic import BaseModel
 
+from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.metagraph_client import (
     create_metagraph_refresh_task,
     get_miner_axon_info,
 )
-from compute_horde_validator.validator.models import Miner, OrganicJob, SystemEvent
+from compute_horde_validator.validator.models import Miner, MinerManifest, OrganicJob, SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
-
-PREPARE_WAIT_TIMEOUT = 300
-TOTAL_JOB_TIMEOUT = 300
 
 
 class AuthenticationError(Exception):
@@ -61,6 +64,8 @@ class FacilitatorClient:
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
         self.refresh_metagraph_task = self.create_metagraph_refresh_task()
+
+        self.last_miner_cross_validated: str | None = None
 
     def connect(self):
         """Create an awaitable/async-iterable websockets.connect() object"""
@@ -232,7 +237,7 @@ class FacilitatorClient:
         except pydantic.ValidationError as exc:
             logger.debug("could not parse raw message as JobRequest: %s", exc)
         else:
-            task = asyncio.create_task(self.miner_driver(job_request))
+            task = asyncio.create_task(self.process_job_request(job_request))
             await self.miner_drivers.put(task)
             return
 
@@ -241,13 +246,92 @@ class FacilitatorClient:
     async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
         return await get_miner_axon_info(hotkey)
 
-    async def miner_driver(self, job_request: JobRequest):
+    async def fetch_miner_for_cross_validation(
+        self, executor_class: ExecutorClass, num_hours_ago_valid_manifests=4
+    ) -> Miner | None:
+        """
+        Goes through all miners with recent manifests and online executors of the given executor class
+        And returns the miner that follows alphabetically or loops back to the first miner in the list
+        If no miner is found, returns None
+        """
+
+        available_miner_manifests = (
+            MinerManifest.objects.select_related("miner")
+            .filter(
+                executor_class=str(executor_class),
+                online_executor_count__gt=0,
+                created_at__gte=timezone.now() - timedelta(hours=num_hours_ago_valid_manifests),
+            )
+            .order_by("miner__hotkey")
+        )
+
+        # get the next miner to cross validate
+        miner_manifest = None
+        if self.last_miner_cross_validated:
+            miner_manifest = await available_miner_manifests.filter(
+                miner__hotkey__gt=self.last_miner_cross_validated
+            ).afirst()
+
+        # if no next miner, go back to the first miner
+        if miner_manifest is None:
+            miner_manifest = await available_miner_manifests.afirst()
+
+        if miner_manifest is None:
+            self.last_miner_cross_validated = None
+            return None
+
+        miner = miner_manifest.miner
+        self.last_miner_cross_validated = miner.hotkey
+        return miner
+
+    async def process_job_request(self, job_request: JobRequest):
+        max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
+
+        if job_request.message_type == "V2JobRequest" and job_request.miner_hotkey is None:
+            logger.debug(f"Received signed payload: {job_request}")
+            try:
+                verify_signature(
+                    job_request.signed_request.signed_payload,
+                    Signature(
+                        signature_type=job_request.signed_request.signature_type,
+                        signatory=job_request.signed_request.signatory,
+                        timestamp_ns=job_request.signed_request.timestamp_ns,
+                        signature=base64.b64decode(job_request.signed_request.signature),
+                    ),
+                )
+            except Exception as e:
+                logger.error(f"Failed to verify signed payload: {e} - will not run job")
+                return
+
+            for i in range(max_retries):
+                miner = await self.fetch_miner_for_cross_validation(job_request.executor_class)
+                if miner is None:
+                    logger.warning(
+                        "No available miners with executor class: {executor_class} - will not run job"
+                    )
+                    return
+
+                try:
+                    if i > 0:
+                        # delete organic job failed from the previous attempt
+                        await OrganicJob.objects.filter(job_uuid=str(job_request.uuid)).adelete()
+                    job_completed = await self.miner_driver(miner, job_request)
+                    if job_completed:
+                        break
+                except Exception as e:
+                    logger.error(
+                        f"Error running organic job {job_request.uuid}: {e} - {max_retries-i-1} retries left"
+                    )
+        else:
+            # normal organic job flow
+            miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
+            await self.miner_driver(miner, job_request)
+
+    async def miner_driver(self, miner: Miner, job_request: JobRequest) -> bool:
         """drive a miner client from job start to completion, then close miner connection"""
-        assert not isinstance(job_request, V2JobRequest)
-        miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
-        miner_axon_info = await self.get_miner_axon_info(job_request.miner_hotkey)
+        miner_axon_info = await self.get_miner_axon_info(miner.hotkey)
         job = await OrganicJob.objects.acreate(
-            job_uuid=job_request.uuid,
+            job_uuid=str(job_request.uuid),
             miner=miner,
             miner_address=miner_axon_info.ip,
             miner_address_ip_version=miner_axon_info.ip_type,
@@ -257,17 +341,20 @@ class FacilitatorClient:
         )
 
         miner_client = self.MINER_CLIENT_CLASS(
-            miner_hotkey=job_request.miner_hotkey,
-            miner_address=miner_axon_info.ip,
-            miner_port=miner_axon_info.port,
-            job_uuid=job_request.uuid,
+            miner_hotkey=miner.hotkey,
+            miner_address=job.miner_address,
+            miner_port=job.miner_port,
+            job_uuid=str(job.job_uuid),
             my_keypair=self.keypair,
         )
-        await execute_organic_job(
+
+        total_job_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_TIMEOUT")
+        wait_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_WAIT_TIMEOUT")
+        return await execute_organic_job(
             miner_client,
             job,
             job_request,
-            total_job_timeout=TOTAL_JOB_TIMEOUT,
-            wait_timeout=PREPARE_WAIT_TIMEOUT,
+            total_job_timeout=total_job_timeout,
+            wait_timeout=wait_timeout,
             notify_callback=self.send_model,
         )
