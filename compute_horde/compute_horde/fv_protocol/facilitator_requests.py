@@ -1,11 +1,11 @@
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Literal, Self
 
-import bittensor
 import pydantic
+from pydantic import BaseModel, JsonValue, model_validator
+
 from compute_horde.base.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde.base.volume import Volume, ZipUrlVolume
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
-from pydantic import BaseModel, model_validator
+from compute_horde.executor_class import ExecutorClass
 
 
 class Error(BaseModel, extra="allow"):
@@ -21,22 +21,15 @@ class Response(BaseModel, extra="forbid"):
     errors: list[Error] = []
 
 
-class AuthenticationRequest(BaseModel, extra="forbid"):
-    """Message sent from validator to facilitator to authenticate itself"""
-
-    message_type: str = "V0AuthenticationRequest"
-    public_key: str
+class SignedRequest(BaseModel, extra="forbid"):
+    signature_type: str
+    signatory: str
+    timestamp_ns: int
     signature: str
-
-    @classmethod
-    def from_keypair(cls, keypair: bittensor.Keypair) -> Self:
-        return cls(
-            public_key=keypair.public_key.hex(),
-            signature=f"0x{keypair.sign(keypair.public_key).hex()}",
-        )
+    signed_payload: JsonValue
 
 
-class V0FacilitatorJobRequest(BaseModel, extra="forbid"):
+class V0JobRequest(BaseModel, extra="forbid"):
     """Message sent from facilitator to validator to request a job execution"""
 
     # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
@@ -45,8 +38,7 @@ class V0FacilitatorJobRequest(BaseModel, extra="forbid"):
 
     uuid: str
     miner_hotkey: str
-    # TODO: remove default after we add executor class support to facilitator
-    executor_class: ExecutorClass = DEFAULT_EXECUTOR_CLASS
+    executor_class: ExecutorClass
     docker_image: str
     raw_script: str
     args: list[str]
@@ -77,7 +69,7 @@ class V0FacilitatorJobRequest(BaseModel, extra="forbid"):
         return None
 
 
-class V1FacilitatorJobRequest(BaseModel, extra="forbid"):
+class V1JobRequest(BaseModel, extra="forbid"):
     """Message sent from facilitator to validator to request a job execution"""
 
     # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
@@ -85,8 +77,7 @@ class V1FacilitatorJobRequest(BaseModel, extra="forbid"):
     message_type: Literal["V1JobRequest"] = "V1JobRequest"
     uuid: str
     miner_hotkey: str
-    # TODO: remove default after we add executor class support to facilitator
-    executor_class: ExecutorClass = DEFAULT_EXECUTOR_CLASS
+    executor_class: ExecutorClass
     docker_image: str
     raw_script: str
     args: list[str]
@@ -105,19 +96,35 @@ class V1FacilitatorJobRequest(BaseModel, extra="forbid"):
         return self
 
 
+class V2JobRequest(BaseModel, extra="forbid"):
+    """Message sent from facilitator to validator to request a job execution"""
+
+    # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
+    type: Literal["job.new"] = "job.new"
+    message_type: Literal["V2JobRequest"] = "V2JobRequest"
+    uuid: str
+    miner_hotkey: str | None
+    executor_class: ExecutorClass
+    docker_image: str
+    raw_script: str
+    args: list[str]
+    env: dict[str, str]
+    use_gpu: bool
+    volume: Volume | None = None
+    output_upload: OutputUpload | None = None
+    signed_request: SignedRequest
+
+    def get_args(self):
+        return self.args
+
+    @model_validator(mode="after")
+    def validate_at_least_docker_image_or_raw_script(self) -> Self:
+        if not (bool(self.docker_image) or bool(self.raw_script)):
+            raise ValueError("Expected at least one of `docker_image` or `raw_script`")
+        return self
+
+
 JobRequest = Annotated[
-    V0FacilitatorJobRequest | V1FacilitatorJobRequest,
+    V0JobRequest | V1JobRequest,
     pydantic.Field(discriminator="message_type"),
 ]
-
-
-class Heartbeat(BaseModel, extra="forbid"):
-    message_type: str = "V0Heartbeat"
-
-
-class MachineSpecsUpdate(BaseModel, extra="forbid"):
-    message_type: str = "V0MachineSpecsUpdate"
-    miner_hotkey: str
-    validator_hotkey: str
-    specs: dict[str, Any]
-    batch_id: str
