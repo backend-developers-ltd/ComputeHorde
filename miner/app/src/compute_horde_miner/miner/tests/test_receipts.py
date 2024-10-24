@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import bittensor
 import pytest
+from compute_horde.base.volume import VolumeType
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
@@ -19,11 +20,20 @@ from django.utils import timezone
 from pytest_mock import MockerFixture
 
 from compute_horde_miner.miner.models import Validator
+from compute_horde_miner.miner.tests.executor_manager import fake_executor
 from compute_horde_miner.miner.tests.validator import fake_validator
 
 
 def _sign(msg, key: bittensor.Keypair):
     return f"0x{key.sign(msg.blob_for_signing()).hex()}"
+
+
+@pytest.fixture
+def job_uuid():
+    _job_uuid = str(uuid4())
+    fake_executor.job_uuid = _job_uuid
+    yield _job_uuid
+    fake_executor.job_uuid = None
 
 
 @pytest.mark.parametrize(
@@ -37,12 +47,12 @@ async def test_receipt_is_saved(
     miner_wallet: bittensor.wallet,
     mocker: MockerFixture,
     organic_job: bool,
+    job_uuid: str,
     settings,
 ) -> None:
     mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.prepare_receipts")
     settings.DEBUG_TURN_AUTHENTICATION_OFF = True
     settings.BITTENSOR_WALLET = lambda: miner_wallet
-    job_uuid = str(uuid4())
     await Validator.objects.acreate(
         public_key=validator_wallet.hotkey.ss58_address,
         active=True,
@@ -88,7 +98,8 @@ async def test_receipt_is_saved(
                 job_uuid=job_uuid,
                 executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
                 base_docker_image_name="it's teeeeests",
-                timeout_seconds=123,
+                timeout_seconds=60,
+                volume_type=VolumeType.inline,
                 job_started_receipt_payload=job_started_receipt_payload,
                 job_started_receipt_signature=job_started_receipt_signature,
             ).model_dump_json()
