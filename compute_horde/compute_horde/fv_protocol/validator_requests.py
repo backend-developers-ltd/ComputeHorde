@@ -1,4 +1,4 @@
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import bittensor
 from pydantic import BaseModel
@@ -7,13 +7,13 @@ from pydantic import BaseModel
 class V0Heartbeat(BaseModel, extra="forbid"):
     """Message sent from validator to facilitator to keep connection alive"""
 
-    message_type: str = "V0Heartbeat"
+    message_type: Literal["V0Heartbeat"] = "V0Heartbeat"
 
 
 class V0AuthenticationRequest(BaseModel, extra="forbid"):
     """Message sent from validator to facilitator to authenticate itself"""
 
-    message_type: str = "V0AuthenticationRequest"
+    message_type: Literal["V0AuthenticationRequest"] = "V0AuthenticationRequest"
     public_key: str
     signature: str
 
@@ -43,7 +43,7 @@ class V0AuthenticationRequest(BaseModel, extra="forbid"):
 class V0MachineSpecsUpdate(BaseModel, extra="forbid"):
     """Message sent from validator to facilitator to update miner specs"""
 
-    message_type: str = "V0MachineSpecsUpdate"
+    message_type: Literal["V0MachineSpecsUpdate"] = "V0MachineSpecsUpdate"
     miner_hotkey: str
     validator_hotkey: str
     specs: dict[str, Any]
