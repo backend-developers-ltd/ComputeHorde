@@ -12,14 +12,10 @@ import typing
 from typing import ClassVar, Protocol
 
 from class_registry import ClassRegistry, RegistryKeyError
+from pydantic import JsonValue
 
 if typing.TYPE_CHECKING:
     import bittensor
-
-JSONValue = str | int | float | bool | None
-JSONDict = dict[str, "JSONType"]
-JSONArray = list["JSONType"]
-JSONType = JSONValue | JSONDict | JSONArray
 
 SIGNERS_REGISTRY: ClassRegistry[Signer] = ClassRegistry("signature_type")
 VERIFIERS_REGISTRY: ClassRegistry[Verifier] = ClassRegistry("signature_type")
@@ -34,7 +30,7 @@ class Signature:
 
 
 def verify_signature(
-    payload: JSONType | bytes,
+    payload: JsonValue | bytes,
     signature: Signature,
     *,
     newer_than: datetime.datetime | None = None,
@@ -87,7 +83,7 @@ def verify_request(
     method: str,
     url: str,
     headers: dict[str, str],
-    json: JSONType | None = None,
+    json: JsonValue | None = None,
     *,
     newer_than: datetime.datetime | None = None,
     signature_extractor: SignatureExtractor = signature_from_headers,
@@ -150,7 +146,7 @@ class SignatureTimeoutException(SignatureInvalidException):
     pass
 
 
-def hash_message_signature(payload: bytes | JSONType, signature: Signature) -> bytes:
+def hash_message_signature(payload: bytes | JsonValue, signature: Signature) -> bytes:
     """
     Hashes the message to be signed with the signature parameters
 
@@ -171,8 +167,8 @@ _REMOVE_URL_SCHEME_N_HOST_RE = re.compile(r"^\w+://[^/]+")
 
 
 def signature_payload(
-    method: str, url: str, headers: dict[str, str], json: JSONType | None = None
-) -> JSONType:
+    method: str, url: str, headers: dict[str, str], json: JsonValue | None = None
+) -> JsonValue:
     reduced_url = _REMOVE_URL_SCHEME_N_HOST_RE.sub("", url)
     return {
         "action": f"{method.upper()} {reduced_url}",
@@ -188,7 +184,7 @@ class SignatureScheme(abc.ABC):
         method: str,
         url: str,
         headers: dict[str, str],
-        json: JSONType | None = None,
+        json: JsonValue | None = None,
     ):
         return signature_payload(
             method=method,
@@ -199,7 +195,7 @@ class SignatureScheme(abc.ABC):
 
 
 class Signer(SignatureScheme):
-    def sign(self, payload: JSONType | bytes) -> Signature:
+    def sign(self, payload: JsonValue | bytes) -> Signature:
         signature = Signature(
             signature_type=self.signature_type,
             signatory=self.get_signatory(),
@@ -211,7 +207,7 @@ class Signer(SignatureScheme):
         return signature
 
     def signature_for_request(
-        self, method: str, url: str, headers: dict[str, str], json: JSONType | None = None
+        self, method: str, url: str, headers: dict[str, str], json: JsonValue | None = None
     ) -> Signature:
         return self.sign(self.payload_from_request(method, url, headers=headers, json=json))
 
@@ -227,7 +223,7 @@ class Signer(SignatureScheme):
 class Verifier(SignatureScheme):
     def verify(
         self,
-        payload: JSONType | bytes,
+        payload: JsonValue | bytes,
         signature: Signature,
         newer_than: datetime.datetime | None = None,
     ):
