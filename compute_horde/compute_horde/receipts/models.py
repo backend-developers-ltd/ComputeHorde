@@ -3,11 +3,12 @@ from datetime import timedelta
 from django.db import models
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
-from compute_horde.mv_protocol.validator_requests import (
+from compute_horde.receipts.schemas import (
+    JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
+    Receipt,
 )
-from compute_horde.receipts.schemas import Receipt
 
 
 class ReceiptNotSigned(Exception):
@@ -20,6 +21,7 @@ class AbstractReceipt(models.Model):
     miner_hotkey = models.CharField(max_length=256)
     validator_signature = models.CharField(max_length=256)
     miner_signature = models.CharField(max_length=256, null=True, blank=True)
+    timestamp = models.DateTimeField()
 
     class Meta:
         abstract = True
@@ -33,9 +35,9 @@ class AbstractReceipt(models.Model):
 
 class JobStartedReceipt(AbstractReceipt):
     executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
-    time_accepted = models.DateTimeField()
     max_timeout = models.IntegerField()
     is_organic = models.BooleanField()
+    ttl = models.IntegerField()
 
     # https://github.com/typeddjango/django-stubs/issues/1684#issuecomment-1706446344
     objects: models.Manager["JobStartedReceipt"]
@@ -49,10 +51,36 @@ class JobStartedReceipt(AbstractReceipt):
                 job_uuid=str(self.job_uuid),
                 miner_hotkey=self.miner_hotkey,
                 validator_hotkey=self.validator_hotkey,
+                timestamp=self.timestamp,
                 executor_class=ExecutorClass(self.executor_class),
-                time_accepted=self.time_accepted,
                 max_timeout=self.max_timeout,
                 is_organic=self.is_organic,
+                ttl=self.ttl,
+            ),
+            validator_signature=self.validator_signature,
+            miner_signature=self.miner_signature,
+        )
+
+
+class JobAcceptedReceipt(AbstractReceipt):
+    time_accepted = models.DateTimeField()
+    ttl = models.IntegerField()
+
+    # https://github.com/typeddjango/django-stubs/issues/1684#issuecomment-1706446344
+    objects: models.Manager["JobAcceptedReceipt"]
+
+    def to_receipt(self) -> Receipt:
+        if self.miner_signature is None:
+            raise ReceiptNotSigned("Miner signature is required")
+
+        return Receipt(
+            payload=JobAcceptedReceiptPayload(
+                job_uuid=str(self.job_uuid),
+                miner_hotkey=self.miner_hotkey,
+                validator_hotkey=self.validator_hotkey,
+                timestamp=self.timestamp,
+                time_accepted=self.time_accepted,
+                ttl=self.ttl,
             ),
             validator_signature=self.validator_signature,
             miner_signature=self.miner_signature,
@@ -82,6 +110,7 @@ class JobFinishedReceipt(AbstractReceipt):
                 job_uuid=str(self.job_uuid),
                 miner_hotkey=self.miner_hotkey,
                 validator_hotkey=self.validator_hotkey,
+                timestamp=self.timestamp,
                 time_started=self.time_started,
                 time_took_us=self.time_took_us,
                 score_str=self.score_str,

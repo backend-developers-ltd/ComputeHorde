@@ -1,14 +1,15 @@
 import uuid
+from datetime import UTC, datetime
 from typing import NamedTuple
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.mv_protocol.validator_requests import (
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
+    Receipt,
 )
-from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
-from compute_horde.receipts.schemas import Receipt
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
@@ -46,10 +47,11 @@ def mocked_get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                     job_uuid=str(uuid.uuid4()),
                     miner_hotkey="5G9qWBzLPVVu2fCPPvg3QgPPK5JaJmJKaJha95TPHH9NZWuL",
                     validator_hotkey="v1",
+                    timestamp=datetime(2020, 1, 1, 0, 0, tzinfo=UTC),
                     executor_class=DEFAULT_EXECUTOR_CLASS,
-                    time_accepted=now(),
                     max_timeout=30,
                     is_organic=False,
+                    ttl=5,
                 ),
                 validator_signature="0xv1",
                 miner_signature="0xm1",
@@ -62,6 +64,7 @@ def mocked_get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
                     job_uuid=str(uuid.uuid4()),
                     miner_hotkey="5CPhGRp4cdEG4KSui7VQixHhvN5eBUSnMYeUF5thdxm4sKtz",
                     validator_hotkey="v1",
+                    timestamp=datetime(2020, 1, 1, 1, 0, tzinfo=UTC),
                     time_started=now(),
                     time_took_us=30_000_000,
                     score_str="123.45",

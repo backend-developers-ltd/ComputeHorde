@@ -92,6 +92,18 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
                 "base_docker_image_name": "it's teeeeests",
                 "timeout_seconds": 60,
                 "volume_type": "inline",
+                "job_started_receipt_payload": {
+                    "receipt_type": "JobStartedReceipt",
+                    "job_uuid": job_uuid,
+                    "miner_hotkey": "miner_hotkey",
+                    "validator_hotkey": validator_key,
+                    "timestamp": "2020-01-01T00:00Z",
+                    "executor_class": DEFAULT_EXECUTOR_CLASS,
+                    "max_timeout": 60,
+                    "is_organic": True,
+                    "ttl": 5,
+                },
+                "job_started_receipt_signature": "gibberish",
             }
         )
         response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
@@ -125,7 +137,7 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
         }
 
 
-async def test_main_loop(validator: Validator, job_uuid: str):
+async def test_main_loop(validator: Validator, job_uuid: str, mock_keypair: MagicMock):
     await run_regular_flow_test(validator.public_key, job_uuid)
 
 
