@@ -110,7 +110,7 @@ async def execute_organic_job(
     # TODO: remove method assignment above and properly handle notify_* cases
 
     job_details = OrganicJobDetails(
-        job_uuid=str(job_request.uuid),
+        job_uuid=str(job.job_uuid),  # TODO: fix uuid field in AdminJobRequest
         executor_class=ExecutorClass(job_request.executor_class),
         docker_image=job_request.docker_image or None,
         raw_script=job_request.raw_script or None,

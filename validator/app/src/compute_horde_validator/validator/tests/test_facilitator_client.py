@@ -2,11 +2,10 @@ import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 import websockets
-from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import JobRequest, Response
@@ -50,7 +49,7 @@ async def async_patch_all():
         ),
         patch(
             "compute_horde_validator.validator.organic_jobs.facilitator_client.get_miner_axon_info",
-            new_callable=lambda: AsyncMock(side_effect=sync_to_async(mock_get_miner_axon_info)),
+            mock_get_miner_axon_info,
         ),
         patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor()),
         patch("bittensor.metagraph", lambda *args, **kwargs: MockMetagraph()),

@@ -12,6 +12,7 @@ from unittest import mock
 import bittensor
 import constance
 import numpy as np
+from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     V0JobRequest,
@@ -56,7 +57,7 @@ def get_miner_client(MINER_CLIENT, job_uuid: str):
     )
 
 
-def mock_get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
+async def mock_get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
     return bittensor.AxonInfo(
         version=4,
         ip="ignore",
@@ -391,7 +392,7 @@ class MockNeuron:
         self.hotkey = hotkey
         self.uid = uid
         self.stake = bittensor.Balance((uid + 1) * 1001.0)
-        self.axon_info = mock_get_miner_axon_info("hotkey")
+        self.axon_info = async_to_sync(mock_get_miner_axon_info)("hotkey")
 
 
 class MockBlock:

@@ -19,7 +19,10 @@ from .helpers import (
 logger = logging.getLogger(__name__)
 
 
-@patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
+@patch(
+    "compute_horde_validator.validator.tasks.get_miner_axon_info",
+    mock_get_miner_axon_info,
+)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockSuccessfulMinerClient)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_completed():
@@ -47,7 +50,10 @@ def test_debug_run_organic_job_command__job_completed():
     )
 
 
-@patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
+@patch(
+    "compute_horde_validator.validator.tasks.get_miner_axon_info",
+    mock_get_miner_axon_info,
+)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_timeout():
@@ -101,7 +107,10 @@ def test_debug_run_organic_job_command__job_not_created():
 
 
 @patch("compute_horde_validator.validator.tasks.get_keypair", throw_error)
-@patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
+@patch(
+    "compute_horde_validator.validator.tasks.get_miner_axon_info",
+    mock_get_miner_axon_info,
+)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockSuccessfulMinerClient)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_created_but_not_triggered():
