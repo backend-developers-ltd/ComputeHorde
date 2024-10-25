@@ -52,7 +52,7 @@ def get_validators(netuid=12, network="finney", block: int | None = None) -> lis
     return neurons[:VALIDATORS_LIMIT]
 
 
-def _json_dumps_default(obj):
+def json_dumps_default(obj):
     if isinstance(obj, datetime.datetime):
         return obj.isoformat()
 

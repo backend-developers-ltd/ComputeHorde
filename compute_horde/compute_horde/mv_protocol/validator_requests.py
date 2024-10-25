@@ -12,7 +12,7 @@ from ..base.output_upload import OutputUpload  # noqa
 from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
 from ..executor_class import ExecutorClass
-from ..utils import MachineSpecs, _json_dumps_default
+from ..utils import MachineSpecs, json_dumps_default
 
 SAFE_DOMAIN_REGEX = re.compile(r".*")
 
@@ -99,7 +99,7 @@ class ReceiptPayload(pydantic.BaseModel):
 
     def blob_for_signing(self):
         # pydantic v2 does not support sort_keys anymore.
-        return json.dumps(self.model_dump(), sort_keys=True, default=_json_dumps_default)
+        return json.dumps(self.model_dump(), sort_keys=True, default=json_dumps_default)
 
 
 class JobFinishedReceiptPayload(ReceiptPayload):
