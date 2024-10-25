@@ -21,12 +21,12 @@ class Response(BaseModel, extra="forbid"):
     errors: list[Error] = []
 
 
-class SignedRequest(BaseModel, extra="forbid"):
-    signature_type: str
-    signatory: str
-    timestamp_ns: int
-    signature: str
-    signed_payload: JsonValue
+class Signature(BaseModel, extra="forbid"):
+    # has defaults to allow easy instantiation
+    signature_type: str = ""
+    signatory: str = ""
+    timestamp_ns: int = 0
+    signature: str = ""
 
 
 class V0JobRequest(BaseModel, extra="forbid"):
@@ -102,8 +102,10 @@ class V2JobRequest(BaseModel, extra="forbid"):
     # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
     type: Literal["job.new"] = "job.new"
     message_type: Literal["V2JobRequest"] = "V2JobRequest"
+    signature: Signature | None = None
+
+    # !!! all fields below are included in the signed json payload
     uuid: str
-    miner_hotkey: str | None
     executor_class: ExecutorClass
     docker_image: str
     raw_script: str
@@ -112,10 +114,17 @@ class V2JobRequest(BaseModel, extra="forbid"):
     use_gpu: bool
     volume: Volume | None = None
     output_upload: OutputUpload | None = None
-    signed_request: SignedRequest
+    # !!! all fields above are included in the signed json payload
 
     def get_args(self):
         return self.args
+
+    def json_for_signing(self) -> JsonValue:
+        payload = self.model_dump(mode="json")
+        del payload["type"]
+        del payload["message_type"]
+        del payload["signature"]
+        return payload
 
     @model_validator(mode="after")
     def validate_at_least_docker_image_or_raw_script(self) -> Self:
