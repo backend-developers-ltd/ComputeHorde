@@ -44,7 +44,7 @@ DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
 async def async_patch_all():
     with (
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_signature",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_job_request",
             lambda *args, **kwargs: True,
         ),
         patch(

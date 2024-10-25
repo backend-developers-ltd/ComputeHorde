@@ -10,8 +10,8 @@ import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde.fv_protocol.facilitator_requests import Error, JobRequest, Response
 from compute_horde.executor_class import ExecutorClass
+from compute_horde.fv_protocol.facilitator_requests import Error, JobRequest, Response, V2JobRequest
 from compute_horde.fv_protocol.validator_requests import (
     V0AuthenticationRequest,
     V0Heartbeat,
@@ -27,12 +27,46 @@ from compute_horde_validator.validator.metagraph_client import (
     create_metagraph_refresh_task,
     get_miner_axon_info,
 )
-from compute_horde_validator.validator.models import Miner, MinerManifest, OrganicJob, SystemEvent
+from compute_horde_validator.validator.models import (
+    Miner,
+    MinerManifest,
+    OrganicJob,
+    SystemEvent,
+    ValidatorWhitelist,
+)
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
+
+
+def verify_job_request(job_request: V2JobRequest):
+    # check if signer is in validator whitelist
+    signer = job_request.signed_request.signatory
+    signed_payload = job_request.signed_request.signed_payload
+    if signed_payload is None:
+        raise ValueError("Signed payload is None")
+
+    if not ValidatorWhitelist.objects.filter(hotkey=signer).exists():
+        raise ValueError(f"Signatory {signer} is not in validator whitelist")
+
+    # verify signed payload
+    verify_signature(
+        signed_payload,
+        Signature(
+            signature_type=job_request.signed_request.signature_type,
+            signatory=job_request.signed_request.signatory,
+            timestamp_ns=job_request.signed_request.timestamp_ns,
+            signature=base64.b64decode(job_request.signed_request.signature),
+        ),
+    )
+
+    # TODO: verify job_request fields against the signed fields
+    # fields = job_request.model_dump(exclude={"signed_request"})
+    # for field in fields.keys():
+    #     if fields[field] != signed_payload[field]:
+    #         raise ValueError(f"Field {field} does not match signed payload")
 
 
 class AuthenticationError(Exception):
@@ -290,15 +324,7 @@ class FacilitatorClient:
         if job_request.message_type == "V2JobRequest" and job_request.miner_hotkey is None:
             logger.debug(f"Received signed payload: {job_request}")
             try:
-                verify_signature(
-                    job_request.signed_request.signed_payload,
-                    Signature(
-                        signature_type=job_request.signed_request.signature_type,
-                        signatory=job_request.signed_request.signatory,
-                        timestamp_ns=job_request.signed_request.timestamp_ns,
-                        signature=base64.b64decode(job_request.signed_request.signature),
-                    ),
-                )
+                verify_job_request(job_request)
             except Exception as e:
                 logger.error(f"Failed to verify signed payload: {e} - will not run job")
                 return
