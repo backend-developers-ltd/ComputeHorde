@@ -11,8 +11,8 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
+    V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
-    V0JobStartedReceiptRequest,
 )
 
 from compute_horde_validator.validator.models import Miner
@@ -37,7 +37,7 @@ WEBSOCKET_TIMEOUT = 10
         "expected_job_status_updates",
         "organic_job_status",
         "dummy_job_factory",
-        "expected_job_started_receipt",
+        "expected_job_accepted_receipt",
         "expected_job_finished_receipt",
     ),
     [
@@ -62,7 +62,7 @@ WEBSOCKET_TIMEOUT = 10
             ["accepted", "failed"],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v0,
-            False,
+            True,
             False,
         ),
         (
@@ -104,7 +104,7 @@ async def test_miner_driver(
     expected_job_status_updates,
     organic_job_status,
     dummy_job_factory,
-    expected_job_started_receipt,
+    expected_job_accepted_receipt,
     expected_job_finished_receipt,
 ):
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_client")
@@ -163,7 +163,7 @@ async def test_miner_driver(
     def condition(_):
         return True
 
-    if expected_job_started_receipt:
-        assert miner_client._query_sent_models(condition, V0JobStartedReceiptRequest)
+    if expected_job_accepted_receipt:
+        assert miner_client._query_sent_models(condition, V0JobAcceptedReceiptRequest)
     if expected_job_finished_receipt:
         assert miner_client._query_sent_models(condition, V0JobFinishedReceiptRequest)

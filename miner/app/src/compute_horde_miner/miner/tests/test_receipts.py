@@ -3,25 +3,37 @@ from uuid import uuid4
 
 import bittensor
 import pytest
+from compute_horde.base.volume import VolumeType
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
     V0AuthenticateRequest,
+    V0InitialJobRequest,
+    V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
-    V0JobStartedReceiptRequest,
 )
-from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.schemas import JobAcceptedReceiptPayload
 from django.utils import timezone
 from pytest_mock import MockerFixture
 
-from compute_horde_miner.miner.models import AcceptedJob, Validator
+from compute_horde_miner.miner.models import Validator
+from compute_horde_miner.miner.tests.executor_manager import fake_executor
 from compute_horde_miner.miner.tests.validator import fake_validator
 
 
 def _sign(msg, key: bittensor.Keypair):
     return f"0x{key.sign(msg.blob_for_signing()).hex()}"
+
+
+@pytest.fixture
+def job_uuid():
+    _job_uuid = str(uuid4())
+    fake_executor.job_uuid = _job_uuid
+    yield _job_uuid
+    fake_executor.job_uuid = None
 
 
 @pytest.mark.parametrize(
@@ -35,13 +47,13 @@ async def test_receipt_is_saved(
     miner_wallet: bittensor.wallet,
     mocker: MockerFixture,
     organic_job: bool,
+    job_uuid: str,
     settings,
 ) -> None:
     mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.prepare_receipts")
     settings.DEBUG_TURN_AUTHENTICATION_OFF = True
     settings.BITTENSOR_WALLET = lambda: miner_wallet
-    job_uuid = str(uuid4())
-    validator = await Validator.objects.acreate(
+    await Validator.objects.acreate(
         public_key=validator_wallet.hotkey.ss58_address,
         active=True,
     )
@@ -69,28 +81,45 @@ async def test_receipt_is_saved(
             },
         }
 
-        # Skip doing the job
-        await AcceptedJob.objects.acreate(
-            job_uuid=job_uuid,
-            validator=validator,
-            initial_job_details={},
-        )
-
         # Send the receipts
         job_started_receipt_payload = JobStartedReceiptPayload(
             job_uuid=job_uuid,
             is_organic=organic_job,
             miner_hotkey=miner_wallet.hotkey.ss58_address,
             validator_hotkey=validator_wallet.hotkey.ss58_address,
+            timestamp=timezone.now(),
             executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+            max_timeout=60,
+            ttl=5,
+        )
+        job_started_receipt_signature = _sign(job_started_receipt_payload, validator_wallet.hotkey)
+        await fake_validator_channel.send_to(
+            V0InitialJobRequest(
+                job_uuid=job_uuid,
+                executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+                base_docker_image_name="it's teeeeests",
+                timeout_seconds=60,
+                volume_type=VolumeType.inline,
+                job_started_receipt_payload=job_started_receipt_payload,
+                job_started_receipt_signature=job_started_receipt_signature,
+            ).model_dump_json()
+        )
+
+        # skip doing the job, and only send receipts
+
+        job_accepted_receipt_payload = JobAcceptedReceiptPayload(
+            job_uuid=job_uuid,
+            miner_hotkey=miner_wallet.hotkey.ss58_address,
+            validator_hotkey=validator_wallet.hotkey.ss58_address,
+            timestamp=timezone.now(),
             time_accepted=timezone.now(),
-            max_timeout=123,
+            ttl=5,
         )
         await fake_validator_channel.send_to(
-            V0JobStartedReceiptRequest(
+            V0JobAcceptedReceiptRequest(
                 job_uuid=job_uuid,
-                payload=job_started_receipt_payload,
-                signature=_sign(job_started_receipt_payload, validator_wallet.hotkey),
+                payload=job_accepted_receipt_payload,
+                signature=_sign(job_accepted_receipt_payload, validator_wallet.hotkey),
             ).model_dump_json()
         )
 
@@ -98,6 +127,7 @@ async def test_receipt_is_saved(
             job_uuid=job_uuid,
             miner_hotkey=miner_wallet.hotkey.ss58_address,
             validator_hotkey=validator_wallet.hotkey.ss58_address,
+            timestamp=timezone.now(),
             time_started=timezone.now(),
             time_took_us=123,
             score_str="123.45",
@@ -113,4 +143,5 @@ async def test_receipt_is_saved(
     assert await JobStartedReceipt.objects.filter(
         job_uuid=job_uuid, is_organic=organic_job
     ).aexists()
+    assert await JobAcceptedReceipt.objects.filter(job_uuid=job_uuid).aexists()
     assert await JobFinishedReceipt.objects.filter(job_uuid=job_uuid).aexists()

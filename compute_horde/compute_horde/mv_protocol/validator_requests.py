@@ -1,18 +1,22 @@
-import datetime
 import enum
 import json
 import re
 from typing import Self
 
 import pydantic
-from pydantic import field_serializer, model_validator
+from pydantic import model_validator
 
 from ..base.docker import DockerRunOptionsPreset
 from ..base.output_upload import OutputUpload  # noqa
 from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
 from ..executor_class import ExecutorClass
-from ..utils import MachineSpecs, json_dumps_default
+from ..receipts.schemas import (
+    JobAcceptedReceiptPayload,
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+)
+from ..utils import MachineSpecs
 
 SAFE_DOMAIN_REGEX = re.compile(r".*")
 
@@ -22,8 +26,8 @@ class RequestType(enum.Enum):
     V0InitialJobRequest = "V0InitialJobRequest"
     V0MachineSpecsRequest = "V0MachineSpecsRequest"
     V0JobRequest = "V0JobRequest"
+    V0JobAcceptedReceiptRequest = "V0JobAcceptedReceiptRequest"
     V0JobFinishedReceiptRequest = "V0JobFinishedReceiptRequest"
-    V0JobStartedReceiptRequest = "V0JobStartedReceiptRequest"
     GenericError = "GenericError"
 
 
@@ -57,6 +61,8 @@ class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     timeout_seconds: int | None = None
     volume: Volume | None = None
     volume_type: VolumeType | None = None
+    job_started_receipt_payload: JobStartedReceiptPayload
+    job_started_receipt_signature: str
 
     @model_validator(mode="after")
     def validate_volume_or_volume_type(self) -> Self:
@@ -92,34 +98,6 @@ class GenericError(BaseValidatorRequest):
     details: str | None = None
 
 
-class ReceiptPayload(pydantic.BaseModel):
-    job_uuid: str
-    miner_hotkey: str
-    validator_hotkey: str
-
-    def blob_for_signing(self):
-        # pydantic v2 does not support sort_keys anymore.
-        return json.dumps(self.model_dump(), sort_keys=True, default=json_dumps_default)
-
-
-class JobFinishedReceiptPayload(ReceiptPayload):
-    time_started: datetime.datetime
-    time_took_us: int  # micro-seconds
-    score_str: str
-
-    @property
-    def time_took(self):
-        return datetime.timedelta(microseconds=self.time_took_us)
-
-    @property
-    def score(self):
-        return float(self.score_str)
-
-    @field_serializer("time_started")
-    def serialize_dt(self, dt: datetime.datetime, _info):
-        return dt.isoformat()
-
-
 class V0JobFinishedReceiptRequest(BaseValidatorRequest):
     message_type: RequestType = RequestType.V0JobFinishedReceiptRequest
     payload: JobFinishedReceiptPayload
@@ -129,20 +107,9 @@ class V0JobFinishedReceiptRequest(BaseValidatorRequest):
         return self.payload.blob_for_signing()
 
 
-class JobStartedReceiptPayload(ReceiptPayload):
-    executor_class: ExecutorClass
-    time_accepted: datetime.datetime
-    max_timeout: int  # seconds
-    is_organic: bool
-
-    @field_serializer("time_accepted")
-    def serialize_dt(self, dt: datetime.datetime, _info):
-        return dt.isoformat()
-
-
-class V0JobStartedReceiptRequest(BaseValidatorRequest):
-    message_type: RequestType = RequestType.V0JobStartedReceiptRequest
-    payload: JobStartedReceiptPayload
+class V0JobAcceptedReceiptRequest(BaseValidatorRequest):
+    message_type: RequestType = RequestType.V0JobAcceptedReceiptRequest
+    payload: JobAcceptedReceiptPayload
     signature: str
 
     def blob_for_signing(self):

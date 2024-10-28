@@ -19,11 +19,12 @@ from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
-from compute_horde.mv_protocol.validator_requests import (
+from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.schemas import (
+    JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.transfer import get_miner_receipts
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
@@ -1023,44 +1024,75 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
     tolerance = timedelta(hours=1)
 
     latest_job_started_receipt = (
-        JobStartedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-time_accepted").first()
+        JobStartedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-timestamp").first()
     )
     job_started_receipt_cutoff_time = (
-        latest_job_started_receipt.time_accepted - tolerance if latest_job_started_receipt else None
+        latest_job_started_receipt.timestamp - tolerance if latest_job_started_receipt else None
     )
     job_started_receipt_to_create = [
         JobStartedReceipt(
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,
             validator_hotkey=receipt.payload.validator_hotkey,
+            miner_signature=receipt.miner_signature,
+            validator_signature=receipt.validator_signature,
+            timestamp=receipt.payload.timestamp,
             executor_class=receipt.payload.executor_class,
-            time_accepted=receipt.payload.time_accepted,
             max_timeout=receipt.payload.max_timeout,
             is_organic=receipt.payload.is_organic,
+            ttl=receipt.payload.ttl,
         )
         for receipt in receipts
         if isinstance(receipt.payload, JobStartedReceiptPayload)
         and (
             job_started_receipt_cutoff_time is None
-            or receipt.payload.time_accepted > job_started_receipt_cutoff_time
+            or receipt.payload.timestamp > job_started_receipt_cutoff_time
         )
     ]
     logger.debug(f"Creating {len(job_started_receipt_to_create)} JobStartedReceipt. {hotkey=}")
     JobStartedReceipt.objects.bulk_create(job_started_receipt_to_create, ignore_conflicts=True)
 
+    latest_job_accepted_receipt = (
+        JobAcceptedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-timestamp").first()
+    )
+    job_accepted_receipt_cutoff_time = (
+        latest_job_accepted_receipt.timestamp - tolerance if latest_job_accepted_receipt else None
+    )
+    job_accepted_receipt_to_create = [
+        JobAcceptedReceipt(
+            job_uuid=receipt.payload.job_uuid,
+            miner_hotkey=receipt.payload.miner_hotkey,
+            validator_hotkey=receipt.payload.validator_hotkey,
+            miner_signature=receipt.miner_signature,
+            validator_signature=receipt.validator_signature,
+            timestamp=receipt.payload.timestamp,
+            time_accepted=receipt.payload.time_accepted,
+            ttl=receipt.payload.ttl,
+        )
+        for receipt in receipts
+        if isinstance(receipt.payload, JobAcceptedReceiptPayload)
+        and (
+            job_accepted_receipt_cutoff_time is None
+            or receipt.payload.timestamp > job_accepted_receipt_cutoff_time
+        )
+    ]
+    logger.debug(f"Creating {len(job_accepted_receipt_to_create)} JobAcceptedReceipt. {hotkey=}")
+    JobAcceptedReceipt.objects.bulk_create(job_accepted_receipt_to_create, ignore_conflicts=True)
+
     latest_job_finished_receipt = (
-        JobFinishedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-time_started").first()
+        JobFinishedReceipt.objects.filter(miner_hotkey=hotkey).order_by("-timestamp").first()
     )
     job_finished_receipt_cutoff_time = (
-        latest_job_finished_receipt.time_started - tolerance
-        if latest_job_finished_receipt
-        else None
+        latest_job_finished_receipt.timestamp - tolerance if latest_job_finished_receipt else None
     )
     job_finished_receipt_to_create = [
         JobFinishedReceipt(
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,
             validator_hotkey=receipt.payload.validator_hotkey,
+            miner_signature=receipt.miner_signature,
+            validator_signature=receipt.validator_signature,
+            timestamp=receipt.payload.timestamp,
             time_started=receipt.payload.time_started,
             time_took_us=receipt.payload.time_took_us,
             score_str=receipt.payload.score_str,
@@ -1069,7 +1101,7 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
         if isinstance(receipt.payload, JobFinishedReceiptPayload)
         and (
             job_finished_receipt_cutoff_time is None
-            or receipt.payload.time_started > job_finished_receipt_cutoff_time
+            or receipt.payload.timestamp > job_finished_receipt_cutoff_time
         )
     ]
     logger.debug(f"Creating {len(job_finished_receipt_to_create)} JobFinishedReceipt. {hotkey=}")
@@ -1080,8 +1112,9 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
 def fetch_receipts():
     """Fetch job receipts from the miners."""
     # Delete old receipts before fetching new ones
-    JobStartedReceipt.objects.filter(time_accepted__lt=now() - timedelta(days=7)).delete()
-    JobFinishedReceipt.objects.filter(time_started__lt=now() - timedelta(days=7)).delete()
+    JobStartedReceipt.objects.filter(timestamp__lt=now() - timedelta(days=7)).delete()
+    JobAcceptedReceipt.objects.filter(timestamp__lt=now() - timedelta(days=7)).delete()
+    JobFinishedReceipt.objects.filter(timestamp__lt=now() - timedelta(days=7)).delete()
 
     metagraph = bittensor.metagraph(
         netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK
