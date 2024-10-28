@@ -70,6 +70,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts impo
     LlmPromptsSyntheticJobGenerator,
 )
 from compute_horde_validator.validator.synthetic_jobs.scoring import get_manifest_multiplier
+from compute_horde_validator.validator.synthetic_jobs.db import safe_bulk_create
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
@@ -1421,13 +1422,16 @@ def _db_persist_system_events(ctx: BatchContext) -> None:
         # it's possible some events were already inserted during
         # a previous call, but the operation failed before clearing
         # the events list, so ignore insert conflicts
-        SystemEvent.objects.bulk_create(ctx.events, ignore_conflicts=True)
+        safe_bulk_create(SystemEvent, ctx.events, batch_size=500, timeout=30, ignore_conflicts=True)
+    except Exception as exc:
+        logger.error("Failed to persist system events: %r", exc)
+    finally:
         # we call this function multiple times during a batch,
         # clear the list to avoid persisting the same event
         # multiple times
+        # also lets clear even if there was some error - better to miss some event
+        # than have this issue multiple times
         ctx.events.clear()
-    except Exception as exc:
-        logger.error("Failed to persist system events: %r", exc)
 
 
 # sync_to_async is needed since we use the sync Django ORM
@@ -1470,7 +1474,7 @@ def _db_persist_critical(ctx: BatchContext) -> None:
                 score=job.score,
             )
             synthetic_jobs.append(synthetic_job)
-        synthetic_jobs = SyntheticJob.objects.bulk_create(synthetic_jobs)
+        synthetic_jobs = safe_bulk_create(SyntheticJob, synthetic_jobs, batch_size=500, timeout=60)
     duration = time.time() - start_time
     logger.info("Persisted to database in %.2f seconds", duration)
 
@@ -1497,7 +1501,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     online_executor_count=ctx.online_executor_count[miner.hotkey],
                 )
             )
-    MinerManifest.objects.bulk_create(miner_manifests)
+    safe_bulk_create(MinerManifest, miner_manifests, batch_size=500, timeout=30)
 
     # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {
@@ -1531,7 +1535,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     max_timeout=started_payload.max_timeout,
                 )
             )
-    JobStartedReceipt.objects.bulk_create(job_started_receipts)
+    safe_bulk_create(JobStartedReceipt, job_started_receipts, batch_size=500, timeout=30)
 
     job_finished_receipts: list[JobFinishedReceipt] = []
     for job in ctx.jobs.values():
@@ -1547,7 +1551,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     score_str=finished_payload.score_str,
                 )
             )
-    JobFinishedReceipt.objects.bulk_create(job_finished_receipts)
+    safe_bulk_create(JobFinishedReceipt, job_finished_receipts, batch_size=500, timeout=30)
 
     duration = time.time() - start_time
     logger.info("Persisted to database in %.2f seconds", duration)
