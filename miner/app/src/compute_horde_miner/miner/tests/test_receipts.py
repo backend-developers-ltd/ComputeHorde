@@ -14,7 +14,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
 )
-from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobAcceptedReceiptPayload
 from django.utils import timezone
 from pytest_mock import MockerFixture
@@ -143,4 +143,5 @@ async def test_receipt_is_saved(
     assert await JobStartedReceipt.objects.filter(
         job_uuid=job_uuid, is_organic=organic_job
     ).aexists()
+    assert await JobAcceptedReceipt.objects.filter(job_uuid=job_uuid).aexists()
     assert await JobFinishedReceipt.objects.filter(job_uuid=job_uuid).aexists()
