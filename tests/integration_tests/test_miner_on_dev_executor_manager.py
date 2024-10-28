@@ -42,8 +42,8 @@ def get_validator_wallet():
     wallet = bittensor.wallet(name="test_validator")
     try:
         # workaround the overwrite flag
-        wallet.regenerate_coldkey(seed="0" * 64, use_password=False, overwrite=True)
-        wallet.regenerate_hotkey(seed="1" * 64, use_password=False, overwrite=True)
+        wallet.regenerate_coldkey(seed="2" * 64, use_password=False, overwrite=True)
+        wallet.regenerate_hotkey(seed="3" * 64, use_password=False, overwrite=True)
     except Exception as e:
         logger.error(f"Failed to create wallet: {e}")
     return wallet
