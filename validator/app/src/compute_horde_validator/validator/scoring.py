@@ -7,7 +7,7 @@ import numpy as np
 from compute_horde.executor_class import ExecutorClass
 from django.conf import settings
 
-from .dynamic_config import get_executor_class_weights
+from .dynamic_config import aget_config, aget_weights_version, get_executor_class_weights
 from .models import SyntheticJob, SyntheticJobBatch
 
 logger = logging.getLogger(__name__)
@@ -68,12 +68,15 @@ def score_jobs(
     return normalize(score_per_hotkey, weight=normalization_weight)
 
 
-def score_batch(batch):
+def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
+    _prev_batch = SyntheticJobBatch.objects.order_by("-id").filter(id__lt=batch.id).first()
+
     executor_class_weights = get_executor_class_weights()
     executor_class_jobs = defaultdict(list)
     for job in batch.synthetic_jobs.select_related("miner"):
         if job.executor_class in executor_class_weights:
-            executor_class_jobs[job.executor_class].append(job)
+            executor_class = ExecutorClass(job.executor_class)
+            executor_class_jobs[executor_class].append(job)
 
     parametriezed_horde_score: Callable[[list[float]], float] = partial(
         horde_score,
@@ -110,3 +113,45 @@ def score_batches(batches: Sequence[SyntheticJobBatch]) -> dict[str, float]:
         for hotkey, score in batch_scores.items():
             hotkeys_scores[hotkey] += score
     return dict(hotkeys_scores)
+
+
+def get_manifest_multiplier_v2(
+    previous_online_executors: int | None,
+    current_online_executors: int,
+    weights_version: int,
+    multiplier: float,
+    ratio_threshold: float,
+) -> float:
+    # weights version 0, 1, 2 does not get any dancing bonus
+    if weights_version < 3:
+        return 1
+
+    # first batch of a miner gets bonus
+    if previous_online_executors is None:
+        return multiplier
+
+    low, high = sorted([previous_online_executors, current_online_executors])
+    # low can be 0 if previous_online_executors == 0, but we make it that way to
+    # make this function correct for any kind of input
+    if low == 0 or high / low >= ratio_threshold:
+        return multiplier
+
+    return 1
+
+
+async def get_manifest_multiplier(
+    previous_online_executors: int | None, current_online_executors: int
+) -> float | None:
+    weights_version = await aget_weights_version()
+    multiplier = None
+    if weights_version >= 2:
+        if previous_online_executors is None:
+            multiplier = await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER")
+        else:
+            low, high = sorted([previous_online_executors, current_online_executors])
+            # low can be 0 if previous_online_executors == 0, but we make it that way to
+            # make this function correct for any kind of input
+            threshold = await aget_config("DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD")
+            if low == 0 or high / low >= threshold:
+                multiplier = await aget_config("DYNAMIC_MANIFEST_SCORE_MULTIPLIER")
+    return multiplier

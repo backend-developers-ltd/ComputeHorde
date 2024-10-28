@@ -61,6 +61,7 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
     SystemEvent,
 )
+from compute_horde_validator.validator.scoring import get_manifest_multiplier
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
@@ -68,7 +69,6 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
     LlmPromptsSyntheticJobGenerator,
 )
-from compute_horde_validator.validator.synthetic_jobs.scoring import get_manifest_multiplier
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
@@ -1371,6 +1371,7 @@ async def _score_jobs(ctx: BatchContext) -> None:
         if job.success:
             ctx.online_executor_count[job.miner_hotkey][job.executor_class] += 1
 
+    # TODO: remove manifest bonus calculation per job, move the calculation to batch scoring
     # apply manifest bonus
     # do not combine with the previous loop, we use online_executor_count
     for job in ctx.jobs.values():
