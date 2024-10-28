@@ -28,6 +28,9 @@ class AbstractReceipt(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["job_uuid"], name="receipts_unique_%(class)s_job_uuid"),
         ]
+        indexes = [
+            models.Index(fields=["timestamp"], name="%(class)s_ts_idx"),
+        ]
 
     def __str__(self):
         return f"job_uuid: {self.job_uuid}"
