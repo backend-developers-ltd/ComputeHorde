@@ -65,6 +65,11 @@ class DockerExecutorManager(BaseExecutorManager):
                     "Pulling executor container timed out, pulling it from shell might provide more details"
                 )
                 raise ExecutorUnavailable("Failed to pull executor image")
+        hf_args = (
+            []
+            if settings.HF_ACCESS_TOKEN is None
+            else ["-e", f"HF_ACCESS_TOKEN={settings.HF_ACCESS_TOKEN}"]
+        )
         process_executor = await asyncio.create_subprocess_exec(  # noqa: S607
             "docker",
             "run",
@@ -73,6 +78,7 @@ class DockerExecutorManager(BaseExecutorManager):
             f"MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS}",
             "-e",
             f"EXECUTOR_TOKEN={token}",
+            *hf_args,
             "--name",
             token,
             # the executor must be able to spawn images on host

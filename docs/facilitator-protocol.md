@@ -43,7 +43,7 @@ sequenceDiagram
     end
 
     validator->>facilitator: V0Heartbeat
-    validator->>facilitator: MachineSpecsUpdate
+    validator->>facilitator: V0MachineSpecsUpdate
 ```
 
 ## `V0AuthenticationRequest` message

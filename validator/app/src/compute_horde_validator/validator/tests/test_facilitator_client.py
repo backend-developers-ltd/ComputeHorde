@@ -6,14 +6,14 @@ import bittensor
 import pytest
 import websockets
 from channels.layers import get_channel_layer
+from compute_horde.fv_protocol.facilitator_requests import Response
+from compute_horde.fv_protocol.validator_requests import (
+    V0AuthenticationRequest,
+    V0MachineSpecsUpdate,
+)
 
 from compute_horde_validator.validator.models import OrganicJob
-from compute_horde_validator.validator.organic_jobs.facilitator_api import MachineSpecsUpdate
-from compute_horde_validator.validator.organic_jobs.facilitator_client import (
-    AuthenticationRequest,
-    FacilitatorClient,
-    Response,
-)
+from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
@@ -60,7 +60,7 @@ class FacilitatorJobStatusUpdatesWsV0(FacilitatorWs):
             # auth
             response = await asyncio.wait_for(ws.recv(), timeout=5)
             try:
-                AuthenticationRequest.model_validate_json(response)
+                V0AuthenticationRequest.model_validate_json(response)
             except Exception as e:
                 self.facilitator_error = e
 
@@ -170,7 +170,7 @@ class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
     async def serve(self, ws, path):
         response = await asyncio.wait_for(ws.recv(), timeout=5)
         try:
-            AuthenticationRequest.model_validate_json(response)
+            V0AuthenticationRequest.model_validate_json(response)
         except Exception as e:
             self.facilitator_error = e
 
@@ -178,7 +178,7 @@ class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
 
         async for message in ws:
             try:
-                MachineSpecsUpdate.model_validate_json(message)
+                V0MachineSpecsUpdate.model_validate_json(message)
             except Exception:
                 continue
             else:
