@@ -321,7 +321,7 @@ class FacilitatorClient:
     async def process_job_request(self, job_request: JobRequest):
         max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
 
-        if job_request.message_type == "V2JobRequest" and job_request.miner_hotkey is None:
+        if job_request.message_type == "V2JobRequest":
             logger.debug(f"Received signed payload: {job_request}")
             try:
                 verify_job_request(job_request)
@@ -338,9 +338,9 @@ class FacilitatorClient:
                     return
 
                 try:
-                    if i > 0:
-                        # delete organic job failed from the previous attempt
-                        await OrganicJob.objects.filter(job_uuid=str(job_request.uuid)).adelete()
+                    # if exists, delete organic job from the previous attempt
+                    await OrganicJob.objects.filter(job_uuid=str(job_request.uuid)).adelete()
+
                     job_completed = await self.miner_driver(miner, job_request)
                     if job_completed:
                         break
