@@ -1,10 +1,13 @@
 import importlib
+import logging
 import os
 
 from celery import Celery, signals
 from celery.signals import worker_process_shutdown
 from django.conf import settings
 from prometheus_client import multiprocess
+
+logger = logging.getLogger(__name__)
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "compute_horde_validator.settings")
 
@@ -38,6 +41,8 @@ TASK_QUEUE_MAP = {
 
 
 def route_task(name, args, kwargs, options, task=None, **kw):
+    if name not in TASK_QUEUE_MAP:
+        logger.warning("Celery task %s is not mapped to any queue", name)
     return {"queue": TASK_QUEUE_MAP.get(name, DEFAULT_QUEUE)}
 
 
