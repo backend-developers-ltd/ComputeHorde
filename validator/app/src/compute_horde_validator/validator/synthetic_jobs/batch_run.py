@@ -1466,7 +1466,7 @@ def _db_persist_system_events(ctx: BatchContext) -> None:
 
 # sync_to_async is needed since we use the sync Django ORM
 @sync_to_async
-def _db_persist(ctx: BatchContext) -> None:
+def _db_persist_critical(ctx: BatchContext) -> None:
     start_time = time.time()
 
     # persist the batch and the jobs in the same transaction, to
@@ -1505,6 +1505,19 @@ def _db_persist(ctx: BatchContext) -> None:
             )
             synthetic_jobs.append(synthetic_job)
         synthetic_jobs = SyntheticJob.objects.bulk_create(synthetic_jobs)
+    duration = time.time() - start_time
+    logger.info("Persisted to database in %.2f seconds", duration)
+
+
+# sync_to_async is needed since we use the sync Django ORM
+@sync_to_async
+def _db_persist(ctx: BatchContext) -> None:
+    start_time = time.time()
+
+    if ctx.batch_id is not None:
+        batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
+    else:
+        batch = SyntheticJobBatch.objects.get(started_at=ctx.stage_start_time["BATCH_BEGIN"])
 
     miner_manifests: list[MinerManifest] = []
     for miner in ctx.miners.values():
@@ -1523,7 +1536,7 @@ def _db_persist(ctx: BatchContext) -> None:
 
     # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {
-        str(synthetic_job.job_uuid): synthetic_job for synthetic_job in synthetic_jobs
+        str(synthetic_job.job_uuid): synthetic_job for synthetic_job in batch.synthetic_jobs.all()
     }
     prompt_samples: list[PromptSample] = []
 
@@ -1699,6 +1712,9 @@ async def execute_synthetic_batch_run(
             description=repr(exc),
             func="_multi_close_client",
         )
+
+    await ctx.checkpoint_system_event("_db_persist_critical")
+    await _db_persist_critical(ctx)
 
     await ctx.checkpoint_system_event("_emit_telemetry_events")
     try:
