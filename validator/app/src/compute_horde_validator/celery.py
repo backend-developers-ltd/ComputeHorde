@@ -12,7 +12,7 @@ app = Celery("compute_horde_validator")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
-DEFAULT_QUEUE = "generic"
+DEFAULT_QUEUE = "default"
 
 TASK_QUEUE_MAP = {
     # Jobs

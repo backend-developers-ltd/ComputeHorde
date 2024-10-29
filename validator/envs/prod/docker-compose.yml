@@ -58,7 +58,7 @@ services:
     logging:
       <<: *logging
 
-  celery-worker-generic:
+  celery-worker-default:
     image: compute_horde_validator/app
     init: true
     healthcheck:
@@ -67,8 +67,8 @@ services:
     env_file: ./.env
     environment:
       - DEBUG=off
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
-      - CELERY_QUEUE=generic
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-default
+      - CELERY_QUEUE=default
     command: ./celery-entrypoint.sh
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
@@ -87,7 +87,7 @@ services:
     env_file: ./.env
     environment:
       - DEBUG=off
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-weights
       - CELERY_QUEUE=weights
     command: ./celery-entrypoint.sh
     volumes:
@@ -107,7 +107,7 @@ services:
     env_file: ./.env
     environment:
       - DEBUG=off
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-jobs
       - CELERY_QUEUE=jobs
     command: ./celery-entrypoint.sh
     volumes:
@@ -127,7 +127,7 @@ services:
     env_file: ./.env
     environment:
       - DEBUG=off
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-llm
       - CELERY_QUEUE=llm
     command: ./celery-entrypoint.sh
     volumes:
@@ -147,7 +147,7 @@ services:
     env_file: ./.env
     environment:
       - DEBUG=off
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-receipts
       - CELERY_QUEUE=receipts
     command: ./celery-entrypoint.sh
     volumes:
