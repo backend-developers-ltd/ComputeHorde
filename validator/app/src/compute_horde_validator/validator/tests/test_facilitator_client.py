@@ -55,6 +55,10 @@ async def async_patch_all():
         ),
         patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor()),
         patch("bittensor.metagraph", lambda *args, **kwargs: MockMetagraph()),
+        patch(
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.create_metagraph_refresh_task",
+            lambda *args, **kwargs: asyncio.create_task(asyncio.sleep(0)),
+        ),
     ):
         yield
 
