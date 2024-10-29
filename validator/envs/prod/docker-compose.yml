@@ -68,8 +68,7 @@ services:
     environment:
       - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-default
-      - CELERY_QUEUE=default
-    command: ./celery-entrypoint.sh
+    command: ./celery-entrypoint.sh -Q default -E -l INFO -c ${CELERY_CONCURRENCY}
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
     tmpfs: /run
@@ -88,8 +87,7 @@ services:
     environment:
       - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-weights
-      - CELERY_QUEUE=weights
-    command: ./celery-entrypoint.sh
+    command: ./celery-entrypoint.sh -Q weights -E -l INFO -c ${CELERY_CONCURRENCY}
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
     tmpfs: /run
@@ -108,8 +106,7 @@ services:
     environment:
       - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-jobs
-      - CELERY_QUEUE=jobs
-    command: ./celery-entrypoint.sh
+    command: ./celery-entrypoint.sh -Q jobs -E -l INFO -c ${CELERY_CONCURRENCY}
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
     tmpfs: /run
@@ -128,8 +125,7 @@ services:
     environment:
       - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-llm
-      - CELERY_QUEUE=llm
-    command: ./celery-entrypoint.sh
+    command: ./celery-entrypoint.sh -Q llm -E -l INFO -c ${CELERY_CONCURRENCY}
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
     tmpfs: /run
@@ -148,8 +144,7 @@ services:
     environment:
       - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-receipts
-      - CELERY_QUEUE=receipts
-    command: ./celery-entrypoint.sh
+    command: ./celery-entrypoint.sh -Q receipts -E -l INFO -c ${CELERY_CONCURRENCY}
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
     tmpfs: /run
