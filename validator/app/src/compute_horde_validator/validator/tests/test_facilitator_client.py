@@ -1,4 +1,6 @@
 import asyncio
+
+# from enum import pickle_by_enum_name
 import uuid
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -71,58 +73,24 @@ async def setup_db(n: int = 1):
         )
 
 
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.asyncio
-async def test_fetch_miner_for_cross_validation__wrap_around():
-    await setup_db(n := 5)
+def cancel_facilitator_tasks(facilitator_client, run_forever_task: asyncio.Task | None = None):
+    tasks = [
+        facilitator_client.miner_driver_awaiter_task,
+        facilitator_client.refresh_metagraph_task,
+        facilitator_client.heartbeat_task,
+    ]
+    if run_forever_task:
+        tasks.append(run_forever_task)
+    if facilitator_client.specs_task:
+        tasks.append(facilitator_client.specs_task)
 
-    async with async_patch_all():
-        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
+    for task in tasks:
+        task.cancel()
 
-        # loop twice to check wrap-around behavior
-        for i in range(n * 2):
-            miner = await client.fetch_miner_for_cross_validation(DEFAULT_EXECUTOR_CLASS)
-            expected_hotkey = f"miner_{i % n}"
-            assert miner.hotkey == expected_hotkey
-            assert client.last_miner_cross_validated == expected_hotkey
-
-        client.miner_driver_awaiter_task.cancel()
-        client.heartbeat_task.cancel()
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.asyncio
-async def test_fetch_miner_for_cross_validation__no_matching_executor_class():
-    await setup_db()
-
-    async with async_patch_all():
-        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
-        client.last_miner_cross_validated = "some_miner"
-
-        miner = await client.fetch_miner_for_cross_validation("NonExistentExecutorClass")
-        assert miner is None
-        assert client.last_miner_cross_validated is None
-
-        client.miner_driver_awaiter_task.cancel()
-        client.heartbeat_task.cancel()
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.asyncio
-async def test_fetch_miner_for_cross_validation__no_online_executors():
-    await setup_db()
-    await MinerManifest.objects.all().aupdate(online_executor_count=0)
-
-    async with async_patch_all():
-        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
-        client.last_miner_cross_validated = "some_miner"
-
-        miner = await client.fetch_miner_for_cross_validation(DEFAULT_EXECUTOR_CLASS)
-        assert miner is None
-        assert client.last_miner_cross_validated is None
-
-        client.miner_driver_awaiter_task.cancel()
-        client.heartbeat_task.cancel()
+    return asyncio.gather(
+        *tasks,
+        return_exceptions=True,
+    )
 
 
 class FacilitatorWs:
@@ -264,10 +232,8 @@ async def test_facilitator_client__job_completed(ws_server_cls):
                 task = asyncio.create_task(facilitator_client.run_forever())
                 await ws_server.condition.wait()
 
-            facilitator_client.miner_driver_awaiter_task.cancel()
-            facilitator_client.heartbeat_task.cancel()
-            facilitator_client.specs_task.cancel()
-            task.cancel()
+            await cancel_facilitator_tasks(facilitator_client, task)
+
             if ws_server.facilitator_error:
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")
 
@@ -292,10 +258,7 @@ async def test_facilitator_client__failed_job_retries():
                 task = asyncio.create_task(facilitator_client.run_forever())
                 await ws_server.condition.wait()
 
-            facilitator_client.miner_driver_awaiter_task.cancel()
-            facilitator_client.heartbeat_task.cancel()
-            facilitator_client.specs_task.cancel()
-            task.cancel()
+            cancel_facilitator_tasks(facilitator_client, task)
             if ws_server.facilitator_error:
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")
 
@@ -333,6 +296,57 @@ class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
                     self.condition.notify()
 
 
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.asyncio
+async def test_fetch_miner_for_cross_validation__wrap_around():
+    await setup_db(n := 5)
+
+    async with async_patch_all():
+        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
+
+        # loop twice to check wrap-around behavior
+        for i in range(n * 2):
+            miner = await client.fetch_miner_for_cross_validation(DEFAULT_EXECUTOR_CLASS)
+            expected_hotkey = f"miner_{i % n}"
+            assert miner.hotkey == expected_hotkey
+            assert client.last_miner_cross_validated == expected_hotkey
+
+        cancel_facilitator_tasks(client)
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.asyncio
+async def test_fetch_miner_for_cross_validation__no_matching_executor_class():
+    await setup_db()
+
+    async with async_patch_all():
+        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
+        client.last_miner_cross_validated = "some_miner"
+
+        miner = await client.fetch_miner_for_cross_validation("NonExistentExecutorClass")
+        assert miner is None
+        assert client.last_miner_cross_validated is None
+
+        cancel_facilitator_tasks(client)
+
+
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.asyncio
+async def test_fetch_miner_for_cross_validation__no_online_executors():
+    await setup_db()
+    await MinerManifest.objects.all().aupdate(online_executor_count=0)
+
+    async with async_patch_all():
+        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
+        client.last_miner_cross_validated = "some_miner"
+
+        miner = await client.fetch_miner_for_cross_validation(DEFAULT_EXECUTOR_CLASS)
+        assert miner is None
+        assert client.last_miner_cross_validated is None
+
+        cancel_facilitator_tasks(client)
+
+
 # TODO: this test is flaky, needs proper investigation
 @pytest.mark.skip
 @pytest.mark.asyncio
@@ -354,7 +368,4 @@ async def test_wait_for_specs(specs_msg: dict):
                 task = asyncio.create_task(facilitator_client.run_forever())
                 await asyncio.wait_for(ws_server.condition.wait(), timeout=5)
 
-            facilitator_client.miner_driver_awaiter_task.cancel()
-            facilitator_client.heartbeat_task.cancel()
-            facilitator_client.specs_task.cancel()
-            task.cancel()
+            cancel_facilitator_tasks(facilitator_client, task)

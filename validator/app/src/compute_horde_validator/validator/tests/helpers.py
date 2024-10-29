@@ -15,6 +15,7 @@ import numpy as np
 from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
+    Signature,
     V0JobRequest,
     V1JobRequest,
     V2JobRequest,
@@ -224,7 +225,6 @@ def get_dummy_job_request_v2(uuid: str) -> V2JobRequest:
     return V2JobRequest(
         type="job.new",
         uuid=uuid,
-        miner_hotkey=None,
         docker_image="nvidia",
         executor_class=DEFAULT_EXECUTOR_CLASS,
         raw_script="print('hello world')",
@@ -239,11 +239,6 @@ def get_dummy_job_request_v2(uuid: str) -> V2JobRequest:
                     "url": "fake.com/input.txt",
                     "relative_path": "input.txt",
                 },
-                {
-                    "volume_type": "zip_url",
-                    "contents": "fake.com/input.zip",
-                    "relative_path": "zip/",
-                },
             ],
         },
         output_upload={
@@ -253,33 +248,19 @@ def get_dummy_job_request_v2(uuid: str) -> V2JobRequest:
                     "output_upload_type": "single_file_post",
                     "url": "http://s3.bucket.com/output1.txt",
                     "relative_path": "output1.txt",
-                },
-                {
-                    "output_upload_type": "single_file_put",
-                    "url": "http://s3.bucket.com/output2.zip",
-                    "relative_path": "zip/output2.zip",
-                },
+                }
             ],
             "system_output": {
                 "output_upload_type": "zip_and_http_put",
                 "url": "http://r2.bucket.com/output.zip",
             },
         },
-        signed_request={
-            "signature_type": "bittensor",
-            "signatory": "5CDapJdKqe6b1kdD7ABZEbNKrRZqhM21m8q3vn1YU22rKK9h",
-            "timestamp_ns": 1729622861880448856,
-            "signature": "lnX1rPC+Dnbc6fKPunR35T329IgjJBKHxvA1Y5hpWUl7N7GzlwEnjGHuWcdRfOjfamNNXYnT/gaIUWJxbmwChw==",
-            "signed_payload": {
-                "target_validator_hotkey": "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE",
-                "executor_class": "spin_up-4min.gpu-24gb",
-                "docker_image": "library/hello-world",
-                "args": "",
-                "env": {},
-                "use_gpu": False,
-                "input_url": "https://raw.githubusercontent.com/backend-developers-ltd/ComputeHorde-examples/master/input_shapes.zip",
-            },
-        },
+        signature=Signature(
+            signature_type="bittensor",
+            signatory="5CDapJdKqe6b1kdD7ABZEbNKrRZqhM21m8q3vn1YU22rKK9h",
+            timestamp_ns=1729622861880448856,
+            signature="lnX1rPC+Dnbc6fKPunR35T329IgjJBKHxvA1Y5hpWUl7N7GzlwEnjGHuWcdRfOjfamNNXYnT/gaIUWJxbmwChw==",
+        ),
     )
 
 

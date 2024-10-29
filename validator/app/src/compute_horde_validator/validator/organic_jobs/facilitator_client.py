@@ -43,10 +43,12 @@ logger = logging.getLogger(__name__)
 
 def verify_job_request(job_request: V2JobRequest):
     # check if signer is in validator whitelist
-    signer = job_request.signed_request.signatory
-    signed_payload = job_request.signed_request.signed_payload
-    if signed_payload is None:
-        raise ValueError("Signed payload is None")
+    if job_request.signature is None:
+        raise ValueError("Signature is None")
+
+    signature = job_request.signature
+    signer = signature.signatory
+    signed_payload = job_request.json_for_signing()
 
     if not ValidatorWhitelist.objects.filter(hotkey=signer).exists():
         raise ValueError(f"Signatory {signer} is not in validator whitelist")
@@ -55,18 +57,12 @@ def verify_job_request(job_request: V2JobRequest):
     verify_signature(
         signed_payload,
         Signature(
-            signature_type=job_request.signed_request.signature_type,
-            signatory=job_request.signed_request.signatory,
-            timestamp_ns=job_request.signed_request.timestamp_ns,
-            signature=base64.b64decode(job_request.signed_request.signature),
+            signature_type=signature.signature_type,
+            signatory=signature.signatory,
+            timestamp_ns=signature.timestamp_ns,
+            signature=base64.b64decode(signature.signature),
         ),
     )
-
-    # TODO: verify job_request fields against the signed fields
-    # fields = job_request.model_dump(exclude={"signed_request"})
-    # for field in fields.keys():
-    #     if fields[field] != signed_payload[field]:
-    #         raise ValueError(f"Field {field} does not match signed payload")
 
 
 class AuthenticationError(Exception):
@@ -98,6 +94,7 @@ class FacilitatorClient:
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
         self.refresh_metagraph_task = self.create_metagraph_refresh_task()
+        self.specs_task: asyncio.Task[None] | None = None
 
         self.last_miner_cross_validated: str | None = None
 
