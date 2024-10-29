@@ -3,14 +3,16 @@ import uuid
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol.miner_requests import (
+    V0AcceptJobRequest,
     V0DeclineJobRequest,
+    V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
+    V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
-    V0JobStartedReceiptRequest,
 )
 
 from compute_horde_validator.validator.models import Miner
@@ -35,12 +37,12 @@ WEBSOCKET_TIMEOUT = 10
         "expected_job_status_updates",
         "organic_job_status",
         "dummy_job_factory",
-        "expected_job_started_receipt",
+        "expected_job_accepted_receipt",
         "expected_job_finished_receipt",
     ),
     [
         (
-            (None, None),
+            (None, None, None),
             ["failed"],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v0,
@@ -48,7 +50,7 @@ WEBSOCKET_TIMEOUT = 10
             False,
         ),
         (
-            (V0DeclineJobRequest, None),
+            (V0DeclineJobRequest, None, None),
             ["rejected"],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v0,
@@ -56,7 +58,7 @@ WEBSOCKET_TIMEOUT = 10
             False,
         ),
         (
-            (V0ExecutorReadyRequest, None),
+            (V0AcceptJobRequest, V0ExecutorFailedRequest, None),
             ["accepted", "failed"],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v0,
@@ -64,7 +66,7 @@ WEBSOCKET_TIMEOUT = 10
             False,
         ),
         (
-            (V0ExecutorReadyRequest, V0JobFailedRequest),
+            (V0AcceptJobRequest, V0ExecutorReadyRequest, None),
             ["accepted", "failed"],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v0,
@@ -72,7 +74,15 @@ WEBSOCKET_TIMEOUT = 10
             False,
         ),
         (
-            (V0ExecutorReadyRequest, V0JobFinishedRequest),
+            (V0AcceptJobRequest, V0ExecutorReadyRequest, V0JobFailedRequest),
+            ["accepted", "failed"],
+            OrganicJob.Status.FAILED,
+            get_dummy_job_request_v0,
+            True,
+            False,
+        ),
+        (
+            (V0AcceptJobRequest, V0ExecutorReadyRequest, V0JobFinishedRequest),
             ["accepted", "completed"],
             OrganicJob.Status.COMPLETED,
             get_dummy_job_request_v0,
@@ -80,7 +90,7 @@ WEBSOCKET_TIMEOUT = 10
             True,
         ),
         (
-            (V0ExecutorReadyRequest, V0JobFinishedRequest),
+            (V0AcceptJobRequest, V0ExecutorReadyRequest, V0JobFinishedRequest),
             ["accepted", "completed"],
             OrganicJob.Status.COMPLETED,
             get_dummy_job_request_v1,
@@ -94,7 +104,7 @@ async def test_miner_driver(
     expected_job_status_updates,
     organic_job_status,
     dummy_job_factory,
-    expected_job_started_receipt,
+    expected_job_accepted_receipt,
     expected_job_finished_receipt,
 ):
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_client")
@@ -111,12 +121,14 @@ async def test_miner_driver(
         job_description="User job from facilitator",
     )
     miner_client = get_miner_client(MockMinerClient, job_uuid)
-    f0, f1 = futures_result
+    f0, f1, f2 = futures_result
     if f0:
-        miner_client.miner_ready_or_declining_future.set_result(f0(job_uuid=job_uuid))
+        miner_client.miner_accepting_or_declining_future.set_result(f0(job_uuid=job_uuid))
     if f1:
+        miner_client.executor_ready_or_failed_future.set_result(f1(job_uuid=job_uuid))
+    if f2:
         miner_client.miner_finished_or_failed_future.set_result(
-            f1(
+            f2(
                 job_uuid=job_uuid,
                 docker_process_stdout="mocked stdout",
                 docker_process_stderr="mocked stderr",
@@ -151,7 +163,7 @@ async def test_miner_driver(
     def condition(_):
         return True
 
-    if expected_job_started_receipt:
-        assert miner_client._query_sent_models(condition, V0JobStartedReceiptRequest)
+    if expected_job_accepted_receipt:
+        assert miner_client._query_sent_models(condition, V0JobAcceptedReceiptRequest)
     if expected_job_finished_receipt:
         assert miner_client._query_sent_models(condition, V0JobFinishedReceiptRequest)

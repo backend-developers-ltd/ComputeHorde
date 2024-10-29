@@ -1,9 +1,10 @@
 import logging
 import shlex
 import uuid
-from datetime import timedelta
 from os import urandom
 
+from compute_horde.base.output_upload import OutputUpload, ZipAndHttpPutUpload
+from compute_horde.base.volume import Volume, ZipUrlVolume
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
@@ -161,12 +162,15 @@ class MinerManifest(models.Model):
     miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
     batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
+    executor_class = models.CharField(max_length=255)
     executor_count = models.IntegerField(default=0)
     online_executor_count = models.IntegerField(default=0)
 
     class Meta:
         constraints = [
-            UniqueConstraint(fields=["miner", "batch"], name="unique_miner_manifest"),
+            UniqueConstraint(
+                fields=["miner", "batch", "executor_class"], name="unique_miner_manifest"
+            ),
         ]
 
 
@@ -239,38 +243,17 @@ class AdminJobRequest(models.Model):
     def __str__(self):
         return f"uuid: {self.uuid} - miner hotkey: {self.miner.hotkey}"
 
+    @property
+    def volume(self) -> Volume | None:
+        if self.input_url:
+            return ZipUrlVolume(contents=self.input_url)
+        return None
 
-class AbstractReceipt(models.Model):
-    job_uuid = models.UUIDField()
-    miner_hotkey = models.CharField(max_length=256)
-    validator_hotkey = models.CharField(max_length=256)
-
-    class Meta:
-        abstract = True
-        constraints = [
-            UniqueConstraint(fields=["job_uuid"], name="unique_%(class)s_job_uuid"),
-        ]
-
-    def __str__(self):
-        return f"job_uuid: {self.job_uuid}"
-
-
-class JobFinishedReceipt(AbstractReceipt):
-    time_started = models.DateTimeField()
-    time_took_us = models.BigIntegerField()
-    score_str = models.CharField(max_length=256)
-
-    def time_took(self):
-        return timedelta(microseconds=self.time_took_us)
-
-    def score(self):
-        return float(self.score_str)
-
-
-class JobStartedReceipt(AbstractReceipt):
-    executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
-    time_accepted = models.DateTimeField()
-    max_timeout = models.IntegerField()
+    @property
+    def output_upload(self) -> OutputUpload | None:
+        if self.output_url:
+            return ZipAndHttpPutUpload(url=self.output_url)
+        return None
 
 
 def get_random_salt() -> list[int]:

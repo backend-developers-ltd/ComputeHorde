@@ -5,14 +5,18 @@ from compute_horde.miner_client.organic import (
     OrganicMinerClient,
     run_organic_job,
 )
-from compute_horde.mv_protocol.miner_requests import V0ExecutorReadyRequest, V0JobFinishedRequest
+from compute_horde.mv_protocol.miner_requests import (
+    V0AcceptJobRequest,
+    V0ExecutorReadyRequest,
+    V0JobFinishedRequest,
+)
 from compute_horde.mv_protocol.validator_requests import (
     BaseValidatorRequest,
     V0AuthenticateRequest,
     V0InitialJobRequest,
+    V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
     V0JobRequest,
-    V0JobStartedReceiptRequest,
 )
 from compute_horde.transport import StubTransport
 
@@ -34,6 +38,7 @@ async def test_run_organic_job__success(keypair):
     mock_transport = MinerStubTransport(
         "mock",
         [
+            V0AcceptJobRequest(job_uuid=JOB_UUID).model_dump_json(),
             V0ExecutorReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
             V0JobFinishedRequest(
                 job_uuid=JOB_UUID,
@@ -60,7 +65,7 @@ async def test_run_organic_job__success(keypair):
     assert sent_models_types == [
         V0AuthenticateRequest,
         V0InitialJobRequest,
-        V0JobStartedReceiptRequest,
+        V0JobAcceptedReceiptRequest,
         V0JobRequest,
         V0JobFinishedReceiptRequest,
     ]

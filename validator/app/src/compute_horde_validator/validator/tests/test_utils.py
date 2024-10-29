@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import bittensor
 import pytest
 from asgiref.sync import sync_to_async
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.volume import InlineVolume, Volume
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
 from compute_horde.mv_protocol.miner_requests import (
@@ -70,8 +71,8 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def docker_image_name(self) -> str:
         return "mock"
 
-    def docker_run_options_preset(self) -> str:
-        return "mock"
+    def docker_run_options_preset(self) -> DockerRunOptionsPreset:
+        return "none"
 
     def docker_run_cmd(self) -> list[str]:
         return ["mock"]
@@ -426,6 +427,7 @@ async def test_manifest_dance_incentives(
         await MinerManifest.objects.acreate(
             miner=miner,
             batch=batch,
+            executor_class=DEFAULT_EXECUTOR_CLASS,
             executor_count=prev_online_executor_count,
             online_executor_count=prev_online_executor_count,
         )
@@ -510,6 +512,7 @@ def test_create_and_run_synthetic_job_batch(
         MinerManifest.objects.create(
             miner=miner,
             batch=batch,
+            executor_class=DEFAULT_EXECUTOR_CLASS,
             executor_count=previous_online_executors,
             online_executor_count=previous_online_executors,
         )

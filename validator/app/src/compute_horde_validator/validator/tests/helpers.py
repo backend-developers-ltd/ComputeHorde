@@ -14,7 +14,12 @@ import constance
 import numpy as np
 from bittensor import Balance
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.fv_protocol.facilitator_requests import (
+    V0JobRequest,
+    V1JobRequest,
+)
 from compute_horde.mv_protocol.miner_requests import (
+    V0AcceptJobRequest,
     V0ExecutorReadyRequest,
     V0JobFinishedRequest,
 )
@@ -23,10 +28,6 @@ from django.conf import settings
 from substrateinterface.exceptions import SubstrateRequestException
 
 from compute_horde_validator.validator.models import SystemEvent
-from compute_horde_validator.validator.organic_jobs.facilitator_api import (
-    V0FacilitatorJobRequest,
-    V1FacilitatorJobRequest,
-)
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.synthetic_jobs import batch_run
 
@@ -119,7 +120,10 @@ class MockMinerClient(MinerClient):
 class MockJobStateMinerClient(MockMinerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.miner_ready_or_declining_future.set_result(
+        self.miner_accepting_or_declining_future.set_result(
+            V0AcceptJobRequest(job_uuid=self.job_uuid)
+        )
+        self.executor_ready_or_failed_future.set_result(
             V0ExecutorReadyRequest(job_uuid=self.job_uuid)
         )
         self.miner_finished_or_failed_future.set_result(
@@ -131,8 +135,8 @@ class MockJobStateMinerClient(MockMinerClient):
         )
 
 
-def get_dummy_job_request_v0(uuid: str) -> V0FacilitatorJobRequest:
-    return V0FacilitatorJobRequest(
+def get_dummy_job_request_v0(uuid: str) -> V0JobRequest:
+    return V0JobRequest(
         type="job.new",
         uuid=uuid,
         miner_hotkey="miner_hotkey",
@@ -147,11 +151,12 @@ def get_dummy_job_request_v0(uuid: str) -> V0FacilitatorJobRequest:
     )
 
 
-def get_dummy_job_request_v1(uuid: str) -> V1FacilitatorJobRequest:
-    return V1FacilitatorJobRequest(
+def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
+    return V1JobRequest(
         type="job.new",
         uuid=uuid,
         miner_hotkey="miner_hotkey",
+        executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="nvidia",
         raw_script="print('hello world')",
         args=[],

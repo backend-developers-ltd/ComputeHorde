@@ -4,11 +4,12 @@ import pathlib
 import shutil
 import tempfile
 
-from compute_horde.mv_protocol.validator_requests import (
+from compute_horde.receipts.schemas import (
+    JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
+    Receipt,
 )
-from compute_horde.receipts import Receipt, ReceiptType
 from django.conf import settings
 
 from compute_horde_miner.miner.receipt_store.base import BaseReceiptStore
@@ -23,6 +24,7 @@ class LocalReceiptStore(BaseReceiptStore):
 
         payload_fields = set()
         payload_fields |= set(JobStartedReceiptPayload.model_fields.keys())
+        payload_fields |= set(JobAcceptedReceiptPayload.model_fields.keys())
         payload_fields |= set(JobFinishedReceiptPayload.model_fields.keys())
 
         buf = io.StringIO()
@@ -37,14 +39,9 @@ class LocalReceiptStore(BaseReceiptStore):
         )
         csv_writer.writeheader()
         for receipt in receipts:
-            match receipt.payload:
-                case JobStartedReceiptPayload():
-                    receipt_type = ReceiptType.JobStartedReceipt
-                case JobFinishedReceiptPayload():
-                    receipt_type = ReceiptType.JobFinishedReceipt
             row = (
                 dict(
-                    type=receipt_type.value,
+                    type=receipt.payload.receipt_type.value,
                     validator_signature=receipt.validator_signature,
                     miner_signature=receipt.miner_signature,
                 )

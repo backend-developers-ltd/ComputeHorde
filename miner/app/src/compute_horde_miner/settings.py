@@ -49,6 +49,8 @@ if env("ENV", default=None) is None:
 
 ENV = env("ENV", default="prod")
 
+HF_ACCESS_TOKEN = env("HF_ACCESS_TOKEN", default=None)
+
 DEFAULT_ADMIN_PASSWORD = env("DEFAULT_ADMIN_PASSWORD", default=None)
 DEFAULT_ADMIN_USERNAME = env("DEFAULT_ADMIN_USERNAME", default="admin")
 DEFAULT_ADMIN_EMAIL = env("DEFAULT_ADMIN_EMAIL", default="admin@admin.com")
@@ -78,6 +80,7 @@ INSTALLED_APPS = [
     "django_extensions",
     "django_probes",
     "constance",
+    "compute_horde.receipts",
     "compute_horde_miner.miner",
     "compute_horde_miner.miner.admin_config.MinerAdminConfig",
 ]

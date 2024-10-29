@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "django_extensions",
     "django_probes",
     "constance",
+    "compute_horde.receipts",
     "compute_horde_validator.validator",
     "compute_horde_validator.validator.admin_config.ValidatorAdminConfig",
     "rangefilter",

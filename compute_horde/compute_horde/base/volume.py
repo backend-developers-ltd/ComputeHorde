@@ -14,9 +14,20 @@ class VolumeType(str, enum.Enum):
     zip_url = "zip_url"
     single_file = "single_file"
     multi_volume = "multi_volume"
+    huggingface_volume = "huggingface_volume"
 
     def __str__(self):
         return str.__str__(self)
+
+
+class HuggingfaceVolume(pydantic.BaseModel):
+    volume_type: Literal[VolumeType.huggingface_volume] = VolumeType.huggingface_volume
+    repo_id: str
+    revision: str | None = None  # Git revision id: branch name / tag / commit hash
+    relative_path: str | None = None
+
+    def is_safe(self) -> bool:
+        return True
 
 
 class InlineVolume(pydantic.BaseModel):
@@ -56,7 +67,8 @@ class MultiVolume(pydantic.BaseModel):
     volume_type: Literal[VolumeType.multi_volume] = VolumeType.multi_volume
     volumes: list[
         Annotated[
-            InlineVolume | ZipUrlVolume | SingleFileVolume, Field(discriminator="volume_type")
+            InlineVolume | ZipUrlVolume | SingleFileVolume | HuggingfaceVolume,
+            Field(discriminator="volume_type"),
         ]
     ]
 
@@ -65,6 +77,6 @@ class MultiVolume(pydantic.BaseModel):
 
 
 Volume = Annotated[
-    InlineVolume | ZipUrlVolume | SingleFileVolume | MultiVolume,
+    InlineVolume | ZipUrlVolume | SingleFileVolume | MultiVolume | HuggingfaceVolume,
     Field(discriminator="volume_type"),
 ]

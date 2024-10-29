@@ -1,3 +1,4 @@
+from datetime import datetime, UTC
 import asyncio
 import base64
 import io
@@ -11,6 +12,8 @@ import time
 import uuid
 import zipfile
 from unittest import mock
+import bittensor
+import logging
 
 import pytest
 import requests
@@ -21,7 +24,29 @@ from compute_horde.test_base import ActiveSubnetworkBaseTest
 
 MINER_PORT = 8045
 WEBSOCKET_TIMEOUT = 10
-validator_key = str(uuid.uuid4())
+logger = logging.getLogger(__name__)
+
+
+def get_miner_wallet():
+    wallet = bittensor.wallet(name="test_miner")
+    try:
+        # workaround the overwrite flag
+        wallet.regenerate_coldkey(seed="0" * 64, use_password=False, overwrite=True)
+        wallet.regenerate_hotkey(seed="1" * 64, use_password=False, overwrite=True)
+    except Exception as e:
+        logger.error(f"Failed to create wallet: {e}")
+    return wallet
+
+
+def get_validator_wallet():
+    wallet = bittensor.wallet(name="test_validator")
+    try:
+        # workaround the overwrite flag
+        wallet.regenerate_coldkey(seed="2" * 64, use_password=False, overwrite=True)
+        wallet.regenerate_hotkey(seed="3" * 64, use_password=False, overwrite=True)
+    except Exception as e:
+        logger.error(f"Failed to create wallet: {e}")
+    return wallet
 
 
 class Test(ActiveSubnetworkBaseTest):
@@ -43,6 +68,7 @@ class Test(ActiveSubnetworkBaseTest):
 
     @classmethod
     def miner_preparation_tasks(cls):
+        validator_key = get_validator_wallet().get_hotkey().ss58_address
         db_shell_cmd = f"{sys.executable} miner/app/src/manage.py dbshell"
         for cmd in [
             f'echo "DROP DATABASE IF EXISTS compute_horde_miner_integration_test" | {db_shell_cmd}',
@@ -69,6 +95,7 @@ class Test(ActiveSubnetworkBaseTest):
             "PORT_FOR_EXECUTORS": str(MINER_PORT),
             "DATABASE_SUFFIX": "_integration_test",
             "DEBUG_TURN_AUTHENTICATION_OFF": "1",
+            "BITTENSOR_WALLET_NAME": "test_miner",
         }
 
     @classmethod
@@ -77,11 +104,16 @@ class Test(ActiveSubnetworkBaseTest):
 
     @classmethod
     def validator_environ(cls) -> dict[str, str]:
-        return {}
+        return {
+            "BITTENSOR_WALLET_NAME": "test_validator",
+        }
 
     @pytest.mark.asyncio
     async def test_echo_image(self):
         job_uuid = str(uuid.uuid4())
+        miner_key = get_miner_wallet().get_hotkey().ss58_address
+        validator_wallet = get_validator_wallet()
+        validator_key = validator_wallet.get_hotkey().ss58_address
 
         payload = "".join(
             random.choice(string.ascii_uppercase + string.digits) for _ in range(32)
@@ -121,6 +153,19 @@ class Test(ActiveSubnetworkBaseTest):
                     ]
                 },
             }
+
+            receipt_payload = {
+                "job_uuid": job_uuid,
+                "miner_hotkey": miner_key,
+                "validator_hotkey": validator_key,
+                "timestamp": datetime.now(tz=UTC).isoformat(),
+                "executor_class": DEFAULT_EXECUTOR_CLASS,
+                "max_timeout": 60,
+                "is_organic": True,
+                "ttl": 30,
+            }
+            blob = json.dumps(receipt_payload, sort_keys=True)
+            signature = "0x" + validator_wallet.get_hotkey().sign(blob).hex()
             await ws.send(
                 json.dumps(
                     {
@@ -130,6 +175,8 @@ class Test(ActiveSubnetworkBaseTest):
                         "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "timeout_seconds": 60,
                         "volume_type": "inline",
+                        "job_started_receipt_payload": receipt_payload,
+                        "job_started_receipt_signature": signature,
                     }
                 )
             )
