@@ -20,21 +20,17 @@ TASK_QUEUE_MAP = {
     "compute_horde_validator.validator.tasks._run_synthetic_jobs": "jobs",
     "compute_horde_validator.validator.tasks.run_synthetic_jobs": "jobs",
     "compute_horde_validator.validator.tasks.schedule_synthetic_jobs": "jobs",
-
     # LLM job tasks
     "compute_horde_validator.validator.tasks.llm_prompt_generation": "llm",
     "compute_horde_validator.validator.tasks.llm_prompt_sampling": "llm",
     "compute_horde_validator.validator.tasks.llm_prompt_answering": "llm",
-
     # Scores/weights
     "compute_horde_validator.validator.tasks.reveal_scores": "weights",
     "compute_horde_validator.validator.tasks.set_scores": "weights",
     "compute_horde_validator.validator.tasks.do_set_weights": "weights",
-
     # Receipts
     "compute_horde_validator.validator.tasks.fetch_receipts": "receipts",
     "compute_horde_validator.validator.tasks.fetch_receipts_from_miner": "receipts",
-
     # Misc
     "compute_horde_validator.validator.tasks.send_events_to_facilitator": DEFAULT_QUEUE,
     "compute_horde_validator.validator.tasks.fetch_dynamic_config": DEFAULT_QUEUE,
