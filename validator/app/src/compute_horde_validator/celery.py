@@ -9,24 +9,40 @@ from prometheus_client import multiprocess
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "compute_horde_validator.settings")
 
 app = Celery("compute_horde_validator")
-
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
+DEFAULT_QUEUE = "generic"
+
+TASK_QUEUE_MAP = {
+    # Jobs
+    "compute_horde_validator.validator.tasks.check_missed_synthetic_jobs": "jobs",
+    "compute_horde_validator.validator.tasks._run_synthetic_jobs": "jobs",
+    "compute_horde_validator.validator.tasks.run_synthetic_jobs": "jobs",
+    "compute_horde_validator.validator.tasks.schedule_synthetic_jobs": "jobs",
+
+    # LLM job tasks
+    "compute_horde_validator.validator.tasks.llm_prompt_generation": "llm",
+    "compute_horde_validator.validator.tasks.llm_prompt_sampling": "llm",
+    "compute_horde_validator.validator.tasks.llm_prompt_answering": "llm",
+
+    # Scores/weights
+    "compute_horde_validator.validator.tasks.reveal_scores": "weights",
+    "compute_horde_validator.validator.tasks.set_scores": "weights",
+    "compute_horde_validator.validator.tasks.do_set_weights": "weights",
+
+    # Receipts
+    "compute_horde_validator.validator.tasks.fetch_receipts": "receipts",
+    "compute_horde_validator.validator.tasks.fetch_receipts_from_miner": "receipts",
+
+    # Misc
+    "compute_horde_validator.validator.tasks.send_events_to_facilitator": DEFAULT_QUEUE,
+    "compute_horde_validator.validator.tasks.fetch_dynamic_config": DEFAULT_QUEUE,
+}
+
 
 def route_task(name, args, kwargs, options, task=None, **kw):
-    worker_queue_names = {
-        "compute_horde_validator.validator.tasks.fetch_receipts_from_miner",
-        "compute_horde_validator.validator.tasks.send_events_to_facilitator",
-        "compute_horde_validator.validator.tasks.fetch_dynamic_config",
-        # TODO: llm tasks should have dedicated workers, but just move them from default queue for now
-        "compute_horde_validator.validator.tasks.llm_prompt_generation",
-        "compute_horde_validator.validator.tasks.llm_prompt_sampling",
-        "compute_horde_validator.validator.tasks.llm_prompt_answering",
-    }
-    if name in worker_queue_names:
-        return {"queue": "worker"}
-    return {"queue": "celery"}
+    return {"queue": TASK_QUEUE_MAP.get(name, DEFAULT_QUEUE)}
 
 
 @worker_process_shutdown.connect
