@@ -58,7 +58,7 @@ services:
     logging:
       <<: *logging
 
-  celery-worker:
+  celery-worker-generic:
     image: compute_horde_validator/app
     init: true
     healthcheck:
@@ -68,6 +68,87 @@ services:
     environment:
       - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
+      - CELERY_QUEUE=generic
+    command: ./celery-entrypoint.sh
+    volumes:
+      - ./prometheus-metrics:/prometheus-multiproc-dir
+    tmpfs: /run
+    depends_on:
+      - redis
+    logging:
+      <<: *logging
+
+  celery-worker-weights:
+    image: compute_horde_validator/app
+    init: true
+    healthcheck:
+      test: celery -A compute_horde_validator status > /dev/null || exit 1
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - DEBUG=off
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
+      - CELERY_QUEUE=weights
+    command: ./celery-entrypoint.sh
+    volumes:
+      - ./prometheus-metrics:/prometheus-multiproc-dir
+    tmpfs: /run
+    depends_on:
+      - redis
+    logging:
+      <<: *logging
+
+  celery-worker-jobs:
+    image: compute_horde_validator/app
+    init: true
+    healthcheck:
+      test: celery -A compute_horde_validator status > /dev/null || exit 1
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - DEBUG=off
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
+      - CELERY_QUEUE=jobs
+    command: ./celery-entrypoint.sh
+    volumes:
+      - ./prometheus-metrics:/prometheus-multiproc-dir
+    tmpfs: /run
+    depends_on:
+      - redis
+    logging:
+      <<: *logging
+
+  celery-worker-llm:
+    image: compute_horde_validator/app
+    init: true
+    healthcheck:
+      test: celery -A compute_horde_validator status > /dev/null || exit 1
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - DEBUG=off
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
+      - CELERY_QUEUE=llm
+    command: ./celery-entrypoint.sh
+    volumes:
+      - ./prometheus-metrics:/prometheus-multiproc-dir
+    tmpfs: /run
+    depends_on:
+      - redis
+    logging:
+      <<: *logging
+
+  celery-worker-receipts:
+    image: compute_horde_validator/app
+    init: true
+    healthcheck:
+      test: celery -A compute_horde_validator status > /dev/null || exit 1
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - DEBUG=off
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
+      - CELERY_QUEUE=receipts
     command: ./celery-entrypoint.sh
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
@@ -102,8 +183,6 @@ services:
     environment:
       - DEBUG=off
     command: celery --app=compute_horde_validator --broker="${CELERY_BROKER_URL}" flower --basic_auth="${CELERY_FLOWER_USER}:${CELERY_FLOWER_PASSWORD}"
-    depends_on:
-      - celery-worker
     ports:
       - 5555:5555
     logging:
