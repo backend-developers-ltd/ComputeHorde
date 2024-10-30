@@ -7,20 +7,23 @@ import subprocess
 from datetime import timedelta
 from pathlib import Path
 from time import monotonic
-from typing import NamedTuple
 from unittest import mock
 
+import bittensor
 import constance
 import numpy as np
-from bittensor import Balance
+from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
+    Signature,
     V0JobRequest,
     V1JobRequest,
+    V2JobRequest,
 )
 from compute_horde.mv_protocol.miner_requests import (
     V0AcceptJobRequest,
     V0ExecutorReadyRequest,
+    V0JobFailedRequest,
     V0JobFinishedRequest,
 )
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
@@ -55,15 +58,15 @@ def get_miner_client(MINER_CLIENT, job_uuid: str):
     )
 
 
-class MockedAxonInfo(NamedTuple):
-    is_serving: bool
-    ip: str
-    ip_type: int
-    port: int
-
-
-async def mock_get_miner_axon_info(hotkey: str):
-    return MockedAxonInfo(is_serving=True, ip_type=4, ip="0000", port=8000)
+async def mock_get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
+    return bittensor.AxonInfo(
+        version=4,
+        ip="ignore",
+        ip_type=4,
+        port=8000,
+        hotkey=hotkey,
+        coldkey="ignore",
+    )
 
 
 class MockSyntheticMinerClient(batch_run.MinerClient):
@@ -117,7 +120,7 @@ class MockMinerClient(MinerClient):
         return result
 
 
-class MockJobStateMinerClient(MockMinerClient):
+class MockSuccessfulMinerClient(MockMinerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.miner_accepting_or_declining_future.set_result(
@@ -131,6 +134,25 @@ class MockJobStateMinerClient(MockMinerClient):
                 job_uuid=self.job_uuid,
                 docker_process_stdout="",
                 docker_process_stderr="",
+            )
+        )
+
+
+class MockFaillingMinerClient(MockMinerClient):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.miner_accepting_or_declining_future.set_result(
+            V0AcceptJobRequest(job_uuid=self.job_uuid)
+        )
+        self.executor_ready_or_failed_future.set_result(
+            V0ExecutorReadyRequest(job_uuid=self.job_uuid)
+        )
+        self.miner_finished_or_failed_future.set_result(
+            V0JobFailedRequest(
+                job_uuid=self.job_uuid,
+                docker_process_stdout="",
+                docker_process_stderr="",
+                docker_process_exit_status=1,
             )
         )
 
@@ -196,6 +218,49 @@ def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
                 "url": "http://r2.bucket.com/output.zip",
             },
         },
+    )
+
+
+def get_dummy_job_request_v2(uuid: str) -> V2JobRequest:
+    return V2JobRequest(
+        type="job.new",
+        uuid=uuid,
+        docker_image="nvidia",
+        executor_class=DEFAULT_EXECUTOR_CLASS,
+        raw_script="print('hello world')",
+        args=[],
+        env={},
+        use_gpu=False,
+        volume={
+            "volume_type": "multi_volume",
+            "volumes": [
+                {
+                    "volume_type": "single_file",
+                    "url": "fake.com/input.txt",
+                    "relative_path": "input.txt",
+                },
+            ],
+        },
+        output_upload={
+            "output_upload_type": "multi_upload",
+            "uploads": [
+                {
+                    "output_upload_type": "single_file_post",
+                    "url": "http://s3.bucket.com/output1.txt",
+                    "relative_path": "output1.txt",
+                }
+            ],
+            "system_output": {
+                "output_upload_type": "zip_and_http_put",
+                "url": "http://r2.bucket.com/output.zip",
+            },
+        },
+        signature=Signature(
+            signature_type="bittensor",
+            signatory="5CDapJdKqe6b1kdD7ABZEbNKrRZqhM21m8q3vn1YU22rKK9h",
+            timestamp_ns=1729622861880448856,
+            signature="lnX1rPC+Dnbc6fKPunR35T329IgjJBKHxvA1Y5hpWUl7N7GzlwEnjGHuWcdRfOjfamNNXYnT/gaIUWJxbmwChw==",
+        ),
     )
 
 
@@ -307,8 +372,8 @@ class MockNeuron:
     def __init__(self, hotkey, uid):
         self.hotkey = hotkey
         self.uid = uid
-        self.stake = Balance((uid + 1) * 1001.0)
-        self.axon_info = MockedAxonInfo(True, f"127.0.0.{uid}", 4, 8000 + uid)
+        self.stake = bittensor.Balance((uid + 1) * 1001.0)
+        self.axon_info = async_to_sync(mock_get_miner_axon_info)("hotkey")
 
 
 class MockBlock:

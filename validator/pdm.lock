@@ -5,7 +5,7 @@
 groups = ["default", "format", "lint", "security_check", "test", "type_check"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:779dfd3e080b19c6bd4a37e4f28edb28b16b131af3f6e195de306166b88a24d0"
+content_hash = "sha256:4dec86f89be8f060c0dd8e3f3840a1ecbd652111c502043d5a3ff6afd4520a12"
 
 [[metadata.targets]]
 requires_python = "==3.11.*"
@@ -559,6 +559,20 @@ files = [
 ]
 
 [[package]]
+name = "class-registry"
+version = "2.1.2"
+summary = "Factory+Registry pattern for Python classes."
+groups = ["default"]
+dependencies = [
+    "six",
+    "typing; python_version < \"3.0\"",
+]
+files = [
+    {file = "class-registry-2.1.2.tar.gz", hash = "sha256:678bdb0322566c07a4d8905140d364bd34a73baf46bf7580fc2e06fa994d4e7e"},
+    {file = "class_registry-2.1.2-py2.py3-none-any.whl", hash = "sha256:cfb855514753e2edfe8d88b14a6e449820682fe0983efe61b83df28b688b3e5a"},
+]
+
+[[package]]
 name = "click"
 version = "8.1.7"
 requires_python = ">=3.7"
@@ -675,8 +689,10 @@ path = "../compute_horde"
 summary = ""
 groups = ["default"]
 dependencies = [
+    "Django~=4.2.4",
     "bittensor<8.0.0,>=7.3.1",
     "more-itertools>=10.2.0",
+    "phx-class-registry>=4.1.0",
     "pydantic<3,>=2.3",
     "requests>=2.32.2",
     "websockets>=11.0",
@@ -1842,6 +1858,17 @@ dependencies = [
 files = [
     {file = "pexpect-4.9.0-py2.py3-none-any.whl", hash = "sha256:7236d1e080e4936be2dc3e326cec0af72acf9212a7e1d060210e70a47e253523"},
     {file = "pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f"},
+]
+
+[[package]]
+name = "phx-class-registry"
+version = "5.1.1"
+requires_python = "<4.0,>=3.11"
+summary = "Factory+Registry pattern for Python classes"
+groups = ["default"]
+files = [
+    {file = "phx_class_registry-5.1.1-py3-none-any.whl", hash = "sha256:b093ecc1dad34c5dc6eda2530046d956f2303a5cfaa543bf7fba35ce3c7b1672"},
+    {file = "phx_class_registry-5.1.1.tar.gz", hash = "sha256:06c9af198b846a7530406314f63f8d83441daf42d29ee25d8c0b19a9dbc37939"},
 ]
 
 [[package]]

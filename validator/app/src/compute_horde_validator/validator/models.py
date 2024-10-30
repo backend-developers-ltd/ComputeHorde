@@ -122,6 +122,14 @@ class MinerBlacklist(models.Model):
         return f"hotkey: {self.miner.hotkey}"
 
 
+class ValidatorWhitelist(models.Model):
+    hotkey = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"hotkey: {self.hotkey}"
+
+
 class Cycle(models.Model):
     start = models.BigIntegerField()
     stop = models.BigIntegerField()

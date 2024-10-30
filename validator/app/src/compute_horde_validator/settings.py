@@ -274,6 +274,21 @@ CONSTANCE_CONFIG = {
         ),
         str,
     ),
+    "DYNAMIC_ORGANIC_JOB_TIMEOUT": (
+        300,
+        "Timeout for the run of an organic jobs in seconds",
+        int,
+    ),
+    "DYNAMIC_ORGANIC_JOB_WAIT_TIMEOUT": (
+        300,
+        "Timeout for preparing an organic job in seconds",
+        int,
+    ),
+    "DYNAMIC_ORGANIC_JOB_MAX_RETRIES": (
+        3,
+        "Maximum retries for organic jobs",
+        int,
+    ),
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 

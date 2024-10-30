@@ -19,6 +19,7 @@ from compute_horde_validator.validator.models import (
     SolveWorkload,
     SyntheticJob,
     SystemEvent,
+    ValidatorWhitelist,
     Weights,
 )  # noqa
 from compute_horde_validator.validator.tasks import trigger_run_admin_job_request  # noqa
@@ -148,6 +149,13 @@ class PromptAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
     ]
 
 
+class ValidatorWhitelistAdmin(admin.ModelAdmin):
+    list_display = [
+        "hotkey",
+        "created_at",
+    ]
+
+
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
@@ -159,3 +167,4 @@ admin.site.register(PromptSeries, admin_class=PromptSeriesAdmin)
 admin.site.register(SolveWorkload, admin_class=SolveWorkloadAdmin)
 admin.site.register(PromptSample, admin_class=PromptSampleAdmin)
 admin.site.register(Prompt, admin_class=PromptAdmin)
+admin.site.register(ValidatorWhitelist, admin_class=ValidatorWhitelistAdmin)
