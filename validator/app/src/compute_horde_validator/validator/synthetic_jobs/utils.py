@@ -1,10 +1,14 @@
 import logging
 import time
+from collections.abc import Iterable
+from itertools import islice
+from typing import TypeVar
 
 import bittensor
 import uvloop
 from asgiref.sync import async_to_sync
 from django.conf import settings
+from django.db.models import Model
 
 from compute_horde_validator.validator.models import Miner, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
