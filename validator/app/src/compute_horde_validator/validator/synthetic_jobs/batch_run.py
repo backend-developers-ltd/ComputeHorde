@@ -819,6 +819,7 @@ def _not_enough_prompts_system_event(
         timestamp__gt=datetime.now(UTC) - timedelta(hours=24),
     ).exists()
     if exists_in_24h:
+        logger.warning("skipping INSUFFICIENT_PROMPTS system event, already exists in 24h")
         return
 
     prompt_series_total_count = PromptSeries.objects.count()

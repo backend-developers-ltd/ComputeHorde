@@ -1,8 +1,11 @@
+import logging
 from datetime import timedelta
 
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import SystemEvent
+
+logger = logging.getLogger(__name__)
 
 
 async def trusted_miner_not_configured_system_event(type_: SystemEvent.EventType) -> None:
@@ -16,6 +19,7 @@ async def trusted_miner_not_configured_system_event(type_: SystemEvent.EventType
         timestamp__gt=now() - timedelta(hours=24),
     ).aexists()
     if exists_in_24h:
+        logger.warning("skipping TRUSTED_MINER_NOT_CONFIGURED system event, already exists in 24h")
         return
 
     await SystemEvent.objects.acreate(
