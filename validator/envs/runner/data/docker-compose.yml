@@ -48,7 +48,7 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
-  celery-worker:
+  celery-worker-default: &celery
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
     pull_policy: always
     init: true
@@ -58,10 +58,11 @@ services:
     env_file: ./.env
     environment:
       - CELERY_CONCURRENCY=4
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-default
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
-    command: ./celery-entrypoint.sh
+      - ${HOST_PROMETHEUS_METRICS_DIR:-./prometheus-metrics}:/prometheus-multiproc-dir
+    command: ./celery-entrypoint.sh -Q default -E -l INFO -c ${CELERY_CONCURRENCY}
     tmpfs: /run
     depends_on:
       - redis
@@ -71,14 +72,40 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
+  celery-worker-weights:
+    <<: *celery
+    command: ./celery-entrypoint.sh -Q weights -E -l INFO -c ${CELERY_CONCURRENCY}
+    environment:
+      - CELERY_CONCURRENCY=4
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-weights
+
+  celery-worker-jobs:
+    <<: *celery
+    command: ./celery-entrypoint.sh -Q jobs -E -l INFO -c ${CELERY_CONCURRENCY}
+    environment:
+      - CELERY_CONCURRENCY=4
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-jobs
+
+  celery-worker-llm:
+    <<: *celery
+    command: ./celery-entrypoint.sh -Q llm -E -l INFO -c ${CELERY_CONCURRENCY}
+    environment:
+      - CELERY_CONCURRENCY=4
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-llm
+
+  celery-worker-receipts:
+    <<: *celery
+    command: ./celery-entrypoint.sh -Q receipts -E -l INFO -c ${CELERY_CONCURRENCY}
+    environment:
+      - CELERY_CONCURRENCY=4
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-receipts
+
   celery-beat:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
     pull_policy: always
     init: true
     restart: unless-stopped
     env_file: ./.env
-    environment:
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     command: ./celery-beat-entrypoint.sh
