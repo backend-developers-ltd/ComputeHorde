@@ -62,7 +62,7 @@ services:
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
       - ${HOST_PROMETHEUS_METRICS_DIR:-./prometheus-metrics}:/prometheus-multiproc-dir
-    command: ./celery-entrypoint.sh -Q default -E -l INFO -c ${CELERY_CONCURRENCY}
+    command: ./celery-entrypoint.sh -Q default -E -l INFO -c 4
     tmpfs: /run
     depends_on:
       - redis
@@ -74,30 +74,26 @@ services:
 
   celery-worker-weights:
     <<: *celery
-    command: ./celery-entrypoint.sh -Q weights -E -l INFO -c ${CELERY_CONCURRENCY}
+    command: ./celery-entrypoint.sh -Q weights -E -l INFO -c 4
     environment:
-      - CELERY_CONCURRENCY=4
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-weights
 
   celery-worker-jobs:
     <<: *celery
-    command: ./celery-entrypoint.sh -Q jobs -E -l INFO -c ${CELERY_CONCURRENCY}
+    command: ./celery-entrypoint.sh -Q jobs -E -l INFO -c 4
     environment:
-      - CELERY_CONCURRENCY=4
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-jobs
 
   celery-worker-llm:
     <<: *celery
-    command: ./celery-entrypoint.sh -Q llm -E -l INFO -c ${CELERY_CONCURRENCY}
+    command: ./celery-entrypoint.sh -Q llm -E -l INFO -c 4
     environment:
-      - CELERY_CONCURRENCY=4
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-llm
 
   celery-worker-receipts:
     <<: *celery
-    command: ./celery-entrypoint.sh -Q receipts -E -l INFO -c ${CELERY_CONCURRENCY}
+    command: ./celery-entrypoint.sh -Q receipts -E -l INFO -c 4
     environment:
-      - CELERY_CONCURRENCY=4
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-receipts
 
   celery-beat:
