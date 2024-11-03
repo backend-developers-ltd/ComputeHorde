@@ -28,7 +28,6 @@ def metrics_view(request):
     if os.environ.get(ENV_VAR_NAME):
         registry = prometheus_client.CollectorRegistry()
         RecursiveMultiProcessCollector(registry)
-        registry.register(CustomCeleryCollector())
         return HttpResponse(
             prometheus_client.generate_latest(registry),
             content_type=prometheus_client.CONTENT_TYPE_LATEST,
