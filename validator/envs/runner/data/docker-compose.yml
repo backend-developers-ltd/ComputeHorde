@@ -48,14 +48,14 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
-  celery-worker-default: &celery-worker
+  celery-worker: &celery-worker
     image: compute_horde_validator/app
     init: true
     restart: unless-stopped
     env_file: ./.env
     environment:
       - DEBUG=off
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-default
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker
     command: ./celery-entrypoint.sh -Q default
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
