@@ -68,7 +68,7 @@ services:
     environment:
       - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-default
-    command: ./celery-entrypoint.sh -Q default -E -l INFO -c 2
+    command: ./celery-entrypoint.sh -Q default
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
     tmpfs: /run
@@ -80,26 +80,30 @@ services:
   celery-worker-weights:
     <<: *celery-worker
     environment:
+      - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-weights
-    command: ./celery-entrypoint.sh -Q weights -E -l INFO -c 2
+    command: ./celery-entrypoint.sh -Q weights
 
   celery-worker-jobs:
     <<: *celery-worker
     environment:
+      - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-jobs
-    command: ./celery-entrypoint.sh -Q jobs -E -l INFO -c 2
+    command: ./celery-entrypoint.sh -Q jobs
 
   celery-worker-llm:
     <<: *celery-worker
     environment:
+      - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-llm
-    command: ./celery-entrypoint.sh -Q llm -E -l INFO -c 2
+    command: ./celery-entrypoint.sh -Q llm
 
   celery-worker-receipts:
     <<: *celery-worker
     environment:
+      - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-receipts
-    command: ./celery-entrypoint.sh -Q receipts -E -l INFO -c 2
+    command: ./celery-entrypoint.sh -Q receipts
 
   celery-beat:
     image: compute_horde_validator/app
