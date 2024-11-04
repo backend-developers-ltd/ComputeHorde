@@ -1,15 +1,23 @@
 [project]
+name = "compute-horde-root"
+version = "0.1.0"
 dependencies = []
 requires-python = "==3.11.*"
 
-[tool.pdm.dev-dependencies]
+[dependency-groups]
 dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-xdist",
     "requests",
-    "-e compute-horde @ file:///${PROJECT_ROOT}/compute_horde/",
-    "-e file:///${PROJECT_ROOT}/miner",
-    "-e file:///${PROJECT_ROOT}/executor",
-    "-e file:///${PROJECT_ROOT}/validator",
+    "compute-horde",
+    "miner",
+    "executor",
+    "validator",
 ]
+
+[tool.uv.sources]
+compute-horde = { path = "compute_horde", editable = true }
+miner = { path = "miner", editable = true }
+executor = { path = "executor", editable = true }
+validator = { path = "validator", editable = true }

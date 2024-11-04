@@ -31,7 +31,7 @@ excludes = ["compute_horde/settings.py"]
 source = "scm"
 tag_regex = '^library-v(?P<version>\d+\.\d+\.\d+(a\d+)?)$'
 
-[tool.pdm.dev-dependencies]
+[dependency-groups]
 format = ["ruff"]
 lint = [
     "ruff",
