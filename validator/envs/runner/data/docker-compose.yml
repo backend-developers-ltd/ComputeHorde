@@ -51,8 +51,6 @@ services:
   celery-worker-default: &celery-worker
     image: compute_horde_validator/app
     init: true
-    healthcheck:
-      test: celery -A compute_horde_validator status > /dev/null || exit 1
     restart: unless-stopped
     env_file: ./.env
     environment:
