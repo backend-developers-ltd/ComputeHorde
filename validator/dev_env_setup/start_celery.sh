@@ -14,12 +14,12 @@ CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-INFO}
 
 # below we define two workers types (each may have any concurrency);
 # each worker may have its own settings
-WORKERS="generic weights jobs llm receipts"
+WORKERS="default weights jobs llm receipts"
 OPTIONS="-E -l $CELERY_LOGLEVEL --pidfile=/tmp/celery-validator-%n.pid --logfile=/tmp/celery-validator-%n.log"
 
 # shellcheck disable=SC2086
 celery -A compute_horde_validator multi start $WORKERS $OPTIONS \
-    -Q:generic generic --autoscale:generic=$CELERY_CONCURRENCY \
+    -Q:default default --autoscale:generic=$CELERY_CONCURRENCY \
     -Q:weights weights --autoscale:weights=$CELERY_CONCURRENCY \
     -Q:jobs jobs --autoscale:jobs=$CELERY_CONCURRENCY \
     -Q:scores scores --autoscale:scores=$CELERY_CONCURRENCY \
