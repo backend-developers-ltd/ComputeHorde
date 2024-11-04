@@ -6,6 +6,11 @@ if ! command -v aws &> /dev/null; then
     exit 1
 fi
 
+if ! command -v jq &>/dev/null; then
+    echo "jq cannot be found. Please, install it according to the instructions for your OS: https://jqlang.github.io/jq/download/"
+    exit 1
+fi
+
 if [ "$#" -lt 2 ]; then
     echo "Usage: $0 <prompts_bucket_name> <answers_bucket_name> [--create-user]"
     exit 1
@@ -15,20 +20,34 @@ PROMPTS_BUCKET=$1
 ANSWERS_BUCKET=$2
 CREATE_USER=false
 
-if [ "$#" -eq 3 ] && [ "$3" == "--create-user" ]; then
-    CREATE_USER=true
-fi
+for arg in "$@"; do
+    if [ "$arg" = "--create-user" ]; then
+        CREATE_USER=true
+        break
+    fi
+done
 
+export AWS_PAGER=""
 BUCKET_REGION="${AWS_REGION:-us-east-1}"
 
 create_bucket() {
-    local bucket_name=$1
+    local bucket_name="$1"
 
-    if aws s3api head-bucket --bucket "$bucket_name" --no-cli-pager 2>/dev/null; then
+    HEAD_OUTPUT=$(aws s3api head-bucket --bucket "$bucket_name" --no-cli-pager 2>&1)
+    HEAD_CODE="$?"
+
+    if [[ $HEAD_CODE -eq 0 ]]; then
+        BUCKET_REGION="$(echo "$HEAD_OUTPUT" | jq --raw-output .BucketRegion)"
         echo "Bucket $bucket_name already exists and is owned by you. Skipping creation."
-        return
-    elif [ $? -eq 254 ]; then
-        echo "Bucket $bucket_name already exists but is not owned by you. Exiting."
+        return 0
+    elif [[ $HEAD_CODE -eq 254 ]] && [[ $HEAD_OUTPUT == *"Not Found"* ]]; then
+        # proceed below to create the bucket
+        true # no-op
+    elif [[ $HEAD_CODE -eq 254 ]] && [[ $HEAD_OUTPUT == *"Forbidden"* ]]; then
+        echo "Bucket $bucket_name is owned by someone else. Please choose a different bucket name."
+        exit 1
+    else
+        echo "Failed to create bucket $bucket_name: $HEAD_OUTPUT"
         exit 1
     fi
 
