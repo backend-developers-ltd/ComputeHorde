@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-docker compose up --detach --wait --force-recreate
+docker compose up --detach --wait --force-recreate --remove-orphans
 
 while true
 do
