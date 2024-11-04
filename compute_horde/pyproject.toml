@@ -42,7 +42,7 @@ release = [
 ]
 type_check = [
     "django-stubs[compatible-mypy]",
-    "djangorestframework-stubs[compatible-mypy]",
+    "djangorestframework-stubs[compatible-mypy]>=3.15.1",
     "mypy",
     "types-freezegun",
     "types-python-dateutil",

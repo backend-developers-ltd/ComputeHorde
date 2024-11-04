@@ -6,8 +6,6 @@ from pathlib import Path
 import nox
 
 
-os.environ["PDM_IGNORE_SAVED_PYTHON"] = "1"
-
 CI = os.environ.get("CI") is not None
 
 ROOT = Path(".")
@@ -21,7 +19,14 @@ nox.options.reuse_existing_virtualenvs = not CI
 
 @nox.session(python=PYTHON_VERSIONS)
 def test(session):
-    session.run("pdm", "install", "--check", external=True)
+    session.run_install(
+        "uv",
+        "sync",
+        "--locked",
+        "--group",
+        "dev",
+        env={"UV_PROJECT_ENVIRONMENT": session.virtualenv.location},
+    )
     session.run(
         "pytest",
         "-s",
