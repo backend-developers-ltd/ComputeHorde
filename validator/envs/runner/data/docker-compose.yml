@@ -99,9 +99,6 @@ services:
     init: true
     restart: unless-stopped
     env_file: ./.env
-    environment:
-      - DEBUG=off
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     command: ./celery-beat-entrypoint.sh
