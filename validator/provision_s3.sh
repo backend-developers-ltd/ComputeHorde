@@ -122,9 +122,10 @@ EOF
     aws iam attach-user-policy --user-name "$username" --policy-arn "arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):policy/$policy_name" --no-cli-pager
 
     echo "User created successfully. Here are the access credentials:"
-    echo "Access Key ID: $access_key_id"
-    echo "Secret Access Key: $secret_access_key"
-    echo "Please save these credentials securely. You won't be able to retrieve the secret key again."
+    echo "AWS_ACCESS_KEY_ID=$access_key_id"
+    echo "AWS_SECRET_ACCESS_KEY=$secret_access_key"
+    echo
+    echo "Add these credentials in your validator .env file. You won't be able to retrieve the secret key again."
 }
 
 create_bucket "$PROMPTS_BUCKET"
@@ -133,3 +134,7 @@ create_bucket "$ANSWERS_BUCKET"
 if $CREATE_USER; then
     create_user_and_access
 fi
+
+echo "Add the bucket info in your validator .env file:"
+echo "S3_BUCKET_NAME_PROMPTS=$PROMPTS_BUCKET"
+echo "S3_BUCKET_NAME_ANSWERS=$ANSWERS_BUCKET"
