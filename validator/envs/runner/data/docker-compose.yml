@@ -48,28 +48,48 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
-  celery-worker:
-    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
-    pull_policy: always
+  celery-worker-default: &celery-worker
+    image: compute_horde_validator/app
     init: true
     healthcheck:
       test: celery -A compute_horde_validator status > /dev/null || exit 1
     restart: unless-stopped
     env_file: ./.env
     environment:
-      - CELERY_CONCURRENCY=4
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir
+      - DEBUG=off
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-default
+    command: ./celery-entrypoint.sh -Q default -E -l INFO -c 2
     volumes:
-      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
-    command: ./celery-entrypoint.sh
+      - ./prometheus-metrics:/prometheus-multiproc-dir
     tmpfs: /run
     depends_on:
       - redis
-      - db
     logging:
       <<: *logging
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
+
+  celery-worker-weights:
+    <<: *celery-worker
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-weights
+    command: ./celery-entrypoint.sh -Q weights -E -l INFO -c 2
+
+  celery-worker-jobs:
+    <<: *celery-worker
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-jobs
+    command: ./celery-entrypoint.sh -Q jobs -E -l INFO -c 2
+
+  celery-worker-llm:
+    <<: *celery-worker
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-llm
+    command: ./celery-entrypoint.sh -Q llm -E -l INFO -c 2
+
+  celery-worker-receipts:
+    <<: *celery-worker
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-receipts
+    command: ./celery-entrypoint.sh -Q receipts -E -l INFO -c 2
 
   celery-beat:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest

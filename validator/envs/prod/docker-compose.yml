@@ -58,7 +58,7 @@ services:
     logging:
       <<: *logging
 
-  celery-worker-default:
+  celery-worker-default: &celery-worker
     image: compute_horde_validator/app
     init: true
     healthcheck:
@@ -68,7 +68,7 @@ services:
     environment:
       - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-default
-    command: ./celery-entrypoint.sh -Q default -E -l INFO -c ${CELERY_CONCURRENCY}
+    command: ./celery-entrypoint.sh -Q default -E -l INFO -c 2
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
     tmpfs: /run
@@ -78,80 +78,28 @@ services:
       <<: *logging
 
   celery-worker-weights:
-    image: compute_horde_validator/app
-    init: true
-    healthcheck:
-      test: celery -A compute_horde_validator status > /dev/null || exit 1
-    restart: unless-stopped
-    env_file: ./.env
+    <<: *celery-worker
     environment:
-      - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-weights
-    command: ./celery-entrypoint.sh -Q weights -E -l INFO -c ${CELERY_CONCURRENCY}
-    volumes:
-      - ./prometheus-metrics:/prometheus-multiproc-dir
-    tmpfs: /run
-    depends_on:
-      - redis
-    logging:
-      <<: *logging
+    command: ./celery-entrypoint.sh -Q weights -E -l INFO -c 2
 
   celery-worker-jobs:
-    image: compute_horde_validator/app
-    init: true
-    healthcheck:
-      test: celery -A compute_horde_validator status > /dev/null || exit 1
-    restart: unless-stopped
-    env_file: ./.env
+    <<: *celery-worker
     environment:
-      - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-jobs
-    command: ./celery-entrypoint.sh -Q jobs -E -l INFO -c ${CELERY_CONCURRENCY}
-    volumes:
-      - ./prometheus-metrics:/prometheus-multiproc-dir
-    tmpfs: /run
-    depends_on:
-      - redis
-    logging:
-      <<: *logging
+    command: ./celery-entrypoint.sh -Q jobs -E -l INFO -c 2
 
   celery-worker-llm:
-    image: compute_horde_validator/app
-    init: true
-    healthcheck:
-      test: celery -A compute_horde_validator status > /dev/null || exit 1
-    restart: unless-stopped
-    env_file: ./.env
+    <<: *celery-worker
     environment:
-      - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-llm
-    command: ./celery-entrypoint.sh -Q llm -E -l INFO -c ${CELERY_CONCURRENCY}
-    volumes:
-      - ./prometheus-metrics:/prometheus-multiproc-dir
-    tmpfs: /run
-    depends_on:
-      - redis
-    logging:
-      <<: *logging
+    command: ./celery-entrypoint.sh -Q llm -E -l INFO -c 2
 
   celery-worker-receipts:
-    image: compute_horde_validator/app
-    init: true
-    healthcheck:
-      test: celery -A compute_horde_validator status > /dev/null || exit 1
-    restart: unless-stopped
-    env_file: ./.env
+    <<: *celery-worker
     environment:
-      - DEBUG=off
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-receipts
-    command: ./celery-entrypoint.sh -Q receipts -E -l INFO -c ${CELERY_CONCURRENCY}
-    volumes:
-      - ./prometheus-metrics:/prometheus-multiproc-dir
-    tmpfs: /run
-    depends_on:
-      - redis
-    logging:
-      <<: *logging
+    command: ./celery-entrypoint.sh -Q receipts -E -l INFO -c 2
 
   celery-beat:
     image: compute_horde_validator/app
@@ -214,25 +162,19 @@ services:
       - ./nginx/monitoring_certs:/etc/monitoring_certs
     depends_on:
       - app
-      
       - cadvisor
       - node-exporter
-      
+
     command: nginx -g 'daemon off;'
     ports:
       - 127.0.0.1:80:80
       - 127.0.0.1:443:443
-      
       - 10443:10443
-      
     logging:
       <<: *logging
-    
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    
 
-  
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
@@ -244,9 +186,7 @@ services:
     command:
       - '--path.rootfs=/host'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|run|boot|var/.+)($$|/)'
-      
       - '--collector.tcpstat'
-      
     logging:
       <<: *logging
 
@@ -285,7 +225,7 @@ services:
       - -config.expand-env=true
     logging:
       <<: *logging
-  
+
 
 volumes:
   backend-static:
