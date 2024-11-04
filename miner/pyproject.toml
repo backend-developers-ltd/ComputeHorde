@@ -17,7 +17,7 @@ dependencies = [
     "redis~=4.6.0",
     "sentry-sdk==1.29.2",
     "ipython~=8.14.0",
-    "nox==2023.4.22",
+    "nox==2024.10.09",
     "channels[daphne]==4.*",
     "channels-redis==4.*",
     "compute-horde",
@@ -54,7 +54,7 @@ lint = [
 ]
 type_check = [
     "django-stubs[compatible-mypy]",
-    "djangorestframework-stubs[compatible-mypy]",
+    "djangorestframework-stubs[compatible-mypy]>=3.15.1",
     "mypy",
     "types-freezegun",
     "types-python-dateutil",

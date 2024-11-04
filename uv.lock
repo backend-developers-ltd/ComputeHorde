@@ -547,7 +547,7 @@ test = [
 ]
 type-check = [
     { name = "django-stubs", extras = ["compatible-mypy"] },
-    { name = "djangorestframework-stubs", extras = ["compatible-mypy"] },
+    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = ">=3.15.1" },
     { name = "mypy" },
     { name = "types-freezegun" },
     { name = "types-python-dateutil" },
@@ -943,7 +943,7 @@ requires-dist = [
     { name = "httpx", specifier = "~=0.26.0" },
     { name = "huggingface-hub", specifier = ">=0.26.1" },
     { name = "ipython", specifier = "~=8.14.0" },
-    { name = "nox", specifier = "==2023.4.22" },
+    { name = "nox", specifier = "==2024.10.9" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
     { name = "psycopg2-binary", specifier = "~=2.9.7" },
     { name = "redis", specifier = "~=4.6.0" },
@@ -969,7 +969,7 @@ test = [
 ]
 type-check = [
     { name = "django-stubs", extras = ["compatible-mypy"] },
-    { name = "djangorestframework-stubs", extras = ["compatible-mypy"] },
+    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = ">=3.15.1" },
     { name = "mypy" },
     { name = "types-freezegun" },
     { name = "types-python-dateutil" },
@@ -1369,7 +1369,7 @@ requires-dist = [
     { name = "flower", specifier = "~=2.0.0" },
     { name = "gunicorn", specifier = "==20.1.0" },
     { name = "ipython", specifier = "~=8.14.0" },
-    { name = "nox", specifier = "==2023.4.22" },
+    { name = "nox", specifier = "==2024.10.9" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
     { name = "psycopg2-binary", specifier = "~=2.9.7" },
     { name = "redis", specifier = "~=4.6.0" },
@@ -1396,7 +1396,7 @@ test = [
 type-check = [
     { name = "celery-types" },
     { name = "django-stubs", extras = ["compatible-mypy"] },
-    { name = "djangorestframework-stubs", extras = ["compatible-mypy"] },
+    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = ">=3.15.1" },
     { name = "mypy" },
     { name = "types-freezegun" },
     { name = "types-python-dateutil" },
@@ -1500,7 +1500,7 @@ wheels = [
 
 [[package]]
 name = "nox"
-version = "2023.4.22"
+version = "2024.10.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "argcomplete" },
@@ -1508,9 +1508,9 @@ dependencies = [
     { name = "packaging" },
     { name = "virtualenv" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e7/3b/529fa8920b18b92085ed5923caee4aee112c65a7af99b34bd5a868b82e3e/nox-2023.4.22.tar.gz", hash = "sha256:46c0560b0dc609d7d967dc99e22cb463d3c4caf54a5fda735d6c11b5177e3a9f", size = 3984546 }
+sdist = { url = "https://files.pythonhosted.org/packages/08/93/4df547afcd56e0b2bbaa99bc2637deb218a01802ed62d80f763189be802c/nox-2024.10.9.tar.gz", hash = "sha256:7aa9dc8d1c27e9f45ab046ffd1c3b2c4f7c91755304769df231308849ebded95", size = 4003197 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/c8/6e8e7412cb690fbfc993fb00e75b438e6982d2a247f29645d7daf75d013a/nox-2023.4.22-py3-none-any.whl", hash = "sha256:0b1adc619c58ab4fa57d6ab2e7823fe47a32e70202f287d78474adcc7bda1891", size = 54093 },
+    { url = "https://files.pythonhosted.org/packages/66/00/981f0dcaddf111b6caf6e03d7f7f01b07fd4af117316a7eb1c22039d9e37/nox-2024.10.9-py3-none-any.whl", hash = "sha256:1d36f309a0a2a853e9bccb76bbef6bb118ba92fa92674d15604ca99adeb29eab", size = 61210 },
 ]
 
 [[package]]
@@ -2429,7 +2429,7 @@ requires-dist = [
     { name = "gunicorn", specifier = "==20.1.0" },
     { name = "httpx", specifier = "~=0.26.0" },
     { name = "ipython", specifier = "~=8.14.0" },
-    { name = "nox", specifier = "==2023.4.22" },
+    { name = "nox", specifier = "==2024.10.9" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
     { name = "psycopg2-binary", specifier = "~=2.9.7" },
     { name = "redis", specifier = "~=4.6.0" },
@@ -2460,7 +2460,7 @@ test = [
 type-check = [
     { name = "celery-types", specifier = ">=0.22.0" },
     { name = "django-stubs", extras = ["compatible-mypy"] },
-    { name = "djangorestframework-stubs", extras = ["compatible-mypy"] },
+    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = ">=3.15.1" },
     { name = "mypy" },
     { name = "types-freezegun" },
     { name = "types-python-dateutil" },

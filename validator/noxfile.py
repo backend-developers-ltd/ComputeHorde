@@ -8,8 +8,6 @@ from pathlib import Path
 
 import nox
 
-os.environ["PDM_IGNORE_SAVED_PYTHON"] = "1"
-
 CI = os.environ.get("CI") is not None
 
 ROOT = Path(".")
@@ -26,7 +24,13 @@ def install(session: nox.Session, *args):
     groups = []
     for group in args:
         groups.extend(["--group", group])
-    session.run("pdm", "install", "--check", *groups, external=True)
+    session.run_install(
+        "uv",
+        "sync",
+        "--locked",
+        *groups,
+        env={"UV_PROJECT_ENVIRONMENT": session.virtualenv.location},
+    )
 
 
 @functools.lru_cache
