@@ -92,6 +92,9 @@ create_user_and_access() {
     key_output=$(aws iam create-access-key --user-name "$username" --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text --no-cli-pager)
     access_key_id=$(echo "$key_output" | awk '{print $1}')
     secret_access_key=$(echo "$key_output" | awk '{print $2}')
+    if [[ $access_key_id = "" ]]; then
+        return 1
+    fi
 
     echo "Creating IAM policy for bucket access"
     policy_document=$(cat <<EOF
@@ -134,7 +137,7 @@ create_bucket "$PROMPTS_BUCKET"
 create_bucket "$ANSWERS_BUCKET"
 
 if $CREATE_USER; then
-    create_user_and_access
+    create_user_and_access || echo "Failed to generate access key for IAM user!"
 fi
 
 echo "Add the bucket info in your validator .env file:"
