@@ -82,6 +82,10 @@ logger = logging.getLogger(__name__)
 _GIVE_AVERAGE_JOB_SEND_TIME_BONUS = False
 _SEND_MACHINE_SPECS = False
 
+# asyncio event loop profiling intervals
+_LOOP_PROFILING_SLEEP_INTERVAL = 0.1
+_LOOP_PROFILING_TIMEOUT_INTERVAL = 1
+
 # always-on executor classes have spin_up_time=0, but realistically
 # we need a bit more for all the back-and-forth messaging, especially
 # when we talk with a lot of executors
@@ -445,6 +449,8 @@ class BatchContext:
     stage_start_time: dict[str, datetime]
     average_job_send_time: timedelta | None = None
 
+    loop_profiler: "LoopProfiler | None" = None
+
     # for tests
     _loop: asyncio.AbstractEventLoop | None = None
 
@@ -569,6 +575,7 @@ class BatchContext:
             average_job_send_time=_timedelta_dump(self.average_job_send_time),
             counts=counts,
             manifests=manifests,
+            loop_profiling=self.loop_profiler.get() if self.loop_profiler is not None else None,
         )
         return self.system_event(
             type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
@@ -576,6 +583,80 @@ class BatchContext:
             description="batch telemetry",
             data=data,
         )
+
+
+class LoopProfiler:
+    def __init__(self, ctx: BatchContext) -> None:
+        self._ctx = ctx
+
+        self._sleep_timings: list[float] = []
+        self._sleep_task = asyncio.create_task(
+            self._sleep_profiler(), name="LoopProfiler._sleep_profiler"
+        )
+
+        self._timeout_timings: list[float] = []
+        self._timeout_task = asyncio.create_task(
+            self._timeout_profiler(), name="LoopProfiler._timeout_profiler"
+        )
+
+    async def close(self) -> None:
+        self._sleep_task.cancel()
+        try:
+            await self._sleep_task
+        except asyncio.CancelledError:
+            pass
+
+        self._timeout_task.cancel()
+        try:
+            await self._timeout_task
+        except asyncio.CancelledError:
+            pass
+
+    def get(self) -> JsonValue:
+        return dict(
+            sleep=self._get(_LOOP_PROFILING_SLEEP_INTERVAL, self._sleep_timings),
+            timeout=self._get(_LOOP_PROFILING_TIMEOUT_INTERVAL, self._timeout_timings),
+        )
+
+    def _get(self, timeout: float, timings: list[float]) -> JsonValue:
+        stats: JsonValue = dict(
+            interval=timeout,
+            count=len(timings),
+        )
+        if len(timings) > 2:
+            if isinstance(stats, dict):  # make mypy happy
+                stats |= dict(
+                    min=min(timings),
+                    max=max(timings),
+                    mean=statistics.mean(timings),
+                    median=statistics.median(timings),
+                    stddev=statistics.stdev(timings),
+                    variance=statistics.variance(timings),
+                )
+        return stats
+
+    async def _sleep_profiler(self) -> None:
+        while True:
+            time_before_ns = time.monotonic_ns()
+            await asyncio.sleep(_LOOP_PROFILING_SLEEP_INTERVAL)
+            time_after_ns = time.monotonic_ns()
+
+            duration_sec = (time_after_ns - time_before_ns) / 1_000_000_000
+            self._sleep_timings.append(duration_sec)
+
+    async def _timeout_profiler(self) -> None:
+        while True:
+            time_before_ns = time.monotonic_ns()
+            try:
+                async with asyncio.timeout(_LOOP_PROFILING_TIMEOUT_INTERVAL):
+                    # we want the timeout to expire, so wait many times longer
+                    await asyncio.sleep(_LOOP_PROFILING_TIMEOUT_INTERVAL * 100)
+            except TimeoutError:
+                pass
+            time_after_ns = time.monotonic_ns()
+
+            duration_sec = (time_after_ns - time_before_ns) / 1_000_000_000
+            self._timeout_timings.append(duration_sec)
 
 
 def _datetime_dump(dt: datetime | None) -> str | None:
@@ -1689,6 +1770,8 @@ async def execute_synthetic_batch_run(
     await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
     try:
+        ctx.loop_profiler = LoopProfiler(ctx)
+
         await ctx.checkpoint_system_event("_db_get_previous_online_executor_count")
         await _db_get_previous_online_executor_count(ctx)
 
@@ -1745,6 +1828,9 @@ async def execute_synthetic_batch_run(
 
         else:
             logger.warning("No executors available")
+
+        await ctx.checkpoint_system_event("loop_profiler.close")
+        await ctx.loop_profiler.close()
 
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
