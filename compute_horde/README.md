@@ -14,5 +14,5 @@ INSTALLED_APPS = [
 ## Migrations
 To make new migrations after doing some changes in the model files, run:
 ```shell
-DJANGO_SETTINGS_MODULE=compute_horde.settings pdm run django-admin makemigrations
+DJANGO_SETTINGS_MODULE=compute_horde.settings uv run django-admin makemigrations
 ```
