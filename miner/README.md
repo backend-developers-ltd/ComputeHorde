@@ -112,7 +112,7 @@ docker-compose exec miner_runner docker-compose exec miner python manage.py self
 
 # Setup development environment
 
-You'll need to have Python 3.11 and [pdm](https://pdm-project.org) installed.
+You'll need to have Python 3.11 and [uv](https://docs.astral.sh/uv/) installed.
 
 ```sh
 # 1st tab
@@ -127,7 +127,7 @@ docker-compose up
 ```sh
 # 1st tab
 cd app/src
-pdm run python manage.py wait_for_database --timeout 10
-pdm run python manage.py migrate
-pdm run python manage.py runserver
+uv run python manage.py wait_for_database --timeout 10
+uv run python manage.py migrate
+uv run python manage.py runserver
 ```
