@@ -17,12 +17,14 @@ def install(session: nox.Session, *args):
     groups = []
     for group in args:
         groups.extend(["--group", group])
+
+    uv_env = getattr(session.virtualenv, "location", os.getenv("VIRTUAL_ENV"))
     session.run_install(
         "uv",
         "sync",
         "--locked",
         *groups,
-        env={"UV_PROJECT_ENVIRONMENT": session.virtualenv.location},
+        env={"UV_PROJECT_ENVIRONMENT": uv_env},
     )
 
 
