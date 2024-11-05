@@ -1330,12 +1330,18 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
             type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_SUCCESS,
             subtype=SystemEvent.EventSubType.SUCCESS,
             description=job.comment,
+            data=dict(
+                executor_class=job.executor_class.value,
+            ),
         )
     else:
         job.system_event(
             type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
             subtype=SystemEvent.EventSubType.FAILURE,
             description=job.comment,
+            data=dict(
+                executor_class=job.executor_class.value,
+            ),
         )
 
     logger.info(
