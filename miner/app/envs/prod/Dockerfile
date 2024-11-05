@@ -4,24 +4,21 @@ ARG BASE_IMAGE=python:3.11-slim
 FROM $BASE_IMAGE AS base-image
 LABEL builder=true
 
-WORKDIR /root/src/
-
-RUN pip3 install --no-cache-dir 'pdm>=2.12,<3'
-
 RUN apt-get update && apt-get install -y git
-COPY pyproject.toml pdm.lock ./
-RUN pdm lock --check
+COPY --from=ghcr.io/astral-sh/uv:0.4 /uv /uvx /bin/
+
 COPY --from=compute-horde . /root/compute_horde
 
-RUN --mount=type=cache,target=/tmp/pdm_cache \
-  pdm config cache_dir /tmp/pdm_cache && \
-  pdm config python.use_venv False && \
-  # compute-horde from path computes version from git tag which is unavailable here, 
-  # hence we pass PDM_BUILD_SCM_VERSION=0 manually
-  PDM_BUILD_SCM_VERSION=0 pdm sync --prod --group :all
-RUN mkdir -p /opt/ && mv __pypackages__/3.11/ /opt/pypackages/
-ENV PATH=/opt/pypackages/bin:$PATH
-ENV PYTHONPATH=/opt/pypackages/lib:$PYTHONPATH
+WORKDIR /root/src/
+COPY pyproject.toml uv.lock ./
+
+# Enable bytecode compilation
+ENV UV_COMPILE_BYTECODE=1
+# Copy from the cache instead of linking since it's a mounted volume
+ENV UV_LINK_MODE=copy
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+	uv sync --frozen --no-install-project --no-dev --no-editable
 
 COPY ./app/src/ /root/src/
 COPY ./app/envs/prod/entrypoint.sh /root/src/
@@ -30,22 +27,21 @@ COPY ./app/envs/prod/celery-entrypoint.sh /root/src/
 COPY ./app/envs/prod/prometheus-cleanup.sh /root/src/
 COPY ./app/envs/prod/vendor_setup.sh /root/src/
 
-RUN python3 -m compileall -b -f -q /root/
+RUN --mount=type=cache,target=/root/.cache/uv \
+	uv sync --frozen --no-dev --no-editable
 
 FROM $BASE_IMAGE AS secondary-image
 LABEL builder=false
 
 RUN apt-get update \
-  && apt-get install -y wget docker.io docker-compose \
-  && rm -rf /var/lib/apt/lists/*
+	&& apt-get install -y wget docker.io docker-compose \
+	&& rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/src/
 ENV PYTHONUNBUFFERED=1
-ENV PATH=/opt/pypackages/bin:$PATH
-ENV PYTHONPATH=/opt/pypackages/lib:$PYTHONPATH
+ENV PATH="/root/src/.venv/bin:$PATH"
 
 COPY --from=base-image /root/src/ /root/src/
-COPY --from=base-image /opt/pypackages/ /opt/pypackages/
 
 ARG MINER_VERSION=notset
 ENV MINER_VERSION=$MINER_VERSION
