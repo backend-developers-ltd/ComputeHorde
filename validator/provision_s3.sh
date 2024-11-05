@@ -33,8 +33,10 @@ BUCKET_REGION="${AWS_REGION:-us-east-1}"
 create_bucket() {
     local bucket_name="$1"
 
+    set +e
     HEAD_OUTPUT=$(aws s3api head-bucket --bucket "$bucket_name" --no-cli-pager 2>&1)
     HEAD_CODE="$?"
+    set -e
 
     if [[ $HEAD_CODE -eq 0 ]]; then
         BUCKET_REGION="$(echo "$HEAD_OUTPUT" | jq --raw-output .BucketRegion)"
