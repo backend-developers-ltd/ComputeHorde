@@ -52,6 +52,7 @@ from compute_horde.receipts.schemas import (
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q
 from pydantic import BaseModel, JsonValue
@@ -813,12 +814,7 @@ def _not_enough_prompts_system_event(
     ctx: BatchContext,
     llm_executor_count: int,
 ) -> None:
-    exists_in_24h = SystemEvent.objects.filter(
-        type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
-        subtype=SystemEvent.EventSubType.INSUFFICIENT_PROMPTS,
-        timestamp__gt=datetime.now(UTC) - timedelta(hours=24),
-    ).exists()
-    if exists_in_24h:
+    if cache.get("insufficient_prompts_telemetry_sent"):
         logger.warning("skipping INSUFFICIENT_PROMPTS system event, already exists in 24h")
         return
 
@@ -866,6 +862,7 @@ def _not_enough_prompts_system_event(
             "prompt_sample_unused_unanswered_count": prompt_sample_unused_unanswered_count,
         },
     )
+    cache.set("insufficient_prompts_telemetry_sent", True, timeout=24 * 60 * 60)
 
 
 async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None:
