@@ -30,6 +30,14 @@ def wallet():
         logger.error(f"Failed to create wallet: {e}")
 
 
+@pytest.fixture(scope="function", autouse=True)
+def clear_cache():
+    yield
+    from django.core.cache import cache
+
+    cache.clear()
+
+
 @pytest.fixture
 def override_weights_version_v2(settings):
     settings.DEBUG_OVERRIDE_WEIGHTS_VERSION = 2

@@ -52,7 +52,9 @@ from compute_horde.receipts.schemas import (
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
+from django.db.models import BooleanField, Count, ExpressionWrapper, Q
 from pydantic import BaseModel, JsonValue
 
 from compute_horde_validator.validator.dynamic_config import get_miner_max_executors_per_class
@@ -60,6 +62,7 @@ from compute_horde_validator.validator.models import (
     Miner,
     MinerManifest,
     PromptSample,
+    PromptSeries,
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
@@ -806,6 +809,62 @@ async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
         await client.close()
 
 
+@sync_to_async
+def _not_enough_prompts_system_event(
+    ctx: BatchContext,
+    llm_executor_count: int,
+) -> None:
+    if cache.get("insufficient_prompts_telemetry_sent"):
+        logger.warning("skipping INSUFFICIENT_PROMPTS system event, already exists in 24h")
+        return
+
+    prompt_series_total_count = PromptSeries.objects.count()
+
+    prompt_sample_types = (
+        PromptSample.objects.annotate(
+            is_used=ExpressionWrapper(
+                Q(synthetic_job_id__isnull=False),
+                output_field=BooleanField(),
+            ),
+            is_answered=ExpressionWrapper(
+                Q(workload__finished_at__isnull=False),
+                output_field=BooleanField(),
+            ),
+        )
+        .values("is_used", "is_answered")
+        .annotate(count=Count("*"))
+    )
+
+    prompt_sample_used_count = 0
+    prompt_sample_unused_answered_count = 0
+    prompt_sample_unused_unanswered_count = 0
+    for prompt_sample_type in prompt_sample_types:
+        match prompt_sample_type:
+            case {"is_used": True, "count": n}:
+                prompt_sample_used_count += n
+            case {"is_used": False, "is_answered": True, "count": n}:
+                prompt_sample_unused_answered_count += n
+            case {"is_used": False, "is_answered": False, "count": n}:
+                prompt_sample_unused_unanswered_count += n
+            case _:
+                logger.warning("unreachable code reached!")
+
+    ctx.system_event(
+        type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+        subtype=SystemEvent.EventSubType.INSUFFICIENT_PROMPTS,
+        description="not enough prompt samples available in database",
+        func="get_llm_prompt_samples",
+        data={
+            "llm_executor_count": llm_executor_count,
+            "prompt_series_total_count": prompt_series_total_count,
+            "prompt_sample_used_count": prompt_sample_used_count,
+            "prompt_sample_unused_answered_count": prompt_sample_unused_answered_count,
+            "prompt_sample_unused_unanswered_count": prompt_sample_unused_unanswered_count,
+        },
+    )
+    cache.set("insufficient_prompts_telemetry_sent", True, timeout=24 * 60 * 60)
+
+
 async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None:
     # TODO: refactor into nicer abstraction
     llm_executor_count = sum(
@@ -824,16 +883,7 @@ async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None
     )
     prompt_samples = [ps async for ps in prompt_samples_qs]
     if len(prompt_samples) < llm_executor_count:
-        ctx.system_event(
-            type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
-            subtype=SystemEvent.EventSubType.INSUFFICIENT_PROMPTS,
-            description="not enough prompt samples available in database",
-            func="get_llm_prompt_samples",
-            data={
-                "llm_executor_count": llm_executor_count,
-                "prompt_samples": len(prompt_samples),
-            },
-        )
+        await _not_enough_prompts_system_event(ctx, llm_executor_count)
         logger.warning(
             "Not enough prompt samples for llm executors: %d < %d - will NOT run llm synthetic prompt jobs",
             len(prompt_samples),

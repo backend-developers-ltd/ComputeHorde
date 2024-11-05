@@ -15,6 +15,7 @@ from compute_horde_validator.validator.models import PromptSeries, SystemEvent
 from compute_horde_validator.validator.s3 import generate_upload_url, get_public_url
 
 from .generator.current import prompt_job_generator
+from .utils import trusted_miner_not_configured_system_event
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,7 @@ async def generate_prompts(
             settings.TRUSTED_MINER_PORT,
         ]
     ):
-        await SystemEvent.objects.acreate(
-            type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
-            subtype=SystemEvent.EventSubType.TRUSTED_MINER_NOT_CONFIGURED,
-            timestamp=now(),
-            long_description="",
-            data={},
-        )
+        await trusted_miner_not_configured_system_event(SystemEvent.EventType.LLM_PROMPT_GENERATION)
         logger.warning("Trusted miner not configured, skipping prompt generation")
         return
 
