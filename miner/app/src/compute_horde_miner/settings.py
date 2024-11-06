@@ -273,9 +273,9 @@ PROD_CELERY_BEAT_SCHEDULE = {
         "schedule": 60,
         "options": {},
     },
-    "clear_old_receipts": {
-        "task": "compute_horde_miner.miner.tasks.clear_old_receipts",
-        "schedule": timedelta(hours=1),
+    "evict_old_data": {
+        "task": "compute_horde_miner.miner.tasks.evict_old_data",
+        "schedule": timedelta(days=1),
         "options": {},
     },
     "fetch_validators": {
