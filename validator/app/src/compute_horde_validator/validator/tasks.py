@@ -759,7 +759,7 @@ def set_scores():
                 batches = [batches[-1]]
 
             logger.info(
-                f"Selected batches for scoring: [%s]",
+                "Selected batches for scoring: [%s]",
                 ", ".join(batch.id for batch in batches),
             )
 
@@ -771,7 +771,9 @@ def set_scores():
                 score_per_uid[uid] = score
 
             if not score_per_uid:
-                logger.warning("Batches produced no scores. Marking them as scored and skipping setting weights.")
+                logger.warning(
+                    "Batches produced no scores. Marking them as scored and skipping setting weights."
+                )
                 for batch in batches:
                     batch.scored = True
                     batch.save()
