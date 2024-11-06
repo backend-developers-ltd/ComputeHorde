@@ -52,8 +52,7 @@ async def mock_throw_error(*args, **kwargs):
     "compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts.download_file_content",
     mock_download_file_content,
 )
-async def test_answer_prompts(
-    settings,
+async def test_answer_prompts__success(
     transport: MinerSimulationTransport,
     create_miner_client: Callable,
     manifest_message: str,
@@ -81,7 +80,36 @@ async def test_answer_prompts(
         assert prompt.answer == f"answer{i + 1}"
 
 
-async def test_answer_prompts_job_failed(
+@patch(
+    "compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts.download_file_content",
+    mock_download_file_content,
+)
+async def test_answer_prompts__missing_answers(
+    transport: MinerSimulationTransport,
+    create_miner_client: Callable,
+    manifest_message: str,
+    executor_ready_message: str,
+    accept_job_message: str,
+    job_finish_message: str,
+    job_uuid: uuid.UUID,
+):
+    await transport.add_message(manifest_message, send_before=1)
+    await transport.add_message(accept_job_message, send_before=1)
+    await transport.add_message(executor_ready_message, send_before=0)
+    await transport.add_message(job_finish_message, send_before=2)
+
+    _, workload = await db_setup()
+    await Prompt.objects.aupdate(content="missing_prompt")
+
+    await answer_prompts(
+        workload, create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
+    )
+
+    await workload.arefresh_from_db()
+    assert workload.finished_at is None
+
+
+async def test_answer_prompts__job_failed(
     transport: MinerSimulationTransport,
     create_miner_client: Callable,
     manifest_message: str,
@@ -113,7 +141,7 @@ async def test_answer_prompts_job_failed(
     "compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts.download_file_content",
     mock_throw_error,
 )
-async def test_answer_prompts_download_failed(
+async def test_answer_prompts__download_failed(
     settings,
     transport: MinerSimulationTransport,
     create_miner_client: Callable,
