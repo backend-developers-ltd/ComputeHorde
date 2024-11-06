@@ -758,6 +758,11 @@ def set_scores():
                     batch.save()
                 batches = [batches[-1]]
 
+            logger.info(
+                f"Selected batches for scoring: [%s]",
+                ", ".join(batch.id for batch in batches),
+            )
+
             hotkey_scores = score_batches(batches)
             for hotkey, score in hotkey_scores.items():
                 uid = hotkey_to_uid.get(hotkey)
@@ -766,8 +771,12 @@ def set_scores():
                 score_per_uid[uid] = score
 
             if not score_per_uid:
-                logger.info("No miners on the subnet to score")
+                logger.warning("Batches produced no scores. Marking them as scored and skipping setting weights.")
+                for batch in batches:
+                    batch.scored = True
+                    batch.save()
                 return
+
             uids = np.zeros(len(neurons), dtype=np.int64)
             weights = np.zeros(len(neurons), dtype=np.float32)
             for ind, n in enumerate(neurons):
