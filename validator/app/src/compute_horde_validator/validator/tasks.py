@@ -760,7 +760,7 @@ def set_scores():
 
             logger.info(
                 "Selected batches for scoring: [%s]",
-                ", ".join(batch.id for batch in batches),
+                ", ".join(str(batch.id) for batch in batches),
             )
 
             hotkey_scores = score_batches(batches)
