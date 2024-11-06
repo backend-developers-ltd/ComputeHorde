@@ -746,7 +746,7 @@ def set_scores():
                     started_at__gte=now() - timedelta(days=1),
                     cycle__stop__lt=current_block,
                 )
-                .order_by("-started_at")
+                .order_by("started_at")
             )
             if not batches:
                 logger.info("No batches - nothing to score")
