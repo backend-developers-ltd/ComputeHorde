@@ -1246,8 +1246,10 @@ def llm_prompt_answering():
                 break
 
             success = async_to_sync(answer_prompts)(workload)
-        success_count += success
-        failure_count += not success_count
+        if success:
+            success_count += 1
+        else:
+            failure_count += 1
         times.append(time.time() - start)
         total_time = sum(times)
         avg_time = total_time / len(times)
