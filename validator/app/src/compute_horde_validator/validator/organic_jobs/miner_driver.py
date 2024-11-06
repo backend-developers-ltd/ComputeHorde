@@ -94,7 +94,12 @@ async def execute_organic_job(
     total_job_timeout: int = 300,
     wait_timeout: int = 300,
     notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] = _dummy_notify_callback,
-) -> None:
+) -> bool:
+    """
+    Execute an organic job on a miner client.
+    Returns True if the job was successfully executed, False otherwise.
+    """
+
     data: JsonValue = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
     save_event = partial(save_job_execution_event, data=data)
 
@@ -105,7 +110,7 @@ async def execute_organic_job(
     # TODO: remove method assignment above and properly handle notify_* cases
 
     job_details = OrganicJobDetails(
-        job_uuid=str(job.job_uuid),
+        job_uuid=str(job.job_uuid),  # TODO: fix uuid field in AdminJobRequest
         executor_class=ExecutorClass(job_request.executor_class),
         docker_image=job_request.docker_image or None,
         raw_script=job_request.raw_script or None,
@@ -131,6 +136,7 @@ async def execute_organic_job(
             subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
         )
         await notify_callback(JobStatusUpdate.from_job(job, "completed", "V0JobFinishedRequest"))
+        return True
     except OrganicJobError as exc:
         if exc.reason == FailureReason.MINER_CONNECTION_FAILED:
             comment = f"Miner connection error: {exc}"
@@ -216,3 +222,4 @@ async def execute_organic_job(
             logger.info(comment)
             await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
             await notify_callback(JobStatusUpdate.from_job(job, "failed", "V0JobFailedRequest"))
+        return False

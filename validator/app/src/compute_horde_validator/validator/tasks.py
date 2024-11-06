@@ -1243,7 +1243,7 @@ def llm_prompt_answering():
                 get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
             except Locked:
                 logger.debug("Another thread already using the trusted miner")
-                return
+                break
 
             success = async_to_sync(answer_prompts)(workload)
         success_count += success
@@ -1255,20 +1255,21 @@ def llm_prompt_answering():
             break
 
     completed_at = now()
-    SystemEvent.objects.create(
-        type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
-        subtype=SystemEvent.EventSubType.SUCCESS,
-        timestamp=now(),
-        long_description="",
-        data={
-            "started_at": started_at.isoformat(),
-            "completed_at": completed_at.isoformat(),
-            "task_duration": (completed_at - started_at).total_seconds(),
-            "times": times,
-            "success_count": success_count,
-            "failure_count": failure_count,
-        },
-    )
+    if times:
+        SystemEvent.objects.create(
+            type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
+            subtype=SystemEvent.EventSubType.SUCCESS,
+            timestamp=now(),
+            long_description="",
+            data={
+                "started_at": started_at.isoformat(),
+                "completed_at": completed_at.isoformat(),
+                "task_duration": (completed_at - started_at).total_seconds(),
+                "times": times,
+                "success_count": success_count,
+                "failure_count": failure_count,
+            },
+        )
 
 
 def init_workload(seed: int) -> tuple[SolveWorkload, str]:

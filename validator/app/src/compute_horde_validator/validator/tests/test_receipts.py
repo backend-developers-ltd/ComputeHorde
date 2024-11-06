@@ -1,6 +1,5 @@
 import uuid
 from datetime import UTC, datetime
-from typing import NamedTuple
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
@@ -17,25 +16,14 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.tasks import fetch_receipts
 
-from .helpers import MockedAxonInfo, check_system_events, throw_error
-
-
-class MockedNeuron(NamedTuple):
-    hotkey: str
-    axon_info: MockedAxonInfo
+from .helpers import MockNeuron, check_system_events, throw_error
 
 
 class MockedMetagraph:
     def __init__(self, *args, **kwargs):
         self.neurons = [
-            MockedNeuron(
-                hotkey="5G9qWBzLPVVu2fCPPvg3QgPPK5JaJmJKaJha95TPHH9NZWuL",
-                axon_info=MockedAxonInfo(is_serving=True, ip="127.0.0.1", ip_type=4, port=8000),
-            ),
-            MockedNeuron(
-                hotkey="5CPhGRp4cdEG4KSui7VQixHhvN5eBUSnMYeUF5thdxm4sKtz",
-                axon_info=MockedAxonInfo(is_serving=True, ip="127.0.0.2", ip_type=4, port=8000),
-            ),
+            MockNeuron(hotkey="5G9qWBzLPVVu2fCPPvg3QgPPK5JaJmJKaJha95TPHH9NZWuL", uid=0),
+            MockNeuron(hotkey="5CPhGRp4cdEG4KSui7VQixHhvN5eBUSnMYeUF5thdxm4sKtz", uid=1),
         ]
 
 

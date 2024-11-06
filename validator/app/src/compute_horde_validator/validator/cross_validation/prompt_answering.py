@@ -14,6 +14,9 @@ from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
 
+from compute_horde_validator.validator.cross_validation.utils import (
+    trusted_miner_not_configured_system_event,
+)
 from compute_horde_validator.validator.models import Prompt, SolveWorkload, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
     LlmPromptsJobGenerator,
@@ -40,14 +43,8 @@ async def answer_prompts(
             settings.TRUSTED_MINER_PORT,
         ]
     ):
-        await SystemEvent.objects.acreate(
-            type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
-            subtype=SystemEvent.EventSubType.TRUSTED_MINER_NOT_CONFIGURED,
-            timestamp=now(),
-            long_description="",
-            data={},
-        )
-        logger.warning("Trusted generation miner not configured, skipping prompt generation")
+        await trusted_miner_not_configured_system_event(SystemEvent.EventType.LLM_PROMPT_ANSWERING)
+        logger.warning("Trusted generation miner not configured, skipping prompt answering")
         return False
 
     ts = datetime.now()
