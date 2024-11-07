@@ -539,22 +539,16 @@ class BatchContext:
         # convert to regular dict for nice logging
         messages_count = dict(messages_count)
 
-        job_count = dict(
-            total=len(self.jobs),
-            failed=sum(1 for job in self.jobs.values() if not job.success),
-            successful=sum(1 for job in self.jobs.values() if job.success),
-            correct=sum(1 for job in self.jobs.values() if job.correct),
-            # don't count None as incorrect
-            incorrect=sum(1 for job in self.jobs.values() if job.correct is False),
-        )
-
         counts = dict(
             miners=len(self.miners),
             manifests=sum(1 for manifest in self.manifests.values() if manifest is not None),
             messages=messages_count,
-            jobs=job_count,
             system_events=self.event_count,
         )
+
+        counts["jobs"] = self._get_job_count(None)
+        for executor_class in ExecutorClass:
+            counts[f"jobs:{executor_class.value}"] = self._get_job_count(executor_class)
 
         manifests = {}
         for miner_hotkey, manifest in self.manifests.items():
@@ -582,6 +576,19 @@ class BatchContext:
             subtype=SystemEvent.EventSubType.SYNTHETIC_BATCH,
             description="batch telemetry",
             data=data,
+        )
+
+    def _get_job_count(self, executor_class: ExecutorClass | None) -> dict[str, int]:
+        jobs = list(self.jobs.values())
+        if executor_class is not None:
+            jobs = [job for job in jobs if job.executor_class == executor_class]
+        return dict(
+            total=len(jobs),
+            failed=sum(1 for job in jobs if not job.success),
+            successful=sum(1 for job in jobs if job.success),
+            correct=sum(1 for job in jobs if job.correct),
+            # don't count None as incorrect
+            incorrect=sum(1 for job in jobs if job.correct is False),
         )
 
 
