@@ -104,7 +104,7 @@ async def answer_prompts(
     except Exception as e:
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
-            subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED,
+            subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
             timestamp=now(),
             long_description=f"Failed to download prompt answers: {e!r}",
             data={},

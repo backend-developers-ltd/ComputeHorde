@@ -1373,11 +1373,14 @@ def persist_workload(
     workload: SolveWorkload, prompt_samples: list[PromptSample], prompts: list[Prompt]
 ):
     logger.info(f"Saving workload {workload}")
-    # save the sampled prompts as unanswered in the db
-    with transaction.atomic():
-        workload.save()
-        PromptSample.objects.bulk_create(prompt_samples)
-        Prompt.objects.bulk_create(prompts)
+    try:
+        # save the sampled prompts as unanswered in the db
+        with transaction.atomic():
+            workload.save()
+            PromptSample.objects.bulk_create(prompt_samples)
+            Prompt.objects.bulk_create(prompts)
+    except Exception:
+        logger.error(f"Failed to create workload {workload}")
 
 
 def create_sample_workloads(num_needed_prompt_samples: int) -> int:
@@ -1410,7 +1413,17 @@ def create_sample_workloads(num_needed_prompt_samples: int) -> int:
     # take a random order of prompt series to avoid using the same series at each synthetic jobs run
     for prompt_series in PromptSeries.objects.order_by("?").all():
         # get all prompts
-        lines = download_prompts_from_s3_url(prompt_series.s3_url)
+        try:
+            lines = download_prompts_from_s3_url(prompt_series.s3_url)
+        except Exception as e:
+            msg = f"Failed to download prompt series from {prompt_series.s3_url}: {e} - skipping"
+            logger.error(msg, exc_info=True)
+            SystemEvent.objects.create(
+                type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
+                subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
+                long_description=msg,
+            )
+            continue
 
         # should always have enough prompts
         if len(lines) <= prompts_per_sample:
@@ -1426,13 +1439,22 @@ def create_sample_workloads(num_needed_prompt_samples: int) -> int:
 
         if len(current_prompts) >= prompts_per_workload:
             content = "\n".join([p.content for p in current_prompts])
-            if upload_prompts_to_s3_url(current_upload_url, content):
+            try:
+                upload_prompts_to_s3_url(current_upload_url, content)
+
                 # save the workload in the db
                 persist_workload(current_workload, current_prompt_samples, current_prompts)
                 num_prompt_series_sampled += len(current_prompt_samples)
                 num_workloads_created += 1
-            else:
-                logger.error(f"Failed to create workload {current_workload} - skipping")
+
+            except Exception as e:
+                msg = f"Failed to upload prompts to s3 {current_upload_url} for workload {current_workload.workload_uuid}: {e} - skipping"
+                logger.error(msg, exc_info=True)
+                SystemEvent.objects.create(
+                    type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
+                    subtype=SystemEvent.EventSubType.ERROR_UPLOADING_TO_S3,
+                    long_description=msg,
+                )
 
             # finished creating all needed prompt samples so exit after last batch is filled
             if num_prompt_series_sampled >= num_needed_prompt_samples:

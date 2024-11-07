@@ -4,6 +4,7 @@ import logging
 import boto3
 import httpx
 import requests
+import tenacity
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -41,24 +42,33 @@ generate_download_url = functools.partial(_generate_presigned_url, "get_object")
 
 def get_public_url(key: str, *, bucket_name: str, prefix: str = "") -> str:
     endpoint_url = settings.AWS_ENDPOINT_URL or "https://s3.amazonaws.com"
-
     return f"{endpoint_url}/{bucket_name}/{prefix}{key}"
 
 
-# TODO: retries etc
-def upload_prompts_to_s3_url(s3_url: str, content: str) -> bool:
+@tenacity.retry(
+    retry=(
+        tenacity.retry_if_exception_type(requests.exceptions.ConnectionError)
+        | tenacity.retry_if_exception_type(requests.exceptions.Timeout)
+    ),
+    stop=tenacity.stop_after_attempt(3),
+    wait=tenacity.wait_fixed(1),
+)
+def upload_prompts_to_s3_url(s3_url: str, content: str):
     response = requests.put(s3_url, data=content)
-    if response.status_code != 200:
-        logger.warning(f"Failed to upload prompts to {s3_url}")
-        return False
-    return True
+    response.raise_for_status()
 
 
+@tenacity.retry(
+    retry=(
+        tenacity.retry_if_exception_type(requests.exceptions.ConnectionError)
+        | tenacity.retry_if_exception_type(requests.exceptions.Timeout)
+    ),
+    stop=tenacity.stop_after_attempt(3),
+    wait=tenacity.wait_fixed(1),
+)
 def download_prompts_from_s3_url(s3_url: str) -> list[str]:
     response = requests.get(s3_url)
-    if response.status_code != 200:
-        logger.warning(f"Failed to download prompts from {s3_url}")
-        return []
+    response.raise_for_status()
     return response.text.splitlines()
 
 
