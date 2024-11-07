@@ -7,6 +7,7 @@ from compute_horde_validator.validator.models import (
     PromptSample,
     PromptSeries,
     SolveWorkload,
+    SystemEvent,
 )
 from compute_horde_validator.validator.tasks import llm_prompt_generation, llm_prompt_sampling
 
@@ -20,17 +21,20 @@ def create_prompt_series(num: int):
 @pytest.mark.override_config(DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY=5)
 @pytest.mark.django_db(transaction=True)
 def test_llm_prompt_sampling__will_not_trigger():
-    create_prompt_series(10)
+    create_prompt_series(5)
     prompt_series = PromptSeries.objects.create(s3_url="", generator_version=1)
     for i in range(5):
         workload = SolveWorkload.objects.create(seed=i, s3_url="s3://test")
         PromptSample(series=prompt_series, workload=workload)
 
-    with patch(
-        "compute_horde_validator.validator.tasks.create_sample_workloads"
-    ) as mock_create_sample_workloads:
+    with patch("compute_horde_validator.validator.tasks.create_sample_workloads", lambda *_: 0):
         llm_prompt_sampling()
-        assert mock_create_sample_workloads.called
+        assert (
+            SystemEvent.objects.filter(
+                subtype=SystemEvent.EventSubType.PROMPT_SAMPLING_SKIPPED
+            ).count()
+            == 1
+        )
 
 
 @pytest.mark.override_config(DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY=5)

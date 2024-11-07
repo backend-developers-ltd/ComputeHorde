@@ -38,6 +38,7 @@ class SystemEvent(models.Model):
         VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING = "VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING"
         LLM_PROMPT_GENERATION = "LLM_PROMPT_GENERATION"
         LLM_PROMPT_ANSWERING = "LLM_PROMPT_ANSWERING"
+        LLM_PROMPT_SAMPLING = "LLM_PROMPT_SAMPLING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -76,7 +77,14 @@ class SystemEvent(models.Model):
         FAILED_TO_WAIT = "FAILED_TO_WAIT"
         TRUSTED_MINER_NOT_CONFIGURED = "TRUSTED_MINER_NOT_CONFIGURED"
         LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED = "LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED"
+        LLM_PROMPT_ANSWERS_MISSING = "LLM_PROMPT_ANSWERS_MISSING"
         INSUFFICIENT_PROMPTS = "INSUFFICIENT_PROMPTS"
+        UNPROCESSED_WORKLOADS = "UNPROCESSED_WORKLOADS"
+        PROMPT_GENERATION_STARTED = "PROMPT_GENERATION_STARTED"
+        PROMPT_SAMPLING_SKIPPED = "PROMPT_SAMPLING_SKIPPED"
+        NEW_WORKLOADS_CREATED = "NEW_WORKLOADS_CREATED"
+        ERROR_UPLOADING_TO_S3 = "ERROR_UPLOADING_TO_S3"
+        ERROR_DOWNLOADING_FROM_S3 = "ERROR_DOWNLOADING_FROM_S3"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
@@ -120,6 +128,14 @@ class MinerBlacklist(models.Model):
 
     def __str__(self):
         return f"hotkey: {self.miner.hotkey}"
+
+
+class ValidatorWhitelist(models.Model):
+    hotkey = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"hotkey: {self.hotkey}"
 
 
 class Cycle(models.Model):

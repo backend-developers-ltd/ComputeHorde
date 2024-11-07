@@ -14,6 +14,9 @@ from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
 
+from compute_horde_validator.validator.cross_validation.utils import (
+    trusted_miner_not_configured_system_event,
+)
 from compute_horde_validator.validator.models import Prompt, SolveWorkload, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
     LlmPromptsJobGenerator,
@@ -40,14 +43,8 @@ async def answer_prompts(
             settings.TRUSTED_MINER_PORT,
         ]
     ):
-        await SystemEvent.objects.acreate(
-            type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
-            subtype=SystemEvent.EventSubType.TRUSTED_MINER_NOT_CONFIGURED,
-            timestamp=now(),
-            long_description="",
-            data={},
-        )
-        logger.warning("Trusted generation miner not configured, skipping prompt generation")
+        await trusted_miner_not_configured_system_event(SystemEvent.EventType.LLM_PROMPT_ANSWERING)
+        logger.warning("Trusted generation miner not configured, skipping prompt answering")
         return False
 
     ts = datetime.now()
@@ -107,7 +104,7 @@ async def answer_prompts(
     except Exception as e:
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
-            subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED,
+            subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
             timestamp=now(),
             long_description=f"Failed to download prompt answers: {e!r}",
             data={},
@@ -115,10 +112,10 @@ async def answer_prompts(
         logger.error("Failed to download prompt answers", exc_info=True)
         return False
 
-    await sync_to_async(save_workload_answers)(workload, prompt_answers)
+    success = await sync_to_async(save_workload_answers)(workload, prompt_answers)
     duration_seconds = (datetime.now() - ts).total_seconds()
     logger.info(f"Workload {workload} finished in {duration_seconds} seconds")
-    return True
+    return success
 
 
 def get_workload_prompts(workload: SolveWorkload) -> list[Prompt]:
@@ -130,18 +127,31 @@ def get_workload_prompts(workload: SolveWorkload) -> list[Prompt]:
     ]
 
 
-def save_workload_answers(workload, prompt_answers):
+def save_workload_answers(workload: SolveWorkload, prompt_answers) -> bool:
     prompts = get_workload_prompts(workload)
+
+    # update the prompts with the answers
+    for prompt in prompts:
+        if prompt.content in prompt_answers:
+            prompt.answer = prompt_answers[prompt.content]
+        else:
+            logger.error(f"Prompt {prompt} was not found in the generated answers")
+            SystemEvent.objects.create(
+                type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
+                subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_MISSING,
+                long_description="Prompt answer not found in the prompt answering job output",
+                data={
+                    "unanswered_prompt_content": prompt.content,
+                    "workload_id": str(workload.workload_uuid),
+                    "prompt_sample_id": prompt.sample.id,
+                },
+            )
+            # leave workload as unfinished so that it can be re-processed
+            return False
 
     with transaction.atomic():
         # update the workload as finished
         workload.finished_at = now()
         workload.save()
-
-        # update the prompts with the answers
-        for prompt in prompts:
-            if prompt.content in prompt_answers:
-                prompt.answer = prompt_answers[prompt.content]
-            else:
-                logger.error(f"Prompt {prompt} was not found in the prompt answers generated")
         Prompt.objects.bulk_update(prompts, ["answer"])
+    return True

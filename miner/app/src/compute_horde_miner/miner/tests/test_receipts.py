@@ -1,4 +1,5 @@
 from datetime import datetime
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import bittensor
@@ -51,8 +52,14 @@ async def test_receipt_is_saved(
     settings,
 ) -> None:
     mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.prepare_receipts")
+
+    executor = mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.current")
+    executor.executor_manager.get_manifest = AsyncMock(return_value={})
+    executor.executor_manager.reserve_executor_class = AsyncMock()
+
     settings.DEBUG_TURN_AUTHENTICATION_OFF = True
     settings.BITTENSOR_WALLET = lambda: miner_wallet
+
     await Validator.objects.acreate(
         public_key=validator_wallet.hotkey.ss58_address,
         active=True,
@@ -76,9 +83,7 @@ async def test_receipt_is_saved(
         response = await fake_validator_channel.receive_json_from()
         assert response == {
             "message_type": "V0ExecutorManifestRequest",
-            "manifest": {
-                "executor_classes": [{"executor_class": "spin_up-4min.gpu-24gb", "count": 1}],
-            },
+            "manifest": {"executor_classes": []},
         }
 
         # Send the receipts

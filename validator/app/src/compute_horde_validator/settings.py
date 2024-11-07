@@ -274,6 +274,21 @@ CONSTANCE_CONFIG = {
         ),
         str,
     ),
+    "DYNAMIC_ORGANIC_JOB_TIMEOUT": (
+        300,
+        "Timeout for the run of an organic jobs in seconds",
+        int,
+    ),
+    "DYNAMIC_ORGANIC_JOB_WAIT_TIMEOUT": (
+        300,
+        "Timeout for preparing an organic job in seconds",
+        int,
+    ),
+    "DYNAMIC_ORGANIC_JOB_MAX_RETRIES": (
+        3,
+        "Maximum retries for organic jobs",
+        int,
+    ),
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 
@@ -387,9 +402,19 @@ if env.bool("HTTPS_REDIRECT", default=False) and not DEBUG:
 else:
     SECURE_SSL_REDIRECT = False
 
-CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://redis:6379/0")
+REDIS_HOST = env.str("REDIS_HOST", default="redis")
+REDIS_PORT = env.int("REDIS_PORT", default=6379)
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+    }
+}
+
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
 CELERY_RESULT_BACKEND = env(
-    "CELERY_BROKER_URL", default="redis://redis:6379/0"
+    "CELERY_BROKER_URL", default=f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 )  # store results in Redis
 CELERY_RESULT_EXPIRES = int(timedelta(days=1).total_seconds())  # time until task result deletion
 CELERY_COMPRESSION = "gzip"  # task compression
@@ -589,7 +614,7 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [
-                (env.str("REDIS_HOST", default="redis"), env.int("REDIS_PORT", default="6379"))
+                (REDIS_HOST, REDIS_PORT),
             ],
             # we need some buffer here to handle synthetic job batch messages
             "capacity": 50_000,

@@ -48,3 +48,5 @@ DYNAMIC_CONFIG_CACHE_TIMEOUT = 0
 TRUSTED_MINER_KEY = ""
 TRUSTED_MINER_ADDRESS = "fakehost"
 TRUSTED_MINER_PORT = 1234
+
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}

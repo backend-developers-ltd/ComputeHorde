@@ -746,7 +746,7 @@ def set_scores():
                     started_at__gte=now() - timedelta(days=1),
                     cycle__stop__lt=current_block,
                 )
-                .order_by("-started_at")
+                .order_by("started_at")
             )
             if not batches:
                 logger.info("No batches - nothing to score")
@@ -758,6 +758,11 @@ def set_scores():
                     batch.save()
                 batches = [batches[-1]]
 
+            logger.info(
+                "Selected batches for scoring: [%s]",
+                ", ".join(str(batch.id) for batch in batches),
+            )
+
             hotkey_scores = score_batches(batches)
             for hotkey, score in hotkey_scores.items():
                 uid = hotkey_to_uid.get(hotkey)
@@ -766,8 +771,14 @@ def set_scores():
                 score_per_uid[uid] = score
 
             if not score_per_uid:
-                logger.info("No miners on the subnet to score")
+                logger.warning(
+                    "Batches produced no scores. Marking them as scored and skipping setting weights."
+                )
+                for batch in batches:
+                    batch.scored = True
+                    batch.save()
                 return
+
             uids = np.zeros(len(neurons), dtype=np.int64)
             weights = np.zeros(len(neurons), dtype=np.float32)
             for ind, n in enumerate(neurons):
@@ -1186,8 +1197,8 @@ def fetch_dynamic_config() -> None:
     time_limit=5 * 60,
 )
 def llm_prompt_generation():
-    unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True).count()
-    if unprocessed_workloads > 0:
+    unprocessed_workloads_count = SolveWorkload.objects.filter(finished_at__isnull=True).count()
+    if unprocessed_workloads_count > 0:
         # prevent any starvation issues
         logger.info("Unprocessed workloads found - skipping prompt generation")
         return
@@ -1203,6 +1214,15 @@ def llm_prompt_generation():
         return
 
     logger.info("There are %s series in the db, generating prompts", num_prompt_series)
+    SystemEvent.objects.create(
+        type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
+        subtype=SystemEvent.EventSubType.PROMPT_GENERATION_STARTED,
+        long_description="",
+        data={
+            "prompt_series_count": num_prompt_series,
+            "expected_prompt_series_count": num_expected_prompt_series,
+        },
+    )
 
     with transaction.atomic():
         try:
@@ -1222,6 +1242,15 @@ def llm_prompt_answering():
     started_at = now()
     unprocessed_workloads = SolveWorkload.objects.filter(finished_at__isnull=True)
 
+    SystemEvent.objects.create(
+        type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
+        subtype=SystemEvent.EventSubType.UNPROCESSED_WORKLOADS,
+        long_description="number of unprocessed workloads to be answered",
+        data={
+            "count": unprocessed_workloads.count(),
+        },
+    )
+
     times = []
     success_count = 0
     failure_count = 0
@@ -1232,11 +1261,13 @@ def llm_prompt_answering():
                 get_advisory_lock(LockType.TRUSTED_MINER_LOCK)
             except Locked:
                 logger.debug("Another thread already using the trusted miner")
-                return
+                break
 
             success = async_to_sync(answer_prompts)(workload)
-        success_count += success
-        failure_count += not success_count
+        if success:
+            success_count += 1
+        else:
+            failure_count += 1
         times.append(time.time() - start)
         total_time = sum(times)
         avg_time = total_time / len(times)
@@ -1244,20 +1275,20 @@ def llm_prompt_answering():
             break
 
     completed_at = now()
-    SystemEvent.objects.create(
-        type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
-        subtype=SystemEvent.EventSubType.SUCCESS,
-        timestamp=now(),
-        long_description="",
-        data={
-            "started_at": started_at.isoformat(),
-            "completed_at": completed_at.isoformat(),
-            "task_duration": (completed_at - started_at).total_seconds(),
-            "times": times,
-            "success_count": success_count,
-            "failure_count": failure_count,
-        },
-    )
+    if times:
+        SystemEvent.objects.create(
+            type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
+            subtype=SystemEvent.EventSubType.SUCCESS,
+            long_description="Finished running prompt answering jobs",
+            data={
+                "started_at": started_at.isoformat(),
+                "completed_at": completed_at.isoformat(),
+                "task_duration": (completed_at - started_at).total_seconds(),
+                "times": times,
+                "job_success_count": success_count,
+                "job_failure_count": failure_count,
+            },
+        )
 
 
 def init_workload(seed: int) -> tuple[SolveWorkload, str]:
@@ -1288,38 +1319,75 @@ def llm_prompt_sampling():
             num_prompt_series,
             required_series_to_start_sampling,
         )
+        SystemEvent.objects.create(
+            type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
+            subtype=SystemEvent.EventSubType.PROMPT_SAMPLING_SKIPPED,
+            long_description="not enough prompt series in the database to start sampling",
+            data={
+                "prompt_series_count": num_prompt_series,
+                "required_prompt_series_count_to_start_sampling": required_series_to_start_sampling,
+            },
+        )
         return
+
     num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()
     num_needed_prompt_samples = (
         config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY - num_unused_prompt_samples
     )
 
-    if num_needed_prompt_samples > 0:
-        logger.info(
-            "There are %s prompt samples in the db, generating more",
-            num_unused_prompt_samples,
-        )
-        create_sample_workloads(num_needed_prompt_samples)
-        return
-    else:
+    if num_needed_prompt_samples <= 0:
         logger.warning(
-            "There are %s prompt samples - skipping prompt sampling",
+            "There are already %s prompt samples in the db not used in synthetic jobs - skipping prompt sampling",
             num_unused_prompt_samples,
         )
+        SystemEvent.objects.create(
+            type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
+            subtype=SystemEvent.EventSubType.PROMPT_SAMPLING_SKIPPED,
+            long_description="enough prompt samples unused in synthetic jobs in the database",
+            data={
+                "unused_prompt_samples_count": num_unused_prompt_samples,
+                "target_unused_prompt_samples_count": config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY,
+            },
+        )
+        return
+
+    logger.info(
+        "We need %s more prompt samples in the db for synthetic jobs - generating prompt answering workloads",
+        num_needed_prompt_samples,
+    )
+
+    num_workloads_created = create_sample_workloads(num_needed_prompt_samples)
+    SystemEvent.objects.create(
+        type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
+        subtype=SystemEvent.EventSubType.NEW_WORKLOADS_CREATED,
+        long_description="number of new workloads for prompt answering created",
+        data={
+            "new_workloads_count": num_workloads_created,
+            "prompt_series_count": num_prompt_series,
+            "unused_prompt_samples_count": num_unused_prompt_samples,
+        },
+    )
 
 
 def persist_workload(
     workload: SolveWorkload, prompt_samples: list[PromptSample], prompts: list[Prompt]
 ):
     logger.info(f"Saving workload {workload}")
-    # save the sampled prompts as unanswered in the db
-    with transaction.atomic():
-        workload.save()
-        PromptSample.objects.bulk_create(prompt_samples)
-        Prompt.objects.bulk_create(prompts)
+    try:
+        # save the sampled prompts as unanswered in the db
+        with transaction.atomic():
+            workload.save()
+            PromptSample.objects.bulk_create(prompt_samples)
+            Prompt.objects.bulk_create(prompts)
+    except Exception:
+        logger.error(f"Failed to create workload {workload}")
 
 
-def create_sample_workloads(num_needed_prompt_samples):
+def create_sample_workloads(num_needed_prompt_samples: int) -> int:
+    """
+    Creates enough workloads to cover at least `num_needed_prompt_samples` prompt samples
+    Returns the number of workloads created
+    """
     prompts_per_sample = config.DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES
     prompts_per_workload = config.DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD
 
@@ -1331,11 +1399,12 @@ def create_sample_workloads(num_needed_prompt_samples):
         current_workload, current_upload_url = init_workload(seed)
     except Exception as e:
         logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
-        return
+        return 0
 
     # how many prompts series we sampled so far
     # for each prompt series there is one prompt sample
     num_prompt_series_sampled = 0
+    num_workloads_created = 0
 
     current_prompt_samples = []
     current_prompts = []
@@ -1344,7 +1413,17 @@ def create_sample_workloads(num_needed_prompt_samples):
     # take a random order of prompt series to avoid using the same series at each synthetic jobs run
     for prompt_series in PromptSeries.objects.order_by("?").all():
         # get all prompts
-        lines = download_prompts_from_s3_url(prompt_series.s3_url)
+        try:
+            lines = download_prompts_from_s3_url(prompt_series.s3_url)
+        except Exception as e:
+            msg = f"Failed to download prompt series from {prompt_series.s3_url}: {e} - skipping"
+            logger.error(msg, exc_info=True)
+            SystemEvent.objects.create(
+                type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
+                subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
+                long_description=msg,
+            )
+            continue
 
         # should always have enough prompts
         if len(lines) <= prompts_per_sample:
@@ -1360,12 +1439,22 @@ def create_sample_workloads(num_needed_prompt_samples):
 
         if len(current_prompts) >= prompts_per_workload:
             content = "\n".join([p.content for p in current_prompts])
-            if upload_prompts_to_s3_url(current_upload_url, content):
+            try:
+                upload_prompts_to_s3_url(current_upload_url, content)
+
                 # save the workload in the db
                 persist_workload(current_workload, current_prompt_samples, current_prompts)
                 num_prompt_series_sampled += len(current_prompt_samples)
-            else:
-                logger.error(f"Failed to create workload {current_workload} - skipping")
+                num_workloads_created += 1
+
+            except Exception as e:
+                msg = f"Failed to upload prompts to s3 {current_upload_url} for workload {current_workload.workload_uuid}: {e} - skipping"
+                logger.error(msg, exc_info=True)
+                SystemEvent.objects.create(
+                    type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
+                    subtype=SystemEvent.EventSubType.ERROR_UPLOADING_TO_S3,
+                    long_description=msg,
+                )
 
             # finished creating all needed prompt samples so exit after last batch is filled
             if num_prompt_series_sampled >= num_needed_prompt_samples:
@@ -1380,3 +1469,4 @@ def create_sample_workloads(num_needed_prompt_samples):
             except Exception as e:
                 logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
                 continue
+    return num_workloads_created

@@ -52,7 +52,9 @@ from compute_horde.receipts.schemas import (
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
+from django.db.models import BooleanField, Count, ExpressionWrapper, Q
 from pydantic import BaseModel, JsonValue
 
 from compute_horde_validator.validator.dynamic_config import get_miner_max_executors_per_class
@@ -60,6 +62,7 @@ from compute_horde_validator.validator.models import (
     Miner,
     MinerManifest,
     PromptSample,
+    PromptSeries,
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
@@ -78,6 +81,10 @@ logger = logging.getLogger(__name__)
 
 _GIVE_AVERAGE_JOB_SEND_TIME_BONUS = False
 _SEND_MACHINE_SPECS = False
+
+# asyncio event loop profiling intervals
+_LOOP_PROFILING_SLEEP_INTERVAL = 0.1
+_LOOP_PROFILING_TIMEOUT_INTERVAL = 1
 
 # always-on executor classes have spin_up_time=0, but realistically
 # we need a bit more for all the back-and-forth messaging, especially
@@ -251,6 +258,7 @@ class Job:
     exception_stage: str | None = None
 
     accept_barrier_time: datetime | None = None
+    accept_barrier_2_time: datetime | None = None
     accept_before_sent_time: datetime | None = None
     accept_after_sent_time: datetime | None = None
     accept_response: V0AcceptJobRequest | V0DeclineJobRequest | None = None
@@ -364,6 +372,7 @@ class Job:
             exception_time=_datetime_dump(self.exception_time),
             exception_stage=self.exception_stage,
             accept_barrier_time=_datetime_dump(self.accept_barrier_time),
+            accept_barrier_2_time=_datetime_dump(self.accept_barrier_2_time),
             accept_before_sent_time=_datetime_dump(self.accept_before_sent_time),
             accept_after_sent_time=_datetime_dump(self.accept_after_sent_time),
             accept_response=_model_dump(self.accept_response),
@@ -441,6 +450,8 @@ class BatchContext:
 
     stage_start_time: dict[str, datetime]
     average_job_send_time: timedelta | None = None
+
+    loop_profiler: "LoopProfiler | None" = None
 
     # for tests
     _loop: asyncio.AbstractEventLoop | None = None
@@ -530,22 +541,16 @@ class BatchContext:
         # convert to regular dict for nice logging
         messages_count = dict(messages_count)
 
-        job_count = dict(
-            total=len(self.jobs),
-            failed=sum(1 for job in self.jobs.values() if not job.success),
-            successful=sum(1 for job in self.jobs.values() if job.success),
-            correct=sum(1 for job in self.jobs.values() if job.correct),
-            # don't count None as incorrect
-            incorrect=sum(1 for job in self.jobs.values() if job.correct is False),
-        )
-
         counts = dict(
             miners=len(self.miners),
             manifests=sum(1 for manifest in self.manifests.values() if manifest is not None),
             messages=messages_count,
-            jobs=job_count,
             system_events=self.event_count,
         )
+
+        counts["jobs"] = self._get_job_count(None)
+        for executor_class in ExecutorClass:
+            counts[f"jobs:{executor_class.value}"] = self._get_job_count(executor_class)
 
         manifests = {}
         for miner_hotkey, manifest in self.manifests.items():
@@ -566,6 +571,7 @@ class BatchContext:
             average_job_send_time=_timedelta_dump(self.average_job_send_time),
             counts=counts,
             manifests=manifests,
+            loop_profiling=self.loop_profiler.get() if self.loop_profiler is not None else None,
         )
         return self.system_event(
             type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
@@ -573,6 +579,93 @@ class BatchContext:
             description="batch telemetry",
             data=data,
         )
+
+    def _get_job_count(self, executor_class: ExecutorClass | None) -> dict[str, int]:
+        jobs = list(self.jobs.values())
+        if executor_class is not None:
+            jobs = [job for job in jobs if job.executor_class == executor_class]
+        return dict(
+            total=len(jobs),
+            failed=sum(1 for job in jobs if not job.success),
+            successful=sum(1 for job in jobs if job.success),
+            correct=sum(1 for job in jobs if job.correct),
+            # don't count None as incorrect
+            incorrect=sum(1 for job in jobs if job.correct is False),
+        )
+
+
+class LoopProfiler:
+    def __init__(self, ctx: BatchContext) -> None:
+        self._ctx = ctx
+
+        self._sleep_timings: list[float] = []
+        self._sleep_task = asyncio.create_task(
+            self._sleep_profiler(), name="LoopProfiler._sleep_profiler"
+        )
+
+        self._timeout_timings: list[float] = []
+        self._timeout_task = asyncio.create_task(
+            self._timeout_profiler(), name="LoopProfiler._timeout_profiler"
+        )
+
+    async def close(self) -> None:
+        self._sleep_task.cancel()
+        try:
+            await self._sleep_task
+        except asyncio.CancelledError:
+            pass
+
+        self._timeout_task.cancel()
+        try:
+            await self._timeout_task
+        except asyncio.CancelledError:
+            pass
+
+    def get(self) -> JsonValue:
+        return dict(
+            sleep=self._get(_LOOP_PROFILING_SLEEP_INTERVAL, self._sleep_timings),
+            timeout=self._get(_LOOP_PROFILING_TIMEOUT_INTERVAL, self._timeout_timings),
+        )
+
+    def _get(self, timeout: float, timings: list[float]) -> JsonValue:
+        stats: JsonValue = dict(
+            interval=timeout,
+            count=len(timings),
+        )
+        if len(timings) > 2:
+            if isinstance(stats, dict):  # make mypy happy
+                stats |= dict(
+                    min=min(timings),
+                    max=max(timings),
+                    mean=statistics.mean(timings),
+                    median=statistics.median(timings),
+                    stddev=statistics.stdev(timings),
+                    variance=statistics.variance(timings),
+                )
+        return stats
+
+    async def _sleep_profiler(self) -> None:
+        while True:
+            time_before_ns = time.monotonic_ns()
+            await asyncio.sleep(_LOOP_PROFILING_SLEEP_INTERVAL)
+            time_after_ns = time.monotonic_ns()
+
+            duration_sec = (time_after_ns - time_before_ns) / 1_000_000_000
+            self._sleep_timings.append(duration_sec)
+
+    async def _timeout_profiler(self) -> None:
+        while True:
+            time_before_ns = time.monotonic_ns()
+            try:
+                async with asyncio.timeout(_LOOP_PROFILING_TIMEOUT_INTERVAL):
+                    # we want the timeout to expire, so wait many times longer
+                    await asyncio.sleep(_LOOP_PROFILING_TIMEOUT_INTERVAL * 100)
+            except TimeoutError:
+                pass
+            time_after_ns = time.monotonic_ns()
+
+            duration_sec = (time_after_ns - time_before_ns) / 1_000_000_000
+            self._timeout_timings.append(duration_sec)
 
 
 def _datetime_dump(dt: datetime | None) -> str | None:
@@ -806,6 +899,62 @@ async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
         await client.close()
 
 
+@sync_to_async
+def _not_enough_prompts_system_event(
+    ctx: BatchContext,
+    llm_executor_count: int,
+) -> None:
+    if cache.get("insufficient_prompts_telemetry_sent"):
+        logger.warning("skipping INSUFFICIENT_PROMPTS system event, already exists in 24h")
+        return
+
+    prompt_series_total_count = PromptSeries.objects.count()
+
+    prompt_sample_types = (
+        PromptSample.objects.annotate(
+            is_used=ExpressionWrapper(
+                Q(synthetic_job_id__isnull=False),
+                output_field=BooleanField(),
+            ),
+            is_answered=ExpressionWrapper(
+                Q(workload__finished_at__isnull=False),
+                output_field=BooleanField(),
+            ),
+        )
+        .values("is_used", "is_answered")
+        .annotate(count=Count("*"))
+    )
+
+    prompt_sample_used_count = 0
+    prompt_sample_unused_answered_count = 0
+    prompt_sample_unused_unanswered_count = 0
+    for prompt_sample_type in prompt_sample_types:
+        match prompt_sample_type:
+            case {"is_used": True, "count": n}:
+                prompt_sample_used_count += n
+            case {"is_used": False, "is_answered": True, "count": n}:
+                prompt_sample_unused_answered_count += n
+            case {"is_used": False, "is_answered": False, "count": n}:
+                prompt_sample_unused_unanswered_count += n
+            case _:
+                logger.warning("unreachable code reached!")
+
+    ctx.system_event(
+        type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+        subtype=SystemEvent.EventSubType.INSUFFICIENT_PROMPTS,
+        description="not enough prompt samples available in database",
+        func="get_llm_prompt_samples",
+        data={
+            "llm_executor_count": llm_executor_count,
+            "prompt_series_total_count": prompt_series_total_count,
+            "prompt_sample_used_count": prompt_sample_used_count,
+            "prompt_sample_unused_answered_count": prompt_sample_unused_answered_count,
+            "prompt_sample_unused_unanswered_count": prompt_sample_unused_unanswered_count,
+        },
+    )
+    cache.set("insufficient_prompts_telemetry_sent", True, timeout=24 * 60 * 60)
+
+
 async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None:
     # TODO: refactor into nicer abstraction
     llm_executor_count = sum(
@@ -824,16 +973,7 @@ async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None
     )
     prompt_samples = [ps async for ps in prompt_samples_qs]
     if len(prompt_samples) < llm_executor_count:
-        ctx.system_event(
-            type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
-            subtype=SystemEvent.EventSubType.INSUFFICIENT_PROMPTS,
-            description="not enough prompt samples available in database",
-            func="get_llm_prompt_samples",
-            data={
-                "llm_executor_count": llm_executor_count,
-                "prompt_samples": len(prompt_samples),
-            },
-        )
+        await _not_enough_prompts_system_event(ctx, llm_executor_count)
         logger.warning(
             "Not enough prompt samples for llm executors: %d < %d - will NOT run llm synthetic prompt jobs",
             len(prompt_samples),
@@ -900,32 +1040,47 @@ async def _generate_jobs(ctx: BatchContext) -> None:
 
 
 async def _send_initial_job_request(
-    ctx: BatchContext, start_barrier: asyncio.Barrier, max_spin_up_time: int, job_uuid: str
+    ctx: BatchContext,
+    start_barrier: asyncio.Barrier,
+    serialize_barrier: asyncio.Barrier,
+    max_spin_up_time: int,
+    job_uuid: str,
 ) -> None:
-    await start_barrier.wait()
-    barrier_time = datetime.now(tz=UTC)
+    job: Job | None = None
+    try:
+        await start_barrier.wait()
+        barrier_time = datetime.now(tz=UTC)
 
-    job = ctx.jobs[job_uuid]
-    job.accept_barrier_time = barrier_time
-    client = ctx.clients[job.miner_hotkey]
+        job = ctx.jobs[job_uuid]
+        job.accept_barrier_time = barrier_time
+        client = ctx.clients[job.miner_hotkey]
 
-    _generate_job_started_receipt(ctx, job)
-    assert job.job_started_receipt_payload is not None
-    assert job.job_started_receipt_signature is not None
+        _generate_job_started_receipt(ctx, job)
+        assert job.job_started_receipt_payload is not None
+        assert job.job_started_receipt_signature is not None
 
-    stagger_wait_interval = max_spin_up_time - job.get_spin_up_time()
-    assert stagger_wait_interval >= 0
+        stagger_wait_interval = max_spin_up_time - job.get_spin_up_time()
+        assert stagger_wait_interval >= 0
 
-    request = V0InitialJobRequest(
-        job_uuid=job.uuid,
-        executor_class=job.executor_class,
-        base_docker_image_name=job.job_generator.base_docker_image_name(),
-        timeout_seconds=job.job_generator.timeout_seconds(),
-        volume=job.volume if job.job_generator.volume_in_initial_req() else None,
-        job_started_receipt_payload=job.job_started_receipt_payload,
-        job_started_receipt_signature=job.job_started_receipt_signature,
-    )
-    request_json = request.model_dump_json()
+        request = V0InitialJobRequest(
+            job_uuid=job.uuid,
+            executor_class=job.executor_class,
+            base_docker_image_name=job.job_generator.base_docker_image_name(),
+            timeout_seconds=job.job_generator.timeout_seconds(),
+            volume=job.volume if job.job_generator.volume_in_initial_req() else None,
+            job_started_receipt_payload=job.job_started_receipt_payload,
+            job_started_receipt_signature=job.job_started_receipt_signature,
+        )
+        request_json = request.model_dump_json()
+
+    finally:
+        # !!! it's very important we wait on this barrier, no matter what happens above,
+        #     if we don't wait, other concurrent jobs will hang forever since they will
+        #     never pass this barrier
+        await serialize_barrier.wait()
+
+        if job is not None:
+            job.accept_barrier_2_time = datetime.now(tz=UTC)
 
     async with asyncio.timeout(max_spin_up_time):
         if stagger_wait_interval > 0:
@@ -1162,9 +1317,12 @@ async def _multi_send_initial_job_request(ctx: BatchContext) -> None:
 
     logger.info("Sending initial job requests for %d jobs", len(ctx.job_uuids))
     start_barrier = asyncio.Barrier(len(ctx.job_uuids))
+    serialize_barrier = asyncio.Barrier(len(ctx.job_uuids))
     tasks = [
         asyncio.create_task(
-            _send_initial_job_request(ctx, start_barrier, max_spin_up_time, job_uuid),
+            _send_initial_job_request(
+                ctx, start_barrier, serialize_barrier, max_spin_up_time, job_uuid
+            ),
             name=f"{job_uuid}._send_initial_job_request",
         )
         for job_uuid in ctx.job_uuids
@@ -1330,12 +1488,18 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
             type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_SUCCESS,
             subtype=SystemEvent.EventSubType.SUCCESS,
             description=job.comment,
+            data=dict(
+                executor_class=job.executor_class.value,
+            ),
         )
     else:
         job.system_event(
             type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
             subtype=SystemEvent.EventSubType.FAILURE,
             description=job.comment,
+            data=dict(
+                executor_class=job.executor_class.value,
+            ),
         )
 
     logger.info(
@@ -1371,7 +1535,7 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
             logger.warning("failed to get llm prompt answers of %s: %r", job.name, result)
             ctx.system_event(
                 type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
-                subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED,
+                subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
                 description=repr(result),
                 miner_hotkey=job.miner_hotkey,
                 func="_download_llm_prompts_answers",
@@ -1466,7 +1630,7 @@ def _db_persist_system_events(ctx: BatchContext) -> None:
 
 # sync_to_async is needed since we use the sync Django ORM
 @sync_to_async
-def _db_persist(ctx: BatchContext) -> None:
+def _db_persist_critical(ctx: BatchContext) -> None:
     start_time = time.time()
 
     # persist the batch and the jobs in the same transaction, to
@@ -1505,6 +1669,19 @@ def _db_persist(ctx: BatchContext) -> None:
             )
             synthetic_jobs.append(synthetic_job)
         synthetic_jobs = SyntheticJob.objects.bulk_create(synthetic_jobs)
+    duration = time.time() - start_time
+    logger.info("Persisted to database in %.2f seconds", duration)
+
+
+# sync_to_async is needed since we use the sync Django ORM
+@sync_to_async
+def _db_persist(ctx: BatchContext) -> None:
+    start_time = time.time()
+
+    if ctx.batch_id is not None:
+        batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
+    else:
+        batch = SyntheticJobBatch.objects.get(started_at=ctx.stage_start_time["BATCH_BEGIN"])
 
     miner_manifests: list[MinerManifest] = []
     for miner in ctx.miners.values():
@@ -1523,7 +1700,7 @@ def _db_persist(ctx: BatchContext) -> None:
 
     # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {
-        str(synthetic_job.job_uuid): synthetic_job for synthetic_job in synthetic_jobs
+        str(synthetic_job.job_uuid): synthetic_job for synthetic_job in batch.synthetic_jobs.all()
     }
     prompt_samples: list[PromptSample] = []
 
@@ -1620,6 +1797,8 @@ async def execute_synthetic_batch_run(
     await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
     try:
+        ctx.loop_profiler = LoopProfiler(ctx)
+
         await ctx.checkpoint_system_event("_db_get_previous_online_executor_count")
         await _db_get_previous_online_executor_count(ctx)
 
@@ -1677,6 +1856,9 @@ async def execute_synthetic_batch_run(
         else:
             logger.warning("No executors available")
 
+        await ctx.checkpoint_system_event("loop_profiler.close")
+        await ctx.loop_profiler.close()
+
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
@@ -1699,6 +1881,9 @@ async def execute_synthetic_batch_run(
             description=repr(exc),
             func="_multi_close_client",
         )
+
+    await ctx.checkpoint_system_event("_db_persist_critical")
+    await _db_persist_critical(ctx)
 
     await ctx.checkpoint_system_event("_emit_telemetry_events")
     try:
