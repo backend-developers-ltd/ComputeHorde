@@ -59,6 +59,7 @@ services:
     command: ./celery-entrypoint.sh -Q default
     volumes:
       - ./prometheus-metrics:/prometheus-multiproc-dir
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     tmpfs: /run
     depends_on:
       - redis
