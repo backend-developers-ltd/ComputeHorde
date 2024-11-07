@@ -9,7 +9,7 @@ from prometheus_client import multiprocess
 from prometheus_client.core import REGISTRY, GaugeMetricFamily, Metric
 from prometheus_client.registry import Collector
 
-from ..celery import get_num_tasks_in_queue, CELERY_TASK_QUEUES
+from ..celery import CELERY_TASK_QUEUES, get_num_tasks_in_queue
 
 
 class RecursiveMultiProcessCollector(multiprocess.MultiProcessCollector):

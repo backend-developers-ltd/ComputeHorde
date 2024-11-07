@@ -21,7 +21,9 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
     ValidatorWhitelist,
     Weights,
-)  # noqa
+)
+
+# noqa
 from compute_horde_validator.validator.tasks import trigger_run_admin_job_request  # noqa
 
 admin.site.site_header = "ComputeHorde Validator Administration"

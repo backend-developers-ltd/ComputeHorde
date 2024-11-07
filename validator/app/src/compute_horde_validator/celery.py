@@ -65,5 +65,8 @@ def apply_startup_hook(*args, **kwargs):
 
 
 def get_num_tasks_in_queue(queue_name: str) -> int:
-    with app.pool.acquire(block=True) as conn:
-        return conn.default_channel.client.llen(queue_name)
+    with app.pool.acquire(block=True) as conn:  # type: ignore
+        try:
+            return int(conn.default_channel.client.llen(queue_name))
+        except (TypeError, ValueError):
+            return 0
