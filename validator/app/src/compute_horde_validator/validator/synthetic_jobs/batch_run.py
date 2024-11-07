@@ -258,6 +258,7 @@ class Job:
     exception_stage: str | None = None
 
     accept_barrier_time: datetime | None = None
+    accept_barrier_2_time: datetime | None = None
     accept_before_sent_time: datetime | None = None
     accept_after_sent_time: datetime | None = None
     accept_response: V0AcceptJobRequest | V0DeclineJobRequest | None = None
@@ -371,6 +372,7 @@ class Job:
             exception_time=_datetime_dump(self.exception_time),
             exception_stage=self.exception_stage,
             accept_barrier_time=_datetime_dump(self.accept_barrier_time),
+            accept_barrier_2_time=_datetime_dump(self.accept_barrier_2_time),
             accept_before_sent_time=_datetime_dump(self.accept_before_sent_time),
             accept_after_sent_time=_datetime_dump(self.accept_after_sent_time),
             accept_response=_model_dump(self.accept_response),
@@ -1038,32 +1040,47 @@ async def _generate_jobs(ctx: BatchContext) -> None:
 
 
 async def _send_initial_job_request(
-    ctx: BatchContext, start_barrier: asyncio.Barrier, max_spin_up_time: int, job_uuid: str
+    ctx: BatchContext,
+    start_barrier: asyncio.Barrier,
+    serialize_barrier: asyncio.Barrier,
+    max_spin_up_time: int,
+    job_uuid: str,
 ) -> None:
-    await start_barrier.wait()
-    barrier_time = datetime.now(tz=UTC)
+    job: Job | None = None
+    try:
+        await start_barrier.wait()
+        barrier_time = datetime.now(tz=UTC)
 
-    job = ctx.jobs[job_uuid]
-    job.accept_barrier_time = barrier_time
-    client = ctx.clients[job.miner_hotkey]
+        job = ctx.jobs[job_uuid]
+        job.accept_barrier_time = barrier_time
+        client = ctx.clients[job.miner_hotkey]
 
-    _generate_job_started_receipt(ctx, job)
-    assert job.job_started_receipt_payload is not None
-    assert job.job_started_receipt_signature is not None
+        _generate_job_started_receipt(ctx, job)
+        assert job.job_started_receipt_payload is not None
+        assert job.job_started_receipt_signature is not None
 
-    stagger_wait_interval = max_spin_up_time - job.get_spin_up_time()
-    assert stagger_wait_interval >= 0
+        stagger_wait_interval = max_spin_up_time - job.get_spin_up_time()
+        assert stagger_wait_interval >= 0
 
-    request = V0InitialJobRequest(
-        job_uuid=job.uuid,
-        executor_class=job.executor_class,
-        base_docker_image_name=job.job_generator.base_docker_image_name(),
-        timeout_seconds=job.job_generator.timeout_seconds(),
-        volume=job.volume if job.job_generator.volume_in_initial_req() else None,
-        job_started_receipt_payload=job.job_started_receipt_payload,
-        job_started_receipt_signature=job.job_started_receipt_signature,
-    )
-    request_json = request.model_dump_json()
+        request = V0InitialJobRequest(
+            job_uuid=job.uuid,
+            executor_class=job.executor_class,
+            base_docker_image_name=job.job_generator.base_docker_image_name(),
+            timeout_seconds=job.job_generator.timeout_seconds(),
+            volume=job.volume if job.job_generator.volume_in_initial_req() else None,
+            job_started_receipt_payload=job.job_started_receipt_payload,
+            job_started_receipt_signature=job.job_started_receipt_signature,
+        )
+        request_json = request.model_dump_json()
+
+    finally:
+        # !!! it's very important we wait on this barrier, no matter what happens above,
+        #     if we don't wait, other concurrent jobs will hang forever since they will
+        #     never pass this barrier
+        await serialize_barrier.wait()
+
+        if job is not None:
+            job.accept_barrier_2_time = datetime.now(tz=UTC)
 
     async with asyncio.timeout(max_spin_up_time):
         if stagger_wait_interval > 0:
@@ -1300,9 +1317,12 @@ async def _multi_send_initial_job_request(ctx: BatchContext) -> None:
 
     logger.info("Sending initial job requests for %d jobs", len(ctx.job_uuids))
     start_barrier = asyncio.Barrier(len(ctx.job_uuids))
+    serialize_barrier = asyncio.Barrier(len(ctx.job_uuids))
     tasks = [
         asyncio.create_task(
-            _send_initial_job_request(ctx, start_barrier, max_spin_up_time, job_uuid),
+            _send_initial_job_request(
+                ctx, start_barrier, serialize_barrier, max_spin_up_time, job_uuid
+            ),
             name=f"{job_uuid}._send_initial_job_request",
         )
         for job_uuid in ctx.job_uuids
