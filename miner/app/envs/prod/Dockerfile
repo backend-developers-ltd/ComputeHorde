@@ -6,7 +6,7 @@ LABEL builder=true
 
 WORKDIR /root/src/
 
-RUN pip3 install --no-cache-dir 'pdm>=2.12,<3'
+RUN pip3 install --no-cache-dir 'pdm==2.19.3'
 
 RUN apt-get update && apt-get install -y git
 COPY pyproject.toml pdm.lock ./
