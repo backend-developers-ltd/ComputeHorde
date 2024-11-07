@@ -1515,7 +1515,7 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
             logger.warning("failed to get llm prompt answers of %s: %r", job.name, result)
             ctx.system_event(
                 type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
-                subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_DOWNLOAD_FAILED,
+                subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
                 description=repr(result),
                 miner_hotkey=job.miner_hotkey,
                 func="_download_llm_prompts_answers",
