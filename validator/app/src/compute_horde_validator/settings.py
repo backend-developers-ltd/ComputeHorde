@@ -489,6 +489,8 @@ if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
 CELERY_TASK_ROUTES = ["compute_horde_validator.celery.route_task"]
 CELERY_TASK_TIME_LIMIT = int(timedelta(hours=2, minutes=5).total_seconds())
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
+CELERY_WORKER_SEND_TASK_EVENTS = True
+CELERY_TASK_SEND_SENT_EVENT = True
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
