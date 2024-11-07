@@ -83,6 +83,8 @@ class SystemEvent(models.Model):
         PROMPT_GENERATION_STARTED = "PROMPT_GENERATION_STARTED"
         PROMPT_SAMPLING_SKIPPED = "PROMPT_SAMPLING_SKIPPED"
         NEW_WORKLOADS_CREATED = "NEW_WORKLOADS_CREATED"
+        ERROR_UPLOADING_TO_S3 = "ERROR_UPLOADING_TO_S3"
+        ERROR_DOWNLOADING_FROM_S3 = "ERROR_DOWNLOADING_FROM_S3"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
