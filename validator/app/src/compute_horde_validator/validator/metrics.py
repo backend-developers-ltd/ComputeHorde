@@ -1,10 +1,15 @@
 import glob
 import os
+from collections.abc import Iterator
 
 import prometheus_client
 from django.http import HttpResponse
 from django_prometheus.exports import ExportToDjangoView
 from prometheus_client import multiprocess
+from prometheus_client.core import REGISTRY, GaugeMetricFamily, Metric
+from prometheus_client.registry import Collector
+
+from ..celery import CELERY_TASK_QUEUES, get_num_tasks_in_queue
 
 
 class RecursiveMultiProcessCollector(multiprocess.MultiProcessCollector):
@@ -29,3 +34,18 @@ def metrics_view(request):
         )
     else:
         return ExportToDjangoView(request)
+
+
+class CustomCeleryCollector(Collector):
+    def collect(self) -> Iterator[Metric]:
+        num_tasks_in_queue = GaugeMetricFamily(
+            "celery_queue_len",
+            "How many tasks are there in a queue",
+            labels=("queue",),
+        )
+        for queue in CELERY_TASK_QUEUES:
+            num_tasks_in_queue.add_metric([queue], get_num_tasks_in_queue(queue))
+        yield num_tasks_in_queue
+
+
+REGISTRY.register(CustomCeleryCollector())

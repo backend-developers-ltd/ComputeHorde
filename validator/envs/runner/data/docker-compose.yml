@@ -27,7 +27,7 @@ services:
 
   app:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
-    pull_policy: always
+    pull_policy: ${PULL_POLICY:-always}
     healthcheck:
       test: wget -q --spider 127.0.0.1:8000/admin/login/ || exit 1
     init: true
@@ -49,7 +49,8 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   celery-worker: &celery-worker
-    image: compute_horde_validator/app
+    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
+    pull_policy: ${PULL_POLICY:-always}
     init: true
     restart: unless-stopped
     env_file: ./.env
@@ -94,9 +95,93 @@ services:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-receipts
     command: ./celery-entrypoint.sh -Q receipts
 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.40.0
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /cgroup:/cgroup:ro
+    restart: unless-stopped
+    logging:
+      <<: *logging
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|run|boot|var/.+)($$|/)'
+      - '--collector.tcpstat'
+    logging:
+      <<: *logging
+
+  prometheus:
+    image: backenddevelopersltd/bittensor_prometheus:latest
+    restart: unless-stopped
+    links:
+      - cadvisor
+      - app
+      - prometheus-proxy
+      - celery-flower
+    env_file: ./.env
+    volumes:
+      - ${HOST_WALLET_DIR}:/wallets
+    entrypoint: |
+      /bin/sh -c 'cat <<EOF > /etc/prometheus/prometheus.yml.template 
+      global:
+        scrape_interval: 30s
+      scrape_configs:
+        - job_name: 'validator'
+          static_configs:
+            - targets: ['cadvisor:8080', 'host.docker.internal:9100', 'app:8000', 'celery-flower:5555']
+              labels:
+                hotkey: '{hotkey}'
+      remote_write:
+        - url: "http://prometheus-proxy:8000/prometheus_outbound_proxy/"
+      EOF
+      exec /entrypoint.sh --log.level=debug --storage.tsdb.retention.size=1GB'
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  prometheus-proxy:
+    image: backenddevelopersltd/bittensor-prometheus-proxy:latest
+    restart: unless-stopped
+    environment:
+      - CENTRAL_PROMETHEUS_PROXY_URL=https://prometheus.bactensor.io
+      - ENV=prometheus-proxy-prod
+      - SECRET_KEY=${SECRET_KEY}
+      - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
+      - BITTENSOR_WALLET_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
+      - SENTRY_DSN=${SENTRY_DSN}
+    volumes:
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+
+  celery-flower:
+    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
+    healthcheck:
+      test: wget -qO- 127.0.0.1:5555 > /dev/null || exit 1
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - DEBUG=off
+      - FLOWER_TASK_RUNTIME_METRIC_BUCKETS=1,2,3,5,10,20,30,45,60,120,180,240,300,600,inf
+    command: celery --app=compute_horde_validator --broker="redis://redis:6379/0" flower
+    logging:
+      <<: *logging
+
   celery-beat:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
-    pull_policy: always
+    pull_policy: ${PULL_POLICY:-always}
     init: true
     restart: unless-stopped
     env_file: ./.env
@@ -113,7 +198,7 @@ services:
 
   connect-facilitator:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
-    pull_policy: always
+    pull_policy: ${PULL_POLICY:-always}
     init: true
     restart: unless-stopped
     env_file: ./.env
