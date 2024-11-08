@@ -15,13 +15,12 @@ from django.conf import settings
 from django.utils.timezone import now
 
 from compute_horde_miner.celery import app
-from compute_horde_miner.miner import quasi_axon
+from compute_horde_miner.miner import eviction, quasi_axon
 from compute_horde_miner.miner.models import Validator
 from compute_horde_miner.miner.receipt_store.current import receipts_store
 
 logger = get_task_logger(__name__)
 
-RECEIPTS_MAX_RETENTION_PERIOD = datetime.timedelta(days=2)
 RECEIPTS_MAX_SERVED_PERIOD = datetime.timedelta(days=1)
 
 
@@ -87,9 +86,8 @@ def prepare_receipts():
 
 
 @app.task
-def clear_old_receipts():
-    for model in [JobStartedReceipt, JobAcceptedReceipt, JobFinishedReceipt]:
-        model.objects.filter(timestamp__lt=now() - RECEIPTS_MAX_RETENTION_PERIOD).delete()  # type: ignore[attr-defined]
+def evict_old_data():
+    eviction.evict_all()
 
 
 @app.task

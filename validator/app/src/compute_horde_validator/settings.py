@@ -480,6 +480,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(minutes=5),
         "options": {},
     },
+    "evict_old_data": {
+        "task": "compute_horde_validator.validator.tasks.evict_old_data",
+        "schedule": timedelta(days=1),
+        "options": {},
+    },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
