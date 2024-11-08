@@ -41,7 +41,7 @@ from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 logger = logging.getLogger(__name__)
 
 
-def verify_job_request(job_request: V2JobRequest):
+async def verify_job_request(job_request: V2JobRequest):
     # check if signer is in validator whitelist
     if job_request.signature is None:
         raise ValueError("Signature is None")
@@ -50,7 +50,8 @@ def verify_job_request(job_request: V2JobRequest):
     signer = signature.signatory
     signed_payload = job_request.json_for_signing()
 
-    if not ValidatorWhitelist.objects.filter(hotkey=signer).exists():
+    whitelisted = await ValidatorWhitelist.objects.filter(hotkey=signer).aexists()
+    if not whitelisted:
         raise ValueError(f"Signatory {signer} is not in validator whitelist")
 
     # verify signed payload
@@ -321,7 +322,7 @@ class FacilitatorClient:
         if job_request.message_type == "V2JobRequest":
             logger.debug(f"Received signed payload: {job_request}")
             try:
-                verify_job_request(job_request)
+                await verify_job_request(job_request)
             except Exception as e:
                 logger.error(f"Failed to verify signed payload: {e} - will not run job")
                 return
