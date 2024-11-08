@@ -509,8 +509,8 @@ wheels = [
 
 [[package]]
 name = "compute-horde"
-version = "0.0.0"
-source = { editable = "compute_horde" }
+version = "0.0.16.dev33+g805d5de7.d20241108"
+source = { editable = "../compute_horde" }
 dependencies = [
     { name = "bittensor" },
     { name = "django" },
@@ -575,14 +575,14 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "compute-horde", editable = "compute_horde" },
-    { name = "executor", editable = "executor" },
-    { name = "miner", editable = "miner" },
+    { name = "compute-horde", editable = "../compute_horde" },
+    { name = "executor", editable = "../executor" },
+    { name = "miner", editable = "../miner" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-xdist" },
     { name = "requests" },
-    { name = "validator", editable = "validator" },
+    { name = "validator", editable = "../validator" },
 ]
 
 [[package]]
@@ -899,7 +899,7 @@ wheels = [
 [[package]]
 name = "executor"
 version = "0"
-source = { editable = "executor" }
+source = { editable = "../executor" }
 dependencies = [
     { name = "celery" },
     { name = "channels", extra = ["daphne"] },
@@ -929,7 +929,7 @@ dependencies = [
 requires-dist = [
     { name = "celery", specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
-    { name = "compute-horde", editable = "compute_horde" },
+    { name = "compute-horde", editable = "../compute_horde" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-business-metrics", git = "https://github.com/reef-technologies/django-business-metrics.git?rev=9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01#9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01" },
     { name = "django-cors-headers", specifier = "~=4.2.0" },
@@ -1326,7 +1326,7 @@ wheels = [
 [[package]]
 name = "miner"
 version = "0"
-source = { editable = "miner" }
+source = { editable = "../miner" }
 dependencies = [
     { name = "celery" },
     { name = "channels", extra = ["daphne"] },
@@ -1356,7 +1356,7 @@ requires-dist = [
     { name = "celery", specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
     { name = "channels-redis", specifier = "==4.*" },
-    { name = "compute-horde", editable = "compute_horde" },
+    { name = "compute-horde", editable = "../compute_horde" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-business-metrics", git = "https://github.com/reef-technologies/django-business-metrics.git?rev=9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01#9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01" },
     { name = "django-constance", extras = ["database"], specifier = "==3.1.0" },
@@ -2375,7 +2375,7 @@ wheels = [
 [[package]]
 name = "validator"
 version = "0"
-source = { editable = "validator" }
+source = { editable = "../validator" }
 dependencies = [
     { name = "boto3" },
     { name = "celery" },
@@ -2414,7 +2414,7 @@ requires-dist = [
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
     { name = "channels-redis", specifier = ">=4.2.0" },
     { name = "class-registry", specifier = ">=2.1.2" },
-    { name = "compute-horde", editable = "compute_horde" },
+    { name = "compute-horde", editable = "../compute_horde" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-admin-rangefilter", specifier = "==0.12.4" },
     { name = "django-business-metrics", git = "https://github.com/reef-technologies/django-business-metrics.git?rev=9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01#9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01" },
