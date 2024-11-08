@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
@@ -12,6 +13,8 @@ ORGANIC_JOBS_RETENTION_PERIOD = timedelta(days=2)
 SYSTEM_EVENTS_RETENTION_PERIOD = timedelta(days=2)
 PROMPTS_RETENTION_PERIOD = timedelta(days=2)
 
+logger = logging.getLogger(__name__)
+
 
 def evict_all() -> None:
     evict_organic_jobs()
@@ -22,16 +25,19 @@ def evict_all() -> None:
 
 
 def evict_system_events() -> None:
+    logger.info("Evicting old system events")
     cutoff = now() - SYSTEM_EVENTS_RETENTION_PERIOD
     SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(timestamp__lt=cutoff).delete()
 
 
 def evict_synthetic_jobs() -> None:
+    logger.info("Evicting old synthetic jobs")
     cutoff = now() - SYNTHETIC_JOBS_RETENTION_PERIOD
     SyntheticJobBatch.objects.filter(created_at__lt=cutoff).delete()
 
 
 def evict_dangling_prompts():
+    logger.info("Evicting old dangling LLM prompts")
     # Remove SolveWorkload's that are dangling after PromptSample's get deleted
     # along with SyntheticJobBatch (cascading: SyntheticJobBatch->SyntheticJob->PromptSample).
     cutoff = now() - PROMPTS_RETENTION_PERIOD
@@ -39,11 +45,13 @@ def evict_dangling_prompts():
 
 
 def evict_organic_jobs() -> None:
+    logger.info("Evicting old organic jobs")
     cutoff = now() - ORGANIC_JOBS_RETENTION_PERIOD
     OrganicJob.objects.filter(updated_at__lt=cutoff).delete()
 
 
 def evict_receipts() -> None:
+    logger.info("Evicting old receipts")
     cutoff = now() - RECEIPTS_RETENTION_PERIOD
     JobStartedReceipt.objects.filter(timestamp__lt=cutoff).delete()
     JobAcceptedReceipt.objects.filter(timestamp__lt=cutoff).delete()
