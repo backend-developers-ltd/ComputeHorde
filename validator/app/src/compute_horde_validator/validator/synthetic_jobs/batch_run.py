@@ -573,6 +573,10 @@ class BatchContext:
             },
             average_job_send_time=_timedelta_dump(self.average_job_send_time),
             counts=counts,
+            llm_counts={
+                "llm_executor_count": self.get_executor_count(ExecutorClass.always_on__llm__a6000),
+                **calculate_llm_prompt_sample_counts(),
+            },
             manifests=manifests,
             loop_profiling=self.loop_profiler.get() if self.loop_profiler is not None else None,
         )
@@ -913,7 +917,7 @@ async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
         await client.close()
 
 
-def calculate_llm_prompt_sample_stats() -> dict:
+def calculate_llm_prompt_sample_counts() -> dict[str, int]:
     """
     Calculate counts of LLM jobs, grouped by whether they are used and/or answered.
     """
@@ -948,7 +952,6 @@ def calculate_llm_prompt_sample_stats() -> dict:
             case _:
                 logger.warning("unreachable code reached!")
 
-    # TODO: TypedDict
     return {
         "prompt_series_total_count": prompt_series_total_count,
         "prompt_sample_used_count": prompt_sample_used_count,
@@ -972,7 +975,7 @@ def _not_enough_prompts_system_event(
         func="get_llm_prompt_samples",
         data={
             "llm_executor_count": ctx.get_executor_count(ExecutorClass.always_on__llm__a6000),
-            **calculate_llm_prompt_sample_stats(),
+            **calculate_llm_prompt_sample_counts(),
         },
     )
     cache.set("insufficient_prompts_telemetry_sent", True, timeout=24 * 60 * 60)
