@@ -530,7 +530,7 @@ class BatchContext:
         except Exception as exc:
             logger.error("Failed to checkpoint system event: %r", exc)
 
-    # needed because the event payload has data coming from the DB
+    # needed because we query the DB for some data we put in the event payload
     @sync_to_async
     def emit_telemetry_event(self) -> SystemEvent | None:
         """
