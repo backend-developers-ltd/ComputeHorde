@@ -111,6 +111,9 @@ _MAX_MINER_CLIENT_DEBOUNCE_COUNT = 4  # approximately 32 seconds
 SYNTHETIC_JOBS_SOFT_LIMIT = 20 * 60
 SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
 
+# Executor class considered to be the one used for LLM-type jobs
+LLM_EXECUTOR_CLASS = ExecutorClass.always_on__llm__a6000
+
 
 class MinerClient(AbstractMinerClient):
     def __init__(
@@ -574,7 +577,7 @@ class BatchContext:
             average_job_send_time=_timedelta_dump(self.average_job_send_time),
             counts=counts,
             llm_counts={
-                "llm_executor_count": self.get_executor_count(ExecutorClass.always_on__llm__a6000),
+                "llm_executor_count": self.get_executor_count(LLM_EXECUTOR_CLASS),
                 **calculate_llm_prompt_sample_counts(),
             },
             manifests=manifests,
@@ -974,7 +977,7 @@ def _not_enough_prompts_system_event(
         description="not enough prompt samples available in database",
         func="get_llm_prompt_samples",
         data={
-            "llm_executor_count": ctx.get_executor_count(ExecutorClass.always_on__llm__a6000),
+            "llm_executor_count": ctx.get_executor_count(LLM_EXECUTOR_CLASS),
             **calculate_llm_prompt_sample_counts(),
         },
     )
@@ -983,7 +986,7 @@ def _not_enough_prompts_system_event(
 
 async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None:
     # TODO: refactor into nicer abstraction
-    llm_executor_count = ctx.get_executor_count(ExecutorClass.always_on__llm__a6000)
+    llm_executor_count = ctx.get_executor_count(LLM_EXECUTOR_CLASS)
     prompt_samples_qs = (
         PromptSample.objects.select_related("series", "workload")
         .prefetch_related("prompts")
@@ -1017,7 +1020,7 @@ async def _generate_jobs(ctx: BatchContext) -> None:
             job_generators = []
             for _ in range(count):
                 kwargs = {}
-                if executor_class == ExecutorClass.always_on__llm__a6000:
+                if executor_class == LLM_EXECUTOR_CLASS:
                     if prompt_samples_iter is None:
                         logger.warning("No llm prompt samples available, skipping llm job")
                         continue
@@ -1541,7 +1544,7 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
 
     for job in ctx.jobs.values():
         if (
-            job.executor_class == ExecutorClass.always_on__llm__a6000
+            job.executor_class == LLM_EXECUTOR_CLASS
             and isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator)
             and isinstance(job.job_response, V0JobFinishedRequest)
         ):
@@ -1726,7 +1729,7 @@ def _db_persist(ctx: BatchContext) -> None:
     prompt_samples: list[PromptSample] = []
 
     for job in ctx.jobs.values():
-        if job.executor_class != ExecutorClass.always_on__llm__a6000:
+        if job.executor_class != LLM_EXECUTOR_CLASS:
             continue
         if not isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator):
             logger.warning(f"Skipped non-LLM job: {job.job_generator.__class__.__name__}")
