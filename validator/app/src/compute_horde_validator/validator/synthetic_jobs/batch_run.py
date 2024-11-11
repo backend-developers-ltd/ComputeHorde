@@ -530,9 +530,11 @@ class BatchContext:
         except Exception as exc:
             logger.error("Failed to checkpoint system event: %r", exc)
 
+    # needed because the event payload has data coming from the DB
+    @sync_to_async
     def emit_telemetry_event(self) -> SystemEvent | None:
         """
-        Create and send a "batch" telemetry system event based on this batch.
+        Append a "batch" telemetry system event based on this batch to be sent later.
         """
         messages_count: dict[str, int] = defaultdict(int)
         for job in self.jobs.values():
@@ -1215,8 +1217,8 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
             )
 
 
-def _emit_telemetry_events(ctx: BatchContext) -> None:
-    batch_system_event = ctx.emit_telemetry_event()
+async def _emit_telemetry_events(ctx: BatchContext) -> None:
+    batch_system_event = await ctx.emit_telemetry_event()
     if batch_system_event is not None:
         counts = batch_system_event.data.get("counts")
         logger.info("Batch telemetry counts: %s", counts)
@@ -1911,7 +1913,7 @@ async def execute_synthetic_batch_run(
 
     await ctx.checkpoint_system_event("_emit_telemetry_events")
     try:
-        _emit_telemetry_events(ctx)
+        await _emit_telemetry_events(ctx)
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
