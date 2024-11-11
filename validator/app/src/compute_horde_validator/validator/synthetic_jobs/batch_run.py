@@ -111,6 +111,9 @@ _MAX_MINER_CLIENT_DEBOUNCE_COUNT = 4  # approximately 32 seconds
 SYNTHETIC_JOBS_SOFT_LIMIT = 20 * 60
 SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
 
+# Executor class considered to be the one used for LLM-type jobs
+LLM_EXECUTOR_CLASS = ExecutorClass.always_on__llm__a6000
+
 
 class MinerClient(AbstractMinerClient):
     def __init__(
@@ -527,7 +530,12 @@ class BatchContext:
         except Exception as exc:
             logger.error("Failed to checkpoint system event: %r", exc)
 
+    # needed because we query the DB for some data we put in the event payload
+    @sync_to_async
     def emit_telemetry_event(self) -> SystemEvent | None:
+        """
+        Append a "batch" telemetry system event based on this batch to be sent later.
+        """
         messages_count: dict[str, int] = defaultdict(int)
         for job in self.jobs.values():
             for msg in (
@@ -570,6 +578,10 @@ class BatchContext:
             },
             average_job_send_time=_timedelta_dump(self.average_job_send_time),
             counts=counts,
+            llm_counts={
+                "llm_executor_count": self.get_executor_count(LLM_EXECUTOR_CLASS),
+                **calculate_llm_prompt_sample_counts(),
+            },
             manifests=manifests,
             loop_profiling=self.loop_profiler.get() if self.loop_profiler is not None else None,
         )
@@ -578,6 +590,17 @@ class BatchContext:
             subtype=SystemEvent.EventSubType.SYNTHETIC_BATCH,
             description="batch telemetry",
             data=data,
+        )
+
+    def get_executor_count(self, executor_class: ExecutorClass) -> int:
+        """
+        Calculate the total count of executors of given class.
+        """
+        return sum(
+            count
+            for executors in self.executors.values()
+            for _executor_class, count in executors.items()
+            if _executor_class == executor_class
         )
 
     def _get_job_count(self, executor_class: ExecutorClass | None) -> dict[str, int]:
@@ -899,15 +922,10 @@ async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
         await client.close()
 
 
-@sync_to_async
-def _not_enough_prompts_system_event(
-    ctx: BatchContext,
-    llm_executor_count: int,
-) -> None:
-    if cache.get("insufficient_prompts_telemetry_sent"):
-        logger.warning("skipping INSUFFICIENT_PROMPTS system event, already exists in 24h")
-        return
-
+def calculate_llm_prompt_sample_counts() -> dict[str, int]:
+    """
+    Calculate counts of LLM jobs, grouped by whether they are used and/or answered.
+    """
     prompt_series_total_count = PromptSeries.objects.count()
 
     prompt_sample_types = (
@@ -939,17 +957,30 @@ def _not_enough_prompts_system_event(
             case _:
                 logger.warning("unreachable code reached!")
 
+    return {
+        "prompt_series_total_count": prompt_series_total_count,
+        "prompt_sample_used_count": prompt_sample_used_count,
+        "prompt_sample_unused_answered_count": prompt_sample_unused_answered_count,
+        "prompt_sample_unused_unanswered_count": prompt_sample_unused_unanswered_count,
+    }
+
+
+@sync_to_async
+def _not_enough_prompts_system_event(
+    ctx: BatchContext,
+) -> None:
+    if cache.get("insufficient_prompts_telemetry_sent"):
+        logger.warning("skipping INSUFFICIENT_PROMPTS system event, already exists in 24h")
+        return
+
     ctx.system_event(
         type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
         subtype=SystemEvent.EventSubType.INSUFFICIENT_PROMPTS,
         description="not enough prompt samples available in database",
         func="get_llm_prompt_samples",
         data={
-            "llm_executor_count": llm_executor_count,
-            "prompt_series_total_count": prompt_series_total_count,
-            "prompt_sample_used_count": prompt_sample_used_count,
-            "prompt_sample_unused_answered_count": prompt_sample_unused_answered_count,
-            "prompt_sample_unused_unanswered_count": prompt_sample_unused_unanswered_count,
+            "llm_executor_count": ctx.get_executor_count(LLM_EXECUTOR_CLASS),
+            **calculate_llm_prompt_sample_counts(),
         },
     )
     cache.set("insufficient_prompts_telemetry_sent", True, timeout=24 * 60 * 60)
@@ -957,12 +988,7 @@ def _not_enough_prompts_system_event(
 
 async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None:
     # TODO: refactor into nicer abstraction
-    llm_executor_count = sum(
-        count
-        for executors in ctx.executors.values()
-        for executor_class, count in executors.items()
-        if executor_class == ExecutorClass.always_on__llm__a6000
-    )
+    llm_executor_count = ctx.get_executor_count(LLM_EXECUTOR_CLASS)
     prompt_samples_qs = (
         PromptSample.objects.select_related("series", "workload")
         .prefetch_related("prompts")
@@ -973,7 +999,7 @@ async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None
     )
     prompt_samples = [ps async for ps in prompt_samples_qs]
     if len(prompt_samples) < llm_executor_count:
-        await _not_enough_prompts_system_event(ctx, llm_executor_count)
+        await _not_enough_prompts_system_event(ctx)
         logger.warning(
             "Not enough prompt samples for llm executors: %d < %d - will NOT run llm synthetic prompt jobs",
             len(prompt_samples),
@@ -996,7 +1022,7 @@ async def _generate_jobs(ctx: BatchContext) -> None:
             job_generators = []
             for _ in range(count):
                 kwargs = {}
-                if executor_class == ExecutorClass.always_on__llm__a6000:
+                if executor_class == LLM_EXECUTOR_CLASS:
                     if prompt_samples_iter is None:
                         logger.warning("No llm prompt samples available, skipping llm job")
                         continue
@@ -1191,8 +1217,8 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
             )
 
 
-def _emit_telemetry_events(ctx: BatchContext) -> None:
-    batch_system_event = ctx.emit_telemetry_event()
+async def _emit_telemetry_events(ctx: BatchContext) -> None:
+    batch_system_event = await ctx.emit_telemetry_event()
     if batch_system_event is not None:
         counts = batch_system_event.data.get("counts")
         logger.info("Batch telemetry counts: %s", counts)
@@ -1520,7 +1546,7 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
 
     for job in ctx.jobs.values():
         if (
-            job.executor_class == ExecutorClass.always_on__llm__a6000
+            job.executor_class == LLM_EXECUTOR_CLASS
             and isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator)
             and isinstance(job.job_response, V0JobFinishedRequest)
         ):
@@ -1705,7 +1731,7 @@ def _db_persist(ctx: BatchContext) -> None:
     prompt_samples: list[PromptSample] = []
 
     for job in ctx.jobs.values():
-        if job.executor_class != ExecutorClass.always_on__llm__a6000:
+        if job.executor_class != LLM_EXECUTOR_CLASS:
             continue
         if not isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator):
             logger.warning(f"Skipped non-LLM job: {job.job_generator.__class__.__name__}")
@@ -1887,7 +1913,7 @@ async def execute_synthetic_batch_run(
 
     await ctx.checkpoint_system_event("_emit_telemetry_events")
     try:
-        _emit_telemetry_events(ctx)
+        await _emit_telemetry_events(ctx)
     except (Exception, asyncio.CancelledError) as exc:
         logger.error("Synthetic jobs batch failure: %r", exc)
         ctx.system_event(
