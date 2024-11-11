@@ -528,6 +528,9 @@ class BatchContext:
             logger.error("Failed to checkpoint system event: %r", exc)
 
     def emit_telemetry_event(self) -> SystemEvent | None:
+        """
+        Create and send a "batch" telemetry system event based on this batch.
+        """
         messages_count: dict[str, int] = defaultdict(int)
         for job in self.jobs.values():
             for msg in (
@@ -578,6 +581,17 @@ class BatchContext:
             subtype=SystemEvent.EventSubType.SYNTHETIC_BATCH,
             description="batch telemetry",
             data=data,
+        )
+
+    def get_executor_count(self, executor_class: ExecutorClass) -> int:
+        """
+        Calculate the total count of executors of given class.
+        """
+        return sum(
+            count
+            for executors in self.executors.values()
+            for _executor_class, count in executors.items()
+            if _executor_class == executor_class
         )
 
     def _get_job_count(self, executor_class: ExecutorClass | None) -> dict[str, int]:
@@ -899,15 +913,10 @@ async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
         await client.close()
 
 
-@sync_to_async
-def _not_enough_prompts_system_event(
-    ctx: BatchContext,
-    llm_executor_count: int,
-) -> None:
-    if cache.get("insufficient_prompts_telemetry_sent"):
-        logger.warning("skipping INSUFFICIENT_PROMPTS system event, already exists in 24h")
-        return
-
+def calculate_llm_prompt_sample_stats() -> dict:
+    """
+    Calculate counts of LLM jobs, grouped by whether they are used and/or answered.
+    """
     prompt_series_total_count = PromptSeries.objects.count()
 
     prompt_sample_types = (
@@ -939,17 +948,31 @@ def _not_enough_prompts_system_event(
             case _:
                 logger.warning("unreachable code reached!")
 
+    # TODO: TypedDict
+    return {
+        "prompt_series_total_count": prompt_series_total_count,
+        "prompt_sample_used_count": prompt_sample_used_count,
+        "prompt_sample_unused_answered_count": prompt_sample_unused_answered_count,
+        "prompt_sample_unused_unanswered_count": prompt_sample_unused_unanswered_count,
+    }
+
+
+@sync_to_async
+def _not_enough_prompts_system_event(
+    ctx: BatchContext,
+) -> None:
+    if cache.get("insufficient_prompts_telemetry_sent"):
+        logger.warning("skipping INSUFFICIENT_PROMPTS system event, already exists in 24h")
+        return
+
     ctx.system_event(
         type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
         subtype=SystemEvent.EventSubType.INSUFFICIENT_PROMPTS,
         description="not enough prompt samples available in database",
         func="get_llm_prompt_samples",
         data={
-            "llm_executor_count": llm_executor_count,
-            "prompt_series_total_count": prompt_series_total_count,
-            "prompt_sample_used_count": prompt_sample_used_count,
-            "prompt_sample_unused_answered_count": prompt_sample_unused_answered_count,
-            "prompt_sample_unused_unanswered_count": prompt_sample_unused_unanswered_count,
+            "llm_executor_count": ctx.get_executor_count(ExecutorClass.always_on__llm__a6000),
+            **calculate_llm_prompt_sample_stats(),
         },
     )
     cache.set("insufficient_prompts_telemetry_sent", True, timeout=24 * 60 * 60)
@@ -957,12 +980,7 @@ def _not_enough_prompts_system_event(
 
 async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None:
     # TODO: refactor into nicer abstraction
-    llm_executor_count = sum(
-        count
-        for executors in ctx.executors.values()
-        for executor_class, count in executors.items()
-        if executor_class == ExecutorClass.always_on__llm__a6000
-    )
+    llm_executor_count = ctx.get_executor_count(ExecutorClass.always_on__llm__a6000)
     prompt_samples_qs = (
         PromptSample.objects.select_related("series", "workload")
         .prefetch_related("prompts")
@@ -973,7 +991,7 @@ async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None
     )
     prompt_samples = [ps async for ps in prompt_samples_qs]
     if len(prompt_samples) < llm_executor_count:
-        await _not_enough_prompts_system_event(ctx, llm_executor_count)
+        await _not_enough_prompts_system_event(ctx)
         logger.warning(
             "Not enough prompt samples for llm executors: %d < %d - will NOT run llm synthetic prompt jobs",
             len(prompt_samples),
