@@ -66,6 +66,8 @@ services:
       - redis
     logging:
       <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   celery-worker-weights:
     <<: *celery-worker
