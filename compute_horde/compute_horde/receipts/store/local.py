@@ -51,7 +51,9 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         TODO: Make this thread- and cross-process-safe
         """
         with open(self.page_filepath(page), "a") as pagefile:
-            pagefile.writelines(r.model_dump_json() for r in receipts)
+            for r in receipts:
+                pagefile.write(r.model_dump_json())
+                pagefile.write("\n")
 
     def evoke_page(self, page: PageID):
         """
