@@ -368,7 +368,7 @@ PORT_FOR_EXECUTORS = env.int("PORT_FOR_EXECUTORS")
 
 RECEIPT_STORE_CLASS_PATH = env.str(
     "RECEIPT_STORE_CLASS_PATH",
-    default="compute_horde_miner.miner.receipt_store.local:LocalFilesystemPagedReceiptStore",
+    default="compute_horde.receipts.store.local:LocalFilesystemPagedReceiptStore",
 )
 LOCAL_RECEIPTS_URL = env.str("LOCAL_RECEIPTS_URL", default="/receipts/")
 LOCAL_RECEIPTS_ROOT = env.path("LOCAL_RECEIPTS_ROOT", default=root("..", "..", "receipts"))

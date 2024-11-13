@@ -35,7 +35,7 @@ from compute_horde_miner.miner.models import (
     ValidatorBlacklist,
 )
 
-from compute_horde_miner.miner.receipt_store.current import receipts_store as receipt_store
+from compute_horde.receipts.store.current import receipts_store as receipt_store
 
 logger = logging.getLogger(__name__)
 

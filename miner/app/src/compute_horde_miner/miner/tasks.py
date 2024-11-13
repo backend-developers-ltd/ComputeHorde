@@ -12,12 +12,10 @@ from compute_horde.receipts.transfer import get_miner_receipts
 from compute_horde.utils import get_validators
 from constance import config
 from django.conf import settings
-from django.utils.timezone import now
 
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import eviction, quasi_axon
 from compute_horde_miner.miner.models import Validator
-from compute_horde_miner.miner.receipt_store.current import receipts_store
 
 logger = get_task_logger(__name__)
 

@@ -51,8 +51,6 @@ async def test_receipt_is_saved(
     job_uuid: str,
     settings,
 ) -> None:
-    mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.prepare_receipts")
-
     executor = mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.current")
     executor.executor_manager.get_manifest = AsyncMock(return_value={})
     executor.executor_manager.reserve_executor_class = AsyncMock()

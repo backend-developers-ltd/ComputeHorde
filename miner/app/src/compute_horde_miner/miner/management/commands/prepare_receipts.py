@@ -1,7 +1,7 @@
 from compute_horde.receipts.models import JobStartedReceipt, JobAcceptedReceipt, JobFinishedReceipt
 from django.core.management import BaseCommand
 
-from compute_horde_miner.miner.receipt_store.current import receipts_store
+from compute_horde.receipts.store.current import receipts_store
 
 
 class Command(BaseCommand):

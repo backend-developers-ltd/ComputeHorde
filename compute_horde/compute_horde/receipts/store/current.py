@@ -2,7 +2,7 @@ import importlib
 
 from django.conf import settings
 
-from compute_horde_miner.miner.receipt_store.base import BaseReceiptStore
+from compute_horde.receipts.store.base import BaseReceiptStore
 
 module_path, class_name = settings.RECEIPT_STORE_CLASS_PATH.split(":", 1)
 target_module = importlib.import_module(module_path)

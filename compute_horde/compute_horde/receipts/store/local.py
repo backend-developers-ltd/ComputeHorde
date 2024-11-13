@@ -9,7 +9,7 @@ from compute_horde.receipts.schemas import (
 from django.conf import settings
 from mypy.memprofile import defaultdict
 
-from compute_horde_miner.miner.receipt_store.base import BaseReceiptStore
+from compute_horde.receipts.store.base import BaseReceiptStore
 
 PageID = int
 
