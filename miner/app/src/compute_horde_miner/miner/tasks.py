@@ -67,25 +67,6 @@ def fetch_validators():
 
 
 @app.task
-def prepare_receipts():
-    receipts = []
-
-    for model in [JobStartedReceipt, JobAcceptedReceipt, JobFinishedReceipt]:
-        db_objects = model.objects.order_by("timestamp").filter(  # type: ignore[attr-defined]
-            timestamp__gt=now() - RECEIPTS_MAX_SERVED_PERIOD
-        )
-        for db_object in db_objects:
-            try:
-                receipts.append(db_object.to_receipt())
-            except Exception as e:
-                logger.error(f"Skipping job started receipt for job {db_object.job_uuid}: {e}")
-
-    logger.info(f"Stored receipts: {len(receipts)}")
-
-    receipts_store.store(receipts)
-
-
-@app.task
 def evict_old_data():
     eviction.evict_all()
 

@@ -34,7 +34,8 @@ from compute_horde_miner.miner.models import (
     Validator,
     ValidatorBlacklist,
 )
-from compute_horde_miner.miner.tasks import prepare_receipts
+
+from compute_horde_miner.miner.receipt_store.current import receipts_store as receipt_store
 
 logger = logging.getLogger(__name__)
 
@@ -274,7 +275,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             return
 
         if isinstance(msg, validator_requests.V0InitialJobRequest) or isinstance(
-            msg, validator_requests.V0JobRequest
+                msg, validator_requests.V0JobRequest
         ):
             # Proactively check volume safety in both requests that may contain a volume
             if msg.volume and not msg.volume.is_safe():
@@ -294,12 +295,12 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await self.handle_job_request(msg)
 
         if isinstance(
-            msg, validator_requests.V0JobAcceptedReceiptRequest
+                msg, validator_requests.V0JobAcceptedReceiptRequest
         ) and self.verify_receipt_payload(msg.payload, msg.signature):
             await self.handle_job_accepted_receipt(msg)
 
         if isinstance(
-            msg, validator_requests.V0JobFinishedReceiptRequest
+                msg, validator_requests.V0JobFinishedReceiptRequest
         ) and self.verify_receipt_payload(msg.payload, msg.signature):
             await self.handle_job_finished_receipt(msg)
 
@@ -405,7 +406,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         )
 
     async def handle_job_accepted_receipt(
-        self, msg: validator_requests.V0JobAcceptedReceiptRequest
+            self, msg: validator_requests.V0JobAcceptedReceiptRequest
     ):
         logger.info(
             f"Received job accepted receipt for"
@@ -415,7 +416,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         if settings.IS_LOCAL_MINER:
             return
 
-        await JobAcceptedReceipt.objects.acreate(
+        created_receipt = await JobAcceptedReceipt.objects.acreate(
             validator_signature=msg.signature,
             miner_signature=get_miner_signature(msg),
             job_uuid=msg.payload.job_uuid,
@@ -425,10 +426,11 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             time_accepted=msg.payload.time_accepted,
             ttl=msg.payload.ttl,
         )
-        prepare_receipts.delay()
+
+        receipt_store.store([created_receipt.to_receipt()])
 
     async def handle_job_finished_receipt(
-        self, msg: validator_requests.V0JobFinishedReceiptRequest
+            self, msg: validator_requests.V0JobFinishedReceiptRequest
     ):
         logger.info(
             f"Received job finished receipt for"
@@ -443,7 +445,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         if settings.IS_LOCAL_MINER:
             return
 
-        await JobFinishedReceipt.objects.acreate(
+        created_receipt = await JobFinishedReceipt.objects.acreate(
             validator_signature=msg.signature,
             miner_signature=get_miner_signature(msg),
             job_uuid=msg.payload.job_uuid,
@@ -454,7 +456,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             time_took_us=msg.payload.time_took_us,
             score_str=msg.payload.score_str,
         )
-        prepare_receipts.delay()
+
+        receipt_store.store([created_receipt])
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
