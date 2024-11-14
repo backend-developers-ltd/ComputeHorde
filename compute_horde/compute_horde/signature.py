@@ -72,42 +72,6 @@ def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Si
         raise SignatureNotFound("Signature not found in headers") from e
 
 
-def verify_request(
-    method: str,
-    url: str,
-    headers: dict[str, str],
-    json: JsonValue | None = None,
-    *,
-    newer_than: datetime.datetime | None = None,
-    signature_extractor: SignatureExtractor = signature_from_headers,
-) -> Signature | None:
-    """
-    Verifies the signature of the request
-
-    :param method: HTTP method
-    :param url: request URL
-    :param headers: request headers
-    :param json: request JSON payload
-    :param newer_than: if provided, checks if the signature is newer than the provided timestamp
-    :param signature_extractor: function to extract the signature from the headers
-    :return: Signature object or None if no signature found
-    :raises SignatureInvalidException: if the signature is invalid
-    """
-    try:
-        signature = signature_extractor(headers)
-    except SignatureNotFound:
-        return None
-    try:
-        verifier = VERIFIERS_REGISTRY.get(signature.signature_type)
-    except RegistryKeyError as e:
-        raise SignatureInvalidException(
-            f"Invalid signature type: {signature.signature_type!r}"
-        ) from e
-    payload = verifier.payload_from_request(method, url, headers=headers, json=json)
-    verifier.verify(payload, signature, newer_than)
-    return signature
-
-
 def signature_to_headers(signature: Signature, prefix: str = "X-CH-") -> dict[str, str]:
     """
     Converts the signature to headers
