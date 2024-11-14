@@ -1,4 +1,5 @@
 import re
+import time
 from glob import glob
 from pathlib import Path
 from typing import Sequence, DefaultDict
@@ -12,13 +13,22 @@ from mypy.memprofile import defaultdict
 from compute_horde.receipts.store.base import BaseReceiptStore
 
 PageID = int
+MODULUS = 60 * 60
 
 
 class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
     def __init__(self):
         super().__init__()
         self.pages_directory: Path = Path(settings.LOCAL_RECEIPTS_ROOT)
-        self.modulus = 60 * 60
+        self.modulus = MODULUS
+
+    @staticmethod
+    def current_page() -> int:
+        return int(time.time()) // MODULUS
+
+    @staticmethod
+    def receipt_page(receipt: Receipt) -> int:
+        return int(receipt.payload.timestamp.timestamp()) // MODULUS
 
     def store(self, receipts: Sequence[Receipt]) -> None:
         """
@@ -26,7 +36,7 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         """
         pages: DefaultDict[PageID, list[Receipt]] = defaultdict(list)
         for receipt in receipts:
-            page = self._receipt_page_id(receipt)
+            page = self.receipt_page(receipt)
             pages[page].append(receipt)
         for page, receipts_in_page in pages.items():
             self._append_to_page(receipts_in_page, page)
@@ -37,12 +47,6 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         Does not whether it actually exists or not.
         """
         return self.pages_directory / f"{page}.jsonl"
-
-    def _receipt_page_id(self, receipt: Receipt) -> PageID:
-        """
-        Map a receipt to its page ID.
-        """
-        return int(receipt.payload.timestamp.timestamp()) // self.modulus
 
     def _append_to_page(self, receipts: Sequence[Receipt], page: PageID) -> None:
         """

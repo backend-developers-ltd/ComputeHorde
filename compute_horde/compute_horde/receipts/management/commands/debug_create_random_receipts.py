@@ -10,9 +10,12 @@ from typing import TypeAlias
 from uuid import uuid4
 
 import bittensor
+from django.conf import settings
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts.models import (
-    AbstractReceipt,
     JobAcceptedReceipt,
     JobFinishedReceipt,
     JobStartedReceipt,
@@ -22,9 +25,7 @@ from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from django.conf import settings
-from django.core.management.base import BaseCommand
-from django.utils import timezone
+from compute_horde.receipts.store.current import receipts_store
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,8 @@ def _sign(kp: bittensor.Keypair, blob: str):
     return f"0x{kp.sign(blob).hex()}"
 
 
-ReceiptFactory: TypeAlias = Callable[[bittensor.Keypair, bittensor.Keypair], AbstractReceipt]
+ReceiptModel: TypeAlias = JobAcceptedReceipt | JobStartedReceipt | JobFinishedReceipt
+ReceiptFactory: TypeAlias = Callable[[bittensor.Keypair, bittensor.Keypair], ReceiptModel]
 
 
 class Command(BaseCommand):
@@ -79,28 +81,30 @@ class Command(BaseCommand):
                 so_far += next_chunk
 
         if self.interval is None:
-            # Insert in chunks of 1000
+            # Insert in chunks of up to 1000
             for chunk, so_far in chunkinate(self.n, 1000):
                 logger.info(f"Done {so_far} out of {self.n}")
-                receipts = (self.generate() for _ in range(chunk))
-                by_type: defaultdict[type[AbstractReceipt], list[AbstractReceipt]] = defaultdict(list)
+                receipts = [self.generate_one() for _ in range(chunk)]
+                by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
                 for receipt in receipts:
                     by_type[receipt.__class__].append(receipt)
                 for cls, receipts in by_type.items():
                     cls.objects.bulk_create(receipts)
+                receipts_store.store([r.to_receipt() for r in receipts])
 
         else:
             time_per_receipt = self.interval / self.n / self.condense
             while True:
                 time_started = time.time()
-                for _ in range(n):
-                    self.generate()
+                for _ in range(self.n):
+                    receipt = self.generate_one()
+                    receipts_store.store([receipt.to_receipt()])
                     # wait for time_per_receipt +- 20% of the time
                     time.sleep(random.uniform(time_per_receipt * 0.8, time_per_receipt * 1.2))
                 # Sleep for the rest of the cycle
                 time.sleep(max(time_started + self.interval - time.time(), 0))
 
-    def generate(self) -> AbstractReceipt:
+    def generate_one(self) -> ReceiptModel:
         return random.choice(
             (
                 self._generate_job_accepted_receipt,

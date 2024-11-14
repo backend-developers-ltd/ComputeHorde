@@ -4,7 +4,10 @@ import io
 import logging
 import shutil
 import tempfile
+from abc import ABC
+from typing import Iterable, AsyncGenerator, AsyncIterable, Protocol, Mapping
 
+import httpx
 import pydantic
 import requests
 
@@ -23,6 +26,83 @@ logger = logging.getLogger(__name__)
 
 class ReceiptFetchError(Exception):
     pass
+
+
+Offset = int
+CheckpointBackend = Mapping[str, int]
+
+
+class ReceiptsClient:
+    def __init__(self, server_url: str, checkpoint_backend: CheckpointBackend):
+        self._receipts_url = server_url.rstrip("/")
+        self._checkpoints = checkpoint_backend
+
+    async def page(self, page: int, use_checkpoints: bool = True, yield_invalid: bool = False) -> AsyncIterable[
+        Receipt]:
+        page_url = f"{self._receipts_url}/{page}.jsonl"
+
+        checkpoint_key = page_url
+        checkpoint = self._checkpoints[checkpoint_key] if use_checkpoints else 0
+        use_range_request = checkpoint > 0
+
+        if use_range_request:
+            # We're re-requesting the page starting from a known offset.
+            # Ask for file content that was added after the page was last checked.
+            # Also, range request and gzip won't work together.
+            # (the range relates to compressed bytes then, which are meaningless here.)
+            headers = {
+                "Accept-Encoding": "",
+                "Range": f"bytes={checkpoint}-",
+            }
+        else:
+            # This is the first time we're requesting this page.
+            # This will only receive a gzipped page if it's available.
+            # If it's not, this will still work but the raw page file will be sent.
+            # httpx inflates the file automatically.
+            headers = {
+                "Accept-Encoding": "gzip",
+            }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(page_url, headers=headers)
+
+        if response.status_code not in {200, 206}:
+            logger.warning(f"Request failed for page {page}: {response.status_code}")
+            return 
+
+        for line in response.iter_lines():
+            try:
+                receipt = Receipt.model_validate_json(line)
+            except pydantic.ValidationError:
+                logger.warning(
+                    f"skipping invalid line: {line[:1000]}{' (...)' if len(line) > 1000 else ''}"
+                )
+                continue
+            if not receipt.verify_validator_signature():
+                logger.warning(
+                    f"skipping {receipt.payload.receipt_type}:{receipt.payload.job_uuid} "
+                    f"- invalid validator signature"
+                )
+                if not yield_invalid: continue
+            if not receipt.verify_miner_signature():
+                logger.warning(
+                    f"skipping {receipt.payload.receipt_type}:{receipt.payload.job_uuid} "
+                    f"- invalid miner signature"
+                )
+                if not yield_invalid: continue
+            yield receipt
+
+        # Save the total page size so that next time we request the page we know what range to request.
+        if use_range_request:
+            # Range requests return a "content-range" header that contains full size of the file.
+            # We ask the server not to gzip range requests - so this is the real size of the file.
+            range_header = response.headers["content-range"]
+            assert range_header.startswith("bytes ")
+            _, total_str = range_header.split("/")
+            self._checkpoints[checkpoint_key] = int(total_str)
+        else:
+            # This is the inflated size (uncompressed). The content length in the headers refers to compressed size.
+            self._checkpoints[checkpoint_key] = len(response.content)
 
 
 def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
