@@ -34,7 +34,7 @@ def test_signed_job_roundtrip(signature_wallet):
         signature_type=raw_signature.signature_type,
         signatory=raw_signature.signatory,
         timestamp_ns=raw_signature.timestamp_ns,
-        signature=base64.b64encode(raw_signature.signature).decode("utf8"),
+        signature=base64.b64encode(raw_signature.signature),
     )
 
     job_json = job.model_dump_json()
@@ -45,7 +45,7 @@ def test_signed_job_roundtrip(signature_wallet):
         signature_type=deserialized_job.signature.signature_type,
         signatory=deserialized_job.signature.signatory,
         timestamp_ns=deserialized_job.signature.timestamp_ns,
-        signature=base64.b64decode(deserialized_job.signature.signature),
+        signature=base64.b64encode(deserialized_job.signature.signature),
     )
 
     deserialized_payload = deserialized_job.json_for_signing()

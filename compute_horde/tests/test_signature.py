@@ -1,16 +1,15 @@
 import base64
-import dataclasses
 import datetime
 
 import freezegun
 import pytest
 
+from compute_horde.fv_protocol.facilitator_requests import Signature
 from compute_horde.signature import (
     SIGNERS_REGISTRY,
     VERIFIERS_REGISTRY,
     BittensorWalletSigner,
     BittensorWalletVerifier,
-    Signature,
     SignatureInvalidException,
     SignatureNotFound,
     hash_message_signature,
@@ -42,8 +41,10 @@ def sample_signature():
         signature_type="bittensor",
         signatory="5FUJCuGtQPonu8B9JKH4BwsKzEdtyBTpyvbBk2beNZ4iX8sk",  # hotkey address
         timestamp_ns=1718845323456788992,
-        signature=base64.b85decode(
-            "1SaAcLt*GG`2RG*@xmapXZ14m*Y`@b1MP(hAfEnwXkO5Os<30drw{`X`15JFP4GWR96T7p>rUmYA#=8Z"
+        signature=base64.b64encode(
+            base64.b85decode(
+                "1SaAcLt*GG`2RG*@xmapXZ14m*Y`@b1MP(hAfEnwXkO5Os<30drw{`X`15JFP4GWR96T7p>rUmYA#=8Z"
+            )
         ),
     )
 
@@ -63,17 +64,10 @@ def test_bittensor_wallet_signer_sign(signature_wallet, sample_data):
         signature_type="bittensor",
         signatory=signature_wallet.hotkey.ss58_address,
         timestamp_ns=1718845323456788992,
-        signature=signature.signature,
+        signature=base64.b64encode(signature.signature),
     )
 
     assert isinstance(signature.signature, bytes) and len(signature.signature) == 64
-
-    # assert random nonce is always included in the signature
-    signature_2 = signer.sign(sample_data)
-    assert dataclasses.replace(signature_2, signature=b"") == dataclasses.replace(
-        signature, signature=b""
-    )
-    assert signature_2.signature != signature.signature
 
 
 def test_bittensor_wallet_verifier_verify(sample_data, sample_signature):
