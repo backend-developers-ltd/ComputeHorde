@@ -62,7 +62,7 @@ def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Si
             signature_type=headers[f"{prefix}Signature-Type"],
             signatory=headers[f"{prefix}Signatory"],
             timestamp_ns=int(headers[f"{prefix}Timestamp-NS"]),
-            signature=typing.cast(bytes, headers[f"{prefix}Signature"]),
+            signature=headers[f"{prefix}Signature"].encode("utf-8"),
         )
     except (
         KeyError,
