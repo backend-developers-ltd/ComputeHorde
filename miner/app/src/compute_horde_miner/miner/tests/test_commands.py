@@ -83,6 +83,7 @@ def test_self_test_env_file(env_file: Path, hotkey_address: str, settings):
     env = environ.Env.parse_value(content, cast=dict)
 
     for arg in [
+        "SUBTENSOR_NODE_ADDRESS",
         "BITTENSOR_NETWORK",
         "BITTENSOR_NETUID",
         "BITTENSOR_WALLET_NAME",
