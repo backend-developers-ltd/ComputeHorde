@@ -134,7 +134,7 @@ class SignedFields(BaseModel):
             executor_class=str(data.get("executor_class")),
             docker_image=str(data.get("docker_image", "")),
             raw_script=str(data.get("raw_script", "")),
-            args=str(data.get("args", None)),
+            args=str(data.get("args", "")),
             env=typing.cast(dict[str, str], data.get("env", None)),
             use_gpu=typing.cast(bool, data.get("use_gpu")),
             volumes=typing.cast(list[JsonValue], data.get("volumes", [])),
@@ -155,8 +155,9 @@ class V2JobRequest(BaseModel, extra="forbid"):
     message_type: Literal["V2JobRequest"] = "V2JobRequest"
     signature: Signature | None = None
 
-    # !!! all fields below are included in the signed json payload
     uuid: str
+
+    # !!! all fields below are included in the signed json payload
     executor_class: ExecutorClass
     docker_image: str
     raw_script: str
