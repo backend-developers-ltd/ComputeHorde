@@ -96,3 +96,13 @@ You have to copy these variables in your validator `.env` file and restart your 
 > [!WARNING]  
 > If you did not use `--create-user`, you still need to provide `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your validator .env file.
 > In that case, you will have to manually generate the credentials.
+
+### Updated validator .env
+
+Add or update these variables in the validator `.env` file:
+
+```
+TRUSTED_MINER_KEY = "HOTKEY"
+TRUSTED_MINER_ADDRESS = "MINER_IP"
+TRUSTED_MINER_PORT = MINER_PORT
+```
