@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import logging
 import os
 from collections import deque
@@ -17,7 +16,7 @@ from compute_horde.fv_protocol.validator_requests import (
     V0Heartbeat,
     V0MachineSpecsUpdate,
 )
-from compute_horde.signature import Signature, verify_signature
+from compute_horde.signature import verify_signature
 from django.conf import settings
 from django.utils import timezone
 from pydantic import BaseModel
@@ -48,22 +47,14 @@ async def verify_job_request(job_request: V2JobRequest):
 
     signature = job_request.signature
     signer = signature.signatory
-    signed_payload = job_request.json_for_signing()
+    signed_fields = job_request.get_signed_fields()
 
     whitelisted = await ValidatorWhitelist.objects.filter(hotkey=signer).aexists()
     if not whitelisted:
         raise ValueError(f"Signatory {signer} is not in validator whitelist")
 
     # verify signed payload
-    verify_signature(
-        signed_payload,
-        Signature(
-            signature_type=signature.signature_type,
-            signatory=signature.signatory,
-            timestamp_ns=signature.timestamp_ns,
-            signature=base64.b64decode(signature.signature),
-        ),
-    )
+    verify_signature(signed_fields.model_dump_json(), signature)
 
 
 class AuthenticationError(Exception):

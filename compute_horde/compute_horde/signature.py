@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import abc
 import base64
-import dataclasses
 import datetime
 import hashlib
 import json
@@ -14,19 +13,13 @@ from typing import ClassVar, Protocol
 from class_registry import ClassRegistry, RegistryKeyError
 from pydantic import JsonValue
 
+from compute_horde.fv_protocol.facilitator_requests import Signature
+
 if typing.TYPE_CHECKING:
     import bittensor
 
 SIGNERS_REGISTRY: ClassRegistry[Signer] = ClassRegistry("signature_type")
 VERIFIERS_REGISTRY: ClassRegistry[Verifier] = ClassRegistry("signature_type")
-
-
-@dataclasses.dataclass
-class Signature:
-    signature_type: str
-    signatory: str  # identity of the signer (e.g. sa58 address if signature_type == "bittensor")
-    timestamp_ns: int  # UNIX timestamp in nanoseconds
-    signature: bytes
 
 
 def verify_signature(
@@ -69,7 +62,7 @@ def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Si
             signature_type=headers[f"{prefix}Signature-Type"],
             signatory=headers[f"{prefix}Signatory"],
             timestamp_ns=int(headers[f"{prefix}Timestamp-NS"]),
-            signature=base64.b64decode(headers[f"{prefix}Signature"]),
+            signature=headers[f"{prefix}Signature"].encode("utf-8"),
         )
     except (
         KeyError,

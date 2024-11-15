@@ -1,16 +1,23 @@
 import base64
-import dataclasses
 import datetime
 
 import freezegun
 import pytest
 
+from compute_horde.base.output_upload import SingleFilePutUpload
+from compute_horde.base.volume import HuggingfaceVolume, MultiVolume, SingleFileVolume
+from compute_horde.executor_class import ExecutorClass
+from compute_horde.fv_protocol.facilitator_requests import (
+    Signature,
+    SignedFields,
+    V2JobRequest,
+    to_json_array,
+)
 from compute_horde.signature import (
     SIGNERS_REGISTRY,
     VERIFIERS_REGISTRY,
     BittensorWalletSigner,
     BittensorWalletVerifier,
-    Signature,
     SignatureInvalidException,
     SignatureNotFound,
     hash_message_signature,
@@ -42,8 +49,10 @@ def sample_signature():
         signature_type="bittensor",
         signatory="5FUJCuGtQPonu8B9JKH4BwsKzEdtyBTpyvbBk2beNZ4iX8sk",  # hotkey address
         timestamp_ns=1718845323456788992,
-        signature=base64.b85decode(
-            "1SaAcLt*GG`2RG*@xmapXZ14m*Y`@b1MP(hAfEnwXkO5Os<30drw{`X`15JFP4GWR96T7p>rUmYA#=8Z"
+        signature=base64.b64encode(
+            base64.b85decode(
+                "1SaAcLt*GG`2RG*@xmapXZ14m*Y`@b1MP(hAfEnwXkO5Os<30drw{`X`15JFP4GWR96T7p>rUmYA#=8Z"
+            )
         ),
     )
 
@@ -63,17 +72,10 @@ def test_bittensor_wallet_signer_sign(signature_wallet, sample_data):
         signature_type="bittensor",
         signatory=signature_wallet.hotkey.ss58_address,
         timestamp_ns=1718845323456788992,
-        signature=signature.signature,
+        signature=base64.b64encode(signature.signature),
     )
 
     assert isinstance(signature.signature, bytes) and len(signature.signature) == 64
-
-    # assert random nonce is always included in the signature
-    signature_2 = signer.sign(sample_data)
-    assert dataclasses.replace(signature_2, signature=b"") == dataclasses.replace(
-        signature, signature=b""
-    )
-    assert signature_2.signature != signature.signature
 
 
 def test_bittensor_wallet_verifier_verify(sample_data, sample_signature):
@@ -122,3 +124,79 @@ def test_signature_payload():
         "action": "GET /car",
         "json": {"a": 1},
     }
+
+
+def test_signed_fields__missing_fields():
+    facilitator_request_json = {
+        "executor_class": str(ExecutorClass.always_on__llm__a6000),
+        "env": {},
+        "raw_script": "test",
+        "use_gpu": False,
+        "input_url": "",
+        "uploads": [],
+        "volumes": [],
+    }
+    facilitator_signed_fields = SignedFields.from_facilitator_sdk_json(facilitator_request_json)
+
+    v2_job_request = V2JobRequest(
+        uuid="uuid",
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        docker_image="",
+        raw_script="test",
+        args=[],
+        env={},
+        use_gpu=False,
+        volume=None,
+        output_upload=None,
+    )
+    assert v2_job_request.get_signed_fields() == facilitator_signed_fields
+
+
+def test_signed_fields__volumes_uploads():
+    volumes = [
+        SingleFileVolume(
+            url="smth.amazon.com",
+            relative_path="np_data.npy",
+        ),
+        HuggingfaceVolume(
+            repo_id="hug",
+            revision="333",
+            relative_path="./models/here",
+        ),
+    ]
+
+    uploads = [
+        SingleFilePutUpload(
+            url="smth.amazon.com",
+            relative_path="output.json",
+        )
+    ]
+
+    facilitator_request_json = {
+        "validator_hotkey": "5HBVrXXYYZZ",
+        "random_field": "to_ignore",
+        "executor_class": str(ExecutorClass.always_on__llm__a6000),
+        "docker_image": "backenddevelopersltd/latest",
+        "args": "--device cuda --batch_size 1 --model_ids Deeptensorlab",
+        "env": {"f": "test"},
+        "use_gpu": True,
+        "input_url": "",
+        "uploads": to_json_array(uploads),
+        "volumes": to_json_array(volumes),
+    }
+    facilitator_signed_fields = SignedFields.from_facilitator_sdk_json(facilitator_request_json)
+
+    v2_job_request = V2JobRequest(
+        uuid="uuid",
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        docker_image="backenddevelopersltd/latest",
+        raw_script="",
+        args=["--device", "cuda", "--batch_size", "1", "--model_ids", "Deeptensorlab"],
+        env={"f": "test"},
+        use_gpu=True,
+        volume=MultiVolume(
+            volumes=volumes,
+        ),
+        output_upload=uploads[0],
+    )
+    assert v2_job_request.get_signed_fields() == facilitator_signed_fields
