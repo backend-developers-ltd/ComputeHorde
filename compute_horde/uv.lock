@@ -283,7 +283,7 @@ wheels = [
 
 [[package]]
 name = "compute-horde"
-version = "0.0.0"
+version = "0.0.18.dev12+g5610f29a"
 source = { editable = "." }
 dependencies = [
     { name = "bittensor" },
