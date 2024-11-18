@@ -1,4 +1,6 @@
 import datetime
+import subprocess
+import uuid
 
 import bittensor
 import pytest
@@ -98,3 +100,17 @@ def receipts(validator_keypair, miner_keypair):
 def mocked_responses():
     with responses.RequestsMock() as rsps:
         yield rsps
+
+
+@pytest.fixture(scope="session")
+def docker_name_prefix():
+    return str(uuid.uuid4())
+
+
+@pytest.fixture(scope="session")
+def cleanup_docker(docker_name_prefix):
+    output = subprocess.check_output(["docker", "ps", "--format", "{{.Names}}"])
+    containers = output.decode().split()
+    for container in containers:
+        if container.startswith(docker_name_prefix):
+            subprocess.run(["docker", "kill", container])
