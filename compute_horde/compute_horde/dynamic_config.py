@@ -31,7 +31,9 @@ def sync_dynamic_config(config_url: str, namespace: SupportsSetAttr) -> None:
     :param config_url: URL to a JSON object of dynamic config
     :param namespace: An object where the config values will be set as attributes
     """
+    logger.error(f"Fetching dynamic config from {config_url}")
     response = requests.get(config_url)
+    logger.error(f"Response: {response.status_code} {response.text}")
     response.raise_for_status()
     for param_key, raw_param in response.json().items():
         if not param_key.startswith("DYNAMIC_"):
