@@ -74,7 +74,7 @@ async def generate_prompts(
             long_description=f"Trusted miner failed to run prompt generation job: {e!r}",
             data={},
         )
-        logger.error("Failed to run organic job", exc_info=True)
+        logger.warning("Failed to run organic job", exc_info=True)
         return
 
     await _persist_series_list(series_uuids, public_urls, job_generator.generator_version())
