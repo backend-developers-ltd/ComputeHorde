@@ -1,6 +1,7 @@
 import os
 import subprocess
 import time
+import uuid
 
 import pytest
 import requests
@@ -57,7 +58,7 @@ def certificates_with_nginx_helper(tmp_path, docker_name_prefix):
     nginx_conf_file = tmp_path / "nginx.conf"
     nginx_conf_file.write_text(NGINX_CONF)
 
-    container_name = f"{docker_name_prefix}_certificate"
+    container_name = f"{docker_name_prefix}_{uuid.uuid4()}"
     subprocess.run(
         [
             "docker",
