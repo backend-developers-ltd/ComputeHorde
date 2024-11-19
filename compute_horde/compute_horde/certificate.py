@@ -27,6 +27,7 @@ def generate_certificate(alternative_name: str) -> tuple[Certificate, RSAPrivate
         x509.BasicConstraints(ca=False, path_length=None), critical=True
     )
 
+    alt_name: x509.GeneralName
     try:
         _ip = ipaddress.ip_address(alternative_name)
     except ValueError:
