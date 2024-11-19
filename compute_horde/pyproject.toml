@@ -13,6 +13,7 @@ dependencies = [
     "phx-class-registry>=4.1.0",
     "requests>=2.32.2",
     "Django~=4.2.4",
+    "cryptography>=42.0.8",
 ]
 
 [build-system]
