@@ -128,6 +128,11 @@ services:
   prometheus:
     image: backenddevelopersltd/bittensor_prometheus:latest
     restart: unless-stopped
+    depends_on:
+      - cadvisor
+      - app
+      - prometheus-proxy
+      - celery-flower
     links:
       - cadvisor
       - app
@@ -178,6 +183,8 @@ services:
       - DEBUG=off
       - FLOWER_TASK_RUNTIME_METRIC_BUCKETS=1,2,3,5,10,20,30,45,60,120,180,240,300,600,inf
     command: celery --app=compute_horde_validator --broker="redis://redis:6379/0" flower
+    depends_on:
+      - redis
     logging:
       <<: *logging
 
