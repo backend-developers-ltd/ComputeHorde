@@ -5,6 +5,7 @@ Django settings for compute_horde_validator project.
 import inspect
 import logging
 import pathlib
+from collections.abc import Sequence
 from datetime import timedelta
 from functools import wraps
 
@@ -615,6 +616,10 @@ TRUSTED_MINER_KEY = env.str("TRUSTED_MINER_KEY", default="")
 TRUSTED_MINER_ADDRESS = env.str("TRUSTED_MINER_ADDRESS", default="")
 TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
+# Receipt fetching debugging (miner = (hotkey, address, port))
+DEBUG_FETCH_RECEIPTS_FROM_MINERS: Sequence[tuple[str, str, int]] | None = [
+    (f"localdebugminer-{i}", "127.0.0.1", 8000) for i in range(10)
+]
 
 CHANNEL_LAYERS = {
     "default": {

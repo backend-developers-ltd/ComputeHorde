@@ -1,7 +1,6 @@
-from asgiref.sync import async_to_sync
 from django.core.management import BaseCommand
 
-from ...tasks import fetch_receipts, fetch_receipts_from_miner
+from compute_horde_validator.validator.tasks import fetch_receipts
 
 
 class Command(BaseCommand):
@@ -16,4 +15,8 @@ class Command(BaseCommand):
         if (miner_hotkey, miner_ip, miner_port) == (None, None, None):
             fetch_receipts()
         else:
-            async_to_sync(fetch_receipts_from_miner)(miner_hotkey, miner_ip, miner_port)
+            fetch_receipts(
+                miners=[
+                    (miner_hotkey, miner_ip, miner_port),
+                ]
+            )

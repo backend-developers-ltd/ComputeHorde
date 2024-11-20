@@ -40,7 +40,7 @@ class ReceiptsClient:
     def current_page(self) -> int:
         return LocalFilesystemPagedReceiptStore.current_page()
 
-    async def page(
+    async def receipts_on_page(
         self, page: int, use_checkpoints: bool = True, yield_invalid: bool = False
     ) -> AsyncIterable[Receipt]:
         page_url = f"{self._receipts_url}/{page}.jsonl"
