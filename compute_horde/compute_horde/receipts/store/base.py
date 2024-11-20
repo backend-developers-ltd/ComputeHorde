@@ -1,5 +1,5 @@
 import abc
-from typing import Sequence
+from collections.abc import Sequence
 
 from compute_horde.receipts.schemas import Receipt
 

@@ -1,3 +1,4 @@
+from asgiref.sync import async_to_sync
 from django.core.management import BaseCommand
 
 from ...tasks import fetch_receipts, fetch_receipts_from_miner
@@ -15,4 +16,4 @@ class Command(BaseCommand):
         if (miner_hotkey, miner_ip, miner_port) == (None, None, None):
             fetch_receipts()
         else:
-            fetch_receipts_from_miner(miner_hotkey, miner_ip, miner_port)
+            async_to_sync(fetch_receipts_from_miner)(miner_hotkey, miner_ip, miner_port)

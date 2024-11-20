@@ -4,8 +4,7 @@ import io
 import logging
 import shutil
 import tempfile
-from abc import ABC
-from typing import Iterable, AsyncGenerator, AsyncIterable, Protocol, Mapping
+from collections.abc import AsyncIterable, Mapping
 
 import httpx
 import pydantic
@@ -20,6 +19,7 @@ from compute_horde.receipts.schemas import (
     ReceiptPayload,
     ReceiptType,
 )
+from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +37,12 @@ class ReceiptsClient:
         self._receipts_url = server_url.rstrip("/")
         self._checkpoints = checkpoint_backend
 
-    async def page(self, page: int, use_checkpoints: bool = True, yield_invalid: bool = False) -> AsyncIterable[
-        Receipt]:
+    def current_page(self) -> int:
+        return LocalFilesystemPagedReceiptStore.current_page()
+
+    async def page(
+        self, page: int, use_checkpoints: bool = True, yield_invalid: bool = False
+    ) -> AsyncIterable[Receipt]:
         page_url = f"{self._receipts_url}/{page}.jsonl"
 
         checkpoint_key = page_url
@@ -68,7 +72,7 @@ class ReceiptsClient:
 
         if response.status_code not in {200, 206}:
             logger.warning(f"Request failed for page {page}: {response.status_code}")
-            return 
+            return
 
         for line in response.iter_lines():
             try:
@@ -79,17 +83,19 @@ class ReceiptsClient:
                 )
                 continue
             if not receipt.verify_validator_signature():
-                logger.warning(
-                    f"skipping {receipt.payload.receipt_type}:{receipt.payload.job_uuid} "
-                    f"- invalid validator signature"
-                )
-                if not yield_invalid: continue
+                # logger.warning(
+                #     f"skipping {receipt.payload.receipt_type}:{receipt.payload.job_uuid} "
+                #     f"- invalid validator signature"
+                # )
+                if not yield_invalid:
+                    continue
             if not receipt.verify_miner_signature():
-                logger.warning(
-                    f"skipping {receipt.payload.receipt_type}:{receipt.payload.job_uuid} "
-                    f"- invalid miner signature"
-                )
-                if not yield_invalid: continue
+                # logger.warning(
+                #     f"skipping {receipt.payload.receipt_type}:{receipt.payload.job_uuid} "
+                #     f"- invalid miner signature"
+                # )
+                if not yield_invalid:
+                    continue
             yield receipt
 
         # Save the total page size so that next time we request the page we know what range to request.

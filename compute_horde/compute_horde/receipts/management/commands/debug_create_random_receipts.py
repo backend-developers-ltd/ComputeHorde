@@ -57,12 +57,24 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("n", type=int, help="Number of receipts")
-        parser.add_argument("--spread-hours", type=int, default=None,
-                            help="How far into the past the 'timestamp' of a random receipt can be set to.")
-        parser.add_argument("--interval", type=int, default=None,
-                            help="Keep on adding `n` receipts every `interval` seconds. (default: add only once)")
-        parser.add_argument("--interval-condense", type=int, default=2,
-                            help="Larger value condenses the creation of receipts closer to the start of interval.")
+        parser.add_argument(
+            "--spread-hours",
+            type=int,
+            default=None,
+            help="How far into the past the 'timestamp' of a random receipt can be set to.",
+        )
+        parser.add_argument(
+            "--interval",
+            type=int,
+            default=None,
+            help="Keep on adding `n` receipts every `interval` seconds. (default: add only once)",
+        )
+        parser.add_argument(
+            "--interval-condense",
+            type=int,
+            default=2,
+            help="Larger value condenses the creation of receipts closer to the start of interval.",
+        )
 
     def handle(self, *args, **kwargs):
         self.n = kwargs["n"]
@@ -96,13 +108,16 @@ class Command(BaseCommand):
             time_per_receipt = self.interval / self.n / self.condense
             while True:
                 time_started = time.time()
+                receipts_this_loop = []
                 for _ in range(self.n):
                     receipt = self.generate_one()
                     receipts_store.store([receipt.to_receipt()])
                     # wait for time_per_receipt +- 20% of the time
+                    receipts_this_loop.append(receipt)
                     time.sleep(random.uniform(time_per_receipt * 0.8, time_per_receipt * 1.2))
                 # Sleep for the rest of the cycle
                 time.sleep(max(time_started + self.interval - time.time(), 0))
+                logger.info(f"Created {len(receipts_this_loop)} receipts")
 
     def generate_one(self) -> ReceiptModel:
         return random.choice(
@@ -115,13 +130,15 @@ class Command(BaseCommand):
 
     def timestamp(self) -> datetime.datetime:
         if self.spread_hours:
-            return timezone.now() - timedelta(seconds=random.randrange(0, self.spread_hours * 60 * 60))
+            return timezone.now() - timedelta(
+                seconds=random.randrange(0, self.spread_hours * 60 * 60)
+            )
         return timezone.now()
 
     def _generate_job_accepted_receipt(
-            self,
-            validator_keys: bittensor.Keypair,
-            miner_keys: bittensor.Keypair,
+        self,
+        validator_keys: bittensor.Keypair,
+        miner_keys: bittensor.Keypair,
     ) -> JobAcceptedReceipt:
         payload = JobAcceptedReceiptPayload(
             job_uuid=str(uuid4()),
@@ -143,9 +160,9 @@ class Command(BaseCommand):
         )
 
     def _generate_job_started_receipt(
-            self,
-            validator_keys: bittensor.Keypair,
-            miner_keys: bittensor.Keypair,
+        self,
+        validator_keys: bittensor.Keypair,
+        miner_keys: bittensor.Keypair,
     ) -> JobStartedReceipt:
         payload = JobStartedReceiptPayload(
             job_uuid=str(uuid4()),
@@ -171,9 +188,9 @@ class Command(BaseCommand):
         )
 
     def _generate_job_finished_receipt(
-            self,
-            validator_keys: bittensor.Keypair,
-            miner_keys: bittensor.Keypair,
+        self,
+        validator_keys: bittensor.Keypair,
+        miner_keys: bittensor.Keypair,
     ) -> JobFinishedReceipt:
         payload = JobFinishedReceiptPayload(
             job_uuid=str(uuid4()),

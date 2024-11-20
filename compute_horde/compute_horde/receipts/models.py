@@ -1,4 +1,5 @@
 from datetime import timedelta
+from typing import TypeAlias
 
 from django.db import models
 
@@ -64,6 +65,21 @@ class JobStartedReceipt(AbstractReceipt):
             miner_signature=self.miner_signature,
         )
 
+    @classmethod
+    def from_receipt(cls, receipt: Receipt) -> "JobStartedReceipt":
+        return JobStartedReceipt(
+            job_uuid=receipt.payload.job_uuid,
+            miner_hotkey=receipt.payload.miner_hotkey,
+            validator_hotkey=receipt.payload.validator_hotkey,
+            miner_signature=receipt.miner_signature,
+            validator_signature=receipt.validator_signature,
+            timestamp=receipt.payload.timestamp,
+            executor_class=receipt.payload.executor_class,
+            max_timeout=receipt.payload.max_timeout,
+            is_organic=receipt.payload.is_organic,
+            ttl=receipt.payload.ttl,
+        )
+
 
 class JobAcceptedReceipt(AbstractReceipt):
     time_accepted = models.DateTimeField()
@@ -87,6 +103,19 @@ class JobAcceptedReceipt(AbstractReceipt):
             ),
             validator_signature=self.validator_signature,
             miner_signature=self.miner_signature,
+        )
+
+    @classmethod
+    def from_receipt(cls, receipt: Receipt) -> "JobAcceptedReceipt":
+        return JobAcceptedReceipt(
+            job_uuid=receipt.payload.job_uuid,
+            miner_hotkey=receipt.payload.miner_hotkey,
+            validator_hotkey=receipt.payload.validator_hotkey,
+            miner_signature=receipt.miner_signature,
+            validator_signature=receipt.validator_signature,
+            timestamp=receipt.payload.timestamp,
+            time_accepted=receipt.payload.time_accepted,
+            ttl=receipt.payload.ttl,
         )
 
 
@@ -121,3 +150,20 @@ class JobFinishedReceipt(AbstractReceipt):
             validator_signature=self.validator_signature,
             miner_signature=self.miner_signature,
         )
+
+    @classmethod
+    def from_receipt(cls, receipt: Receipt) -> "JobFinishedReceipt":
+        return JobFinishedReceipt(
+            job_uuid=receipt.payload.job_uuid,
+            miner_hotkey=receipt.payload.miner_hotkey,
+            validator_hotkey=receipt.payload.validator_hotkey,
+            miner_signature=receipt.miner_signature,
+            validator_signature=receipt.validator_signature,
+            timestamp=receipt.payload.timestamp,
+            time_started=receipt.payload.time_started,
+            time_took_us=receipt.payload.time_took_us,
+            score_str=receipt.payload.score_str,
+        )
+
+
+ReceiptModel: TypeAlias = JobAcceptedReceipt | JobStartedReceipt | JobFinishedReceipt

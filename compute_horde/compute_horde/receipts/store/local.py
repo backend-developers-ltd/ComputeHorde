@@ -1,9 +1,9 @@
 import logging
 import re
 import time
+from collections.abc import Sequence
 from glob import glob
 from pathlib import Path
-from typing import Sequence, DefaultDict
 
 from django.conf import settings
 from mypy.memprofile import defaultdict
@@ -13,7 +13,7 @@ from compute_horde.receipts.schemas import (
 )
 from compute_horde.receipts.store.base import BaseReceiptStore
 
-MODULUS = 60 * 60
+PAGE_TIME_MOD = 60 * 60
 
 logger = logging.getLogger(__name__)
 
@@ -25,17 +25,17 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
 
     @staticmethod
     def current_page() -> int:
-        return int(time.time()) // MODULUS
+        return int(time.time()) // PAGE_TIME_MOD
 
     @staticmethod
     def receipt_page(receipt: Receipt) -> int:
-        return int(receipt.payload.timestamp.timestamp()) // MODULUS
+        return int(receipt.payload.timestamp.timestamp()) // PAGE_TIME_MOD
 
     def store(self, receipts: Sequence[Receipt]) -> None:
         """
         Append receipts to the store.
         """
-        pages: DefaultDict[int, list[Receipt]] = defaultdict(list)
+        pages: defaultdict[int, list[Receipt]] = defaultdict(list)
         for receipt in receipts:
             page = self.receipt_page(receipt)
             pages[page].append(receipt)

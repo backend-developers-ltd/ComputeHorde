@@ -4,6 +4,7 @@ import random
 import time
 import traceback
 import uuid
+from collections import defaultdict
 from datetime import timedelta
 from functools import cached_property
 from math import ceil, floor
@@ -19,18 +20,25 @@ from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
-from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.models import (
+    JobAcceptedReceipt,
+    JobFinishedReceipt,
+    JobStartedReceipt,
+    ReceiptModel,
+)
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
+    ReceiptType,
 )
-from compute_horde.receipts.transfer import get_miner_receipts
+from compute_horde.receipts.transfer import ReceiptsClient, get_miner_receipts
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
+from more_itertools.more import chunked
 from pydantic import JsonValue
 
 from compute_horde_validator.celery import app
@@ -1018,7 +1026,44 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
 
 
 @app.task
-def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
+def _fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
+    async_to_sync(fetch_receipts_from_miner)(hotkey, ip, port)
+
+
+async def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
+    receipt_models: dict[ReceiptType, type[ReceiptModel]] = {
+        ReceiptType.JobAcceptedReceipt: JobAcceptedReceipt,
+        ReceiptType.JobStartedReceipt: JobStartedReceipt,
+        ReceiptType.JobFinishedReceipt: JobFinishedReceipt,
+    }
+
+    receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
+
+    receipts_url = f"http://{ip}:{port}/receipts"
+    checkpoint_memory = defaultdict(lambda: 0)  # TODO: This should be persistent
+    client = ReceiptsClient(receipts_url, checkpoint_memory)
+    current_page = client.current_page()
+    pages_to_fetch = [
+        current_page - 1,
+        current_page,
+    ]
+
+    for page in pages_to_fetch:
+        async for receipt in client.page(page, yield_invalid=True):
+            receipt_type = receipt.payload.receipt_type
+            receipt_model = receipt_models[receipt_type]
+            receipts_by_type[receipt_model].append(receipt_model.from_receipt(receipt))
+
+    for receipt_model, receipts in receipts_by_type.items():
+        for receipts_chunk in chunked(receipts, 1000):
+            logger.info(
+                f"Inserting {len(receipts_chunk)} receipts of type {receipt_model.__name__}"
+            )
+            await receipt_model.objects.abulk_create(receipts_chunk, ignore_conflicts=True)
+
+
+@app.task
+def old_fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
     logger.debug(f"Fetching receipts from miner. {hotkey=} {ip} {port=}")
     try:
         receipts = get_miner_receipts(hotkey, ip, port)
