@@ -21,3 +21,6 @@ compute-horde = { path = "compute_horde", editable = true }
 miner = { path = "miner", editable = true }
 executor = { path = "executor", editable = true }
 validator = { path = "validator", editable = true }
+
+[tool.uv]
+environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]

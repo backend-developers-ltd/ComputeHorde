@@ -287,6 +287,7 @@ version = "0.0.17"
 source = { editable = "." }
 dependencies = [
     { name = "bittensor" },
+    { name = "cryptography" },
     { name = "django" },
     { name = "more-itertools" },
     { name = "phx-class-registry" },
@@ -324,6 +325,7 @@ type-check = [
 [package.metadata]
 requires-dist = [
     { name = "bittensor", specifier = ">=7.3.1,<8.0.0" },
+    { name = "cryptography", specifier = ">=42.0.8" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "more-itertools", specifier = ">=10.2.0" },
     { name = "phx-class-registry", specifier = ">=4.1.0" },
