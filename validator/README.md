@@ -89,7 +89,7 @@ curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/val
 
 Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets you want to use for prompts and answers respectively. It will automatically create a dedicated user, assign permissions policy for created buckets, and add an access key, displaying it at the end so it can be copied to the validator env file. If you don't want to create a user and prefer to handle permissions manually, just skip the `--create-user` option.
 
-Note: if your buckets are not in your default AWS region export `AWS_DEFAULT_REGION` before running the script (both buckets needs to be in the same region):
+Note: if your buckets are not in your default AWS region export `AWS_DEFAULT_REGION` before running the script (both buckets needs to be in the same region), and add it to `.env` later:
 ```
 export AWS_DEFAULT_REGION=BUCKETS_REGION
 ```
