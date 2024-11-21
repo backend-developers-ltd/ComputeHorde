@@ -82,7 +82,7 @@ export AWS_DEFAULT_REGION=...
 
 Note: `AWS_DEFAULT_REGION` property is optional. Use it when your buckets are not in your default AWS region.
 
-Export `AWS_ENDPOINT_URL` too if you want to us another cloud object storage (s3-compatible) provider. If not given, AWS S3 will be used.
+Export `AWS_ENDPOINT_URL` too if you want to use another cloud object storage (s3-compatible) provider. If not given, AWS S3 will be used.
 
 
 Then execute the following command from the same terminal session:
