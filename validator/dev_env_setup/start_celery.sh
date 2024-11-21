@@ -5,33 +5,15 @@ THIS_DIR=$(dirname "$(readlink -f "$0")")
 cd "$THIS_DIR"
 
 cd ../app/src
-./manage.py migrate
 
-# Default concurrency = 2
-CELERY_CONCURRENCY=${CELERY_CONCURRENCY:-2}
-# Default loglevel = INFO
+CELERY_CONCURRENCY_MAX=${CELERY_CONCURRENCY_MAX:-4}
+CELERY_CONCURRENCY_MIN=${CELERY_CONCURRENCY_MIN:-1}
 CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-INFO}
+CELERY_MAX_TASKS_PER_CHILD=${CELERY_MAX_TASKS_PER_CHILD:-30}
+QUEUES=${QUEUES:-"default,weights,jobs,scores,receipts"}
 
-# below we define two workers types (each may have any concurrency);
-# each worker may have its own settings
-WORKERS="default weights jobs llm receipts"
-OPTIONS="-E -l $CELERY_LOGLEVEL --pidfile=/tmp/celery-validator-%n.pid --logfile=/tmp/celery-validator-%n.log"
-
-# shellcheck disable=SC2086
-celery -A compute_horde_validator multi start $WORKERS $OPTIONS \
-    -Q:default default --autoscale:generic=$CELERY_CONCURRENCY \
-    -Q:weights weights --autoscale:weights=$CELERY_CONCURRENCY \
-    -Q:jobs jobs --autoscale:jobs=$CELERY_CONCURRENCY \
-    -Q:scores scores --autoscale:scores=$CELERY_CONCURRENCY \
-    -Q:receipts receipts --autoscale:receipts=$CELERY_CONCURRENCY
-
-# shellcheck disable=2064
-trap "celery multi stop $WORKERS $OPTIONS; exit 0" INT TERM
-
-tail -f /tmp/celery-validator-*.log &
-
-# check celery status periodically to exit if it crashed
-while true; do
-    sleep 30
-    celery -A compute_horde_validator status > /dev/null 2>&1 || exit 1
-done
+celery -A compute_horde_validator worker \
+        -E -l "${CELERY_LOGLEVEL}" \
+        --autoscale "${CELERY_CONCURRENCY_MAX},${CELERY_CONCURRENCY_MIN}" \
+        --max-tasks-per-child "${CELERY_MAX_TASKS_PER_CHILD}" \
+        -Q "${QUEUES}"
