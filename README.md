@@ -58,7 +58,7 @@ for miner in miners:
 
 ## Validator
 
-To run a validator, first you need to [setup a trusted miner for cross-validation](/validator/README.md#setting-up-a-trusted-miner-for-cross-validation) and [provision S3 buckets for prompts and answers](/validator/README.md#provision-s3-buckets-for-prompts-and-answers) of LLM jobs.
+To run a validator, first you need to [setup a trusted miner for cross-validation](/validator/README.md#setting-up-a-trusted-miner-for-cross-validation) and [provision S3 buckets for prompts and answers](/validator/README.md#provision-s3-buckets-for-prompts-and-answers) of LLM jobs. Your trusted miner needs to have A6000 GPU, and be configured to use it. The validator doesn't need A6000. 
 
 **If you are upgrading** your validator to support LLM jobs, prepare a trusted miner and S3 buckets (find out how using the links above). Then, set the environment variables directly in the .env file of your validator instance and restart your validator:
 
@@ -77,10 +77,13 @@ export S3_BUCKET_NAME_ANSWERS=...
 
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
-export AWS_ENDPOINT_URL=...
+export AWS_DEFAULT_REGION=...
 ```
 
-Note: setting `AWS_ENDPOINT_URL` is optional. If not given, the default AWS S3 endpoint will be used.
+Note: `AWS_DEFAULT_REGION` property is optional. Use it when your buckets are not in your default AWS region.
+
+Export `AWS_ENDPOINT_URL` too if you want to us another S3 provider. If not given, the default AWS S3 endpoint will be used.
+
 
 Then execute the following command from the same terminal session:
 
