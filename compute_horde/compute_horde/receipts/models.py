@@ -1,9 +1,10 @@
 from datetime import timedelta
-from typing import TypeAlias
+from typing import TypeAlias, assert_never
 
 from django.db import models
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
+from compute_horde.receipts import ReceiptType
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
@@ -167,3 +168,15 @@ class JobFinishedReceipt(AbstractReceipt):
 
 
 ReceiptModel: TypeAlias = JobAcceptedReceipt | JobStartedReceipt | JobFinishedReceipt
+
+
+def receipt_to_django_model(receipt: Receipt) -> ReceiptModel:
+    match receipt.payload.receipt_type:
+        case ReceiptType.JobAcceptedReceipt:
+            return JobAcceptedReceipt.from_receipt(receipt)
+        case ReceiptType.JobStartedReceipt:
+            return JobStartedReceipt.from_receipt(receipt)
+        case ReceiptType.JobFinishedReceipt:
+            return JobFinishedReceipt.from_receipt(receipt)
+        case _:
+            assert_never(receipt.payload.receipt_type)

@@ -23,22 +23,13 @@ from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
-from compute_horde.receipts.models import (
-    JobAcceptedReceipt,
-    JobFinishedReceipt,
-    JobStartedReceipt,
-    ReceiptModel,
-)
-from compute_horde.receipts.schemas import (
-    ReceiptType,
-)
-from compute_horde.receipts.transfer import ReceiptsClient
+from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
+from compute_horde.receipts.transfer import ReceiptsTransfer
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
-from more_itertools.more import chunked
 from pydantic import JsonValue
 
 from compute_horde_validator.celery import app
@@ -1025,36 +1016,6 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
     return is_success, message
 
 
-async def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
-    # TODO: Lock this (redis?) so we don't run multiple fetches per miner
-    receipt_models: dict[ReceiptType, type[ReceiptModel]] = {
-        ReceiptType.JobAcceptedReceipt: JobAcceptedReceipt,
-        ReceiptType.JobStartedReceipt: JobStartedReceipt,
-        ReceiptType.JobFinishedReceipt: JobFinishedReceipt,
-    }
-
-    receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
-
-    receipts_url = f"http://{ip}:{port}/receipts"
-    checkpoint_memory = defaultdict(lambda: 0)  # TODO: This should be persistent
-    client = ReceiptsClient(receipts_url, checkpoint_memory)
-    current_page = client.current_page()
-    pages_to_fetch = [
-        current_page - 1,
-        current_page,
-    ]
-
-    for page in pages_to_fetch:
-        async for receipt in client.receipts_on_page(page, yield_invalid=True):
-            receipt_type = receipt.payload.receipt_type
-            receipt_model = receipt_models[receipt_type]
-            receipts_by_type[receipt_model].append(receipt_model.from_receipt(receipt))
-
-    for receipt_model, receipts in receipts_by_type.items():
-        for receipts_chunk in chunked(receipts, 1000):
-            await receipt_model.objects.abulk_create(receipts_chunk, ignore_conflicts=True)
-
-
 @app.task()
 def fetch_receipts(miners: Sequence[tuple[str, str, int]] | None = None):
     """
@@ -1084,13 +1045,30 @@ def fetch_receipts(miners: Sequence[tuple[str, str, int]] | None = None):
     else:
         logger.info(f"Will fetch receipts from {len(miners)} miners")
 
+    n_pages_to_fetch = 2
+    latest_page = LocalFilesystemPagedReceiptStore.active_page_id()
+    pages = [latest_page - offset for offset in reversed(range(n_pages_to_fetch))]
+
     @async_to_sync
-    async def _do_fetch():
+    async def transfer_from_all_miners():
         async with TaskGroup() as tg:
             for miner in miners:
-                tg.create_task(fetch_receipts_from_miner(*miner))
 
-    _do_fetch()
+                async def transfer_from_miner(miner):
+                    hotkey, ip, port = miner
+                    transfer = ReceiptsTransfer(
+                        server_url=f"http://{ip}:{port}/receipts",
+                        checkpoint_backend=defaultdict(
+                            lambda: 0
+                        ),  # TODO: This should be persistent
+                    )
+                    fetched_receipts = await transfer.new_receipts(pages=pages)
+                    total = sum(len(receipts) for receipts in fetched_receipts.values())
+                    logger.info(f"Fetched {total} receipts from {hotkey} at {ip}:{port}")
+
+                tg.create_task(transfer_from_miner(miner))
+
+    transfer_from_all_miners()
 
 
 @shared_task

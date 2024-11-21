@@ -1,25 +1,16 @@
-import contextlib
-import csv
-import io
 import logging
-import shutil
-import tempfile
-from collections.abc import AsyncIterable, Mapping
+from collections import defaultdict
+from collections.abc import AsyncIterable, MutableMapping, Sequence
+from contextlib import AsyncExitStack, asynccontextmanager
 
 import httpx
 import pydantic
-import requests
+from more_itertools import chunked
 
-from compute_horde.executor_class import ExecutorClass
+from compute_horde.receipts.models import ReceiptModel, receipt_to_django_model
 from compute_horde.receipts.schemas import (
-    JobAcceptedReceiptPayload,
-    JobFinishedReceiptPayload,
-    JobStartedReceiptPayload,
     Receipt,
-    ReceiptPayload,
-    ReceiptType,
 )
-from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
 
 logger = logging.getLogger(__name__)
 
@@ -29,24 +20,64 @@ class ReceiptFetchError(Exception):
 
 
 Offset = int
-CheckpointBackend = Mapping[str, int]
+CheckpointBackend = MutableMapping[str, int]
 
 
-class ReceiptsClient:
+class ReceiptsTransfer:
+    """
+    HTTP client for fetching receipts from a target based on an HTTP URL.
+    Uses HTTP range requests to only retrieve receipts added since last run.
+    """
+
     def __init__(self, server_url: str, checkpoint_backend: CheckpointBackend):
         self._receipts_url = server_url.rstrip("/")
         self._checkpoints = checkpoint_backend
+        self._client: httpx.Client | None = None
 
-    def current_page(self) -> int:
-        return LocalFilesystemPagedReceiptStore.current_page()
+    @asynccontextmanager
+    async def session(self):
+        """
+        When running multiple subsequent requests to the same host within a session context, the underlying TCP
+        connection will be reused, reducing TCP handshake roundtrips.
+        """
+        with httpx.AsyncClient() as client:
+            self._client = client
 
-    async def receipts_on_page(
-        self, page: int, use_checkpoints: bool = True, yield_invalid: bool = False
+    async def new_receipts(
+        self,
+        pages: Sequence[int],
+        # TODO: signed_by_miner: bittensor.wallet,
+    ) -> dict[type[ReceiptModel], list[ReceiptModel]]:
+        """
+        Fetch and store updated receipts by looking at last N pages.
+        """
+
+        # Retrieve the receipts the pages and group by receipt model type.
+        receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
+        for page in pages:
+            async for receipt in self._receipts_on_page(page):
+                model = receipt_to_django_model(receipt)
+                receipts_by_type[model.__class__].append(model)
+
+        # Bach insert in chunks.
+        for receipt_model, receipts in receipts_by_type.items():
+            for receipts_chunk in chunked(receipts, 1000):
+                await receipt_model.objects.abulk_create(receipts_chunk, ignore_conflicts=True)
+
+        return dict(receipts_by_type)
+
+    async def _receipts_on_page(
+        self, page: int, use_checkpoint: bool = True
     ) -> AsyncIterable[Receipt]:
+        """
+        Iterate over receipts present on given page of the remote server.
+        If use_checkpoint=False, all receipts from the page will be returned.
+        The checkpoint will be written in any case.
+        """
         page_url = f"{self._receipts_url}/{page}.jsonl"
 
         checkpoint_key = page_url
-        checkpoint = self._checkpoints[checkpoint_key] if use_checkpoints else 0
+        checkpoint = self._checkpoints[checkpoint_key] if use_checkpoint else 0
         use_range_request = checkpoint > 0
 
         if use_range_request:
@@ -67,7 +98,9 @@ class ReceiptsClient:
                 "Accept-Encoding": "gzip",
             }
 
-        async with httpx.AsyncClient() as client:
+        async with AsyncExitStack() as request_context:
+            # Reuse the client if we're within a session()
+            client = self._client or await request_context.enter_async_context(httpx.AsyncClient())
             response = await client.get(page_url, headers=headers)
 
         if response.status_code not in {200, 206}:
@@ -82,20 +115,6 @@ class ReceiptsClient:
                     f"skipping invalid line: {line[:1000]}{' (...)' if len(line) > 1000 else ''}"
                 )
                 continue
-            if not receipt.verify_validator_signature():
-                # logger.warning(
-                #     f"skipping {receipt.payload.receipt_type}:{receipt.payload.job_uuid} "
-                #     f"- invalid validator signature"
-                # )
-                if not yield_invalid:
-                    continue
-            if not receipt.verify_miner_signature():
-                # logger.warning(
-                #     f"skipping {receipt.payload.receipt_type}:{receipt.payload.job_uuid} "
-                #     f"- invalid miner signature"
-                # )
-                if not yield_invalid:
-                    continue
             yield receipt
 
         # Save the total page size so that next time we request the page we know what range to request.
@@ -109,86 +128,3 @@ class ReceiptsClient:
         else:
             # This is the inflated size (uncompressed). The content length in the headers refers to compressed size.
             self._checkpoints[checkpoint_key] = len(response.content)
-
-
-def get_miner_receipts(hotkey: str, ip: str, port: int) -> list[Receipt]:
-    """Get receipts from a given miner"""
-    with contextlib.ExitStack() as exit_stack:
-        try:
-            receipts_url = f"http://{ip}:{port}/receipts/receipts.csv"
-            response = exit_stack.enter_context(requests.get(receipts_url, stream=True, timeout=5))
-            response.raise_for_status()
-        except requests.RequestException as e:
-            raise ReceiptFetchError("failed to get receipts from miner") from e
-
-        temp_file = exit_stack.enter_context(tempfile.TemporaryFile())
-        shutil.copyfileobj(response.raw, temp_file)
-        temp_file.seek(0)
-
-        receipts = []
-        wrapper = io.TextIOWrapper(temp_file)
-        csv_reader = csv.DictReader(wrapper)
-        for raw_receipt in csv_reader:
-            try:
-                receipt_type = ReceiptType(raw_receipt["type"])
-                receipt_payload: ReceiptPayload
-
-                match receipt_type:
-                    case ReceiptType.JobStartedReceipt:
-                        receipt_payload = JobStartedReceiptPayload(
-                            job_uuid=raw_receipt["job_uuid"],
-                            miner_hotkey=raw_receipt["miner_hotkey"],
-                            validator_hotkey=raw_receipt["validator_hotkey"],
-                            timestamp=raw_receipt["timestamp"],  # type: ignore[arg-type]
-                            executor_class=ExecutorClass(raw_receipt["executor_class"]),
-                            max_timeout=int(raw_receipt["max_timeout"]),
-                            is_organic=raw_receipt.get("is_organic") == "True",
-                            ttl=int(raw_receipt["ttl"]),
-                        )
-
-                    case ReceiptType.JobFinishedReceipt:
-                        receipt_payload = JobFinishedReceiptPayload(
-                            job_uuid=raw_receipt["job_uuid"],
-                            miner_hotkey=raw_receipt["miner_hotkey"],
-                            validator_hotkey=raw_receipt["validator_hotkey"],
-                            timestamp=raw_receipt["timestamp"],  # type: ignore[arg-type]
-                            time_started=raw_receipt["time_started"],  # type: ignore[arg-type]
-                            time_took_us=int(raw_receipt["time_took_us"]),
-                            score_str=raw_receipt["score_str"],
-                        )
-
-                    case ReceiptType.JobAcceptedReceipt:
-                        receipt_payload = JobAcceptedReceiptPayload(
-                            job_uuid=raw_receipt["job_uuid"],
-                            miner_hotkey=raw_receipt["miner_hotkey"],
-                            validator_hotkey=raw_receipt["validator_hotkey"],
-                            timestamp=raw_receipt["timestamp"],  # type: ignore[arg-type]
-                            time_accepted=raw_receipt["time_accepted"],  # type: ignore[arg-type]
-                            ttl=int(raw_receipt["ttl"]),
-                        )
-
-                receipt = Receipt(
-                    payload=receipt_payload,
-                    validator_signature=raw_receipt["validator_signature"],
-                    miner_signature=raw_receipt["miner_signature"],
-                )
-
-            except (KeyError, ValueError, pydantic.ValidationError):
-                logger.warning(f"Miner sent invalid receipt {raw_receipt=}")
-                continue
-
-            if receipt.payload.miner_hotkey != hotkey:
-                logger.warning(f"Miner sent receipt of a different miner {receipt=}")
-                continue
-
-            if not receipt.verify_miner_signature():
-                logger.warning(f"Invalid miner signature of receipt {receipt=}")
-                continue
-
-            if not receipt.verify_validator_signature():
-                logger.warning(f"Invalid validator signature of receipt {receipt=}")
-                continue
-
-            receipts.append(receipt)
-
-        return receipts

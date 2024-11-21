@@ -24,7 +24,7 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         self.pages_directory: Path = Path(settings.LOCAL_RECEIPTS_ROOT)
 
     @staticmethod
-    def current_page() -> int:
+    def active_page_id() -> int:
         return int(time.time()) // PAGE_TIME_MOD
 
     @staticmethod

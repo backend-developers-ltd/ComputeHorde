@@ -26,7 +26,7 @@ def compress_receipt_pages(except_last: int = LIVE_PAGES_COUNT):
         )
 
     pages = sorted(receipts_store.get_available_pages())
-    current_page = receipts_store.current_page()
+    current_page = receipts_store.active_page_id()
     ignored_pages = pages[-except_last:] if except_last else []
 
     # Also exclude "future" pages. They should not be there in first place, so this script should not touch them.
