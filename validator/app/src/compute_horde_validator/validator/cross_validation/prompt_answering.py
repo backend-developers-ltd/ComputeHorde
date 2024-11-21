@@ -91,7 +91,6 @@ async def answer_prompts(
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.FAILURE,
-            timestamp=now(),
             long_description=f"Trusted miner failed to run prompt answering job: {e!r}",
             data={},
         )
@@ -105,7 +104,6 @@ async def answer_prompts(
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
-            timestamp=now(),
             long_description=f"Failed to download prompt answers: {e!r}",
             data={},
         )

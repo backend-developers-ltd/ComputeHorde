@@ -70,7 +70,6 @@ async def generate_prompts(
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
             subtype=SystemEvent.EventSubType.FAILURE,
-            timestamp=now(),
             long_description=f"Trusted miner failed to run prompt generation job: {e!r}",
             data={},
         )
@@ -83,7 +82,6 @@ async def generate_prompts(
     await SystemEvent.objects.acreate(
         type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
         subtype=SystemEvent.EventSubType.SUCCESS,
-        timestamp=now(),
         long_description="",
         data={
             "started_at": started_at.isoformat(),
