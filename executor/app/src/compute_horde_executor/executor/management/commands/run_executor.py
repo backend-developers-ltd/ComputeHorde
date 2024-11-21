@@ -65,6 +65,13 @@ CVE_2022_0492_IMAGE = (
 )
 
 
+def _check_docker_image(docker_image: str | None) -> bool:
+    if not docker_image:
+        return True
+    docker_image = docker_image.removeprefix("docker.io/")
+    return docker_image.startswith("backenddevelopersltd/")
+
+
 class RunConfigManager:
     @classmethod
     def preset_to_docker_run_args(cls, preset: DockerRunOptionsPreset) -> list[str]:
@@ -390,9 +397,14 @@ class DownloadManager:
             raise JobError(f"Download failed after {self.max_retries} retries")
 
 
+class JobExit(Exception): ...
+
+
 class JobRunner:
-    def __init__(self, initial_job_request: V0InitialJobRequest):
-        self.initial_job_request = initial_job_request
+    def __init__(self, miner_client: MinerClient):
+        self.specs: MachineSpecs | None = None
+        self.miner_client = miner_client
+        self.initial_job_request: None | V0InitialJobRequest = None
         self.full_job_request: None | V0JobRequest = None
         self.temp_dir = pathlib.Path(tempfile.mkdtemp())
         self.volume_mount_dir = self.temp_dir / "volume"
@@ -401,14 +413,28 @@ class JobRunner:
         self.download_manager = DownloadManager()
 
     async def prepare(self):
+        try:
+            await self._prepare()
+        except JobError:
+            await self.miner_client.send_failed_to_prepare()
+            raise JobExit
+
+    async def _prepare(self):
+        initial_job_request: V0InitialJobRequest = await self.miner_client.initial_msg
+        if not _check_docker_image(initial_job_request.base_docker_image_name):
+            raise JobError("provided docker image is not allowed")
+
+        self.initial_job_request = initial_job_request
+        logger.debug(f"Preparing for job {initial_job_request.job_uuid}")
+
         self.volume_mount_dir.mkdir(exist_ok=True)
         self.output_volume_mount_dir.mkdir(exist_ok=True)
 
-        if self.initial_job_request.base_docker_image_name is not None:
+        if initial_job_request.base_docker_image_name is not None:
             process = await asyncio.create_subprocess_exec(
                 "docker",
                 "pull",
-                self.initial_job_request.base_docker_image_name,
+                initial_job_request.base_docker_image_name,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -416,15 +442,44 @@ class JobRunner:
 
             if process.returncode != 0:
                 msg = (
-                    f'"docker pull {self.initial_job_request.base_docker_image_name}" '
-                    f"(job_uuid={self.initial_job_request.job_uuid})"
+                    f'"docker pull {initial_job_request.base_docker_image_name}" '
+                    f"(job_uuid={initial_job_request.job_uuid})"
                     f" failed with status={process.returncode}"
                     f' stdout="{stdout.decode()}"\nstderr="{stderr.decode()}'
                 )
                 logger.error(msg)
                 raise JobError(msg)
 
-    async def run_job(self, job_request: V0JobRequest):
+            logger.debug(f"Scraping hardware specs for job {initial_job_request.job_uuid}")
+            self.specs = get_machine_specs()
+
+            await self.miner_client.send_ready()
+            logger.debug(f"Informed miner that I'm ready for job {initial_job_request.job_uuid}")
+
+    async def run_job(self):
+        result = await self._run_job()
+        result.specs = self.specs
+        if result.success:
+            await self.miner_client.send_finished(result)
+        else:
+            await self.miner_client.send_failed(result)
+
+    async def _run_job(self):
+        initial_job_request = self.initial_job_request
+        assert initial_job_request is not None
+
+        job_request: V0JobRequest = await self.miner_client.full_payload
+        if not _check_docker_image(job_request.docker_image_name):
+            return JobResult(
+                success=False,
+                exit_status=None,
+                timeout=False,
+                stdout="",
+                stderr="provided docker image is not allowed",
+            )
+
+        logger.debug(f"Running job {job_request.job_uuid}")
+
         self.full_job_request = job_request
         try:
             docker_run_options = RunConfigManager.preset_to_docker_run_args(
@@ -459,7 +514,7 @@ class JobRunner:
 
         if not docker_image:
             logger.error(
-                f"(job_uuid={self.initial_job_request.job_uuid})"
+                f"(job_uuid={initial_job_request.job_uuid})"
                 f" could not determine Docker image to run"
             )
             return JobResult(
@@ -498,7 +553,7 @@ class JobRunner:
         t1 = time.time()
         try:
             result = await asyncio.wait_for(
-                process.communicate(), timeout=self.initial_job_request.timeout_seconds
+                process.communicate(), timeout=initial_job_request.timeout_seconds
             )
             stdout = result[0].decode()
             stderr = result[1].decode()
@@ -506,7 +561,7 @@ class JobRunner:
         except TimeoutError:
             # If the process did not finish in time, kill it
             logger.error(
-                f"Process didn't finish in time, killing it, job_uuid={self.initial_job_request.job_uuid}"
+                f"Process didn't finish in time, killing it, job_uuid={initial_job_request.job_uuid}"
             )
             process.kill()
             timeout = True
@@ -535,7 +590,7 @@ class JobRunner:
                     await output_uploader.upload(self.output_volume_mount_dir)
                 except OutputUploadFailed as ex:
                     logger.warning(
-                        f"Uploading output failed for job {self.initial_job_request.job_uuid} with error: {ex!r}"
+                        f"Uploading output failed for job {initial_job_request.job_uuid} with error: {ex!r}"
                     )
                     success = False
                     stdout = ex.description
@@ -543,12 +598,12 @@ class JobRunner:
 
             time_took = time.time() - t1
             logger.info(
-                f'Job "{self.initial_job_request.job_uuid}" finished successfully in {time_took:0.2f} seconds'
+                f'Job "{initial_job_request.job_uuid}" finished successfully in {time_took:0.2f} seconds'
             )
         else:
             time_took = time.time() - t1
             logger.error(
-                f'"{" ".join(cmd)}" (job_uuid={self.initial_job_request.job_uuid})'
+                f'"{" ".join(cmd)}" (job_uuid={initial_job_request.job_uuid})'
                 f' failed after {time_took:0.2f} seconds with status={process.returncode}'
                 f' \nstdout="{stdout}"\nstderr="{stderr}'
             )
@@ -655,7 +710,7 @@ class JobRunner:
                 raise NotImplementedError(f"Unsupported sub-volume type: {type(sub_volume)}")
 
     async def get_job_volume(self) -> Volume | None:
-        initial_volume = self.initial_job_request.volume
+        initial_volume = self.initial_job_request.volume if self.initial_job_request else None
         late_volume = self.full_job_request.volume if self.full_job_request else None
 
         if initial_volume and late_volume:
@@ -682,7 +737,6 @@ class Command(BaseCommand):
     help = "Run the executor, query the miner for job details, and run the job docker"
 
     MINER_CLIENT_CLASS = MinerClient
-    JOB_RUNNER_CLASS = JobRunner
 
     def handle(self, *args, **options):
         self.miner_client_for_tests = asyncio.run(self._executor_loop())
@@ -725,53 +779,22 @@ class Command(BaseCommand):
         miner_client = self.MINER_CLIENT_CLASS(settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN)
         async with miner_client:
             logger.debug(f"Connected to miner: {settings.MINER_ADDRESS}")
-            initial_message: V0InitialJobRequest = await miner_client.initial_msg
-            if initial_message.base_docker_image_name and not (
-                initial_message.base_docker_image_name.startswith("backenddevelopersltd/")
-                or initial_message.base_docker_image_name.startswith(
-                    "docker.io/backenddevelopersltd/"
-                )
-            ):
-                await miner_client.send_failed_to_prepare()
-                return
+
             logger.debug("Checking for CVE-2022-0492 vulnerability")
             if not await self.is_system_safe_for_cve_2022_0492():
                 await miner_client.send_failed_to_prepare()
                 return
 
-            job_runner = self.JOB_RUNNER_CLASS(initial_message)
+            job_runner = JobRunner(miner_client)
             try:
-                logger.debug(f"Preparing for job {initial_message.job_uuid}")
-                try:
-                    await job_runner.prepare()
-                except JobError:
-                    await miner_client.send_failed_to_prepare()
-                    return
-
-                logger.debug(f"Scraping hardware specs for job {initial_message.job_uuid}")
-                specs = get_machine_specs()
-
-                await miner_client.send_ready()
-                logger.debug(f"Informed miner that I'm ready for job {initial_message.job_uuid}")
-
-                job_request = await miner_client.full_payload
-                if job_request.docker_image_name and not (
-                    job_request.docker_image_name.startswith("backenddevelopersltd/")
-                    or job_request.docker_image_name.startswith("docker.io/backenddevelopersltd/")
-                ):
-                    await miner_client.send_failed_to_prepare()
-                    return
-                logger.debug(f"Running job {initial_message.job_uuid}")
-                result = await job_runner.run_job(job_request)
-                result.specs = specs
-
-                if result.success:
-                    await miner_client.send_finished(result)
-                else:
-                    await miner_client.send_failed(result)
+                await job_runner.prepare()
+                await job_runner.run_job()
+            except JobExit:
+                pass
             except Exception:
+                job_uuid = getattr(job_runner.initial_job_request, "job_uuid", None)
                 logger.error(
-                    f"Unhandled exception when working on job {initial_message.job_uuid}",
+                    f"Unhandled exception when working on job {job_uuid}",
                     exc_info=True,
                 )
                 # not deferred, because this is the end of the process, making it deferred would cause it never
