@@ -311,18 +311,18 @@ class FacilitatorClient:
         max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
 
         if job_request.message_type == "V2JobRequest":
-            logger.debug(f"Received signed payload: {job_request}")
+            logger.debug(f"Received signed job request: {job_request}")
             try:
                 await verify_job_request(job_request)
             except Exception as e:
-                logger.error(f"Failed to verify signed payload: {e} - will not run job")
+                logger.warning(f"Failed to verify signed payload: {e} - will not run job")
                 return
 
             for i in range(max_retries):
                 miner = await self.fetch_miner_for_cross_validation(job_request.executor_class)
                 if miner is None:
                     logger.warning(
-                        "No available miners with executor class: {executor_class} - will not run job"
+                        f"No available miners with executor class: {job_request.executor_class} - will not run job"
                     )
                     return
 
@@ -334,7 +334,7 @@ class FacilitatorClient:
                     if job_completed:
                         break
                 except Exception as e:
-                    logger.error(
+                    logger.warning(
                         f"Error running organic job {job_request.uuid}: {e} - {max_retries-i-1} retries left"
                     )
         else:
