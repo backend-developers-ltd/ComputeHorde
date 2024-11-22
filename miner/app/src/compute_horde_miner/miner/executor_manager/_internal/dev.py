@@ -37,3 +37,6 @@ class DevExecutorManager(BaseExecutorManager):
 
     async def get_manifest(self):
         return {settings.DEFAULT_EXECUTOR_CLASS: 1}
+
+    async def is_active(self) -> bool:
+        return True

@@ -37,6 +37,9 @@ class BaseExecutorManager(v1.BaseExecutorManager):
     async def wait_for_executor(self, executor, timeout):
         return await self._wait_for_executor(executor, timeout)
 
+    async def is_active(self) -> bool:
+        return True
+
 
 class DevExecutorManager(v1.DevExecutorManager):
     async def _reserve_executor(self, token):
