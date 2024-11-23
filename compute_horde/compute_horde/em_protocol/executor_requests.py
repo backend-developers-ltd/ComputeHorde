@@ -6,6 +6,7 @@ from ..utils import MachineSpecs
 
 class RequestType(enum.Enum):
     V0ReadyRequest = "V0ReadyRequest"
+    V1ReadyRequest = "V1ReadyRequest"
     V0FailedToPrepare = "V0FailedToPrepare"
     V0FinishedRequest = "V0FinishedRequest"
     V0FailedRequest = "V0FailedRequest"
@@ -19,6 +20,12 @@ class BaseExecutorRequest(BaseRequest):
 
 class V0ReadyRequest(BaseExecutorRequest, JobMixin):
     message_type: RequestType = RequestType.V0ReadyRequest
+
+
+class V1ReadyRequest(V0ReadyRequest):
+    message_type: RequestType = RequestType.V1ReadyRequest
+    public_key: str
+    port: int
 
 
 class V0FailedToPrepare(BaseExecutorRequest, JobMixin):
