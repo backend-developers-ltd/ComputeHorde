@@ -1,4 +1,8 @@
 import ipaddress
+import subprocess
+import tempfile
+import time
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -8,6 +12,50 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID
+
+
+def start_nginx_with_certificates(
+    nginx_conf: str,
+    public_key: bytes,
+    docker_name_prefix: str = "nginx",
+    tmp_path: Path | None = None,
+):
+    if tmp_path is None:
+        tmp_path = Path(tempfile.mkdtemp())
+    certs_dir = tmp_path / "ssl"
+    certs_dir.mkdir()
+
+    generate_certificate_at(certs_dir, "127.0.0.1")
+
+    nginx_conf_file = tmp_path / "nginx.conf"
+    nginx_conf_file.write_text(nginx_conf)
+
+    client_cert_file = certs_dir / "client.crt"
+    client_cert_file.write_bytes(public_key)
+
+    container_name = f"{docker_name_prefix}_{uuid.uuid4()}"
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--detach",
+            "--rm",
+            "--name",
+            container_name,
+            "-p",
+            "8080:80",
+            "-p",
+            "8443:443",
+            "-v",
+            f"{tmp_path}:/etc/nginx/",
+            "nginx:1.26-alpine",
+        ]
+    )
+
+    # wait for nginx to start
+    time.sleep(1)
+
+    return container_name, certs_dir
 
 
 def generate_certificate(alternative_name: str) -> tuple[Certificate, RSAPrivateKey]:
