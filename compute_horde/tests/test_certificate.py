@@ -14,6 +14,9 @@ from compute_horde.certificate import (
     write_certificate,
 )
 
+NGINX_PORT = 8443
+NGINX_URI = f"https://localhost:{NGINX_PORT}"
+
 NGINX_CONF = """
 http {
     server {
@@ -66,28 +69,26 @@ def make_cert(tmp_path):
     )
 
 
-def test_certificates_with_nginx__success(tmp_path, docker_name_prefix):
+def test_certificates_with_nginx__success(tmp_path, container_name):
     public_key, cert = make_cert(tmp_path)
     container_name, certs_dir = start_nginx_with_certificates(
-        NGINX_CONF, public_key, docker_name_prefix, tmp_path
+        NGINX_CONF, public_key, NGINX_PORT, container_name, tmp_path
     )
 
-    resp = requests.get(
-        "https://localhost:8443", verify=str(certs_dir / "certificate.pem"), cert=cert
-    )
+    resp = requests.get(NGINX_URI, verify=str(certs_dir / "certificate.pem"), cert=cert)
     assert resp.status_code == 200
     assert resp.text.strip() == "Hello World!"
 
     subprocess.run(["docker", "kill", container_name])
 
 
-def test_certificates_with_nginx__no_cert(tmp_path, docker_name_prefix):
+def test_certificates_with_nginx__no_cert(tmp_path, container_name):
     public_key, _ = make_cert(tmp_path)
     container_name, certs_dir = start_nginx_with_certificates(
-        NGINX_CONF, public_key, docker_name_prefix, tmp_path
+        NGINX_CONF, public_key, NGINX_PORT, container_name, tmp_path
     )
 
-    resp = requests.get("https://localhost:8443", verify=str(certs_dir / "certificate.pem"))
+    resp = requests.get(NGINX_URI, verify=str(certs_dir / "certificate.pem"))
 
     # 400 no cert, 403 wrong cert
     assert resp.status_code != 200
@@ -95,10 +96,10 @@ def test_certificates_with_nginx__no_cert(tmp_path, docker_name_prefix):
     subprocess.run(["docker", "kill", container_name])
 
 
-def test_certificates_with_nginx__fail(tmp_path, docker_name_prefix):
+def test_certificates_with_nginx__fail(tmp_path, container_name):
     public_key, _ = make_cert(tmp_path)
     container_name, _ = start_nginx_with_certificates(
-        NGINX_CONF, public_key, docker_name_prefix, tmp_path
+        NGINX_CONF, public_key, NGINX_PORT, container_name, tmp_path
     )
 
     cert_path = tmp_path / "wrong_certificate.pem"
@@ -106,6 +107,6 @@ def test_certificates_with_nginx__fail(tmp_path, docker_name_prefix):
     write_certificate(certificate, cert_path)
 
     with pytest.raises(requests.exceptions.SSLError):
-        requests.get("https://localhost:8443", verify=str(cert_path))
+        requests.get(NGINX_URI, verify=str(cert_path))
 
     subprocess.run(["docker", "kill", container_name])
