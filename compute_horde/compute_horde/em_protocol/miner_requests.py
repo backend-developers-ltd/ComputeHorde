@@ -11,6 +11,7 @@ from ..base_requests import BaseRequest, JobMixin
 
 class RequestType(enum.Enum):
     V0PrepareJobRequest = "V0PrepareJobRequest"
+    V1PrepareJobRequest = "V1PrepareJobRequest"
     V0RunJobRequest = "V0RunJobRequest"
     GenericError = "GenericError"
 
@@ -31,6 +32,11 @@ class V0InitialJobRequest(BaseMinerRequest, JobMixin):
         if bool(self.volume) and bool(self.volume_type):
             raise ValueError("Expected either `volume` or `volume_type`, got both")
         return self
+
+
+class V1InitialJobRequest(V0InitialJobRequest):
+    message_type: RequestType = RequestType.V1PrepareJobRequest
+    public_key: str
 
 
 class V0JobRequest(BaseMinerRequest, JobMixin):
