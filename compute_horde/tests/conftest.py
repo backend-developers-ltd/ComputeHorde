@@ -103,14 +103,14 @@ def mocked_responses():
 
 
 @pytest.fixture(scope="session")
-def docker_name_prefix():
+def container_name():
     return str(uuid.uuid4())
 
 
 @pytest.fixture(scope="session")
-def cleanup_docker(docker_name_prefix):
+def cleanup_docker(container_name):
     output = subprocess.check_output(["docker", "ps", "--format", "{{.Names}}"])
     containers = output.decode().split()
     for container in containers:
-        if container.startswith(docker_name_prefix):
+        if container.startswith(container_name):
             subprocess.run(["docker", "kill", container])
