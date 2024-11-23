@@ -2,7 +2,6 @@ import ipaddress
 import subprocess
 import tempfile
 import time
-import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -17,7 +16,8 @@ from cryptography.x509.oid import NameOID
 def start_nginx_with_certificates(
     nginx_conf: str,
     public_key: bytes,
-    docker_name_prefix: str = "nginx",
+    port: int,
+    container_name: str = "job-nginx",
     tmp_path: Path | None = None,
 ):
     if tmp_path is None:
@@ -33,7 +33,6 @@ def start_nginx_with_certificates(
     client_cert_file = certs_dir / "client.crt"
     client_cert_file.write_bytes(public_key)
 
-    container_name = f"{docker_name_prefix}_{uuid.uuid4()}"
     subprocess.run(
         [
             "docker",
@@ -43,9 +42,7 @@ def start_nginx_with_certificates(
             "--name",
             container_name,
             "-p",
-            "8080:80",
-            "-p",
-            "8443:443",
+            f"{port}:443",
             "-v",
             f"{tmp_path}:/etc/nginx/",
             "nginx:1.26-alpine",
