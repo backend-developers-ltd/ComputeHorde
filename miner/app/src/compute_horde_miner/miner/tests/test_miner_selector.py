@@ -8,6 +8,7 @@ from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.selector import (
     HistoricalRandomMinerSelector,
+    NoActiveHotkeysException,
 )
 
 
@@ -67,13 +68,12 @@ async def test_no_active_neurons(
         seed="SECRET",
     )
 
-    res = await selector.active([
-        "HotkeyA",
-        "HotkeyB",
-        "HotkeyC",
-    ])
-
-    assert res is None
+    with pytest.raises(NoActiveHotkeysException):
+        await selector.active([
+            "HotkeyA",
+            "HotkeyB",
+            "HotkeyC",
+        ])
 
 
 @pytest.mark.asyncio
@@ -142,4 +142,4 @@ async def test_cache_active_neurons(
 
     assert res1 == res2 == "HotkeyA"
 
-    mock_subtensor.return_value.neurons_lite.assert_called_once_with(settings.BITTENSOR_NETUID, 3023722)
+    mock_subtensor.return_value.neurons_lite.assert_called_once_with(settings.BITTENSOR_NETUID, 3023685)

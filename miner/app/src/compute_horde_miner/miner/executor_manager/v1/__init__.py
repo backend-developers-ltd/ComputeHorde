@@ -17,9 +17,6 @@ from compute_horde_miner.miner.executor_manager._internal.docker import (
     DockerExecutor,
     DockerExecutorManager,
 )
-from compute_horde_miner.miner.executor_manager._internal.selector import (
-    HistoricalRandomMinerSelector,
-)
 
 __all__ = [
     "DEFAULT_EXECUTOR_CLASS",
@@ -34,5 +31,4 @@ __all__ = [
     "DockerExecutor",
     "DockerExecutorManager",
     "DevExecutorManager",
-    "HistoricalRandomMinerSelector",
 ]

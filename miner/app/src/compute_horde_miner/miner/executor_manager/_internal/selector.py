@@ -5,16 +5,28 @@ from collections.abc import Sequence
 
 import asgiref.sync
 import bittensor
-import compute_horde.subtensor
+import bittensor.chain_data
+import substrateinterface.exceptions
+from compute_horde.subtensor import get_cycle_containing_block
 from django.conf import settings
 
 from compute_horde_miner.miner.models import ClusterMiner
+
+UNKNOWN_BLOCK_ERROR = -32000
+
+
+class SelectorException(Exception):
+    pass
+
+
+class NoActiveHotkeysException(SelectorException):
+    pass
 
 
 class BaseSelector(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     async def active(self, hotkeys: Sequence[str], block: int = None) -> str | None:
-        """Select an active hotkey in a specified block (or active block if omited)."""
+        """Select an active hotkey in a specified block (or active block if omitted)."""
 
 
 class HistoricalRandomMinerSelector(BaseSelector):
@@ -32,13 +44,23 @@ class HistoricalRandomMinerSelector(BaseSelector):
     def subtensor(self) -> bittensor.Subtensor:
         return bittensor.Subtensor(network=settings.BITTENSOR_NETWORK)
 
-    @asgiref.sync.sync_to_async(thread_sensitive=False)
-    def fetch_current_block(self) -> int:
-        return self.subtensor.get_current_block()
+    @functools.cached_property
+    def subtensor_archive(self) -> bittensor.Subtensor:
+        return bittensor.Subtensor(network="archive")
 
-    @asgiref.sync.sync_to_async(thread_sensitive=False)
-    def fetch_neurons(self, netuid: int, block: int) -> list[str]:
-        return self.subtensor.neurons_lite(netuid, block)
+    @asgiref.sync.sync_to_async
+    def fetch_current_block(self) -> int:
+        return self.subtensor.get_current_block()  # type: ignore
+
+    @asgiref.sync.sync_to_async
+    def fetch_neurons(self, netuid: int, block: int) -> list[bittensor.chain_data.NeuronInfoLite]:
+        try:
+            return self.subtensor.neurons_lite(netuid, block)  # type: ignore
+        except substrateinterface.exceptions.SubstrateRequestException as e:
+            if e.args[0]["code"] != UNKNOWN_BLOCK_ERROR:
+                raise
+
+            return self.subtensor_archive.neurons_lite(netuid, block)  # type: ignore
 
     async def filter_active_hotkeys(self, hotkeys: Sequence[str], block: int) -> list[str]:
         active_hotkeys = [
@@ -52,8 +74,10 @@ class HistoricalRandomMinerSelector(BaseSelector):
         if active_hotkeys:
             return active_hotkeys
 
-        neurons = await self.fetch_neurons(netuid=settings.BITTENSOR_NETUID, block=block)
-        neurons = {neuron.hotkey for neuron in neurons}
+        neurons = {
+            neuron.hotkey
+            for neuron in await self.fetch_neurons(netuid=settings.BITTENSOR_NETUID, block=block)
+        }
 
         active_hotkeys = [hotkey for hotkey in hotkeys if hotkey in neurons]
 
@@ -80,15 +104,13 @@ class HistoricalRandomMinerSelector(BaseSelector):
         if not block:
             block = await self.fetch_current_block()
 
-        cycle = compute_horde.subtensor.get_cycle_containing_block(
-            block=block, netuid=settings.BITTENSOR_NETUID
-        )
+        cycle = get_cycle_containing_block(block=block, netuid=settings.BITTENSOR_NETUID)
 
         active_hotkeys = await self.filter_active_hotkeys(hotkeys, cycle.start)
         active_hotkeys = sorted(active_hotkeys)
 
         if not active_hotkeys:
-            return None
+            raise NoActiveHotkeysException()
 
         if len(active_hotkeys) == 1:
             return active_hotkeys[0]
@@ -99,7 +121,7 @@ class HistoricalRandomMinerSelector(BaseSelector):
 
         for i in range(self._lookback):
             cycles.append(
-                compute_horde.subtensor.get_cycle_containing_block(
+                get_cycle_containing_block(
                     block=cycles[i].start - 1, netuid=settings.BITTENSOR_NETUID
                 )
             )

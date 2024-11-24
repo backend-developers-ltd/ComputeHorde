@@ -11,7 +11,6 @@ from math import ceil, floor
 import billiard.exceptions
 import bittensor
 import celery.exceptions
-import compute_horde.subtensor
 import numpy as np
 import requests
 from asgiref.sync import async_to_sync
@@ -27,6 +26,7 @@ from compute_horde.receipts.schemas import (
     JobStartedReceiptPayload,
 )
 from compute_horde.receipts.transfer import get_miner_receipts
+from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
 from django.conf import settings
@@ -248,7 +248,7 @@ def schedule_synthetic_jobs() -> None:
         bittensor.turn_console_off()
         subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
         current_block = subtensor_.get_current_block()
-        current_cycle = compute_horde.subtensor.get_cycle_containing_block(
+        current_cycle = get_cycle_containing_block(
             block=current_block, netuid=settings.BITTENSOR_NETUID
         )
 
