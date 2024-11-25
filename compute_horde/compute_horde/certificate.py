@@ -1,4 +1,6 @@
 import ipaddress
+import logging
+import pathlib
 import subprocess
 import tempfile
 import time
@@ -11,6 +13,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID
+
+logger = logging.getLogger(__name__)
 
 
 def start_nginx_with_certificates(
@@ -116,3 +120,11 @@ def generate_certificate_at(dir_path: Path, alternative_name: str) -> None:
     certificate, private_key = generate_certificate(alternative_name)
     write_certificate(certificate, dir_path / "certificate.pem")
     write_private_key(private_key, dir_path / "private_key.pem")
+
+
+def read_certificate(certs_dir: pathlib.Path) -> str | None:
+    try:
+        return Path(certs_dir / "certificate.pem").read_bytes().decode("utf-8")
+    except Exception as e:
+        logger.error(f"Failed to read executor certificate.pem: {e}")
+        return None
