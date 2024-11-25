@@ -9,6 +9,9 @@ from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
     ExecutorUnavailable,
 )
+from compute_horde_miner.miner.executor_manager.executor_port_dispenser import (
+    executor_port_dispenser,
+)
 
 PULLING_TIMEOUT = 300
 DOCKER_STOP_TIMEOUT = 5
@@ -70,6 +73,8 @@ class DockerExecutorManager(BaseExecutorManager):
             if settings.HF_ACCESS_TOKEN is None
             else ["-e", f"HF_ACCESS_TOKEN={settings.HF_ACCESS_TOKEN}"]
         )
+
+        nginx_port = executor_port_dispenser.get_port()
         process_executor = await asyncio.create_subprocess_exec(  # noqa: S607
             "docker",
             "run",
@@ -78,6 +83,8 @@ class DockerExecutorManager(BaseExecutorManager):
             f"MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS}",
             "-e",
             f"EXECUTOR_TOKEN={token}",
+            "-e",
+            f"NGINX_PORT={nginx_port}",
             *hf_args,
             "--name",
             token,

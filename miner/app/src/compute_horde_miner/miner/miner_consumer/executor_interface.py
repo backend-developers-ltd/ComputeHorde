@@ -69,9 +69,10 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             return
 
         await self.group_add(self.executor_token)
-        initial_job_details = validator_requests.V0InitialJobRequest(**job.initial_job_details)
-        await self.send(
-            miner_requests.V0InitialJobRequest(
+
+        if "public_key" in job.initial_job_details:
+            initial_job_details = validator_requests.V1InitialJobRequest(**job.initial_job_details)
+            miner_initial_job_request = miner_requests.V1InitialJobRequest(
                 job_uuid=initial_job_details.job_uuid,
                 base_docker_image_name=initial_job_details.base_docker_image_name,
                 timeout_seconds=initial_job_details.timeout_seconds,
@@ -79,14 +80,34 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 volume_type=initial_job_details.volume_type.value
                 if initial_job_details.volume_type
                 else None,
-            ).model_dump_json()
-        )
+                public_key=initial_job_details.public_key,
+            )
+        else:
+            initial_job_details = validator_requests.V1InitialJobRequest(**job.initial_job_details)
+            miner_initial_job_request = miner_requests.V0InitialJobRequest(
+                job_uuid=initial_job_details.job_uuid,
+                base_docker_image_name=initial_job_details.base_docker_image_name,
+                timeout_seconds=initial_job_details.timeout_seconds,
+                volume=initial_job_details.volume,
+                volume_type=initial_job_details.volume_type.value
+                if initial_job_details.volume_type
+                else None,
+            )
+
+        await self.send(miner_initial_job_request.model_dump_json())
 
     async def handle(self, msg: BaseExecutorRequest):
-        if isinstance(msg, executor_requests.V0ReadyRequest):
+        if isinstance(msg, executor_requests.V0ReadyRequest) or isinstance(
+            msg, executor_requests.V1ReadyRequest
+        ):
             self.job.status = AcceptedJob.Status.WAITING_FOR_PAYLOAD
             await self.job.asave()
-            await self.send_executor_ready(self.executor_token)
+            if isinstance(msg, executor_requests.V1ReadyRequest):
+                await self.send_executor_ready(
+                    self.executor_token, public_key=msg.public_key, port=msg.port
+                )
+            else:
+                await self.send_executor_ready(self.executor_token)
         if isinstance(msg, executor_requests.V0FailedToPrepare):
             self.job.status = AcceptedJob.Status.FAILED
             await self.job.asave()

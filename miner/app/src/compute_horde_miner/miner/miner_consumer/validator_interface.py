@@ -244,6 +244,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         # we should not send any messages until validator authorizes itself
         while self.defer_executor_ready:
             job = self.defer_executor_ready.pop()
+
+            # TODO: handle V1ExecutorReadyRequest
             await self.send(
                 miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).model_dump_json()
             )
@@ -287,7 +289,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 )
                 return
 
-        if isinstance(msg, validator_requests.V0InitialJobRequest):
+        if isinstance(msg, validator_requests.V0InitialJobRequest) or isinstance(
+            msg, validator_requests.V1InitialJobRequest
+        ):
             await self.handle_initial_job_request(msg)
 
         if isinstance(msg, validator_requests.V0JobRequest):
@@ -303,7 +307,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         ) and self.verify_receipt_payload(msg.payload, msg.signature):
             await self.handle_job_finished_receipt(msg)
 
-    async def handle_initial_job_request(self, msg: validator_requests.V0InitialJobRequest):
+    async def handle_initial_job_request(
+        self, msg: validator_requests.V0InitialJobRequest | validator_requests.V1InitialJobRequest
+    ):
         validator_blacklisted = await ValidatorBlacklist.objects.filter(
             validator=self.validator
         ).aexists()
@@ -460,7 +466,17 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
         job_uuid = str(job.job_uuid)
         self.pending_jobs[job_uuid] = job
-        await self.send(miner_requests.V0ExecutorReadyRequest(job_uuid=job_uuid).model_dump_json())
+        executor_ready_request = (
+            miner_requests.V1ExecutorReadyRequest(
+                job_uuid=job_uuid,
+                public_key=msg.public_key,
+                ip=settings.BITTENSOR_MINER_ADDRESS,
+                port=msg.port,
+            )
+            if msg.public_key
+            else miner_requests.V0ExecutorReadyRequest(job_uuid=job_uuid)
+        )
+        await self.send(executor_ready_request.model_dump_json())
         logger.debug(f"Readiness for job {job_uuid} reported to validator {self.validator_key}")
 
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):

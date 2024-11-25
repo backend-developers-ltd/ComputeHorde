@@ -27,6 +27,7 @@ from compute_horde.base.volume import (
     ZipUrlVolume,
 )
 from compute_horde.base_requests import BaseRequest
+from compute_horde.certificate import read_certificate, start_nginx_with_certificates
 from compute_horde.em_protocol import executor_requests, miner_requests
 from compute_horde.em_protocol.executor_requests import (
     GenericError,
@@ -35,11 +36,13 @@ from compute_horde.em_protocol.executor_requests import (
     V0FinishedRequest,
     V0MachineSpecsRequest,
     V0ReadyRequest,
+    V1ReadyRequest,
 )
 from compute_horde.em_protocol.miner_requests import (
     BaseMinerRequest,
     V0InitialJobRequest,
     V0JobRequest,
+    V1InitialJobRequest,
 )
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
@@ -63,6 +66,62 @@ INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 300
 CVE_2022_0492_IMAGE = (
     "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
 )
+
+NGINX_CONF = """
+http {
+    server {
+        listen 443 ssl;
+        server_name localhost;
+
+        ssl_certificate /etc/nginx/ssl/certificate.pem;
+        ssl_certificate_key /etc/nginx/ssl/private_key.pem;
+
+        ssl_client_certificate /etc/nginx/ssl/client.crt;
+        ssl_verify_client on;
+
+        location /execute-job {
+            if ($ssl_client_verify != SUCCESS) { return 403; }
+            # hack to make nginx not complain about host not found in upstream
+            set $upstream CONTAINER;
+            proxy_pass http://$upstream/execute-job;
+        }
+    }
+
+    server {
+        listen 80;
+        server_name localhost;
+
+        location /health {
+            # hack to make nginx not complain about host not found in upstream
+            set $upstream CONTAINER;
+            proxy_pass http://$upstream/health;
+        }
+    }
+}
+
+events {
+    worker_connections 1024;
+}
+"""
+
+
+async def run_nginx(
+    public_key: str, job_container_name: str, nginx_container_name: str
+) -> str | None:
+    nginx_conf = NGINX_CONF.replace("CONTAINER", f"{job_container_name}:8000")
+    public_key_bytes = public_key.encode("utf-8")
+    try:
+        _, certs_dir = start_nginx_with_certificates(
+            nginx_conf,
+            public_key_bytes,
+            port=settings.NGINX_PORT,
+            container_name=nginx_container_name,
+        )
+    except Exception as e:
+        logger.error(f"Failed to start nginx: {e}")
+        return None
+
+    return read_certificate(certs_dir)
 
 
 class RunConfigManager:
@@ -156,8 +215,15 @@ class MinerClient(AbstractMinerClient):
             logger.debug(f"Received full job payload request: {msg.job_uuid=}")
             self.full_payload.set_result(msg)
 
-    async def send_ready(self):
-        await self.send_model(V0ReadyRequest(job_uuid=self.job_uuid))
+    async def send_ready(self, certificate: str | None = None):
+        if certificate:
+            await self.send_model(
+                V1ReadyRequest(
+                    job_uuid=self.job_uuid, public_key=certificate, port=settings.NGINX_PORT
+                )
+            )
+        else:
+            await self.send_model(V0ReadyRequest(job_uuid=self.job_uuid))
 
     async def send_finished(self, job_result: "JobResult"):
         if job_result.specs:
@@ -391,7 +457,7 @@ class DownloadManager:
 
 
 class JobRunner:
-    def __init__(self, initial_job_request: V0InitialJobRequest):
+    def __init__(self, initial_job_request: V0InitialJobRequest | V1InitialJobRequest):
         self.initial_job_request = initial_job_request
         self.full_job_request: None | V0JobRequest = None
         self.temp_dir = pathlib.Path(tempfile.mkdtemp())
@@ -399,6 +465,14 @@ class JobRunner:
         self.output_volume_mount_dir = self.temp_dir / "output"
         self.specs_volume_mount_dir = self.temp_dir / "specs"
         self.download_manager = DownloadManager()
+
+        self.job_container_name = f"{settings.EXECUTOR_TOKEN}-job"
+        self.nginx_container_name = f"{settings.EXECUTOR_TOKEN}-nginx"
+
+        # for streaming job
+        if isinstance(self.initial_job_request, V1InitialJobRequest):
+            self.public_key = self.initial_job_request.public_key
+            self.executor_certificate = None
 
     async def prepare(self):
         self.volume_mount_dir.mkdir(exist_ok=True)
@@ -423,6 +497,17 @@ class JobRunner:
                 )
                 logger.error(msg)
                 raise JobError(msg)
+
+        # if streaming job
+        if self.public_key:
+            await asyncio.sleep(1)
+            try:
+                logger.debug("Spinning up nginx for streaming job")
+                self.executor_certificate = await run_nginx(
+                    self.public_key, self.job_container_name, self.nginx_container_name
+                )
+            except Exception as e:
+                logger.error(f"Failed to start nginx: {e}")
 
     async def run_job(self, job_request: V0JobRequest):
         self.full_job_request = job_request
@@ -475,10 +560,10 @@ class JobRunner:
             "run",
             *docker_run_options,
             "--name",
-            f"{settings.EXECUTOR_TOKEN}-job",
+            self.job_container_name,
             "--rm",
             "--network",
-            "none",
+            "bridge",  # to allow the container to access the nginx server
             "-v",
             f"{self.volume_mount_dir.as_posix()}/:/volume/",
             "-v",
@@ -751,7 +836,9 @@ class Command(BaseCommand):
                 logger.debug(f"Scraping hardware specs for job {initial_message.job_uuid}")
                 specs = get_machine_specs()
 
-                await miner_client.send_ready()
+                # TODO: get I AM READY response from the streaming job
+
+                await miner_client.send_ready(certificate=job_runner.executor_certificate)
                 logger.debug(f"Informed miner that I'm ready for job {initial_message.job_uuid}")
 
                 job_request = await miner_client.full_payload
