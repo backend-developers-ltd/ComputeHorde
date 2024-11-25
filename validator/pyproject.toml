@@ -19,7 +19,7 @@ dependencies = [
     "ipython~=8.14.0",
     "nox==2024.10.09",
     "channels[daphne]==4.*",
-    "channels-redis>=4.2.0",
+    "channels-redis==4.2.0",
     "websockets==13.*",
     "compute-horde",
     "prometheus-client~=0.17.0",

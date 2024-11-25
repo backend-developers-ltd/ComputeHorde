@@ -1435,7 +1435,7 @@ dependencies = [
 requires-dist = [
     { name = "celery", specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
-    { name = "channels-redis", specifier = "==4.*" },
+    { name = "channels-redis", specifier = "==4.2.0" },
     { name = "compute-horde", editable = "compute_horde" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-business-metrics", git = "https://github.com/reef-technologies/django-business-metrics.git?rev=9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01#9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01" },
@@ -2497,7 +2497,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.35.11" },
     { name = "celery", specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
-    { name = "channels-redis", specifier = ">=4.2.0" },
+    { name = "channels-redis", specifier = "==4.2.0" },
     { name = "class-registry", specifier = ">=2.1.2" },
     { name = "compute-horde", editable = "compute_horde" },
     { name = "django", specifier = "~=4.2.4" },
