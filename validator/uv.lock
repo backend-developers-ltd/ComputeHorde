@@ -9,6 +9,9 @@ supported-markers = [
     "sys_platform == 'darwin'",
 ]
 
+[options]
+prerelease-mode = "allow"
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.4.3"

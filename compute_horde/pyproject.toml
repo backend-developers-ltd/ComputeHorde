@@ -20,6 +20,9 @@ dependencies = [
 requires = ["pdm-backend==2.4.3"]
 build-backend = "pdm.backend"
 
+[tool.uv]
+prerelease = "allow"
+
 [tool.pdm]
 distribution = true
 

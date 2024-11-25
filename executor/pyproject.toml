@@ -32,6 +32,7 @@ dependencies = [
 compute-horde = { path = "../compute_horde", editable = true }
 
 [tool.uv]
+prerelease = "allow"
 environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
 
 [build-system]
