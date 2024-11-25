@@ -20,7 +20,7 @@ dependencies = [
     "nox==2024.10.09",
     "channels[daphne]==4.*",
     "channels-redis>=4.2.0",
-    "websockets==12.*",
+    "websockets==13.*",
     "compute-horde",
     "prometheus-client~=0.17.0",
     "django-prometheus==2.3.1",
