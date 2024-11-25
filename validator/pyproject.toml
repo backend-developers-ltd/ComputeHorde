@@ -17,11 +17,11 @@ dependencies = [
     "redis~=4.6.0",
     "sentry-sdk==1.29.2",
     "ipython~=8.14.0",
-    "nox==2023.4.22",
+    "nox==2024.10.09",
     "channels[daphne]==4.*",
     "channels-redis>=4.2.0",
     "websockets==12.*",
-    "compute-horde @ file:///${PROJECT_ROOT}/../compute_horde",
+    "compute-horde",
     "prometheus-client~=0.17.0",
     "django-prometheus==2.3.1",
     "django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01",
@@ -34,14 +34,17 @@ dependencies = [
     "class-registry>=2.1.2",
 ]
 
+[tool.uv.sources]
+compute-horde = { path = "../compute_horde", editable = true }
+
+[tool.uv]
+environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+
 [build-system]
-requires = ["pdm-backend"]
+requires = ["pdm-backend==2.4.3"]
 build-backend = "pdm.backend"
 
-[tool.pdm]
-distribution = false
-
-[tool.pdm.dev-dependencies]
+[dependency-groups]
 test = [
     "pytest",
     "pytest-django",
@@ -62,7 +65,7 @@ lint = [
 ]
 type_check = [
     "django-stubs[compatible-mypy]",
-    "djangorestframework-stubs[compatible-mypy]",
+    "djangorestframework-stubs[compatible-mypy]>=3.15.1",
     "mypy",
     "types-freezegun",
     "types-python-dateutil",

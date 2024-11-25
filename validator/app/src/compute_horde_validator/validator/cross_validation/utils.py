@@ -2,7 +2,6 @@ import logging
 
 from asgiref.sync import sync_to_async
 from django.core.cache import cache
-from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import SystemEvent
 
@@ -22,7 +21,6 @@ def trusted_miner_not_configured_system_event(type_: SystemEvent.EventType) -> N
     SystemEvent.objects.create(
         type=type_,
         subtype=SystemEvent.EventSubType.TRUSTED_MINER_NOT_CONFIGURED,
-        timestamp=now(),
         long_description="",
         data={},
     )

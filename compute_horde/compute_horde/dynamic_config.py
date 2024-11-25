@@ -31,7 +31,8 @@ def sync_dynamic_config(config_url: str, namespace: SupportsSetAttr) -> None:
     :param config_url: URL to a JSON object of dynamic config
     :param namespace: An object where the config values will be set as attributes
     """
-    response = requests.get(config_url)
+    # https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api?apiVersion=2022-11-28#user-agent-required
+    response = requests.get(config_url, headers={"User-Agent": "backend-developers-ltd"})
     response.raise_for_status()
     for param_key, raw_param in response.json().items():
         if not param_key.startswith("DYNAMIC_"):

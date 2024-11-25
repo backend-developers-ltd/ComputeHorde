@@ -1,6 +1,6 @@
 [project]
 name = "compute-horde"
-dynamic = ["version"]
+version = "0.0.17"
 authors = [{name = "Backend Developers LTD"}]
 license = {text = "MIT License"}
 readme = "README.md"
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["pdm-backend"]
+requires = ["pdm-backend==2.4.3"]
 build-backend = "pdm.backend"
 
 [tool.pdm]
@@ -27,11 +27,7 @@ distribution = true
 includes = ["compute_horde"]
 excludes = ["compute_horde/settings.py"]
 
-[tool.pdm.version]
-source = "scm"
-tag_regex = '^library-v(?P<version>\d+\.\d+\.\d+(a\d+)?)$'
-
-[tool.pdm.dev-dependencies]
+[dependency-groups]
 format = ["ruff"]
 lint = [
     "ruff",
@@ -42,7 +38,7 @@ release = [
 ]
 type_check = [
     "django-stubs[compatible-mypy]",
-    "djangorestframework-stubs[compatible-mypy]",
+    "djangorestframework-stubs[compatible-mypy]>=3.15.1",
     "mypy",
     "types-freezegun",
     "types-python-dateutil",

@@ -4,13 +4,11 @@ import subprocess
 
 import nox
 
-os.environ["PDM_IGNORE_SAVED_PYTHON"] = "1"
-
 CI = os.environ.get("CI") is not None
 PYTHON_VERSION = ["3.11"]
 RELEASE_TAG_PREFIX = "library"
 
-nox.options.default_venv_backend = "venv"
+nox.options.default_venv_backend = "uv"
 nox.options.stop_on_first_error = True
 nox.options.reuse_existing_virtualenvs = not CI
 
@@ -19,7 +17,15 @@ def install(session: nox.Session, *args):
     groups = []
     for group in args:
         groups.extend(["--group", group])
-    session.run("pdm", "install", "--check", *groups, external=True)
+
+    uv_env = getattr(session.virtualenv, "location", os.getenv("VIRTUAL_ENV"))
+    session.run_install(
+        "uv",
+        "sync",
+        "--locked",
+        *groups,
+        env={"UV_PROJECT_ENVIRONMENT": uv_env},
+    )
 
 
 @nox.session(name="format", python=PYTHON_VERSION)
@@ -47,7 +53,7 @@ def type_check(session):
 
 @nox.session(python=PYTHON_VERSION)
 def check_missing_migrations(session):
-    install(session, "check_missing_migrations")
+    install(session)
     session.run(
         "django-admin",
         "makemigrations",

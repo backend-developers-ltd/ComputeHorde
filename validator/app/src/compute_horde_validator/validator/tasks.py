@@ -1227,7 +1227,17 @@ def llm_prompt_generation():
             logger.debug("Another thread already using the trusted miner")
             return
 
-        async_to_sync(generate_prompts)()
+        try:
+            async_to_sync(generate_prompts)()
+        except Exception as e:
+            msg = f"Error while generating prompts: {e}"
+            logger.warning(msg)
+            SystemEvent.objects.create(
+                type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
+                subtype=SystemEvent.EventSubType.FAILURE,
+                long_description=msg,
+                data={},
+            )
 
 
 @app.task(
@@ -1259,7 +1269,19 @@ def llm_prompt_answering():
                 logger.debug("Another thread already using the trusted miner")
                 break
 
-            success = async_to_sync(answer_prompts)(workload)
+            try:
+                success = async_to_sync(answer_prompts)(workload)
+            except Exception as e:
+                success = False
+                msg = f"Error while answering prompts: {e}"
+                logger.warning(msg)
+                SystemEvent.objects.create(
+                    type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
+                    subtype=SystemEvent.EventSubType.FAILURE,
+                    long_description=msg,
+                    data={},
+                )
+
         if success:
             success_count += 1
         else:

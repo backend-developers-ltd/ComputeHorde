@@ -91,11 +91,10 @@ async def answer_prompts(
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.FAILURE,
-            timestamp=now(),
             long_description=f"Trusted miner failed to run prompt answering job: {e!r}",
             data={},
         )
-        logger.error("Failed to run organic job", exc_info=True)
+        logger.warning("Failed to run organic job", exc_info=True)
         return False
 
     try:
@@ -105,11 +104,10 @@ async def answer_prompts(
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
-            timestamp=now(),
             long_description=f"Failed to download prompt answers: {e!r}",
             data={},
         )
-        logger.error("Failed to download prompt answers", exc_info=True)
+        logger.warning("Failed to download prompt answers", exc_info=True)
         return False
 
     success = await sync_to_async(save_workload_answers)(workload, prompt_answers)

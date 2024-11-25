@@ -8,8 +8,6 @@ from pathlib import Path
 
 import nox
 
-os.environ["PDM_IGNORE_SAVED_PYTHON"] = "1"
-
 CI = os.environ.get("CI") is not None
 
 ROOT = Path(".")
@@ -17,7 +15,7 @@ PYTHON_VERSIONS = ["3.11"]
 PYTHON_DEFAULT_VERSION = PYTHON_VERSIONS[-1]
 APP_ROOT = ROOT / "app" / "src"
 
-nox.options.default_venv_backend = "venv"
+nox.options.default_venv_backend = "uv"
 nox.options.stop_on_first_error = True
 nox.options.reuse_existing_virtualenvs = not CI
 
@@ -26,7 +24,15 @@ def install(session: nox.Session, *args):
     groups = []
     for group in args:
         groups.extend(["--group", group])
-    session.run("pdm", "install", "--check", *groups, external=True)
+
+    uv_env = getattr(session.virtualenv, "location", os.getenv("VIRTUAL_ENV"))
+    session.run_install(
+        "uv",
+        "sync",
+        "--locked",
+        *groups,
+        env={"UV_PROJECT_ENVIRONMENT": uv_env},
+    )
 
 
 @functools.lru_cache
