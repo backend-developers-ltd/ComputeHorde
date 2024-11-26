@@ -1,9 +1,8 @@
 import logging
 from collections import defaultdict
 from collections.abc import AsyncIterable, MutableMapping, Sequence
-from contextlib import AsyncExitStack, asynccontextmanager
 
-import httpx
+import aiohttp
 import pydantic
 from more_itertools import chunked
 
@@ -23,6 +22,17 @@ Offset = int
 CheckpointBackend = MutableMapping[str, int]
 
 
+async def _aiter_aiohttp_lines(response: aiohttp.ClientResponse):
+    """
+    Iterate over lines within an aiohttp response.
+    """
+    while True:
+        line = await response.content.readline()
+        if line == b'':
+            break
+        yield line[:-1]  # strip newline
+
+
 class ReceiptsTransfer:
     """
     HTTP client for fetching receipts from a target based on an HTTP URL.
@@ -32,16 +42,6 @@ class ReceiptsTransfer:
     def __init__(self, server_url: str, checkpoint_backend: CheckpointBackend):
         self._receipts_url = server_url.rstrip("/")
         self._checkpoints = checkpoint_backend
-        self._client: httpx.Client | None = None
-
-    @asynccontextmanager
-    async def session(self):
-        """
-        When running multiple subsequent requests to the same host within a session context, the underlying TCP
-        connection will be reused, reducing TCP handshake roundtrips.
-        """
-        with httpx.AsyncClient() as client:
-            self._client = client
 
     async def new_receipts(
         self,
@@ -49,13 +49,12 @@ class ReceiptsTransfer:
         # TODO: signed_by_miner: bittensor.wallet,
     ) -> dict[type[ReceiptModel], list[ReceiptModel]]:
         """
-        Fetch and store updated receipts by looking at last N pages.
+        Fetch and _store_ new receipts by looking at last N pages.
         """
-
         # Retrieve the receipts the pages and group by receipt model type.
         receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
         for page in pages:
-            async for receipt in self._receipts_on_page(page):
+            async for receipt in self.new_receipts_on_page(page):
                 model = receipt_to_django_model(receipt)
                 receipts_by_type[model.__class__].append(model)
 
@@ -66,9 +65,7 @@ class ReceiptsTransfer:
 
         return dict(receipts_by_type)
 
-    async def _receipts_on_page(
-        self, page: int, use_checkpoint: bool = True
-    ) -> AsyncIterable[Receipt]:
+    async def new_receipts_on_page(self, page: int) -> AsyncIterable[Receipt]:
         """
         Iterate over receipts present on given page of the remote server.
         If use_checkpoint=False, all receipts from the page will be returned.
@@ -77,7 +74,7 @@ class ReceiptsTransfer:
         page_url = f"{self._receipts_url}/{page}.jsonl"
 
         checkpoint_key = page_url
-        checkpoint = self._checkpoints[checkpoint_key] if use_checkpoint else 0
+        checkpoint = self._checkpoints[checkpoint_key]
         use_range_request = checkpoint > 0
 
         if use_range_request:
@@ -98,33 +95,30 @@ class ReceiptsTransfer:
                 "Accept-Encoding": "gzip",
             }
 
-        async with AsyncExitStack() as request_context:
-            # Reuse the client if we're within a session()
-            client = self._client or await request_context.enter_async_context(httpx.AsyncClient())
-            response = await client.get(page_url, headers=headers)
+        async with aiohttp.ClientSession() as http:
+            # As the request should be as fast as possible, don't allow redirecting - clients must respond immediately.
+            response = await http.get(page_url, headers=headers, allow_redirects=False)
 
-        if response.status_code not in {200, 206}:
-            logger.warning(f"Request failed for page {page}: {response.status_code}")
-            return
+            if not 200 <= response.status < 300:
+                logger.warning(f"Request failed for page {page}: {response.status}")
+                return
 
-        for line in response.iter_lines():
-            try:
-                receipt = Receipt.model_validate_json(line)
-            except pydantic.ValidationError:
-                logger.warning(
-                    f"skipping invalid line: {line[:1000]}{' (...)' if len(line) > 1000 else ''}"
-                )
-                continue
-            yield receipt
+            async for line in _aiter_aiohttp_lines(response):
+                try:
+                    yield Receipt.model_validate_json(line)
+                except pydantic.ValidationError:
+                    logger.warning(
+                        f"skipping invalid line: {line[:100]}{' (...)' if len(line) > 100 else ''}"
+                    )
+                    continue
 
         # Save the total page size so that next time we request the page we know what range to request.
         if use_range_request:
             # Range requests return a "content-range" header that contains full size of the file.
-            # We ask the server not to gzip range requests - so this is the real size of the file.
+            # We ask the server not to gzip range requests - so this is the real total size.
             range_header = response.headers["content-range"]
-            assert range_header.startswith("bytes ")
+            assert range_header.lower().startswith("bytes ")
             _, total_str = range_header.split("/")
             self._checkpoints[checkpoint_key] = int(total_str)
         else:
-            # This is the inflated size (uncompressed). The content length in the headers refers to compressed size.
-            self._checkpoints[checkpoint_key] = len(response.content)
+            self._checkpoints[checkpoint_key] = response.content.total_bytes

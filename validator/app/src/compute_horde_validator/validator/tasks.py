@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import json
 import random
@@ -371,7 +372,7 @@ def run_synthetic_jobs(
             SyntheticJobBatch.objects.select_for_update(skip_locked=True)
             .filter(
                 block__gte=current_block
-                - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
+                           - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
                 block__lte=current_block + wait_in_advance_blocks,
                 started_at__isnull=True,
             )
@@ -1048,25 +1049,26 @@ def fetch_receipts(miners: Sequence[tuple[str, str, int]] | None = None):
     n_pages_to_fetch = 2
     latest_page = LocalFilesystemPagedReceiptStore.active_page_id()
     pages = [latest_page - offset for offset in reversed(range(n_pages_to_fetch))]
+    checkpoint_backend = defaultdict(lambda: 0)  # TODO: This should be persistent
+
+    # TODO: Semaphore
+
+    async def transfer_from_miner(miner):
+        hotkey, ip, port = miner
+        transfer = ReceiptsTransfer(
+            server_url=f"http://{ip}:{port}/receipts",
+            checkpoint_backend=checkpoint_backend,
+        )
+        fetched_receipts = await transfer.new_receipts(pages=pages)
+        total = sum(len(receipts) for receipts in fetched_receipts.values())
+        logger.info(f"Fetched {total} receipts from {hotkey} at {ip}:{port}")
 
     @async_to_sync
     async def transfer_from_all_miners():
-        async with TaskGroup() as tg:
-            for miner in miners:
-
-                async def transfer_from_miner(miner):
-                    hotkey, ip, port = miner
-                    transfer = ReceiptsTransfer(
-                        server_url=f"http://{ip}:{port}/receipts",
-                        checkpoint_backend=defaultdict(
-                            lambda: 0
-                        ),  # TODO: This should be persistent
-                    )
-                    fetched_receipts = await transfer.new_receipts(pages=pages)
-                    total = sum(len(receipts) for receipts in fetched_receipts.values())
-                    logger.info(f"Fetched {total} receipts from {hotkey} at {ip}:{port}")
-
-                tg.create_task(transfer_from_miner(miner))
+        tasks = []
+        for miner in miners:
+            tasks.append(asyncio.create_task(transfer_from_miner(miner)))
+        await asyncio.gather(*tasks)
 
     transfer_from_all_miners()
 
