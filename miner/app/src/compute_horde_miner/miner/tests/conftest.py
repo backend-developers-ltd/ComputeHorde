@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 def validator_wallet():
     wallet = bittensor.wallet(name="test_validator")
     # workaround the overwrite flag
-    wallet.regenerate_coldkey(seed="0" * 64, use_password=False, overwrite=True)
-    wallet.regenerate_hotkey(seed="1" * 64, use_password=False, overwrite=True)
+    wallet.regenerate_coldkey(seed="a" * 64, use_password=False, overwrite=True)
+    wallet.regenerate_hotkey(seed="b" * 64, use_password=False, overwrite=True)
     return wallet
 
 
@@ -20,8 +20,8 @@ def validator_wallet():
 def miner_wallet(settings):
     wallet = bittensor.wallet(name="test_miner")
     # workaround the overwrite flag
-    wallet.regenerate_coldkey(seed="2" * 64, use_password=False, overwrite=True)
-    wallet.regenerate_hotkey(seed="3" * 64, use_password=False, overwrite=True)
+    wallet.regenerate_coldkey(seed="c" * 64, use_password=False, overwrite=True)
+    wallet.regenerate_hotkey(seed="d" * 64, use_password=False, overwrite=True)
     return wallet
 
 
@@ -37,7 +37,7 @@ def wallet():
     wallet = bittensor.wallet(name="test_miner")
     try:
         # workaround the overwrite flag
-        wallet.regenerate_coldkey(seed="0" * 64, use_password=False, overwrite=True)
-        wallet.regenerate_hotkey(seed="1" * 64, use_password=False, overwrite=True)
+        wallet.regenerate_coldkey(seed="e" * 64, use_password=False, overwrite=True)
+        wallet.regenerate_hotkey(seed="f" * 64, use_password=False, overwrite=True)
     except Exception as e:
         logger.error(f"Failed to create wallet: {e}")
