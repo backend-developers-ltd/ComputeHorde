@@ -63,7 +63,7 @@ ComputeHorde validator is built out of three components
 1. two S3 buckets for sharing LLM data (lots of small text files)
 1. validator machine (standard, non-GPU) - for regular validating & weight-setting
 
-The steps (performed by running installation scripts **on your local maching** (the machine where you have your wallet files)):
+The steps (performed by running installation scripts **on your local machine** (the machine where you have your wallet files)):
 1. [setup trusted miner](/validator/README.md#setting-up-a-trusted-miner-for-cross-validation) 
 1. [provision S3 buckets for prompts and answers](/validator/README.md#provision-s3-buckets-for-prompts-and-answers) 
 1. [setup validator](#validator-setup)
@@ -95,9 +95,9 @@ export AWS_SECRET_ACCESS_KEY=...
 export AWS_DEFAULT_REGION=...
 ```
 
-Note: `AWS_DEFAULT_REGION` property is optional. Use it when your buckets are not in your default AWS region.
+Note: The `AWS_DEFAULT_REGION` property is optional. Use it when your buckets are not in your default AWS region.
 
-Export `AWS_ENDPOINT_URL` too if you want to use another cloud object storage (s3-compatible) provider. If not given, AWS S3 will be used.
+Export `AWS_ENDPOINT_URL` if you want to use another cloud object storage (s3-compatible) provider. If not given, AWS S3 will be used.
 
 Then execute the following command from the same terminal session:
 
@@ -109,7 +109,7 @@ Replace:
 - `SSH_DESTINATION` with your server's connection info (i.e. `username@1.2.3.4`)
 - `HOTKEY_PATH` with the path of your hotkey (i.e. `~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey`)
 
-This script installs necessary tools in the server, copies the public keys and starts the validator with the corresponding runner and the default config.
+This script installs the necessary tools in the server, copies the public keys and starts the validator with the corresponding runner and the default config.
 
 If you want to change the default config, see [Validator runner README](validator/envs/runner/README.md) for details.
 
@@ -125,7 +125,7 @@ curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/ins
 
 Replace `SSH_DESTINATION` with your server's connection info (i.e. `username@1.2.3.4`)
 and `HOTKEY_PATH` with the path of your hotkey (i.e. `~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey`).
-This script installs necessary tools in the server, copies the keys and starts the miner with the corresponding runner and default config.
+This script installs necessary tools in the server, copies the keys, and starts the miner with the corresponding runner and default config.
 
 If you want to change the default config, see [Miner runner README](miner/envs/runner/README.md) for details.
 
