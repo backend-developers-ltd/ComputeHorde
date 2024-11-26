@@ -74,20 +74,25 @@ curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/ins
 
 Replace the placeholders in the command above:
 - `SSH_DESTINATION`: your server's connection info (i.e. `username@1.2.3.4`)
-- `VALIDATOR_PUBLIC_KEY`: the public key of your validator (not a path to the key)
-- `MINER_PORT` (optional): the port on which the miner will listen for incoming connections (default is 8000)
-- `DEFAULT_EXECUTOR_CLASS` (optional): specify a custom executor class to use; **to support A6000 synthetic job flow, setting `always_on.llm.a6000` is mandatory** 
+- `VALIDATOR_PUBLIC_KEY`: the public key of your validator (_not_ the path to the key)
+- `MINER_PORT` (optional): the port (of your choosing) on which the miner will listen for incoming connections (default is 8000)
+- `DEFAULT_EXECUTOR_CLASS` (optional): specify a custom executor class to use; set **`always_on.llm.a6000` is mandatory to support A6000 synthetic job flow** 
 
 ### Provision S3 buckets for prompts and answers
 
-Trusted miners require S3 buckets to store prompts and answers. To provision these buckets conveniently with the correct permissions pre-configured, make sure you have [AWS CLI](https://aws.amazon.com/cli/) installed and configured.
+Trusted miners require S3 buckets to store prompts and answers. 
+
+**Make sure** you have [AWS CLI](https://aws.amazon.com/cli/) installed and configured, 
+to provision these buckets conveniently with the correct permissions pre-configured. 
+
 Then run the following script:
 
 ```sh
 curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/validator/provision_s3.sh | bash -s - PROMPTS_BUCKET ANSWERS_BUCKET --create-user
 ```
 
-Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets you want to use for prompts and answers respectively. 
+Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets you want to use for prompts and answers respectively.
+
 It will automatically create a dedicated user, assign permissions policy for created buckets, and add an access key, 
 displaying it at the end so it can be copied to the validator `.env` file. 
 
@@ -114,8 +119,8 @@ You have to copy these variables in your validator `.env` file and restart your 
 Add or update these variables in the validator `.env` file:
 
 ```
-TRUSTED_MINER_ADDRESS = "MINER_IP"
-TRUSTED_MINER_PORT = MINER_PORT
+TRUSTED_MINER_ADDRESS="MINER_IP"
+TRUSTED_MINER_PORT=MINER_PORT
 ```
 
 If your buckets are not in the default AWS region, add also:
