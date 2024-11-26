@@ -26,13 +26,13 @@ def install(session: nox.Session, *args):
         groups.extend(["--group", group])
 
     uv_env = getattr(session.virtualenv, "location", os.getenv("VIRTUAL_ENV"))
-    session.run_install(
-        "uv",
-        "sync",
-        "--locked",
-        *groups,
-        env={"UV_PROJECT_ENVIRONMENT": uv_env},
-    )
+    # session.run_install(
+    #     "uv",
+    #     "sync",
+    #     "--locked",
+    #     *groups,
+    #     env={"UV_PROJECT_ENVIRONMENT": uv_env},
+    # )
 
 
 @functools.lru_cache

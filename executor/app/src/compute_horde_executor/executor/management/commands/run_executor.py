@@ -811,18 +811,18 @@ class Command(BaseCommand):
         async with miner_client:
             logger.debug(f"Connected to miner: {settings.MINER_ADDRESS}")
             initial_message: V0InitialJobRequest = await miner_client.initial_msg
-            if initial_message.base_docker_image_name and not (
-                initial_message.base_docker_image_name.startswith("backenddevelopersltd/")
-                or initial_message.base_docker_image_name.startswith(
-                    "docker.io/backenddevelopersltd/"
-                )
-            ):
-                await miner_client.send_failed_to_prepare()
-                return
-            logger.debug("Checking for CVE-2022-0492 vulnerability")
-            if not await self.is_system_safe_for_cve_2022_0492():
-                await miner_client.send_failed_to_prepare()
-                return
+            # if initial_message.base_docker_image_name and not (
+            #     initial_message.base_docker_image_name.startswith("backenddevelopersltd/")
+            #     or initial_message.base_docker_image_name.startswith(
+            #         "docker.io/backenddevelopersltd/"
+            #     )
+            # ):
+            #     await miner_client.send_failed_to_prepare()
+            #     return
+            # logger.debug("Checking for CVE-2022-0492 vulnerability")
+            # if not await self.is_system_safe_for_cve_2022_0492():
+            #     await miner_client.send_failed_to_prepare()
+            #     return
 
             job_runner = self.JOB_RUNNER_CLASS(initial_message)
             try:
@@ -842,12 +842,12 @@ class Command(BaseCommand):
                 logger.debug(f"Informed miner that I'm ready for job {initial_message.job_uuid}")
 
                 job_request = await miner_client.full_payload
-                if job_request.docker_image_name and not (
-                    job_request.docker_image_name.startswith("backenddevelopersltd/")
-                    or job_request.docker_image_name.startswith("docker.io/backenddevelopersltd/")
-                ):
-                    await miner_client.send_failed_to_prepare()
-                    return
+                # if job_request.docker_image_name and not (
+                #     job_request.docker_image_name.startswith("backenddevelopersltd/")
+                #     or job_request.docker_image_name.startswith("docker.io/backenddevelopersltd/")
+                # ):
+                #     await miner_client.send_failed_to_prepare()
+                #     return
                 logger.debug(f"Running job {initial_message.job_uuid}")
                 result = await job_runner.run_job(job_request)
                 result.specs = specs
