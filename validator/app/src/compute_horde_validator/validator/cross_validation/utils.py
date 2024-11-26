@@ -7,6 +7,8 @@ from compute_horde_validator.validator.models import SystemEvent
 
 logger = logging.getLogger(__name__)
 
+TRUSTED_MINER_FAKE_KEY = "0" * 48
+
 
 @sync_to_async
 def trusted_miner_not_configured_system_event(type_: SystemEvent.EventType) -> None:

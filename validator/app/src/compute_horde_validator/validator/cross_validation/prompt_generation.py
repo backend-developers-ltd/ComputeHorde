@@ -10,6 +10,9 @@ from compute_horde.miner_client.organic import (
 from django.conf import settings
 from django.utils.timezone import now
 
+from compute_horde_validator.validator.cross_validation.utils import (
+    TRUSTED_MINER_FAKE_KEY,
+)
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import PromptSeries, SystemEvent
 from compute_horde_validator.validator.s3 import generate_upload_url, get_public_url
@@ -57,7 +60,7 @@ async def generate_prompts(
     wait_timeout = wait_timeout or job_generator.timeout_seconds()
 
     miner_client = create_miner_client(
-        miner_hotkey=settings.TRUSTED_MINER_KEY,
+        miner_hotkey=TRUSTED_MINER_FAKE_KEY,
         miner_address=settings.TRUSTED_MINER_ADDRESS,
         miner_port=settings.TRUSTED_MINER_PORT,
         job_uuid=str(job_uuid),

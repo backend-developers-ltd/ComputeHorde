@@ -15,6 +15,7 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.cross_validation.utils import (
+    TRUSTED_MINER_FAKE_KEY,
     trusted_miner_not_configured_system_event,
 )
 from compute_horde_validator.validator.models import Prompt, SolveWorkload, SystemEvent
@@ -51,7 +52,7 @@ async def answer_prompts(
     seed = workload.seed
 
     job_generator = LlmPromptsJobGenerator(workload.s3_url, seed)
-    await job_generator.ainit(miner_hotkey=settings.TRUSTED_MINER_KEY)
+    await job_generator.ainit(miner_hotkey=TRUSTED_MINER_FAKE_KEY)
 
     # TODO: Should be generated for all the llm executor classes.
     #       SolveWorkload/PromptSample should have a executor_class field saying which
@@ -78,7 +79,7 @@ async def answer_prompts(
     wait_timeout = wait_timeout or job_generator.timeout_seconds()
 
     miner_client = create_miner_client(
-        miner_hotkey=settings.TRUSTED_MINER_KEY,
+        miner_hotkey=TRUSTED_MINER_FAKE_KEY,
         miner_address=settings.TRUSTED_MINER_ADDRESS,
         miner_port=settings.TRUSTED_MINER_PORT,
         job_uuid=str(job_uuid),
