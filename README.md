@@ -64,8 +64,8 @@ ComputeHorde validator is built out of three components
 1. validator machine (standard, non-GPU) - for regular validating & weight-setting
 
 The steps (performed by running installation scripts **on your local machine** (the machine where you have your wallet files)):
-1. [setup trusted miner](/validator/README.md#setting-up-a-trusted-miner-for-cross-validation) 
-1. [provision S3 buckets for prompts and answers](/validator/README.md#provision-s3-buckets-for-prompts-and-answers) 
+1. [setup trusted miner](/validator#setting-up-a-trusted-miner-for-cross-validation) 
+1. [provision S3 buckets for prompts and answers](/validator#provision-s3-buckets-for-prompts-and-answers) 
 1. [setup validator](#validator-setup)
 
 ### Validator setup
