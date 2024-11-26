@@ -73,10 +73,10 @@ curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/ins
 ```
 
 Replace the placeholders in the command above:
-- SSH_DESTINATION: your server's connection info (i.e. `username@1.2.3.4`)
-- VALIDATOR_PUBLIC_KEY: the public key of your validator
-- MINER_PORT (optional): the port on which the miner will listen for incoming connections (default is 8000)
-- DEFAULT_EXECUTOR_CLASS (optional): specify a custom executor class to use; **to support A6000 synthetic job flow, setting `always_on.llm.a6000` is mandatory** 
+- `SSH_DESTINATION`: your server's connection info (i.e. `username@1.2.3.4`)
+- `VALIDATOR_PUBLIC_KEY`: the public key of your validator (not a path to the key)
+- `MINER_PORT` (optional): the port on which the miner will listen for incoming connections (default is 8000)
+- `DEFAULT_EXECUTOR_CLASS` (optional): specify a custom executor class to use; **to support A6000 synthetic job flow, setting `always_on.llm.a6000` is mandatory** 
 
 ### Provision S3 buckets for prompts and answers
 
@@ -87,7 +87,11 @@ Then run the following script:
 curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/validator/provision_s3.sh | bash -s - PROMPTS_BUCKET ANSWERS_BUCKET --create-user
 ```
 
-Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets you want to use for prompts and answers respectively. It will automatically create a dedicated user, assign permissions policy for created buckets, and add an access key, displaying it at the end so it can be copied to the validator env file. If you don't want to create a user and prefer to handle permissions manually, just skip the `--create-user` option.
+Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets you want to use for prompts and answers respectively. 
+It will automatically create a dedicated user, assign permissions policy for created buckets, and add an access key, 
+displaying it at the end so it can be copied to the validator `.env` file. 
+
+If you don't want to create a user and prefer to handle permissions manually, just skip the `--create-user` option.
 
 Note: if your buckets are not in your default AWS region export `AWS_DEFAULT_REGION` before running the script (both buckets needs to be in the same region), and add it to `.env` later:
 ```
@@ -99,7 +103,7 @@ If you used `--create-user` flag, it will also show the values for `AWS_ACCESS_K
 You have to copy these variables in your validator `.env` file and restart your validator.
 
 > [!WARNING]  
-> If you did not use `--create-user`, you still need to provide `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your validator .env file.
+> If you did not use `--create-user`, you still need to provide `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your validator `.env` file.
 > In that case, you will have to manually generate the credentials.
 
 > [!NOTE]
@@ -117,5 +121,5 @@ TRUSTED_MINER_PORT = MINER_PORT
 If your buckets are not in the default AWS region, add also:
 
 ```
-AWS_DEFAULT_REGION = BUCKETS_REGION
+AWS_DEFAULT_REGION=BUCKETS_REGION
 ```
