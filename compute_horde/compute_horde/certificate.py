@@ -1,12 +1,12 @@
+import asyncio
 import ipaddress
 import logging
 import pathlib
-import subprocess
 import tempfile
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import requests
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -16,8 +16,23 @@ from cryptography.x509.oid import NameOID
 
 logger = logging.getLogger(__name__)
 
+WAIT_FOR_NGINX_TIMEOUT = 10
 
-def start_nginx_with_certificates(
+
+async def get_docker_container_ip(container_name: str) -> str:
+    process = await asyncio.create_subprocess_exec(
+        "docker",
+        "inspect",
+        container_name,
+        "-f",
+        "{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+        stdout=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await process.communicate()
+    return stdout.decode("utf-8").strip()
+
+
+async def start_nginx_with_certificates(
     nginx_conf: str,
     public_key: bytes,
     port: int,
@@ -37,24 +52,35 @@ def start_nginx_with_certificates(
     client_cert_file = certs_dir / "client.crt"
     client_cert_file.write_bytes(public_key)
 
-    subprocess.run(
-        [
-            "docker",
-            "run",
-            "--detach",
-            "--rm",
-            "--name",
-            container_name,
-            "-p",
-            f"{port}:443",
-            "-v",
-            f"{tmp_path}:/etc/nginx/",
-            "nginx:1.26-alpine",
-        ]
+    process = await asyncio.create_subprocess_exec(
+        "docker",
+        "run",
+        "--detach",
+        "--rm",
+        "--name",
+        container_name,
+        "-p",
+        f"{port}:443",
+        "-v",
+        f"{tmp_path}:/etc/nginx/",
+        "nginx:1.26-alpine",
     )
+    await process.wait()
 
     # wait for nginx to start
-    time.sleep(1)
+    ip = await get_docker_container_ip(container_name)
+    nginx_started = False
+    for _ in range(WAIT_FOR_NGINX_TIMEOUT):
+        try:
+            if requests.get(f"http://{ip}/ok").status_code == 200:
+                nginx_started = True
+                break
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+
+    if not nginx_started:
+        logger.error("Failed to start nginx - continuing ...")
 
     return container_name, certs_dir
 
