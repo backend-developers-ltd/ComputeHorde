@@ -62,9 +62,9 @@ REMOTE_CELERY_START_SCRIPT=/project/mount/ComputeHorde/validator/dev_env_setup/s
 DEBUG_MINER_KEY=... python manage.py debug_run_synthetic_jobs
 ```
 
-## Setting up a trusted miner for cross-validation
+# Setting up a trusted miner for cross-validation
 
-### Set up a server
+## Set up a server
 
 Create an Ubuntu server and use the `install_miner.sh` script from the root of this repository to install the miner in a **local mode**:
 
@@ -78,7 +78,7 @@ Replace the placeholders in the command above:
 - `MINER_PORT` (optional): the port (of your choosing) on which the miner will listen for incoming connections (default is 8000)
 - `DEFAULT_EXECUTOR_CLASS` (optional): specify a custom executor class to use; set **`always_on.llm.a6000` is mandatory to support A6000 synthetic job flow** 
 
-### Provision S3 buckets for prompts and answers
+## Provision S3 buckets for prompts and answers
 
 Trusted miners require S3 buckets to store prompts and answers. 
 
@@ -114,7 +114,7 @@ You have to copy these variables in your validator `.env` file and restart your 
 > [!NOTE]
 > We have tested the AWS S3. The buckets are used to allow quick and concurrent upload and download of multiple (but tiny) text files.
 
-### Updated validator .env
+## Updated validator .env
 
 Add or update these variables in the validator `.env` file:
 
