@@ -287,7 +287,6 @@ def schedule_synthetic_jobs() -> None:
             logger.debug("Another thread already scheduling validation")
             return
 
-        bittensor.turn_console_off()
         subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
         current_block = subtensor_.get_current_block()
         current_cycle = get_cycle_containing_block(
@@ -507,7 +506,6 @@ def do_set_weights(
     Set weights. To be used in other celery tasks in order to facilitate a timeout,
      since the multiprocessing version of this doesn't work in celery.
     """
-    bittensor.turn_console_off()
     subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
