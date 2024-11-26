@@ -97,7 +97,7 @@ export AWS_DEFAULT_REGION=...
 
 Note: The `AWS_DEFAULT_REGION` property is optional. Use it when your buckets are not in your default AWS region.
 
-Export `AWS_ENDPOINT_URL` if you want to use another cloud object storage (s3-compatible) provider. If not given, AWS S3 will be used.
+Export `AWS_ENDPOINT_URL` to use another cloud object storage (s3-compatible) provider. If not given, AWS S3 will be used.
 
 Then execute the following command from the same terminal session:
 
@@ -109,7 +109,7 @@ Replace:
 - `SSH_DESTINATION` with your server's connection info (i.e. `username@1.2.3.4`)
 - `HOTKEY_PATH` with the path of your hotkey (i.e. `~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey`)
 
-This script installs the necessary tools in the server, copies the public keys and starts the validator with the corresponding runner and the default config.
+This script installs the necessary tools in the server, copies the public keys,  and starts the validator with the corresponding runner and the default config.
 
 If you want to change the default config, see [Validator runner README](validator/envs/runner/README.md) for details.
 

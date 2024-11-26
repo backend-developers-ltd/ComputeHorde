@@ -96,23 +96,23 @@ Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets y
 It will automatically create a dedicated user, assign permissions policy for created buckets, and add an access key, 
 displaying it at the end so it can be copied to the validator `.env` file. 
 
-If you don't want to create a user and prefer to handle permissions manually, just skip the `--create-user` option.
+If you don't want to create a user and prefer to handle permissions manually, skip the `--create-user` option.
 
-Note: if your buckets are not in your default AWS region export `AWS_DEFAULT_REGION` before running the script (both buckets needs to be in the same region), and add it to `.env` later:
+Note: if your buckets are not in your default AWS region export `AWS_DEFAULT_REGION` before running the script (both buckets need to be in the same region), and add it to `.env` later:
 ```
 export AWS_DEFAULT_REGION=BUCKETS_REGION
 ```
 
 At the end of the script, it will show the values for `S3_BUCKET_NAME_PROMPTS`, `S3_BUCKET_NAME_ANSWERS`.
-If you used `--create-user` flag, it will also show the values for `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
-You have to copy these variables in your validator `.env` file and restart your validator.
+If you use the `--create-user` flag, it will also show the values for `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+opy these variables in your validator `.env` file and restart your validator.
 
 > [!WARNING]  
 > If you did not use `--create-user`, you still need to provide `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your validator `.env` file.
 > In that case, you will have to manually generate the credentials.
 
 > [!NOTE]
-> We have tested the AWS S3. The buckets are used to allow quick and concurrent upload and download of multiple (but tiny) text files.
+> We have tested the AWS S3. The buckets allow quick and concurrent upload and download of multiple (but tiny) text files.
 
 ## Updated validator .env
 
