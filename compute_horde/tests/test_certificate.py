@@ -35,6 +35,12 @@ http {
             add_header Content-Type text/plain;
         }
     }
+    
+    server {
+        listen 80;
+        server_name localhost;
+        location /ok { return 200; } # to verify nginx exists
+    }
 }
 
 events {
@@ -69,9 +75,10 @@ def make_cert(tmp_path):
     )
 
 
-def test_certificates_with_nginx__success(tmp_path, container_name):
+@pytest.mark.asyncio
+async def test_certificates_with_nginx__success(tmp_path, container_name):
     public_key, cert = make_cert(tmp_path)
-    container_name, certs_dir = start_nginx_with_certificates(
+    container_name, certs_dir = await start_nginx_with_certificates(
         NGINX_CONF, public_key, NGINX_PORT, container_name, tmp_path
     )
 
@@ -82,9 +89,10 @@ def test_certificates_with_nginx__success(tmp_path, container_name):
     subprocess.run(["docker", "kill", container_name])
 
 
-def test_certificates_with_nginx__no_cert(tmp_path, container_name):
+@pytest.mark.asyncio
+async def test_certificates_with_nginx__no_cert(tmp_path, container_name):
     public_key, _ = make_cert(tmp_path)
-    container_name, certs_dir = start_nginx_with_certificates(
+    container_name, certs_dir = await start_nginx_with_certificates(
         NGINX_CONF, public_key, NGINX_PORT, container_name, tmp_path
     )
 
@@ -96,9 +104,10 @@ def test_certificates_with_nginx__no_cert(tmp_path, container_name):
     subprocess.run(["docker", "kill", container_name])
 
 
-def test_certificates_with_nginx__fail(tmp_path, container_name):
+@pytest.mark.asyncio
+async def test_certificates_with_nginx__fail(tmp_path, container_name):
     public_key, _ = make_cert(tmp_path)
-    container_name, _ = start_nginx_with_certificates(
+    container_name, _ = await start_nginx_with_certificates(
         NGINX_CONF, public_key, NGINX_PORT, container_name, tmp_path
     )
 
