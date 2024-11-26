@@ -58,7 +58,17 @@ for miner in miners:
 
 ## Validator
 
-To run a validator, first you need to [setup a trusted miner for cross-validation](/validator/README.md#setting-up-a-trusted-miner-for-cross-validation) and [provision S3 buckets for prompts and answers](/validator/README.md#provision-s3-buckets-for-prompts-and-answers) of LLM jobs. Your trusted miner needs to have A6000 GPU, and be configured to use it. The validator doesn't need A6000. 
+ComputeHorde validator is built out of three components
+1. trusted miner (requires A6000 (the only GPU supported now)) for cross-validation
+1. two s3 buckets for sharing LLM data (lots of small text files)
+1. validator machine (standard, non-GPU) - for regular validating & weight-setting
+
+The steps:
+1. [setup trusted miner](/validator/README.md#setting-up-a-trusted-miner-for-cross-validation) 
+1. [provision S3 buckets for prompts and answers](/validator/README.md#provision-s3-buckets-for-prompts-and-answers) 
+1. [setup validator](#validator-setup)
+
+### Validator Setup
 
 **If you are upgrading** your validator to support LLM jobs, prepare a trusted miner and S3 buckets (find out how using the links above). Then, set the environment variables directly in the .env file of your validator instance and restart your validator:
 
