@@ -622,7 +622,7 @@ TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
 # Receipt fetching debugging (miner = (hotkey, address, port))
 DEBUG_FETCH_RECEIPTS_FROM_MINERS: Sequence[tuple[str, str, int]] | None = [
-    (f"localdebugminer-{i}", f"127.0.0.{1+i}", 8000) for i in range(200)
+    (f"localdebugminer-{i}", f"127.0.0.{1+i}", 8000) for i in range(250)
 ]
 
 CHANNEL_LAYERS = {
