@@ -70,6 +70,7 @@ services:
       <<: *logging
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
+      - "autoheal=true"
     healthcheck:
       test: ["CMD", "./celery-worker-healthcheck.sh"]
       interval: 10s       # Run the check every 10 seconds
@@ -259,6 +260,17 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
+  # Auto restart unhealthy containers with label autoheal=true.
+  # Warning! This container has access to the Docker socket.
+  # See https://github.com/willfarrell/docker-autoheal
+  autoheal:
+    image: willfarrell/autoheal:1.1.0 # Pinned tag for security, see above.
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+    network_mode: none
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   redis:
