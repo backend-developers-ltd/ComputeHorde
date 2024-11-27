@@ -41,10 +41,8 @@ def test_is_port_available(dispenser):
     assert dispenser.is_port_available(port)
 
 
-@patch(
-    "compute_horde_miner.miner.executor_manager.executor_port_dispenser.socket.socket.bind",
-    side_effect=OSError,
-)
 def test_get_port_with_system_check(dispenser):
-    with pytest.raises(RuntimeError):
-        dispenser.get_port()
+    with patch("socket.socket.bind", side_effect=OSError("Mocked bind error")) as mock_bind:
+        with pytest.raises(RuntimeError):
+            dispenser.get_port()
+        assert mock_bind.call_count == 5
