@@ -410,7 +410,11 @@ CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
         "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
-    }
+    },
+    "receipts_checkpoints": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/2",
+    },
 }
 
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
@@ -618,7 +622,7 @@ TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
 # Receipt fetching debugging (miner = (hotkey, address, port))
 DEBUG_FETCH_RECEIPTS_FROM_MINERS: Sequence[tuple[str, str, int]] | None = [
-    (f"localdebugminer-{i}", "127.0.0.1", 8000) for i in range(200)
+    (f"localdebugminer-{i}", f"127.0.0.{1+i}", 8000) for i in range(200)
 ]
 
 CHANNEL_LAYERS = {

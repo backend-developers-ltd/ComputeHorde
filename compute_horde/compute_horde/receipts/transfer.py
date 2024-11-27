@@ -1,9 +1,11 @@
 import logging
 from collections import defaultdict
-from collections.abc import AsyncIterable, MutableMapping, Sequence
+from collections.abc import AsyncIterable, Sequence
+from typing import Protocol
 
 import aiohttp
 import pydantic
+from django.core.cache import caches
 from more_itertools import chunked
 
 from compute_horde.receipts.models import ReceiptModel, receipt_to_django_model
@@ -19,7 +21,27 @@ class ReceiptFetchError(Exception):
 
 
 Offset = int
-CheckpointBackend = MutableMapping[str, int]
+
+
+class CheckpointBackend(Protocol):
+    async def get(self, key: str) -> int: ...
+
+    async def set(self, key: str, checkpoint: int) -> None: ...
+
+
+class DjangoCacheCheckpointBackend:
+    def __init__(self, cache: str = "default"):
+        self.cache = caches[cache]
+
+    async def get(self, key: str) -> int:
+        try:
+            return int(await self.cache.aget(key, 0))
+        except TypeError:
+            logger.warning(f"Django cache contained non-integer checkpoint value for {key}")
+            return 0
+
+    async def set(self, key: str, checkpoint: int) -> None:
+        await self.cache.aset(key, str(checkpoint))
 
 
 async def _aiter_aiohttp_lines(response: aiohttp.ClientResponse):
@@ -43,7 +65,7 @@ class ReceiptsTransfer:
         self._receipts_url = server_url.rstrip("/")
         self._checkpoints = checkpoint_backend
 
-    async def new_receipts(
+    async def transfer_new_receipts(
         self,
         pages: Sequence[int],
         # TODO: signed_by_miner: bittensor.wallet,
@@ -54,7 +76,7 @@ class ReceiptsTransfer:
         # Retrieve the receipts the pages and group by receipt model type.
         receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
         for page in pages:
-            async for receipt in self.new_receipts_on_page(page):
+            async for receipt in self.transfer_new_receipts_on_page(page):
                 model = receipt_to_django_model(receipt)
                 receipts_by_type[model.__class__].append(model)
 
@@ -65,7 +87,7 @@ class ReceiptsTransfer:
 
         return dict(receipts_by_type)
 
-    async def new_receipts_on_page(self, page: int) -> AsyncIterable[Receipt]:
+    async def transfer_new_receipts_on_page(self, page: int) -> AsyncIterable[Receipt]:
         """
         Iterate over receipts present on given page of the remote server.
         If use_checkpoint=False, all receipts from the page will be returned.
@@ -74,7 +96,7 @@ class ReceiptsTransfer:
         page_url = f"{self._receipts_url}/{page}.jsonl"
 
         checkpoint_key = page_url
-        checkpoint = self._checkpoints[checkpoint_key]
+        checkpoint = await self._checkpoints.get(checkpoint_key)
         use_range_request = checkpoint > 0
 
         if use_range_request:
@@ -99,7 +121,11 @@ class ReceiptsTransfer:
             # As the request should be as fast as possible, don't allow redirecting - clients must respond immediately.
             response = await http.get(page_url, headers=headers, allow_redirects=False)
 
-            if not 200 <= response.status < 300:
+            if response.status in {404, 416}:
+                logger.debug(f"Nothing to fetch from %s - %s", page_url, response.status)
+                return
+
+            if response.status not in {200, 206}:
                 logger.warning(f"Request failed for page {page}: {response.status}")
                 return
 
@@ -119,6 +145,6 @@ class ReceiptsTransfer:
             range_header = response.headers["content-range"]
             assert range_header.lower().startswith("bytes ")
             _, total_str = range_header.split("/")
-            self._checkpoints[checkpoint_key] = int(total_str)
+            await self._checkpoints.set(checkpoint_key, int(total_str))
         else:
-            self._checkpoints[checkpoint_key] = response.content.total_bytes
+            await self._checkpoints.set(checkpoint_key, response.content.total_bytes)

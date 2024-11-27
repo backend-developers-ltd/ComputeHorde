@@ -1017,62 +1017,6 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
     return is_success, message
 
 
-@app.task()
-def fetch_receipts(miners: Sequence[tuple[str, str, int]] | None = None):
-    """
-    Fetch job receipts from miners.
-    If miners are not specified, use current miners by querying metagraph. (expensive!)
-    """
-    if miners is None:
-        if settings.DEBUG_FETCH_RECEIPTS_FROM_MINERS:
-            # 1st, if debug miners are specified, they take precedence.
-            miners = settings.DEBUG_FETCH_RECEIPTS_FROM_MINERS
-            logger.info(f"Will fetch receipts from {len(miners)} debug miners")
-        else:
-            # 2nd, if no specific miners were specified, get from metagraph.
-            metagraph = bittensor.metagraph(
-                netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK
-            )
-            miners = [
-                (
-                    cast(str, neuron.hotkey),
-                    cast(str, neuron.axon_info.ip),
-                    cast(int, neuron.axon_info.port),
-                )
-                for neuron in metagraph.neurons
-                if neuron.axon_info.is_serving
-            ]
-            logger.info(f"Will fetch receipts from {len(miners)} metagraph miners")
-    else:
-        logger.info(f"Will fetch receipts from {len(miners)} miners")
-
-    n_pages_to_fetch = 2
-    latest_page = LocalFilesystemPagedReceiptStore.active_page_id()
-    pages = [latest_page - offset for offset in reversed(range(n_pages_to_fetch))]
-    checkpoint_backend = defaultdict(lambda: 0)  # TODO: This should be persistent
-
-    # TODO: Semaphore
-
-    async def transfer_from_miner(miner):
-        hotkey, ip, port = miner
-        transfer = ReceiptsTransfer(
-            server_url=f"http://{ip}:{port}/receipts",
-            checkpoint_backend=checkpoint_backend,
-        )
-        fetched_receipts = await transfer.new_receipts(pages=pages)
-        total = sum(len(receipts) for receipts in fetched_receipts.values())
-        logger.info(f"Fetched {total} receipts from {hotkey} at {ip}:{port}")
-
-    @async_to_sync
-    async def transfer_from_all_miners():
-        tasks = []
-        for miner in miners:
-            tasks.append(asyncio.create_task(transfer_from_miner(miner)))
-        await asyncio.gather(*tasks)
-
-    transfer_from_all_miners()
-
-
 @shared_task
 def send_events_to_facilitator():
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):

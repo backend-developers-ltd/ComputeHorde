@@ -1,12 +1,12 @@
 import logging
 import re
 import time
+from collections import defaultdict
 from collections.abc import Sequence
 from glob import glob
 from pathlib import Path
 
 from django.conf import settings
-from mypy.memprofile import defaultdict
 
 from compute_horde.receipts.schemas import (
     Receipt,
