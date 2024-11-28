@@ -65,7 +65,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--interval",
-            type=int,
+            type=float,
             default=None,
             help="Keep on adding `n` receipts every `interval` seconds. (default: add only once)",
         )

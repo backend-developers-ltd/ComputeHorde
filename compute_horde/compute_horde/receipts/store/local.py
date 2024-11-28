@@ -13,7 +13,8 @@ from compute_horde.receipts.schemas import (
 )
 from compute_horde.receipts.store.base import BaseReceiptStore
 
-PAGE_TIME_MOD = 60 * 60
+# 5 minutes per page
+PAGE_TIME_MOD = 60 * 5
 
 logger = logging.getLogger(__name__)
 

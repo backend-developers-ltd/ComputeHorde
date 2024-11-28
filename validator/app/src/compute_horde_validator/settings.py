@@ -414,6 +414,7 @@ CACHES = {
     "receipts_checkpoints": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
         "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/2",
+        "TIMEOUT": 60 * 60 * 24 * 2, # Remember the checkpoints for 2 days
     },
 }
 

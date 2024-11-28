@@ -1,17 +1,17 @@
 import asyncio
 import logging
 from collections import defaultdict
-from collections.abc import AsyncIterable, Sequence
+from collections.abc import Sequence
+from io import BytesIO
 from typing import Protocol, TypeAlias
 
 import aiohttp
 import pydantic
 from django.core.cache import caches
-from more_itertools import chunked
 
 from compute_horde.receipts.models import ReceiptModel, receipt_to_django_model
 from compute_horde.receipts.schemas import (
-    Receipt,
+    Receipt, BadMinerReceiptSignature, BadValidatorReceiptSignature,
 )
 from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
 
@@ -47,15 +47,17 @@ class DjangoCacheCheckpointBackend:
         await self.cache.aset(key, str(checkpoint))
 
 
-async def _aiter_aiohttp_lines(response: aiohttp.ClientResponse):
-    """
-    Iterate over lines within an aiohttp response.
-    """
-    while True:
-        line = await response.content.readline()
-        if line == b'':
-            break
-        yield line[:-1]  # strip newline
+async def _merged_generators(*gens):
+    tasks = [asyncio.create_task(gen) for gen in gens]
+    while tasks:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            try:
+                yield task.result()
+                tasks.remove(task)
+                tasks.append(asyncio.create_task(next(gen)))
+            except StopAsyncIteration:
+                tasks.remove(task)
 
 
 class ReceiptsTransfer:
@@ -69,7 +71,7 @@ class ReceiptsTransfer:
         self._checkpoints = checkpoint_backend
 
     @classmethod
-    async def transfer_from(cls, miners: Sequence[MinerInfo]):
+    async def transfer(cls, miners: Sequence[MinerInfo], session: aiohttp.ClientSession) -> int:
         """
         Efficiently transfer receipts from multiple miners at the same time, storing
         them in local database.
@@ -82,34 +84,60 @@ class ReceiptsTransfer:
         # TODO: inject it automatically
         checkpoint_backend = DjangoCacheCheckpointBackend("receipts_checkpoints")
 
+        # More concurrency = more load from switching asyncio tasks
+        # Less concurrency = higher latency miners will slow down the process
         # TODO: Configurable, but default to 100 or so
-        semaphore = asyncio.Semaphore(100)
-        transferred_receipts = []
+        semaphore = asyncio.Semaphore(70)
 
         async def transfer_page_from_miner(miner: MinerInfo, page: int):
-            hotkey, ip, port = miner
-            transfer = ReceiptsTransfer(
-                server_url=f"http://{ip}:{port}/receipts",
-                checkpoint_backend=checkpoint_backend,
-            )
-            async with semaphore:
-                async for receipt in transfer._get_new_receipts(page):
-                    transferred_receipts.append(receipt)
+            try:
+                async with semaphore:
+                    hotkey, ip, port = miner
+                    transfer = cls(
+                        server_url=f"http://{ip}:{port}/receipts",
+                        checkpoint_backend=checkpoint_backend,
+                    )
+                    return await transfer.get_new_receipts_on_page(page, session)
+            except Exception as e:
+                logger.error(f"Got exception from {miner}: {e.__class__.__name__} {e}", exc_info=False)
+                return []
 
-        await asyncio.gather(*(
+        transfer_tasks = [
             asyncio.create_task(transfer_page_from_miner(miner, page))
-            for page in pages
             for miner in miners
-        ))
+            for page in pages
+        ]
 
-        await cls._store_receipts(transferred_receipts)
+        total = 0
 
-    async def _get_new_receipts(self, page: int) -> AsyncIterable[Receipt]:
+        # Place received receipts into buckets based on receipt model type
+        receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
+        for completed_task in asyncio.as_completed(transfer_tasks):
+            for receipt in await completed_task:
+                model = receipt_to_django_model(receipt)
+                model_type = model.__class__
+                bucket = receipts_by_type[model_type]
+                bucket.append(model)
+                if len(bucket) >= 1000:
+                    await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
+                    total += len(bucket)
+                    logger.info(f"Transferred {len(bucket)} {model_type.__name__} receipts")
+                    bucket.clear()
+
+        # Batch insert
+        for model_type, bucket in receipts_by_type.items():
+            await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
+            total += len(bucket)
+            logger.info(f"Transferred {len(bucket)} {model_type.__name__} receipts")
+
+        return total
+
+
+    async def get_new_receipts_on_page(self, page: int, session: aiohttp.ClientSession) -> list[Receipt]:
         """
-        Iterate over receipts present on given page of the remote server.
+        Fetch a batch of receipts from remote server.
         Will start from last checkpoint for this page, if available.
-        Will also save a checkpoint for future runs.
-        TODO: Verify signatures
+        Checkpoint will be saved when this context manager exits.
         """
         page_url = f"{self._receipts_url}/{page}.jsonl"
 
@@ -130,33 +158,47 @@ class ReceiptsTransfer:
             # This is the first time we're requesting this page.
             # This will only receive a gzipped page if it's available.
             # If it's not, this will still work but the raw page file will be sent.
-            # httpx inflates the file automatically.
+            # aiohttp inflates the file automatically.
             headers = {
                 "Accept-Encoding": "gzip",
             }
 
-        async with aiohttp.ClientSession() as http:
-            # TODO: short timeout
-            # As the request should be as fast as possible, don't allow redirecting - clients must respond immediately.
-            response = await http.get(page_url, headers=headers, allow_redirects=False)
+        # TODO: short timeout
+        # As the request should be as fast as possible, don't allow redirecting - clients must respond immediately.
+        response = await session.get(page_url, headers=headers, allow_redirects=False)
+        if response.status in {404, 416}:
+            logger.debug(f"Nothing to fetch from %s - %s", page_url, response.status)
+            return []
+        if response.status not in {200, 206}:
+            logger.warning(f"Request failed for page {page}: {response.status}")
+            return []
+        jsonl_content = await response.read()
 
-            if response.status in {404, 416}:
-                logger.debug(f"Nothing to fetch from %s - %s", page_url, response.status)
-                return
-
-            if response.status not in {200, 206}:
-                logger.warning(f"Request failed for page {page}: {response.status}")
-                return
-
-            async for line in _aiter_aiohttp_lines(response):
-                try:
-                    yield Receipt.model_validate_json(line)
-                except pydantic.ValidationError:
-                    logger.warning(
-                        f"skipping invalid line: %s%s",
-                        line[:100],
-                        ' (...)' if len(line) > 100 else ''
-                    )
+        # This iterates over lines without splitting/copying the string in memory
+        receipts = []
+        for line in BytesIO(jsonl_content):
+            try:
+                receipt = Receipt.model_validate_json(line)
+                # TODO: throw=True
+                receipt.verify_miner_signature(throw=False)
+                receipt.verify_validator_signature(throw=False)
+                receipts.append(receipt)
+            except pydantic.ValidationError:
+                logger.warning(
+                    f"skipping invalid line: %s%s",
+                    line[:100],
+                    ' (...)' if len(line) > 100 else '',
+                )
+            except BadMinerReceiptSignature as e:
+                logger.warning(
+                    "Skipping receipt with bad miner signature: %s",
+                    e.receipt.payload.job_uuid,
+                )
+            except BadValidatorReceiptSignature as e:
+                logger.warning(
+                    "Skipping receipt with bad validator signature: %s",
+                    e.receipt.payload.job_uuid,
+                )
 
         # Save the total page size so that next time we request the page we know what range to request.
         if use_range_request:
@@ -170,16 +212,4 @@ class ReceiptsTransfer:
             # We got the complete page file, use its size for next checkpoint.
             await self._checkpoints.set(checkpoint_key, response.content.total_bytes)
 
-    @staticmethod
-    async def _store_receipts(receipts: list[Receipt]):
-        """
-        Convert receipts to django models and batch-save them
-        """
-        receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
-        for receipt in receipts:
-            model = receipt_to_django_model(receipt)
-            receipts_by_type[model.__class__].append(model)
-
-        for receipt_model, receipts in receipts_by_type.items():
-            for receipts_chunk in chunked(receipts, 1000):
-                await receipt_model.objects.abulk_create(receipts_chunk, ignore_conflicts=True)
+        return receipts
