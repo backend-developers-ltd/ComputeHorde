@@ -10,7 +10,8 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from compute_horde.certificate import (
     generate_certificate,
     generate_certificate_at,
-    start_nginx_with_certificates,
+    save_public_key,
+    start_nginx,
     write_certificate,
 )
 
@@ -51,6 +52,7 @@ events {
 
 def test_generate_ca_and_server_certs(tmp_path):
     generate_certificate_at(tmp_path, "blabla")
+    tmp_path = tmp_path / "ssl"
 
     assert set(os.listdir(tmp_path)) == {"certificate.pem", "private_key.pem"}
 
@@ -62,27 +64,26 @@ def test_generate_ca_and_server_certs(tmp_path):
     assert isinstance(key, RSAPrivateKey)
 
 
-def make_cert(tmp_path):
-    client_tmp_path = tmp_path / "client"
-    client_tmp_path.mkdir()
-
-    generate_certificate_at(client_tmp_path, "blabla")
-    public_key = (client_tmp_path / "certificate.pem").read_bytes()
-
-    return public_key, (
-        str(client_tmp_path / "certificate.pem"),
-        str(client_tmp_path / "private_key.pem"),
-    )
+async def start_nginx_with_certificates(
+    nginx_conf: str,
+    public_key: str,
+    port: int,
+    container_name: str,
+) -> tuple[str, str]:
+    tmp_path, _, cert = generate_certificate_at()
+    save_public_key(public_key, tmp_path)
+    await start_nginx(nginx_conf, port, tmp_path, container_name)
+    return cert
 
 
 @pytest.mark.asyncio
 async def test_certificates_with_nginx__success(tmp_path, container_name):
-    public_key, cert = make_cert(tmp_path)
-    container_name, certs_dir = await start_nginx_with_certificates(
-        NGINX_CONF, public_key, NGINX_PORT, container_name, tmp_path
+    _, public_key, cert = generate_certificate_at(tmp_path)
+    nginx_cert_path, _ = await start_nginx_with_certificates(
+        NGINX_CONF, public_key, NGINX_PORT, container_name
     )
 
-    resp = requests.get(NGINX_URI, verify=str(certs_dir / "certificate.pem"), cert=cert)
+    resp = requests.get(NGINX_URI, verify=nginx_cert_path, cert=cert)
     assert resp.status_code == 200
     assert resp.text.strip() == "Hello World!"
 
@@ -91,12 +92,12 @@ async def test_certificates_with_nginx__success(tmp_path, container_name):
 
 @pytest.mark.asyncio
 async def test_certificates_with_nginx__no_cert(tmp_path, container_name):
-    public_key, _ = make_cert(tmp_path)
-    container_name, certs_dir = await start_nginx_with_certificates(
-        NGINX_CONF, public_key, NGINX_PORT, container_name, tmp_path
+    _, public_key, _ = generate_certificate_at(tmp_path)
+    nginx_cert_path, _ = await start_nginx_with_certificates(
+        NGINX_CONF, public_key, NGINX_PORT, container_name
     )
 
-    resp = requests.get(NGINX_URI, verify=str(certs_dir / "certificate.pem"))
+    resp = requests.get(NGINX_URI, verify=nginx_cert_path)
 
     # 400 no cert, 403 wrong cert
     assert resp.status_code != 200
@@ -106,10 +107,8 @@ async def test_certificates_with_nginx__no_cert(tmp_path, container_name):
 
 @pytest.mark.asyncio
 async def test_certificates_with_nginx__fail(tmp_path, container_name):
-    public_key, _ = make_cert(tmp_path)
-    container_name, _ = await start_nginx_with_certificates(
-        NGINX_CONF, public_key, NGINX_PORT, container_name, tmp_path
-    )
+    _, public_key, _ = generate_certificate_at(tmp_path)
+    _ = await start_nginx_with_certificates(NGINX_CONF, public_key, NGINX_PORT, container_name)
 
     cert_path = tmp_path / "wrong_certificate.pem"
     certificate, _ = generate_certificate("127.0.0.1")
