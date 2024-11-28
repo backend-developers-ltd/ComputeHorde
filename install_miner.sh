@@ -189,7 +189,7 @@ ssh "$SSH_DESTINATION" <<'ENDSSH'
 set -euxo pipefail
 cat >> ~/compute_horde_miner/.env <<ENDENV
 IS_LOCAL_MINER=1
-LOCAL_MINER_VALIDATOR_HOTKEY="$(. ~/tmpvars && echo "$VALIDATOR_HOTKEY")"
+LOCAL_MINER_VALIDATOR_PUBLIC_KEY="$(. ~/tmpvars && echo "$VALIDATOR_HOTKEY")"
 ENDENV
 ENDSSH
 fi
