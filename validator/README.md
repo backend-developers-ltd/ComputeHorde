@@ -62,9 +62,9 @@ REMOTE_CELERY_START_SCRIPT=/project/mount/ComputeHorde/validator/dev_env_setup/s
 DEBUG_MINER_KEY=... python manage.py debug_run_synthetic_jobs
 ```
 
-## Setting up a trusted miner for cross-validation
+# Setting up a trusted miner for cross-validation
 
-### Set up a server
+## Set up a server
 
 Create an Ubuntu server and use the `install_miner.sh` script from the root of this repository to install the miner in a **local mode**:
 
@@ -73,49 +73,58 @@ curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/ins
 ```
 
 Replace the placeholders in the command above:
-- SSH_DESTINATION: your server's connection info (i.e. `username@1.2.3.4`)
-- VALIDATOR_HOTKEY: the hotkey of your validator
-- MINER_PORT (optional): the port on which the miner will listen for incoming connections (default is 8000)
-- DEFAULT_EXECUTOR_CLASS (optional): specify a custom executor class to use; **to support A6000 synthetic job flow, setting `always_on.llm.a6000` is mandatory** 
+- `SSH_DESTINATION`: your server's connection info (i.e. `username@1.2.3.4`)
+- `VALIDATOR_HOTKEY`: the hotkey of your validator (_not_ the path to the key)
+- `MINER_PORT` (optional): the port (of your choosing) on which the miner will listen for incoming connections (default is 8000)
+- `DEFAULT_EXECUTOR_CLASS` (optional): specifies a custom executor class to use. **For A6000 synthetic job support, `always_on.llm.a6000` must be set**
 
-### Provision S3 buckets for prompts and answers
+## Provision S3 buckets for prompts and answers
 
-Trusted miners require S3 buckets to store prompts and answers. To provision these buckets conveniently with the correct permissions pre-configured, make sure you have [AWS CLI](https://aws.amazon.com/cli/) installed and configured.
+Trusted miners require S3 buckets to store prompts and answers. 
+
+**Make sure** you have [AWS CLI](https://aws.amazon.com/cli/) installed and configured, 
+to provision these buckets conveniently with the correct permissions pre-configured. 
+
 Then run the following script:
 
 ```sh
 curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/validator/provision_s3.sh | bash -s - PROMPTS_BUCKET ANSWERS_BUCKET --create-user
 ```
 
-Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets you want to use for prompts and answers respectively. It will automatically create a dedicated user, assign permissions policy for created buckets, and add an access key, displaying it at the end so it can be copied to the validator env file. If you don't want to create a user and prefer to handle permissions manually, just skip the `--create-user` option.
+Replace `PROMPTS_BUCKET` and `ANSWERS_BUCKET` with the names of the S3 buckets you want to use for prompts and answers respectively.
 
-Note: if your buckets are not in your default AWS region export `AWS_DEFAULT_REGION` before running the script (both buckets needs to be in the same region), and add it to `.env` later:
+It will automatically create a dedicated user, assign permissions policy for created buckets, and add an access key, 
+displaying it at the end so it can be copied to the validator `.env` file. 
+
+If you don't want to create a user and prefer to handle permissions manually, skip the `--create-user` option.
+
+Note: if your buckets are not in your default AWS region export `AWS_DEFAULT_REGION` before running the script (both buckets need to be in the same region), and add it to `.env` later:
 ```
 export AWS_DEFAULT_REGION=BUCKETS_REGION
 ```
 
 At the end of the script, it will show the values for `S3_BUCKET_NAME_PROMPTS`, `S3_BUCKET_NAME_ANSWERS`.
-If you used `--create-user` flag, it will also show the values for `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
-You have to copy these variables in your validator `.env` file and restart your validator.
+If you use the `--create-user` flag, it will also show the values for `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+opy these variables in your validator `.env` file and restart your validator.
 
 > [!WARNING]  
-> If you did not use `--create-user`, you still need to provide `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your validator .env file.
+> Even if you did not use `--create-user`, you still need to provide `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your validator `.env` file.
 > In that case, you will have to manually generate the credentials.
 
 > [!NOTE]
-> We have tested the AWS S3. The buckets are used to allow quick and concurrent upload and download of multiple (but tiny) text files.
+> We have tested the AWS S3. The buckets allow quick and concurrent upload and download of multiple (but tiny) text files.
 
-### Updated validator .env
+## Updated validator .env
 
 Add or update these variables in the validator `.env` file:
 
 ```
-TRUSTED_MINER_ADDRESS = "MINER_IP"
-TRUSTED_MINER_PORT = MINER_PORT
+TRUSTED_MINER_ADDRESS="MINER_IP"
+TRUSTED_MINER_PORT=MINER_PORT
 ```
 
 If your buckets are not in the default AWS region, add also:
 
 ```
-AWS_DEFAULT_REGION = BUCKETS_REGION
+AWS_DEFAULT_REGION=BUCKETS_REGION
 ```
