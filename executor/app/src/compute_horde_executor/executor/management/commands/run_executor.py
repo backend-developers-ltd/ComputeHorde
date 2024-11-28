@@ -27,7 +27,12 @@ from compute_horde.base.volume import (
     ZipUrlVolume,
 )
 from compute_horde.base_requests import BaseRequest
-from compute_horde.certificate import read_certificate, start_nginx_with_certificates
+from compute_horde.certificate import (
+    generate_certificate_at,
+    get_docker_container_ip,
+    save_public_key,
+    start_nginx,
+)
 from compute_horde.em_protocol import executor_requests, miner_requests
 from compute_horde.em_protocol.executor_requests import (
     GenericError,
@@ -67,6 +72,7 @@ CVE_2022_0492_IMAGE = (
     "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
 )
 
+JOB_CONTAINER_PORT = 8000
 NGINX_CONF = """
 http {
     server {
@@ -105,26 +111,6 @@ events {
     worker_connections 1024;
 }
 """
-
-
-async def run_nginx(
-    public_key: str, job_container_name: str, nginx_container_name: str
-) -> str | None:
-    # TODO: verify that job_container_name is resolved to an IP address
-    nginx_conf = NGINX_CONF.replace("CONTAINER", f"{job_container_name}:8000")
-    public_key_bytes = public_key.encode("utf-8")
-    try:
-        _, certs_dir = await start_nginx_with_certificates(
-            nginx_conf,
-            public_key_bytes,
-            port=settings.NGINX_PORT,
-            container_name=nginx_container_name,
-        )
-    except Exception as e:
-        logger.error(f"Failed to start nginx: {e}")
-        return None
-
-    return read_certificate(certs_dir)
 
 
 class RunConfigManager:
@@ -471,10 +457,10 @@ class JobRunner:
         self.nginx_container_name = f"{settings.EXECUTOR_TOKEN}-nginx"
 
         # for streaming job
-        self.public_key: str | None = None
         self.executor_certificate: str | None = None
         if isinstance(self.initial_job_request, V1InitialJobRequest):
-            self.public_key = self.initial_job_request.public_key
+            self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at()
+            save_public_key(self.initial_job_request.public_key, self.nginx_dir_path)
 
     async def prepare(self):
         self.volume_mount_dir.mkdir(exist_ok=True)
@@ -499,16 +485,6 @@ class JobRunner:
                 )
                 logger.error(msg)
                 raise JobError(msg)
-
-        # if streaming job, spin up nginx for it
-        if self.public_key:
-            try:
-                logger.debug("Spinning up nginx for streaming job")
-                self.executor_certificate = await run_nginx(
-                    self.public_key, self.job_container_name, self.nginx_container_name
-                )
-            except Exception as e:
-                logger.error(f"Failed to start nginx: {e}")
 
     async def run_job(self, job_request: V0JobRequest):
         self.full_job_request = job_request
@@ -581,6 +557,26 @@ class JobRunner:
             stderr=asyncio.subprocess.PIPE,
         )
 
+        # if streaming job, spin up nginx for it
+        if self.executor_certificate is not None:
+            # TODO wait for the streaming job to be ready
+            logger.debug("Spinning up nginx for streaming job")
+            await asyncio.sleep(1)
+            try:
+                # the job container ip is needed to proxy the request to the job container
+                job_ip = await get_docker_container_ip(self.job_container_name)
+                # update the nginx conf with the job container ip
+                nginx_conf = NGINX_CONF.replace("CONTAINER", f"{job_ip}:{JOB_CONTAINER_PORT}")
+                await start_nginx(
+                    nginx_conf,
+                    port=settings.NGINX_PORT,
+                    dir_path=self.nginx_dir_path,
+                    container_name=self.nginx_container_name,
+                )
+                logger.debug("Nginx started successfully")
+            except Exception as e:
+                logger.error(f"Failed to start Nginx: {e}")
+
         t1 = time.time()
         try:
             result = await asyncio.wait_for(
@@ -602,6 +598,20 @@ class JobRunner:
         else:
             exit_status = process.returncode
             timeout = False
+
+        # if streaming job, stop the associated nginx server
+        if self.executor_certificate is not None:
+            try:
+                await asyncio.sleep(1)
+                await asyncio.create_subprocess_exec(
+                    "docker",
+                    "stop",
+                    self.nginx_container_name,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+            except Exception as e:
+                logger.error(f"Failed to stop Nginx: {e}")
 
         # Save the streams in output volume and truncate them in response.
         with open(self.output_volume_mount_dir / "stdout.txt", "w") as f:
