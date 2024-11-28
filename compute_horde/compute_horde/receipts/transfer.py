@@ -118,7 +118,7 @@ class ReceiptsTransfer:
                 model_type = model.__class__
                 bucket = receipts_by_type[model_type]
                 bucket.append(model)
-                if len(bucket) >= 1000:
+                if len(bucket) >= 5000:
                     await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
                     total += len(bucket)
                     logger.info(f"Transferred {len(bucket)} {model_type.__name__} receipts")
