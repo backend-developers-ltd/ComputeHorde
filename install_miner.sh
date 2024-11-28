@@ -3,7 +3,7 @@ set -euxo pipefail
 
 if [ $# -lt 3 ] || [ $# -gt 5 ];
 then
-  >&2 echo "USAGE: ./install_miner.sh MODE[production|local] SSH_DESTINATION HOTKEY_PATH|VALIDATOR_PUBLIC_KEY MINER_PORT:8000(optional) DEFAULT_EXECUTOR_CLASS(optional, local mode only)"
+  >&2 echo "USAGE: ./install_miner.sh MODE[production|local] SSH_DESTINATION HOTKEY_PATH|VALIDATOR_HOTKEY MINER_PORT:8000(optional) DEFAULT_EXECUTOR_CLASS(optional, local mode only)"
   exit 1
 fi
 
@@ -35,11 +35,11 @@ if [ "$MODE" == "production" ]; then
   REMOTE_HOTKEY_NAME="$(basename "$REMOTE_HOTKEY_PATH")"
   REMOTE_WALLET_NAME="$(basename "$(dirname "$REMOTE_HOTKEY_DIR")")"
 
-  VALIDATOR_PUBLIC_KEY=""
+  VALIDATOR_HOTKEY=""
   DEFAULT_EXECUTOR_CLASS=
 
 elif [ "$MODE" == "local" ]; then
-  VALIDATOR_PUBLIC_KEY="$3"
+  VALIDATOR_HOTKEY="$3"
 
   REMOTE_HOTKEY_DIR=.bittensor/wallets/dummy/hotkeys
   REMOTE_HOTKEY_NAME=dummy
@@ -65,7 +65,7 @@ WALLET_NAME=$REMOTE_WALLET_NAME
 DEFAULT_ADMIN_PASSWORD="$DEFAULT_ADMIN_PASSWORD"
 MIGRATING=$MIGRATING
 MINER_PORT=$MINER_PORT
-VALIDATOR_PUBLIC_KEY=$VALIDATOR_PUBLIC_KEY
+VALIDATOR_HOTKEY=$VALIDATOR_HOTKEY
 DEFAULT_EXECUTOR_CLASS=$DEFAULT_EXECUTOR_CLASS
 ENDCAT
 ENDSSH
@@ -189,7 +189,7 @@ ssh "$SSH_DESTINATION" <<'ENDSSH'
 set -euxo pipefail
 cat >> ~/compute_horde_miner/.env <<ENDENV
 IS_LOCAL_MINER=1
-LOCAL_MINER_VALIDATOR_PUBLIC_KEY="$(. ~/tmpvars && echo "$VALIDATOR_PUBLIC_KEY")"
+LOCAL_MINER_VALIDATOR_HOTKEY="$(. ~/tmpvars && echo "$VALIDATOR_HOTKEY")"
 ENDENV
 ENDSSH
 fi
