@@ -69,12 +69,12 @@ DEBUG_MINER_KEY=... python manage.py debug_run_synthetic_jobs
 Create an Ubuntu server and use the `install_miner.sh` script from the root of this repository to install the miner in a **local mode**:
 
 ```sh
-curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/install_miner.sh | bash -s - local SSH_DESTINATION VALIDATOR_HOTKEY MINER_PORT DEFAULT_EXECUTOR_CLASS
+curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/install_miner.sh | bash -s - local SSH_DESTINATION VALIDATOR_PUBLIC_KEY MINER_PORT DEFAULT_EXECUTOR_CLASS
 ```
 
 Replace the placeholders in the command above:
 - `SSH_DESTINATION`: your server's connection info (i.e. `username@1.2.3.4`)
-- `VALIDATOR_HOTKEY`: the hotkey of your validator (_not_ the path to the key)
+- `VALIDATOR_PUBLIC_KEY`: the hotkey of your validator (_not_ the path to the key)
 - `MINER_PORT` (optional): the port (of your choosing) on which the miner will listen for incoming connections (default is 8000)
 - `DEFAULT_EXECUTOR_CLASS` (optional): specifies a custom executor class to use. **For A6000 synthetic job support, `always_on.llm.a6000` must be set**
 
