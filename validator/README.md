@@ -76,7 +76,7 @@ Replace the placeholders in the command above:
 - `SSH_DESTINATION`: your server's connection info (i.e. `username@1.2.3.4`)
 - `VALIDATOR_PUBLIC_KEY`: the public key of your validator (_not_ the path to the key)
 - `MINER_PORT` (optional): the port (of your choosing) on which the miner will listen for incoming connections (default is 8000)
-- `DEFAULT_EXECUTOR_CLASS` (optional): specify a custom executor class to use; set **`always_on.llm.a6000` is mandatory to support A6000 synthetic job flow** 
+- `DEFAULT_EXECUTOR_CLASS` (optional): specifies a custom executor class to use. **For A6000 synthetic job support, `always_on.llm.a6000` must be set**
 
 ## Provision S3 buckets for prompts and answers
 
