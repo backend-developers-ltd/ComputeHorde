@@ -17,7 +17,6 @@ from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
 
 logger = logging.getLogger(__name__)
 
-
 Offset = int
 MinerInfo: TypeAlias = tuple[str, str, int]
 
@@ -43,19 +42,6 @@ class DjangoCacheCheckpointBackend:
         await self.cache.aset(key, str(checkpoint))
 
 
-async def _merged_generators(*gens):
-    tasks = [asyncio.create_task(gen) for gen in gens]
-    while tasks:
-        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            try:
-                yield task.result()
-                tasks.remove(task)
-                tasks.append(asyncio.create_task(next(gen)))
-            except StopAsyncIteration:
-                tasks.remove(task)
-
-
 class ReceiptsTransfer:
     """
     HTTP client for fetching receipts from a target based on an HTTP URL.
@@ -71,7 +57,10 @@ class ReceiptsTransfer:
         cls,
         miners: Sequence[MinerInfo],
         session: aiohttp.ClientSession,
-    ) -> (int, int):
+        concurrency: int,
+        max_time_per_miner_page: float,
+        batch_insert_size: int,
+    ) -> tuple[int, int]:
         """
         Efficiently transfer receipts from multiple miners at the same time, storing
         them in local database.
@@ -80,14 +69,11 @@ class ReceiptsTransfer:
         latest_page = LocalFilesystemPagedReceiptStore.active_page_id()
         pages = [latest_page - 1, latest_page]
 
-        # TODO: cache name should be coming from settings
-        # TODO: inject it automatically
         checkpoint_backend = DjangoCacheCheckpointBackend("receipts_checkpoints")
 
         # More concurrency = more load from switching asyncio tasks
         # Less concurrency = higher latency miners will slow down the process
-        # TODO: Configurable, but default to 100 or so
-        semaphore = asyncio.Semaphore(70)
+        semaphore = asyncio.Semaphore(concurrency)
 
         async def transfer_page_from_miner(miner: MinerInfo, page: int):
             try:
@@ -97,7 +83,7 @@ class ReceiptsTransfer:
                         server_url=f"http://{ip}:{port}/receipts",
                         checkpoint_backend=checkpoint_backend,
                     )
-                    return await transfer.get_new_receipts_on_page(page, session)
+                    return await transfer.get_new_receipts_on_page(page, session, timeout=max_time_per_miner_page)
             except Exception as e:
                 logger.error(f"Got exception from {miner}: {e.__class__.__name__} {e}", exc_info=False)
                 raise
@@ -114,23 +100,22 @@ class ReceiptsTransfer:
         failures = 0
 
         # Wait for all transfer tasks and handle them as soon as they finish
-        for completed_task in asyncio.as_completed(transfer_tasks):
+        for transfer_task in asyncio.as_completed(transfer_tasks):
             try:
-                task = await completed_task
+                for receipt in await transfer_task:
+                    model = receipt_to_django_model(receipt)
+                    model_type = model.__class__
+                    bucket = receipts_by_type[model_type]
+                    bucket.append(model)
+                    if len(bucket) >= batch_insert_size:
+                        await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
+                        total_receipts += len(bucket)
+                        logger.info(f"Transferred {len(bucket)} {model_type.__name__} receipts")
+                        bucket.clear()
             except Exception:
                 # TODO: This catch may be too broad
                 failures += 1
                 continue
-            for receipt in task:
-                model = receipt_to_django_model(receipt)
-                model_type = model.__class__
-                bucket = receipts_by_type[model_type]
-                bucket.append(model)
-                if len(bucket) >= 5000:
-                    await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
-                    total_receipts += len(bucket)
-                    logger.info(f"Transferred {len(bucket)} {model_type.__name__} receipts")
-                    bucket.clear()
 
         # Batch insert
         for model_type, bucket in receipts_by_type.items():
@@ -140,7 +125,8 @@ class ReceiptsTransfer:
 
         return total_receipts, failures
 
-    async def get_new_receipts_on_page(self, page: int, session: aiohttp.ClientSession) -> list[Receipt]:
+    async def get_new_receipts_on_page(self, page: int, session: aiohttp.ClientSession, timeout: float) -> list[
+        Receipt]:
         """
         Fetch a batch of receipts from remote server.
         Will start from last checkpoint for this page, if available.
@@ -172,7 +158,7 @@ class ReceiptsTransfer:
 
         # TODO: short timeout
         # As the request should be as fast as possible, don't allow redirecting - clients must respond immediately.
-        response = await session.get(page_url, headers=headers, allow_redirects=False)
+        response = await session.get(page_url, headers=headers, allow_redirects=False, timeout=timeout)
         if response.status in {404, 416}:
             logger.debug(f"Nothing to fetch from %s - %s", page_url, response.status)
             return []
@@ -185,8 +171,8 @@ class ReceiptsTransfer:
         for line in BytesIO(jsonl_content):
             try:
                 receipt = Receipt.model_validate_json(line)
-                receipt.verify_miner_signature(throw=False)
-                receipt.verify_validator_signature(throw=False)
+                receipt.verify_miner_signature(throw=True)
+                receipt.verify_validator_signature(throw=True)
                 receipts.append(receipt)
             except pydantic.ValidationError:
                 logger.warning(
