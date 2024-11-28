@@ -89,6 +89,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 volume=request.volume,
                 volume_type=request.volume_type.value if request.volume_type else None,
                 public_key=request.public_key,
+                executor_ip=self.scope["client"][0],
             )
         else:
             raise ValueError(f"Unknown job message type {request_type}")
@@ -102,9 +103,9 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             self.job.status = AcceptedJob.Status.WAITING_FOR_PAYLOAD
             await self.job.asave()
             if isinstance(msg, executor_requests.V1ReadyRequest):
-                ip = self.scope["client"][0]  # get the ip of the executor
+                executor_ip = self.scope["client"][0]
                 await self.send_executor_ready(
-                    self.executor_token, public_key=msg.public_key, ip=ip, port=msg.port
+                    self.executor_token, public_key=msg.public_key, ip=executor_ip, port=msg.port
                 )
             else:
                 await self.send_executor_ready(self.executor_token)

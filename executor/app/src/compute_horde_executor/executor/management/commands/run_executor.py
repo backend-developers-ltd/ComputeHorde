@@ -459,7 +459,9 @@ class JobRunner:
         # for streaming job
         self.executor_certificate: str | None = None
         if isinstance(self.initial_job_request, V1InitialJobRequest):
-            self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at()
+            self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(
+                alternative_name=self.initial_job_request.executor_ip
+            )
             save_public_key(self.initial_job_request.public_key, self.nginx_dir_path)
 
     async def prepare(self):
