@@ -108,7 +108,7 @@ If you use the `--create-user` flag, it will also show the values for `AWS_ACCES
 opy these variables in your validator `.env` file and restart your validator.
 
 > [!WARNING]  
-> If you did not use `--create-user`, you still need to provide `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your validator `.env` file.
+> Even if you did not use `--create-user`, you still need to provide `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your validator `.env` file.
 > In that case, you will have to manually generate the credentials.
 
 > [!NOTE]

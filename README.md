@@ -59,11 +59,11 @@ for miner in miners:
 ## Validator
 
 ComputeHorde validator is built out of three components
-1. trusted miner (requires A6000 (the only GPU supported now)) for cross-validation
+1. trusted miner (requires A6000 - the only GPU supported now) for cross-validation
 1. two S3 buckets for sharing LLM data (lots of small text files)
 1. validator machine (standard, non-GPU) - for regular validating & weight-setting
 
-The steps (performed by running installation scripts **on your local machine** (the machine where you have your wallet files)):
+The steps, performed by running installation scripts **on your local machine**, which has your wallet files. For clarity, **these installation scripts are not run on the machine that will become the trusted miner or the validator**, the scripts will connect through SSH to those machines from your local machine:
 1. [setup trusted miner](/validator#setting-up-a-trusted-miner-for-cross-validation) 
 1. [provision S3 buckets for prompts and answers](/validator#provision-s3-buckets-for-prompts-and-answers) 
 1. [setup validator](#validator-setup)
