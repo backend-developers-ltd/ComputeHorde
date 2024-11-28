@@ -18,10 +18,6 @@ from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
 logger = logging.getLogger(__name__)
 
 
-class ReceiptFetchError(Exception):
-    pass
-
-
 Offset = int
 MinerInfo: TypeAlias = tuple[str, str, int]
 
@@ -71,7 +67,11 @@ class ReceiptsTransfer:
         self._checkpoints = checkpoint_backend
 
     @classmethod
-    async def transfer(cls, miners: Sequence[MinerInfo], session: aiohttp.ClientSession) -> int:
+    async def transfer(
+        cls,
+        miners: Sequence[MinerInfo],
+        session: aiohttp.ClientSession,
+    ) -> (int, int):
         """
         Efficiently transfer receipts from multiple miners at the same time, storing
         them in local database.
@@ -100,7 +100,7 @@ class ReceiptsTransfer:
                     return await transfer.get_new_receipts_on_page(page, session)
             except Exception as e:
                 logger.error(f"Got exception from {miner}: {e.__class__.__name__} {e}", exc_info=False)
-                return []
+                raise
 
         transfer_tasks = [
             asyncio.create_task(transfer_page_from_miner(miner, page))
@@ -108,30 +108,37 @@ class ReceiptsTransfer:
             for page in pages
         ]
 
-        total = 0
-
         # Place received receipts into buckets based on receipt model type
         receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
+        total_receipts = 0
+        failures = 0
+
+        # Wait for all transfer tasks and handle them as soon as they finish
         for completed_task in asyncio.as_completed(transfer_tasks):
-            for receipt in await completed_task:
+            try:
+                task = await completed_task
+            except Exception:
+                # TODO: This catch may be too broad
+                failures += 1
+                continue
+            for receipt in task:
                 model = receipt_to_django_model(receipt)
                 model_type = model.__class__
                 bucket = receipts_by_type[model_type]
                 bucket.append(model)
                 if len(bucket) >= 5000:
                     await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
-                    total += len(bucket)
+                    total_receipts += len(bucket)
                     logger.info(f"Transferred {len(bucket)} {model_type.__name__} receipts")
                     bucket.clear()
 
         # Batch insert
         for model_type, bucket in receipts_by_type.items():
             await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
-            total += len(bucket)
+            total_receipts += len(bucket)
             logger.info(f"Transferred {len(bucket)} {model_type.__name__} receipts")
 
-        return total
-
+        return total_receipts, failures
 
     async def get_new_receipts_on_page(self, page: int, session: aiohttp.ClientSession) -> list[Receipt]:
         """
@@ -174,12 +181,10 @@ class ReceiptsTransfer:
             return []
         jsonl_content = await response.read()
 
-        # This iterates over lines without splitting/copying the string in memory
         receipts = []
         for line in BytesIO(jsonl_content):
             try:
                 receipt = Receipt.model_validate_json(line)
-                # TODO: throw=True
                 receipt.verify_miner_signature(throw=False)
                 receipt.verify_validator_signature(throw=False)
                 receipts.append(receipt)

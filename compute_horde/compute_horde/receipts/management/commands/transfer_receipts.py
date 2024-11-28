@@ -1,3 +1,4 @@
+import gc
 import logging
 import time
 from statistics import mean
@@ -57,14 +58,14 @@ class Command(BaseCommand):
             while True:
                 # TODO: Miners on metagraph may change
                 start_time = time.monotonic()
-                total = await ReceiptsTransfer.transfer(miners, session)
+                total_receipts, total_exceptions = await ReceiptsTransfer.transfer(miners, session)
                 elapsed = time.monotonic() - start_time
-                rps = total / elapsed
-                logger.info(f"Transferred {total} receipts in {elapsed:.3f}s at {rps:.0f} RPS")
+                rps = total_receipts / elapsed
+                logger.info(f"Transferred {total_receipts} receipts in {elapsed:.3f}s at {rps:.0f} RPS (got {total_exceptions} exceptions)")
                 if not daemon:
                     break
 
-                if total:
+                if total_receipts:
                     samples_time.append(elapsed)
                     samples_rps.append(rps)
                     mean_elapsed = mean(samples_time[1:]) if len(samples_time) > 1 else 0
