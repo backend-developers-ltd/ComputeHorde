@@ -1,12 +1,11 @@
 import asyncio
-import requests
 import contextlib
 import logging
-import subprocess
 import sys
 import uuid
 from typing import cast
 
+import requests
 import uvloop
 from asgiref.sync import async_to_sync
 from compute_horde.certificate import generate_certificate_at
