@@ -34,11 +34,13 @@ async def test_all_active_neurons(
         ),
     ]
 
-    res = await selector.active([
-        "HotkeyA",
-        "HotkeyB",
-        "HotkeyC",
-    ])
+    res = await selector.active(
+        [
+            "HotkeyA",
+            "HotkeyB",
+            "HotkeyC",
+        ]
+    )
 
     assert res == "HotkeyC"
 
@@ -69,11 +71,13 @@ async def test_no_active_neurons(
     )
 
     with pytest.raises(NoActiveHotkeysException):
-        await selector.active([
-            "HotkeyA",
-            "HotkeyB",
-            "HotkeyC",
-        ])
+        await selector.active(
+            [
+                "HotkeyA",
+                "HotkeyB",
+                "HotkeyC",
+            ]
+        )
 
 
 @pytest.mark.asyncio
@@ -93,21 +97,25 @@ async def test_only_one_active_neurons(
         seed="SECRET",
     )
 
-    res = await selector.active([
-        "HotkeyA",
-        "HotkeyB",
-        "HotkeyC",
-    ])
+    res = await selector.active(
+        [
+            "HotkeyA",
+            "HotkeyB",
+            "HotkeyC",
+        ]
+    )
 
     assert res == "HotkeyA"
 
     mock_subtensor.return_value.get_current_block.return_value = 3023723 + 722
 
-    res = await selector.active([
-        "HotkeyA",
-        "HotkeyB",
-        "HotkeyC",
-    ])
+    res = await selector.active(
+        [
+            "HotkeyA",
+            "HotkeyB",
+            "HotkeyC",
+        ]
+    )
 
     assert res == "HotkeyA"
 
@@ -129,17 +137,23 @@ async def test_cache_active_neurons(
         seed="SECRET",
     )
 
-    res1 = await selector.active([
-        "HotkeyA",
-        "HotkeyB",
-        "HotkeyC",
-    ])
-    res2 = await selector.active([
-        "HotkeyA",
-        "HotkeyB",
-        "HotkeyC",
-    ])
+    res1 = await selector.active(
+        [
+            "HotkeyA",
+            "HotkeyB",
+            "HotkeyC",
+        ]
+    )
+    res2 = await selector.active(
+        [
+            "HotkeyA",
+            "HotkeyB",
+            "HotkeyC",
+        ]
+    )
 
     assert res1 == res2 == "HotkeyA"
 
-    mock_subtensor.return_value.neurons_lite.assert_called_once_with(settings.BITTENSOR_NETUID, 3023685)
+    mock_subtensor.return_value.neurons_lite.assert_called_once_with(
+        settings.BITTENSOR_NETUID, 3023685
+    )
