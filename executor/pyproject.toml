@@ -20,7 +20,7 @@ dependencies = [
     "nox==2024.10.09",
     "httpx~=0.26.0",
     "channels[daphne]==4.*",
-    "websockets==12.*",
+    "websockets==13.*",
     "compute-horde",
     "prometheus-client~=0.17.0",
     "django-prometheus==2.3.1",
@@ -32,6 +32,7 @@ dependencies = [
 compute-horde = { path = "../compute_horde", editable = true }
 
 [tool.uv]
+prerelease = "allow"
 environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
 
 [build-system]
