@@ -131,9 +131,10 @@ class DockerExecutorManager(BaseExecutorManager):
     async def get_manifest(self):
         return {settings.DEFAULT_EXECUTOR_CLASS: 1}
 
-    async def is_active(self):
+    async def is_active(self) -> bool:
         selected = await self.selector.active(
             settings.CLUSTER_HOTKEYS,
         )
+        my_address = settings.BITTENSOR_WALLET().hotkey.ss58_address  # type: str
 
-        return selected == settings.BITTENSOR_WALLET().hotkey.ss58_address
+        return selected == my_address
