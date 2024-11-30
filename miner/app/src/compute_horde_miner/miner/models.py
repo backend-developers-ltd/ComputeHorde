@@ -85,3 +85,11 @@ class AcceptedJob(models.Model):
                 result_reported_to_validator__isnull=True,
             )
         ]
+
+
+class ClusterMiner(models.Model):
+    hotkey = models.CharField(max_length=48, primary_key=True)
+    block = models.BigIntegerField(null=True)
+
+    def __str__(self):
+        return f"hotkey: {self.hotkey}"
