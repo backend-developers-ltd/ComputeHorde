@@ -1,12 +1,9 @@
 import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import bittensor
 import pydantic
 from substrateinterface.exceptions import SubstrateRequestException
-
-if TYPE_CHECKING:
-    from bittensor.chain_data import NeuronInfo
 
 BAC_VALIDATOR_SS58_ADDRESS = "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
 MIN_STAKE = 1000
@@ -25,7 +22,9 @@ class ValidatorListError(Exception):
         self.reason = reason
 
 
-def get_validators(netuid=12, network="finney", block: int | None = None) -> list["NeuronInfo"]:
+def get_validators(
+    netuid=12, network="finney", block: int | None = None
+) -> list[bittensor.NeuronInfo]:
     """
     Validators are top 24 neurons in terms of stake, only taking into account those that have at least 1000
     and forcibly including BAC_VALIDATOR_SS58_ADDRESS.

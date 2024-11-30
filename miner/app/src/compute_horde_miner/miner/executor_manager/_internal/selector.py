@@ -5,7 +5,6 @@ from collections.abc import Sequence
 
 import asgiref.sync
 import bittensor
-import bittensor.chain_data
 import substrateinterface.exceptions
 from compute_horde.subtensor import get_cycle_containing_block
 from django.conf import settings
@@ -53,7 +52,7 @@ class HistoricalRandomMinerSelector(BaseSelector):
         return self.subtensor.get_current_block()  # type: ignore
 
     @asgiref.sync.sync_to_async
-    def fetch_neurons(self, netuid: int, block: int) -> list[bittensor.chain_data.NeuronInfoLite]:
+    def fetch_neurons(self, netuid: int, block: int) -> list[bittensor.NeuronInfoLite]:
         try:
             return self.subtensor.neurons_lite(netuid, block)  # type: ignore
         except substrateinterface.exceptions.SubstrateRequestException as e:
