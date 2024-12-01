@@ -17,14 +17,23 @@ class Command(BaseCommand):
     help = "Fetch receipts from miners"
 
     def add_arguments(self, parser):
-        parser.add_argument("--daemon", "-d", default=False, action='store_true')
         parser.add_argument("--miner-hotkey", type=str)
         parser.add_argument("--miner-ip", type=str)
         parser.add_argument("--miner-port", type=int)
-        # TODO: --interval
+        parser.add_argument("--interval", type=float)
 
     @async_to_sync
-    async def handle(self, daemon: bool, miner_hotkey: str, miner_ip: str, miner_port: int, **kwargs):
+    async def handle(
+        self,
+        interval: float | None,
+        miner_hotkey: str | None,
+        miner_ip: str | None,
+        miner_port: int | None,
+        **kwargs,
+    ):
+        if interval is not None and interval < 1:
+            logger.warning("Running with interval < 1 may significantly impact performance.")
+
         if (miner_hotkey, miner_ip, miner_port) != (None, None, None):
             # 1st, use explicitly specified miner if available
             if None in {miner_hotkey, miner_ip, miner_port}:
@@ -62,9 +71,9 @@ class Command(BaseCommand):
                 ]
 
         # TODO: Catch up last 2 cycles of receipts
-        await self.do_transfer(daemon, miners)
+        await self.do_transfer(interval, miners)
 
-    async def do_transfer(self, daemon: bool, miners: Callable[[], Awaitable[list[MinerInfo]]]):
+    async def do_transfer(self, interval: float | None, miners: Callable[[], Awaitable[list[MinerInfo]]]):
         async with aiohttp.ClientSession() as session:
             while True:
                 start_time = time.monotonic()
@@ -89,7 +98,9 @@ class Command(BaseCommand):
                     f"and got {total_exceptions} exceptions"
                 )
 
-                if not daemon:
+                if interval is None:
                     break
 
-                time.sleep((1 - elapsed) if elapsed < 1 else 0)
+                # Sleep for the remainder of the time if any
+                if elapsed < interval:
+                    time.sleep(interval - elapsed)
