@@ -162,8 +162,9 @@ class ReceiptsTransfer:
             return []
         jsonl_content = await response.read()
 
-        # Schedule to the sync thread so that other HTTP requests don't time out waiting for CPU stuff
-        receipts = await sync_to_async(self._to_valid_receipts)(jsonl_content)
+        # Put this on a worker thread, otherwise other HTTP requests will time out waiting for this.
+        # While not thread sensitive, putting these tasks on dedicated worker threads somehow makes the timeouts worse.
+        receipts = await sync_to_async(self._to_valid_receipts, thread_sensitive=True)(jsonl_content)
 
         # Save the total page size so that next time we request the page we know what range to request.
         if use_range_request:
@@ -193,16 +194,19 @@ class ReceiptsTransfer:
                     line[:100],
                     ' (...)' if len(line) > 100 else '',
                 )
+                continue
             except BadMinerReceiptSignature as e:
                 logger.warning(
                     "Skipping %s with bad miner signature: %s",
                     e.receipt.payload.receipt_type,
                     e.receipt.payload.job_uuid,
                 )
+                continue
             except BadValidatorReceiptSignature as e:
                 logger.warning(
                     "Skipping %s with bad validator signature: %s",
                     e.receipt.payload.receipt_type,
                     e.receipt.payload.job_uuid,
                 )
+                continue
         return receipts

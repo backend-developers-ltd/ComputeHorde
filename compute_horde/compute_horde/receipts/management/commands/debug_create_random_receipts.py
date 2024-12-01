@@ -45,7 +45,6 @@ class Command(BaseCommand):
     n: int
     interval: int | None
     condense: int
-    spread_hours: int | None
 
     @cached_property
     def validator_keys(self) -> bittensor.Keypair:
@@ -57,12 +56,6 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("n", type=int, help="Number of receipts")
-        parser.add_argument(
-            "--spread-hours",
-            type=int,
-            default=None,
-            help="How far into the past the 'timestamp' of a random receipt can be set to.",
-        )
         parser.add_argument(
             "--interval",
             type=float,
@@ -80,29 +73,21 @@ class Command(BaseCommand):
         self.n = kwargs["n"]
         self.interval = kwargs["interval"]
         self.condense = kwargs["interval_condense"]
-        self.spread_hours = kwargs["spread_hours"]
-
-        def chunkinate(total: int, size: int):
-            """
-            Keep on returning integers no larger than `size` until they add up to `total`
-            """
-            so_far = 0
-            while so_far < total:
-                next_chunk = min(size, total - so_far)
-                yield next_chunk, so_far
-                so_far += next_chunk
 
         if self.interval is None:
+            so_far = 0
             # Insert in chunks of up to 1000
-            for chunk, so_far in chunkinate(self.n, 1000):
-                logger.info(f"Done {so_far} out of {self.n}")
+            while so_far < self.n:
+                chunk = min(self.n - so_far, 1000)
                 receipts = [self.generate_one() for _ in range(chunk)]
                 by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
                 for receipt in receipts:
                     by_type[receipt.__class__].append(receipt)
                 for cls, receipts in by_type.items():
                     cls.objects.bulk_create(receipts)
-                receipts_store.store([r.to_receipt() for r in receipts])
+                    logger.info(f"Inserted {len(receipts)} receipts")
+                    receipts_store.store([r.to_receipt() for r in receipts])
+                so_far += chunk
 
         else:
             time_per_receipt = self.interval / self.n / self.condense
@@ -128,13 +113,6 @@ class Command(BaseCommand):
             )
         )(self.validator_keys, self.miner_keys)
 
-    def timestamp(self) -> datetime.datetime:
-        if self.spread_hours:
-            return timezone.now() - timedelta(
-                seconds=random.randrange(0, self.spread_hours * 60 * 60)
-            )
-        return timezone.now()
-
     def _generate_job_accepted_receipt(
         self,
         validator_keys: bittensor.Keypair,
@@ -142,9 +120,9 @@ class Command(BaseCommand):
     ) -> JobAcceptedReceipt:
         payload = JobAcceptedReceiptPayload(
             job_uuid=str(uuid4()),
-            miner_hotkey=validator_keys.ss58_address,
-            validator_hotkey=miner_keys.ss58_address,
-            timestamp=self.timestamp(),
+            miner_hotkey=miner_keys.ss58_address,
+            validator_hotkey=validator_keys.ss58_address,
+            timestamp=timezone.now(),
             time_accepted=timezone.now(),
             ttl=123,
         )
@@ -166,9 +144,9 @@ class Command(BaseCommand):
     ) -> JobStartedReceipt:
         payload = JobStartedReceiptPayload(
             job_uuid=str(uuid4()),
-            miner_hotkey=validator_keys.ss58_address,
-            validator_hotkey=miner_keys.ss58_address,
-            timestamp=self.timestamp(),
+            miner_hotkey=miner_keys.ss58_address,
+            validator_hotkey=validator_keys.ss58_address,
+            timestamp=timezone.now(),
             executor_class=DEFAULT_EXECUTOR_CLASS,
             max_timeout=123,
             is_organic=random.choice((True, False)),
@@ -194,9 +172,9 @@ class Command(BaseCommand):
     ) -> JobFinishedReceipt:
         payload = JobFinishedReceiptPayload(
             job_uuid=str(uuid4()),
-            validator_hotkey=validator_keys.ss58_address,
             miner_hotkey=miner_keys.ss58_address,
-            timestamp=self.timestamp(),
+            validator_hotkey=validator_keys.ss58_address,
+            timestamp=timezone.now(),
             time_started=timezone.now(),
             time_took_us=12345,
             score_str="1.23",

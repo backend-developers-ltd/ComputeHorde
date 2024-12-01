@@ -540,6 +540,11 @@ LOGGING = {
             "level": "INFO",
             "propagate": True,
         },
+        "compute_horde.receipts.transfer": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": True,
+        },
     },
 }
 

@@ -79,23 +79,24 @@ class Command(BaseCommand):
                 start_time = time.monotonic()
                 """
                 Considerations:
-                - page request timeout may be influenced by some heavy async task in between like db write
+                - page request timeout may be influenced by some heavy async task
+                - too many concurrent downloads may take a lot of bandwidth
                 """
                 total_receipts, total_exceptions = await ReceiptsTransfer.transfer(
                     miners=await miners(),
                     session=session,
-                    concurrency=1000,
-                    max_time_per_miner_page=2.0,
-                    batch_insert_size=100,
+                    concurrency=50,
+                    max_time_per_miner_page=1.0,
+                    batch_insert_size=1000,
                 )
                 elapsed = time.monotonic() - start_time
                 rps = total_receipts / elapsed
 
                 logger.info(
-                    f"Transferred {total_receipts} receipts "
-                    f"in {elapsed:.3f}s "
-                    f"at {rps:.0f} RPS "
-                    f"and got {total_exceptions} exceptions"
+                    f"{total_receipts=} "
+                    f"{elapsed=:.3f} "
+                    f"{rps=:.0f} "
+                    f"{total_exceptions=} "
                 )
 
                 if interval is None:
