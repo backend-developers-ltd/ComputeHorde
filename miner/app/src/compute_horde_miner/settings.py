@@ -441,3 +441,7 @@ if SENTRY_DSN := env("SENTRY_DSN", default=""):
             ),
         ],
     )
+
+
+CLUSTER_SECRET = env.str("CLUSTER_SECRET", default="")
+CLUSTER_HOTKEYS = env.list("CLUSTER_HOTKEYS", default=[])

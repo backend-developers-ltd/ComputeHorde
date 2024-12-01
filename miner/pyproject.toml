@@ -19,7 +19,7 @@ dependencies = [
     "ipython~=8.14.0",
     "nox==2024.10.09",
     "channels[daphne]==4.*",
-    "channels-redis==4.*",
+    "channels-redis==4.2.0",
     "compute-horde",
     "prometheus-client~=0.17.0",
     "django-prometheus==2.3.1",
@@ -31,6 +31,7 @@ dependencies = [
 compute-horde = { path = "../compute_horde", editable = true }
 
 [tool.uv]
+prerelease = "allow"
 environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
 
 [build-system]

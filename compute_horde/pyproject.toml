@@ -1,14 +1,14 @@
 [project]
 name = "compute-horde"
-version = "0.0.17"
+version = "0.0.18"
 authors = [{name = "Backend Developers LTD"}]
 license = {text = "MIT License"}
 readme = "README.md"
 requires-python = "==3.11.*"
 dependencies = [
     "pydantic<3,>=2.3",
-    "bittensor<8.0.0,>=7.3.1",
-    "websockets>=11.0",
+    "bittensor<9.0.0,>=8.3.1",
+    "websockets<14.0,>=13.0",
     "more-itertools>=10.2.0",
     "phx-class-registry>=4.1.0",
     "requests>=2.32.2",
@@ -20,6 +20,9 @@ dependencies = [
 [build-system]
 requires = ["pdm-backend==2.4.3"]
 build-backend = "pdm.backend"
+
+[tool.uv]
+prerelease = "allow"
 
 [tool.pdm]
 distribution = true

@@ -58,15 +58,30 @@ for miner in miners:
 
 ## Validator
 
-To run a validator, first you need to [setup a trusted miner for cross-validation](/validator/README.md#setting-up-a-trusted-miner-for-cross-validation) and [provision S3 buckets for prompts and answers](/validator/README.md#provision-s3-buckets-for-prompts-and-answers) of LLM jobs. Your trusted miner needs to have A6000 GPU, and be configured to use it. The validator doesn't need A6000. 
+ComputeHorde validator is built out of three components
+1. trusted miner (requires A6000 - the only GPU supported now) for cross-validation
+1. two S3 buckets for sharing LLM data (lots of small text files)
+1. validator machine (standard, non-GPU) - for regular validating & weight-setting
 
-**If you are upgrading** your validator to support LLM jobs, prepare a trusted miner and S3 buckets (find out how using the links above). Then, set the environment variables directly in the .env file of your validator instance and restart your validator:
+The steps, performed by running installation scripts **on your local machine**, which has your wallet files. For clarity, **these installation scripts are not run on the machine that will become the trusted miner or the validator**, the scripts will connect through SSH to those machines from your local machine:
+1. [setup trusted miner](/validator#setting-up-a-trusted-miner-for-cross-validation) 
+1. [provision S3 buckets for prompts and answers](/validator#provision-s3-buckets-for-prompts-and-answers) 
+1. [setup validator](#validator-setup)
+
+### Validator setup
+
+#### Upgrading already existing deployment
+
+Prepare a trusted miner and S3 buckets (find out how using the links above). 
+Then, set the [environment variables](#deploying-from-scratch) directly in the `.env` file of your **validator** instance and restart your validator:
 
 ```
 $ docker compose down --remove-orphans && docker compose up -d
 ```
 
-Set the following environment variables in a terminal on your local machine (on the machine where you have your wallet files):
+#### Deploying from scratch
+
+Set the following environment variables in a terminal on your **local machine** (on the machine where you have your wallet files):
 
 ```sh
 export TRUSTED_MINER_ADDRESS=...
@@ -80,10 +95,9 @@ export AWS_SECRET_ACCESS_KEY=...
 export AWS_DEFAULT_REGION=...
 ```
 
-Note: `AWS_DEFAULT_REGION` property is optional. Use it when your buckets are not in your default AWS region.
+Note: The `AWS_DEFAULT_REGION` property is optional. Use it when your buckets are not in your default AWS region.
 
-Export `AWS_ENDPOINT_URL` too if you want to use another cloud object storage (s3-compatible) provider. If not given, AWS S3 will be used.
-
+Export `AWS_ENDPOINT_URL` to use another cloud object storage (s3-compatible) provider. If not given, AWS S3 will be used.
 
 Then execute the following command from the same terminal session:
 
@@ -91,9 +105,11 @@ Then execute the following command from the same terminal session:
 curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/install_validator.sh | bash -s - SSH_DESTINATION HOTKEY_PATH
 ```
 
-Replace `SSH_DESTINATION` with your server's connection info (i.e. `username@1.2.3.4`)
-and `HOTKEY_PATH` with the path of your hotkey (i.e. `~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey`).
-This script installs necessary tools in the server, copies the keys and starts the validator with the corresponding runner and default config.
+Replace:
+- `SSH_DESTINATION` with your server's connection info (i.e. `username@1.2.3.4`)
+- `HOTKEY_PATH` with the path of your hotkey (i.e. `~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey`)
+
+This script installs the necessary tools in the server, copies the public keys,  and starts the validator with the corresponding runner and the default config.
 
 If you want to change the default config, see [Validator runner README](validator/envs/runner/README.md) for details.
 
@@ -109,7 +125,7 @@ curl -sSfL https://github.com/backend-developers-ltd/ComputeHorde/raw/master/ins
 
 Replace `SSH_DESTINATION` with your server's connection info (i.e. `username@1.2.3.4`)
 and `HOTKEY_PATH` with the path of your hotkey (i.e. `~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey`).
-This script installs necessary tools in the server, copies the keys and starts the miner with the corresponding runner and default config.
+This script installs necessary tools in the server, copies the keys, and starts the miner with the corresponding runner and default config.
 
 If you want to change the default config, see [Miner runner README](miner/envs/runner/README.md) for details.
 

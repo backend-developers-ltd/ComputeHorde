@@ -23,4 +23,5 @@ executor = { path = "executor", editable = true }
 validator = { path = "validator", editable = true }
 
 [tool.uv]
+prerelease = "allow"
 environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
