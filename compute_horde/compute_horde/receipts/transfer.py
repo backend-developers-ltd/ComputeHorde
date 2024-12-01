@@ -69,11 +69,7 @@ class ReceiptsTransfer:
         # TODO: Be smart about catching up when we have no receipts at all?
         latest_page = LocalFilesystemPagedReceiptStore.active_page_id()
         pages = [latest_page - 1, latest_page]
-
         checkpoint_backend = DjangoCacheCheckpointBackend("receipts_checkpoints")
-
-        # More concurrency = more load from switching asyncio tasks
-        # Less concurrency = higher latency miners will slow down the process
         semaphore = asyncio.Semaphore(concurrency)
 
         async def transfer_page_from_miner(miner: MinerInfo, page: int):
@@ -131,7 +127,6 @@ class ReceiptsTransfer:
         """
         Fetch a batch of receipts from remote server.
         Will start from last checkpoint for this page, if available.
-        Checkpoint will be saved when this context manager exits.
         """
         page_url = f"{self._receipts_url}/{page}.jsonl"
 
