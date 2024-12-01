@@ -225,6 +225,26 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
+  transfer-receipts:
+    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
+    pull_policy: ${PULL_POLICY:-always}
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - VALIDATOR_RUNNER_VERSION=${VALIDATOR_RUNNER_VERSION}
+      - DEBUG=off
+    volumes:
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
+    command: python manage.py transfer_receipts -d --interval 2
+    depends_on:
+      - redis
+      - db
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
   nginx:
     image: backenddevelopersltd/compute-horde-validator-nginx:v0-latest
     restart: unless-stopped
