@@ -195,12 +195,14 @@ class ReceiptsTransfer:
                 )
             except BadMinerReceiptSignature as e:
                 logger.warning(
-                    "Skipping receipt with bad miner signature: %s",
+                    "Skipping %s with bad miner signature: %s",
+                    e.receipt.payload.receipt_type,
                     e.receipt.payload.job_uuid,
                 )
             except BadValidatorReceiptSignature as e:
                 logger.warning(
-                    "Skipping receipt with bad validator signature: %s",
+                    "Skipping %s with bad validator signature: %s",
+                    e.receipt.payload.receipt_type,
                     e.receipt.payload.job_uuid,
                 )
         return receipts
