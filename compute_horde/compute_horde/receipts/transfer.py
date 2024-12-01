@@ -7,6 +7,7 @@ from typing import Protocol, TypeAlias
 
 import aiohttp
 import pydantic
+from asgiref.sync import sync_to_async
 from django.core.cache import caches
 
 from compute_horde.receipts.models import ReceiptModel, receipt_to_django_model
@@ -166,29 +167,8 @@ class ReceiptsTransfer:
             return []
         jsonl_content = await response.read()
 
-        receipts = []
-        for line in BytesIO(jsonl_content):
-            try:
-                receipt = Receipt.model_validate_json(line)
-                receipt.verify_miner_signature(throw=True)
-                receipt.verify_validator_signature(throw=True)
-                receipts.append(receipt)
-            except pydantic.ValidationError:
-                logger.warning(
-                    f"skipping invalid line: %s%s",
-                    line[:100],
-                    ' (...)' if len(line) > 100 else '',
-                )
-            except BadMinerReceiptSignature as e:
-                logger.warning(
-                    "Skipping receipt with bad miner signature: %s",
-                    e.receipt.payload.job_uuid,
-                )
-            except BadValidatorReceiptSignature as e:
-                logger.warning(
-                    "Skipping receipt with bad validator signature: %s",
-                    e.receipt.payload.job_uuid,
-                )
+        # Schedule to the sync thread so that other HTTP requests don't time out waiting for CPU stuff
+        receipts = await sync_to_async(self._to_valid_receipts)(jsonl_content)
 
         # Save the total page size so that next time we request the page we know what range to request.
         if use_range_request:
@@ -202,4 +182,30 @@ class ReceiptsTransfer:
             # We got the complete page file, use its size for next checkpoint.
             await self._checkpoints.set(checkpoint_key, response.content.total_bytes)
 
+        return receipts
+
+    def _to_valid_receipts(self, received_bytes: bytes) -> list[Receipt]:
+        receipts = []
+        for line in BytesIO(received_bytes):
+            try:
+                receipt = Receipt.model_validate_json(line)
+                receipt.verify_miner_signature(throw=True)
+                receipt.verify_validator_signature(throw=True)
+                receipts.append(receipt)
+            except pydantic.ValidationError:
+                logger.warning(
+                    f"skipping line: failed pydantic validation: %s%s",
+                    line[:100],
+                    ' (...)' if len(line) > 100 else '',
+                )
+            except BadMinerReceiptSignature as e:
+                logger.warning(
+                    "Skipping receipt with bad miner signature: %s",
+                    e.receipt.payload.job_uuid,
+                )
+            except BadValidatorReceiptSignature as e:
+                logger.warning(
+                    "Skipping receipt with bad validator signature: %s",
+                    e.receipt.payload.job_uuid,
+                )
         return receipts
