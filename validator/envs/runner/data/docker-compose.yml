@@ -90,13 +90,6 @@ services:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-llm
     command: ./celery-entrypoint.sh -Q llm
 
-  celery-worker-receipts:
-    <<: *celery-worker
-    environment:
-      - DEBUG=off
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-receipts
-    command: ./celery-entrypoint.sh -Q receipts
-
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.40.0
     devices:
