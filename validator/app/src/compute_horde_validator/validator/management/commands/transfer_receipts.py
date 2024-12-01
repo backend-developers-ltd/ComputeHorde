@@ -85,7 +85,7 @@ class Command(BaseCommand):
                     miners=await miners(),
                     session=session,
                     concurrency=1000,
-                    max_time_per_miner_page=3.0,
+                    max_time_per_miner_page=2.0,
                     batch_insert_size=100,
                 )
                 elapsed = time.monotonic() - start_time

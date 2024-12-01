@@ -621,10 +621,11 @@ TRUSTED_MINER_KEY = env.str("TRUSTED_MINER_KEY", default="")
 TRUSTED_MINER_ADDRESS = env.str("TRUSTED_MINER_ADDRESS", default="")
 TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
-# Receipt fetching debugging (miner = (hotkey, address, port))
-DEBUG_FETCH_RECEIPTS_FROM_MINERS: Sequence[tuple[str, str, int]] | None = [
-    (f"localdebugminer-{i}", f"127.0.0.{1+i}", 8000) for i in range(250)
-]
+# The env value should be a list of hotkey:ip:port
+DEBUG_FETCH_RECEIPTS_FROM_MINERS: list[tuple[str, str, int]] | None = []
+for miner in env.list("DEBUG_FETCH_RECEIPTS_FROM_MINERS", default=[]):
+    hotkey, ip, port = miner.split(":")
+    DEBUG_FETCH_RECEIPTS_FROM_MINERS.append((hotkey, ip, port))
 
 CHANNEL_LAYERS = {
     "default": {
