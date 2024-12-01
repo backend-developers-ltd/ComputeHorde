@@ -156,7 +156,6 @@ class ReceiptsTransfer:
                 "Accept-Encoding": "gzip",
             }
 
-        # TODO: short timeout
         # As the request should be as fast as possible, don't allow redirecting - clients must respond immediately.
         response = await session.get(page_url, headers=headers, allow_redirects=False, timeout=timeout)
         if response.status in {404, 416}:

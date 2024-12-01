@@ -1,8 +1,10 @@
 import logging
+import os
 import re
 import time
 from collections import defaultdict
 from collections.abc import Sequence
+from datetime import datetime
 from glob import glob
 from pathlib import Path
 
@@ -30,7 +32,11 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
 
     @staticmethod
     def receipt_page(receipt: Receipt) -> int:
-        return int(receipt.payload.timestamp.timestamp()) // PAGE_TIME_MOD
+        return LocalFilesystemPagedReceiptStore.current_page_at(receipt.payload.timestamp)
+
+    @staticmethod
+    def current_page_at(dt: datetime) -> int:
+        return int(dt.timestamp() // PAGE_TIME_MOD)
 
     def store(self, receipts: Sequence[Receipt]) -> None:
         """
@@ -46,7 +52,7 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
     def page_filepath(self, page: int) -> Path:
         """
         Find the filepath under which given pagefile should be found.
-        Does not whether it actually exists or not.
+        Does not check whether it actually exists or not.
         """
         return self.pages_directory / f"{page}.jsonl"
 
@@ -54,12 +60,19 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         """
         Write new receipts to the end of specified page.
         Does not check whether the receipts actually belong on this page.
-        TODO: Make this thread- and cross-process-safe
         """
         with open(self.page_filepath(page), "a") as pagefile:
+            # TODO: copy -> append -> move
             for r in receipts:
                 pagefile.write(r.model_dump_json())
                 pagefile.write("\n")
+
+    def delete_page(self, page: int) -> None:
+        page_filepath = self.page_filepath(page)
+        try:
+            os.unlink(page_filepath)
+        except FileNotFoundError:
+            pass
 
     def get_available_pages(self) -> list[int]:
         """

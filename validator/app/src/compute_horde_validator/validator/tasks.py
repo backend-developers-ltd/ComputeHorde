@@ -1,17 +1,12 @@
-import asyncio
 import contextlib
 import json
 import random
 import time
 import traceback
 import uuid
-from asyncio import TaskGroup
-from collections import defaultdict
-from collections.abc import Sequence
 from datetime import timedelta
 from functools import cached_property
 from math import ceil, floor
-from typing import cast
 
 import billiard.exceptions
 import bittensor
@@ -24,16 +19,7 @@ from celery import shared_task
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
-from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
-from compute_horde.receipts.schemas import (
-    JobAcceptedReceiptPayload,
-    JobFinishedReceiptPayload,
-    JobStartedReceiptPayload,
-)
-from compute_horde.receipts.transfer import get_miner_receipts
 from compute_horde.subtensor import get_cycle_containing_block
-from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
-from compute_horde.receipts.transfer import ReceiptsTransfer
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
 from django.conf import settings
@@ -72,7 +58,6 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
 )
-
 from . import eviction
 from .models import AdminJobRequest
 from .scoring import score_batches

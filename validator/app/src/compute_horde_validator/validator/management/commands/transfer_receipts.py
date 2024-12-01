@@ -21,6 +21,7 @@ class Command(BaseCommand):
         parser.add_argument("--miner-hotkey", type=str)
         parser.add_argument("--miner-ip", type=str)
         parser.add_argument("--miner-port", type=int)
+        # TODO: --interval
 
     @async_to_sync
     async def handle(self, daemon: bool, miner_hotkey: str, miner_ip: str, miner_port: int, **kwargs):
@@ -60,6 +61,7 @@ class Command(BaseCommand):
                     if neuron.axon_info.is_serving
                 ]
 
+        # TODO: Catch up last 2 cycles of receipts
         await self.do_transfer(daemon, miners)
 
     async def do_transfer(self, daemon: bool, miners: Callable[[], Awaitable[list[MinerInfo]]]):
