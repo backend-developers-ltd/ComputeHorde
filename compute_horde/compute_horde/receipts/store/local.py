@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
     def __init__(self):
         super().__init__()
-        self.pages_directory: Path = Path(settings.LOCAL_RECEIPTS_ROOT)
+        self.pages_directory = Path(settings.LOCAL_RECEIPTS_ROOT)
+        self.pages_directory.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def current_page() -> int:
