@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import random
 import statistics
@@ -246,6 +247,32 @@ class ExceptionInfo:
 
 
 @dataclass(slots=True)
+class LightSystemEvent:
+    type: str
+    subtype: str
+    long_description: str
+    epoch: float = field(default_factory=time.time)
+    data: str | None = None
+
+    def get_data(self) -> dict:
+        if self.data is None:
+            return dict()
+        return json.loads(self.data)
+
+    def set_data(self, obj: dict) -> None:
+        self.data = json.dumps(obj)
+
+    def to_model(self) -> SystemEvent:
+        return SystemEvent(
+            type=self.type,
+            subtype=self.subtype,
+            long_description=self.long_description,
+            data=self.get_data(),
+            timestamp=datetime.fromtimestamp(self.epoch, tz=UTC),
+        )
+
+
+@dataclass(slots=True)
 class Job:
     ctx: "BatchContext"
 
@@ -355,7 +382,7 @@ class Job:
         description: str,
         func: str | None = None,
         data: dict[str, str] | None = None,
-    ) -> SystemEvent | None:
+    ) -> LightSystemEvent | None:
         return self.ctx.system_event(
             type=type,
             subtype=subtype,
@@ -366,7 +393,7 @@ class Job:
             func=func,
         )
 
-    def emit_telemetry_event(self) -> SystemEvent | None:
+    def emit_telemetry_event(self) -> LightSystemEvent | None:
         data = dict(
             job_uuid=self.uuid,
             miner_hotkey=self.miner_hotkey,
@@ -453,7 +480,7 @@ class BatchContext:
     # system events, periodically flushed to database, which is why
     # we need a separate event_count field to track how many we
     # created during a batch run
-    events: list[SystemEvent]
+    events: list[LightSystemEvent]
     event_count: int
 
     stage_start_time: dict[str, datetime]
@@ -475,7 +502,7 @@ class BatchContext:
         miner_hotkey: str | None = None,
         func: str | None = None,
         append: bool = True,
-    ) -> SystemEvent | None:
+    ) -> LightSystemEvent | None:
         if data is None:
             data = {}
 
@@ -495,11 +522,11 @@ class BatchContext:
             data["func"] = func
 
         try:
-            event = SystemEvent(
-                type=type,
-                subtype=subtype,
+            event = LightSystemEvent(
+                type=type.value,
+                subtype=subtype.value,
                 long_description=description,
-                data=data,
+                data=json.dumps(data),
             )
             # checkpoint events are sent directly to the database,
             # don't append them to avoid duplication
@@ -531,13 +558,13 @@ class BatchContext:
                 append=False,
             )
             if event is not None:
-                event.save()
+                event.to_model().save()
         except Exception as exc:
             logger.error("Failed to checkpoint system event: %r", exc)
 
     # needed because we query the DB for some data we put in the event payload
     @sync_to_async
-    def emit_telemetry_event(self) -> SystemEvent | None:
+    def emit_telemetry_event(self) -> LightSystemEvent | None:
         """
         Append a "batch" telemetry system event based on this batch to be sent later.
         """
@@ -1225,7 +1252,7 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
 async def _emit_telemetry_events(ctx: BatchContext) -> None:
     batch_system_event = await ctx.emit_telemetry_event()
     if batch_system_event is not None:
-        counts = batch_system_event.data.get("counts")
+        counts = batch_system_event.get_data().get("counts", {})
         logger.info("Batch telemetry counts: %s", counts)
 
     for job in ctx.jobs.values():
@@ -1720,7 +1747,9 @@ def _db_persist_system_events(ctx: BatchContext) -> None:
         # it's possible some events were already inserted during
         # a previous call, but the operation failed before clearing
         # the events list, so ignore insert conflicts
-        SystemEvent.objects.bulk_create(ctx.events, ignore_conflicts=True)
+        with transaction.atomic():
+            for light_event in ctx.events:
+                light_event.to_model().save()
         # we call this function multiple times during a batch,
         # clear the list to avoid persisting the same event
         # multiple times
