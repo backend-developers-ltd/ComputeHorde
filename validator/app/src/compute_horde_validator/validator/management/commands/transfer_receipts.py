@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 from typing import cast
 
 import aiohttp
@@ -93,7 +93,9 @@ class Command(BaseCommand):
                 semaphore=asyncio.Semaphore(50),
             )
 
-    async def run_in_loop(self, interval: float, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]):
+    async def run_in_loop(
+        self, interval: float, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]
+    ):
         # Do a full catch-up while listening for changes in latest 2 pages
         catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff)
         current_page = LocalFilesystemPagedReceiptStore.current_page()
@@ -111,9 +113,8 @@ class Command(BaseCommand):
                     pages=list(reversed(range(catchup_cutoff_page, current_page - 1))),
                     miners=miners,
                     session=session,
-                    semaphore=asyncio.Semaphore(
-                        10
-                    ),  # Throttle this so that it doesn't choke the keep up loop
+                    # Throttle this lower so that it doesn't choke the keep up loop
+                    semaphore=asyncio.Semaphore(10),
                 ),
                 # ... and keep up with latest 2 pages continuously
                 self.keep_up(

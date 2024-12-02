@@ -1,9 +1,10 @@
 import asyncio
 import logging
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
 from io import BytesIO
-from typing import Protocol, TypeAlias
+from typing import TypeAlias
 
 import aiohttp
 import pydantic
@@ -23,15 +24,15 @@ Offset = int
 MinerInfo: TypeAlias = tuple[str, str, int]
 
 
-class CheckpointBackend(Protocol):
+class CheckpointBackend(ABC):
+    @abstractmethod
     async def get(self, key: str) -> int: ...
 
+    @abstractmethod
     async def set(self, key: str, checkpoint: int) -> None: ...
 
-    async def has(self, key: str) -> bool: ...
 
-
-class DjangoCacheCheckpointBackend:
+class DjangoCacheCheckpointBackend(CheckpointBackend):
     def __init__(self, cache: str = "default"):
         self.cache = caches[cache]
 
@@ -44,9 +45,6 @@ class DjangoCacheCheckpointBackend:
 
     async def set(self, key: str, checkpoint: int) -> None:
         await self.cache.aset(key, str(checkpoint))
-
-    async def has(self, key: str) -> bool:
-        return await self.cache.ahas_key(key)
 
 
 class ReceiptsTransfer:
