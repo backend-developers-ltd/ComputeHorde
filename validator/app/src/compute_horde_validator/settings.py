@@ -5,7 +5,6 @@ Django settings for compute_horde_validator project.
 import inspect
 import logging
 import pathlib
-from collections.abc import Sequence
 from datetime import timedelta
 from functools import wraps
 
@@ -414,7 +413,7 @@ CACHES = {
     "receipts_checkpoints": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
         "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/2",
-        "TIMEOUT": 60 * 60 * 24 * 2, # Remember the checkpoints for 2 days
+        "TIMEOUT": 60 * 60 * 24 * 2,  # Remember the checkpoints for 2 days
     },
 }
 

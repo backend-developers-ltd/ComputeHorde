@@ -1,14 +1,18 @@
+import asyncio
 import logging
 import time
-from typing import cast, Callable, Awaitable
+from collections.abc import Awaitable, Callable, Sequence
+from datetime import timedelta
+from typing import cast
 
 import aiohttp
 import bittensor
 from asgiref.sync import async_to_sync
+from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
+from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer
 from django.conf import settings
 from django.core.management import BaseCommand
-
-from compute_horde.receipts.transfer import ReceiptsTransfer, MinerInfo
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +58,7 @@ class Command(BaseCommand):
 
         else:
             # 3rd, if no specific miners were specified, get from metagraph.
-            logger.info(f"Will fetch receipts from metagraph miners")
+            logger.info("Will fetch receipts from metagraph miners")
 
             async def miners():
                 metagraph = bittensor.metagraph(
@@ -70,38 +74,125 @@ class Command(BaseCommand):
                     if neuron.axon_info.is_serving
                 ]
 
-        # TODO: Catch up last 2 cycles of receipts
-        await self.do_transfer(interval, miners)
+        if interval is None:
+            await self.run_once(miners)
+        else:
+            await self.run_in_loop(interval, miners)
 
-    async def do_transfer(self, interval: float | None, miners: Callable[[], Awaitable[list[MinerInfo]]]):
+    async def run_once(self, miners: Callable[[], Awaitable[list[MinerInfo]]]):
+        # Do a one time fetch of all pages
+        catchup_cutoff = timezone.now() - timedelta(hours=10)
+        catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(catchup_cutoff)
+        current_page = LocalFilesystemPagedReceiptStore.active_page_id()
         async with aiohttp.ClientSession() as session:
-            while True:
-                start_time = time.monotonic()
-                """
-                Considerations:
-                - page request timeout may be influenced by some heavy async task
-                - too many concurrent downloads may take a lot of bandwidth
-                """
-                total_receipts, total_exceptions = await ReceiptsTransfer.transfer(
-                    miners=await miners(),
+            await self.catch_up(
+                pages=list(reversed(range(catchup_cutoff_page, current_page + 1))),
+                miners=miners,
+                session=session,
+                semaphore=asyncio.Semaphore(50),
+                skip_visited=False,
+            )
+
+    async def run_in_loop(self, interval: float, miners: Callable[[], Awaitable[list[MinerInfo]]]):
+        # Do a full catch-up while listening for changes in latest 2 pages
+        catchup_cutoff = timezone.now() - timedelta(hours=10)
+        catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(catchup_cutoff)
+        current_page = LocalFilesystemPagedReceiptStore.active_page_id()
+
+        async with aiohttp.ClientSession() as session:
+            # First, quickly catch-up with the 2 latest pages so that the "keep up" loop has easier time later
+            await self.catch_up(
+                pages=[current_page, current_page - 1],
+                miners=miners,
+                session=session,
+                semaphore=asyncio.Semaphore(50),
+                skip_visited=False,
+            )
+            await asyncio.gather(
+                # Slowly catch up with pages older than 2
+                self.catch_up(
+                    pages=list(reversed(range(catchup_cutoff_page, current_page - 1))),
+                    miners=miners,
                     session=session,
-                    concurrency=50,
-                    max_time_per_miner_page=1.0,
-                    batch_insert_size=1000,
-                )
-                elapsed = time.monotonic() - start_time
-                rps = total_receipts / elapsed
+                    semaphore=asyncio.Semaphore(
+                        10
+                    ),  # Throttle this so that it doesn't choke the keep up loop
+                    skip_visited=True,
+                ),
+                # ... and keep up with latest 2 pages continuously
+                self.keep_up(
+                    n_pages=2,
+                    interval=interval,
+                    miners=miners,
+                    session=session,
+                    semaphore=asyncio.Semaphore(50),
+                ),
+            )
 
-                logger.info(
-                    f"{total_receipts=} "
-                    f"{elapsed=:.3f} "
-                    f"{rps=:.0f} "
-                    f"{total_exceptions=} "
-                )
+    async def catch_up(
+        self,
+        pages: Sequence[int],
+        miners: Callable[[], Awaitable[list[MinerInfo]]],
+        session: aiohttp.ClientSession,
+        semaphore: asyncio.Semaphore,
+        skip_visited: bool,
+    ):
+        for idx, page in enumerate(pages):
+            receipts, exceptions = await ReceiptsTransfer.transfer(
+                miners=await miners(),
+                pages=[page],
+                session=session,
+                semaphore=semaphore,
+                max_time_per_miner_page=3.0,
+                # misnomer, this is only about the http request, validation and saving may take longer
+                batch_insert_size=1000,
+                skip_visited=skip_visited,
+            )
+            logger.info(
+                f"Catching up: "
+                f"{page=} ({idx + 1}/{len(pages)}) "
+                f"{receipts=} "
+                f"{exceptions=} "
+            )
 
-                if interval is None:
-                    break
+    async def keep_up(
+        self,
+        n_pages: int,
+        interval: float | None,
+        miners: Callable[[], Awaitable[list[MinerInfo]]],
+        session: aiohttp.ClientSession,
+        semaphore: asyncio.Semaphore,
+    ):
+        while True:
+            start_time = time.monotonic()
+            """
+            Considerations:
+            - page request timeout may be influenced by some heavy async task
+            - too many concurrent downloads may take a lot of bandwidth
+            """
+            latest_page = LocalFilesystemPagedReceiptStore.active_page_id()
+            pages = list(reversed(range(latest_page - n_pages + 1, latest_page + 1)))
+            receipts, exceptions = await ReceiptsTransfer.transfer(
+                miners=await miners(),
+                pages=pages,
+                session=session,
+                semaphore=semaphore,
+                max_time_per_miner_page=1.0,
+                batch_insert_size=1000,
+                skip_visited=False,
+            )
+            elapsed = time.monotonic() - start_time
+            rps = receipts / elapsed
 
-                # Sleep for the remainder of the time if any
-                if elapsed < interval:
-                    time.sleep(interval - elapsed)
+            logger.info(
+                f"Keeping up: "
+                f"{pages=} "
+                f"{elapsed=:.3f} "
+                f"{rps=:.0f} "
+                f"{receipts=} "
+                f"{exceptions=} "
+            )
+
+            # Sleep for the remainder of the time if any
+            if elapsed < interval:
+                time.sleep(interval - elapsed)

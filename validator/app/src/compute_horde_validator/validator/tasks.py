@@ -58,6 +58,7 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
 from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
 )
+
 from . import eviction
 from .models import AdminJobRequest
 from .scoring import score_batches
@@ -321,7 +322,7 @@ def run_synthetic_jobs(
             SyntheticJobBatch.objects.select_for_update(skip_locked=True)
             .filter(
                 block__gte=current_block
-                           - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
+                - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
                 block__lte=current_block + wait_in_advance_blocks,
                 started_at__isnull=True,
             )

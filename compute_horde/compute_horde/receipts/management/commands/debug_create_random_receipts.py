@@ -1,4 +1,3 @@
-import datetime
 import logging
 import random
 import time
@@ -113,6 +112,13 @@ class Command(BaseCommand):
             )
         )(self.validator_keys, self.miner_keys)
 
+    def _receipt_timestamp(self):
+        if self.interval:
+            return timezone.now()
+        else:
+            # For one-time generation, spread the receipts over last 10 hours
+            return timezone.now() - timedelta(seconds=int(60 * 60 * 10 * random.random()))
+
     def _generate_job_accepted_receipt(
         self,
         validator_keys: bittensor.Keypair,
@@ -122,7 +128,7 @@ class Command(BaseCommand):
             job_uuid=str(uuid4()),
             miner_hotkey=miner_keys.ss58_address,
             validator_hotkey=validator_keys.ss58_address,
-            timestamp=timezone.now(),
+            timestamp=self._receipt_timestamp(),
             time_accepted=timezone.now(),
             ttl=123,
         )
@@ -146,7 +152,7 @@ class Command(BaseCommand):
             job_uuid=str(uuid4()),
             miner_hotkey=miner_keys.ss58_address,
             validator_hotkey=validator_keys.ss58_address,
-            timestamp=timezone.now(),
+            timestamp=self._receipt_timestamp(),
             executor_class=DEFAULT_EXECUTOR_CLASS,
             max_timeout=123,
             is_organic=random.choice((True, False)),
@@ -174,7 +180,7 @@ class Command(BaseCommand):
             job_uuid=str(uuid4()),
             miner_hotkey=miner_keys.ss58_address,
             validator_hotkey=validator_keys.ss58_address,
-            timestamp=timezone.now(),
+            timestamp=self._receipt_timestamp(),
             time_started=timezone.now(),
             time_took_us=12345,
             score_str="1.23",

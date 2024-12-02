@@ -27,16 +27,16 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         self.pages_directory: Path = Path(settings.LOCAL_RECEIPTS_ROOT)
 
     @staticmethod
+    def current_page_at(dt: datetime) -> int:
+        return int(dt.timestamp() // PAGE_TIME_MOD)
+
+    @staticmethod
     def active_page_id() -> int:
         return int(time.time()) // PAGE_TIME_MOD
 
     @staticmethod
     def receipt_page(receipt: Receipt) -> int:
         return LocalFilesystemPagedReceiptStore.current_page_at(receipt.payload.timestamp)
-
-    @staticmethod
-    def current_page_at(dt: datetime) -> int:
-        return int(dt.timestamp() // PAGE_TIME_MOD)
 
     def store(self, receipts: Sequence[Receipt]) -> None:
         """

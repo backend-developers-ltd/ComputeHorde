@@ -12,9 +12,10 @@ from django.core.cache import caches
 
 from compute_horde.receipts.models import ReceiptModel, receipt_to_django_model
 from compute_horde.receipts.schemas import (
-    Receipt, BadMinerReceiptSignature, BadValidatorReceiptSignature,
+    BadMinerReceiptSignature,
+    BadValidatorReceiptSignature,
+    Receipt,
 )
-from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,8 @@ class CheckpointBackend(Protocol):
     async def get(self, key: str) -> int: ...
 
     async def set(self, key: str, checkpoint: int) -> None: ...
+
+    async def has(self, key: str) -> bool: ...
 
 
 class DjangoCacheCheckpointBackend:
@@ -42,6 +45,9 @@ class DjangoCacheCheckpointBackend:
     async def set(self, key: str, checkpoint: int) -> None:
         await self.cache.aset(key, str(checkpoint))
 
+    async def has(self, key: str) -> bool:
+        return await self.cache.ahas_key(key)
+
 
 class ReceiptsTransfer:
     """
@@ -57,39 +63,44 @@ class ReceiptsTransfer:
     async def transfer(
         cls,
         miners: Sequence[MinerInfo],
+        pages: Sequence[int],
         session: aiohttp.ClientSession,
-        concurrency: int,
+        semaphore: asyncio.Semaphore,
         max_time_per_miner_page: float,
         batch_insert_size: int,
+        skip_visited: bool,
     ) -> tuple[int, int]:
         """
         Efficiently transfer receipts from multiple miners at the same time, storing
         them in local database.
         """
-        # TODO: Be smart about catching up when we have no receipts at all?
-        latest_page = LocalFilesystemPagedReceiptStore.active_page_id()
-        pages = [latest_page - 1, latest_page]
         checkpoint_backend = DjangoCacheCheckpointBackend("receipts_checkpoints")
-        semaphore = asyncio.Semaphore(concurrency)
 
-        async def transfer_page_from_miner(miner: MinerInfo, page: int):
+        async def rate_limited_transfer(transfer: cls, page: int, session: aiohttp.ClientSession):
             try:
                 async with semaphore:
-                    hotkey, ip, port = miner
-                    transfer = cls(
-                        server_url=f"http://{ip}:{port}/receipts",
-                        checkpoint_backend=checkpoint_backend,
+                    return await transfer.get_new_receipts_on_page(
+                        page=page,
+                        session=session,
+                        timeout=max_time_per_miner_page,
                     )
-                    return await transfer.get_new_receipts_on_page(page, session, timeout=max_time_per_miner_page)
-            except Exception as e:
-                logger.error(f"Got exception from {miner}: {e.__class__.__name__} {e}", exc_info=False)
+            except (TimeoutError, Exception) as e:
+                logger.error(
+                    f"Got exception from {miner}: {e.__class__.__name__} {e}", exc_info=False
+                )
                 raise
 
-        transfer_tasks = [
-            asyncio.create_task(transfer_page_from_miner(miner, page))
-            for miner in miners
-            for page in pages
-        ]
+        # Create transfer tasks, one transfer = one page from one miner
+        transfer_tasks = []
+        for page in pages:
+            for miner in miners:
+                hotkey, ip, port = miner
+                transfer = cls(f"http://{ip}:{port}/receipts", checkpoint_backend)
+                if skip_visited and await transfer.has_visited_page(page):
+                    continue
+                transfer_tasks.append(
+                    asyncio.create_task(rate_limited_transfer(transfer, page, session))
+                )
 
         # Place received receipts into buckets based on receipt model type
         receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
@@ -99,7 +110,8 @@ class ReceiptsTransfer:
         # Wait for all transfer tasks and handle them as soon as they finish
         for transfer_task in asyncio.as_completed(transfer_tasks):
             try:
-                for receipt in await transfer_task:
+                transferred_batch = await transfer_task
+                for receipt in transferred_batch:
                     model = receipt_to_django_model(receipt)
                     model_type = model.__class__
                     bucket = receipts_by_type[model_type]
@@ -107,28 +119,34 @@ class ReceiptsTransfer:
                     if len(bucket) >= batch_insert_size:
                         await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
                         total_receipts += len(bucket)
-                        logger.info(f"Transferred {len(bucket)} {model_type.__name__} receipts")
+                        logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
                         bucket.clear()
-            except Exception:
-                # TODO: This catch may be too broad
+            except RuntimeError:
+                # Don't catch this as it may block the script from exiting
+                raise
+            except (TimeoutError, Exception):
                 failures += 1
                 continue
 
-        # Batch insert
+        # Insert the remainder
         for model_type, bucket in receipts_by_type.items():
             await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
             total_receipts += len(bucket)
-            logger.info(f"Transferred {len(bucket)} {model_type.__name__} receipts")
+            logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
 
         return total_receipts, failures
 
-    async def get_new_receipts_on_page(self, page: int, session: aiohttp.ClientSession, timeout: float) -> list[
-        Receipt]:
+    async def has_visited_page(self, page: int) -> bool:
+        return await self._checkpoints.has(self.page_url(page))
+
+    async def get_new_receipts_on_page(
+        self, page: int, session: aiohttp.ClientSession, timeout: float
+    ) -> list[Receipt]:
         """
         Fetch a batch of receipts from remote server.
         Will start from last checkpoint for this page, if available.
         """
-        page_url = f"{self._receipts_url}/{page}.jsonl"
+        page_url = self.page_url(page)
 
         checkpoint_key = page_url
         checkpoint = await self._checkpoints.get(checkpoint_key)
@@ -153,9 +171,11 @@ class ReceiptsTransfer:
             }
 
         # As the request should be as fast as possible, don't allow redirecting - clients must respond immediately.
-        response = await session.get(page_url, headers=headers, allow_redirects=False, timeout=timeout)
+        response = await session.get(
+            page_url, headers=headers, allow_redirects=False, timeout=timeout
+        )
         if response.status in {404, 416}:
-            logger.debug(f"Nothing to fetch from %s - %s", page_url, response.status)
+            logger.debug("Nothing to fetch from %s - %s", page_url, response.status)
             return []
         if response.status not in {200, 206}:
             logger.warning(f"Request failed for page {page}: {response.status}")
@@ -164,7 +184,9 @@ class ReceiptsTransfer:
 
         # Put this on a worker thread, otherwise other HTTP requests will time out waiting for this.
         # While not thread sensitive, putting these tasks on dedicated worker threads somehow makes the timeouts worse.
-        receipts = await sync_to_async(self._to_valid_receipts, thread_sensitive=True)(jsonl_content)
+        receipts = await sync_to_async(self._to_valid_receipts, thread_sensitive=False)(
+            jsonl_content
+        )
 
         # Save the total page size so that next time we request the page we know what range to request.
         if use_range_request:
@@ -180,6 +202,9 @@ class ReceiptsTransfer:
 
         return receipts
 
+    def page_url(self, page):
+        return f"{self._receipts_url}/{page}.jsonl"
+
     def _to_valid_receipts(self, received_bytes: bytes) -> list[Receipt]:
         receipts = []
         for line in BytesIO(received_bytes):
@@ -190,9 +215,9 @@ class ReceiptsTransfer:
                 receipts.append(receipt)
             except pydantic.ValidationError:
                 logger.warning(
-                    f"skipping line: failed pydantic validation: %s%s",
+                    "skipping line: failed pydantic validation: %s%s",
                     line[:100],
-                    ' (...)' if len(line) > 100 else '',
+                    " (...)" if len(line) > 100 else "",
                 )
                 continue
             except BadMinerReceiptSignature as e:
