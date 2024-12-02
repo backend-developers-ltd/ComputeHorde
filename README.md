@@ -170,6 +170,21 @@ docker compose up
 
 Afterwards, use `docker ps` to verify that the containers have started successfully.
 
+## How to delete persistent volumes
+
+To start fresh and remove all persistent data, follow these steps:
+
+1. Stop the validator or miner (all running containers)
+1. Run `docker volume ls` to list all existing volumes and identify the ones to delete.
+   Key volumes to consider:
+    - Miner: `miner_db_data`, `miner_redis_data`
+    - Validator: `validator_db`, `validator_redis`, `validator_static`
+1. Run the following command to remove all Docker volumes:
+   ```bash
+   docker volume rm $(docker volume ls -q)
+   ```
+1. Start the validator or miner again
+
 ## How to fix issues with installing `cuda-drivers`
 
 Miner installation may occasionally fail with an error about the system being unable to install the `cuda-drivers` package. 
