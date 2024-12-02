@@ -74,6 +74,7 @@ class Command(BaseCommand):
                     if neuron.axon_info.is_serving
                 ]
 
+        # This encompasses at least current and previous cycle.
         cutoff = timezone.now() - timedelta(hours=5)
 
         if interval is None:
