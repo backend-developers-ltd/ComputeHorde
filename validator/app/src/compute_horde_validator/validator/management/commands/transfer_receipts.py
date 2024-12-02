@@ -24,7 +24,11 @@ class Command(BaseCommand):
         parser.add_argument("--miner-hotkey", type=str)
         parser.add_argument("--miner-ip", type=str)
         parser.add_argument("--miner-port", type=int)
-        parser.add_argument("--interval", type=float)
+        parser.add_argument(
+            "--interval",
+            type=float,
+            help="If provided, runs in daemon mode and polls for changes every `interval` seconds.",
+        )
 
     @async_to_sync
     async def handle(
@@ -83,11 +87,14 @@ class Command(BaseCommand):
             await self.run_in_loop(interval, cutoff, miners)
 
     async def run_once(self, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]):
-        # Do a one time fetch of all pages
+        """
+        Do a one time fetch of all pages
+        """
         catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff)
         current_page = LocalFilesystemPagedReceiptStore.current_page()
         async with aiohttp.ClientSession() as session:
             await self.catch_up(
+                # Pull all pages from latest to oldest
                 pages=list(reversed(range(catchup_cutoff_page, current_page + 1))),
                 miners=miners,
                 session=session,
@@ -97,9 +104,13 @@ class Command(BaseCommand):
     async def run_in_loop(
         self, interval: float, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]
     ):
-        # Do a full catch-up while listening for changes in latest 2 pages
+        """
+        Do a full catch-up while listening for changes in latest 2 pages.
+        """
         catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff)
         current_page = LocalFilesystemPagedReceiptStore.current_page()
+
+        # Reuse the session between all tasks so that we can keep the TCP connections up
         async with aiohttp.ClientSession() as session:
             # First, quickly catch-up with the 2 latest pages so that the "keep up" loop has easier time later
             await self.catch_up(
@@ -109,7 +120,7 @@ class Command(BaseCommand):
                 semaphore=asyncio.Semaphore(50),
             )
             await asyncio.gather(
-                # Slowly catch up with pages older than 2
+                # Slowly catch up with pages older than 2, latest page first
                 self.catch_up(
                     pages=list(reversed(range(catchup_cutoff_page, current_page - 1))),
                     miners=miners,
@@ -117,7 +128,7 @@ class Command(BaseCommand):
                     # Throttle this lower so that it doesn't choke the keep up loop
                     semaphore=asyncio.Semaphore(10),
                 ),
-                # ... and keep up with latest 2 pages continuously
+                # ... and keep up with latest 2 pages continuously in parallel
                 self.keep_up(
                     n_pages=2,
                     interval=interval,
@@ -134,6 +145,9 @@ class Command(BaseCommand):
         session: aiohttp.ClientSession,
         semaphore: asyncio.Semaphore,
     ):
+        """
+        Fetches changes in given pages one by one.
+        """
         for idx, page in enumerate(pages):
             start_time = time.monotonic()
             receipts, exceptions = await ReceiptsTransfer.transfer(
@@ -163,6 +177,9 @@ class Command(BaseCommand):
         session: aiohttp.ClientSession,
         semaphore: asyncio.Semaphore,
     ):
+        """
+        Runs indefinitely and polls for changes in last `n_pages` every `interval`.
+        """
         while True:
             start_time = time.monotonic()
             """
