@@ -63,6 +63,9 @@ class DummyExecutorManager(BaseExecutorManager):
     async def get_manifest(self):
         return self.manifest
 
+    async def is_active(self) -> bool:
+        return True
+
 
 @pytest_asyncio.fixture
 async def dummy_manager():

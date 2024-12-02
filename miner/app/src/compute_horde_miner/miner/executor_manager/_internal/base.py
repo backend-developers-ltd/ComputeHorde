@@ -133,6 +133,10 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         Keys are executor class ids and values are number of supported executors for given executor class.
         """
 
+    @abc.abstractmethod
+    async def is_active(self) -> bool:
+        """Check if the Miner is an active one for configured Cluster"""
+
     async def _sync_pools_with_manifest(self):
         manifest = await self.get_manifest()
         for executor_class, executor_count in manifest.items():
