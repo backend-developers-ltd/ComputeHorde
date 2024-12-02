@@ -1,3 +1,109 @@
+# ComputeHorde (Subnet 12 of Bittensor)
+
+ComputeHorde is a specialized subnet within the Bittensor network that provides the compute power of networkless GPU-equipped servers. 
+Unlike other subnets in Bittensor, ComputeHorde focuses on delivering reliable, decentralized access to computing resources for validation tasks.
+
+The primary purpose of ComputeHorde is to decentralize and democratize the hardware required by validators of other subnets. 
+By removing reliance on centralized cloud providers, ComputeHorde ensures the Bittensor network remains true to its goal of decentralized resilience.
+
+---
+
+## Key Features
+
+- **Decentralized Compute for Validators**  
+  ComputeHorde aims to become the go-to decentralized source for hardware needed to validate other subnets. 
+  This is crucial for avoiding dependency on centralized services, which contradicts Bittensor's ethos.
+  
+- **Fair and Verified Work**  
+  ComputeHorde employs mechanisms to ensure miners provide authentic and fair compute work:
+  - Validate tasks from all validators equally, regardless of their stake.
+  - Handle both **organic** (external) and **synthetic** (validation-only) tasks.
+  - Match jobs to the advertised hardware (e.g., ensuring A6000 GPUs are actually used for tasks requiring them).
+  - Prevent malicious behaviors like "weight-copying" through innovative validation mechanisms.
+
+- **Scalable Mining with Executors**  
+  Each miner in ComputeHorde can spawn multiple **executors**, virtual machines performing individual compute tasks. 
+  This removes the 256 miner (UID) limit and significantly scales the available computing power.
+
+- **Hardware Classes**  
+  ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance. Currently, the supported classes are:
+  - **A6000** (available now)
+  - **A100** (coming soon)  
+  The goal is to support all GPU types required by validators across Bittensor subnets.
+
+- **Facilitating Organic Jobs**  
+  Facilitators connect external requests from validators of other subnets to ComputeHorde, encouraging miners to execute organic tasks alongside synthetic ones.
+
+---
+
+## Components
+
+### **Facilitator**
+- Acts as a gateway for organic requests (from other subnets’ validators) to enter ComputeHorde.
+- Sends tasks to validators, who then distribute them to miners.
+
+### **Validator**
+- Receives organic requests via the Facilitator or generates synthetic tasks for validation.
+- Distributes tasks to miners and evaluates the results:
+  - Organic results are returned to external requesters.
+  - Synthetic results adjust miners' scores.
+
+### **Miner**
+- Accepts job requests from validators.
+- Manages **executors** to perform tasks and sends results back to validators.
+
+### **Executor**
+- A virtual machine spawned by a miner to perform a single dockerized task.
+- Operates in a restricted environment, with limited network access necessary for:
+  - Communicating with miners.
+  - Downloading docker images.
+  - Handling job data.
+- Executors form a **horde** under a miner and are assigned hardware classes.
+
+---
+
+## Innovations to Highlight
+
+### Discouraging Weight-Copying
+- **Commit-Reveal Scheme**: Validators post hidden weights and reveal them in the next epoch, minimizing the impact of weight-copying.
+- **Executor Dancing**: Miners randomly move GPUs across multiple UIDs, further reducing the effectiveness of copying old weights.
+
+### Encouraging Actual Mining
+- Synthetic tasks are designed to run only on specific hardware (e.g., A6000 GPUs), ensuring miners deliver the advertised compute power.
+- Incentives for completing organic tasks.
+
+### Democratizing Mining
+- Miners can scale their operations by spawning multiple executors, breaking traditional limits and enabling cost-effective participation.
+
+---
+
+## Goals
+
+1. **Expand Hardware Support**  
+   Add support for all GPU classes required by other Bittensor subnets.
+
+2. **Introduce Paid Organic Jobs**  
+   Allow the free market to regulate demand and prioritize cost-effective hardware.
+
+3. **Support Long-Running Jobs**  
+   Implement accounting mechanisms for miners to be rewarded proportionally, even for incomplete long-running tasks.
+
+4. **Fair Resource Sharing**  
+   Allocate resources based on validators' stakes while allowing low-stake validators access when demand is low.
+
+5. **Strengthen Security**  
+   Introduce safeguards to prevent exploitation and ensure a fair environment for all participants.
+
+---
+
+## Repository Overview
+
+This repository contains the reference implementations of key ComputeHorde components:
+
+- **Validator**: A reference implementation requiring a Trusted Miner for cross-checking synthetic tasks.
+- **Miner**: Default miner setup with a single executor.
+- **Executor**: Base implementation for executing dockerized jobs. Users can create custom executor managers to scale and optimize mining efficiency.
+
 # What is this
 
 This repository contains reference implementations of
@@ -15,20 +121,24 @@ of the ComputeHorde BitTensor SubNet. Running etc. is explained in each componen
 Data flow looks like this:
 
 1. **Facilitator** is an internet facing app charging users for accepting jobs from them, which are then passed on to validators.
-1. **Validator** has the same meaning as in other Bittensor subnets. It receives organic requests (requests from end users) or generates synthetic ones itself, sends them to miners and reads the results. Results for organic traffic are then passed back to end users, while synthetic traffic is used to adjust miners' scores.
-[See validator's README for more details](validator/README.md)
+1. **Validator** has the same meaning as in other Bittensor subnets. 
+   It receives organic requests (requests from end users) or generates synthetic ones itself, sends them to miners and reads the results. 
+   Results for organic traffic are then passed back to end users, while synthetic traffic is used to adjust miners' scores. [See validator's README for more details](validator/README.md)
 1. **Miner** has the same meaning as in other Bittensor subnets. It receives job requests from validators, spawns executors to do the actual work and sends the results back to validators.
-[See miner's README for more details](miner/README.md)
-1. **Executor** is a virtual machine managed by a single miner, spawned to perform a single dockerized job, and is scrapped afterwards. Its access to the network is limited to necessary bits needed to execute a job, i.e. communicate with a miner, download the docker image that runs the job, download the docker image containing executor app, and mount the job data volume. Executors have hardware classes assigned and together form the horde of a miner.
-[See executor's README for more details](executor/README.md)
+   [See miner's README for more details](miner/README.md)
+1. **Executor** is a virtual machine managed by a single miner, spawned to perform a single dockerized job, and is scrapped afterwards. 
+   Its access to the network is limited to necessary bits needed to execute a job, 
+   i.e. communicate with a miner, download the docker image that runs the job, download the docker image containing executor app, and mount the job data volume. 
+   Executors have hardware classes assigned and together form the horde of a miner.
+   [See executor's README for more details](executor/README.md)
 
-# Scoring
+# Scoring -- outdated
 
 Currently miners are rewarded for providing the time of networkless GPU-equipped servers, proportionally to their efficiency. Each miner can (for now) provide only their fastest Executor.
 
 In February 2024 this will change - subnet will define more resource types andValidators will reward miners more for providing resources that are in higher demand. The system will quickly fill to capacity with organic traffic.
 
-# Incoming changes
+# Incoming changes -- outdated
 * Introduce hardware classes to create a free market that delivers the most cost-effective hardware, rather than solely focusing on the strongest hardware.
 * Organic jobs should not be free to allow the free market to regulate demand on hardware classes effectively.
 * Support long-running jobs by accounting for miners' work in 10-minute intervals, ensuring they can be paid for unfinished long-running jobs.
@@ -55,6 +165,16 @@ for miner in miners:
 ```
 
 # Running
+
+This repository contains reference implementations of
+
+1. Validator
+2. Miner
+3. Executor
+
+of the ComputeHorde BitTensor SubNet. 
+In the following sections you can find instructions on running [Validator](#Validator) and [Miner](#Miner).
+There are more details in each component's README and in the [Troubleshooting](#Troubleshooting) section below.
 
 ## Validator
 
