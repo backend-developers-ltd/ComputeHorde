@@ -25,6 +25,15 @@ services:
     logging:
       <<: *logging
 
+  subtensor-proxy:
+    image: ghcr.io/bactensor/bt-subtensor-tools/subtensor-proxy
+    environment:
+      - SUBTENSOR_NODE_ADDRESS=${SUBTENSOR_NODE_ADDRESS}
+    ports:
+      - 9944:9944
+    logging:
+      <<: *logging
+
   app:
     image: backenddevelopersltd/${MINER_IMAGE_REPO}:${MINER_IMAGE_TAG:-v0-latest}
     pull_policy: always
@@ -48,6 +57,7 @@ services:
     depends_on:
       - redis
       - db
+      - subtensor-proxy
     logging:
       <<: *logging
     labels:
@@ -76,6 +86,7 @@ services:
     depends_on:
       - redis
       - db
+      - subtensor-proxy
     logging:
       <<: *logging
     labels:
@@ -129,6 +140,7 @@ services:
       "--keep", "^postgres:14.0-alpine",
       "--keep", "^containrrr/watchtower",
       "--keep", "^stephanmisc/docuum:0.23.1",
+      "--keep", "^bactensor/bt-subtensor-tools/subtensor-proxy",
       "--keep", "^backenddevelopersltd/compute-horde-miner-runner:v0-latest",
       "--keep", "^backenddevelopersltd/${MINER_IMAGE_REPO}:v0-(latest|preprod)",
       "--keep", "^backenddevelopersltd/compute-horde-miner-nginx:v0-latest",

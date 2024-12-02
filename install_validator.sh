@@ -128,7 +128,8 @@ cat > .env <<ENDENV
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(25))')
 POSTGRES_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')
 BITTENSOR_NETUID=12
-BITTENSOR_NETWORK=finney
+BITTENSOR_NETWORK=subtensor-proxy:9944
+SUBTENSOR_NODE_ADDRESS=
 BITTENSOR_WALLET_NAME="$(. ~/tmpvars && echo "$WALLET_NAME")"
 BITTENSOR_WALLET_HOTKEY_NAME="$(. ~/tmpvars && echo "$HOTKEY_NAME")"
 HOST_WALLET_DIR=$HOME/.bittensor/wallets

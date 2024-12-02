@@ -25,6 +25,15 @@ services:
     logging:
       <<: *logging
 
+  subtensor-proxy:
+    image: ghcr.io/bactensor/bt-subtensor-tools/subtensor-proxy
+    environment:
+      - SUBTENSOR_NODE_ADDRESS=${SUBTENSOR_NODE_ADDRESS}
+    ports:
+      - 9944:9944
+    logging:
+      <<: *logging
+
   app:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
     pull_policy: ${PULL_POLICY:-always}
@@ -43,6 +52,7 @@ services:
     depends_on:
       - redis
       - db
+      - subtensor-proxy
     logging:
       <<: *logging
     labels:
@@ -64,6 +74,7 @@ services:
     tmpfs: /run
     depends_on:
       - redis
+      - subtensor-proxy
     logging:
       <<: *logging
     labels:
