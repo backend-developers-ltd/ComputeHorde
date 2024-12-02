@@ -183,7 +183,6 @@ class ReceiptsTransfer:
         jsonl_content = await response.read()
 
         # Put this on a worker thread, otherwise other HTTP requests will time out waiting for this.
-        # While not thread sensitive, putting these tasks on dedicated worker threads somehow makes the timeouts worse.
         receipts = await sync_to_async(self._to_valid_receipts, thread_sensitive=False)(
             jsonl_content
         )
