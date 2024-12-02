@@ -115,6 +115,8 @@ If you want to change the default config, see [Validator runner README](validato
 
 If you want to trigger jobs from the validator see [Validator README](validator/docs/validator.md) for details.
 
+If anything seems wrong, check the [troubleshooting](#troubleshooting) section.
+
 ## Miner
 
 To quickly start a miner, create an Ubuntu Server and execute the following command from your local machine (where you have your wallet files).
@@ -144,3 +146,63 @@ If you want to change the default config, see [Miner runner README](miner/envs/r
 
 If you need to move your miner or validator to a new server,
 see the [migration guide](/docs/migration.md).
+
+# Troubleshooting
+
+## How to dump the logs
+
+The ComputeHorde software starts several Docker containers. The most relevant logs are from containers with names ending in `app-1`.
+
+To view these logs:
+1. SSH into the machine (validator or miner).
+1. Run `docker ps` to find the name of the appropriate container (e.g., `compute_horde_miner-app-1`).
+1. Run `docker logs CONTAINER_NAME`.
+
+
+## How to restart the services
+
+To perform a hard restart of all ComputeHorde Docker containers, run the following commands:
+
+```bash
+docker compose down --remove-orphans
+docker compose up
+```
+
+Afterwards, use `docker ps` to verify that the containers have started successfully.
+
+## How to delete persistent volumes
+
+To start fresh and remove all persistent data, follow these steps:
+
+1. Stop the validator or miner (all running containers)
+1. Run `docker volume ls` to list all existing volumes and identify the ones to delete.
+   Key volumes to consider:
+    - Miner: `miner_db_data`, `miner_redis_data`
+    - Validator: `validator_db`, `validator_redis`, `validator_static`
+1. Run the following command to remove all Docker volumes:
+   ```bash
+   docker volume rm $(docker volume ls -q)
+   ```
+1. Start the validator or miner again
+
+## How to fix issues with installing `cuda-drivers`
+
+Miner installation may occasionally fail with an error about the system being unable to install the `cuda-drivers` package. 
+This issue is often caused by mismatched drivers already installed before running the installation script.
+
+To resolve this:
+1. Run the following command on the miner machine to purge any conflicting NVIDIA packages:
+   ```bash
+   sudo apt-get purge -y '^nvidia-.*'
+   ```
+1. Re-run the `install_miner.sh` script from your local machine.
+
+## How to check if NVIDIA Drivers are working and the GPU is usable
+
+To verify the health of the NVIDIA setup, run the following command on the miner machine:
+```bash
+docker run --rm --runtime=nvidia --gpus all ubuntu nvidia-smi
+```
+
+If the output indicates a problem (especially immediately after installation), a [restart of the services](#how-to-restart-the-services) may help.
+
