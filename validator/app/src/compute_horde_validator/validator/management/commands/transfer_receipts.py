@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import cast
 
 import aiohttp
@@ -74,15 +74,16 @@ class Command(BaseCommand):
                     if neuron.axon_info.is_serving
                 ]
 
-        if interval is None:
-            await self.run_once(miners)
-        else:
-            await self.run_in_loop(interval, miners)
+        cutoff = timezone.now() - timedelta(hours=5)
 
-    async def run_once(self, miners: Callable[[], Awaitable[list[MinerInfo]]]):
+        if interval is None:
+            await self.run_once(cutoff, miners)
+        else:
+            await self.run_in_loop(interval, cutoff, miners)
+
+    async def run_once(self, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]):
         # Do a one time fetch of all pages
-        catchup_cutoff = timezone.now() - timedelta(hours=10)
-        catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(catchup_cutoff)
+        catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff)
         current_page = LocalFilesystemPagedReceiptStore.current_page()
         async with aiohttp.ClientSession() as session:
             await self.catch_up(
@@ -90,15 +91,12 @@ class Command(BaseCommand):
                 miners=miners,
                 session=session,
                 semaphore=asyncio.Semaphore(50),
-                skip_visited=False,
             )
 
-    async def run_in_loop(self, interval: float, miners: Callable[[], Awaitable[list[MinerInfo]]]):
+    async def run_in_loop(self, interval: float, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]):
         # Do a full catch-up while listening for changes in latest 2 pages
-        catchup_cutoff = timezone.now() - timedelta(hours=10)
-        catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(catchup_cutoff)
+        catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff)
         current_page = LocalFilesystemPagedReceiptStore.current_page()
-
         async with aiohttp.ClientSession() as session:
             # First, quickly catch-up with the 2 latest pages so that the "keep up" loop has easier time later
             await self.catch_up(
@@ -106,7 +104,6 @@ class Command(BaseCommand):
                 miners=miners,
                 session=session,
                 semaphore=asyncio.Semaphore(50),
-                skip_visited=False,
             )
             await asyncio.gather(
                 # Slowly catch up with pages older than 2
@@ -117,7 +114,6 @@ class Command(BaseCommand):
                     semaphore=asyncio.Semaphore(
                         10
                     ),  # Throttle this so that it doesn't choke the keep up loop
-                    skip_visited=True,
                 ),
                 # ... and keep up with latest 2 pages continuously
                 self.keep_up(
@@ -135,22 +131,24 @@ class Command(BaseCommand):
         miners: Callable[[], Awaitable[list[MinerInfo]]],
         session: aiohttp.ClientSession,
         semaphore: asyncio.Semaphore,
-        skip_visited: bool,
     ):
         for idx, page in enumerate(pages):
+            start_time = time.monotonic()
             receipts, exceptions = await ReceiptsTransfer.transfer(
                 miners=await miners(),
                 pages=[page],
                 session=session,
                 semaphore=semaphore,
-                max_time_per_miner_page=3.0,
-                # misnomer, this is only about the http request, validation and saving may take longer
-                batch_insert_size=1000,
-                skip_visited=skip_visited,
+                request_timeout=3.0,
             )
+            elapsed = time.monotonic() - start_time
+            rps = receipts / elapsed
+
             logger.info(
                 f"Catching up: "
                 f"{page=} ({idx + 1}/{len(pages)}) "
+                f"{elapsed=:.3f} "
+                f"{rps=:.0f} "
                 f"{receipts=} "
                 f"{exceptions=} "
             )
@@ -177,9 +175,7 @@ class Command(BaseCommand):
                 pages=pages,
                 session=session,
                 semaphore=semaphore,
-                max_time_per_miner_page=1.0,
-                batch_insert_size=1000,
-                skip_visited=False,
+                request_timeout=1.0,
             )
             elapsed = time.monotonic() - start_time
             rps = receipts / elapsed

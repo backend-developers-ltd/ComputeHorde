@@ -66,23 +66,22 @@ class ReceiptsTransfer:
         pages: Sequence[int],
         session: aiohttp.ClientSession,
         semaphore: asyncio.Semaphore,
-        max_time_per_miner_page: float,
-        batch_insert_size: int,
-        skip_visited: bool,
+        request_timeout: float,
     ) -> tuple[int, int]:
         """
-        Efficiently transfer receipts from multiple miners at the same time, storing
-        them in local database.
+        Efficiently transfer receipts from multiple miners at the same time, storing them in local database.
+        Still, the number of pages transferred at the same time should be limited to 1-2.
         """
         checkpoint_backend = DjangoCacheCheckpointBackend("receipts_checkpoints")
 
         async def rate_limited_transfer(transfer: cls, page: int, session: aiohttp.ClientSession):
             try:
                 async with semaphore:
+                    # This both fetches and verifies the receipts.
                     return await transfer.get_new_receipts_on_page(
                         page=page,
                         session=session,
-                        timeout=max_time_per_miner_page,
+                        timeout=request_timeout,
                     )
             except (TimeoutError, Exception) as e:
                 logger.error(
@@ -96,8 +95,6 @@ class ReceiptsTransfer:
             for miner in miners:
                 hotkey, ip, port = miner
                 transfer = cls(f"http://{ip}:{port}/receipts", checkpoint_backend)
-                if skip_visited and await transfer.has_visited_page(page):
-                    continue
                 transfer_tasks.append(
                     asyncio.create_task(rate_limited_transfer(transfer, page, session))
                 )
@@ -116,7 +113,7 @@ class ReceiptsTransfer:
                     model_type = model.__class__
                     bucket = receipts_by_type[model_type]
                     bucket.append(model)
-                    if len(bucket) >= batch_insert_size:
+                    if len(bucket) >= 1000:
                         await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
                         total_receipts += len(bucket)
                         logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
@@ -128,16 +125,13 @@ class ReceiptsTransfer:
                 failures += 1
                 continue
 
-        # Insert the remainder
+        # Insert the remainder of the receipts
         for model_type, bucket in receipts_by_type.items():
             await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
             total_receipts += len(bucket)
             logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
 
         return total_receipts, failures
-
-    async def has_visited_page(self, page: int) -> bool:
-        return await self._checkpoints.has(self.page_url(page))
 
     async def get_new_receipts_on_page(
         self, page: int, session: aiohttp.ClientSession, timeout: float
