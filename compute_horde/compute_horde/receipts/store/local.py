@@ -1,7 +1,9 @@
+import gzip
 import logging
 import os
 import re
-import time
+import shutil
+import tempfile
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
@@ -9,6 +11,7 @@ from glob import glob
 from pathlib import Path
 
 from django.conf import settings
+from django.utils import timezone
 
 from compute_horde.receipts.schemas import (
     Receipt,
@@ -27,12 +30,12 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         self.pages_directory: Path = Path(settings.LOCAL_RECEIPTS_ROOT)
 
     @staticmethod
-    def current_page_at(dt: datetime) -> int:
-        return int(dt.timestamp() // PAGE_TIME_MOD)
+    def current_page() -> int:
+        return LocalFilesystemPagedReceiptStore.current_page_at(timezone.now())
 
     @staticmethod
-    def active_page_id() -> int:
-        return int(time.time()) // PAGE_TIME_MOD
+    def current_page_at(dt: datetime) -> int:
+        return int(dt.timestamp() // PAGE_TIME_MOD)
 
     @staticmethod
     def receipt_page(receipt: Receipt) -> int:
@@ -56,23 +59,46 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         """
         return self.pages_directory / f"{page}.jsonl"
 
-    def _append_to_page(self, receipts: Sequence[Receipt], page: int) -> None:
+    def archive_filepath(self, page: int) -> Path:
         """
-        Write new receipts to the end of specified page.
-        Does not check whether the receipts actually belong on this page.
+        Find the filepath under which given pagefile's archive should be found.
+        Does not check whether it actually exists or not.
         """
-        with open(self.page_filepath(page), "a") as pagefile:
-            # TODO: copy -> append -> move
-            for r in receipts:
-                pagefile.write(r.model_dump_json())
-                pagefile.write("\n")
+        return self.pages_directory / f"{page}.jsonl.gz"
 
     def delete_page(self, page: int) -> None:
-        page_filepath = self.page_filepath(page)
+        """
+        Deletes the page file from the file system if it exists.
+        Does nothing otherwise.
+        """
         try:
+            page_filepath = self.page_filepath(page)
             os.unlink(page_filepath)
         except FileNotFoundError:
             pass
+        try:
+            archive_filepath = self.archive_filepath(page)
+            os.unlink(archive_filepath)
+        except FileNotFoundError:
+            pass
+
+    def archive_old_pages(self) -> None:
+        current_page = self.current_page()
+        upper_cutoff = current_page - 2
+        pages_to_archive = [p for p in self.get_available_pages() if p <= upper_cutoff]
+        for page in pages_to_archive:
+            archive_filepath = self.archive_filepath(page)
+            if archive_filepath.exists():
+                continue
+            self.do_archive_page(page)
+
+    def do_archive_page(self, page: int) -> None:
+        """
+        Packs given page and creates an additional archive file used by nginx to serve the page.
+        """
+        with open(self.page_filepath(page), "rb") as page_file:
+            with gzip.open(self.archive_filepath(page), "wb") as archive_file:
+                shutil.copyfileobj(page_file, archive_file)
 
     def get_available_pages(self) -> list[int]:
         """
@@ -86,6 +112,23 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
             if match:
                 pages.append(int(match[1]))
         return pages
+
+    def _append_to_page(self, receipts: Sequence[Receipt], page: int) -> None:
+        """
+        Write new receipts to the specified page.
+        Does not check whether the receipts actually belong on this page.
+        For read safery this will copy the page file first, append to the copy and do a swap with the original.
+        """
+        page_filepath = self.page_filepath(page)
+        page_filepath.touch(exist_ok=True)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_page_filepath = Path(tmpdir) / "tmp_page.jsonl"
+            shutil.copyfile(page_filepath, tmp_page_filepath)
+            with open(tmp_page_filepath, "a") as pagefile:
+                for r in receipts:
+                    pagefile.write(r.model_dump_json())
+                    pagefile.write("\n")
+            shutil.move(tmp_page_filepath, page_filepath)
 
     def _get_available_page_filepaths(self) -> list[Path]:
         """

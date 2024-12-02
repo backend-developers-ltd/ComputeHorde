@@ -288,6 +288,11 @@ PROD_CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(minutes=10),
         "options": {},
     },
+    "archive_receipt_pages": {
+        "task": "compute_horde_miner.miner.tasks.archive_receipt_pages",
+        "schedule": timedelta(minutes=1),
+        "options": {},
+    },
 }
 
 if IS_LOCAL_MINER:

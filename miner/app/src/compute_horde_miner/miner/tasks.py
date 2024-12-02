@@ -8,7 +8,7 @@ from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts.transfer import get_miner_receipts
+from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
 from compute_horde.utils import get_validators
 from constance import config
 from django.conf import settings
@@ -185,3 +185,9 @@ def fetch_dynamic_config() -> None:
         config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/common-config-{settings.DYNAMIC_CONFIG_ENV}.json",
         namespace=config,
     )
+
+
+@app.task
+def archive_receipt_pages():
+    store = LocalFilesystemPagedReceiptStore()
+    store.archive_old_pages()

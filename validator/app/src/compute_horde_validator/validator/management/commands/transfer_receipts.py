@@ -83,7 +83,7 @@ class Command(BaseCommand):
         # Do a one time fetch of all pages
         catchup_cutoff = timezone.now() - timedelta(hours=10)
         catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(catchup_cutoff)
-        current_page = LocalFilesystemPagedReceiptStore.active_page_id()
+        current_page = LocalFilesystemPagedReceiptStore.current_page()
         async with aiohttp.ClientSession() as session:
             await self.catch_up(
                 pages=list(reversed(range(catchup_cutoff_page, current_page + 1))),
@@ -97,7 +97,7 @@ class Command(BaseCommand):
         # Do a full catch-up while listening for changes in latest 2 pages
         catchup_cutoff = timezone.now() - timedelta(hours=10)
         catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(catchup_cutoff)
-        current_page = LocalFilesystemPagedReceiptStore.active_page_id()
+        current_page = LocalFilesystemPagedReceiptStore.current_page()
 
         async with aiohttp.ClientSession() as session:
             # First, quickly catch-up with the 2 latest pages so that the "keep up" loop has easier time later
@@ -170,7 +170,7 @@ class Command(BaseCommand):
             - page request timeout may be influenced by some heavy async task
             - too many concurrent downloads may take a lot of bandwidth
             """
-            latest_page = LocalFilesystemPagedReceiptStore.active_page_id()
+            latest_page = LocalFilesystemPagedReceiptStore.current_page()
             pages = list(reversed(range(latest_page - n_pages + 1, latest_page + 1)))
             receipts, exceptions = await ReceiptsTransfer.transfer(
                 miners=await miners(),

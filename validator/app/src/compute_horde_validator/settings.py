@@ -53,7 +53,7 @@ DEFAULT_ADMIN_EMAIL = env("DEFAULT_ADMIN_EMAIL", default="admin@admin.com")
 SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.bool("DEBUG", default=False)
+DEBUG = False  # env.bool("DEBUG", default=False)
 
 ALLOWED_HOSTS = ["*"]
 
