@@ -32,14 +32,23 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
 
     @staticmethod
     def current_page() -> int:
+        """
+        Get current page ID
+        """
         return LocalFilesystemPagedReceiptStore.current_page_at(timezone.now())
 
     @staticmethod
     def current_page_at(dt: datetime) -> int:
+        """
+        Calculate what the current page was at given time
+        """
         return int(dt.timestamp() // PAGE_TIME_MOD)
 
     @staticmethod
     def receipt_page(receipt: Receipt) -> int:
+        """
+        Calculate the page ID the given receipts should appear in
+        """
         return LocalFilesystemPagedReceiptStore.current_page_at(receipt.payload.timestamp)
 
     def store(self, receipts: Sequence[Receipt]) -> None:
@@ -84,6 +93,10 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
             pass
 
     def archive_old_pages(self) -> None:
+        """
+        Create archives for all old pages if they don't exist yet.
+        Skips latest 2 pages as these can be still written to.
+        """
         current_page = self.current_page()
         upper_cutoff = current_page - 2
         pages_to_archive = [p for p in self.get_available_pages() if p <= upper_cutoff]
