@@ -1,12 +1,9 @@
 # ComputeHorde (Subnet 12 of Bittensor)
 
-ComputeHorde is a specialized subnet within the Bittensor network that provides the compute power of networkless GPU-equipped servers. 
-Unlike other subnets in Bittensor, ComputeHorde focuses on delivering reliable, decentralized access to computing resources for validation tasks.
+ComputeHorde is a specialized subnet within the [Bittensor network](https://bittensor.com) that provides the compute power of networkless GPU-equipped servers. 
 
-The primary purpose of ComputeHorde is to decentralize and democratize the hardware required by validators of other subnets. 
+The primary purpose of ComputeHorde is to **provide access to decentralized computing resources required by validators of other subnets**. 
 By removing reliance on centralized cloud providers, ComputeHorde ensures the Bittensor network remains true to its goal of decentralized resilience.
-
----
 
 ## Key Features
 
