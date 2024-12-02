@@ -90,7 +90,7 @@ class LivenessProbe(bootsteps.StartStopStep):
         # Ensure the file exists
         WORKER_HEALTHCHECK_FILE.touch()
         self.tref = worker.timer.call_repeatedly(
-            1.0,
+            10.0,
             self.update_heartbeat_file,
             (worker,),
             priority=10,
