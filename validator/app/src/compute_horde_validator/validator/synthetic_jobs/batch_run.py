@@ -237,7 +237,7 @@ class MinerClient(AbstractMinerClient):
         )
 
 
-@dataclass
+@dataclass(slots=True)
 class ExceptionInfo:
     exception: BaseException
     miner_hotkey: str
@@ -245,7 +245,7 @@ class ExceptionInfo:
     stage: str
 
 
-@dataclass
+@dataclass(slots=True)
 class Job:
     ctx: "BatchContext"
 
@@ -415,7 +415,7 @@ class Job:
         return spin_up_time
 
 
-@dataclass
+@dataclass(slots=True)
 class BatchContext:
     # an already existing SyntheticJobBatch model can be optionally passed in
     batch_id: int | None
