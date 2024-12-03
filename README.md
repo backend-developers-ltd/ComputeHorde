@@ -1,5 +1,7 @@
 # ComputeHorde (Subnet 12 of Bittensor)
 
+![ComputeHorde.png](ComputeHorde.png)
+
 ComputeHorde is a specialized subnet within the [Bittensor network](https://bittensor.com) that provides the compute power of networkless GPU-equipped servers. 
 
 The primary purpose of ComputeHorde is to **provide access to decentralized computing resources required by validators of other subnets**. 
@@ -7,29 +9,25 @@ By removing reliance on centralized cloud providers, ComputeHorde ensures the Bi
 
 ## Key Features
 
-- **Decentralized Compute for Validators**  
-  ComputeHorde aims to become the go-to decentralized source for hardware needed to validate other subnets. 
-  This is crucial for avoiding dependency on centralized services, which contradicts Bittensor's ethos.
+- **Decentralized Compute for Bittensor Validators**  
+  ComputeHorde aims to become the go-to decentralized source for hardware needed to validate other subnets.
+  The mission is to decrease Bittensor ecosystem's dependency on centralized services.
   
 - **Fair and Verified Work**  
-  ComputeHorde employs mechanisms to ensure miners provide authentic and fair compute work:
-  - Validate tasks from all validators equally, regardless of their stake.
+  ComputeHorde employs mechanisms to ensure miners provide authentic and fair compute work authentically and fairly verified by the validators:
+  - Execute tasks from all validators equally, regardless of their stake (above a rather low threshold).
   - Handle both **organic** (external) and **synthetic** (validation-only) tasks.
   - Match jobs to the advertised hardware (e.g., ensuring A6000 GPUs are actually used for tasks requiring them).
   - Prevent malicious behaviors like "weight-copying" through innovative validation mechanisms.
 
 - **Scalable Mining with Executors**  
-  Each miner in ComputeHorde can spawn multiple **executors**, virtual machines performing individual compute tasks. 
-  This removes the 256 miner (UID) limit and significantly scales the available computing power.
+  Each miner in ComputeHorde can spawn multiple **executors**, performing individual compute tasks. 
+  This removes the 256 miner (UID) limit and significantly scales the potentially available computing power.
 
 - **Hardware Classes**  
-  ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance. Currently, the supported classes are:
-  - **A6000** (available now)
-  - **A100** (coming soon)  
-  The goal is to support all GPU types required by validators across Bittensor subnets.
-
-- **Facilitating Organic Jobs**  
-  Facilitators connect external requests from validators of other subnets to ComputeHorde, encouraging miners to execute organic tasks alongside synthetic ones.
+  ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance. 
+  Currently, **A6000** is the supported class, with **A100** coming next.
+  The end-goal is to support all GPU types / configurations required by validators across Bittensor subnets.
 
 ---
 
@@ -44,33 +42,34 @@ By removing reliance on centralized cloud providers, ComputeHorde ensures the Bi
 - Distributes tasks to miners and evaluates the results:
   - Organic results are returned to external requesters.
   - Synthetic results adjust miners' scores.
+- [See validator's README for more details](validator/README.md)
 
 ### **Miner**
 - Accepts job requests from validators.
 - Manages **executors** to perform tasks and sends results back to validators.
+- [See miner's README for more details](miner/README.md)
 
 ### **Executor**
 - A virtual machine spawned by a miner to perform a single dockerized task.
 - Operates in a restricted environment, with limited network access necessary for:
-  - Communicating with miners.
-  - Downloading docker images.
-  - Handling job data.
-- Executors form a **horde** under a miner and are assigned hardware classes.
+  - communicating with miners,
+  - downloading docker images,
+  - handling job data.
+- Executors form a **horde** of a miner and are assigned hardware classes.
+- [See executor's README for more details](executor/README.md)
 
 ---
 
 ## Innovations to Highlight
 
 ### Discouraging Weight-Copying
-- **Commit-Reveal Scheme**: Validators post hidden weights and reveal them in the next epoch, minimizing the impact of weight-copying.
+- **Commit-Reveal**: Validators post hidden weights and reveal them in the next epoch, making the copying of _current_ weights impossible.
 - **Executor Dancing**: Miners randomly move GPUs across multiple UIDs, further reducing the effectiveness of copying old weights.
 
 ### Encouraging Actual Mining
 - Synthetic tasks are designed to run only on specific hardware (e.g., A6000 GPUs), ensuring miners deliver the advertised compute power.
-- Incentives for completing organic tasks.
-
-### Democratizing Mining
-- Miners can scale their operations by spawning multiple executors, breaking traditional limits and enabling cost-effective participation.
+- Scoring system incentivising for completing organic tasks.
+- Mechanisms for penalizing miners serving only a subset of validators
 
 ---
 
@@ -79,99 +78,32 @@ By removing reliance on centralized cloud providers, ComputeHorde ensures the Bi
 1. **Expand Hardware Support**  
    Add support for all GPU classes required by other Bittensor subnets.
 
-2. **Introduce Paid Organic Jobs**  
-   Allow the free market to regulate demand and prioritize cost-effective hardware.
+1. **Bring organic jobs from other subnets' validators**  
+   Allow the free market to regulate demand and prioritize cost-effective hardware, rather than solely focusing on the strongest hardware.
 
-3. **Support Long-Running Jobs**  
-   Implement accounting mechanisms for miners to be rewarded proportionally, even for incomplete long-running tasks.
+1. **Support Long-Running Jobs**  
+   Implement accounting mechanisms for miners to be rewarded proportionally to the time spent, even for incomplete long-running tasks.
 
-4. **Fair Resource Sharing**  
+1. **Fair Resource Sharing**  
    Allocate resources based on validators' stakes while allowing low-stake validators access when demand is low.
 
-5. **Strengthen Security**  
-   Introduce safeguards to prevent exploitation and ensure a fair environment for all participants.
+1. **Strengthen Security**  
+   Introduce rules and safeguards to prevent malicious actors from exploiting the network, ensuring a fair and secure environment for all participants.
+
 
 ---
 
-## Repository Overview
+# Running ComputeHorde components
 
-This repository contains the reference implementations of key ComputeHorde components:
+This repository contains the reference implementations of:
 
 - **Validator**: A reference implementation requiring a Trusted Miner for cross-checking synthetic tasks.
 - **Miner**: Default miner setup with a single executor.
 - **Executor**: Base implementation for executing dockerized jobs. Users can create custom executor managers to scale and optimize mining efficiency.
 
-# What is this
-
-This repository contains reference implementations of
-
-1. Validator
-2. Miner
-3. Executor
-
-of the ComputeHorde BitTensor SubNet. Running etc. is explained in each component's README.
-
-# ComputeHorde
-
-![ComputeHorde.png](ComputeHorde.png)
-
-Data flow looks like this:
-
-1. **Facilitator** is an internet facing app charging users for accepting jobs from them, which are then passed on to validators.
-1. **Validator** has the same meaning as in other Bittensor subnets. 
-   It receives organic requests (requests from end users) or generates synthetic ones itself, sends them to miners and reads the results. 
-   Results for organic traffic are then passed back to end users, while synthetic traffic is used to adjust miners' scores. [See validator's README for more details](validator/README.md)
-1. **Miner** has the same meaning as in other Bittensor subnets. It receives job requests from validators, spawns executors to do the actual work and sends the results back to validators.
-   [See miner's README for more details](miner/README.md)
-1. **Executor** is a virtual machine managed by a single miner, spawned to perform a single dockerized job, and is scrapped afterwards. 
-   Its access to the network is limited to necessary bits needed to execute a job, 
-   i.e. communicate with a miner, download the docker image that runs the job, download the docker image containing executor app, and mount the job data volume. 
-   Executors have hardware classes assigned and together form the horde of a miner.
-   [See executor's README for more details](executor/README.md)
-
-# Scoring -- outdated
-
-Currently miners are rewarded for providing the time of networkless GPU-equipped servers, proportionally to their efficiency. Each miner can (for now) provide only their fastest Executor.
-
-In February 2024 this will change - subnet will define more resource types andValidators will reward miners more for providing resources that are in higher demand. The system will quickly fill to capacity with organic traffic.
-
-# Incoming changes -- outdated
-* Introduce hardware classes to create a free market that delivers the most cost-effective hardware, rather than solely focusing on the strongest hardware.
-* Organic jobs should not be free to allow the free market to regulate demand on hardware classes effectively.
-* Support long-running jobs by accounting for miners' work in 10-minute intervals, ensuring they can be paid for unfinished long-running jobs.
-* Implement rules and safeguards to prevent malicious actors from exploiting the network, ensuring a fair and secure environment for all participants.
-* Develop a resource-sharing system that allocates resources proportionally to each user's stake. However, also allow low-stake users to utilize network resources freely when there is no competing demand from other users.
-* Implement a mechanism for miner servers to reject jobs for a given hardware class if accepting the job would result in a financial loss for the miner.
-* Ensure that benchmark jobs are paid in the same manner as organic jobs: job duration multiplied by the hardware class multiplier and the benchmark value.
-* When a new miner is registered, require all validators to benchmark the miner's hardware classes with extended timeouts to accurately assess their capabilities.
-* When a new validator registers, they must benchmark every other miner in the network to maintain an up-to-date and comprehensive understanding of available resources. Until a miner is benchmarked by the validator, the validator defaults to 1 as the locally_measured_efficiency_factor for that miner.
-* Miners will have the ability to modify their hardware class availability manifest at a frequency of once every 2 hours. In the event that a miner has available executors, they are obligated to accept assigned jobs and cannot reject them. Should a miner reject a job under such circumstances, the validator will impose a penalty by lowering the hardware class local multiplier for all tasks associated with that miner.
-
-
-```python
-points = {}
-for miner in miners:
-    for hardware_class in miner.executors:
-        executor = miner.executors[hardware_class]
-        hardware_class_relative_value = hardware_classes[hardware_class].relative_value
-        points[miner.hotkey] = (
-            hardware_class_relative_value
-            * executor.locally_measured_efficiency_factor
-            * executor.total_worked_seconds
-        )
-```
-
-# Running
-
-This repository contains reference implementations of
-
-1. Validator
-2. Miner
-3. Executor
-
-of the ComputeHorde BitTensor SubNet. 
 In the following sections you can find instructions on running [Validator](#Validator) and [Miner](#Miner).
 There are more details in each component's README and in the [Troubleshooting](#Troubleshooting) section below.
+
 
 ## Validator
 
@@ -322,4 +254,28 @@ docker run --rm --runtime=nvidia --gpus all ubuntu nvidia-smi
 ```
 
 If the output indicates a problem (especially immediately after installation), a [restart of the services](#how-to-restart-the-services) may help.
+
+
+---
+# Pieces of the previous readme to take care of / remove altogether:
+---
+
+# Incoming changes -- outdated
+* When a new miner is registered, require all validators to benchmark the miner's hardware classes with extended timeouts to accurately assess their capabilities.
+* When a new validator registers, they must benchmark every other miner in the network to maintain an up-to-date and comprehensive understanding of available resources. Until a miner is benchmarked by the validator, the validator defaults to 1 as the locally_measured_efficiency_factor for that miner.
+* Miners will have the ability to modify their hardware class availability manifest at a frequency of once every 2 hours. In the event that a miner has available executors, they are obligated to accept assigned jobs and cannot reject them. Should a miner reject a job under such circumstances, the validator will impose a penalty by lowering the hardware class local multiplier for all tasks associated with that miner.
+
+
+```python
+points = {}
+for miner in miners:
+    for hardware_class in miner.executors:
+        executor = miner.executors[hardware_class]
+        hardware_class_relative_value = hardware_classes[hardware_class].relative_value
+        points[miner.hotkey] = (
+            hardware_class_relative_value
+            * executor.locally_measured_efficiency_factor
+            * executor.total_worked_seconds
+        )
+```
 
