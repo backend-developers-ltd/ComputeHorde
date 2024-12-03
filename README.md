@@ -29,8 +29,6 @@ By removing reliance on centralized cloud providers, ComputeHorde ensures the Bi
   Currently, **A6000** is the supported class, with **A100** coming next.
   The end-goal is to support all GPU types / configurations required by validators across Bittensor subnets.
 
----
-
 ## Components
 
 ### **Facilitator**
@@ -58,8 +56,6 @@ By removing reliance on centralized cloud providers, ComputeHorde ensures the Bi
 - Executors form a **horde** of a miner and are assigned hardware classes.
 - [See executor's README for more details](executor/README.md)
 
----
-
 ## Innovations to Highlight
 
 ### Discouraging Weight-Copying
@@ -70,8 +66,6 @@ By removing reliance on centralized cloud providers, ComputeHorde ensures the Bi
 - Synthetic tasks are designed to run only on specific hardware (e.g., A6000 GPUs), ensuring miners deliver the advertised compute power.
 - Scoring system incentivising for completing organic tasks.
 - Mechanisms for penalizing miners serving only a subset of validators
-
----
 
 ## Goals
 
@@ -89,9 +83,6 @@ By removing reliance on centralized cloud providers, ComputeHorde ensures the Bi
 
 1. **Strengthen Security**  
    Introduce rules and safeguards to prevent malicious actors from exploiting the network, ensuring a fair and secure environment for all participants.
-
-
----
 
 # Running ComputeHorde components
 
