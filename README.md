@@ -47,7 +47,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 ### **Facilitator**
 - Acts as a gateway for organic requests (from other subnets’ validators) to enter ComputeHorde.
-- Sends tasks to validators, who then distribute them to miners.
+- Sends tasks to chosen validators, who then distribute them to miners.
 
 ### **Validator**
 - Receives organic requests via the Facilitator or generates synthetic tasks for validation.
@@ -62,7 +62,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 - [See miner's README for more details](miner/README.md)
 
 ### **Executor**
-- A virtual machine spawned by a miner to perform a single dockerized task.
+- An instance spawned by a miner to perform a single dockerized task.
 - Operates in a restricted environment, with limited network access necessary for:
   - communicating with miners,
   - downloading docker images,
