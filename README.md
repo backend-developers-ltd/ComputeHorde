@@ -2,20 +2,20 @@
 
 ![ComputeHorde.png](ComputeHorde.png)
 
-ComputeHorde is a specialized subnet within the [Bittensor network](https://bittensor.com) that provides the compute power of GPU-equipped servers. 
+ComputeHorde is a specialized subnet within the [Bittensor network](https://bittensor.com) that provides the computing power of GPU-equipped servers. 
 
 The primary purpose of ComputeHorde is to **provide access to decentralized computing resources required by validators of other subnets**. 
 By removing reliance on centralized cloud providers, ComputeHorde ensures the Bittensor network remains true to its goal of decentralized resilience.
 
 ## Bittensor context 
 
-Bittensor is a decentralized network designed to ensure that the most critical technology of our era, AI, remains accessible to everyone, free from the control of centralized entities. 
-Each subnet in Bittensor specializes in a _digital commodity_, ranging from storage and large language models to general computing. 
+Bittensor is a decentralized network designed to ensure that AI, the most critical technology of our era, remains accessible to everyone and free from the control of centralized entities.
+Each Bittensor subnet specializes in a _digital commodity_, ranging from storage and large language models to general computing. 
 
 This is achieved by distributing $TAO tokens to incentivize:
 - Subnet owners to define the most useful and reliable commodities (by designing the incentive mechanism),
-- Miners to deliver high-quality and efficient services in an innovative way,
-- Validators to reward miners with the best performance.
+- Miners to deliver high-quality and efficient services innovatively,
+- Validators to reward miners for the best performance.
 
 Bittensor end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
 ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnets operate effectively without relying on centralized cloud services.
@@ -24,14 +24,14 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 - **Decentralized Compute for Bittensor Validators**  
   ComputeHorde aims to become the go-to decentralized source for hardware needed to validate other subnets.
-  The mission is to decrease Bittensor ecosystem's dependency on centralized services.
-  The assurance of the miners work quality is essential for the Bittensor overall reliability.
+  The mission is to decrease the Bittensor ecosystem's dependency on centralized services.
+  The assurance of the miners' work quality is essential for the Bittensor's overall reliability.
   
 - **Fair and Verified Work**  
   ComputeHorde employs mechanisms to ensure miners provide authentic and fair compute work authentically and fairly verified by the validators:
   - Execute tasks from all validators equally, regardless of their stake (above a rather low threshold).
   - Handle both **organic** (external, from other subnets) and **synthetic** (ComputeHorde miners validation) tasks.
-  - Match jobs to the advertised hardware (e.g., ensuring A6000 GPUs are actually used for tasks requiring them).
+  - Match jobs to the advertised hardware (e.g., ensuring A6000 GPUs are used for tasks requiring them).
   - Prevent malicious behaviors like "weight-copying" through innovative validation mechanisms.
 
 - **Scalable Mining with Executors**  
@@ -41,7 +41,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 - **Hardware Classes**  
   ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance. 
   Currently, **A6000** is the supported class, with **A100** coming next.
-  The end-goal is to support all GPU types / configurations required by validators across Bittensor subnets.
+  The end goal is to support all GPU types/configurations required by validators across Bittensor subnets.
 
 ## Components
 
@@ -78,7 +78,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 ### Encouraging Actual Mining
 - Synthetic tasks are designed to run only on specific hardware (e.g., A6000 GPUs), ensuring miners deliver the advertised compute power.
-- Scoring system incentivising for completing organic tasks.
+- Scoring system incentivizing for completing organic tasks.
 - Mechanisms for penalizing miners serving only a subset of validators
 
 ## Development goals
@@ -106,7 +106,7 @@ This repository contains the reference implementations of:
 - **Miner**: Default miner setup with a single executor.
 - **Executor**: Base implementation for executing dockerized jobs. Users can create custom executor managers to scale and optimize mining efficiency.
 
-In the following sections you can find instructions on running [Validator](#Validator) and [Miner](#Miner).
+In the following sections, you can find instructions on running [Validator](#Validator) and [Miner](#Miner).
 There are more details in each component's README and in the [Troubleshooting](#Troubleshooting) section below.
 
 
