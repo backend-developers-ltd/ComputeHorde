@@ -2,7 +2,7 @@
 
 ![ComputeHorde.png](ComputeHorde.png)
 
-ComputeHorde is a specialized subnet within the [Bittensor network](https://bittensor.com) that provides the compute power of networkless GPU-equipped servers. 
+ComputeHorde is a specialized subnet within the [Bittensor network](https://bittensor.com) that provides the compute power of GPU-equipped servers. 
 
 The primary purpose of ComputeHorde is to **provide access to decentralized computing resources required by validators of other subnets**. 
 By removing reliance on centralized cloud providers, ComputeHorde ensures the Bittensor network remains true to its goal of decentralized resilience.
@@ -25,11 +25,12 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 - **Decentralized Compute for Bittensor Validators**  
   ComputeHorde aims to become the go-to decentralized source for hardware needed to validate other subnets.
   The mission is to decrease Bittensor ecosystem's dependency on centralized services.
+  The assurance of the miners work quality is essential for the Bittensor overall reliability.
   
 - **Fair and Verified Work**  
   ComputeHorde employs mechanisms to ensure miners provide authentic and fair compute work authentically and fairly verified by the validators:
   - Execute tasks from all validators equally, regardless of their stake (above a rather low threshold).
-  - Handle both **organic** (external) and **synthetic** (validation-only) tasks.
+  - Handle both **organic** (external, from other subnets) and **synthetic** (ComputeHorde miners validation) tasks.
   - Match jobs to the advertised hardware (e.g., ensuring A6000 GPUs are actually used for tasks requiring them).
   - Prevent malicious behaviors like "weight-copying" through innovative validation mechanisms.
 
@@ -80,22 +81,22 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 - Scoring system incentivising for completing organic tasks.
 - Mechanisms for penalizing miners serving only a subset of validators
 
-## Goals
-
-1. **Expand Hardware Support**  
-   Add support for all GPU classes required by other Bittensor subnets.
+## Development goals
 
 1. **Bring organic jobs from other subnets' validators**  
    Allow the free market to regulate demand and prioritize cost-effective hardware, rather than solely focusing on the strongest hardware.
 
+1. **Strengthen Security**  
+   Introduce rules and safeguards to prevent malicious actors from exploiting the network, ensuring a fair and secure environment for all participants.
+
 1. **Support Long-Running Jobs**  
    Implement accounting mechanisms for miners to be rewarded proportionally to the time spent, even for incomplete long-running tasks.
 
+1. **Expand Hardware Support**  
+   Add support for all GPU classes required by other Bittensor subnets.
+
 1. **Fair Resource Sharing**  
    Allocate resources based on validators' stakes while allowing low-stake validators access when demand is low.
-
-1. **Strengthen Security**  
-   Introduce rules and safeguards to prevent malicious actors from exploiting the network, ensuring a fair and secure environment for all participants.
 
 # Running ComputeHorde components
 
