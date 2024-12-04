@@ -15,9 +15,9 @@ Each Bittensor subnet specializes in a _digital commodity_, ranging from storage
 This is achieved by distributing $TAO tokens to incentivize:
 - Subnet owners to define the most useful and reliable commodities (by designing the incentive mechanism),
 - Miners to deliver high-quality and efficient services innovatively,
-- Validators to reward miners for the best performance.
+- Validators to reward miners based on their performance.
 
-Bittensor end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
+Bittensor's end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
 ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnets operate effectively without relying on centralized cloud services.
 
 ## Key Features
@@ -28,7 +28,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
   The assurance of the miners' work quality is essential for the Bittensor's overall reliability.
   
 - **Fair and Verified Work**  
-  ComputeHorde employs mechanisms to ensure miners provide authentic and fair compute work authentically and fairly verified by the validators:
+  ComputeHorde employs mechanisms to ensure miners provide authentic compute work, fairly verified by the validators:
   - Execute tasks from all validators equally, regardless of their stake (above a rather low threshold).
   - Handle both **organic** (external, from other subnets) and **synthetic** (ComputeHorde miners validation) tasks.
   - Match jobs to the advertised hardware (e.g., ensuring A6000 GPUs are used for tasks requiring them).
@@ -58,7 +58,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 ### **Miner**
 - Accepts job requests from validators.
-- Manages **executors** to perform tasks and sends results back to validators.
+- Manages executors to perform tasks and sends results back to validators.
 - [See miner's README for more details](miner/README.md)
 
 ### **Executor**
@@ -73,8 +73,8 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 ## Innovations to Highlight
 
 ### Discouraging Weight-Copying
-- **Commit-Reveal**: Validators post hidden weights and reveal them in the next epoch, making the copying of _current_ weights impossible.
-- **Executor Dancing**: Miners randomly move GPUs across multiple UIDs, further reducing the effectiveness of copying old weights.
+- Commit-Reveal: Validators post hidden weights and reveal them in the next epoch, making the copying of _current_ weights impossible.
+- Executor Dancing: Miners randomly move GPUs across multiple UIDs, further reducing the effectiveness of copying old weights.
 
 ### Encouraging Actual Mining
 - Synthetic tasks are designed to run only on specific hardware (e.g., A6000 GPUs), ensuring miners deliver the advertised compute power.
