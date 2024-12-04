@@ -1,6 +1,6 @@
 # ComputeHorde (Subnet 12 of Bittensor)
 
-![ComputeHorde.png](ComputeHorde.png)
+![ComputeHorde.svg](ComputeHorde.svg)
 
 ComputeHorde is a specialized subnet within the [Bittensor network](https://bittensor.com) that provides the computing power of GPU-equipped servers. 
 
@@ -259,28 +259,3 @@ docker run --rm --runtime=nvidia --gpus all ubuntu nvidia-smi
 ```
 
 If the output indicates a problem (especially immediately after installation), a [restart of the services](#how-to-restart-the-services) may help.
-
-
----
-# Pieces of the previous readme to take care of / remove altogether:
----
-
-# Incoming changes -- outdated
-* When a new miner is registered, require all validators to benchmark the miner's hardware classes with extended timeouts to accurately assess their capabilities.
-* When a new validator registers, they must benchmark every other miner in the network to maintain an up-to-date and comprehensive understanding of available resources. Until a miner is benchmarked by the validator, the validator defaults to 1 as the locally_measured_efficiency_factor for that miner.
-* Miners will have the ability to modify their hardware class availability manifest at a frequency of once every 2 hours. In the event that a miner has available executors, they are obligated to accept assigned jobs and cannot reject them. Should a miner reject a job under such circumstances, the validator will impose a penalty by lowering the hardware class local multiplier for all tasks associated with that miner.
-
-
-```python
-points = {}
-for miner in miners:
-    for hardware_class in miner.executors:
-        executor = miner.executors[hardware_class]
-        hardware_class_relative_value = hardware_classes[hardware_class].relative_value
-        points[miner.hotkey] = (
-            hardware_class_relative_value
-            * executor.locally_measured_efficiency_factor
-            * executor.total_worked_seconds
-        )
-```
-
