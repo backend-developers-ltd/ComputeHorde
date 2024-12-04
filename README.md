@@ -7,19 +7,6 @@ ComputeHorde is a specialized subnet within the [Bittensor network](https://bitt
 The primary purpose of ComputeHorde is to **provide access to decentralized computing resources required by validators of other subnets**. 
 By removing reliance on centralized cloud providers, ComputeHorde ensures the Bittensor network remains true to its goal of decentralized resilience.
 
-## Bittensor context 
-
-Bittensor is a decentralized network designed to ensure that AI, the most critical technology of our era, remains accessible to everyone and free from the control of centralized entities.
-Each Bittensor subnet specializes in a _digital commodity_, ranging from storage and large language models to general computing. 
-
-This is achieved by distributing $TAO tokens to incentivize:
-- Subnet owners to define the most useful and reliable commodities (by designing the incentive mechanism),
-- Miners to deliver high-quality and efficient services innovatively,
-- Validators to reward miners based on their performance.
-
-Bittensor's end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
-ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnets operate effectively without relying on centralized cloud services.
-
 ## Key Features
 
 - **Decentralized Compute for Bittensor Validators**  
@@ -42,6 +29,19 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
   ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance. 
   Currently, **A6000** is the supported class, with **A100** coming next.
   The end goal is to support all GPU types/configurations required by validators across Bittensor subnets.
+
+## Bittensor context 
+
+Bittensor is a decentralized network designed to ensure that AI, the most critical technology of our era, remains accessible to everyone and free from the control of centralized entities.
+Each Bittensor subnet specializes in a _digital commodity_, ranging from storage and large language models to general computing. 
+
+This is achieved by distributing $TAO tokens to incentivize:
+- Subnet owners to define the most useful and reliable commodities (by designing the incentive mechanism),
+- Miners to deliver high-quality and efficient services innovatively,
+- Validators to reward miners based on their performance.
+
+Bittensor's end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
+ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnets operate effectively without relying on centralized cloud services.
 
 ## Components
 
