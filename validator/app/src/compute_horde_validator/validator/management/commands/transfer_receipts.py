@@ -78,7 +78,7 @@ class Command(BaseCommand):
                     if neuron.axon_info.is_serving
                 ]
 
-        # This encompasses at least current and previous cycle.
+        # This encompasses at least the current and the previous cycle.
         cutoff = timezone.now() - timedelta(hours=5)
 
         if interval is None:
@@ -146,7 +146,7 @@ class Command(BaseCommand):
         semaphore: asyncio.Semaphore,
     ):
         """
-        Fetches changes in given pages one by one.
+        Fetches new receipts on given pages one by one.
         """
         for idx, page in enumerate(pages):
             start_time = time.monotonic()
@@ -155,6 +155,7 @@ class Command(BaseCommand):
                 pages=[page],
                 session=session,
                 semaphore=semaphore,
+                # We may need to download a lot of full pages, so the timeout is higher
                 request_timeout=3.0,
             )
             elapsed = time.monotonic() - start_time
@@ -184,8 +185,14 @@ class Command(BaseCommand):
             start_time = time.monotonic()
             """
             Considerations:
-            - page request timeout may be influenced by some heavy async task
-            - too many concurrent downloads may take a lot of bandwidth
+            - higher concurrency:
+                - higher bandwidth use
+                - more parallel CPU-heavy signature check tasks -> steal CPU time from asyncio thread (GIL) 
+            - lower concurrency:
+                - slows down the process due to higher influence of network latency 
+            - higher allowed request timeout:
+                - one slow miner may stall the whole process for longer
+                - less timeouts due to CPU time being stolen by CPU heavy tasks
             """
             latest_page = LocalFilesystemPagedReceiptStore.current_page()
             pages = list(reversed(range(latest_page - n_pages + 1, latest_page + 1)))
