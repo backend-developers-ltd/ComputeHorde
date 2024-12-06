@@ -2541,6 +2541,7 @@ test = [
     { name = "pytest-httpx" },
     { name = "pytest-mock", specifier = ">=3.14.0" },
     { name = "pytest-xdist" },
+    { name = "responses", specifier = ">=0.25.3" },
 ]
 type-check = [
     { name = "celery-types", specifier = ">=0.22.0" },

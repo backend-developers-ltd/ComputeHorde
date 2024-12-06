@@ -1,5 +1,4 @@
 import contextlib
-import json
 import random
 import time
 import traceback
@@ -12,7 +11,6 @@ import billiard.exceptions
 import bittensor
 import celery.exceptions
 import numpy as np
-import requests
 from asgiref.sync import async_to_sync
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
@@ -69,6 +67,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 from . import eviction
 from .models import AdminJobRequest
 from .scoring import score_batches
+from .stats_collector_client import StatsCollectorClient, StatsCollectorError
 
 logger = get_task_logger(__name__)
 
@@ -1102,33 +1101,19 @@ def send_events_to_facilitator():
             logger.warning("STATS_COLLECTOR_URL is not set, not sending system events")
             return
 
-        keypair = get_keypair()
-        hotkey = keypair.ss58_address
-        signing_timestamp = int(time.time())
-        to_sign = json.dumps(
-            {"signing_timestamp": signing_timestamp, "validator_ss58_address": hotkey},
-            sort_keys=True,
-        )
-        signature = f"0x{keypair.sign(to_sign).hex()}"
         events = list(events_qs)
-        data = [event.to_dict() for event in events]
-        url = settings.STATS_COLLECTOR_URL + f"validator/{hotkey}/system_events"
-        response = requests.post(
-            url,
-            json=data,
-            headers={
-                "Validator-Signature": signature,
-                "Validator-Signing-Timestamp": str(signing_timestamp),
-            },
-        )
-
-        if response.status_code == 201:
-            logger.info(f"Sent {len(data)} system events to facilitator")
+        client = StatsCollectorClient()
+        try:
+            client.send_events(events)
+            logger.info(f"Sent {len(events)} system events to facilitator")
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(
                 id__in=[event.id for event in events]
             ).update(sent=True)
-        else:
-            logger.error(f"Failed to send system events to facilitator: {response}")
+        except StatsCollectorError as e:
+            msg = "Failed to send system events to facilitator"
+            if e.response:
+                msg = f"{msg}: {e.response}"
+            logger.error(msg)
 
 
 @app.task
