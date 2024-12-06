@@ -53,7 +53,7 @@ DEFAULT_ADMIN_EMAIL = env("DEFAULT_ADMIN_EMAIL", default="admin@admin.com")
 SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False  # env.bool("DEBUG", default=False)
+DEBUG = env.bool("DEBUG", default=False)
 
 ALLOWED_HOSTS = ["*"]
 
@@ -618,8 +618,8 @@ TRUSTED_MINER_KEY = env.str("TRUSTED_MINER_KEY", default="")
 TRUSTED_MINER_ADDRESS = env.str("TRUSTED_MINER_ADDRESS", default="")
 TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
-# The env value should be a list of hotkey:ip:port
-DEBUG_FETCH_RECEIPTS_FROM_MINERS: list[tuple[str, str, int]] | None = []
+# This env var is expected to be a list of hotkey:ip:port
+DEBUG_FETCH_RECEIPTS_FROM_MINERS: list[tuple[str, str, int]] = []
 for miner in env.list("DEBUG_FETCH_RECEIPTS_FROM_MINERS", default=[]):
     hotkey, ip, port = miner.split(":")
     DEBUG_FETCH_RECEIPTS_FROM_MINERS.append((hotkey, ip, port))

@@ -11,6 +11,7 @@ from glob import glob
 from pathlib import Path
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 
 from compute_horde.receipts.schemas import (
@@ -18,8 +19,14 @@ from compute_horde.receipts.schemas import (
 )
 from compute_horde.receipts.store.base import BaseReceiptStore
 
-# 5 minutes per page
-PAGE_TIME_MOD = 60 * 5
+"""
+Considerations:
+- smaller pages make for more (smaller) batches when downloading them for the first time (and we need ~5 hours of pages)
+- pages get copied over on write, larger pages may impact efficiency of this
+- we keep up with the 2 latest pages based on time and the clock may be out of sync between miners and validators
+"""
+PAGE_TIME = 60 * 5  # 5 minutes
+N_ACTIVE_PAGES = 2
 
 logger = logging.getLogger(__name__)
 
@@ -27,38 +34,33 @@ logger = logging.getLogger(__name__)
 class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
     def __init__(self):
         super().__init__()
-        self.pages_directory = Path(settings.LOCAL_RECEIPTS_ROOT)
+        if not hasattr(settings, "LOCAL_RECEIPTS_ROOT"):
+            raise ImproperlyConfigured("Required settings.py setting missing: LOCAL_RECEIPTS_ROOT")
+        self.pages_directory = Path(settings.LOCAL_RECEIPTS_ROOT)  # type: ignore
         self.pages_directory.mkdir(parents=True, exist_ok=True)
 
-    @staticmethod
-    def current_page() -> int:
+    @classmethod
+    def current_page(cls) -> int:
         """
         Get current page ID
         """
-        return LocalFilesystemPagedReceiptStore.current_page_at(timezone.now())
+        return cls.current_page_at(timezone.now())
 
     @staticmethod
     def current_page_at(dt: datetime) -> int:
         """
         Calculate what the current page was at given time
         """
-        return int(dt.timestamp() // PAGE_TIME_MOD)
-
-    @staticmethod
-    def receipt_page(receipt: Receipt) -> int:
-        """
-        Calculate the page ID the given receipts should appear in
-        """
-        return LocalFilesystemPagedReceiptStore.current_page_at(receipt.payload.timestamp)
+        return int(dt.timestamp() // PAGE_TIME)
 
     def store(self, receipts: Sequence[Receipt]) -> None:
         """
         Append receipts to the store.
         """
         pages: defaultdict[int, list[Receipt]] = defaultdict(list)
+        current_page = self.current_page()
         for receipt in receipts:
-            page = self.receipt_page(receipt)
-            pages[page].append(receipt)
+            pages[current_page].append(receipt)
         for page, receipts_in_page in pages.items():
             self._append_to_page(receipts_in_page, page)
 
@@ -82,23 +84,21 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         Does nothing otherwise.
         """
         try:
-            page_filepath = self.page_filepath(page)
-            os.unlink(page_filepath)
+            os.unlink(self.page_filepath(page))
         except FileNotFoundError:
             pass
         try:
-            archive_filepath = self.archive_filepath(page)
-            os.unlink(archive_filepath)
+            os.unlink(self.archive_filepath(page))
         except FileNotFoundError:
             pass
 
     def archive_old_pages(self) -> None:
         """
         Create archives for all old pages if they don't exist yet.
-        Skips latest 2 pages as these can be still written to.
+        Skips active pages as these can be still written to.
         """
         current_page = self.current_page()
-        upper_cutoff = current_page - 2
+        upper_cutoff = current_page - N_ACTIVE_PAGES
         pages_to_archive = [p for p in self.get_available_pages() if p <= upper_cutoff]
         for page in pages_to_archive:
             archive_filepath = self.archive_filepath(page)
@@ -130,8 +130,7 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
     def _append_to_page(self, receipts: Sequence[Receipt], page: int) -> None:
         """
         Write new receipts to the specified page.
-        Does not check whether the receipts actually belong on this page.
-        For read safery this will copy the page file first, append to the copy and do a swap with the original.
+        For read safety this will copy the page file first, append to the copy and do a swap with the original.
         """
         page_filepath = self.page_filepath(page)
         page_filepath.touch(exist_ok=True)

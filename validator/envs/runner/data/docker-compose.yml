@@ -224,11 +224,6 @@ services:
     init: true
     restart: unless-stopped
     env_file: ./.env
-    environment:
-      - VALIDATOR_RUNNER_VERSION=${VALIDATOR_RUNNER_VERSION}
-      - DEBUG=off
-    volumes:
-      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     command: python manage.py transfer_receipts -d --interval 2
     depends_on:
       - redis

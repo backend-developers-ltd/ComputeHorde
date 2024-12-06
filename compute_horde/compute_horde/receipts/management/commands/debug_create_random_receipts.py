@@ -9,7 +9,6 @@ from typing import TypeAlias
 from uuid import uuid4
 
 import bittensor
-from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -51,7 +50,7 @@ class Command(BaseCommand):
 
     @cached_property
     def miner_keys(self) -> bittensor.Keypair:
-        return settings.BITTENSOR_WALLET().hotkey
+        return bittensor.Keypair.create_from_seed("2" * 64)
 
     def add_arguments(self, parser):
         parser.add_argument("n", type=int, help="Number of receipts")
@@ -83,9 +82,9 @@ class Command(BaseCommand):
                 for receipt in receipts:
                     by_type[receipt.__class__].append(receipt)
                 for cls, receipts in by_type.items():
-                    cls.objects.bulk_create(receipts)
-                    logger.info(f"Inserted {len(receipts)} receipts")
-                    receipts_store.store([r.to_receipt() for r in receipts])
+                    cls.objects.bulk_create(receipts)  # type: ignore
+                    receipts_store().store([r.to_receipt() for r in receipts])
+                    logger.info(f"Inserted {len(receipts)} {cls.__name__}")
                 so_far += chunk
 
         else:
@@ -95,7 +94,7 @@ class Command(BaseCommand):
                 receipts_this_loop = []
                 for _ in range(self.n):
                     receipt = self.generate_one()
-                    receipts_store.store([receipt.to_receipt()])
+                    receipts_store().store([receipt.to_receipt()])
                     # wait for time_per_receipt +- 20% of the time
                     receipts_this_loop.append(receipt)
                     time.sleep(random.uniform(time_per_receipt * 0.8, time_per_receipt * 1.2))

@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import TypeAlias, assert_never
+from typing import ClassVar, Self, TypeAlias, assert_never
 
 from django.db import models
 
@@ -25,6 +25,9 @@ class AbstractReceipt(models.Model):
     miner_signature = models.CharField(max_length=256, null=True, blank=True)
     timestamp = models.DateTimeField()
 
+    # https://github.com/typeddjango/django-stubs/issues/1684#issuecomment-1706446344
+    objects: ClassVar[models.Manager[Self]]
+
     class Meta:
         abstract = True
         constraints = [
@@ -43,9 +46,6 @@ class JobStartedReceipt(AbstractReceipt):
     max_timeout = models.IntegerField()
     is_organic = models.BooleanField()
     ttl = models.IntegerField()
-
-    # https://github.com/typeddjango/django-stubs/issues/1684#issuecomment-1706446344
-    objects: models.Manager["JobStartedReceipt"]
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:
@@ -68,6 +68,13 @@ class JobStartedReceipt(AbstractReceipt):
 
     @classmethod
     def from_receipt(cls, receipt: Receipt) -> "JobStartedReceipt":
+        if not isinstance(receipt.payload, JobStartedReceiptPayload):
+            raise ValueError(
+                f"Incompatible receipt payload type. "
+                f"Got: {receipt.payload.__class__.__name__} "
+                f"Expected: {JobStartedReceiptPayload.__name__}"
+            )
+
         return JobStartedReceipt(
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,
@@ -85,9 +92,6 @@ class JobStartedReceipt(AbstractReceipt):
 class JobAcceptedReceipt(AbstractReceipt):
     time_accepted = models.DateTimeField()
     ttl = models.IntegerField()
-
-    # https://github.com/typeddjango/django-stubs/issues/1684#issuecomment-1706446344
-    objects: models.Manager["JobAcceptedReceipt"]
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:
@@ -108,6 +112,13 @@ class JobAcceptedReceipt(AbstractReceipt):
 
     @classmethod
     def from_receipt(cls, receipt: Receipt) -> "JobAcceptedReceipt":
+        if not isinstance(receipt.payload, JobAcceptedReceiptPayload):
+            raise ValueError(
+                f"Incompatible receipt payload type. "
+                f"Got: {receipt.payload.__class__.__name__} "
+                f"Expected: {JobAcceptedReceiptPayload.__name__}"
+            )
+
         return JobAcceptedReceipt(
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,
@@ -124,9 +135,6 @@ class JobFinishedReceipt(AbstractReceipt):
     time_started = models.DateTimeField()
     time_took_us = models.BigIntegerField()
     score_str = models.CharField(max_length=256)
-
-    # https://github.com/typeddjango/django-stubs/issues/1684#issuecomment-1706446344
-    objects: models.Manager["JobFinishedReceipt"]
 
     def time_took(self):
         return timedelta(microseconds=self.time_took_us)
@@ -154,6 +162,13 @@ class JobFinishedReceipt(AbstractReceipt):
 
     @classmethod
     def from_receipt(cls, receipt: Receipt) -> "JobFinishedReceipt":
+        if not isinstance(receipt.payload, JobFinishedReceiptPayload):
+            raise ValueError(
+                f"Incompatible receipt payload type. "
+                f"Got: {receipt.payload.__class__.__name__} "
+                f"Expected: {JobFinishedReceiptPayload.__name__}"
+            )
+
         return JobFinishedReceipt(
             job_uuid=receipt.payload.job_uuid,
             miner_hotkey=receipt.payload.miner_hotkey,

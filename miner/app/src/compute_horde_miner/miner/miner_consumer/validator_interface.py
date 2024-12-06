@@ -426,7 +426,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             ttl=msg.payload.ttl,
         )
 
-        receipt_store.store([created_receipt.to_receipt()])
+        receipt_store().store([created_receipt.to_receipt()])
 
     async def handle_job_finished_receipt(
         self, msg: validator_requests.V0JobFinishedReceiptRequest
@@ -456,7 +456,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             score_str=msg.payload.score_str,
         )
 
-        receipt_store.store([created_receipt])
+        receipt_store().store([created_receipt.to_receipt()])
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)

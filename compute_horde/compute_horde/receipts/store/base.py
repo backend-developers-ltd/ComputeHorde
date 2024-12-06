@@ -8,6 +8,6 @@ class BaseReceiptStore(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def store(self, receipts: Sequence[Receipt]) -> None:
         """
-        Append given receipts to the store.
+        Append receipts to the store.
         """
         ...

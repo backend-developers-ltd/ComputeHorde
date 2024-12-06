@@ -8,7 +8,7 @@ from typing import cast
 import aiohttp
 import bittensor
 from asgiref.sync import async_to_sync
-from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
+from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
 from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer
 from django.conf import settings
 from django.core.management import BaseCommand
@@ -39,9 +39,6 @@ class Command(BaseCommand):
         miner_port: int | None,
         **kwargs,
     ):
-        if interval is not None and interval < 1:
-            logger.warning("Running with interval < 1 may significantly impact performance.")
-
         if (miner_hotkey, miner_ip, miner_port) != (None, None, None):
             # 1st, use explicitly specified miner if available
             if None in {miner_hotkey, miner_ip, miner_port}:
@@ -78,8 +75,20 @@ class Command(BaseCommand):
                     if neuron.axon_info.is_serving
                 ]
 
-        # This encompasses at least the current and the previous cycle.
+        # IMPORTANT: This encompasses at least the current and the previous cycle.
         cutoff = timezone.now() - timedelta(hours=5)
+
+        """
+        General considerations:
+        - higher concurrency:
+            - higher bandwidth use
+            - more parallel CPU-heavy signature check tasks -> steal CPU time from asyncio thread (GIL) 
+        - lower concurrency:
+            - slows down the process due to higher influence of network latency 
+        - higher allowed request timeout:
+            - one slow miner may stall the whole process for longer
+            - less timeouts due to CPU time being stolen by CPU heavy tasks
+        """
 
         if interval is None:
             await self.run_once(cutoff, miners)
@@ -87,14 +96,11 @@ class Command(BaseCommand):
             await self.run_in_loop(interval, cutoff, miners)
 
     async def run_once(self, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]):
-        """
-        Do a one time fetch of all pages
-        """
         catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff)
         current_page = LocalFilesystemPagedReceiptStore.current_page()
         async with aiohttp.ClientSession() as session:
             await self.catch_up(
-                # Pull all pages from latest to oldest
+                # Pull all pages from newest to oldest
                 pages=list(reversed(range(catchup_cutoff_page, current_page + 1))),
                 miners=miners,
                 session=session,
@@ -105,32 +111,33 @@ class Command(BaseCommand):
         self, interval: float, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]
     ):
         """
-        Do a full catch-up while listening for changes in latest 2 pages.
+        Do a full catch-up + listen for changes in latest 2 pages indefinitely
         """
         catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff)
         current_page = LocalFilesystemPagedReceiptStore.current_page()
 
-        # Reuse the session between all tasks so that we can keep the TCP connections up
+        # TCP adds significant overhead - it's important to reuse connections.
         async with aiohttp.ClientSession() as session:
-            # First, quickly catch-up with the 2 latest pages so that the "keep up" loop has easier time later
+            # Catch-up with the latest pages so that the "keep up" loop has easier time later
             await self.catch_up(
-                pages=[current_page, current_page - 1],
+                pages=list(reversed(range(current_page - N_ACTIVE_PAGES + 1, current_page + 1))),
                 miners=miners,
                 session=session,
                 semaphore=asyncio.Semaphore(50),
             )
             await asyncio.gather(
-                # Slowly catch up with pages older than 2, latest page first
+                # Slowly catch up with non-active pages, newest first
                 self.catch_up(
-                    pages=list(reversed(range(catchup_cutoff_page, current_page - 1))),
+                    pages=list(
+                        reversed(range(catchup_cutoff_page, current_page - N_ACTIVE_PAGES + 1))
+                    ),
                     miners=miners,
                     session=session,
-                    # Throttle this lower so that it doesn't choke the keep up loop
+                    # Throttle this lower so that it doesn't choke the "keep up" loop
                     semaphore=asyncio.Semaphore(10),
                 ),
-                # ... and keep up with latest 2 pages continuously in parallel
+                # Keep up with latest pages continuously in parallel
                 self.keep_up(
-                    n_pages=2,
                     interval=interval,
                     miners=miners,
                     session=session,
@@ -155,7 +162,7 @@ class Command(BaseCommand):
                 pages=[page],
                 session=session,
                 semaphore=semaphore,
-                # We may need to download a lot of full pages, so the timeout is higher
+                # We may need to download a lot of full pages, so the timeout is higher.
                 request_timeout=3.0,
             )
             elapsed = time.monotonic() - start_time
@@ -164,38 +171,26 @@ class Command(BaseCommand):
             logger.info(
                 f"Catching up: "
                 f"{page=} ({idx + 1}/{len(pages)}) "
+                f"{receipts=} "
                 f"{elapsed=:.3f} "
                 f"{rps=:.0f} "
-                f"{receipts=} "
                 f"{exceptions=} "
             )
 
     async def keep_up(
         self,
-        n_pages: int,
-        interval: float | None,
+        interval: float,
         miners: Callable[[], Awaitable[list[MinerInfo]]],
         session: aiohttp.ClientSession,
         semaphore: asyncio.Semaphore,
     ):
         """
-        Runs indefinitely and polls for changes in last `n_pages` every `interval`.
+        Runs indefinitely and polls for changes in active pages every `interval`.
         """
         while True:
             start_time = time.monotonic()
-            """
-            Considerations:
-            - higher concurrency:
-                - higher bandwidth use
-                - more parallel CPU-heavy signature check tasks -> steal CPU time from asyncio thread (GIL) 
-            - lower concurrency:
-                - slows down the process due to higher influence of network latency 
-            - higher allowed request timeout:
-                - one slow miner may stall the whole process for longer
-                - less timeouts due to CPU time being stolen by CPU heavy tasks
-            """
-            latest_page = LocalFilesystemPagedReceiptStore.current_page()
-            pages = list(reversed(range(latest_page - n_pages + 1, latest_page + 1)))
+            current_page = LocalFilesystemPagedReceiptStore.current_page()
+            pages = list(reversed(range(current_page - N_ACTIVE_PAGES + 1, current_page + 1)))
             receipts, exceptions = await ReceiptsTransfer.transfer(
                 miners=await miners(),
                 pages=pages,
@@ -209,9 +204,9 @@ class Command(BaseCommand):
             logger.info(
                 f"Keeping up: "
                 f"{pages=} "
+                f"{receipts=} "
                 f"{elapsed=:.3f} "
                 f"{rps=:.0f} "
-                f"{receipts=} "
                 f"{exceptions=} "
             )
 

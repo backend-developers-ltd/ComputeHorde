@@ -8,6 +8,7 @@ from typing import TypeAlias
 
 import aiohttp
 import pydantic
+from aiohttp import ClientTimeout
 from asgiref.sync import sync_to_async
 from django.core.cache import caches
 
@@ -24,7 +25,7 @@ Offset = int
 MinerInfo: TypeAlias = tuple[str, str, int]
 
 
-class CheckpointBackend(ABC):
+class TransferCheckpointBackend(ABC):
     @abstractmethod
     async def get(self, key: str) -> int: ...
 
@@ -32,7 +33,7 @@ class CheckpointBackend(ABC):
     async def set(self, key: str, checkpoint: int) -> None: ...
 
 
-class DjangoCacheCheckpointBackend(CheckpointBackend):
+class DjangoCacheTransferCheckpointBackend(TransferCheckpointBackend):
     def __init__(self, cache: str = "default"):
         self.cache = caches[cache]
 
@@ -53,10 +54,6 @@ class ReceiptsTransfer:
     Uses HTTP range requests to only retrieve receipts added since last run.
     """
 
-    def __init__(self, server_url: str, checkpoint_backend: CheckpointBackend):
-        self._receipts_url = server_url.rstrip("/")
-        self._checkpoints = checkpoint_backend
-
     @classmethod
     async def transfer(
         cls,
@@ -70,9 +67,11 @@ class ReceiptsTransfer:
         Efficiently transfer receipts from multiple miners at the same time, storing them in local database.
         Still, the number of pages transferred at the same time should be limited to 1-2.
         """
-        checkpoint_backend = DjangoCacheCheckpointBackend("receipts_checkpoints")
+        checkpoint_backend = DjangoCacheTransferCheckpointBackend("receipts_checkpoints")
 
-        async def rate_limited_transfer(transfer: cls, page: int, session: aiohttp.ClientSession):
+        async def rate_limited_transfer(
+            transfer: ReceiptsTransfer, page: int, session: aiohttp.ClientSession
+        ):
             try:
                 async with semaphore:
                     # This both fetches and verifies the receipts.
@@ -83,11 +82,12 @@ class ReceiptsTransfer:
                     )
             except (TimeoutError, Exception) as e:
                 logger.error(
-                    f"Got exception from {miner}: {e.__class__.__name__} {e}", exc_info=False
+                    f"Transfer failed: " f"{miner=} " f"{page=} " f"{type(e).__name__} " f"{e}",
+                    exc_info=False,
                 )
                 raise
 
-        # Create transfer tasks, one transfer = one page from one miner
+        # Create transfer tasks, one transfer task = one page from one miner
         transfer_tasks = []
         for page in pages:
             for miner in miners:
@@ -102,22 +102,22 @@ class ReceiptsTransfer:
         total_receipts = 0
         failures = 0
 
-        # Wait for all transfer tasks and handle them as soon as they finish
+        # Wait for transfer tasks in parallel, handle a batch of receipts as soon as any is available
         for transfer_task in asyncio.as_completed(transfer_tasks):
             try:
                 transferred_batch = await transfer_task
                 for receipt in transferred_batch:
                     model = receipt_to_django_model(receipt)
-                    model_type = model.__class__
+                    model_type = type(model)
                     bucket = receipts_by_type[model_type]
                     bucket.append(model)
                     if len(bucket) >= 1000:
-                        await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
+                        await model_type.objects.abulk_create(bucket, ignore_conflicts=True)  # type: ignore
                         total_receipts += len(bucket)
                         logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
                         bucket.clear()
             except RuntimeError:
-                # Don't catch this as it may block the script from exiting
+                # Don't catch this as it may block the script from exiting.
                 raise
             except (TimeoutError, Exception):
                 failures += 1
@@ -125,11 +125,15 @@ class ReceiptsTransfer:
 
         # Insert the remainder of the receipts
         for model_type, bucket in receipts_by_type.items():
-            await model_type.objects.abulk_create(bucket, ignore_conflicts=True)
+            await model_type.objects.abulk_create(bucket, ignore_conflicts=True)  # type: ignore
             total_receipts += len(bucket)
             logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
 
         return total_receipts, failures
+
+    def __init__(self, server_url: str, checkpoints: TransferCheckpointBackend):
+        self._receipts_url = server_url.rstrip("/")
+        self._checkpoints = checkpoints
 
     async def get_new_receipts_on_page(
         self, page: int, session: aiohttp.ClientSession, timeout: float
@@ -164,39 +168,45 @@ class ReceiptsTransfer:
 
         # As the request should be as fast as possible, don't allow redirecting - clients must respond immediately.
         response = await session.get(
-            page_url, headers=headers, allow_redirects=False, timeout=timeout
+            page_url, headers=headers, allow_redirects=False, timeout=ClientTimeout(total=timeout)
         )
         if response.status in {404, 416}:
-            logger.debug("Nothing to fetch from %s - %s", page_url, response.status)
+            # 404 - miner doesn't have the page (yet / anymore / at all)
+            # 416 - no new receipts on page
+            logger.debug(f"Nothing to fetch from {page_url}: {response.status}")
             return []
         if response.status not in {200, 206}:
-            logger.warning(f"Request failed for page {page}: {response.status}")
+            logger.warning(f"Request failed for {page_url}: {response.status}")
             return []
         jsonl_content = await response.read()
 
-        # Put this on a worker thread, otherwise other HTTP requests will time out waiting for this.
+        # Put this on a worker thread, otherwise other HTTP requests are more likely to time out waiting for this.
         receipts = await sync_to_async(self._to_valid_receipts, thread_sensitive=False)(
             jsonl_content
         )
 
-        # Save the total page size so that next time we request the page we know what range to request.
+        # Save the checkpoint
         if use_range_request:
             # Range requests return a "content-range" header that contains full size of the file.
-            # We ask the server not to gzip range requests - so this is the real total size.
+            # We ask the server not to gzip range requests - so this is the total bytes we got so far.
             range_header = response.headers["content-range"]
             assert range_header.lower().startswith("bytes ")
             _, total_str = range_header.split("/")
             await self._checkpoints.set(checkpoint_key, int(total_str))
         else:
             # We got the complete page file, use its size for next checkpoint.
-            await self._checkpoints.set(checkpoint_key, response.content.total_bytes)
+            await self._checkpoints.set(checkpoint_key, len(jsonl_content))
 
         return receipts
 
-    def page_url(self, page):
+    def page_url(self, page: int) -> str:
         return f"{self._receipts_url}/{page}.jsonl"
 
     def _to_valid_receipts(self, received_bytes: bytes) -> list[Receipt]:
+        """
+        Converts a received JSONL chunk into valid, signed receipts - one line at a time.
+        Skips anything else.
+        """
         receipts = []
         for line in BytesIO(received_bytes):
             try:
@@ -205,8 +215,12 @@ class ReceiptsTransfer:
                 receipt.verify_validator_signature(throw=True)
                 receipts.append(receipt)
             except pydantic.ValidationError:
-                logger.warning(
-                    "skipping line: failed pydantic validation: %s%s",
+                # This is potentially a serious issue.
+                # A receipt line that doesn't validate could be a schema mismatch or an incomplete receipt line.
+                # Schema incompatibility is a showstopper for syncing a miner.
+                # Incomplete receipts will get lost in transfer and the cause of it must be investigated.
+                logger.error(
+                    "skipping line: failed validation: %s%s",
                     line[:100],
                     " (...)" if len(line) > 100 else "",
                 )
