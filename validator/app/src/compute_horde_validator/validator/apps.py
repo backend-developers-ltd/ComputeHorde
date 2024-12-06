@@ -1,8 +1,11 @@
 import logging
+import threading
 
 from django.apps import AppConfig
 from django.conf import settings
 from django.db.models.signals import post_migrate
+
+from compute_horde_validator.validator.sentry import init_sentry
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +30,26 @@ def maybe_create_default_admin(sender, **kwargs):
             )
 
 
+
+def maybe_init_sentry_from_facilitator():
+    if settings.SENTRY_DSN:
+        return
+
+    def target():
+        # Fetch DSN from facilitator
+        logger.info("Fetching Sentry DSN from facilitator")
+        dsn = ""
+        if dsn:
+            init_sentry(dsn, settings.ENV)
+
+    thread = threading.Thread(target=target)
+    thread.start()
+
+
+
 class ValidatorConfig(AppConfig):
     name = "compute_horde_validator.validator"
 
     def ready(self):
         post_migrate.connect(maybe_create_default_admin, sender=self)
+        maybe_init_sentry_from_facilitator()
