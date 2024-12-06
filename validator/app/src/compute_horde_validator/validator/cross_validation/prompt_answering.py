@@ -7,7 +7,6 @@ from asgiref.sync import sync_to_async
 from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
-    OrganicMinerClient,
     run_organic_job,
 )
 from django.conf import settings
@@ -16,6 +15,7 @@ from django.utils.timezone import now
 
 from compute_horde_validator.validator.cross_validation.utils import (
     TRUSTED_MINER_FAKE_KEY,
+    TrustedMinerClient,
     trusted_miner_not_configured_system_event,
 )
 from compute_horde_validator.validator.models import Prompt, SolveWorkload, SystemEvent
@@ -34,7 +34,7 @@ def _get_keypair() -> bittensor.Keypair:
 
 async def answer_prompts(
     workload: SolveWorkload,
-    create_miner_client=OrganicMinerClient,
+    create_miner_client=TrustedMinerClient,
     job_uuid: uuid.UUID | None = None,
     wait_timeout: int | None = None,
 ) -> bool:
@@ -79,7 +79,6 @@ async def answer_prompts(
     wait_timeout = wait_timeout or job_generator.timeout_seconds()
 
     miner_client = create_miner_client(
-        miner_hotkey=TRUSTED_MINER_FAKE_KEY,
         miner_address=settings.TRUSTED_MINER_ADDRESS,
         miner_port=settings.TRUSTED_MINER_PORT,
         job_uuid=str(job_uuid),

@@ -4,14 +4,13 @@ from collections.abc import Callable, Iterable
 
 import bittensor
 from compute_horde.miner_client.organic import (
-    OrganicMinerClient,
     run_organic_job,
 )
 from django.conf import settings
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.cross_validation.utils import (
-    TRUSTED_MINER_FAKE_KEY,
+    TrustedMinerClient,
 )
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import PromptSeries, SystemEvent
@@ -25,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 async def generate_prompts(
     *,
-    create_miner_client: Callable[..., OrganicMinerClient] | None = None,
+    create_miner_client: Callable[..., TrustedMinerClient] | None = None,
     job_uuid: uuid.UUID | None = None,
     wait_timeout: int | None = None,
 ) -> None:
@@ -56,11 +55,10 @@ async def generate_prompts(
     )
     job_details = job_generator.get_job_details()
 
-    create_miner_client = create_miner_client or OrganicMinerClient
+    create_miner_client = create_miner_client or TrustedMinerClient
     wait_timeout = wait_timeout or job_generator.timeout_seconds()
 
     miner_client = create_miner_client(
-        miner_hotkey=TRUSTED_MINER_FAKE_KEY,
         miner_address=settings.TRUSTED_MINER_ADDRESS,
         miner_port=settings.TRUSTED_MINER_PORT,
         job_uuid=str(job_uuid),
