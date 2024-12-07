@@ -611,7 +611,6 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
 
 
 # Local miner generating prompts
-TRUSTED_MINER_KEY = env.str("TRUSTED_MINER_KEY", default="")
 TRUSTED_MINER_ADDRESS = env.str("TRUSTED_MINER_ADDRESS", default="")
 TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
