@@ -409,7 +409,12 @@ CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
         "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
-    }
+    },
+    "receipts_checkpoints": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/2",
+        "TIMEOUT": 60 * 60 * 24 * 2,  # Remember the checkpoints for 2 days
+    },
 }
 
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
@@ -444,12 +449,6 @@ CELERY_BEAT_SCHEDULE = {
         ),
         "options": {},
     },
-    # TODO: high CPU usage may impact synthetic jobs - we should profile it and make it less CPU heavy
-    # "fetch_receipts": {
-    #     "task": "compute_horde_validator.validator.tasks.fetch_receipts",
-    #     "schedule": crontab(minute="15,45"),  # try to stay away from set_scores task :)
-    #     "options": {},
-    # },
     "reveal_scores": {
         "task": "compute_horde_validator.validator.tasks.reveal_scores",
         "schedule": timedelta(minutes=1),
@@ -489,7 +488,6 @@ CELERY_BEAT_SCHEDULE = {
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
     CELERY_BEAT_SCHEDULE["set_scores"]["schedule"] = crontab(minute="*/3")
-    CELERY_BEAT_SCHEDULE["fetch_receipts"]["schedule"] = crontab(minute="*/3")
 
 CELERY_TASK_ROUTES = ["compute_horde_validator.celery.route_task"]
 CELERY_TASK_TIME_LIMIT = int(timedelta(hours=2, minutes=5).total_seconds())
@@ -539,6 +537,11 @@ LOGGING = {
         "websockets": {
             "handlers": ["console"],
             "level": "INFO",
+            "propagate": True,
+        },
+        "compute_horde.receipts.transfer": {
+            "handlers": ["console"],
+            "level": "WARNING",
             "propagate": True,
         },
     },
@@ -614,6 +617,11 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
 TRUSTED_MINER_ADDRESS = env.str("TRUSTED_MINER_ADDRESS", default="")
 TRUSTED_MINER_PORT = env.int("TRUSTED_MINER_PORT", default=0)
 
+# This env var is expected to be a list of hotkey:ip:port
+DEBUG_FETCH_RECEIPTS_FROM_MINERS: list[tuple[str, str, int]] = []
+for miner in env.list("DEBUG_FETCH_RECEIPTS_FROM_MINERS", default=[]):
+    hotkey, ip, port = miner.split(":")
+    DEBUG_FETCH_RECEIPTS_FROM_MINERS.append((hotkey, ip, port))
 
 CHANNEL_LAYERS = {
     "default": {

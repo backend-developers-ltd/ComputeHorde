@@ -372,6 +372,7 @@ name = "compute-horde"
 version = "0.0.18"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "bittensor" },
     { name = "cryptography" },
     { name = "django" },
@@ -410,6 +411,7 @@ type-check = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.10.10" },
     { name = "bittensor", specifier = ">=8.3.1,<9.0.0" },
     { name = "cryptography", specifier = ">=42.0.8" },
     { name = "django", specifier = "~=4.2.4" },

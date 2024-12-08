@@ -12,6 +12,7 @@ from compute_horde.mv_protocol.validator_requests import (
 )
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload, ReceiptPayload
+from compute_horde.receipts.store.current import receipts_store as receipt_store
 from django.conf import settings
 from django.utils import timezone
 
@@ -34,7 +35,6 @@ from compute_horde_miner.miner.models import (
     Validator,
     ValidatorBlacklist,
 )
-from compute_horde_miner.miner.tasks import prepare_receipts
 
 logger = logging.getLogger(__name__)
 
@@ -415,7 +415,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         if settings.IS_LOCAL_MINER:
             return
 
-        await JobAcceptedReceipt.objects.acreate(
+        created_receipt = await JobAcceptedReceipt.objects.acreate(
             validator_signature=msg.signature,
             miner_signature=get_miner_signature(msg),
             job_uuid=msg.payload.job_uuid,
@@ -425,7 +425,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             time_accepted=msg.payload.time_accepted,
             ttl=msg.payload.ttl,
         )
-        prepare_receipts.delay()
+
+        receipt_store().store([created_receipt.to_receipt()])
 
     async def handle_job_finished_receipt(
         self, msg: validator_requests.V0JobFinishedReceiptRequest
@@ -443,7 +444,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         if settings.IS_LOCAL_MINER:
             return
 
-        await JobFinishedReceipt.objects.acreate(
+        created_receipt = await JobFinishedReceipt.objects.acreate(
             validator_signature=msg.signature,
             miner_signature=get_miner_signature(msg),
             job_uuid=msg.payload.job_uuid,
@@ -454,7 +455,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             time_took_us=msg.payload.time_took_us,
             score_str=msg.payload.score_str,
         )
-        prepare_receipts.delay()
+
+        receipt_store().store([created_receipt.to_receipt()])
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
