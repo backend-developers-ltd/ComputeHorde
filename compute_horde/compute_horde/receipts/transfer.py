@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
 from io import BytesIO
@@ -10,7 +9,7 @@ import aiohttp
 import pydantic
 from aiohttp import ClientTimeout
 from asgiref.sync import sync_to_async
-from django.core.cache import caches
+from django.core.exceptions import ImproperlyConfigured
 
 from compute_horde.receipts.models import ReceiptModel, receipt_to_django_model
 from compute_horde.receipts.schemas import (
@@ -18,34 +17,12 @@ from compute_horde.receipts.schemas import (
     BadValidatorReceiptSignature,
     Receipt,
 )
+from compute_horde.receipts.transfer_checkpoints import checkpoint_backend
 
 logger = logging.getLogger(__name__)
 
 Offset = int
 MinerInfo: TypeAlias = tuple[str, str, int]
-
-
-class TransferCheckpointBackend(ABC):
-    @abstractmethod
-    async def get(self, key: str) -> int: ...
-
-    @abstractmethod
-    async def set(self, key: str, checkpoint: int) -> None: ...
-
-
-class DjangoCacheTransferCheckpointBackend(TransferCheckpointBackend):
-    def __init__(self, cache: str = "default"):
-        self.cache = caches[cache]
-
-    async def get(self, key: str) -> int:
-        try:
-            return int(await self.cache.aget(key, 0))
-        except TypeError:
-            logger.warning(f"Django cache contained non-integer checkpoint value for {key}")
-            return 0
-
-    async def set(self, key: str, checkpoint: int) -> None:
-        await self.cache.aset(key, str(checkpoint))
 
 
 class ReceiptsTransfer:
@@ -67,7 +44,6 @@ class ReceiptsTransfer:
         Efficiently transfer receipts from multiple miners at the same time, storing them in local database.
         Still, the number of pages transferred at the same time should be limited to 1-2.
         """
-        checkpoint_backend = DjangoCacheTransferCheckpointBackend("receipts_checkpoints")
 
         async def rate_limited_transfer(
             transfer: ReceiptsTransfer, page: int, session: aiohttp.ClientSession
@@ -83,7 +59,6 @@ class ReceiptsTransfer:
             except (TimeoutError, Exception) as e:
                 logger.error(
                     f"Transfer failed: " f"{miner=} " f"{page=} " f"{type(e).__name__} " f"{e}",
-                    exc_info=False,
                 )
                 raise
 
@@ -92,7 +67,7 @@ class ReceiptsTransfer:
         for page in pages:
             for miner in miners:
                 hotkey, ip, port = miner
-                transfer = cls(f"http://{ip}:{port}/receipts", checkpoint_backend)
+                transfer = cls(f"http://{ip}:{port}/receipts")
                 transfer_tasks.append(
                     asyncio.create_task(rate_limited_transfer(transfer, page, session))
                 )
@@ -116,7 +91,7 @@ class ReceiptsTransfer:
                         total_receipts += len(bucket)
                         logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
                         bucket.clear()
-            except RuntimeError:
+            except (RuntimeError, ImproperlyConfigured):
                 # Don't catch this as it may block the script from exiting.
                 raise
             except (TimeoutError, Exception):
@@ -131,9 +106,8 @@ class ReceiptsTransfer:
 
         return total_receipts, failures
 
-    def __init__(self, server_url: str, checkpoints: TransferCheckpointBackend):
+    def __init__(self, server_url: str):
         self._receipts_url = server_url.rstrip("/")
-        self._checkpoints = checkpoints
 
     async def get_new_receipts_on_page(
         self, page: int, session: aiohttp.ClientSession, timeout: float
@@ -143,9 +117,10 @@ class ReceiptsTransfer:
         Will start from last checkpoint for this page, if available.
         """
         page_url = self.page_url(page)
+        checkpoints = checkpoint_backend()
 
         checkpoint_key = page_url
-        checkpoint = await self._checkpoints.get(checkpoint_key)
+        checkpoint = await checkpoints.get(checkpoint_key)
         use_range_request = checkpoint > 0
 
         if use_range_request:
@@ -176,8 +151,7 @@ class ReceiptsTransfer:
             logger.debug(f"Nothing to fetch from {page_url}: {response.status}")
             return []
         if response.status not in {200, 206}:
-            logger.warning(f"Request failed for {page_url}: {response.status}")
-            return []
+            raise Exception(f"Request failed for {page_url}: {response.status}")
         jsonl_content = await response.read()
 
         # Put this on a worker thread, otherwise other HTTP requests are more likely to time out waiting for this.
@@ -192,10 +166,10 @@ class ReceiptsTransfer:
             range_header = response.headers["content-range"]
             assert range_header.lower().startswith("bytes ")
             _, total_str = range_header.split("/")
-            await self._checkpoints.set(checkpoint_key, int(total_str))
+            await checkpoints.set(checkpoint_key, int(total_str))
         else:
             # We got the complete page file, use its size for next checkpoint.
-            await self._checkpoints.set(checkpoint_key, len(jsonl_content))
+            await checkpoints.set(checkpoint_key, len(jsonl_content))
 
         return receipts
 

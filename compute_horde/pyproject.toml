@@ -15,6 +15,7 @@ dependencies = [
     "Django~=4.2.4",
     "cryptography>=42.0.8",
     "aiohttp>=3.10.10",
+    "pytest-django>=4.9.0",
 ]
 
 [build-system]

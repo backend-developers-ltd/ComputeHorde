@@ -28,7 +28,7 @@ from compute_horde.receipts.store.current import receipts_store
 logger = logging.getLogger(__name__)
 
 
-def _sign(kp: bittensor.Keypair, blob: str):
+def bt_sign_blob(kp: bittensor.Keypair, blob: str):
     return f"0x{kp.sign(blob).hex()}"
 
 
@@ -135,8 +135,8 @@ class Command(BaseCommand):
             job_uuid=payload.job_uuid,
             validator_hotkey=payload.validator_hotkey,
             miner_hotkey=payload.miner_hotkey,
-            validator_signature=_sign(validator_keys, payload.blob_for_signing()),
-            miner_signature=_sign(miner_keys, payload.blob_for_signing()),
+            validator_signature=bt_sign_blob(validator_keys, payload.blob_for_signing()),
+            miner_signature=bt_sign_blob(miner_keys, payload.blob_for_signing()),
             timestamp=payload.timestamp,
             time_accepted=payload.time_accepted,
             ttl=payload.ttl,
@@ -161,8 +161,8 @@ class Command(BaseCommand):
             job_uuid=payload.job_uuid,
             validator_hotkey=payload.validator_hotkey,
             miner_hotkey=payload.miner_hotkey,
-            validator_signature=_sign(validator_keys, payload.blob_for_signing()),
-            miner_signature=_sign(miner_keys, payload.blob_for_signing()),
+            validator_signature=bt_sign_blob(validator_keys, payload.blob_for_signing()),
+            miner_signature=bt_sign_blob(miner_keys, payload.blob_for_signing()),
             timestamp=payload.timestamp,
             executor_class=payload.executor_class,
             max_timeout=payload.max_timeout,
@@ -188,8 +188,8 @@ class Command(BaseCommand):
             job_uuid=payload.job_uuid,
             validator_hotkey=payload.validator_hotkey,
             miner_hotkey=payload.miner_hotkey,
-            validator_signature=_sign(validator_keys, payload.blob_for_signing()),
-            miner_signature=_sign(miner_keys, payload.blob_for_signing()),
+            validator_signature=bt_sign_blob(validator_keys, payload.blob_for_signing()),
+            miner_signature=bt_sign_blob(miner_keys, payload.blob_for_signing()),
             timestamp=payload.timestamp,
             time_started=payload.time_started,
             time_took_us=payload.time_took_us,
