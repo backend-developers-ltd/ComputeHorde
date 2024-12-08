@@ -1,8 +1,7 @@
-import asyncio
 import random
 from asyncio import Semaphore
 from functools import partial
-from unittest.mock import AsyncMock, patch, Mock
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 
 import aiohttp
@@ -112,13 +111,15 @@ async def test_handles_failures(miner_keypair, mocked_checkpoint_backend):
         ValueError("Doh!"),
         ValidationError("Doh!", []),
         aiohttp.ClientError("Doh!"),
-        asyncio.TimeoutError("Doh!"),
+        TimeoutError("Doh!"),
         mock_response_500,
         mock_response_400,
     ]
     session.get = AsyncMock(side_effect=response_effects)
 
-    n_receipts, n_transfer_errors = await do_transfer(session=session, pages=[*range(len(response_effects))])
+    n_receipts, n_transfer_errors = await do_transfer(
+        session=session, pages=[*range(len(response_effects))]
+    )
 
     assert n_receipts == 0
     assert n_transfer_errors == len(response_effects)
@@ -133,21 +134,25 @@ async def test_uses_checkpoints(miner_keypair, validator_keypair, mocked_checkpo
     session.get = AsyncMock()
 
     # First response: whole page
-    initial_data = b"\n".join([
-        _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
-        _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
-        _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
-    ])
+    initial_data = b"\n".join(
+        [
+            _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+            _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+            _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+        ]
+    )
     initial_response = Mock()
     initial_response.read = AsyncMock(return_value=initial_data)
     initial_response.status = 200
 
     # Subsequent response: changes on top of first page
     # This should be a range request with offset == length of previous response
-    subsequent_data = b"\n".join([
-        _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
-        _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
-    ])
+    subsequent_data = b"\n".join(
+        [
+            _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+            _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+        ]
+    )
     subsequent_response = Mock()
     subsequent_response.status = 206
     subsequent_response.read = AsyncMock(return_value=subsequent_data)

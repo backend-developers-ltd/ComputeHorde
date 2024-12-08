@@ -1,4 +1,3 @@
-import importlib
 import logging
 from abc import ABC, abstractmethod
 from functools import cache
@@ -21,9 +20,11 @@ class TransferCheckpointBackend(ABC):
 class DjangoCacheTransferCheckpointBackend(TransferCheckpointBackend):
     def __init__(self):
         if not hasattr(settings, "RECEIPTS_TRANSFER_CHECKPOINT_CACHE"):
-            raise ImproperlyConfigured("Required settings.py setting missing: RECEIPTS_TRANSFER_CHECKPOINT_CACHE")
+            raise ImproperlyConfigured(
+                "Required settings.py setting missing: RECEIPTS_TRANSFER_CHECKPOINT_CACHE"
+            )
 
-        self.cache = caches[settings.RECEIPTS_TRANSFER_CHECKPOINT_CACHE]
+        self.cache = caches[settings.RECEIPTS_TRANSFER_CHECKPOINT_CACHE]  # type: ignore
 
     async def get(self, key: str) -> int:
         try:

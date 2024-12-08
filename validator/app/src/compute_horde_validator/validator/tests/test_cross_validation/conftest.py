@@ -3,9 +3,11 @@ import uuid
 import pytest
 import pytest_asyncio
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.mv_protocol import miner_requests
 
+from compute_horde_validator.validator.cross_validation.utils import (
+    TrustedMinerClient,
+)
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
 
@@ -23,7 +25,7 @@ def job_uuid():
 def create_miner_client(transport: MinerSimulationTransport):
     def _create(*args, **kwargs):
         kwargs["transport"] = transport
-        return OrganicMinerClient(*args, **kwargs)
+        return TrustedMinerClient(*args, **kwargs)
 
     return _create
 

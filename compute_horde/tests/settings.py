@@ -5,8 +5,8 @@ USE_TZ = True
 RECEIPTS_TRANSFER_CHECKPOINT_CACHE = "default"
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": ":memory:",
     }
 }
