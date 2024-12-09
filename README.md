@@ -6,8 +6,8 @@ ComputeHorde is a specialized subnet within the [Bittensor network](https://bitt
 designed to **supercharge Bittensor with scalable and trusted GPU computing power**. 
 
 By transforming untrusted GPUs provided by miners into trusted compute resources, 
-ComputeHorde enables **validators of other subnets** to access large amounts of decentralized computing power efficiently and cost-effectively, 
-paving the way for Bittensor to scale beyond its current limitations to potentially support over 1,000 subnets.
+ComputeHorde enables **validators of other subnets** to access large amounts of decentralized computing power cost-effectively, 
+paving the way for Bittensor to scale beyond its current limitations to support potentially over 1,000 subnets.
 
 ## Key Features
 
