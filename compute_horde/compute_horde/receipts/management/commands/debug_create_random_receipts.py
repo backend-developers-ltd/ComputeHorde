@@ -23,7 +23,7 @@ from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts.store.current import receipts_store
+from compute_horde.receipts.store.current import receipt_store
 from compute_horde.utils import sign_blob
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ class Command(BaseCommand):
                     by_type[receipt.__class__].append(receipt)
                 for cls, receipts in by_type.items():
                     cls.objects.bulk_create(receipts)  # type: ignore
-                    receipts_store().store([r.to_receipt() for r in receipts])
+                    receipt_store().store([r.to_receipt() for r in receipts])
                     logger.info(f"Inserted {len(receipts)} {cls.__name__}")
                 so_far += chunk
 
@@ -90,7 +90,7 @@ class Command(BaseCommand):
                 receipts_this_loop = []
                 for _ in range(self.n):
                     receipt = self.generate_one()
-                    receipts_store().store([receipt.to_receipt()])
+                    receipt_store().store([receipt.to_receipt()])
                     # wait for time_per_receipt +- 20% of the time
                     receipts_this_loop.append(receipt)
                     time.sleep(random.uniform(time_per_receipt * 0.8, time_per_receipt * 1.2))

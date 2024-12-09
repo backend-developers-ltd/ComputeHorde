@@ -12,7 +12,7 @@ from compute_horde.mv_protocol.validator_requests import (
 )
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload, ReceiptPayload
-from compute_horde.receipts.store.current import receipts_store as receipt_store
+from compute_horde.receipts.store.current import receipt_store
 from django.conf import settings
 from django.utils import timezone
 
@@ -391,7 +391,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         if not self.verify_receipt_payload(payload, signature):
             return
 
-        await JobStartedReceipt.objects.acreate(
+        receipt = await JobStartedReceipt.objects.acreate(
             job_uuid=payload.job_uuid,
             validator_hotkey=payload.validator_hotkey,
             miner_hotkey=payload.miner_hotkey,
@@ -403,6 +403,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             is_organic=payload.is_organic,
             ttl=payload.ttl,
         )
+        receipt_store().store([receipt.to_receipt()])
 
     async def handle_job_accepted_receipt(
         self, msg: validator_requests.V0JobAcceptedReceiptRequest

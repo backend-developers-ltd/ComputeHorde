@@ -52,6 +52,12 @@ async def test_receipt_is_saved(
     settings,
 ) -> None:
     executor = mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.current")
+    receipt_store_factory = mocker.patch(
+        "compute_horde_miner.miner.miner_consumer.validator_interface.receipt_store"
+    )
+    stored_receipts = []
+    receipt_store_factory.return_value.store = lambda rs: stored_receipts.extend(rs)
+
     executor.executor_manager.get_manifest = AsyncMock(return_value={})
     executor.executor_manager.reserve_executor_class = AsyncMock()
 
@@ -148,3 +154,10 @@ async def test_receipt_is_saved(
     ).aexists()
     assert await JobAcceptedReceipt.objects.filter(job_uuid=job_uuid).aexists()
     assert await JobFinishedReceipt.objects.filter(job_uuid=job_uuid).aexists()
+
+    stored_payloads = [r.payload for r in stored_receipts]
+    assert stored_payloads == [
+        job_started_receipt_payload,
+        job_accepted_receipt_payload,
+        job_finished_receipt_payload,
+    ]

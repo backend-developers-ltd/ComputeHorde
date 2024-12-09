@@ -8,7 +8,7 @@ from compute_horde.receipts.store.base import BaseReceiptStore
 
 
 @cache
-def receipts_store() -> BaseReceiptStore:
+def receipt_store() -> BaseReceiptStore:
     if not getattr(settings, "RECEIPT_STORE_CLASS_PATH", ""):
         raise ImproperlyConfigured("Required settings.py setting missing: RECEIPT_STORE_CLASS_PATH")
     class_path: str = settings.RECEIPT_STORE_CLASS_PATH  # type: ignore
