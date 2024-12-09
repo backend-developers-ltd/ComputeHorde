@@ -100,15 +100,18 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 # Running ComputeHorde components
 
-This repository contains the reference implementations of:
+This repository contains the implementations of:
 
-- **Validator**: A reference implementation requiring a Trusted Miner for cross-checking synthetic tasks.
+- **Validator**: Requres a Trusted Miner for cross-checking synthetic tasks.
 - **Miner**: Default miner setup with a single executor.
-- **Executor**: Base implementation for executing dockerized jobs. Users can create custom executor managers to scale and optimize mining efficiency.
+- **Executor**: Base implementation for executing dockerized jobs. 
+  Users can create [custom executor managers](miner#custom-executor-manager) to scale and optimize mining efficiency.
 
 In the following sections, you can find instructions on running [Validator](#Validator) and [Miner](#Miner).
 There are more details in each component's README and in the [Troubleshooting](#Troubleshooting) section below.
 
+Modifications to ComputeHorde components are generally not recommended, with the exception of the [ExecutorManager class](miner#custom-executor-manager). 
+Customizing this class allows you to implement dedicated logic for handling executors, such as running multiple executors per miner.
 
 ## Validator
 
