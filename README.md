@@ -2,10 +2,12 @@
 
 ![ComputeHorde.svg](ComputeHorde.svg)
 
-ComputeHorde is a specialized subnet within the [Bittensor network](https://bittensor.com) that provides the computing power of GPU-equipped servers. 
+ComputeHorde is a specialized subnet within the [Bittensor network](https://bittensor.com) 
+designed to **supercharge Bittensor with scalable and trusted GPU computing power**. 
 
-The primary purpose of ComputeHorde is to **provide access to decentralized computing resources required by validators of other subnets**. 
-By removing reliance on centralized cloud providers, ComputeHorde ensures the Bittensor network remains true to its goal of decentralized resilience.
+By transforming untrusted GPUs provided by miners into trusted compute resources, 
+ComputeHorde enables **validators of other subnets** to access large amounts of decentralized computing power efficiently and cost-effectively, 
+paving the way for Bittensor to scale beyond its current limitations to potentially support over 1,000 subnets.
 
 ## Key Features
 
