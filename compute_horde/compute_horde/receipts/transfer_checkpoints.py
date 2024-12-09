@@ -19,12 +19,12 @@ class TransferCheckpointBackend(ABC):
 
 class DjangoCacheTransferCheckpointBackend(TransferCheckpointBackend):
     def __init__(self):
-        if not hasattr(settings, "RECEIPTS_TRANSFER_CHECKPOINT_CACHE"):
+        if not getattr(settings, "RECEIPT_TRANSFER_CHECKPOINT_CACHE", ""):
             raise ImproperlyConfigured(
-                "Required settings.py setting missing: RECEIPTS_TRANSFER_CHECKPOINT_CACHE"
+                "Required settings.py setting missing: RECEIPT_TRANSFER_CHECKPOINT_CACHE"
             )
 
-        self.cache = caches[settings.RECEIPTS_TRANSFER_CHECKPOINT_CACHE]  # type: ignore
+        self.cache = caches[settings.RECEIPT_TRANSFER_CHECKPOINT_CACHE]  # type: ignore
 
     async def get(self, key: str) -> int:
         try:

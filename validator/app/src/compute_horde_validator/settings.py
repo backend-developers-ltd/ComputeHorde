@@ -417,7 +417,7 @@ CACHES = {
     },
 }
 
-RECEIPTS_TRANSFER_CHECKPOINT_CACHE = "receipts_checkpoints"
+RECEIPT_TRANSFER_CHECKPOINT_CACHE = "receipts_checkpoints"
 
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
 CELERY_RESULT_BACKEND = env(
