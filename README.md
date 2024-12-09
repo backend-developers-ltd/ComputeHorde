@@ -266,7 +266,8 @@ If the output indicates a problem (especially immediately after installation), a
 ## How to list the contents of S3 buckets
 
 To verify that the S3 buckets are configured correctly, 
-you can list their contents by running the following command on a machine with the AWS CLI installed (e.g., the validator or miner). 
+you can list their contents by running the following command on a machine with the AWS CLI installed 
+(check out the [Amazon instructions](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)). 
 Replace the placeholders with the appropriate values:
 
 ```
