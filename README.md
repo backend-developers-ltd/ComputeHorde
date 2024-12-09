@@ -262,3 +262,21 @@ docker run --rm --runtime=nvidia --gpus all ubuntu nvidia-smi
 ```
 
 If the output indicates a problem (especially immediately after installation), a [restart of the services](#how-to-restart-the-services) may help.
+
+## How to list the contents of S3 buckets
+
+To verify that the S3 buckets are configured correctly, 
+you can list their contents by running the following command on a machine with the AWS CLI installed (e.g., the validator or miner). 
+Replace the placeholders with the appropriate values:
+
+```
+AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... aws s3api list-objects --bucket BUCKET_NAME
+```
+
+The bucket names and required AWS credentials are stored in the validator’s `.env` file as:
+- `S3_BUCKET_NAME_PROMPTS`
+- `S3_BUCKET_NAME_ANSWERS`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
+If you encounter a permissions error, such as missing the `s3:ListBucket` permission, you may need to use the AWS root user credentials.
