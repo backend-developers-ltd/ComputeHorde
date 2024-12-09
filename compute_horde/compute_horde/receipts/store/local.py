@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
     def __init__(self):
         super().__init__()
-        if not hasattr(settings, "LOCAL_RECEIPTS_ROOT"):
+        if not getattr(settings, "LOCAL_RECEIPTS_ROOT", ""):
             raise ImproperlyConfigured("Required settings.py setting missing: LOCAL_RECEIPTS_ROOT")
         self.pages_directory = Path(settings.LOCAL_RECEIPTS_ROOT)  # type: ignore
         self.pages_directory.mkdir(parents=True, exist_ok=True)
@@ -58,9 +58,8 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         Append receipts to the store.
         """
         pages: defaultdict[int, list[Receipt]] = defaultdict(list)
-        current_page = self.current_page()
         for receipt in receipts:
-            pages[current_page].append(receipt)
+            pages[self.current_page()].append(receipt)
         for page, receipts_in_page in pages.items():
             self._append_to_page(receipts_in_page, page)
 

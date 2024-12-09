@@ -24,13 +24,9 @@ from compute_horde.receipts.schemas import (
     JobStartedReceiptPayload,
 )
 from compute_horde.receipts.store.current import receipts_store
+from compute_horde.utils import sign_blob
 
 logger = logging.getLogger(__name__)
-
-
-def bt_sign_blob(kp: bittensor.Keypair, blob: str):
-    return f"0x{kp.sign(blob).hex()}"
-
 
 ReceiptModel: TypeAlias = JobAcceptedReceipt | JobStartedReceipt | JobFinishedReceipt
 ReceiptFactory: TypeAlias = Callable[[bittensor.Keypair, bittensor.Keypair], ReceiptModel]
@@ -135,8 +131,8 @@ class Command(BaseCommand):
             job_uuid=payload.job_uuid,
             validator_hotkey=payload.validator_hotkey,
             miner_hotkey=payload.miner_hotkey,
-            validator_signature=bt_sign_blob(validator_keys, payload.blob_for_signing()),
-            miner_signature=bt_sign_blob(miner_keys, payload.blob_for_signing()),
+            validator_signature=sign_blob(validator_keys, payload.blob_for_signing()),
+            miner_signature=sign_blob(miner_keys, payload.blob_for_signing()),
             timestamp=payload.timestamp,
             time_accepted=payload.time_accepted,
             ttl=payload.ttl,
@@ -161,8 +157,8 @@ class Command(BaseCommand):
             job_uuid=payload.job_uuid,
             validator_hotkey=payload.validator_hotkey,
             miner_hotkey=payload.miner_hotkey,
-            validator_signature=bt_sign_blob(validator_keys, payload.blob_for_signing()),
-            miner_signature=bt_sign_blob(miner_keys, payload.blob_for_signing()),
+            validator_signature=sign_blob(validator_keys, payload.blob_for_signing()),
+            miner_signature=sign_blob(miner_keys, payload.blob_for_signing()),
             timestamp=payload.timestamp,
             executor_class=payload.executor_class,
             max_timeout=payload.max_timeout,
@@ -188,8 +184,8 @@ class Command(BaseCommand):
             job_uuid=payload.job_uuid,
             validator_hotkey=payload.validator_hotkey,
             miner_hotkey=payload.miner_hotkey,
-            validator_signature=bt_sign_blob(validator_keys, payload.blob_for_signing()),
-            miner_signature=bt_sign_blob(miner_keys, payload.blob_for_signing()),
+            validator_signature=sign_blob(validator_keys, payload.blob_for_signing()),
+            miner_signature=sign_blob(miner_keys, payload.blob_for_signing()),
             timestamp=payload.timestamp,
             time_started=payload.time_started,
             time_took_us=payload.time_took_us,

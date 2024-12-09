@@ -1,22 +1,16 @@
-import random
 from asyncio import Semaphore
 from functools import partial
 from unittest.mock import AsyncMock, Mock, patch
-from uuid import uuid4
 
 import aiohttp
 import pytest
-from bittensor_wallet import Keypair
-from django.utils import timezone
 from pydantic import ValidationError
 
-from compute_horde.executor_class import ExecutorClass
-from compute_horde.receipts import Receipt, ReceiptType
-from compute_horde.receipts.management.commands.debug_create_random_receipts import bt_sign_blob
 from compute_horde.receipts.models import JobStartedReceipt
-from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde.receipts.transfer import ReceiptsTransfer
 from compute_horde.receipts.transfer_checkpoints import TransferCheckpointBackend
+from compute_horde.utils import sign_blob
+from tests.utils import random_keypair, random_receipt
 
 do_transfer = partial(
     ReceiptsTransfer.transfer,
@@ -31,14 +25,14 @@ do_transfer = partial(
 @pytest.mark.django_db(transaction=True)
 async def test_rejects_bad_lines(miner_keypair, validator_keypair):
     lines_to_serve = [
-        _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+        random_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
         b"not a receipt",
         b"",
         b"",
-        _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
-        _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode()[50:],
+        random_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+        random_receipt(miner_keypair, validator_keypair).model_dump_json().encode()[50:],
         b"garbage",
-        _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+        random_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
     ]
 
     session = Mock()
@@ -56,25 +50,25 @@ async def test_rejects_bad_lines(miner_keypair, validator_keypair):
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_rejects_bad_signatures(miner_keypair, validator_keypair):
-    bad_miner_signature = _create_receipt(miner_keypair, validator_keypair)
-    bad_miner_signature.miner_signature = bt_sign_blob(
-        _random_keypair(),
+    bad_miner_signature = random_receipt(miner_keypair, validator_keypair)
+    bad_miner_signature.miner_signature = sign_blob(
+        random_keypair(),
         bad_miner_signature.payload.blob_for_signing(),
     )
 
-    bad_validator_signature = _create_receipt(miner_keypair, validator_keypair)
-    bad_validator_signature.validator_signature = bt_sign_blob(
-        _random_keypair(),
+    bad_validator_signature = random_receipt(miner_keypair, validator_keypair)
+    bad_validator_signature.validator_signature = sign_blob(
+        random_keypair(),
         bad_validator_signature.payload.blob_for_signing(),
     )
 
-    both_bad_signatures = _create_receipt(miner_keypair, validator_keypair)
-    both_bad_signatures.miner_signature = bt_sign_blob(
-        _random_keypair(),
+    both_bad_signatures = random_receipt(miner_keypair, validator_keypair)
+    both_bad_signatures.miner_signature = sign_blob(
+        random_keypair(),
         both_bad_signatures.payload.blob_for_signing(),
     )
-    both_bad_signatures.validator_signature = bt_sign_blob(
-        _random_keypair(),
+    both_bad_signatures.validator_signature = sign_blob(
+        random_keypair(),
         both_bad_signatures.payload.blob_for_signing(),
     )
 
@@ -125,6 +119,7 @@ async def test_handles_failures(miner_keypair, mocked_checkpoint_backend):
     assert n_transfer_errors == len(response_effects)
     assert mocked_checkpoint_backend.value == 0
     assert await JobStartedReceipt.objects.acount() == 0
+    # implicit assertion - none of the exceptions sneak out
 
 
 @pytest.mark.asyncio
@@ -136,9 +131,9 @@ async def test_uses_checkpoints(miner_keypair, validator_keypair, mocked_checkpo
     # First response: whole page
     initial_data = b"\n".join(
         [
-            _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
-            _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
-            _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+            random_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+            random_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+            random_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
         ]
     )
     initial_response = Mock()
@@ -149,8 +144,8 @@ async def test_uses_checkpoints(miner_keypair, validator_keypair, mocked_checkpo
     # This should be a range request with offset == length of previous response
     subsequent_data = b"\n".join(
         [
-            _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
-            _create_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+            random_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
+            random_receipt(miner_keypair, validator_keypair).model_dump_json().encode(),
         ]
     )
     subsequent_response = Mock()
@@ -213,27 +208,3 @@ class MockTransferCheckpointBackend(TransferCheckpointBackend):
 
     async def set(self, key: str, checkpoint: int) -> None:
         self.value = checkpoint
-
-
-def _create_receipt(miner: Keypair, validator: Keypair):
-    payload = JobStartedReceiptPayload(
-        job_uuid=str(uuid4()),
-        miner_hotkey=miner.ss58_address,
-        validator_hotkey=validator.ss58_address,
-        timestamp=timezone.now(),
-        receipt_type=ReceiptType.JobStartedReceipt,
-        executor_class=ExecutorClass.always_on__gpu_24gb,
-        max_timeout=100,
-        ttl=100,
-        is_organic=False,
-    )
-    blob = payload.blob_for_signing()
-    return Receipt(
-        payload=payload,
-        miner_signature=bt_sign_blob(miner, blob),
-        validator_signature=bt_sign_blob(validator, blob),
-    )
-
-
-def _random_keypair() -> Keypair:
-    return Keypair.create_from_seed("".join(random.sample("0123456789abcdef" * 10, 64)))
