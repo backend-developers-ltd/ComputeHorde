@@ -379,7 +379,6 @@ dependencies = [
     { name = "more-itertools" },
     { name = "phx-class-registry" },
     { name = "pydantic" },
-    { name = "pytest-django" },
     { name = "requests" },
     { name = "websockets" },
 ]
@@ -399,6 +398,7 @@ test = [
     { name = "freezegun" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "pytest-django" },
     { name = "responses" },
 ]
 type-check = [
@@ -419,7 +419,6 @@ requires-dist = [
     { name = "more-itertools", specifier = ">=10.2.0" },
     { name = "phx-class-registry", specifier = ">=4.1.0" },
     { name = "pydantic", specifier = ">=2.3,<3" },
-    { name = "pytest-django", specifier = ">=4.9.0" },
     { name = "requests", specifier = ">=2.32.2" },
     { name = "websockets", specifier = ">=13.0,<14.0" },
 ]
@@ -435,6 +434,7 @@ test = [
     { name = "freezegun", specifier = ">=1.5.1" },
     { name = "pytest", specifier = ">=8.2.1" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    { name = "pytest-django", specifier = ">=4.9.0" },
     { name = "responses", specifier = ">=0.25.0" },
 ]
 type-check = [

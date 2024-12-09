@@ -598,7 +598,6 @@ dependencies = [
     { name = "more-itertools", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "phx-class-registry", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "pytest-django", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "requests", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
@@ -612,7 +611,6 @@ requires-dist = [
     { name = "more-itertools", specifier = ">=10.2.0" },
     { name = "phx-class-registry", specifier = ">=4.1.0" },
     { name = "pydantic", specifier = ">=2.3,<3" },
-    { name = "pytest-django", specifier = ">=4.9.0" },
     { name = "requests", specifier = ">=2.32.2" },
     { name = "websockets", specifier = ">=13.0,<14.0" },
 ]
@@ -628,6 +626,7 @@ test = [
     { name = "freezegun", specifier = ">=1.5.1" },
     { name = "pytest", specifier = ">=8.2.1" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    { name = "pytest-django", specifier = ">=4.9.0" },
     { name = "responses", specifier = ">=0.25.0" },
 ]
 type-check = [
