@@ -21,7 +21,6 @@ from compute_horde.receipts.transfer_checkpoints import checkpoint_backend
 
 logger = logging.getLogger(__name__)
 
-Offset = int
 MinerInfo: TypeAlias = tuple[str, str, int]
 
 

@@ -71,7 +71,7 @@ class JobStartedReceipt(AbstractReceipt):
         if not isinstance(receipt.payload, JobStartedReceiptPayload):
             raise ValueError(
                 f"Incompatible receipt payload type. "
-                f"Got: {receipt.payload.__class__.__name__} "
+                f"Got: {type(receipt.payload).__name__} "
                 f"Expected: {JobStartedReceiptPayload.__name__}"
             )
 
@@ -115,7 +115,7 @@ class JobAcceptedReceipt(AbstractReceipt):
         if not isinstance(receipt.payload, JobAcceptedReceiptPayload):
             raise ValueError(
                 f"Incompatible receipt payload type. "
-                f"Got: {receipt.payload.__class__.__name__} "
+                f"Got: {type(receipt.payload).__name__} "
                 f"Expected: {JobAcceptedReceiptPayload.__name__}"
             )
 

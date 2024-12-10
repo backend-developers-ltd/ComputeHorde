@@ -366,10 +366,6 @@ DEBUG_SKIP_PULLING_EXECUTOR_IMAGE = env.bool("DEBUG_SKIP_PULLING_EXECUTOR_IMAGE"
 ADDRESS_FOR_EXECUTORS = env.str("ADDRESS_FOR_EXECUTORS", default="")
 PORT_FOR_EXECUTORS = env.int("PORT_FOR_EXECUTORS")
 
-RECEIPT_STORE_CLASS_PATH = env.str(
-    "RECEIPT_STORE_CLASS_PATH",
-    default="compute_horde.receipts.store.local:LocalFilesystemPagedReceiptStore",
-)
 LOCAL_RECEIPTS_ROOT = env.path("LOCAL_RECEIPTS_ROOT", default=root("..", "..", "receipts"))
 
 BITTENSOR_MINER_PORT = env.int("BITTENSOR_MINER_PORT")
