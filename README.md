@@ -112,7 +112,7 @@ This repository contains the implementations of:
 - **Miner**: Modifying the miner code on subnet 12 is discouraged, as the stock implementation manages only communications between components.
   The competitive edge lies in optimizing executor provisioning.
   Users can create [custom executor managers](miner#custom-executor-manager) to scale and optimize mining efficiency.
-  The default implementation runs a single executor and is not intended for mainnet use.
+  The default executor manager runs a single executor and is not intended for mainnet use.
 
 In the following sections, you can find instructions on running [Validator](#Validator) and [Miner](#Miner).
 There are more details in each component's README and in the [Troubleshooting](#Troubleshooting) section below.
