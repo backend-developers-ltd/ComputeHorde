@@ -85,17 +85,22 @@ http {
         ssl_client_certificate /etc/nginx/ssl/client.crt;
         ssl_verify_client on;
 
-        location /execute-job {
+        location / {
             if ($ssl_client_verify != SUCCESS) { return 403; }
             # hack to make nginx not complain about host not found in upstream
             set $upstream CONTAINER;
-            proxy_pass http://$upstream/execute-job;
+            proxy_pass http://$upstream;
         }
     }
 
     server {
         listen 80;
         server_name localhost;
+
+        # Allow access only from the miner instance
+        allow {MINER_ADDRESS};
+        allow 127.0.0.1;
+        deny all;
 
         location /health {
             # hack to make nginx not complain about host not found in upstream
@@ -567,8 +572,12 @@ class JobRunner:
             try:
                 # the job container ip is needed to proxy the request to the job container
                 job_ip = await get_docker_container_ip(self.job_container_name)
+
                 # update the nginx conf with the job container ip
                 nginx_conf = NGINX_CONF.replace("CONTAINER", f"{job_ip}:{JOB_CONTAINER_PORT}")
+                # allow connections from miner address for health checks
+                nginx_conf = NGINX_CONF.replace("MINER_ADDRESS", settings.MINER_ADDRESS)
+
                 await start_nginx(
                     nginx_conf,
                     port=settings.NGINX_PORT,
