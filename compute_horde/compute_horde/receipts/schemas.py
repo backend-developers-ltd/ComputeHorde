@@ -61,15 +61,36 @@ ReceiptPayload = Annotated[
 ]
 
 
+class BadReceiptSignature(Exception):
+    def __init__(self, receipt: "Receipt"):
+        self.receipt = receipt
+
+
+class BadMinerReceiptSignature(BadReceiptSignature):
+    pass
+
+
+class BadValidatorReceiptSignature(BadReceiptSignature):
+    pass
+
+
 class Receipt(BaseModel):
     payload: ReceiptPayload
     validator_signature: str
     miner_signature: str
 
-    def verify_miner_signature(self):
+    def verify_miner_signature(self, throw=False):
         miner_keypair = bittensor.Keypair(ss58_address=self.payload.miner_hotkey)
-        return miner_keypair.verify(self.payload.blob_for_signing(), self.miner_signature)
+        is_valid = miner_keypair.verify(self.payload.blob_for_signing(), self.miner_signature)
+        if throw and not is_valid:
+            raise BadMinerReceiptSignature(self)
+        return is_valid
 
-    def verify_validator_signature(self):
+    def verify_validator_signature(self, throw=False):
         validator_keypair = bittensor.Keypair(ss58_address=self.payload.validator_hotkey)
-        return validator_keypair.verify(self.payload.blob_for_signing(), self.validator_signature)
+        is_valid = validator_keypair.verify(
+            self.payload.blob_for_signing(), self.validator_signature
+        )
+        if throw and not is_valid:
+            raise BadValidatorReceiptSignature(self)
+        return is_valid

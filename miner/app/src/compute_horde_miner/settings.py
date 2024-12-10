@@ -283,9 +283,9 @@ PROD_CELERY_BEAT_SCHEDULE = {
         "schedule": 60,
         "options": {},
     },
-    "get_receipts_from_old_miner": {
-        "task": "compute_horde_miner.miner.tasks.get_receipts_from_old_miner",
-        "schedule": timedelta(minutes=10),
+    "archive_receipt_pages": {
+        "task": "compute_horde_miner.miner.tasks.archive_receipt_pages",
+        "schedule": timedelta(minutes=1),
         "options": {},
     },
 }
@@ -366,11 +366,6 @@ DEBUG_SKIP_PULLING_EXECUTOR_IMAGE = env.bool("DEBUG_SKIP_PULLING_EXECUTOR_IMAGE"
 ADDRESS_FOR_EXECUTORS = env.str("ADDRESS_FOR_EXECUTORS", default="")
 PORT_FOR_EXECUTORS = env.int("PORT_FOR_EXECUTORS")
 
-RECEIPT_STORE_CLASS_PATH = env.str(
-    "RECEIPT_STORE_CLASS_PATH",
-    default="compute_horde_miner.miner.receipt_store.local:LocalReceiptStore",
-)
-LOCAL_RECEIPTS_URL = env.str("LOCAL_RECEIPTS_URL", default="/receipts/")
 LOCAL_RECEIPTS_ROOT = env.path("LOCAL_RECEIPTS_ROOT", default=root("..", "..", "receipts"))
 
 BITTENSOR_MINER_PORT = env.int("BITTENSOR_MINER_PORT")
