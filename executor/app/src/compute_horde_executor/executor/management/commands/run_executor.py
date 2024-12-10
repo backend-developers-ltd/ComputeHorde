@@ -587,6 +587,7 @@ class JobRunner:
             stdout = result[0].decode()
             stderr = result[1].decode()
 
+        # TODO: handle streaming jobs multiple requests
         except TimeoutError:
             # If the process did not finish in time, kill it
             logger.error(
