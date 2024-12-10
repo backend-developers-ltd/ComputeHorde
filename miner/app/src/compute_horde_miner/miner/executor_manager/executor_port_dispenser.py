@@ -2,6 +2,11 @@ import socket
 
 
 class ExecutorPortDispenser:
+    """
+    A class to dispense and release ports for executors to expose for streaming jobs.
+    To be used when running multiple executors on the same machine as the miner.
+    """
+
     def __init__(self, start_port: int = 6000, end_port: int = 7000):
         """
         Initializes the port dispenser with a range of available ports.
