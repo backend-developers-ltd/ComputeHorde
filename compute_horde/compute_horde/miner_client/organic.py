@@ -31,6 +31,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
     V0JobFinishedRequest,
     V0MachineSpecsRequest,
+    V1ExecutorReadyRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
@@ -102,7 +103,7 @@ class OrganicMinerClient(AbstractMinerClient):
         self.miner_accepting_or_declining_timestamp: int = 0
 
         self.executor_ready_or_failed_future: asyncio.Future[
-            V0ExecutorReadyRequest | V0ExecutorFailedRequest
+            V0ExecutorReadyRequest | V1ExecutorReadyRequest | V0ExecutorFailedRequest
         ] = loop.create_future()
         self.executor_ready_or_failed_timestamp: int = 0
 
@@ -153,7 +154,9 @@ class OrganicMinerClient(AbstractMinerClient):
     async def notify_job_accepted(self, msg: V0AcceptJobRequest) -> None:
         """This method is called when miner sends job accepted message"""
 
-    async def notify_executor_ready(self, msg: V0ExecutorReadyRequest) -> None:
+    async def notify_executor_ready(
+        self, msg: V0ExecutorReadyRequest | V1ExecutorReadyRequest
+    ) -> None:
         """This method is called when miner sends executor ready message"""
 
     async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
@@ -192,7 +195,9 @@ class OrganicMinerClient(AbstractMinerClient):
                 self.miner_accepting_or_declining_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
-        elif isinstance(msg, V0ExecutorReadyRequest | V0ExecutorFailedRequest):
+        elif isinstance(
+            msg, V0ExecutorReadyRequest | V1ExecutorReadyRequest | V0ExecutorFailedRequest
+        ):
             try:
                 self.executor_ready_or_failed_future.set_result(msg)
                 self.executor_ready_or_failed_timestamp = int(time.time())

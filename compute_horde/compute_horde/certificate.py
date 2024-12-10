@@ -1,13 +1,79 @@
+import asyncio
 import ipaddress
+import logging
+import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import requests
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID
+
+logger = logging.getLogger(__name__)
+
+WAIT_FOR_NGINX_TIMEOUT = 10
+
+
+async def get_docker_container_ip(container_name: str) -> str:
+    process = await asyncio.create_subprocess_exec(
+        "docker",
+        "inspect",
+        container_name,
+        "-f",
+        "{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+        stdout=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await process.communicate()
+    return stdout.decode("utf-8").strip()
+
+
+async def start_nginx(
+    nginx_conf: str,
+    port: int,
+    dir_path: Path,
+    container_name: str = "job-nginx",
+):
+    nginx_conf_file = dir_path / "nginx.conf"
+    nginx_conf_file.write_text(nginx_conf)
+
+    process = await asyncio.create_subprocess_exec(
+        "docker",
+        "run",
+        "--detach",
+        "--rm",
+        "--name",
+        container_name,
+        "-p",
+        f"{port}:443",
+        "-v",
+        f"{dir_path}:/etc/nginx/",
+        "nginx:1.26-alpine",
+    )
+    stdout, stderr = await process.communicate()
+    await process.wait()
+
+    # wait for nginx to start
+    ip = await get_docker_container_ip(container_name)
+    url = f"http://{ip}/ok"
+    nginx_started = False
+    for _ in range(WAIT_FOR_NGINX_TIMEOUT):
+        try:
+            if requests.get(url).status_code == 200:
+                nginx_started = True
+                break
+        except Exception as e:
+            logger.debug(f"Failed to ping nginx on {url}: {e}")
+            pass
+        await asyncio.sleep(1)
+
+    if not nginx_started:
+        raise Exception(
+            f"Failed to ping nginx on {url} - server init stdout: {stdout.decode()}, stderr: {stderr.decode()}"
+        )
 
 
 def generate_certificate(alternative_name: str) -> tuple[Certificate, RSAPrivateKey]:
@@ -64,10 +130,38 @@ def write_private_key(private_key: RSAPrivateKey, path: Path) -> None:
     path.write_bytes(serialize_private_key(private_key))
 
 
-def generate_certificate_at(dir_path: Path, alternative_name: str) -> None:
-    """Generates and saves a certificate and private key at `dir_path`"""
-    assert dir_path.is_dir()
+def save_public_key(public_key: str, dir_path: Path) -> None:
+    certs_dir = dir_path / "ssl"
+    client_cert_file = certs_dir / "client.crt"
+    client_cert_file.write_text(public_key)
+
+
+def generate_certificate_at(
+    dir_path: Path | None = None, alternative_name: str = "127.0.0.1"
+) -> tuple[Path, str, tuple[str, str]]:
+    """
+    Generate a certificate and private key and save them to a directory.
+    Returns the directory path, the public key and the paths to the public and private key files.
+    """
+
+    if dir_path is None:
+        dir_path = Path(tempfile.mkdtemp())
+    certs_dir = dir_path / "ssl"
+    certs_dir.mkdir()
 
     certificate, private_key = generate_certificate(alternative_name)
-    write_certificate(certificate, dir_path / "certificate.pem")
-    write_private_key(private_key, dir_path / "private_key.pem")
+    public_key_path = certs_dir / "certificate.pem"
+    private_key_path = certs_dir / "private_key.pem"
+    write_certificate(certificate, public_key_path)
+    write_private_key(private_key, private_key_path)
+
+    public_key = serialize_certificate(certificate).decode("utf-8")
+    return dir_path, public_key, (str(public_key_path), str(private_key_path))
+
+
+def read_certificate(cert_path: Path) -> str | None:
+    try:
+        return cert_path.read_bytes().decode("utf-8")
+    except Exception as e:
+        logger.error(f"Failed to read executor certificate at {cert_path}: {e}")
+        return None

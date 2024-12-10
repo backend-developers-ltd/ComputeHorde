@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 class ExecutorReady(pydantic.BaseModel):
     executor_token: str
+    public_key: str | None = None
+    ip: str | None = None
+    port: int | None = None
 
 
 class ExecutorFailedToPrepare(pydantic.BaseModel):
@@ -159,13 +162,21 @@ class ExecutorInterfaceMixin(BaseMixin):
     def group_name(cls, executor_token: str):
         return f"executor_interface_{executor_token}"
 
-    async def send_executor_ready(self, executor_token: str):
+    async def send_executor_ready(
+        self,
+        executor_token: str,
+        public_key: str | None = None,
+        ip: str | None = None,
+        port: int | None = None,
+    ):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
         await self.channel_layer.group_send(
             group_name,
             {
                 "type": "executor.ready",
-                **ExecutorReady(executor_token=executor_token).model_dump(),
+                **ExecutorReady(
+                    executor_token=executor_token, public_key=public_key, ip=ip, port=port
+                ).model_dump(),
             },
         )
 
