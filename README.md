@@ -151,13 +151,22 @@ see the [migration guide](/docs/migration.md).
 
 ## How to dump the logs
 
-The ComputeHorde software starts several Docker containers. The most relevant logs are from containers with names ending in `app-1`.
+The ComputeHorde software starts several Docker containers, 
+with layout differing slightly between the miner and the validator.
 
-To view these logs:
-1. SSH into the machine (validator or miner).
+### Miner logs
+
+The most relevant logs are from the container with a name ending in `app-1`.
+
+1. SSH into the miner machine.
 1. Run `docker ps` to find the name of the appropriate container (e.g., `compute_horde_miner-app-1`).
 1. Run `docker logs CONTAINER_NAME`.
 
+### Validator logs
+
+1. SSH into the validator machine.
+1. Navigate to the directory where the docker compose yaml file is located.
+1. Run `docker compose logs`.
 
 ## How to restart the services
 
