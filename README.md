@@ -56,6 +56,10 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 - Distributes tasks to miners and evaluates the results:
   - Organic results are returned to external requesters.
   - Synthetic results adjust miners' scores.
+- Uses a separate GPU, called a **Trusted Miner**, to pre-run part of the validation tasks and establish expected results. 
+  The Trusted Miner shares the same code as a regular miner but is configured differently:
+  - It is not registered in the metagraph.
+  - It only accepts tasks from the associated validator.
 - [See validator's README for more details](validator/README.md)
 
 ### **Miner**
@@ -104,10 +108,11 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 This repository contains the implementations of:
 
-- **Validator**: Requres a Trusted Miner for cross-checking synthetic tasks.
-- **Miner**: Default miner setup with a single executor.
-- **Executor**: Base implementation for executing dockerized jobs. 
+- **Validator**: Requires a [Trusted Miner](#validator) for cross-checking synthetic tasks.
+- **Miner**: Modifying the miner code on subnet 12 is discouraged, as the stock implementation manages only communications between components.
+  The competitive edge lies in optimizing executor provisioning.
   Users can create [custom executor managers](miner#custom-executor-manager) to scale and optimize mining efficiency.
+  The default implementation runs a single executor and is not intended for mainnet use.
 
 In the following sections, you can find instructions on running [Validator](#Validator) and [Miner](#Miner).
 There are more details in each component's README and in the [Troubleshooting](#Troubleshooting) section below.
