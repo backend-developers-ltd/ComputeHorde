@@ -577,7 +577,15 @@ class JobRunner:
                 )
                 logger.debug("Nginx started successfully")
             except Exception as e:
-                logger.error(f"Failed to start Nginx: {e}")
+                msg = f"Failed to start Nginx: {e}"
+                logger.error(msg)
+                return JobResult(
+                    success=False,
+                    timeout=False,
+                    stdout="",
+                    stderr=msg,
+                    exit_status=None,
+                )
 
         t1 = time.time()
         try:

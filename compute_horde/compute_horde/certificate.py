@@ -53,22 +53,27 @@ async def start_nginx(
         f"{dir_path}:/etc/nginx/",
         "nginx:1.26-alpine",
     )
+    stdout, stderr = await process.communicate()
     await process.wait()
 
     # wait for nginx to start
     ip = await get_docker_container_ip(container_name)
+    url = f"http://{ip}/ok"
     nginx_started = False
     for _ in range(WAIT_FOR_NGINX_TIMEOUT):
         try:
-            if requests.get(f"http://{ip}/ok").status_code == 200:
+            if requests.get(url).status_code == 200:
                 nginx_started = True
                 break
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to ping nginx on {url}: {e}")
             pass
         await asyncio.sleep(1)
 
     if not nginx_started:
-        logger.error("Failed to start nginx - continuing ...")
+        raise Exception(
+            f"Failed to ping nginx on {url} - server init stdout: {stdout.decode()}, stderr: {stderr.decode()}"
+        )
 
 
 def generate_certificate(alternative_name: str) -> tuple[Certificate, RSAPrivateKey]:
