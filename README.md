@@ -100,6 +100,15 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 1. **Fair Resource Sharing**  
    Allocate resources based on validators' stakes while allowing low-stake validators access when demand is low.
 
+## Info pack
+
+ComputeHorde subnet UID: 12
+ComputeHorde testnet UID: 174
+Information dashbaords:
+- [Subnet 12 TaoStats](https://taostats.io/subnets/12) 
+- [Subnet 12 grafana](https://grafana.bactensor.io/d/subnet/metagraph-subnet?var-subnet=12)
+- [Subnet 12 validator health grafana](https://grafana.bactensor.io/d/validator-system-events/validator-system-events?var-subnet=12)
+
 # Running ComputeHorde components
 
 This repository contains the implementations of:
