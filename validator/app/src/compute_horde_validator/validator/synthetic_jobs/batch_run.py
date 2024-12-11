@@ -426,7 +426,7 @@ class BatchContext:
     axons: dict[str, bittensor.AxonInfo]
     # full name for easier debugging: "{miner_hotkey}({ip}:{port})"
     names: dict[str, str]
-    miners: dict[str, Miner]
+    miners: dict[str, Miner] # hotkey -> Miner
     clients: dict[str, MinerClient]
     executors: dict[str, defaultdict[ExecutorClass, int]]
     job_generators: dict[str, dict[ExecutorClass, list[BaseSyntheticJobGenerator]]]
@@ -1088,6 +1088,7 @@ async def _send_initial_job_request(
         stagger_wait_interval = max_spin_up_time - job.get_spin_up_time()
         assert stagger_wait_interval >= 0
 
+        # TODO: for streaming jobs should be V1InitialJobRequest 
         request = V0InitialJobRequest(
             job_uuid=job.uuid,
             executor_class=job.executor_class,

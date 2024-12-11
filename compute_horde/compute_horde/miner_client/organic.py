@@ -31,7 +31,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
     V0JobFinishedRequest,
     V0MachineSpecsRequest,
-    V1ExecutorReadyRequest,
+    V0StreamingJobReadyRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
@@ -103,9 +103,14 @@ class OrganicMinerClient(AbstractMinerClient):
         self.miner_accepting_or_declining_timestamp: int = 0
 
         self.executor_ready_or_failed_future: asyncio.Future[
-            V0ExecutorReadyRequest | V1ExecutorReadyRequest | V0ExecutorFailedRequest
+            V0ExecutorReadyRequest | V0ExecutorFailedRequest
         ] = loop.create_future()
         self.executor_ready_or_failed_timestamp: int = 0
+
+        self.streaming_job_ready_or_not_future: asyncio.Future[
+            V0StreamingJobReadyRequest | miner_requests.V0StreamingJobNotReadyRequest
+        ] = loop.create_future()
+        self.streaming_job_ready_or_not_timestamp: int = 0
 
         self.miner_finished_or_failed_future: asyncio.Future[
             V0JobFailedRequest | V0JobFinishedRequest
@@ -154,9 +159,7 @@ class OrganicMinerClient(AbstractMinerClient):
     async def notify_job_accepted(self, msg: V0AcceptJobRequest) -> None:
         """This method is called when miner sends job accepted message"""
 
-    async def notify_executor_ready(
-        self, msg: V0ExecutorReadyRequest | V1ExecutorReadyRequest
-    ) -> None:
+    async def notify_executor_ready(self, msg: V0ExecutorReadyRequest) -> None:
         """This method is called when miner sends executor ready message"""
 
     async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
@@ -195,12 +198,18 @@ class OrganicMinerClient(AbstractMinerClient):
                 self.miner_accepting_or_declining_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
-        elif isinstance(
-            msg, V0ExecutorReadyRequest | V1ExecutorReadyRequest | V0ExecutorFailedRequest
-        ):
+        elif isinstance(msg, V0ExecutorReadyRequest | V0ExecutorFailedRequest):
             try:
                 self.executor_ready_or_failed_future.set_result(msg)
                 self.executor_ready_or_failed_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
+        elif isinstance(
+            msg, V0StreamingJobReadyRequest | miner_requests.V0StreamingJobNotReadyRequest
+        ):
+            try:
+                self.streaming_job_ready_or_not_future.set_result(msg)
+                self.streaming_job_ready_or_not_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
         elif isinstance(msg, V0JobFailedRequest | V0JobFinishedRequest):
@@ -337,6 +346,7 @@ class FailureReason(enum.Enum):
     FINAL_RESPONSE_TIMED_OUT = enum.auto()
     JOB_DECLINED = enum.auto()
     EXECUTOR_FAILED = enum.auto()
+    STREAMING_JOB_READY_TIMED_OUT = enum.auto()
     JOB_FAILED = enum.auto()
 
 
