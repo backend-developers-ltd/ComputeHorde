@@ -19,8 +19,9 @@ from compute_horde.miner_client.organic import (
 from compute_horde.mv_protocol.miner_requests import (
     RequestType,
     V0DeclineJobRequest,
+    V0ExecutorReadyRequest,
     V0JobFailedRequest,
-    V1ExecutorReadyRequest,
+    V0StreamingJobReadyRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
     V0JobRequest,
@@ -45,7 +46,7 @@ class StreamingMinerClient(OrganicMinerClient):
 def get_mock_job_details():
     return OrganicJobDetails(
         job_uuid=str(uuid.uuid4()),
-        executor_class  = ExecutorClass.always_on__llm__a6000,
+        executor_class=ExecutorClass.always_on__llm__a6000,
         docker_image="python:3.11-slim",
         docker_run_options_preset="none",
         raw_script="""
@@ -62,6 +63,11 @@ class SimpleHandler(BaseHTTPRequestHandler):
             self.wfile.write(b"OK")
             time.sleep(2)
             os._exit(0)  # Mock job finish after endpoint was hit
+        elif self.path == "/ready":
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"OK")
         else:
             self.send_response(404)
             self.send_header("Content-type", "text/plain")
@@ -144,14 +150,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
 
-            # Check received streaming job executor ready response
-            assert exec_ready_response.message_type == RequestType.V1ExecutorReadyRequest
-            exec_ready_response = cast(V1ExecutorReadyRequest, exec_ready_response)
-
-            # Save job certificate received from executor
-            executor_cert_path = dir_path / "ssl" / "executor_certificate.pem"
-            executor_cert_path.write_text(exec_ready_response.public_key)
-
+            exec_ready_response = cast(V0ExecutorReadyRequest, exec_ready_response)
             await client.notify_executor_ready(exec_ready_response)
 
             await client.send_model(
@@ -167,17 +166,34 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                 )
             )
 
-            # TODO: handle waiting for job and nginx containers to spin up
-            await asyncio.sleep(5)
+            try:
+                streaming_job_ready_response = await asyncio.wait_for(
+                    client.streaming_job_ready_or_not_future,
+                    timeout=min(job_timer.time_left(), wait_timeout),
+                )
+            except TimeoutError as exc:
+                raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
+
+            # Check received streaming job executor ready response
+            assert (
+                streaming_job_ready_response.message_type == RequestType.V0StreamingJobReadyRequest
+            )
+            streaming_job_ready_response = cast(
+                V0StreamingJobReadyRequest, streaming_job_ready_response
+            )
+
+            # Save job certificate received from executor
+            executor_cert_path = dir_path / "ssl" / "executor_certificate.pem"
+            executor_cert_path.write_text(streaming_job_ready_response.public_key)
 
             # Check you can connect to the job container and trigger job execution
-            url = f"https://{exec_ready_response.ip}:{exec_ready_response.port}/execute-job"
+            url = f"https://{streaming_job_ready_response.ip}:{streaming_job_ready_response.port}/execute-job"
             logger.info(f"Making request to job container: {url}")
             response = requests.get(
                 url,
                 verify=str(executor_cert_path),
                 cert=cert,
-                headers={"Host": exec_ready_response.ip},
+                headers={"Host": streaming_job_ready_response.ip},
             )
             logger.info(f"Response {response.status_code}: {response.text}")
             assert response.text == "OK"
