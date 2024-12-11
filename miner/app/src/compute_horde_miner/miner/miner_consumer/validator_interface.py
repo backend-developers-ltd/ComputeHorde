@@ -27,6 +27,8 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ExecutorFinished,
     ExecutorReady,
     ExecutorSpecs,
+    StreamingJobFailedToPrepare,
+    StreamingJobReady,
     ValidatorInterfaceMixin,
 )
 from compute_horde_miner.miner.models import (
@@ -244,23 +246,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         # we should not send any messages until validator authorizes itself
         while self.defer_executor_ready:
             job = self.defer_executor_ready.pop()
-
-            # TODO: check type
-            job_details = job.initial_job_details
-            request = (
-                miner_requests.V1ExecutorReadyRequest(
-                    job_uuid=str(job.job_uuid),
-                    public_key=job_details.get("public_key", None),
-                    ip=job_details.get("ip", None),
-                    port=job_details.get("port", None),
-                )
-                if job_details.get("public_key", None)
-                and job_details.get("port", None)
-                and job_details.get("ip", None)
-                else miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid))
+            await self.send(
+                miner_requests.V0ExecutorReadyRequest(job_uuid=str(job.job_uuid)).model_dump_json()
             )
-
-            await self.send(request.model_dump_json())
             logger.debug(
                 f"Readiness for job {job.job_uuid} reported to validator {self.validator_key}"
             )
@@ -478,18 +466,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
         job_uuid = str(job.job_uuid)
         self.pending_jobs[job_uuid] = job
-
-        executor_ready_request = (
-            miner_requests.V1ExecutorReadyRequest(
-                job_uuid=job_uuid,
-                public_key=msg.public_key,
-                ip=msg.ip,
-                port=msg.port,
-            )
-            if msg.public_key and msg.port and msg.ip
-            else miner_requests.V0ExecutorReadyRequest(job_uuid=job_uuid)
-        )
-        await self.send(executor_ready_request.model_dump_json())
+        await self.send(miner_requests.V0ExecutorReadyRequest(job_uuid=job_uuid).model_dump_json())
         logger.debug(f"Readiness for job {job_uuid} reported to validator {self.validator_key}")
 
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare):
@@ -507,6 +484,32 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         )
         logger.debug(
             f"Failure in preparation for job {str(job.job_uuid)} reported to validator {self.validator_key}"
+        )
+
+    async def _streaming_job_ready(self, msg: StreamingJobReady):
+        job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
+        job_uuid = str(job.job_uuid)
+
+        await self.send(
+            miner_requests.V0StreamingJobReadyRequest(
+                job_uuid=job_uuid,
+                public_key=msg.public_key,
+                ip=msg.ip,
+                port=msg.port,
+            ).model_dump_json()
+        )
+        logger.debug(
+            f"Readiness for streaming job {job_uuid} reported to validator {self.validator_key}"
+        )
+
+    async def _streaming_job_failed_to_prepare(self, msg: StreamingJobFailedToPrepare):
+        job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
+        job_uuid = str(job.job_uuid)
+        await self.send(
+            miner_requests.V0StreamingJobNotReadyRequest(job_uuid=job_uuid).model_dump_json()
+        )
+        logger.debug(
+            f"Failure in preparation for streaming job {job_uuid} reported to validator {self.validator_key}"
         )
 
     async def _executor_finished(self, msg: ExecutorFinished):
