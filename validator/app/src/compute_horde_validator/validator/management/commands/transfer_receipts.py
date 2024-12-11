@@ -21,12 +21,21 @@ class Command(BaseCommand):
     help = "Fetch receipts from miners"
 
     def add_arguments(self, parser):
-        parser.add_argument("--debug-miner-hotkey", type=str,
-                            help="Only for debug: hotkey of miner to fetch receipts from")
-        parser.add_argument("--debug-miner-ip", type=str,
-                            help="Only for debug: IP address of miner to fetch receipts from")
-        parser.add_argument("--debug-miner-port", type=int,
-                            help="Only for debug: IP port of miner to fetch receipts from")
+        parser.add_argument(
+            "--debug-miner-hotkey",
+            type=str,
+            help="Only for debug: hotkey of miner to fetch receipts from",
+        )
+        parser.add_argument(
+            "--debug-miner-ip",
+            type=str,
+            help="Only for debug: IP address of miner to fetch receipts from",
+        )
+        parser.add_argument(
+            "--debug-miner-port",
+            type=int,
+            help="Only for debug: IP port of miner to fetch receipts from",
+        )
         parser.add_argument(
             "--interval",
             type=float,

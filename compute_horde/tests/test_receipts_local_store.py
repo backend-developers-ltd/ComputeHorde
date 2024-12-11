@@ -100,7 +100,7 @@ def test_deletes_old_pages(local_store):
 
         local_store.delete_pages_older_than(5)
         assert local_store.get_available_pages() == [*range(5, 10)]
-        
+
 
 @pytest.fixture(autouse=True)
 def time_freezer():
