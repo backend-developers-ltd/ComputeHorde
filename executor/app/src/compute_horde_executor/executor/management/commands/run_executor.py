@@ -28,6 +28,7 @@ from compute_horde.base.volume import (
 )
 from compute_horde.base_requests import BaseRequest
 from compute_horde.certificate import (
+    check_endpoint,
     generate_certificate_at,
     get_docker_container_ip,
     save_public_key,
@@ -41,7 +42,8 @@ from compute_horde.em_protocol.executor_requests import (
     V0FinishedRequest,
     V0MachineSpecsRequest,
     V0ReadyRequest,
-    V1ReadyRequest,
+    V0StreamingJobFailedToPrepareRequest,
+    V0StreamingJobReadyRequest,
 )
 from compute_horde.em_protocol.miner_requests import (
     BaseMinerRequest,
@@ -72,7 +74,6 @@ CVE_2022_0492_IMAGE = (
     "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
 )
 
-JOB_CONTAINER_PORT = 8000
 NGINX_CONF = """
 http {
     server {
@@ -98,7 +99,7 @@ http {
 
         # for checking if job is ready to serve requests
         location /ready {
-            proxy_pass http://CONTAINER/health;
+            proxy_pass http://CONTAINER/ready;
         }
 
         # for checking if nginx is running
@@ -111,6 +112,7 @@ events {
 }
 """
 
+JOB_CONTAINER_PORT = 8000
 WAIT_FOR_STREAMING_JOB_TIMEOUT = 10
 WAIT_FOR_NGINX_TIMEOUT = 10
 
@@ -206,13 +208,15 @@ class MinerClient(AbstractMinerClient):
             logger.debug(f"Received full job payload request: {msg.job_uuid=}")
             self.full_payload.set_result(msg)
 
-    async def send_ready(self, certificate: str | None = None):
-        ready_request = (
-            V1ReadyRequest(job_uuid=self.job_uuid, public_key=certificate, port=settings.NGINX_PORT)
-            if certificate
-            else V0ReadyRequest(job_uuid=self.job_uuid)
+    async def send_streaming_job_ready(self, certificate: str):
+        await self.send_model(
+            V0StreamingJobReadyRequest(
+                job_uuid=self.job_uuid, public_key=certificate, port=settings.NGINX_PORT
+            )
         )
-        await self.send_model(ready_request)
+
+    async def send_ready(self):
+        await self.send_model(V0ReadyRequest(job_uuid=self.job_uuid))
 
     async def send_finished(self, job_result: "JobResult"):
         if job_result.specs:
@@ -251,6 +255,13 @@ class MinerClient(AbstractMinerClient):
     async def send_failed_to_prepare(self):
         await self.send_model(
             V0FailedToPrepare(
+                job_uuid=self.job_uuid,
+            )
+        )
+
+    async def send_streaming_job_failed_to_prepare(self):
+        await self.send_model(
+            V0StreamingJobFailedToPrepareRequest(
                 job_uuid=self.job_uuid,
             )
         )
@@ -457,6 +468,8 @@ class JobRunner:
 
         self.job_container_name = f"{settings.EXECUTOR_TOKEN}-job"
         self.nginx_container_name = f"{settings.EXECUTOR_TOKEN}-nginx"
+        self.process: asyncio.subprocess.Process | None = None
+        self.cmd: list[str] = []
 
         # for streaming job
         self.executor_certificate: str | None = None
@@ -490,7 +503,10 @@ class JobRunner:
                 logger.error(msg)
                 raise JobError(msg)
 
-    async def run_job(self, job_request: V0JobRequest):
+    async def start_job(self, job_request: V0JobRequest) -> JobResult | None:
+        """
+        Trigger a job to run in a Docker container.
+        """
         self.full_job_request = job_request
         try:
             docker_run_options = RunConfigManager.preset_to_docker_run_args(
@@ -536,7 +552,7 @@ class JobRunner:
                 exit_status=None,
             )
 
-        cmd = [
+        self.cmd = [
             "docker",
             "run",
             *docker_run_options,
@@ -555,8 +571,8 @@ class JobRunner:
             docker_image,
             *docker_run_cmd,
         ]
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
+        self.process = await asyncio.create_subprocess_exec(
+            *self.cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -573,10 +589,6 @@ class JobRunner:
                 # update the nginx conf with the job container ip
                 nginx_conf = NGINX_CONF.replace("CONTAINER", f"{job_ip}:{JOB_CONTAINER_PORT}")
 
-                # allow connections from miner address for health checks
-                nginx_conf = NGINX_CONF.replace("MINER_ADDRESS", settings.MINER_ADDRESS)
-                # allow connections from miner address for health checks
-                nginx_conf = NGINX_CONF.replace("MINER_ADDRESS", settings.MINER_ADDRESS)
                 await start_nginx(
                     nginx_conf,
                     port=settings.NGINX_PORT,
@@ -596,10 +608,19 @@ class JobRunner:
                     exit_status=None,
                 )
 
+        return None
+
+    async def wait_for_job(self, job_request: V0JobRequest) -> JobResult:
+        """
+        Waits for the existing job process to finish and returns the result.
+        """
+        if self.process is None:
+            raise JobError("Job process not started")
+
         t1 = time.time()
         try:
             result = await asyncio.wait_for(
-                process.communicate(), timeout=self.initial_job_request.timeout_seconds
+                self.process.communicate(), timeout=self.initial_job_request.timeout_seconds
             )
             stdout = result[0].decode()
             stderr = result[1].decode()
@@ -610,13 +631,13 @@ class JobRunner:
             logger.error(
                 f"Process didn't finish in time, killing it, job_uuid={self.initial_job_request.job_uuid}"
             )
-            process.kill()
+            self.process.kill()
             timeout = True
             exit_status = None
-            stdout = (await process.stdout.read()).decode() if process.stdout else ""
-            stderr = (await process.stderr.read()).decode() if process.stderr else ""
+            stdout = (await self.process.stdout.read()).decode() if self.process.stdout else ""
+            stderr = (await self.process.stderr.read()).decode() if self.process.stderr else ""
         else:
-            exit_status = process.returncode
+            exit_status = self.process.returncode
             timeout = False
 
         # if streaming job, stop the associated nginx server
@@ -664,8 +685,8 @@ class JobRunner:
         else:
             time_took = time.time() - t1
             logger.error(
-                f'"{" ".join(cmd)}" (job_uuid={self.initial_job_request.job_uuid})'
-                f' failed after {time_took:0.2f} seconds with status={process.returncode}'
+                f'"{" ".join(self.cmd)}" (job_uuid={self.initial_job_request.job_uuid})'
+                f' failed after {time_took:0.2f} seconds with status={self.process.returncode}'
                 f' \nstdout="{stdout}"\nstderr="{stderr}'
             )
 
@@ -867,9 +888,7 @@ class Command(BaseCommand):
                 logger.debug(f"Scraping hardware specs for job {initial_message.job_uuid}")
                 specs = get_machine_specs()
 
-                # TODO: get I AM READY response from the streaming job before continuing
-
-                await miner_client.send_ready(certificate=job_runner.executor_certificate)
+                await miner_client.send_ready()
                 logger.debug(f"Informed miner that I'm ready for job {initial_message.job_uuid}")
 
                 job_request = await miner_client.full_payload
@@ -880,9 +899,28 @@ class Command(BaseCommand):
                     await miner_client.send_failed_to_prepare()
                     return
                 logger.debug(f"Running job {initial_message.job_uuid}")
-                result = await job_runner.run_job(job_request)
-                result.specs = specs
 
+                # start the job running process
+                result = await job_runner.start_job(job_request)
+                if result is None:
+                    # check that the job is ready to serve requests
+                    if job_runner.executor_certificate is not None:
+                        ip = await get_docker_container_ip(job_runner.job_container_name)
+                        job_ready = await check_endpoint(
+                            f"http://{ip}:{JOB_CONTAINER_PORT}/ready",
+                            WAIT_FOR_STREAMING_JOB_TIMEOUT,
+                        )
+                        if job_ready:
+                            await miner_client.send_streaming_job_ready(
+                                certificate=job_runner.executor_certificate
+                            )
+                        else:
+                            await miner_client.send_streaming_job_failed_to_prepare()
+
+                    # wait for the job process to finish
+                    result = await job_runner.wait_for_job(job_request)
+
+                result.specs = specs
                 if result.success:
                     await miner_client.send_finished(result)
                 else:

@@ -97,22 +97,23 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
         await self.send(miner_initial_job_request.model_dump_json())
 
     async def handle(self, msg: BaseExecutorRequest):
-        if isinstance(msg, executor_requests.V0ReadyRequest) or isinstance(
-            msg, executor_requests.V1ReadyRequest
-        ):
+        if isinstance(msg, executor_requests.V0ReadyRequest):
             self.job.status = AcceptedJob.Status.WAITING_FOR_PAYLOAD
             await self.job.asave()
-            if isinstance(msg, executor_requests.V1ReadyRequest):
-                executor_ip = self.scope["client"][0]
-                await self.send_executor_ready(
-                    self.executor_token, public_key=msg.public_key, ip=executor_ip, port=msg.port
-                )
-            else:
-                await self.send_executor_ready(self.executor_token)
+            await self.send_executor_ready(self.executor_token)
         if isinstance(msg, executor_requests.V0FailedToPrepare):
             self.job.status = AcceptedJob.Status.FAILED
             await self.job.asave()
             await self.send_executor_failed_to_prepare(self.executor_token)
+        if isinstance(msg, executor_requests.V0StreamingJobReadyRequest):
+            executor_ip = self.scope["client"][0]
+            await self.send_streaming_job_ready(
+                self.executor_token, public_key=msg.public_key, ip=executor_ip, port=msg.port
+            )
+        if isinstance(msg, executor_requests.V0StreamingJobFailedToPrepareRequest):
+            self.job.status = AcceptedJob.Status.FAILED
+            await self.job.asave()
+            await self.send_streaming_job_failed_to_prepare(self.executor_token)
         if isinstance(msg, executor_requests.V0FinishedRequest):
             self.job.status = AcceptedJob.Status.FINISHED
             self.job.stderr = msg.docker_process_stderr
