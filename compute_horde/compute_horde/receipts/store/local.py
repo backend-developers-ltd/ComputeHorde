@@ -91,6 +91,18 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         except FileNotFoundError:
             pass
 
+    def delete_pages_older_than(self, older_than: int | datetime) -> None:
+        if isinstance(older_than, datetime):
+            older_than = self.current_page_at(older_than)
+
+        old_pages = [p for p in self.get_available_pages() if p < older_than]
+
+        for old_page in old_pages:
+            try:
+                self.delete_page(old_page)
+            except Exception:
+                logger.exception("Error while deleting page %s", old_page, exc_info=True)
+
     def archive_old_pages(self) -> None:
         """
         Create archives for all old pages if they don't exist yet.

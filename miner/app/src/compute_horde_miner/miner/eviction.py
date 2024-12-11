@@ -33,11 +33,4 @@ def evict_receipts() -> None:
 
     logger.info("Evicting old receipt pages")
     store = LocalFilesystemPagedReceiptStore()
-    all_pages = store.get_available_pages()
-    cutoff_page = store.current_page_at(cutoff)
-    to_delete = [p for p in all_pages if p < cutoff_page]
-    for page in to_delete:
-        try:
-            store.delete_page(page)
-        except Exception:
-            logger.exception(f"Could not delete page receipt page {page}", exc_info=True)
+    store.delete_pages_older_than(cutoff)

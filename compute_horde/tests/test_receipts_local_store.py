@@ -90,6 +90,18 @@ def test_lists_available_pages(local_store):
         assert sorted(local_store.get_available_pages()) == expected_pages
 
 
+def test_deletes_old_pages(local_store):
+    with patch.object(LocalFilesystemPagedReceiptStore, "current_page") as current_page:
+        for page_to_create in range(1, 10):  # 1-9 inclusive
+            current_page.return_value = page_to_create
+            local_store.store([random_receipt()])
+
+        assert local_store.get_available_pages() == [*range(1, 10)]
+
+        local_store.delete_pages_older_than(5)
+        assert local_store.get_available_pages() == [*range(5, 10)]
+        
+
 @pytest.fixture(autouse=True)
 def time_freezer():
     with freeze_time("2024-12-01T00:00:00Z") as freezer:
