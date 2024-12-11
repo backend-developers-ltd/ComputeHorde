@@ -40,10 +40,11 @@ async def test_rejects_bad_lines(miner_keypair, validator_keypair):
     session.get.return_value.status = 200
     session.get.return_value.read = AsyncMock(return_value=b"\n".join(lines_to_serve))
 
-    n_receipts, n_transfer_errors = await do_transfer(session=session)
+    result = await do_transfer(session=session)
 
-    assert n_receipts == 3
-    assert n_transfer_errors == 0
+    assert result.n_receipts == 3
+    assert len(result.transfer_errors) == 0
+    assert len(result.line_errors) == 5
     assert await JobStartedReceipt.objects.acount() == 3
 
 
@@ -83,10 +84,11 @@ async def test_rejects_bad_signatures(miner_keypair, validator_keypair):
     session.get.return_value.status = 200
     session.get.return_value.read = AsyncMock(return_value=b"\n".join(lines_to_serve))
 
-    n_receipts, n_transfer_errors = await do_transfer(session=session)
+    result = await do_transfer(session=session)
 
-    assert n_receipts == 0
-    assert n_transfer_errors == 0
+    assert result.n_receipts == 0
+    assert len(result.transfer_errors) == 0
+    assert len(result.line_errors) == 3
     assert await JobStartedReceipt.objects.acount() == 0
 
 
@@ -111,12 +113,11 @@ async def test_handles_failures(miner_keypair, mocked_checkpoint_backend):
     ]
     session.get = AsyncMock(side_effect=response_effects)
 
-    n_receipts, n_transfer_errors = await do_transfer(
-        session=session, pages=[*range(len(response_effects))]
-    )
+    result = await do_transfer(session=session, pages=[*range(len(response_effects))])
 
-    assert n_receipts == 0
-    assert n_transfer_errors == len(response_effects)
+    assert result.n_receipts == 0
+    assert len(result.transfer_errors) == len(response_effects)
+    assert len(result.line_errors) == 0
     assert mocked_checkpoint_backend.value == 0
     assert await JobStartedReceipt.objects.acount() == 0
     # implicit assertion - none of the exceptions sneak out
@@ -165,25 +166,28 @@ async def test_uses_checkpoints(miner_keypair, validator_keypair, mocked_checkpo
         no_more_content_response,
     ]
 
-    n_receipts, n_transfer_errors = await do_transfer(session=session)
-    assert n_receipts == 3
-    assert n_transfer_errors == 0
+    result = await do_transfer(session=session)
+    assert result.n_receipts == 3
+    assert len(result.transfer_errors) == 0
+    assert len(result.line_errors) == 0
     assert mocked_checkpoint_backend.value == len(initial_data)
     assert await JobStartedReceipt.objects.acount() == 3
 
-    n_receipts, n_transfer_errors = await do_transfer(session=session)
+    result = await do_transfer(session=session)
     _, get_kwargs = session.get.call_args
     assert get_kwargs["headers"]["Range"] == f"bytes={len(initial_data)}-"
-    assert n_receipts == 2
-    assert n_transfer_errors == 0
+    assert result.n_receipts == 2
+    assert len(result.transfer_errors) == 0
+    assert len(result.line_errors) == 0
     assert mocked_checkpoint_backend.value == 1337
     assert await JobStartedReceipt.objects.acount() == 5
 
-    n_receipts, n_transfer_errors = await do_transfer(session=session)
+    result = await do_transfer(session=session)
     _, get_kwargs = session.get.call_args
     assert get_kwargs["headers"]["Range"] == f"bytes={1337}-"
-    assert n_receipts == 0
-    assert n_transfer_errors == 0
+    assert result.n_receipts == 0
+    assert len(result.transfer_errors) == 0
+    assert len(result.line_errors) == 0
     assert mocked_checkpoint_backend.value == 1337
     assert await JobStartedReceipt.objects.acount() == 5
 

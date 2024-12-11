@@ -30,7 +30,7 @@ class DjangoCacheTransferCheckpointBackend(TransferCheckpointBackend):
         try:
             return int(await self.cache.aget(key, 0))
         except TypeError:
-            logger.warning(f"Django cache contained non-integer checkpoint value for {key}")
+            logger.error(f"Django cache contained non-integer checkpoint value for {key}. Defaulting to 0.")
             return 0
 
     async def set(self, key: str, checkpoint: int) -> None:

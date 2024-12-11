@@ -169,7 +169,7 @@ class Command(BaseCommand):
         """
         for idx, page in enumerate(pages):
             start_time = time.monotonic()
-            receipts, exceptions = await ReceiptsTransfer.transfer(
+            result = await ReceiptsTransfer.transfer(
                 miners=await miners(),
                 pages=[page],
                 session=session,
@@ -178,15 +178,16 @@ class Command(BaseCommand):
                 request_timeout=3.0,
             )
             elapsed = time.monotonic() - start_time
-            rps = receipts / elapsed
+            rps = result.n_receipts / elapsed
 
             logger.info(
                 f"Catching up: "
                 f"{page=} ({idx + 1}/{len(pages)}) "
-                f"{receipts=} "
+                f"receipts={result.n_receipts} "
                 f"{elapsed=:.3f} "
                 f"{rps=:.0f} "
-                f"{exceptions=} "
+                f"transfer_errors={len(result.transfer_errors)} "
+                f"line_errors={len(result.line_errors)} "
             )
 
     async def keep_up(
@@ -203,7 +204,7 @@ class Command(BaseCommand):
             start_time = time.monotonic()
             current_page = LocalFilesystemPagedReceiptStore.current_page()
             pages = list(reversed(range(current_page - N_ACTIVE_PAGES + 1, current_page + 1)))
-            receipts, exceptions = await ReceiptsTransfer.transfer(
+            result = await ReceiptsTransfer.transfer(
                 miners=await miners(),
                 pages=pages,
                 session=session,
@@ -211,15 +212,16 @@ class Command(BaseCommand):
                 request_timeout=1.0,
             )
             elapsed = time.monotonic() - start_time
-            rps = receipts / elapsed
+            rps = result.n_receipts / elapsed
 
             logger.info(
                 f"Keeping up: "
                 f"{pages=} "
-                f"{receipts=} "
+                f"receipts={result.n_receipts} "
                 f"{elapsed=:.3f} "
                 f"{rps=:.0f} "
-                f"{exceptions=} "
+                f"transfer_errors={len(result.transfer_errors)} "
+                f"line_errors={len(result.line_errors)} "
             )
 
             # Sleep for the remainder of the time if any

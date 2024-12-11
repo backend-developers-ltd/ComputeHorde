@@ -2,6 +2,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import dataclass
 from io import BytesIO
 from typing import TypeAlias
 
@@ -24,6 +25,29 @@ logger = logging.getLogger(__name__)
 MinerInfo: TypeAlias = tuple[str, str, int]
 
 
+class TransferException(Exception):
+    def __init__(self, miner: MinerInfo, page: int):
+        super().__init__(f"Transfer failed: {miner=} {page=}")
+        self.miner: MinerInfo = miner
+        self.page: int = page
+
+
+class LineException(Exception):
+    def __init__(
+        self,
+        cause: pydantic.ValidationError | BadMinerReceiptSignature | BadValidatorReceiptSignature,
+    ):
+        super().__init__(f"Transferred line skipped: {type(cause).__name__}: {cause}")
+        self.__cause__ = self.cause = cause
+
+
+@dataclass
+class TransferResult:
+    n_receipts: int
+    transfer_errors: list[TransferException]
+    line_errors: list[LineException]
+
+
 class ReceiptsTransfer:
     """
     HTTP client for fetching receipts from a target based on an HTTP URL.
@@ -38,7 +62,7 @@ class ReceiptsTransfer:
         session: aiohttp.ClientSession,
         semaphore: asyncio.Semaphore,
         request_timeout: float,
-    ) -> tuple[int, int]:
+    ) -> TransferResult:
         """
         Efficiently transfer receipts from multiple miners at the same time, storing them in local database.
         Still, the number of pages transferred at the same time should be limited to 1-2.
@@ -46,7 +70,7 @@ class ReceiptsTransfer:
 
         async def rate_limited_transfer(
             transfer: ReceiptsTransfer, page: int, session: aiohttp.ClientSession
-        ):
+        ) -> tuple[list[Receipt], list[LineException]]:
             try:
                 async with semaphore:
                     # This both fetches and verifies the receipts.
@@ -55,11 +79,12 @@ class ReceiptsTransfer:
                         session=session,
                         timeout=request_timeout,
                     )
-            except (TimeoutError, Exception) as e:
-                logger.error(
-                    f"Transfer failed: " f"{miner=} " f"{page=} " f"{type(e).__name__} " f"{e}",
-                )
+            except (RuntimeError, ImproperlyConfigured):
+                # Don't catch this as it may block the script from exiting.
                 raise
+            except (TimeoutError, Exception) as e:
+                # Wrap other exceptions as transfer exceptions
+                raise TransferException(miner, page) from e
 
         # Create transfer tasks, one transfer task = one page from one miner
         transfer_tasks = []
@@ -74,12 +99,14 @@ class ReceiptsTransfer:
         # Place received receipts into buckets based on receipt model type
         receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
         total_receipts = 0
-        failures = 0
+        transfer_errors: list[TransferException] = []
+        line_errors: list[LineException] = []
 
         # Wait for transfer tasks in parallel, handle a batch of receipts as soon as any is available
         for transfer_task in asyncio.as_completed(transfer_tasks):
             try:
-                transferred_batch = await transfer_task
+                transferred_batch, batch_line_errors = await transfer_task
+                line_errors.extend(batch_line_errors)
                 for receipt in transferred_batch:
                     model = receipt_to_django_model(receipt)
                     model_type = type(model)
@@ -90,11 +117,8 @@ class ReceiptsTransfer:
                         total_receipts += len(bucket)
                         logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
                         bucket.clear()
-            except (RuntimeError, ImproperlyConfigured):
-                # Don't catch this as it may block the script from exiting.
-                raise
-            except (TimeoutError, Exception):
-                failures += 1
+            except TransferException as e:
+                transfer_errors.append(e)
                 continue
 
         # Insert the remainder of the receipts
@@ -103,14 +127,14 @@ class ReceiptsTransfer:
             total_receipts += len(bucket)
             logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
 
-        return total_receipts, failures
+        return TransferResult(total_receipts, transfer_errors, line_errors)
 
     def __init__(self, server_url: str):
         self._receipts_url = server_url.rstrip("/")
 
     async def get_new_receipts_on_page(
         self, page: int, session: aiohttp.ClientSession, timeout: float
-    ) -> list[Receipt]:
+    ) -> tuple[list[Receipt], list[LineException]]:
         """
         Fetch a batch of receipts from remote server.
         Will start from last checkpoint for this page, if available.
@@ -148,15 +172,15 @@ class ReceiptsTransfer:
             # 404 - miner doesn't have the page (yet / anymore / at all)
             # 416 - no new receipts on page
             logger.debug(f"Nothing to fetch from {page_url}: {response.status}")
-            return []
+            return [], []
         if response.status not in {200, 206}:
             raise Exception(f"Request failed for {page_url}: {response.status}")
         jsonl_content = await response.read()
 
         # Put this on a worker thread, otherwise other HTTP requests are more likely to time out waiting for this.
-        receipts = await sync_to_async(self._to_valid_receipts, thread_sensitive=False)(
-            jsonl_content
-        )
+        receipts, line_errors = await sync_to_async(
+            self._to_valid_receipts, thread_sensitive=False
+        )(jsonl_content)
 
         # Save the checkpoint
         if use_range_request:
@@ -170,46 +194,52 @@ class ReceiptsTransfer:
             # We got the complete page file, use its size for next checkpoint.
             await checkpoints.set(checkpoint_key, len(jsonl_content))
 
-        return receipts
+        return receipts, line_errors
 
     def page_url(self, page: int) -> str:
         return f"{self._receipts_url}/{page}.jsonl"
 
-    def _to_valid_receipts(self, received_bytes: bytes) -> list[Receipt]:
+    def _to_valid_receipts(
+        self, received_bytes: bytes
+    ) -> tuple[list[Receipt], list[LineException]]:
         """
         Converts a received JSONL chunk into valid, signed receipts - one line at a time.
         Skips anything else.
         """
-        receipts = []
+        receipts: list[Receipt] = []
+        line_errors: list[LineException] = []
         for line in BytesIO(received_bytes):
             try:
                 receipt = Receipt.model_validate_json(line)
                 receipt.verify_miner_signature(throw=True)
                 receipt.verify_validator_signature(throw=True)
                 receipts.append(receipt)
-            except pydantic.ValidationError:
+            except pydantic.ValidationError as e:
                 # This is potentially a serious issue.
                 # A receipt line that doesn't validate could be a schema mismatch or an incomplete receipt line.
                 # Schema incompatibility is a showstopper for syncing a miner.
                 # Incomplete receipts will get lost in transfer and the cause of it must be investigated.
-                logger.error(
+                logger.info(
                     "skipping line: failed validation: %s%s",
                     line[:100],
                     " (...)" if len(line) > 100 else "",
                 )
+                line_errors.append(LineException(e))
                 continue
             except BadMinerReceiptSignature as e:
-                logger.warning(
+                logger.info(
                     "Skipping %s with bad miner signature: %s",
                     e.receipt.payload.receipt_type,
                     e.receipt.payload.job_uuid,
                 )
+                line_errors.append(LineException(e))
                 continue
             except BadValidatorReceiptSignature as e:
-                logger.warning(
+                logger.info(
                     "Skipping %s with bad validator signature: %s",
                     e.receipt.payload.receipt_type,
                     e.receipt.payload.job_uuid,
                 )
+                line_errors.append(LineException(e))
                 continue
-        return receipts
+        return receipts, line_errors
