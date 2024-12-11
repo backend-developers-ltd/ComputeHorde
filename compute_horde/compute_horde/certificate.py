@@ -76,8 +76,10 @@ async def start_nginx(
     url = f"http://{ip}/ok"
     nginx_started = await check_endpoint(url, timeout)
     if not nginx_started:
+        stdout = stdout.decode() if stdout else ""
+        stderr = stderr.decode() if stderr else ""
         raise Exception(
-            f"Failed to ping nginx on {url} - server init stdout: {stdout.decode()}, stderr: {stderr.decode()}"
+            f"Failed to ping nginx on {url} - server init stdout: {stdout}, stderr: {stderr}"
         )
 
 
