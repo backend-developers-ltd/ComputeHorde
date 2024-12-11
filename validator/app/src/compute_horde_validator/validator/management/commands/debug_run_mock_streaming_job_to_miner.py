@@ -9,7 +9,7 @@ import requests
 import uvloop
 from asgiref.sync import async_to_sync
 from compute_horde.certificate import generate_certificate_at
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.executor_class import ExecutorClass
 from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,
@@ -45,6 +45,7 @@ class StreamingMinerClient(OrganicMinerClient):
 def get_mock_job_details():
     return OrganicJobDetails(
         job_uuid=str(uuid.uuid4()),
+        executor_class  = ExecutorClass.always_on__llm__a6000,
         docker_image="python:3.11-slim",
         docker_run_options_preset="none",
         raw_script="""
@@ -204,9 +205,6 @@ class Command(BaseCommand):
             "--miner_address", type=str, help="Miner IPv4 address", default="127.0.0.1"
         )
         parser.add_argument("--miner_port", type=int, help="Miner port", default=8000)
-        parser.add_argument(
-            "--executor_class", type=str, help="Executor class", default=DEFAULT_EXECUTOR_CLASS
-        )
 
     def handle(self, *args, **options):
         uvloop.install()
