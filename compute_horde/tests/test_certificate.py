@@ -40,7 +40,9 @@ http {
     server {
         listen 80;
         server_name localhost;
-        location /ok { return 200; } # to verify nginx exists
+
+        # for checking if nginx is running
+        location /ok { return 200; }
     }
 }
 
