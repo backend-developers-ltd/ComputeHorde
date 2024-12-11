@@ -221,6 +221,13 @@ services:
       <<: *logging
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
+      - "autoheal=true"
+    healthcheck:
+      test: [ "CMD", "python", "celery_beat_healthcheck.py" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 2m
 
   connect-facilitator:
     image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
