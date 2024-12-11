@@ -68,7 +68,7 @@ async def start_nginx(
         f"{dir_path}:/etc/nginx/",
         "nginx:1.26-alpine",
     )
-    stdout, stderr = await process.communicate()
+    _stdout, _stderr = await process.communicate()
     await process.wait()
 
     # wait for nginx to start
@@ -76,11 +76,9 @@ async def start_nginx(
     url = f"http://{ip}/ok"
     nginx_started = await check_endpoint(url, timeout)
     if not nginx_started:
-        stdout = stdout.decode() if stdout else ""
-        stderr = stderr.decode() if stderr else ""
-        raise Exception(
-            f"Failed to ping nginx on {url} - server init stdout: {stdout}, stderr: {stderr}"
-        )
+        stdout = _stdout.decode() if _stdout else ""
+        stderr = _stderr.decode() if _stderr else ""
+        raise Exception(f"Failed to ping nginx on {url} - server init {stdout=}, {stderr=}")
 
 
 def generate_certificate(alternative_name: str) -> tuple[Certificate, RSAPrivateKey]:

@@ -20,12 +20,20 @@ logger = logging.getLogger(__name__)
 
 class ExecutorReady(pydantic.BaseModel):
     executor_token: str
-    public_key: str | None = None
-    ip: str | None = None
-    port: int | None = None
 
 
 class ExecutorFailedToPrepare(pydantic.BaseModel):
+    executor_token: str
+
+
+class StreamingJobReady(pydantic.BaseModel):
+    executor_token: str
+    public_key: str
+    ip: str
+    port: int
+
+
+class StreamingJobFailedToPrepare(pydantic.BaseModel):
     executor_token: str
 
 
@@ -113,6 +121,26 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
     async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare): ...
 
     @log_errors_explicitly
+    async def streaming_job_ready(self, event: dict[str, Any]):
+        payload = self.validate_event("streaming_job_ready", StreamingJobReady, event)
+        if payload:
+            await self._streaming_job_ready(payload)
+
+    @abc.abstractmethod
+    async def _streaming_job_ready(self, msg: StreamingJobReady): ...
+
+    @log_errors_explicitly
+    async def streaming_job_failed_to_prepare(self, event: dict[str, Any]):
+        payload = self.validate_event(
+            "streaming_job_failed_to_prepare", StreamingJobFailedToPrepare, event
+        )
+        if payload:
+            await self._streaming_job_failed_to_prepare(payload)
+
+    @abc.abstractmethod
+    async def _streaming_job_failed_to_prepare(self, msg: StreamingJobFailedToPrepare): ...
+
+    @log_errors_explicitly
     async def executor_finished(self, event: dict[str, Any]):
         payload = self.validate_event("executor_finished", ExecutorFinished, event)
         if payload:
@@ -162,21 +190,13 @@ class ExecutorInterfaceMixin(BaseMixin):
     def group_name(cls, executor_token: str):
         return f"executor_interface_{executor_token}"
 
-    async def send_executor_ready(
-        self,
-        executor_token: str,
-        public_key: str | None = None,
-        ip: str | None = None,
-        port: int | None = None,
-    ):
+    async def send_executor_ready(self, executor_token: str):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
         await self.channel_layer.group_send(
             group_name,
             {
                 "type": "executor.ready",
-                **ExecutorReady(
-                    executor_token=executor_token, public_key=public_key, ip=ip, port=port
-                ).model_dump(),
+                **ExecutorReady(executor_token=executor_token).model_dump(),
             },
         )
 
@@ -187,6 +207,34 @@ class ExecutorInterfaceMixin(BaseMixin):
             {
                 "type": "executor.failed_to_prepare",
                 **ExecutorFailedToPrepare(executor_token=executor_token).model_dump(),
+            },
+        )
+
+    async def send_streaming_job_ready(
+        self,
+        executor_token: str,
+        public_key: str,
+        ip: str,
+        port: int,
+    ):
+        group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        await self.channel_layer.group_send(
+            group_name,
+            {
+                "type": "streaming_job.ready",
+                **StreamingJobReady(
+                    executor_token=executor_token, public_key=public_key, ip=ip, port=port
+                ).model_dump(),
+            },
+        )
+
+    async def send_streaming_job_failed_to_prepare(self, executor_token: str):
+        group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        await self.channel_layer.group_send(
+            group_name,
+            {
+                "type": "streaming_job.failed_to_prepare",
+                **StreamingJobFailedToPrepare(executor_token=executor_token).model_dump(),
             },
         )
 
