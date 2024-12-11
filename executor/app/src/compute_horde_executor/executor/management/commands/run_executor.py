@@ -97,8 +97,6 @@ http {
         listen 80;
         server_name localhost;
 
-        # Allow access only from the miner instance
-        allow {MINER_ADDRESS};
         allow 127.0.0.1;
         deny all;
 
