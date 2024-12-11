@@ -6,8 +6,9 @@ from ..utils import MachineSpecs
 
 class RequestType(enum.Enum):
     V0ReadyRequest = "V0ReadyRequest"
-    V1ReadyRequest = "V1ReadyRequest"
     V0FailedToPrepare = "V0FailedToPrepare"
+    V0StreamingJobReadyRequest = "V0StreamingJobReadyRequest"
+    V0StreamingJobFailedToPrepareRequest = "V0StreamingJobFailedToPrepareRequest"
     V0FinishedRequest = "V0FinishedRequest"
     V0FailedRequest = "V0FailedRequest"
     V0MachineSpecsRequest = "V0MachineSpecsRequest"
@@ -22,14 +23,19 @@ class V0ReadyRequest(BaseExecutorRequest, JobMixin):
     message_type: RequestType = RequestType.V0ReadyRequest
 
 
-class V1ReadyRequest(V0ReadyRequest):
-    message_type: RequestType = RequestType.V1ReadyRequest
+class V0FailedToPrepare(BaseExecutorRequest, JobMixin):
+    message_type: RequestType = RequestType.V0FailedToPrepare
+
+
+# signaling the streaming job is ready to accept connections from user
+class V0StreamingJobReadyRequest(BaseExecutorRequest, JobMixin):
+    message_type: RequestType = RequestType.V0StreamingJobReadyRequest
     public_key: str
     port: int
 
 
-class V0FailedToPrepare(BaseExecutorRequest, JobMixin):
-    message_type: RequestType = RequestType.V0FailedToPrepare
+class V0StreamingJobFailedToPrepareRequest(BaseExecutorRequest, JobMixin):
+    message_type: RequestType = RequestType.V0StreamingJobFailedToPrepareRequest
 
 
 class V0FailedRequest(BaseExecutorRequest, JobMixin):
