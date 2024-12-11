@@ -5,7 +5,7 @@ import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import requests
+import aiohttp
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -14,8 +14,6 @@ from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID
 
 logger = logging.getLogger(__name__)
-
-WAIT_FOR_NGINX_TIMEOUT = 10
 
 
 async def get_docker_container_ip(container_name: str) -> str:
@@ -31,11 +29,28 @@ async def get_docker_container_ip(container_name: str) -> str:
     return stdout.decode("utf-8").strip()
 
 
+async def check_endpoint(url, timeout) -> bool:
+    """
+    Pings endpoint every second until it returns 200 or timeout is reached.
+    """
+    async with aiohttp.ClientSession() as session:
+        for _ in range(timeout):
+            try:
+                response = await session.get(url)
+                if response.status == 200:
+                    return True
+            except aiohttp.ClientError as e:
+                logger.debug(f"Failed to ping {url}: {e}")
+            await asyncio.sleep(1)
+    return False
+
+
 async def start_nginx(
     nginx_conf: str,
     port: int,
     dir_path: Path,
     container_name: str = "job-nginx",
+    timeout: int = 10,
 ):
     nginx_conf_file = dir_path / "nginx.conf"
     nginx_conf_file.write_text(nginx_conf)
@@ -59,17 +74,7 @@ async def start_nginx(
     # wait for nginx to start
     ip = await get_docker_container_ip(container_name)
     url = f"http://{ip}/ok"
-    nginx_started = False
-    for _ in range(WAIT_FOR_NGINX_TIMEOUT):
-        try:
-            if requests.get(url).status_code == 200:
-                nginx_started = True
-                break
-        except Exception as e:
-            logger.debug(f"Failed to ping nginx on {url}: {e}")
-            pass
-        await asyncio.sleep(1)
-
+    nginx_started = await check_endpoint(url, timeout)
     if not nginx_started:
         raise Exception(
             f"Failed to ping nginx on {url} - server init stdout: {stdout.decode()}, stderr: {stderr.decode()}"
