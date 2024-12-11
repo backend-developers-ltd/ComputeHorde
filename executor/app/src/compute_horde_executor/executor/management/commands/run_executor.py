@@ -87,26 +87,22 @@ http {
 
         location / {
             if ($ssl_client_verify != SUCCESS) { return 403; }
-            # hack to make nginx not complain about host not found in upstream
-            set $upstream CONTAINER;
-            proxy_pass http://$upstream;
+            proxy_pass http://CONTAINER;
         }
     }
 
     server {
+        # this port is not public - only executor connects to it
         listen 80;
         server_name localhost;
 
-        allow 127.0.0.1;
-        deny all;
-
-        location /health {
-            # hack to make nginx not complain about host not found in upstream
-            set $upstream CONTAINER;
-            proxy_pass http://$upstream/health;
+        # for checking if job is ready to serve requests
+        location /ready {
+            proxy_pass http://CONTAINER/health;
         }
 
-        location /ok { return 200; } # to verify nginx exists
+        # for checking if nginx is running
+        location /ok { return 200; }
     }
 }
 
@@ -114,6 +110,9 @@ events {
     worker_connections 1024;
 }
 """
+
+WAIT_FOR_STREAMING_JOB_TIMEOUT = 10
+WAIT_FOR_NGINX_TIMEOUT = 10
 
 
 class RunConfigManager:
@@ -573,14 +572,17 @@ class JobRunner:
 
                 # update the nginx conf with the job container ip
                 nginx_conf = NGINX_CONF.replace("CONTAINER", f"{job_ip}:{JOB_CONTAINER_PORT}")
+
                 # allow connections from miner address for health checks
                 nginx_conf = NGINX_CONF.replace("MINER_ADDRESS", settings.MINER_ADDRESS)
-
+                # allow connections from miner address for health checks
+                nginx_conf = NGINX_CONF.replace("MINER_ADDRESS", settings.MINER_ADDRESS)
                 await start_nginx(
                     nginx_conf,
                     port=settings.NGINX_PORT,
                     dir_path=self.nginx_dir_path,
                     container_name=self.nginx_container_name,
+                    timeout=WAIT_FOR_NGINX_TIMEOUT,
                 )
                 logger.debug("Nginx started successfully")
             except Exception as e:
