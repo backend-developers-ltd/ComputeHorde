@@ -139,7 +139,9 @@ class Command(BaseCommand):
         else:
             await self.run_in_loop(interval, cutoff, miners)
 
-    async def run_once(self, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]):
+    async def run_once(
+        self, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]
+    ) -> None:
         catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff)
         current_page = LocalFilesystemPagedReceiptStore.current_page()
         async with aiohttp.ClientSession() as session:
@@ -153,7 +155,7 @@ class Command(BaseCommand):
 
     async def run_in_loop(
         self, interval: float, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]
-    ):
+    ) -> None:
         """
         Do a full catch-up + listen for changes in latest 2 pages indefinitely
         """
@@ -195,7 +197,7 @@ class Command(BaseCommand):
         miners: Callable[[], Awaitable[list[MinerInfo]]],
         session: aiohttp.ClientSession,
         semaphore: asyncio.Semaphore,
-    ):
+    ) -> None:
         """
         Fetches new receipts on given pages one by one.
         """
@@ -231,7 +233,7 @@ class Command(BaseCommand):
         miners: Callable[[], Awaitable[list[MinerInfo]]],
         session: aiohttp.ClientSession,
         semaphore: asyncio.Semaphore,
-    ):
+    ) -> None:
         """
         Runs indefinitely and polls for changes in active pages every `interval`.
         """
@@ -266,7 +268,7 @@ class Command(BaseCommand):
             if elapsed < interval:
                 time.sleep(interval - elapsed)
 
-    def _push_common_metrics(self, result: TransferResult):
+    def _push_common_metrics(self, result: TransferResult) -> None:
         n_line_errors: defaultdict[type[Exception], int] = defaultdict(int)
         for line_error in result.line_errors:
             n_line_errors[type(line_error)] += 1
