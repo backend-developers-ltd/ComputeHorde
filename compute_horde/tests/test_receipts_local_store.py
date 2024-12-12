@@ -96,10 +96,10 @@ def test_deletes_old_pages(local_store):
             current_page.return_value = page_to_create
             local_store.store([random_receipt()])
 
-        assert local_store.get_available_pages() == [*range(1, 10)]
+        assert sorted(local_store.get_available_pages()) == [*range(1, 10)]
 
         local_store.delete_pages_older_than(5)
-        assert local_store.get_available_pages() == [*range(5, 10)]
+        assert sorted(local_store.get_available_pages()) == [*range(5, 10)]
 
 
 @pytest.fixture(autouse=True)
