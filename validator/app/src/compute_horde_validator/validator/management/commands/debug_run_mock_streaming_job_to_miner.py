@@ -35,49 +35,13 @@ from django.core.management.base import BaseCommand
 logger = logging.getLogger(__name__)
 
 
-class StreamingMinerClient(OrganicMinerClient):
-    """
-    Miner client to run streaming job on a miner.
-    """
-
-    pass
-
-
 def get_mock_job_details():
     return OrganicJobDetails(
         job_uuid=str(uuid.uuid4()),
         executor_class=ExecutorClass.always_on__llm__a6000,
-        docker_image="python:3.11-slim",
+        docker_image="backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
         docker_run_options_preset="none",
-        raw_script="""
-import os
-import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
-
-class SimpleHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/execute-job":
-            self.send_response(200)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"OK")
-            time.sleep(2)
-            os._exit(0)  # Mock job finish after endpoint was hit
-        elif self.path == "/ready":
-            self.send_response(200)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"OK")
-        else:
-            self.send_response(404)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"Not Found")
-
-if __name__ == '__main__':
-    httpd = HTTPServer(("0.0.0.0", 8000), SimpleHandler)
-    httpd.serve_forever()
-""",
+        docker_run_cmd=["python", "./mock_streaming_job.py"],
     )
 
 
@@ -88,7 +52,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
 
     job_details = get_mock_job_details()
 
-    client = StreamingMinerClient(
+    client = OrganicMinerClient(
         miner_hotkey=miner_hotkey,
         miner_address=miner_address,
         miner_port=miner_port,
