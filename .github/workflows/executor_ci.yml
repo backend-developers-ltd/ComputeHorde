@@ -87,5 +87,8 @@ jobs:
       - name: Build backenddevelopersltd/compute-horde-job-echo:v0-latest image
         run: docker build . -t backenddevelopersltd/compute-horde-job-echo:v0-latest
         working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_tests
+      - name: Build backenddevelopersltd/compute-horde-streaming-job-test:v0-latest image
+        run: docker build . -t backenddevelopersltd/compute-horde-streaming-job-test:v0-latest
+        working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_streaming_job_tests
       - name: Run unit tests
         run: nox -vs test
