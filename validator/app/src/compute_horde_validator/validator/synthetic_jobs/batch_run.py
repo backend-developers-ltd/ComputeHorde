@@ -110,6 +110,7 @@ _MAX_MINER_CLIENT_DEBOUNCE_COUNT = 4  # approximately 32 seconds
 
 _LLM_ANSWERS_DOWNLOAD_MAX_ATTEMPTS = 5
 _LLM_ANSWERS_DOWNLOAD_MAX_WORKERS = 100
+_LLM_ANSWERS_DOWNLOAD_RETRY_MIN_BACKOFF = 0.2
 
 # Celery job timeouts
 SYNTHETIC_JOBS_SOFT_LIMIT = 20 * 60
@@ -1543,27 +1544,44 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
 
 class LlmAnswerDownloadTask:
-    def __init__(self, job_generator: LlmPromptsSyntheticJobGenerator):
-        self.job_generator = job_generator
+    def __init__(self, job: Job):
+        self.job = job
         self.attempt = 0
         self.last_tried: datetime | None = None
 
+        assert isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator)
+        self.job_generator = job.job_generator
 
-async def _download_llm_prompts_answers_worker(queue: asyncio.Queue[LlmAnswerDownloadTask]) -> None:
+
+class LlmAnswerDownloadTaskFailed(Exception):
+    def __init__(self, msg: str, task: LlmAnswerDownloadTask):
+        super().__init__(msg)
+        self.task = task
+
+
+async def _download_llm_prompts_answers_worker(
+    queue: asyncio.Queue[LlmAnswerDownloadTask],
+) -> list[LlmAnswerDownloadTaskFailed]:
+    failures = []
     while True:
         try:
             task = queue.get_nowait()
         except asyncio.QueueEmpty:
-            # No task left in the queue, exit worker.
+            # No task left in the queue, exit worker loop.
             # Note: if a task is put back into the queue for retry after this worker exits,
             # the worker putting it back should still be alive. So the task will not be ignored.
-            return
+            break
 
         if task.attempt >= _LLM_ANSWERS_DOWNLOAD_MAX_ATTEMPTS:
+            msg = "llm prompt answer download task exceeded max attempts"
+            logging.warning(msg)
+            failures.append(LlmAnswerDownloadTaskFailed(msg, task))
             continue
 
         if task.last_tried:
-            backoff_seconds = 0.2 * (2**task.attempt) + 0.1 * random.random()
+            backoff_seconds = (
+                _LLM_ANSWERS_DOWNLOAD_RETRY_MIN_BACKOFF * (2**task.attempt) + 0.1 * random.random()
+            )
             sleep_until = task.last_tried + timedelta(seconds=backoff_seconds)
             if sleep_until > datetime.now(tz=UTC):
                 sleep_time = sleep_until - datetime.now(tz=UTC)
@@ -1571,10 +1589,17 @@ async def _download_llm_prompts_answers_worker(queue: asyncio.Queue[LlmAnswerDow
 
         try:
             await task.job_generator.download_answers()
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
+            logger.info(
+                "llm prompt answers download failed at attempt %s with exception: %r",
+                task.attempt,
+                exc,
+            )
             task.last_tried = datetime.now(tz=UTC)
             task.attempt += 1
             queue.put_nowait(task)
+
+    return failures
 
 
 async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
@@ -1590,25 +1615,34 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
             and isinstance(job.job_response, V0JobFinishedRequest)
         ):
             finished_llm_jobs.append(job)
-            task_queue.put_nowait(LlmAnswerDownloadTask(job.job_generator))
+            task_queue.put_nowait(LlmAnswerDownloadTask(job))
 
     num_workers = min(task_queue.qsize(), _LLM_ANSWERS_DOWNLOAD_MAX_WORKERS)
     workers = [_download_llm_prompts_answers_worker(task_queue) for _ in range(num_workers)]
     results = await asyncio.gather(*workers, return_exceptions=True)
 
-    for i, result in enumerate(results):
+    for result in results:
         if isinstance(result, BaseException):
-            job = finished_llm_jobs[i]
-            logger.warning("failed to get llm prompt answers of %s: %r", job.name, result)
+            logger.warning("llm prompt answer download worker failed: %r", result)
             ctx.system_event(
                 type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
-                subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
+                subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED,
                 description=repr(result),
-                miner_hotkey=job.miner_hotkey,
                 func="_download_llm_prompts_answers",
             )
         else:
-            assert result is None
+            assert isinstance(result, list)
+            for exc in result:
+                assert isinstance(exc, LlmAnswerDownloadTaskFailed)
+                job = exc.task.job
+                logger.warning("failed to get llm prompt answers of %s: %r", job.name, exc)
+                ctx.system_event(
+                    type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+                    subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
+                    description=repr(exc),
+                    miner_hotkey=job.miner_hotkey,
+                    func="_download_llm_prompts_answers",
+                )
 
     duration = time.time() - start_time
     logger.info("Downloaded miners' llm prompt answers in %.2f seconds", duration)
