@@ -18,7 +18,7 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-	PDM_BUILD_SCM_VERSION=0 uv sync --frozen --no-install-project --no-dev --no-editable
+	PDM_BUILD_SCM_VERSION=0 uv sync --frozen --no-install-project --no-editable
 
 COPY ./app/src/ /root/src/
 COPY ./app/envs/prod/entrypoint.sh /root/src/
@@ -28,7 +28,7 @@ COPY ./app/envs/prod/prometheus-cleanup.sh /root/src/
 COPY ./app/envs/prod/vendor_setup.sh /root/src/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-	uv sync --frozen --no-dev --no-editable
+	uv sync --frozen --no-editable
 
 FROM $BASE_IMAGE AS secondary-image
 LABEL builder=false
