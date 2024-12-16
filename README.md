@@ -18,7 +18,7 @@ paving the way for Bittensor to scale beyond its current limitations to support 
   
 - **Fair and Verified Work**  
   ComputeHorde employs mechanisms to ensure miners provide authentic compute work, fairly verified by the validators:
-  - Execute tasks from all validators equally, regardless of their stake (above a rather low threshold).
+  - Execute tasks from validators stake-proportionally
   - Handle both **organic** (external, from other subnets) and **synthetic** (ComputeHorde miners validation) tasks.
   - Match jobs to the advertised hardware (e.g., ensuring A6000 GPUs are used for tasks requiring them).
   - Prevent malicious behaviors like "weight-copying" through innovative validation mechanisms.
@@ -30,7 +30,7 @@ paving the way for Bittensor to scale beyond its current limitations to support 
 - **Hardware Classes**  
   ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance. 
   Currently, **A6000** is the supported class, with **A100** coming next.
-  The end goal is to support all GPU types/configurations required by validators across Bittensor subnets.
+  The end goal is to eventually support all GPU types/configurations required by validators across Bittensor subnets.
 
 ## Bittensor context 
 
@@ -57,7 +57,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
   - Organic results are returned to external requesters.
   - Synthetic results adjust miners' scores.
 - Uses a separate GPU, called a **Trusted Miner**, to pre-run part of the validation tasks and establish expected results. 
-  The Trusted Miner shares the same code as a regular miner but is configured differently:
+  The Trusted Miner shares the same code as a regular miner, but is configured differently:
   - It is not registered in the metagraph.
   - It only accepts tasks from the associated validator.
 - [See validator's README for more details](validator/README.md)
@@ -85,7 +85,6 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 ### Encouraging Actual Mining
 - Synthetic tasks are designed to run only on specific hardware (e.g., A6000 GPUs), ensuring miners deliver the advertised compute power.
 - Scoring system incentivizing for completing organic tasks.
-- Mechanisms for penalizing miners serving only a subset of validators
 
 ## Development goals
 
