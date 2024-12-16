@@ -30,7 +30,6 @@ def maybe_create_default_admin(sender, **kwargs):
             )
 
 
-
 def maybe_init_sentry_from_facilitator():
     if settings.SENTRY_DSN:
         return
@@ -44,7 +43,6 @@ def maybe_init_sentry_from_facilitator():
 
     thread = threading.Thread(target=target)
     thread.start()
-
 
 
 class ValidatorConfig(AppConfig):
