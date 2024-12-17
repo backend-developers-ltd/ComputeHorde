@@ -45,6 +45,41 @@ This is achieved by distributing $TAO tokens to incentivize:
 Bittensor's end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
 ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnets operate effectively without relying on centralized cloud services.
 
+## Scoring Mechanism (in the making now, to be released soon)
+
+The **scoring mechanism** in ComputeHorde incentivizes miners to perform organic jobs while maintaining accountability and fairness in the network.
+
+The formula (calculated per validator) is as follows:
+
+- **1 point** for each successfully completed synthetic job.
+- **1 point** for each successfully completed organic job.
+- **1 point** for each **properly rejected** synthetic job.
+
+The goal is to stop penalizing miners from rejecting synthetic jobs, which makes them reject organic jobs
+
+### Proper Rejection
+
+A synthetic job is considered properly rejected when the miner provides a receipt proving 
+they are currently occupied with an **organic job** from a validator with the minimum stake 
+(configurable via a dynamic parameter).
+
+## Scoring Mechanism (in the making now, to be released soon)
+
+The **scoring mechanism** in ComputeHorde incentivizes miners to perform organic jobs while maintaining accountability and fairness in the network.
+
+The formula (calculated per validator) is as follows:
+
+- **1 point** for each successfully completed synthetic job.
+- **1 point** for each successfully completed organic job.
+- **1 point** for each **properly rejected** synthetic job.
+
+The goal is to eliminate the current disincentive where miners avoid organic jobs to avoid penalties for rejecting synthetic jobs.
+
+### Proper Rejection
+
+A synthetic job is considered properly rejected when the miner provides a receipt proving they are currently 
+occupied with an **organic job** from a validator with the minimum stake (configurable via a dynamic parameter).
+
 ## Components
 
 ### **Facilitator**
