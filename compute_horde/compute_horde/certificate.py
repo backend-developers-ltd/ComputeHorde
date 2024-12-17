@@ -162,11 +162,3 @@ def generate_certificate_at(
 
     public_key = serialize_certificate(certificate).decode("utf-8")
     return dir_path, public_key, (str(public_key_path), str(private_key_path))
-
-
-def read_certificate(cert_path: Path) -> str | None:
-    try:
-        return cert_path.read_bytes().decode("utf-8")
-    except Exception as e:
-        logger.error(f"Failed to read executor certificate at {cert_path}: {e}")
-        return None
