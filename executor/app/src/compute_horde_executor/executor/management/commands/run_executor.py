@@ -903,6 +903,7 @@ class Command(BaseCommand):
                 # start the job running process
                 result = await job_runner.start_job(job_request)
                 if result is None:
+                    # None result means this is a streaming job
                     # check that the job is ready to serve requests
                     if job_runner.executor_certificate is not None:
                         ip = await get_docker_container_ip(job_runner.job_container_name)
