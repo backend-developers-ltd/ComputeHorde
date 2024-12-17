@@ -4,8 +4,9 @@ from compute_horde.receipts.models import (
     JobStartedReceipt,
     ReceiptModel,
 )
-from compute_horde.receipts.store.current import receipt_store
 from django.core.management import BaseCommand
+
+from compute_horde_miner.miner.receipts import current_store
 
 
 class Command(BaseCommand):
@@ -17,4 +18,4 @@ class Command(BaseCommand):
         ]
         for receipt_cls in receipt_types:
             receipts = receipt_cls.objects.all()
-            receipt_store().store([r.to_receipt() for r in receipts])
+            current_store().store([r.to_receipt() for r in receipts])

@@ -8,9 +8,6 @@ from typing import TypeAlias
 from uuid import uuid4
 
 import bittensor
-from django.core.management.base import BaseCommand
-from django.utils import timezone
-
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts.models import (
     JobAcceptedReceipt,
@@ -23,8 +20,11 @@ from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.receipts.store.current import receipt_store
 from compute_horde.utils import sign_blob
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+
+from compute_horde_miner.miner.receipts import current_store
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class Command(BaseCommand):
                     by_type[type(receipt)].append(receipt)
                 for cls, receipts in by_type.items():
                     cls.objects.bulk_create(receipts)  # type: ignore
-                    receipt_store().store([r.to_receipt() for r in receipts])
+                    current_store().store([r.to_receipt() for r in receipts])
                     logger.info(f"Inserted {len(receipts)} {cls.__name__}")
                 added_so_far += current_chunk_size
 
@@ -67,7 +67,7 @@ class Command(BaseCommand):
                 for _ in range(self.n):
                     receipt = self.generate_one()
                     receipt.save()
-                    receipt_store().store([receipt.to_receipt()])
+                    current_store().store([receipt.to_receipt()])
                     receipts_this_loop.append(receipt)
                     time.sleep(time_per_receipt)
 
