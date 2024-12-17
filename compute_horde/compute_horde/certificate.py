@@ -20,13 +20,17 @@ async def get_docker_container_ip(container_name: str) -> str:
     process = await asyncio.create_subprocess_exec(
         "docker",
         "inspect",
-        container_name,
         "-f",
-        "{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+        "'{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'",
+        container_name,
         stdout=asyncio.subprocess.PIPE,
     )
     stdout, _ = await process.communicate()
-    return stdout.decode("utf-8").strip()
+    await process.wait()
+    if stdout:
+        return stdout.decode().strip()[1:-1]
+    else:
+        raise Exception(f"Failed to get IP of {container_name}")
 
 
 async def check_endpoint(url, timeout) -> bool:
@@ -49,30 +53,42 @@ async def start_nginx(
     nginx_conf: str,
     port: int,
     dir_path: Path,
+    job_network: str,
     container_name: str = "job-nginx",
     timeout: int = 10,
 ):
     nginx_conf_file = dir_path / "nginx.conf"
     nginx_conf_file.write_text(nginx_conf)
 
-    process = await asyncio.create_subprocess_exec(
+    cmd = [
         "docker",
         "run",
         "--detach",
         "--rm",
         "--name",
         container_name,
+        "--network",
+        "bridge",  # primary external network
         "-p",
-        f"{port}:443",
+        f"{port}:443",  # expose nginx port
         "-v",
         f"{dir_path}:/etc/nginx/",
         "nginx:1.26-alpine",
-    )
+    ]
+    process = await asyncio.create_subprocess_exec(*cmd)
     _stdout, _stderr = await process.communicate()
     await process.wait()
 
-    # wait for nginx to start
+    # make sure to get ip while there is still a single network
     ip = await get_docker_container_ip(container_name)
+
+    # connect to internal network for job communication
+    process = await asyncio.create_subprocess_exec(
+        "docker", "network", "connect", job_network, container_name
+    )
+    await process.wait()
+
+    # wait for nginx to start
     url = f"http://{ip}/ok"
     nginx_started = await check_endpoint(url, timeout)
     if not nginx_started:

@@ -468,6 +468,7 @@ class JobRunner:
 
         self.job_container_name = f"{settings.EXECUTOR_TOKEN}-job"
         self.nginx_container_name = f"{settings.EXECUTOR_TOKEN}-nginx"
+        self.job_network_name = f"{settings.EXECUTOR_TOKEN}-network"
         self.process: asyncio.subprocess.Process | None = None
         self.cmd: list[str] = []
 
@@ -552,6 +553,16 @@ class JobRunner:
                 exit_status=None,
             )
 
+        job_network = "none"
+        # if streaming job create a local network for it to communicate with nginx
+        if self.executor_certificate is not None:
+            logger.debug("Spinning up local network for streaming job")
+            job_network = self.job_network_name
+            process = await asyncio.create_subprocess_exec(
+                "docker", "network", "create", "--internal", self.job_network_name
+            )
+            await process.wait()
+
         self.cmd = [
             "docker",
             "run",
@@ -560,7 +571,7 @@ class JobRunner:
             self.job_container_name,
             "--rm",
             "--network",
-            "bridge",  # to allow the container to access the nginx server
+            job_network,
             "-v",
             f"{self.volume_mount_dir.as_posix()}/:/volume/",
             "-v",
@@ -593,6 +604,7 @@ class JobRunner:
                     nginx_conf,
                     port=settings.NGINX_PORT,
                     dir_path=self.nginx_dir_path,
+                    job_network=self.job_network_name,
                     container_name=self.nginx_container_name,
                     timeout=WAIT_FOR_NGINX_TIMEOUT,
                 )
@@ -715,6 +727,7 @@ class JobRunner:
             stderr=asyncio.subprocess.DEVNULL,
         )
         await process.wait()
+        await asyncio.create_subprocess_exec("docker", "network", "rm", self.job_network_name)
         self.temp_dir.rmdir()
 
     async def _unpack_volume(self, volume: Volume | None):
