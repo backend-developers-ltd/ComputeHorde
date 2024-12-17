@@ -14,7 +14,7 @@ class StreamingJobHandler(BaseHTTPRequestHandler):
             # Mock job finish after endpoint was hit
             time.sleep(2)
             os._exit(0)
-        elif self.path == "/ready":
+        elif self.path == "/health":
             self.send_response(200)
             self.send_header("Content-type", "text/plain")
             self.end_headers()
@@ -28,7 +28,7 @@ class StreamingJobHandler(BaseHTTPRequestHandler):
 
 class AutoStartStreamingJobHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/ready":
+        if self.path == "/health":
             self.send_response(200)
             self.send_header("Content-type", "text/plain")
             self.end_headers()

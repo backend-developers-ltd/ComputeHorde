@@ -98,8 +98,8 @@ http {
         server_name localhost;
 
         # for checking if job is ready to serve requests
-        location /ready {
-            proxy_pass http://CONTAINER/ready;
+        location /health {
+            proxy_pass http://CONTAINER/health;
         }
 
         # for checking if nginx is running
@@ -908,7 +908,7 @@ class Command(BaseCommand):
                     if job_runner.executor_certificate is not None:
                         ip = await get_docker_container_ip(job_runner.job_container_name)
                         job_ready = await check_endpoint(
-                            f"http://{ip}:{JOB_CONTAINER_PORT}/ready",
+                            f"http://{ip}:{JOB_CONTAINER_PORT}/health",
                             WAIT_FOR_STREAMING_JOB_TIMEOUT,
                         )
                         if job_ready:
