@@ -289,6 +289,11 @@ CONSTANCE_CONFIG = {
         "Maximum retries for organic jobs",
         int,
     ),
+    "DYNAMIC_RECEIPT_TRANSFER_ENABLED": (
+        True,
+        "Whether receipt transfer between miners and validators should be enabled",
+        bool,
+    ),
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 

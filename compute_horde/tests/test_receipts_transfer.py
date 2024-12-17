@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from compute_horde.receipts.models import JobStartedReceipt
-from compute_horde.receipts.transfer import ReceiptsTransfer
+from compute_horde.receipts.transfer import ReceiptsTransfer, TransferMustBeEnabledException
 from compute_horde.receipts.transfer_checkpoints import TransferCheckpointBackend
 from compute_horde.utils import sign_blob
 from tests.utils import random_keypair, random_receipt
@@ -192,6 +192,13 @@ async def test_uses_checkpoints(miner_keypair, validator_keypair, mocked_checkpo
     assert await JobStartedReceipt.objects.acount() == 5
 
 
+@pytest.mark.asyncio
+async def test_transfer_fails_when_disabled(settings):
+    settings.DYNAMIC_RECEIPT_TRANSFER_ENABLED = False
+    with pytest.raises(TransferMustBeEnabledException):
+        await do_transfer(session=Mock())
+
+
 @pytest.fixture(autouse=True)
 def mocked_checkpoint_backend():
     """
@@ -212,3 +219,8 @@ class MockTransferCheckpointBackend(TransferCheckpointBackend):
 
     async def set(self, key: str, checkpoint: int) -> None:
         self.value = checkpoint
+
+
+@pytest.fixture(autouse=True)
+def enable_transfer_for_tests(settings):
+    settings.DYNAMIC_RECEIPT_TRANSFER_ENABLED = True

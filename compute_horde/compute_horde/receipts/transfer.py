@@ -10,6 +10,7 @@ import aiohttp
 import pydantic
 from aiohttp import ClientTimeout
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
 from compute_horde.receipts.models import ReceiptModel, receipt_to_django_model
@@ -41,6 +42,13 @@ class LineException(Exception):
         self.__cause__ = self.cause = cause
 
 
+class TransferMustBeEnabledException(Exception):
+    def __init__(self):
+        super().__init__(
+            "Receipt transfer must be enabled by config: DYNAMIC_RECEIPT_TRANSFER_ENABLED"
+        )
+
+
 @dataclass
 class TransferResult:
     n_receipts: int
@@ -67,6 +75,9 @@ class ReceiptsTransfer:
         Efficiently transfer receipts from multiple miners at the same time, storing them in local database.
         Still, the number of pages transferred at the same time should be limited to 1-2.
         """
+
+        if not getattr(settings, "DYNAMIC_RECEIPT_TRANSFER_ENABLED", False):
+            raise TransferMustBeEnabledException()
 
         async def rate_limited_transfer(
             transfer: ReceiptsTransfer, page: int, session: aiohttp.ClientSession

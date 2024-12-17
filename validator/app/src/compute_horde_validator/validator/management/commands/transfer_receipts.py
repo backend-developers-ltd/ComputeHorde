@@ -10,7 +10,12 @@ import aiohttp
 import bittensor
 from asgiref.sync import async_to_sync
 from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
-from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer, TransferResult
+from compute_horde.receipts.transfer import (
+    MinerInfo,
+    ReceiptsTransfer,
+    TransferMustBeEnabledException,
+    TransferResult,
+)
 from django.conf import settings
 from django.core.management import BaseCommand
 from django.utils import timezone
@@ -137,7 +142,13 @@ class Command(BaseCommand):
         if interval is None:
             await self.run_once(cutoff, miners)
         else:
-            await self.run_in_loop(interval, cutoff, miners)
+            while True:
+                try:
+                    await self.run_in_loop(interval, cutoff, miners)
+                except TransferMustBeEnabledException:
+                    # Sleep instead of exiting in case the transfer is dynamically re-enabled.
+                    logger.info("Transfer is currently disabled. Sleeping for a minute.")
+                    await asyncio.sleep(60)
 
     async def run_once(
         self, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]
