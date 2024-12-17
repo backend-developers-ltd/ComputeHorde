@@ -34,6 +34,10 @@ dependencies = [
     "class-registry>=2.1.2",
 ]
 
+[project.optional-dependencies]
+test = [
+    "responses>=0.25.0",
+]
 [tool.uv.sources]
 compute-horde = { path = "../compute_horde", editable = true }
 
@@ -41,6 +45,7 @@ compute-horde = { path = "../compute_horde", editable = true }
 prerelease = "allow"
 environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
 
+[tool.pdm]
 [build-system]
 requires = ["pdm-backend==2.4.3"]
 build-backend = "pdm.backend"

@@ -1,12 +1,17 @@
 import json
+import logging
+from typing import TYPE_CHECKING
+
 import time
 
-import bittensor
 import pydantic
 import requests
 from django.conf import settings
 
-from compute_horde_validator.validator.models import SystemEvent
+if TYPE_CHECKING:
+    from compute_horde_validator.validator.models import SystemEvent
+
+logger = logging.getLogger(__name__)
 
 
 class ValidatorSentryDSNResponse(pydantic.BaseModel):
@@ -26,20 +31,18 @@ class StatsCollectorError(RuntimeError):
 
 
 class StatsCollectorClient:
-    def __init__(
-        self,
-        url: str = settings.STATS_COLLECTOR_URL,
-        keypair: bittensor.Keypair | None = None,
-        timeout: float = 5,
-    ):
+    def __init__(self, url: str = settings.STATS_COLLECTOR_URL):
+        if not url.endswith("/"):
+            url += "/"
         self.url = url
-        self.keypair = keypair or get_keypair()
-        self.timeout = timeout
+        self.keypair = get_keypair()
+        self.timeout = 5  # seconds
 
-    def send_events(self, events: list[SystemEvent]) -> None:
+    def send_events(self, events: list["SystemEvent"]) -> None:
         hotkey = self.keypair.ss58_address
         data = [event.to_dict() for event in events]
         path = f"validator/{hotkey}/system_events"
+
         self.make_request("POST", path, data=data)
 
     def get_sentry_dsn(self) -> str | None:
@@ -51,7 +54,12 @@ class StatsCollectorClient:
                 return None
             raise e
 
-        return ValidatorSentryDSNResponse.model_validate_json(response).sentry_dsn
+        try:
+            model = ValidatorSentryDSNResponse.model_validate_json(response)
+        except pydantic.ValidationError as e:
+            raise StatsCollectorError("Malformed response") from e
+
+        return model.sentry_dsn
 
     def make_request(
         self,
@@ -62,6 +70,8 @@ class StatsCollectorClient:
         data: dict | list | None = None,
         **kwargs,
     ) -> str:
+        url = self.url + path
+        logger.info("%s %s", method, url)
         try:
             response = requests.request(
                 method,

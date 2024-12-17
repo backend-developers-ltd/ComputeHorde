@@ -2578,6 +2578,11 @@ dependencies = [
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "responses", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+
 [package.dev-dependencies]
 format = [
     { name = "ruff", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2636,6 +2641,7 @@ requires-dist = [
     { name = "prometheus-client", specifier = "~=0.17.0" },
     { name = "psycopg2-binary", specifier = "~=2.9.7" },
     { name = "redis", specifier = "~=4.6.0" },
+    { name = "responses", marker = "extra == 'test'", specifier = ">=0.25.0" },
     { name = "sentry-sdk", specifier = "==1.29.2" },
     { name = "tenacity", specifier = "~=8.2.3" },
     { name = "uvloop", specifier = ">=0.19.0" },
