@@ -1,5 +1,5 @@
+import asyncio
 import os
-import subprocess
 
 import pytest
 import requests
@@ -74,8 +74,26 @@ async def start_nginx_with_certificates(
 ) -> tuple[str, str]:
     tmp_path, _, cert = generate_certificate_at()
     save_public_key(public_key, tmp_path)
-    await start_nginx(nginx_conf, port, tmp_path, container_name)
+
+    job_network = f"{container_name}_network"
+    process = await asyncio.create_subprocess_exec(
+        "docker", "network", "create", "--internal", job_network
+    )
+    await process.wait()
+
+    await start_nginx(
+        nginx_conf, port, tmp_path, job_network=job_network, container_name=container_name
+    )
     return cert
+
+
+async def cleanup_docker(container_name):
+    process = await asyncio.create_subprocess_exec(
+        "docker", "network", "rm", f"{container_name}_network"
+    )
+    await process.wait()
+    process = await asyncio.create_subprocess_exec("docker", "kill", container_name)
+    await process.wait()
 
 
 @pytest.mark.asyncio
@@ -89,7 +107,7 @@ async def test_certificates_with_nginx__success(tmp_path, container_name):
     assert resp.status_code == 200
     assert resp.text.strip() == "Hello World!"
 
-    subprocess.run(["docker", "kill", container_name])
+    await cleanup_docker(container_name)
 
 
 @pytest.mark.asyncio
@@ -104,7 +122,7 @@ async def test_certificates_with_nginx__no_cert(tmp_path, container_name):
     # 400 no cert, 403 wrong cert
     assert resp.status_code != 200
 
-    subprocess.run(["docker", "kill", container_name])
+    await cleanup_docker(container_name)
 
 
 @pytest.mark.asyncio
@@ -119,4 +137,4 @@ async def test_certificates_with_nginx__fail(tmp_path, container_name):
     with pytest.raises(requests.exceptions.SSLError):
         requests.get(NGINX_URI, verify=str(cert_path))
 
-    subprocess.run(["docker", "kill", container_name])
+    await cleanup_docker(container_name)
