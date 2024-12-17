@@ -412,7 +412,7 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
 CHANNEL_LAYERS = {
     "default": {
         # Apparently pubsub backend is in "beta" state, yet seems more stable than the older redis backend.
-        "BACKEND": "channels_redis.pubsub.RedisPubSubChannelLayer",
+        "BACKEND": env.str("CHANNELS_BACKEND", "channels_redis.pubsub.RedisPubSubChannelLayer"),
         "CONFIG": {
             "hosts": [
                 (env.str("REDIS_HOST", default="redis"), env.int("REDIS_PORT", default="6379"))
