@@ -53,9 +53,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 ### **Validator**
 - Receives organic requests via the Facilitator or generates synthetic tasks for validation.
-- Distributes tasks to miners and evaluates the results:
-  - Organic results are returned to external requesters.
-  - Synthetic results adjust miners' scores.
+- Distributes both kinds of tasks to miners and evaluates the results:
 - Uses a separate GPU, called a **Trusted Miner**, to pre-run part of the validation tasks and establish expected results. 
   The Trusted Miner shares the same code as a regular miner, but is configured differently:
   - It is not registered in the metagraph.
