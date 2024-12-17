@@ -15,6 +15,10 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
     SystemEvent,
 )
+from compute_horde_validator.validator.stats_collector_client import (
+    StatsCollectorClient,
+    StatsCollectorError,
+)
 from compute_horde_validator.validator.tasks import (
     ScheduleError,
     calculate_job_start_block,
@@ -33,6 +37,10 @@ from .helpers import (
     mock_get_miner_axon_info,
     throw_error,
 )
+
+
+def raise_error(e: Exception | type[Exception]):
+    raise e
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
@@ -114,9 +122,10 @@ def get_response(status):
     return response
 
 
-@patch(
-    "compute_horde_validator.validator.tasks.requests.post",
-    lambda url, json, headers: get_response(201),
+@patch.object(
+    StatsCollectorClient,
+    "send_events",
+    lambda self, events: None,
 )
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test_send_events_to_facilitator__success():
@@ -125,9 +134,10 @@ def test_send_events_to_facilitator__success():
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).filter(sent=True).count() == 3
 
 
-@patch(
-    "compute_horde_validator.validator.tasks.requests.post",
-    lambda url, json, headers: get_response(400),
+@patch.object(
+    StatsCollectorClient,
+    "send_events",
+    lambda self, events: raise_error(StatsCollectorError),
 )
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test_send_events_to_facilitator__failure():

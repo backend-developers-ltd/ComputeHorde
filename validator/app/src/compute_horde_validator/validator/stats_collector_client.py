@@ -1,8 +1,7 @@
 import json
 import logging
-from typing import TYPE_CHECKING
-
 import time
+from typing import Any, TYPE_CHECKING
 
 import pydantic
 import requests
@@ -67,7 +66,7 @@ class StatsCollectorClient:
         path: str,
         *,
         headers: dict[str, str] | None = None,
-        data: dict | list | None = None,
+        data: Any = None,
         **kwargs,
     ) -> str:
         url = self.url + path

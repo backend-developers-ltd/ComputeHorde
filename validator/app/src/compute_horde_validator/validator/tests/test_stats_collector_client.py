@@ -113,7 +113,12 @@ def test_get_sentry_dsn_not_found():
 @responses.activate
 def test_get_sentry_dsn_invalid_response():
     hotkey = get_keypair().ss58_address
-    responses.add(responses.GET, f"{STATS_COLLECTOR_URL}validator/{hotkey}/sentry_dsn", json={"foo": "bar"}, status=200)
+    responses.add(
+        responses.GET,
+        f"{STATS_COLLECTOR_URL}validator/{hotkey}/sentry_dsn",
+        json={"foo": "bar"},
+        status=200,
+    )
     client = StatsCollectorClient(STATS_COLLECTOR_URL)
     with pytest.raises(StatsCollectorError):
         client.get_sentry_dsn()
