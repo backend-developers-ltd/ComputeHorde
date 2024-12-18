@@ -45,29 +45,26 @@ This is achieved by distributing $TAO tokens to incentivize:
 Bittensor's end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
 ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnets operate effectively without relying on centralized cloud services.
 
-## Scoring Mechanism (in the making now, to be released soon)
+## Scoring Mechanism (being reworked currently) 
 
-The scoring mechanism in ComputeHorde incentivizes miners to perform organic jobs while maintaining accountability and fairness in the network.
+The scoring mechanism in ComputeHorde is meant to incentivize miners to perform organic jobs while maintaining accountability and fairness in the network.
+The goal is to eliminate the current disincentive where miners avoid organic jobs to avoid penalties for rejecting synthetic jobs.
 
-The formula (calculated per validator) is as follows:
+The formula (calculated per validator):
 
 - **1 point** for each successfully completed synthetic job (currently the only implemented scoring metric).
-- **1 point** for each successfully completed organic job.
-- **1 point** for each **properly rejected** synthetic job.
+- (in development) **1 point** for each successfully completed organic job.
+- (in development) **1 point** for each **properly rejected** synthetic job.
 
 A **successfully completed job** is one that finishes within a specified timeout.
 
-The goal is to eliminate the current disincentive where miners avoid organic jobs to avoid penalties for rejecting synthetic jobs.
-
-### Proper Rejection
-
-A synthetic job is considered properly rejected when the miner provides a receipt proving they are currently 
+A synthetic job is considered **properly rejected** when the miner provides a receipt proving they are currently 
 occupied with an **organic job** from a validator with the minimum stake.
 
 ### Dancing Bonus
 
-To encourage variance, which is essential for preventing [weight-copying](#discouraging-weight-copying), miners who implement 
-**dancing**—moving their executors between different UIDs—receive a **30% bonus** (as of December 2024) to their scores.
+The miners who implement **dancing**—moving their executors between different UIDs—receive a **30% bonus** (as of December 2024) to their scores.
+This is encouraging variance, which is essential for preventing [weight-copying](#discouraging-weight-copying).
 
 ### Hardware Classes and Configurable Weights
 
