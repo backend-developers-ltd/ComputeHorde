@@ -73,7 +73,7 @@ To encourage variance, which is essential for preventing [weight-copying](#disco
 
 Each hardware class supported by ComputeHorde has a configurable weight parameter.  
 These weights determine the relative contribution of a miner's work to their ultimate score.
-This allows the network to prioritize specific hardware classes based on their utility and demand, 
+This allows the network to prioritize specific hardware classes based on utility and demand, 
 creating a flexible and fair reward structure.
 
 ## Components
