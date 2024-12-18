@@ -51,7 +51,7 @@ The scoring mechanism in ComputeHorde incentivizes miners to perform organic job
 
 The formula (calculated per validator) is as follows:
 
-- **1 point** for each successfully completed synthetic job.
+- **1 point** for each successfully completed synthetic job (currently the only implemented scoring metric).
 - **1 point** for each successfully completed organic job.
 - **1 point** for each **properly rejected** synthetic job.
 
