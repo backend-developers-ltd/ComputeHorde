@@ -62,6 +62,11 @@ The goal is to eliminate the current disincentive where miners avoid organic job
 A synthetic job is considered properly rejected when the miner provides a receipt proving they are currently 
 occupied with an **organic job** from a validator with the minimum stake (configurable via a dynamic parameter).
 
+### Dancing Bonus
+
+To encourage variance, which is essential for preventing [weight-copying](#discouraging-weight-copying), miners who implement 
+**dancing**—moving their executors between different UIDs—receive a **15% bonus** to their scores.
+
 ## Components
 
 ### **Facilitator**
