@@ -66,6 +66,14 @@ def executor_class_value_map_parser(
     return result
 
 
+def executor_class_array_parser(value_map_str: str) -> set[ExecutorClass]:
+    result = set()
+    for executor_class_str in value_map_str.split(","):
+        with suppress(ValueError):
+            result.add(ExecutorClass(executor_class_str))
+    return result
+
+
 async def get_miner_max_executors_per_class() -> dict[ExecutorClass, int]:
     miner_max_executors_per_class: str = await aget_config("DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS")
     result = {
@@ -82,3 +90,8 @@ def get_executor_class_weights() -> dict[ExecutorClass, float]:
     return executor_class_value_map_parser(
         config.DYNAMIC_EXECUTOR_CLASS_WEIGHTS, value_parser=float
     )
+
+
+async def get_streaming_job_executor_classes() -> set[ExecutorClass]:
+    value = await aget_config("DYNAMIC_SYNTHETIC_STREAMING_JOB_EXECUTOR_CLASSES")
+    return executor_class_array_parser(value)
