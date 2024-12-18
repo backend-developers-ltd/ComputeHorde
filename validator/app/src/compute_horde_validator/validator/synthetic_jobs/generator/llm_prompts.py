@@ -22,11 +22,13 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         self,
         s3_url: str,
         seed: int,
+        streaming: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.seed = seed
         self.s3_url = s3_url
+        self.streaming = streaming
         file_uuid = str(uuid.uuid4())
         self.input_filename = file_uuid + ".txt"
         self.s3_output_key = file_uuid + ".json"
@@ -62,14 +64,19 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         return "nvidia_all"
 
     def docker_run_cmd(self) -> list[str]:
-        return [
+        cmd = [
             "--temperature=0.5",
             "--top-p=0.8",
             "--max-tokens=256",
-            "--seed",
-            str(self.seed),
-            f"/volume/{self.input_filename}",
         ]
+        if self.streaming:
+            # for streaming jobs, do not pass the seed yet, just run it in server mode
+            # the job will be triggered hitting /execute-job endpoint with the seed as payload
+            cmd.append("--server")
+        else:
+            cmd.extend(["--seed", str(self.seed)])
+        cmd.append(f"/volume/{self.input_filename}")
+        return cmd
 
     async def volume(self) -> Volume | None:
         return MultiVolume(
@@ -115,11 +122,13 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
         expected_prompts: list[Prompt],
         s3_url: str,
         seed: int,
+        streaming: bool = False,
         **kwargs,
     ):
         super().__init__(
             s3_url=s3_url,
             seed=seed,
+            streaming=streaming,
             **kwargs,
         )
         self.prompt_sample: PromptSample = prompt_sample
