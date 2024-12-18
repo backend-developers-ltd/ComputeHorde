@@ -502,6 +502,10 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("CELERY_WORKER_PREFETCH_MULTIPLIER", default=10)
 CELERY_BROKER_POOL_LIMIT = env.int("CELERY_BROKER_POOL_LIMIT", default=50)
 
+WORKER_HEALTHCHECK_FILE_PATH = env(
+    "WORKER_HEALTHCHECK_FILE_PATH", default="/tmp/worker-healthcheck"
+)
+
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.filebased.EmailBackend")
 EMAIL_FILE_PATH = env("EMAIL_FILE_PATH", default="/tmp/email")
 EMAIL_HOST = env("EMAIL_HOST", default="smtp.sendgrid.net")
