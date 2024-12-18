@@ -1590,7 +1590,7 @@ async def _download_llm_prompts_answers_worker(
         try:
             await task.job_generator.download_answers()
         except httpx.HTTPError as exc:
-            logger.info(
+            logger.warning(
                 "llm prompt answers download failed at attempt %s with exception: %r",
                 task.attempt,
                 exc,
