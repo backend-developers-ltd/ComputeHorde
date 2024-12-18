@@ -10,13 +10,23 @@ import aiohttp
 import bittensor
 from asgiref.sync import async_to_sync
 from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
-from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer, TransferResult
+from compute_horde.receipts.transfer import (
+    MinerInfo,
+    ReceiptsTransfer,
+    TransferResult,
+)
 from django.conf import settings
 from django.core.management import BaseCommand
 from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
 
+from compute_horde_validator.validator.dynamic_config import aget_config
+
 logger = logging.getLogger(__name__)
+
+
+class TransferIsDisabled(Exception):
+    pass
 
 
 class Command(BaseCommand):
@@ -137,7 +147,13 @@ class Command(BaseCommand):
         if interval is None:
             await self.run_once(cutoff, miners)
         else:
-            await self.run_in_loop(interval, cutoff, miners)
+            while True:
+                try:
+                    await self.run_in_loop(interval, cutoff, miners)
+                except TransferIsDisabled:
+                    # Sleep instead of exiting in case the transfer gets dynamically re-enabled.
+                    logger.info("Transfer is currently disabled. Sleeping for a minute.")
+                    await asyncio.sleep(60)
 
     async def run_once(
         self, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]
@@ -202,6 +218,8 @@ class Command(BaseCommand):
         Fetches new receipts on given pages one by one.
         """
         for idx, page in enumerate(pages):
+            await self._throw_if_disabled()
+
             self.m_catchup_pages_left.set(len(pages) - idx)
             start_time = time.monotonic()
             current_loop_miners = await miners()
@@ -238,6 +256,8 @@ class Command(BaseCommand):
         Runs indefinitely and polls for changes in active pages every `interval`.
         """
         while True:
+            await self._throw_if_disabled()
+
             start_time = time.monotonic()
             current_page = LocalFilesystemPagedReceiptStore.current_page()
             pages = list(reversed(range(current_page - N_ACTIVE_PAGES + 1, current_page + 1)))
@@ -282,3 +302,12 @@ class Command(BaseCommand):
             self.m_transfer_errors.labels(exc_type=exc_type.__name__).inc(exc_count)
 
         self.m_receipts.inc(result.n_receipts)
+
+    async def _throw_if_disabled(self):
+        try:
+            if await aget_config("DYNAMIC_RECEIPT_TRANSFER_ENABLED"):
+                return
+        except KeyError:
+            logger.warning("DYNAMIC_RECEIPT_TRANSFER_ENABLED dynamic config is not set up!")
+
+        raise TransferIsDisabled

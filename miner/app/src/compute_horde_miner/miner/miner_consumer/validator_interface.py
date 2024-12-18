@@ -12,7 +12,6 @@ from compute_horde.mv_protocol.validator_requests import (
 )
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload, ReceiptPayload
-from compute_horde.receipts.store.current import receipt_store
 from django.conf import settings
 from django.utils import timezone
 
@@ -35,6 +34,7 @@ from compute_horde_miner.miner.models import (
     Validator,
     ValidatorBlacklist,
 )
+from compute_horde_miner.miner.receipts import current_store
 
 logger = logging.getLogger(__name__)
 
@@ -403,7 +403,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             is_organic=payload.is_organic,
             ttl=payload.ttl,
         )
-        receipt_store().store([receipt.to_receipt()])
+        current_store().store([receipt.to_receipt()])
 
     async def handle_job_accepted_receipt(
         self, msg: validator_requests.V0JobAcceptedReceiptRequest
@@ -427,7 +427,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             ttl=msg.payload.ttl,
         )
 
-        receipt_store().store([created_receipt.to_receipt()])
+        current_store().store([created_receipt.to_receipt()])
 
     async def handle_job_finished_receipt(
         self, msg: validator_requests.V0JobFinishedReceiptRequest
@@ -457,7 +457,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             score_str=msg.payload.score_str,
         )
 
-        receipt_store().store([created_receipt.to_receipt()])
+        current_store().store([created_receipt.to_receipt()])
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)

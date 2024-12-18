@@ -10,6 +10,7 @@ from django.conf import settings
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import eviction, quasi_axon
 from compute_horde_miner.miner.models import Validator
+from compute_horde_miner.miner.receipts import current_store
 
 logger = get_task_logger(__name__)
 
@@ -78,5 +79,9 @@ def fetch_dynamic_config() -> None:
 
 @app.task
 def archive_receipt_pages():
-    store = LocalFilesystemPagedReceiptStore()
+    store = current_store()
+    if not isinstance(store, LocalFilesystemPagedReceiptStore):
+        logger.info(f"Skipping archival: incompatible store: {type(store)}")
+        return
+
     store.archive_old_pages()

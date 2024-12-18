@@ -53,7 +53,7 @@ async def test_receipt_is_saved(
 ) -> None:
     executor = mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.current")
     receipt_store_factory = mocker.patch(
-        "compute_horde_miner.miner.miner_consumer.validator_interface.receipt_store"
+        "compute_horde_miner.miner.miner_consumer.validator_interface.current_store"
     )
     stored_receipts = []
     receipt_store_factory.return_value.store = lambda rs: stored_receipts.extend(rs)

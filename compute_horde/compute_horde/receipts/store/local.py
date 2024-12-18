@@ -91,6 +91,9 @@ class LocalFilesystemPagedReceiptStore(BaseReceiptStore):
         except FileNotFoundError:
             pass
 
+    def evict(self, cutoff: datetime) -> None:
+        self.delete_pages_older_than(cutoff)
+
     def delete_pages_older_than(self, older_than: int | datetime) -> None:
         if isinstance(older_than, datetime):
             older_than = self.current_page_at(older_than)
