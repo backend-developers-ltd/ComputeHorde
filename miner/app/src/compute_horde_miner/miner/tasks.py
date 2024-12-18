@@ -1,5 +1,6 @@
 import datetime
 
+from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
 from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
@@ -61,7 +62,7 @@ def fetch_validators():
 
 @app.task
 def evict_old_data():
-    eviction.evict_all()
+    async_to_sync(eviction.evict_all)()
 
 
 @app.task
@@ -79,7 +80,7 @@ def fetch_dynamic_config() -> None:
 
 @app.task
 def archive_receipt_pages():
-    store = current_store()
+    store = async_to_sync(current_store)()
     if not isinstance(store, LocalFilesystemPagedReceiptStore):
         logger.info(f"Skipping archival: incompatible store: {type(store)}")
         return

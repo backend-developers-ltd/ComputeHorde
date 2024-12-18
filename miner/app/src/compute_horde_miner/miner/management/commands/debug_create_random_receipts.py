@@ -8,6 +8,7 @@ from typing import TypeAlias
 from uuid import uuid4
 
 import bittensor
+from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts.models import (
     JobAcceptedReceipt,
@@ -37,7 +38,8 @@ class Command(BaseCommand):
     n: int
     interval: int | None
 
-    def handle(self, *args, **kwargs):
+    @async_to_sync
+    async def handle(self, *args, **kwargs):
         self.n = kwargs["n"]
         self.interval = kwargs["interval"]
 
@@ -52,7 +54,7 @@ class Command(BaseCommand):
                     by_type[type(receipt)].append(receipt)
                 for cls, receipts in by_type.items():
                     cls.objects.bulk_create(receipts)  # type: ignore
-                    current_store().store([r.to_receipt() for r in receipts])
+                    (await current_store()).store([r.to_receipt() for r in receipts])
                     logger.info(f"Inserted {len(receipts)} {cls.__name__}")
                 added_so_far += current_chunk_size
 
@@ -67,7 +69,7 @@ class Command(BaseCommand):
                 for _ in range(self.n):
                     receipt = self.generate_one()
                     receipt.save()
-                    current_store().store([receipt.to_receipt()])
+                    (await current_store()).store([receipt.to_receipt()])
                     receipts_this_loop.append(receipt)
                     time.sleep(time_per_receipt)
 
