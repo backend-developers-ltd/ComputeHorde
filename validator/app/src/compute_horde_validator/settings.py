@@ -289,6 +289,16 @@ CONSTANCE_CONFIG = {
         "Maximum retries for organic jobs",
         int,
     ),
+    "DYNAMIC_SYNTHETIC_STREAMING_JOB_EXECUTOR_CLASSES": (
+        "always_on.llm.a6000",
+        "Comma separated list of classes to run streaming jobs on during synthetic jobs batch runs",
+        str,
+    ),
+    "DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT": (
+        300,
+        "Timeout for waiting for a streaming job to be ready to accept connections from the user",
+        int,
+    ),
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 
