@@ -2,9 +2,9 @@ import logging
 from datetime import timedelta
 
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
-from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
-from compute_horde_miner.miner.receipts import current_store
 from django.utils.timezone import now
+
+from compute_horde_miner.miner.receipts import current_store
 
 from .models import AcceptedJob
 
@@ -32,7 +32,5 @@ def evict_receipts() -> None:
     JobAcceptedReceipt.objects.filter(timestamp__lt=cutoff).delete()
     JobFinishedReceipt.objects.filter(timestamp__lt=cutoff).delete()
 
-    store = current_store()
-    if isinstance(store, LocalFilesystemPagedReceiptStore):
-        logger.info("Evicting old receipt pages")
-        store.delete_pages_older_than(cutoff)
+    logger.info("Evicting old receipt pages")
+    current_store().evict(cutoff=cutoff)

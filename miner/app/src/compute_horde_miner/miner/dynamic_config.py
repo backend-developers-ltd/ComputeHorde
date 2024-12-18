@@ -1,13 +1,8 @@
 import asyncio
 import time
-from collections.abc import Callable
-from contextlib import suppress
-from typing import Any
 
 import constance.utils
 from asgiref.sync import sync_to_async
-from compute_horde.executor_class import ExecutorClass
-from constance import config
 from django.conf import settings
 
 

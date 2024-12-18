@@ -1,17 +1,16 @@
 import datetime
 
-from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
 from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
 from compute_horde.utils import get_validators
-from compute_horde_miner.miner.receipts import current_store
 from constance import config
 from django.conf import settings
 
 from compute_horde_miner.celery import app
 from compute_horde_miner.miner import eviction, quasi_axon
 from compute_horde_miner.miner.models import Validator
+from compute_horde_miner.miner.receipts import current_store
 
 logger = get_task_logger(__name__)
 
