@@ -105,7 +105,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 - ComputeHorde mainnet UID: 12
 - ComputeHorde testnet UID: 174
-- [ComputeHorde channel](https://discordapp.com/channels/799672011265015819/1201941624243109888) at Bittensor discord
+- [ComputeHorde channel](https://discordapp.com/channels/799672011265015819/1201941624243109888) within Bittensor discord
 - Information dashboards:
   - [Subnet 12 health monitor](https://grafana.bactensor.io/d/subnet/metagraph-subnet?var-subnet=12)
   - [Subnet 12 TaoStats](https://taostats.io/subnets/12) 
