@@ -47,30 +47,35 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 ## Scoring Mechanism (being reworked currently) 
 
-The scoring mechanism in ComputeHorde is meant to incentivize miners to perform organic jobs while maintaining accountability and fairness in the network.
-The goal is to eliminate the current disincentive where miners avoid organic jobs to avoid penalties for rejecting synthetic jobs.
+The scoring mechanism in ComputeHorde is designed to incentivize miners to perform organic jobs while maintaining accountability and fairness in the network.  
+The goal is to eliminate the current disincentive where miners avoid organic jobs to prevent penalties for rejecting synthetic jobs.
 
-The formula (calculated per validator):
+### Formula (calculated per validator):
 
-- **1 point** for each successfully completed synthetic job (currently the only implemented scoring metric).
+- **1 point** for each successfully completed synthetic job (currently the only implemented scoring metric).  
 - (in development) **1 point** for each successfully completed organic job.
 - (in development) **1 point** for each **properly rejected** synthetic job.
 
-A **successfully completed job** is one that finishes within a specified timeout.
+A **successfully completed job** is one that finishes within a specified timeout.  
 
 A synthetic job is considered **properly rejected** when the miner provides a receipt proving they are currently 
 occupied with an **organic job** from a validator with the minimum stake.
 
 ### Dancing Bonus
 
-The miners who implement **dancing**—moving their executors between different UIDs—receive a **30% bonus** (as of December 2024) to their scores.
-This is encouraging variance, which is essential for preventing [weight-copying](#discouraging-weight-copying).
+Miners who implement **dancing**—moving their executors between different UIDs—receive a **30% bonus** (as of December 2024) to their scores.  
+This encourages variance, which is essential for preventing [weight-copying](#discouraging-weight-copying).
 
 ### Hardware Classes and Configurable Weights
 
 Each hardware class supported by ComputeHorde has a configurable weight parameter.  
 These weights determine the relative contribution of a miner's work to their ultimate score.
 This allows the network to prioritize specific hardware classes based on utility and demand, 
+creating a flexible and fair reward structure.
+
+Each hardware class supported by ComputeHorde has a configurable weight parameter.  
+These weights determine the relative contribution of a miner's work to their ultimate score.  
+This system allows the network to prioritize specific hardware classes based on utility and demand, 
 creating a flexible and fair reward structure.
 
 ## Components
