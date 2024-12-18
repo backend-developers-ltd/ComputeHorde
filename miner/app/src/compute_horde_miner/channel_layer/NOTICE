@@ -1,1 +1,0 @@
-code copied from https://github.com/django/channels_redis in order to modify RedisChannelLayer.serialize

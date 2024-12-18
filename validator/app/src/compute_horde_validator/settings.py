@@ -632,7 +632,8 @@ for miner in env.list("DEBUG_FETCH_RECEIPTS_FROM_MINERS", default=[]):
 
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        # Apparently pubsub backend is in "beta" state, yet seems more stable than the older redis backend.
+        "BACKEND": env.str("CHANNELS_BACKEND", "channels_redis.pubsub.RedisPubSubChannelLayer"),
         "CONFIG": {
             "hosts": [
                 (REDIS_HOST, REDIS_PORT),
