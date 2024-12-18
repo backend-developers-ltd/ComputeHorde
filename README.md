@@ -47,7 +47,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 ## Scoring Mechanism (in the making now, to be released soon)
 
-The **scoring mechanism** in ComputeHorde incentivizes miners to perform organic jobs while maintaining accountability and fairness in the network.
+The scoring mechanism in ComputeHorde incentivizes miners to perform organic jobs while maintaining accountability and fairness in the network.
 
 The formula (calculated per validator) is as follows:
 
@@ -71,10 +71,10 @@ To encourage variance, which is essential for preventing [weight-copying](#disco
 
 ### Hardware Classes and Configurable Weights
 
-Each **hardware class** supported by ComputeHorde has a configurable weight parameter.  
+Each hardware class supported by ComputeHorde has a configurable weight parameter.  
 These weights determine the relative contribution of a miner's work to their ultimate score.
 This allows the network to prioritize specific hardware classes based on their utility and demand, 
-ensuring a flexible and fair reward structure.
+creating a flexible and fair reward structure.
 
 ## Components
 
