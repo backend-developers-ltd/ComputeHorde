@@ -271,7 +271,8 @@ services:
   # Warning! This container has access to the Docker socket.
   # See https://github.com/willfarrell/docker-autoheal
   autoheal:
-    image: willfarrell/autoheal:1.1.0 # Pinned tag for security, see above.
+    # Pinned SHA for security, see above.
+    image: willfarrell/autoheal@sha256:794dfad2bd562984a6baaa7e4baa3ba1d211fc452f036dc2079a801a9a71a053
     restart: unless-stopped
     environment:
       AUTOHEAL_CONTAINER_LABEL: autoheal
