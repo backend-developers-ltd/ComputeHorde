@@ -127,6 +127,7 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 BITTENSOR_APPROXIMATE_BLOCK_DURATION = timedelta(seconds=12)
 
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
+CONSTANCE_DATABASE_CACHE_BACKEND = "default"
 CONSTANCE_CONFIG = {
     "SERVING": (
         not env.bool("MIGRATING", default=False),

@@ -136,6 +136,7 @@ if CORS_ENABLED := env.bool("CORS_ENABLED", default=True):
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
+CONSTANCE_DATABASE_CACHE_BACKEND = "default"
 CONSTANCE_CONFIG = {
     "SERVING": (
         not env.bool("MIGRATING", default=False),
@@ -255,9 +256,20 @@ if env.bool("HTTPS_REDIRECT", default=False) and not DEBUG:
 else:
     SECURE_SSL_REDIRECT = False
 
-CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://redis:6379/0")
+
+REDIS_HOST = env.str("REDIS_HOST", default="redis")
+REDIS_PORT = env.int("REDIS_PORT", default=6379)
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+    },
+}
+
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
 CELERY_RESULT_BACKEND = env(
-    "CELERY_BROKER_URL", default="redis://redis:6379/0"
+    "CELERY_BROKER_URL", default=f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 )  # store results in Redis
 CELERY_RESULT_EXPIRES = int(timedelta(days=1).total_seconds())  # time until task result deletion
 CELERY_COMPRESSION = "gzip"  # task compression
