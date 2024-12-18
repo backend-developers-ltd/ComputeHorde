@@ -31,7 +31,7 @@ def get_s3_client(
         signature_version = settings.AWS_SIGNATURE_VERSION
 
     if signature_version:
-        config_kwargs = {'config': Config(signature_version=signature_version)}
+        config_kwargs = {"config": Config(signature_version=signature_version)}
     else:
         config_kwargs = {}
 
