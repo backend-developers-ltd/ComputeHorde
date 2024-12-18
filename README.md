@@ -49,6 +49,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** while 
 maintaining accountability and fairness in the network. 
+
 The goal is to eliminate the current disincentive where miners avoid organic jobs to prevent penalties for rejecting synthetic jobs.
 
 ### Formula (calculated per validator):
@@ -65,12 +66,14 @@ occupied with an **organic job** from a validator with the minimum stake.
 ### Dancing Bonus
 
 Miners who implement **dancing**—moving their executors between different UIDs—receive a **30% bonus** (as of December 2024) to their scores.
+
 This encourages variance, which is essential for preventing [weight-copying](#discouraging-weight-copying).
 
 ### Hardware Classes and Configurable Weights
 
 Each hardware class supported by ComputeHorde has a configurable weight parameter.
 These weights determine the relative contribution of a miner's work to their ultimate score.
+
 This system allows the network to prioritize specific hardware classes based on utility and demand, 
 creating a flexible and fair reward structure.
 
