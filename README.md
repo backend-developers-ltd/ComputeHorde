@@ -47,12 +47,13 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 ## Scoring Mechanism (being reworked currently) 
 
-The scoring mechanism in ComputeHorde is designed to incentivize miners to perform organic jobs while maintaining accountability and fairness in the network.  
+The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** while 
+maintaining accountability and fairness in the network. 
 The goal is to eliminate the current disincentive where miners avoid organic jobs to prevent penalties for rejecting synthetic jobs.
 
 ### Formula (calculated per validator):
 
-- **1 point** for each successfully completed synthetic job (currently the only implemented scoring metric).  
+- **1 point** for each successfully completed synthetic job.  
 - (in development) **1 point** for each successfully completed organic job.
 - (in development) **1 point** for each **properly rejected** synthetic job.
 
@@ -67,11 +68,6 @@ Miners who implement **dancing**—moving their executors between different UIDs
 This encourages variance, which is essential for preventing [weight-copying](#discouraging-weight-copying).
 
 ### Hardware Classes and Configurable Weights
-
-Each hardware class supported by ComputeHorde has a configurable weight parameter.  
-These weights determine the relative contribution of a miner's work to their ultimate score.
-This allows the network to prioritize specific hardware classes based on utility and demand, 
-creating a flexible and fair reward structure.
 
 Each hardware class supported by ComputeHorde has a configurable weight parameter.  
 These weights determine the relative contribution of a miner's work to their ultimate score.  
