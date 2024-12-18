@@ -18,7 +18,7 @@ paving the way for Bittensor to scale beyond its current limitations to support 
   
 - **Fair and Verified Work**  
   ComputeHorde employs mechanisms to ensure miners provide authentic compute work, fairly verified by the validators:
-  - Execute tasks from all validators equally, regardless of their stake (above a rather low threshold).
+  - Execute tasks from validators stake-proportionally
   - Handle both **organic** (external, from other subnets) and **synthetic** (ComputeHorde miners validation) tasks.
   - Match jobs to the advertised hardware (e.g., ensuring A6000 GPUs are used for tasks requiring them).
   - Prevent malicious behaviors like "weight-copying" through innovative validation mechanisms.
@@ -30,7 +30,7 @@ paving the way for Bittensor to scale beyond its current limitations to support 
 - **Hardware Classes**  
   ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance. 
   Currently, **A6000** is the supported class, with **A100** coming next.
-  The end goal is to support all GPU types/configurations required by validators across Bittensor subnets.
+  The end goal is to eventually support all GPU types/configurations required by validators across Bittensor subnets.
 
 ## Bittensor context 
 
@@ -53,9 +53,11 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 ### **Validator**
 - Receives organic requests via the Facilitator or generates synthetic tasks for validation.
-- Distributes tasks to miners and evaluates the results:
-  - Organic results are returned to external requesters.
-  - Synthetic results adjust miners' scores.
+- Distributes both kinds of tasks to miners and evaluates the results:
+- Uses a separate GPU, called a **Trusted Miner**, to pre-run part of the validation tasks and establish expected results. 
+  The Trusted Miner shares the same code as a regular miner, but is configured differently:
+  - It is not registered in the metagraph.
+  - It only accepts tasks from the associated validator.
 - [See validator's README for more details](validator/README.md)
 
 ### **Miner**
@@ -81,7 +83,6 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 ### Encouraging Actual Mining
 - Synthetic tasks are designed to run only on specific hardware (e.g., A6000 GPUs), ensuring miners deliver the advertised compute power.
 - Scoring system incentivizing for completing organic tasks.
-- Mechanisms for penalizing miners serving only a subset of validators
 
 ## Development goals
 
@@ -105,7 +106,6 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 - ComputeHorde mainnet UID: 12
 - ComputeHorde testnet UID: 174
 - [ComputeHorde channel](https://discordapp.com/channels/799672011265015819/1201941624243109888) at Bittensor discord
-- [BacTensor discord](https://discord.gg/NADVTrrm7a)
 - Information dashboards:
   - [Subnet 12 health monitor](https://grafana.bactensor.io/d/subnet/metagraph-subnet?var-subnet=12)
   - [Subnet 12 TaoStats](https://taostats.io/subnets/12) 
@@ -116,10 +116,11 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 
 This repository contains the implementations of:
 
-- **Validator**: Requres a Trusted Miner for cross-checking synthetic tasks.
-- **Miner**: Default miner setup with a single executor.
-- **Executor**: Base implementation for executing dockerized jobs. 
+- **Validator**: Requires a [Trusted Miner](#validator) for cross-checking synthetic tasks.
+- **Miner**: Modifying the miner code on subnet 12 is discouraged, as the stock implementation manages only communications between components.
+  The competitive edge lies in optimizing executor provisioning.
   Users can create [custom executor managers](miner#custom-executor-manager) to scale and optimize mining efficiency.
+  The default executor manager runs a single executor and is not intended for mainnet use.
 
 In the following sections, you can find instructions on running [Validator](#Validator) and [Miner](#Miner).
 There are more details in each component's README and in the [Troubleshooting](#Troubleshooting) section below.
@@ -222,13 +223,22 @@ see the [migration guide](/docs/migration.md).
 
 ## How to dump the logs
 
-The ComputeHorde software starts several Docker containers. The most relevant logs are from containers with names ending in `app-1`.
+The ComputeHorde software starts several Docker containers, 
+with layout differing slightly between the miner and the validator.
 
-To view these logs:
-1. SSH into the machine (validator or miner).
+### Miner logs
+
+The most relevant logs are from the container with a name ending in `app-1`.
+
+1. SSH into the miner machine.
 1. Run `docker ps` to find the name of the appropriate container (e.g., `compute_horde_miner-app-1`).
 1. Run `docker logs CONTAINER_NAME`.
 
+### Validator logs
+
+1. SSH into the validator machine.
+1. Navigate to the directory where the docker compose yaml file is located.
+1. Run `docker compose logs`.
 
 ## How to restart the services
 
