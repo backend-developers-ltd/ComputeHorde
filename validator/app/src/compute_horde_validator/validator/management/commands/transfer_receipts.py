@@ -8,18 +8,19 @@ from typing import cast
 
 import aiohttp
 import bittensor
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import async_to_sync
 from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
 from compute_horde.receipts.transfer import (
     MinerInfo,
     ReceiptsTransfer,
     TransferResult,
 )
-from constance import config
 from django.conf import settings
 from django.core.management import BaseCommand
 from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
+
+from compute_horde_validator.validator.dynamic_config import aget_config
 
 logger = logging.getLogger(__name__)
 
@@ -303,7 +304,10 @@ class Command(BaseCommand):
         self.m_receipts.inc(result.n_receipts)
 
     async def _throw_if_disabled(self):
-        if not await sync_to_async(
-            lambda: getattr(config, "DYNAMIC_RECEIPT_TRANSFER_ENABLED", False)
-        )():
-            raise TransferIsDisabled
+        try:
+            if await aget_config("DYNAMIC_RECEIPT_TRANSFER_ENABLED"):
+                return
+        except KeyError:
+            logger.warning("DYNAMIC_RECEIPT_TRANSFER_ENABLED dynamic config is not set up!")
+
+        raise TransferIsDisabled

@@ -1,9 +1,11 @@
 import datetime
 
+from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
 from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
 from compute_horde.utils import get_validators
+from compute_horde_miner.miner.receipts import current_store
 from constance import config
 from django.conf import settings
 
@@ -78,5 +80,9 @@ def fetch_dynamic_config() -> None:
 
 @app.task
 def archive_receipt_pages():
-    store = LocalFilesystemPagedReceiptStore()
+    store = current_store()
+    if not isinstance(store, LocalFilesystemPagedReceiptStore):
+        logger.info(f"Skipping archival: incompatible store: {type(store)}")
+        return
+
     store.archive_old_pages()
