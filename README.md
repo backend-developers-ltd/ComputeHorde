@@ -55,17 +55,26 @@ The formula (calculated per validator) is as follows:
 - **1 point** for each successfully completed organic job.
 - **1 point** for each **properly rejected** synthetic job.
 
+A **successfully completed job** is one that finishes within a specified timeout.
+
 The goal is to eliminate the current disincentive where miners avoid organic jobs to avoid penalties for rejecting synthetic jobs.
 
 ### Proper Rejection
 
 A synthetic job is considered properly rejected when the miner provides a receipt proving they are currently 
-occupied with an **organic job** from a validator with the minimum stake (configurable via a dynamic parameter).
+occupied with an **organic job** from a validator with the minimum stake.
 
 ### Dancing Bonus
 
 To encourage variance, which is essential for preventing [weight-copying](#discouraging-weight-copying), miners who implement 
-**dancing**—moving their executors between different UIDs—receive a **15% bonus** to their scores.
+**dancing**—moving their executors between different UIDs—receive a **30% bonus** (as of December 2024) to their scores.
+
+### Hardware Classes and Configurable Weights
+
+Each **hardware class** supported by ComputeHorde has a configurable weight parameter.  
+These weights determine the relative contribution of a miner's work to their ultimate score.
+This allows the network to prioritize specific hardware classes based on their utility and demand, 
+ensuring a flexible and fair reward structure.
 
 ## Components
 
