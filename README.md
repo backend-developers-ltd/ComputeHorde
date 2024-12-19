@@ -61,7 +61,7 @@ The goal is to eliminate the current disincentive where miners avoid organic job
 A **successfully completed job** is one that finishes within a specified timeout.  
 
 A synthetic job is considered **properly rejected** when the miner provides a receipt proving they are currently 
-occupied with an **organic job** from a validator with the minimum stake.
+occupied with an **organic job** from another validator.
 
 ### Dancing Bonus
 
