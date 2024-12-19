@@ -73,6 +73,7 @@ def test(session):
         "-vv",
         "tests",
         *session.posargs,
+        env={"DJANGO_SETTINGS_MODULE": "tests.settings"},
     )
 
 
