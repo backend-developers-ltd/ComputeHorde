@@ -13,6 +13,8 @@ class RequestType(enum.Enum):
     V0ExecutorManifestRequest = "V0ExecutorManifestRequest"
     V0ExecutorReadyRequest = "V0ExecutorReadyRequest"
     V0ExecutorFailedRequest = "V0ExecutorFailedRequest"
+    V0StreamingJobReadyRequest = "V0StreamingJobReadyRequest"
+    V0StreamingJobNotReadyRequest = "V0StreamingJobNotReadyRequest"
     V0JobFailedRequest = "V0JobFailedRequest"
     V0JobFinishedRequest = "V0JobFinishedRequest"
     V0MachineSpecsRequest = "V0MachineSpecsRequest"
@@ -52,6 +54,18 @@ class V0ExecutorReadyRequest(BaseMinerRequest, JobMixin):
 
 class V0ExecutorFailedRequest(BaseMinerRequest, JobMixin):
     message_type: RequestType = RequestType.V0ExecutorFailedRequest
+
+
+# TODO: sign this with the miners wallet when sent to vali
+class V0StreamingJobReadyRequest(BaseMinerRequest, JobMixin):
+    message_type: RequestType = RequestType.V0StreamingJobReadyRequest
+    public_key: str
+    ip: str
+    port: int
+
+
+class V0StreamingJobNotReadyRequest(BaseMinerRequest, JobMixin):
+    message_type: RequestType = RequestType.V0StreamingJobNotReadyRequest
 
 
 class V0JobFailedRequest(BaseMinerRequest, JobMixin):
