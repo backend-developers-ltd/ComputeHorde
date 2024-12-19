@@ -2,8 +2,11 @@ import bittensor
 from django.conf import settings
 from django.core.cache import cache
 
-_BLOCK_CACHE_KEY = getattr(settings, "COMPUTE_HORDE_BLOCK_CACHE_KEY", "compute_horde.blockchain.block_cache.current_block")
+_BLOCK_CACHE_KEY = getattr(
+    settings, "COMPUTE_HORDE_BLOCK_CACHE_KEY", "compute_horde.blockchain.block_cache.current_block"
+)
 _BLOCK_CACHE_TIMEOUT = getattr(settings, "COMPUTE_HORDE_BLOCK_CACHE_TIMEOUT", 2)
+
 
 def get_subtensor(network):
     return bittensor.subtensor(network)

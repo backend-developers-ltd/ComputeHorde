@@ -1,34 +1,55 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from django.core.cache import cache
+import pytest
+from celery import Celery
 from django.conf import settings
+from django.core.cache import cache
 
 from compute_horde.blockchain.block_cache import get_current_block
 from compute_horde.blockchain.tasks import update_block_cache
 
 
-def test_block_cache_get_current_block_in_cache():
+@pytest.fixture
+def with_celery():
+    app = Celery("test")
+    app.config_from_object("django.conf:settings", namespace="CELERY")
+    yield
+    app.close()
+
+
+@pytest.fixture
+def with_cache():
+    cache.clear()
+    yield
+
+
+def test_block_cache_get_current_block_in_cache(with_cache):
     cache.set(settings.COMPUTE_HORDE_BLOCK_CACHE_KEY, 123)
 
-    with patch('bittensor.subtensor') as mock_subtensor:
-        current_block = get_current_block()
-
-        assert current_block == 123
-        mock_subtensor.assert_not_called()
-
-
-def test_block_cache_get_current_block_not_in_cache():
-    with patch('bittensor.subtensor') as mock_subtensor:
-        mock_subtensor.block = 123
+    mock_subtensor = MagicMock()
+    with patch("bittensor.subtensor", return_value=mock_subtensor):
+        mock_subtensor.get_current_block.return_value = 123
 
         current_block = get_current_block()
 
         assert current_block == 123
+        mock_subtensor.get_current_block.assert_not_called()
 
 
-def test_tasks_update_block_cache():
-    with patch('bittensor.subtensor') as mock_subtensor:
-        mock_subtensor.block = 123
+def test_block_cache_get_current_block_not_in_cache(with_cache):
+    mock_subtensor = MagicMock()
+    with patch("bittensor.subtensor", return_value=mock_subtensor):
+        mock_subtensor.get_current_block.return_value = 123
+
+        current_block = get_current_block()
+
+        assert current_block == 123
+
+
+def test_tasks_update_block_cache(with_cache, with_celery):
+    mock_subtensor = MagicMock()
+    with patch("bittensor.subtensor", return_value=mock_subtensor):
+        mock_subtensor.get_current_block.return_value = 123
 
         update_block_cache.delay()
 
@@ -36,4 +57,4 @@ def test_tasks_update_block_cache():
 
         assert current_block == 123
 
-        mock_subtensor.assert_called_once()
+        mock_subtensor.get_current_block.assert_called_once()
