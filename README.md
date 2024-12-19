@@ -45,6 +45,38 @@ This is achieved by distributing $TAO tokens to incentivize:
 Bittensor's end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
 ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnets operate effectively without relying on centralized cloud services.
 
+## Scoring Mechanism (being reworked currently) 
+
+The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** while 
+maintaining accountability and fairness in the network. 
+
+The goal is to eliminate the current disincentive where miners avoid organic jobs to prevent penalties for rejecting synthetic jobs.
+
+### Formula (calculated per validator):
+
+- **1 point** for each successfully completed synthetic job.  
+- (in development) **1 point** for each successfully completed organic job.
+- (in development) **1 point** for each **properly rejected** synthetic job.
+
+A **successfully completed job** is one that finishes within a specified timeout.  
+
+A synthetic job is considered **properly rejected** when the miner provides a receipt proving they are currently 
+occupied with an **organic job** from another validator (with a minimum of 50k stake).
+
+### Dancing Bonus
+
+Miners who implement **dancing**—moving their executors between different UIDs—receive a **30% bonus** (as of December 2024) to their scores.
+
+This encourages variance, which is essential for preventing [weight-copying](#discouraging-weight-copying).
+
+### Hardware Classes and Configurable Weights
+
+Each hardware class supported by ComputeHorde has a configurable weight parameter.
+These weights determine the relative contribution of a miner's work to their ultimate score.
+
+This system allows the network to prioritize specific hardware classes based on utility and demand, 
+creating a flexible and fair reward structure.
+
 ## Components
 
 ### **Facilitator**
