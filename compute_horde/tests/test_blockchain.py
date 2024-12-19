@@ -9,21 +9,21 @@ from compute_horde.blockchain.block_cache import get_current_block
 from compute_horde.blockchain.tasks import update_block_cache
 
 
-@pytest.fixture
-def with_celery():
-    app = Celery("test")
-    app.config_from_object("django.conf:settings", namespace="CELERY")
-    yield
-    app.close()
-
-
-@pytest.fixture
-def with_cache():
+@pytest.fixture(autouse=True)
+def clear_cache():
     cache.clear()
     yield
 
 
-def test_block_cache_get_current_block_in_cache(with_cache):
+@pytest.fixture
+def celery():
+    app = Celery("test")
+    app.config_from_object("django.conf:settings", namespace="CELERY")
+    yield app
+    app.close()
+
+
+def test_block_cache_get_current_block_in_cache():
     cache.set(settings.COMPUTE_HORDE_BLOCK_CACHE_KEY, 123)
 
     mock_subtensor = MagicMock()
@@ -36,7 +36,7 @@ def test_block_cache_get_current_block_in_cache(with_cache):
         mock_subtensor.get_current_block.assert_not_called()
 
 
-def test_block_cache_get_current_block_not_in_cache(with_cache):
+def test_block_cache_get_current_block_not_in_cache():
     mock_subtensor = MagicMock()
     with patch("bittensor.subtensor", return_value=mock_subtensor):
         mock_subtensor.get_current_block.return_value = 123
@@ -46,7 +46,7 @@ def test_block_cache_get_current_block_not_in_cache(with_cache):
         assert current_block == 123
 
 
-def test_tasks_update_block_cache(with_cache, with_celery):
+def test_tasks_update_block_cache(celery):
     mock_subtensor = MagicMock()
     with patch("bittensor.subtensor", return_value=mock_subtensor):
         mock_subtensor.get_current_block.return_value = 123
