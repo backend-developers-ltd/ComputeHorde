@@ -13,16 +13,16 @@ def get_subtensor(network):
 
 
 def get_current_block() -> int:
-    block = cache.get(_BLOCK_CACHE_KEY)
-    if block is not None:
-        return block
+    current_block: int = cache.get(_BLOCK_CACHE_KEY)
+    if current_block is not None:
+        return current_block
 
     return cache_current_block()
 
 
 def cache_current_block() -> int:
     subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor.get_current_block()
+    current_block: int = subtensor.get_current_block()
 
     cache.set(_BLOCK_CACHE_KEY, current_block, _BLOCK_CACHE_TIMEOUT)
 
