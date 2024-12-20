@@ -409,14 +409,22 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
     return wallet
 
 
+<<<<<<< Updated upstream
+REDIS_HOST = env.str("BITTENSOR_NETWORK", default="redis")
+REDIS_PORT = env.int("REDIS_PORT", default=6379)
+
+||||||| Stash base
+=======
+REDIS_HOST = env.str("REDIS_PORT", default="127.0.0.1")
+REDIS_PORT = env.int("REDIS_PORT", default=6379)
+
+>>>>>>> Stashed changes
 CHANNEL_LAYERS = {
     "default": {
         # Apparently pubsub backend is in "beta" state, yet seems more stable than the older redis backend.
         "BACKEND": env.str("CHANNELS_BACKEND", "channels_redis.pubsub.RedisPubSubChannelLayer"),
         "CONFIG": {
-            "hosts": [
-                (env.str("REDIS_HOST", default="redis"), env.int("REDIS_PORT", default="6379"))
-            ],
+            "hosts": [(REDIS_HOST, REDIS_PORT)],
         },
     },
 }
