@@ -11,6 +11,7 @@ from unittest import mock
 from unittest.mock import patch
 
 import httpx
+from compute_horde.certificate import generate_certificate_at
 from compute_horde.transport import StubTransport
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
@@ -105,6 +106,59 @@ def test_main_loop():
         {
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
+            "docker_process_stderr": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+    ]
+
+
+def test_main_loop_streaming_job():
+    _, public_key, _ = generate_certificate_at()
+    command = CommandTested(
+        iter(
+            [
+                json.dumps(
+                    {
+                        "message_type": "V1PrepareJobRequest",
+                        "docker_image_name": "backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
+                        "timeout_seconds": 10,
+                        "job_uuid": job_uuid,
+                        "public_key": public_key,
+                        "executor_ip": "127.0.0.1",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "message_type": "V0RunJobRequest",
+                        "docker_image_name": "backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
+                        "docker_run_cmd": ["python", "./mock_streaming_job.py", "autostart"],
+                        "docker_run_options_preset": "none",
+                        "job_uuid": job_uuid,
+                    }
+                ),
+            ]
+        )
+    )
+    command.handle()
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0StreamingJobReadyRequest",
+            "job_uuid": job_uuid,
+            "public_key": mock.ANY,
+            "port": mock.ANY,
+        },
+        {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FinishedRequest",
+            "docker_process_stdout": mock.ANY,
             "docker_process_stderr": mock.ANY,
             "job_uuid": job_uuid,
         },
