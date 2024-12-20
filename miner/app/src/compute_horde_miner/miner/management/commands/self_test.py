@@ -78,31 +78,31 @@ class Command(BaseCommand):
                 validator_image=options["validator_image"], env_file=options["validator_env_file"]
             )
         finally:
-            if options["remove_env_file"]:
-                options["validator_env_file"].unlink()
+            # if options["remove_env_file"]:
+                # options["validator_env_file"].unlink()
             if options["clean_validator_records"]:
                 Validator.objects.filter(public_key=hotkey_address, debug=True).delete()
 
 
 def run_validator_synthetic_jobs(*, validator_image: str, env_file: Path):
-    subprocess.run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "-it",
-            "--network=host",
-            "--add-host=host.docker.internal:host-gateway",
-            "--env-file",
-            str(env_file),
-            "-v",
-            f"{settings.BITTENSOR_WALLET_DIRECTORY}:/root/.bittensor/wallets",
-            validator_image,
-            "/bin/sh",
-            "-c",
-            "python manage.py migrate && python manage.py debug_run_synthetic_jobs",
-        ]
-    )
+    cmd = [
+        "docker",
+        "run",
+        "--rm",
+        "-it",
+        "--network=host",
+        "--add-host=host.docker.internal:host-gateway",
+        "--env-file",
+        str(env_file),
+        "-v",
+        f"{settings.BITTENSOR_WALLET_DIRECTORY}:/root/.bittensor/wallets",
+        validator_image,
+        "/bin/sh",
+        "-c",
+        "python manage.py migrate && python manage.py debug_run_synthetic_jobs",
+    ]
+    print("Running validator debug_run_synthetic_jobs: ", " ".join([str(x) for x in cmd]))
+    subprocess.run(cmd)
 
 
 def create_validator_database(db_name: str):
@@ -128,6 +128,8 @@ def create_env_file(
 
     content = f"""SECRET_KEY={secret_key}
 POSTGRES_PASSWORD={settings.DATABASES["default"]["PASSWORD"]}
+REDIS_HOST={settings.REDIS_HOST}
+REDIS_PORT={settings.REDIS_PORT}
 DATABASE_URL={database_url}
 BITTENSOR_NETWORK={settings.BITTENSOR_NETWORK}
 BITTENSOR_NETUID={settings.BITTENSOR_NETUID}
@@ -137,6 +139,7 @@ DEBUG_MINER_KEY={hotkey_address}
 DEBUG_MINER_ADDRESS=host.docker.internal
 DEBUG_MINER_PORT=8000
 """
+    print(content)
 
     if weights_version is not None:
         content += f"DEBUG_OVERRIDE_WEIGHTS_VERSION={weights_version}\n"

@@ -408,15 +408,15 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
     wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
     return wallet
 
+REDIS_HOST = env.str("REDIS_PORT", default="127.0.0.1")
+REDIS_PORT = env.int("REDIS_PORT", default=6379)
 
 CHANNEL_LAYERS = {
     "default": {
         # Apparently pubsub backend is in "beta" state, yet seems more stable than the older redis backend.
         "BACKEND": env.str("CHANNELS_BACKEND", "channels_redis.pubsub.RedisPubSubChannelLayer"),
         "CONFIG": {
-            "hosts": [
-                (env.str("REDIS_HOST", default="redis"), env.int("REDIS_PORT", default="6379"))
-            ],
+            "hosts": [(REDIS_HOST, REDIS_PORT)],
         },
     },
 }
