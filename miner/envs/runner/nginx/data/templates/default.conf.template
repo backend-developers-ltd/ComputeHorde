@@ -21,6 +21,7 @@ server {
     location /receipts/ {
         # root /;
         alias /receipts/;
+        gzip_static on;
     }
 
 

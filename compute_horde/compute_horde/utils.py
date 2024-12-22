@@ -70,3 +70,10 @@ class Timer:
         if self.timeout is None:
             raise ValueError("timeout was not specified")
         return self.timeout - self.passed_time()
+
+
+def sign_blob(kp: bittensor.Keypair, blob: str):
+    """
+    Signs a string blob with a bittensor keypair and returns the signature
+    """
+    return f"0x{kp.sign(blob).hex()}"
