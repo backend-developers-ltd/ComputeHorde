@@ -304,7 +304,7 @@ wheels = [
 
 [[package]]
 name = "celery"
-version = "5.5.0rc3"
+version = "5.3.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "billiard" },
@@ -314,11 +314,12 @@ dependencies = [
     { name = "click-repl" },
     { name = "kombu" },
     { name = "python-dateutil" },
+    { name = "tzdata" },
     { name = "vine" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/d6/886225ddfc9a0853cecddbb54aa3dd5e36b797774da0c8a11d2f0ec478b1/celery-5.5.0rc3.tar.gz", hash = "sha256:d88850444ac078f561983b1398e8b441814f6c81ab3d150ffbc6da6ba5f561d5", size = 1647499 }
+sdist = { url = "https://files.pythonhosted.org/packages/99/72/45a2d2f9b45ccc6e80e2168ce169d17bf06a98711c192d7b53d5a8accf77/celery-5.3.6.tar.gz", hash = "sha256:870cc71d737c0200c397290d730344cc991d13a057534353d124c9380267aab9", size = 1544498 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c8/82/5ea73643f5c561d5c2d36c07c49e96c260befe83a7e934e2550ac8b1848a/celery-5.5.0rc3-py3-none-any.whl", hash = "sha256:cfac731332959a20a0e2ddc088dc4cb7f38837c1cea5f50a3417d8bccb95ca14", size = 436111 },
+    { url = "https://files.pythonhosted.org/packages/37/c2/4c8a67a4d98a6fcd55dbdd79b641f945d7f59637c3e885c4abbda3c431f6/celery-5.3.6-py3-none-any.whl", hash = "sha256:9da4ea0118d232ce97dff5ed4974587fb1c0ff5c10042eb15278487cdd27d1af", size = 422035 },
 ]
 
 [[package]]
@@ -489,7 +490,7 @@ type-check = [
 [package.metadata]
 requires-dist = [
     { name = "bittensor", specifier = ">=8.3.1,<9.0.0" },
-    { name = "celery", specifier = ">=5.3.0" },
+    { name = "celery", specifier = ">=5.3.0,<6" },
     { name = "cryptography", specifier = ">=42.0.8" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "more-itertools", specifier = ">=10.2.0" },
@@ -851,16 +852,15 @@ wheels = [
 
 [[package]]
 name = "kombu"
-version = "5.5.0rc2"
+version = "5.3.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "amqp" },
-    { name = "tzdata" },
     { name = "vine" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/94/64/cc39be8782edd463a7c6c7c2505fd67d15452d5f1a310981da5c6bdf2275/kombu-5.5.0rc2.tar.gz", hash = "sha256:f581f3b2945a46d5de540a8fde920e87725308cfed6bdeed6983fa4124879cd0", size = 458112 }
+sdist = { url = "https://files.pythonhosted.org/packages/99/3a/2fb09708fef243e35c286414f2bf78543dc311ae7d3de5d343bd8437e38d/kombu-5.3.7.tar.gz", hash = "sha256:011c4cd9a355c14a1de8d35d257314a1d2456d52b7140388561acac3cf1a97bf", size = 439344 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/9b/8384970b77ec1cd9f106be81a5a2f34da2674df3266c35746720127039fc/kombu-5.5.0rc2-py3-none-any.whl", hash = "sha256:213dc124de2a9dada467aa3387c638d8594e91a9dff2dcf6206cd9c6bcf84a5d", size = 208778 },
+    { url = "https://files.pythonhosted.org/packages/b4/9a/1951f2261271d6994f0df5a55b3e9cdad42ed1fc3020a0dc7f6de80a4566/kombu-5.3.7-py3-none-any.whl", hash = "sha256:5634c511926309c7f9789f1433e9ed402616b56836ef9878f01bd59267b4c7a9", size = 200190 },
 ]
 
 [[package]]
