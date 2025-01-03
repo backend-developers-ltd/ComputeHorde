@@ -75,6 +75,7 @@ class Command(BaseCommand):
             # try downloading the pre-signed url
             download_url = s3.get_public_url(test_file, bucket_name=bucket_name)
             response = requests.get(download_url)
+            response.raise_for_status()  # TODO: handle status >= 400, but when would that happen?
             if response.status_code == 301:
                 bucket_region = response.headers.get("x-amz-bucket-region")
                 aws_region = os.getenv("AWS_REGION")
