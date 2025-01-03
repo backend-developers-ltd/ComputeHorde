@@ -49,3 +49,5 @@ TRUSTED_MINER_ADDRESS = "fakehost"
 TRUSTED_MINER_PORT = 1234
 
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+SENTRY_DSN = "fake_sentry_dsn"
