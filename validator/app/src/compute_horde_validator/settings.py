@@ -643,3 +643,5 @@ S3_BUCKET_NAME_ANSWERS = env("S3_BUCKET_NAME_ANSWERS", default=None)
 # Sentry
 if SENTRY_DSN := env("SENTRY_DSN", default=""):
     init_sentry(SENTRY_DSN, ENV)
+
+FETCH_SENTRY_DSN_RETRY_INTERVAL = env.float("FETCH_SENTRY_DSN_RETRY_INTERVAL", default=30 * 60)

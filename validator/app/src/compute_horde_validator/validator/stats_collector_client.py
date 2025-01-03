@@ -79,7 +79,7 @@ class StatsCollectorClient:
             response.raise_for_status()
             return response.text
         except requests.RequestException as e:
-            raise StatsCollectorError() from e
+            raise StatsCollectorError(repr(e)) from e
 
     def get_signature_headers(self):
         hotkey = self.keypair.ss58_address
