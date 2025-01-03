@@ -596,6 +596,7 @@ version = "0.0.18"
 source = { editable = "compute_horde" }
 dependencies = [
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "celery", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "cryptography", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "more-itertools", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -608,6 +609,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "bittensor", specifier = ">=8.3.1,<9.0.0" },
+    { name = "celery", specifier = ">=5.3.0,<6" },
     { name = "cryptography", specifier = ">=42.0.8" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "more-itertools", specifier = ">=10.2.0" },
