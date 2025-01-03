@@ -89,12 +89,19 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 volume=request.volume,
                 volume_type=request.volume_type.value if request.volume_type else None,
                 public_key=request.public_key,
-                executor_ip=self.scope["client"][0],
+                executor_ip=self.get_executor_ip(),
             )
         else:
             raise ValueError(f"Unknown job message type {request_type}")
 
         await self.send(miner_initial_job_request.model_dump_json())
+
+    def get_executor_ip(self):
+        for key, value in self.scope["headers"]:
+            if key.decode("utf-8").lower() == "x-real-ip":
+                return value.decode("utf-8")
+        # Fallback to client's IP if header is not present
+        return self.scope["client"][0]
 
     async def handle(self, msg: BaseExecutorRequest):
         if isinstance(msg, executor_requests.V0ReadyRequest):
@@ -106,9 +113,11 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             await self.job.asave()
             await self.send_executor_failed_to_prepare(self.executor_token)
         if isinstance(msg, executor_requests.V0StreamingJobReadyRequest):
-            executor_ip = self.scope["client"][0]
             await self.send_streaming_job_ready(
-                self.executor_token, public_key=msg.public_key, ip=executor_ip, port=msg.port
+                self.executor_token,
+                public_key=msg.public_key,
+                ip=self.get_executor_ip(),
+                port=msg.port,
             )
         if isinstance(msg, executor_requests.V0StreamingJobFailedToPrepareRequest):
             self.job.status = AcceptedJob.Status.FAILED
