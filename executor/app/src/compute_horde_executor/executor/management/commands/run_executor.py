@@ -919,17 +919,17 @@ class Command(BaseCommand):
                     # None result means this is a streaming job
                     # check that the job is ready to serve requests
                     if job_runner.executor_certificate is not None:
-                        ip = await get_docker_container_ip(job_runner.job_container_name)
-                        job_ready = await check_endpoint(
-                            f"http://{ip}:{JOB_CONTAINER_PORT}/health",
-                            WAIT_FOR_STREAMING_JOB_TIMEOUT,
-                        )
+                        ip = await get_docker_container_ip(job_runner.nginx_container_name, bridge_network=True)
+                        job_ready = await check_endpoint(f"http://{ip}/health", WAIT_FOR_STREAMING_JOB_TIMEOUT)
                         if job_ready:
                             await miner_client.send_streaming_job_ready(
                                 certificate=job_runner.executor_certificate
                             )
                         else:
                             await miner_client.send_streaming_job_failed_to_prepare()
+                    else:
+                        logger.error("Streaming job without certificate")
+                        await miner_client.send_streaming_job_failed_to_prepare()
 
                     # wait for the job process to finish
                     result = await job_runner.wait_for_job(job_request)

@@ -16,12 +16,14 @@ from cryptography.x509.oid import NameOID
 logger = logging.getLogger(__name__)
 
 
-async def get_docker_container_ip(container_name: str) -> str:
+async def get_docker_container_ip(container_name: str, bridge_network: bool =False) -> str:
+    query = "'{{.NetworkSettings.Networks.bridge.IPAddress}}'" if bridge_network else "'{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'"
+
     process = await asyncio.create_subprocess_exec(
         "docker",
         "inspect",
         "-f",
-        "'{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'",
+        query,
         container_name,
         stdout=asyncio.subprocess.PIPE,
     )
