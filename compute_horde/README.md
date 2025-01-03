@@ -36,14 +36,14 @@ INSTALLED_APPS = [
 ### Models
 
 This app works with models from other projects; it doesn't define its own.
-To use it, you need to specify `VALIDATOR_MODEL` in your `settings.py`,
+To use it, you need to specify `COMPUTE_HORDE_VALIDATOR_MODEL` in your `settings.py`,
 in the form of `<app_label>.<model_name>`. This model must have at least two fields: public key (string) and active (bool).
 Other settings are:
 
 ```
-VALIDATOR_KEY_FIELD
-VALIDATOR_ACTIVE_FIELD
-VALIDATOR_DEBUG_FIELD # optional
+COMPUTE_HORDE_VALIDATOR_KEY_FIELD
+COMPUTE_HORDE_VALIDATOR_ACTIVE_FIELD
+COMPUTE_HORDE_VALIDATOR_DEBUG_FIELD # optional
 BITTENSOR_NETUID
 BITTENSOR_NETWORK
 ```

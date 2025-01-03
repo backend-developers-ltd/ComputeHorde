@@ -2,10 +2,10 @@ from django.apps import AppConfig
 from django.core.exceptions import ImproperlyConfigured
 
 REQUIRED_SETTINGS = [
-    "VALIDATOR_MODEL",
-    "VALIDATOR_KEY_FIELD",
-    "VALIDATOR_ACTIVE_FIELD",
-    # VALIDATOR_DEBUG_FIELD - optional
+    "COMPUTE_HORDE_VALIDATOR_MODEL",
+    "COMPUTE_HORDE_VALIDATOR_KEY_FIELD",
+    "COMPUTE_HORDE_VALIDATOR_ACTIVE_FIELD",
+    # COMPUTE_HORDE_VALIDATOR_DEBUG_FIELD - optional
     "BITTENSOR_NETUID",
     "BITTENSOR_NETWORK",
 ]

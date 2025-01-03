@@ -11,17 +11,16 @@ logger = logging.getLogger(__name__)
 
 @shared_task()
 def fetch_validators():
-    Validator = apps.get_model(settings.VALIDATOR_MODEL)
+    Validator = apps.get_model(settings.COMPUTE_HORDE_VALIDATOR_MODEL)
+    key_field = settings.COMPUTE_HORDE_VALIDATOR_KEY_FIELD
+    active_field = settings.COMPUTE_HORDE_VALIDATOR_ACTIVE_FIELD
 
     debug_validator_keys = set()
-    if debug_field := getattr(settings, "VALIDATOR_DEBUG_FIELD", None):
+    if debug_field := getattr(settings, "COMPUTE_HORDE_VALIDATOR_DEBUG_FIELD", None):
         debug_validator_keys = set(
-            Validator.objects.filter(
-                **{
-                    debug_field: True,
-                    settings.VALIDATOR_ACTIVE_FIELD: True,
-                }
-            ).values_list(settings.VALIDATOR_KEY_FIELD, flat=True)
+            Validator.objects.filter(**{debug_field: True, active_field: True}).values_list(
+                key_field, flat=True
+            )
         )
 
     validators = get_validators(
@@ -42,17 +41,10 @@ def fetch_validators():
             to_deactivate.append(validator)
 
     for key in validator_keys:
-        to_create.append(
-            Validator(
-                **{
-                    settings.VALIDATOR_KEY_FIELD: key,
-                    settings.VALIDATOR_ACTIVE_FIELD: True,
-                }
-            )
-        )
+        to_create.append(Validator(**{key_field: key, active_field: True}))
 
     Validator.objects.bulk_create(to_create)
-    Validator.objects.bulk_update(to_activate + to_deactivate, [settings.VALIDATOR_ACTIVE_FIELD])
+    Validator.objects.bulk_update(to_activate + to_deactivate, [active_field])
     logger.info(
         f"Fetched validators. Activated: {len(to_activate)}, deactivated: {len(to_deactivate)}, "
         f"created: {len(to_create)}"

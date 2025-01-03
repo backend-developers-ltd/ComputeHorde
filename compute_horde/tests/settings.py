@@ -12,10 +12,10 @@ DATABASES = {
     "default": {"ENGINE": "django.db.backends.sqlite3"},
 }
 
-VALIDATOR_MODEL = "test_app.Validator"
-VALIDATOR_KEY_FIELD = "public_key"
-VALIDATOR_ACTIVE_FIELD = "active"
-VALIDATOR_DEBUG_FIELD = "debug"
+COMPUTE_HORDE_VALIDATOR_MODEL = "test_app.Validator"
+COMPUTE_HORDE_VALIDATOR_KEY_FIELD = "public_key"
+COMPUTE_HORDE_VALIDATOR_ACTIVE_FIELD = "active"
+COMPUTE_HORDE_VALIDATOR_DEBUG_FIELD = "debug"
 
 BITTENSOR_NETUID = 49
 BITTENSOR_NETWORK = "local"
