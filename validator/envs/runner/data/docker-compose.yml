@@ -66,6 +66,9 @@ services:
     tmpfs: /run
     depends_on:
       - redis
+    links:
+      - redis
+      - db
     logging:
       <<: *logging
     labels:
@@ -202,6 +205,8 @@ services:
     command: celery --app=compute_horde_validator --broker="redis://redis:6379/0" flower
     depends_on:
       - redis
+    links:
+      - redis
     logging:
       <<: *logging
 
@@ -217,6 +222,8 @@ services:
     depends_on:
       - redis
       - db
+    links:
+      - redis
     logging:
       <<: *logging
     labels:
