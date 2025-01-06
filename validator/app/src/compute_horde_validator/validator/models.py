@@ -1,3 +1,4 @@
+import json
 import logging
 import shlex
 import uuid
@@ -10,6 +11,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import UniqueConstraint
 from django.utils.timezone import now
+from pydantic import JsonValue
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +95,27 @@ class SystemEvent(models.Model):
         blank=True,
         help_text="Verbose description of the event, not sent to the stats collector",
     )
-    data = models.JSONField(blank=True)
+    data = models.CharField(blank=True, max_length=1_000_000)
     sent = models.BooleanField(default=False)
+
+    def __init__(
+        self,
+        *,
+        type: EventType,
+        subtype: EventSubType,
+        long_description: str,
+        data: JsonValue | None = None,
+    ):
+        if "data" != None:
+            data = json.dumps(data, separators=(",", ":"))
+        else:
+            data = ""
+        super().__init__(
+            type=type,
+            subtype=subtype,
+            long_description=long_description,
+            data=data,
+        )
 
     def to_dict(self):
         return {
@@ -103,7 +124,7 @@ class SystemEvent(models.Model):
             "timestamp": self.timestamp.isoformat(),
             "data": {
                 "description": self.long_description,
-                **self.data,
+                **(json.loads(self.data) if self.data else {}),
             },
         }
 

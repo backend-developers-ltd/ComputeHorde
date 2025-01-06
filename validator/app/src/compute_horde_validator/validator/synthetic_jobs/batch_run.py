@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import random
 import statistics
@@ -1225,7 +1226,7 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
 async def _emit_telemetry_events(ctx: BatchContext) -> None:
     batch_system_event = await ctx.emit_telemetry_event()
     if batch_system_event is not None:
-        counts = batch_system_event.data.get("counts")
+        counts = json.loads(batch_system_event.data)["counts"]
         logger.info("Batch telemetry counts: %s", counts)
 
     for job in ctx.jobs.values():
