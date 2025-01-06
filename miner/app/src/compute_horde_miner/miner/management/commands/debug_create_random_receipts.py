@@ -53,7 +53,7 @@ class Command(BaseCommand):
                 for receipt in receipts:
                     by_type[type(receipt)].append(receipt)
                 for cls, receipts in by_type.items():
-                    cls.objects.bulk_create(receipts)  # type: ignore
+                    await cls.objects.abulk_create(receipts)  # type: ignore
                     (await current_store()).store([r.to_receipt() for r in receipts])
                     logger.info(f"Inserted {len(receipts)} {cls.__name__}")
                 added_so_far += current_chunk_size
@@ -68,7 +68,7 @@ class Command(BaseCommand):
 
                 for _ in range(self.n):
                     receipt = self.generate_one()
-                    receipt.save()
+                    await receipt.asave()
                     (await current_store()).store([receipt.to_receipt()])
                     receipts_this_loop.append(receipt)
                     time.sleep(time_per_receipt)
