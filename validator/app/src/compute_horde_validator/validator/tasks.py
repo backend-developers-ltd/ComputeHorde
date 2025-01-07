@@ -1111,7 +1111,7 @@ def send_events_to_facilitator():
             ).update(sent=True)
         except StatsCollectorError as e:
             msg = "Failed to send system events to facilitator"
-            if e.response:
+            if e.response is not None:
                 msg = f"{msg}: {e.response}"
             logger.error(msg)
 
