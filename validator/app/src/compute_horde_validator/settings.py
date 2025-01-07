@@ -290,7 +290,7 @@ CONSTANCE_CONFIG = {
         int,
     ),
     "DYNAMIC_RECEIPT_TRANSFER_ENABLED": (
-        True,
+        False,
         "Whether receipt transfer between miners and validators should be enabled",
         bool,
     ),

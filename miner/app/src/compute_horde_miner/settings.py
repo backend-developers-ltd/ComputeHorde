@@ -150,7 +150,7 @@ CONSTANCE_CONFIG = {
     "OLD_MINER_IP": ("", "IP address of old miner for migration", str),
     "OLD_MINER_PORT": (8000, "PORT of old miner for migration", int),
     "DYNAMIC_RECEIPT_TRANSFER_ENABLED": (
-        True,
+        False,
         "Whether continuous receipt transfer between miners and validators should be enabled",
         bool,
     ),
