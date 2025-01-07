@@ -32,6 +32,7 @@ dependencies = [
     "boto3>=1.35.11",
     "httpx~=0.26.0",
     "class-registry>=2.1.2",
+    "kombu~=5.3",
 ]
 
 [tool.uv.sources]
