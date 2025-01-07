@@ -113,7 +113,7 @@ events {
 """
 
 JOB_CONTAINER_PORT = 8000
-WAIT_FOR_STREAMING_JOB_TIMEOUT = 10
+WAIT_FOR_STREAMING_JOB_TIMEOUT = 60
 WAIT_FOR_NGINX_TIMEOUT = 10
 
 
@@ -925,10 +925,12 @@ class Command(BaseCommand):
                             f"http://{ip}/health", WAIT_FOR_STREAMING_JOB_TIMEOUT
                         )
                         if job_ready:
+                            logger.debug(f"Streaming job READY")
                             await miner_client.send_streaming_job_ready(
                                 certificate=job_runner.executor_certificate
                             )
                         else:
+                            logger.debug(f"Streaming job NOT READY")
                             await miner_client.send_streaming_job_failed_to_prepare()
 
                     # wait for the job process to finish
