@@ -16,11 +16,26 @@ logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
     def add_arguments(self, parser):
-        parser.add_argument("--aws-access-key-id")
-        parser.add_argument("--aws-secret-access-key")
-        parser.add_argument("--aws-endpoint-url")
-        parser.add_argument("--s3-bucket-name-prompts")
-        parser.add_argument("--s3-bucket-name-answers")
+        parser.add_argument(
+            "--aws-access-key-id",
+            help="Override the value of AWS_ACCESS_KEY_ID from .env",
+        )
+        parser.add_argument(
+            "--aws-secret-access-key",
+            help="Override the value of AWS_SECRET_ACCESS_KEY from .env",
+        )
+        parser.add_argument(
+            "--aws-endpoint-url",
+            help="Override the value of AWS_ENDPOINT_URL from .env",
+        )
+        parser.add_argument(
+            "--s3-bucket-name-prompts",
+            help="Override the value of S3_BUCKET_NAME_PROMPTS from .env",
+        )
+        parser.add_argument(
+            "--s3-bucket-name-answers",
+            help="Override the value of S3_BUCKET_NAME_ANSWERS from .env",
+        )
 
     def handle(self, *args, **options):
         logging.basicConfig(level="ERROR")
