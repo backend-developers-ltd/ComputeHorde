@@ -45,3 +45,6 @@ class DevExecutorManager(BaseExecutorManager):
 
     async def is_active(self) -> bool:
         return True
+
+    async def get_executor_public_address(self, executor: str) -> str | None:
+        return "127.0.0.1"

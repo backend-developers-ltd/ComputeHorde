@@ -96,12 +96,15 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
 
         await self.send(miner_initial_job_request.model_dump_json())
 
-    def get_executor_ip(self):
+    def get_executor_ip(self) -> str:
+        if self.job.executor_address:
+            return str(self.job.executor_address)
+        # Get the real IP from the headers
         for key, value in self.scope["headers"]:
             if key.decode("utf-8").lower() == "x-real-ip":
-                return value.decode("utf-8")
+                return str(value.decode("utf-8"))
         # Fallback to client's IP if header is not present
-        return self.scope["client"][0]
+        return str(self.scope["client"][0])
 
     async def handle(self, msg: BaseExecutorRequest):
         if isinstance(msg, executor_requests.V0ReadyRequest):

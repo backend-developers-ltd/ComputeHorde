@@ -3,6 +3,7 @@ import asyncio
 import datetime as dt
 import logging
 import time
+from typing import Any
 
 from compute_horde.executor_class import (
     EXECUTOR_CLASS,
@@ -137,6 +138,10 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
     async def is_active(self) -> bool:
         """Check if the Miner is an active one for configured Cluster"""
 
+    async def get_executor_public_address(self, executor: Any) -> str | None:
+        """To be given to clients to connect to streaming jobs"""
+        return None
+
     async def _sync_pools_with_manifest(self):
         manifest = await self.get_manifest()
         for executor_class, executor_count in manifest.items():
@@ -153,7 +158,7 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
 
     async def reserve_executor_class(self, token, executor_class, timeout):
         pool = await self.get_executor_class_pool(executor_class)
-        await pool.reserve_executor(token, self.get_total_timeout(executor_class, timeout))
+        return await pool.reserve_executor(token, self.get_total_timeout(executor_class, timeout))
 
     def get_total_timeout(self, executor_class, job_timeout):
         spec = EXECUTOR_CLASS.get(executor_class)
