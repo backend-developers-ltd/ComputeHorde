@@ -1,4 +1,5 @@
 INSTALLED_APPS = [
+    "compute_horde.blockchain",
     "compute_horde.receipts",
     "compute_horde.validators",
 ]

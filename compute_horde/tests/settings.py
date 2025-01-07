@@ -6,6 +6,8 @@ INSTALLED_APPS += [
 
 CELERY_TASK_ALWAYS_EAGER = True
 
+COMPUTE_HORDE_BLOCK_CACHE_KEY = "test-block-cache-key"
+
 USE_TZ = True
 
 DATABASES = {
