@@ -473,12 +473,14 @@ class JobRunner:
         self.cmd: list[str] = []
 
         # for streaming job
+        self.is_streaming_job: bool = False
         self.executor_certificate: str | None = None
         if isinstance(self.initial_job_request, V1InitialJobRequest):
             self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(
                 alternative_name=self.initial_job_request.executor_ip
             )
             save_public_key(self.initial_job_request.public_key, self.nginx_dir_path)
+            self.is_streaming_job = True
 
     async def prepare(self):
         self.volume_mount_dir.mkdir(exist_ok=True)
@@ -555,7 +557,7 @@ class JobRunner:
 
         job_network = "none"
         # if streaming job create a local network for it to communicate with nginx
-        if self.executor_certificate is not None:
+        if self.is_streaming_job:
             logger.debug("Spinning up local network for streaming job")
             job_network = self.job_network_name
             process = await asyncio.create_subprocess_exec(
@@ -588,9 +590,7 @@ class JobRunner:
             stderr=asyncio.subprocess.PIPE,
         )
 
-        # if streaming job, spin up nginx for it
-        if self.executor_certificate is not None:
-            # TODO wait for the streaming job to be ready
+        if self.is_streaming_job:
             logger.debug("Spinning up nginx for streaming job")
             await asyncio.sleep(1)
             try:
@@ -652,8 +652,8 @@ class JobRunner:
             exit_status = self.process.returncode
             timeout = False
 
-        # if streaming job, stop the associated nginx server
-        if self.executor_certificate is not None:
+        if self.is_streaming_job:
+            # stop the associated nginx server
             try:
                 await asyncio.sleep(1)
                 await asyncio.create_subprocess_exec(
@@ -916,21 +916,22 @@ class Command(BaseCommand):
                 # start the job running process
                 result = await job_runner.start_job(job_request)
                 if result is None:
-                    # None result means this is a streaming job
-                    # check that the job is ready to serve requests
-                    if job_runner.executor_certificate is not None:
-                        ip = await get_docker_container_ip(job_runner.nginx_container_name, bridge_network=True)
+                    if job_runner.is_streaming_job:
+                        assert job_runner.executor_certificate is not None
+                        # check that the job is ready to serve requests
+                        ip = await get_docker_container_ip(
+                            job_runner.nginx_container_name, bridge_network=True
+                        )
                         logger.debug(f"Checking if streaming job is ready at {ip}")
-                        job_ready = await check_endpoint(f"http://{ip}/health", WAIT_FOR_STREAMING_JOB_TIMEOUT)
+                        job_ready = await check_endpoint(
+                            f"http://{ip}/health", WAIT_FOR_STREAMING_JOB_TIMEOUT
+                        )
                         if job_ready:
                             await miner_client.send_streaming_job_ready(
                                 certificate=job_runner.executor_certificate
                             )
                         else:
                             await miner_client.send_streaming_job_failed_to_prepare()
-                    else:
-                        logger.error("Streaming job without certificate")
-                        await miner_client.send_streaming_job_failed_to_prepare()
 
                     # wait for the job process to finish
                     result = await job_runner.wait_for_job(job_request)
