@@ -622,6 +622,10 @@ class JobRunner:
 
         return None
 
+    def kill_job(self):
+        if self.process is not None:
+            self.process.kill()
+
     async def wait_for_job(self, job_request: V0JobRequest) -> JobResult:
         """
         Waits for the existing job process to finish and returns the result.
@@ -930,6 +934,7 @@ class Command(BaseCommand):
                             )
                         else:
                             await miner_client.send_streaming_job_failed_to_prepare()
+                            job_runner.kill_job()
 
                     # wait for the job process to finish
                     result = await job_runner.wait_for_job(job_request)
