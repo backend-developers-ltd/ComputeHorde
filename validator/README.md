@@ -120,7 +120,7 @@ After setting up your `.env` file by following the above section,
 you can verify your S3 setup with the following command:
 
 ```sh
-docker-compose exec validator_runner docker-compose exec validator python manage.py check_s3_setup
+docker compose exec validator-runner docker compose exec app python manage.py check_s3_setup
 ```
 
 If your some reason your S3 setup does not work,

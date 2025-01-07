@@ -115,7 +115,7 @@ class Command(BaseCommand):
                     )
                 return
 
-            # try downloading the pre-signed url
+            # try downloading with public url
             download_url = s3.get_public_url(
                 test_file, bucket_name=bucket_name, s3_client=s3_client
             )
