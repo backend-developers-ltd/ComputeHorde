@@ -150,9 +150,13 @@ async def run_streaming_job(options, wait_timeout: int = 300):
             executor_cert_path = dir_path / "ssl" / "executor_certificate.pem"
             executor_cert_path.write_text(streaming_job_ready_response.public_key)
 
+            base_url = (
+                f"https://{streaming_job_ready_response.ip}:{streaming_job_ready_response.port}"
+            )
+
             # Check you can connect to the job container and trigger job execution
-            url = f"https://{streaming_job_ready_response.ip}:{streaming_job_ready_response.port}/execute-job"
-            logger.info(f"Making request to job container: {url}")
+            url = f"{base_url}/execute-job"
+            logger.info(f"Triggering streaming job execution on: {url}")
             response = requests.get(
                 url,
                 verify=str(executor_cert_path),
@@ -160,7 +164,18 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                 headers={"Host": streaming_job_ready_response.ip},
             )
             logger.info(f"Response {response.status_code}: {response.text}")
-            assert response.text == "OK"
+            assert response.text == "OK", "Failed to trigger job execution"
+
+            url = f"{base_url}/terminate"
+            logger.info(f"Terminating streaming job on: {url}")
+            response = requests.get(
+                url,
+                verify=str(executor_cert_path),
+                cert=cert,
+                headers={"Host": streaming_job_ready_response.ip},
+            )
+            logger.info(f"Response {response.status_code}: {response.text}")
+            assert response.text == "OK", "Failed to terminate job"
 
             try:
                 final_response = await asyncio.wait_for(

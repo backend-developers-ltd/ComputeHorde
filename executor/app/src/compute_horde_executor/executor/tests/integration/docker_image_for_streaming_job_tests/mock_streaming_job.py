@@ -5,42 +5,40 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 class StreamingJobHandler(BaseHTTPRequestHandler):
+    def _set_response(self, code: int, msg: bytes = b""):
+        self.send_response(code)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(msg)
+
     def do_GET(self):
         if self.path == "/execute-job":
-            self.send_response(200)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"OK")
-            # Mock job finish after endpoint was hit
+            self._set_response(200, b"OK")
+        elif self.path == "/health":
+            self._set_response(200, b"OK")
+        elif self.path == "/terminate":
+            self._set_response(200, b"OK")
             time.sleep(2)
             os._exit(0)
-        elif self.path == "/health":
-            self.send_response(200)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"OK")
         else:
-            self.send_response(404)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"Not Found")
+            self._set_response(404, b"Not Found")
 
 
 class AutoStartStreamingJobHandler(BaseHTTPRequestHandler):
+    def _set_response(self, code: int, msg: bytes = b""):
+        self.send_response(code)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(msg)
+
     def do_GET(self):
         if self.path == "/health":
-            self.send_response(200)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"OK")
+            self._set_response(200, b"OK")
             # Mock job finishing right after docker ready
             time.sleep(2)
             os._exit(0)
         else:
-            self.send_response(404)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"Not Found")
+            self._set_response(404, b"Not Found")
 
 
 if __name__ == "__main__":
