@@ -25,6 +25,10 @@ class Command(BaseCommand):
             help="Override the value of AWS_SECRET_ACCESS_KEY from .env",
         )
         parser.add_argument(
+            "--aws-region-name",
+            help="Override the value of AWS region (by default read from environment variable AWS_DEFAULT_REGION)",
+        )
+        parser.add_argument(
             "--aws-endpoint-url",
             help="Override the value of AWS_ENDPOINT_URL from .env",
         )
@@ -40,16 +44,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         logging.basicConfig(level="ERROR")
 
-        # patch aws config
-        if options["aws_access_key_id"] is not None:
-            self.stderr.write("Setting AWS_ACCESS_KEY_ID ...")
-            settings.AWS_ACCESS_KEY_ID = options["aws_access_key_id"]
-        if options["aws_secret_access_key"] is not None:
-            self.stderr.write("Setting AWS_SECRET_ACCESS_KEY ...")
-            settings.AWS_SECRET_ACCESS_KEY = options["aws_secret_access_key"]
-        if options["aws_endpoint_url"] is not None:
-            self.stderr.write("Setting AWS_ENDPOINT_URL ...")
-            settings.AWS_ENDPOINT_URL = options["aws_endpoint_url"]
+        s3_client = s3.get_s3_client(
+            aws_access_key_id=options["aws_access_key_id"],
+            aws_secret_access_key=options["aws_secret_access_key"],
+            region_name=options["aws_region_name"],
+            endpoint_url=options["aws_endpoint_url"],
+        )
 
         prompts_bucket = options["s3_bucket_name_prompts"] or settings.S3_BUCKET_NAME_PROMPTS
         answers_bucket = options["s3_bucket_name_answers"] or settings.S3_BUCKET_NAME_ANSWERS
@@ -60,7 +60,9 @@ class Command(BaseCommand):
 
             # try generating a pre-signed url
             try:
-                upload_url = s3.generate_upload_url(test_file, bucket_name=bucket_name)
+                upload_url = s3.generate_upload_url(
+                    test_file, bucket_name=bucket_name, s3_client=s3_client
+                )
             except (NoCredentialsError, PartialCredentialsError):
                 self.stderr.write(
                     "You did not provide credentials.\n"
@@ -88,7 +90,9 @@ class Command(BaseCommand):
                 return
 
             # try downloading the pre-signed url
-            download_url = s3.get_public_url(test_file, bucket_name=bucket_name)
+            download_url = s3.get_public_url(
+                test_file, bucket_name=bucket_name, s3_client=s3_client
+            )
             response = requests.get(download_url)
             response.raise_for_status()  # TODO: handle status >= 400, but when would that happen?
             if response.status_code == 301:
