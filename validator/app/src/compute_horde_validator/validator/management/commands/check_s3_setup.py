@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import secrets
 import uuid
 
@@ -12,6 +13,22 @@ from requests import HTTPError
 from compute_horde_validator.validator import s3
 
 logger = logging.getLogger(__name__)
+REGION_ERROR = re.compile(
+    "the region '([a-z]+-[a-z]+-[0-9]+)' is wrong; expecting '([a-z]+-[a-z]+-[0-9]+)'"
+)
+
+
+def _print_region_env_warnings(writer):
+    msg = ""
+    if aws_region := os.getenv("AWS_REGION"):
+        msg += f"You have environment variable AWS_REGION={aws_region}\n"
+    if aws_default_region := os.getenv("AWS_DEFAULT_REGION"):
+        msg += f"You have environment variable AWS_DEFAULT_REGION={aws_default_region}\n"
+
+    if msg:
+        msg = "Possible issues with environment variables:\n" + msg
+
+    writer.write(msg)
 
 
 class Command(BaseCommand):
@@ -79,6 +96,15 @@ class Command(BaseCommand):
                     self.stderr.write(
                         f"Your configured credentials does not have permissions to write to this bucket: {bucket_name}\n"
                     )
+                elif match := REGION_ERROR.search(exc.response.text):
+                    wrong, expecting = match.groups()
+                    self.stderr.write(
+                        "Your bucket requests are being routed to a invalid AWS region.\n"
+                    )
+                    self.stderr.write(
+                        f"Your bucket {bucket_name!r} is in region {expecting!r}, but it is configured as {wrong!r}\n"
+                    )
+                    _print_region_env_warnings(self.stderr)
                 else:
                     self.stderr.write(
                         f"Failed to write to the bucket {bucket_name} with the following error:\n"
@@ -97,19 +123,14 @@ class Command(BaseCommand):
             response.raise_for_status()  # TODO: handle status >= 400, but when would that happen?
             if response.status_code == 301:
                 bucket_region = response.headers.get("x-amz-bucket-region")
-                aws_region = os.getenv("AWS_REGION")
-                aws_default_region = os.getenv("AWS_DEFAULT_REGION")
-                msg = "Your bucket requests are being routed to a invalid AWS region.\n"
+                self.stderr.write(
+                    "Your bucket requests are being routed to a invalid AWS region.\n"
+                )
                 if bucket_region:
-                    msg += f"Your bucket {bucket_name} is configured in region {bucket_region}\n"
-                if aws_region:
-                    msg += f"You have environment variable AWS_REGION={aws_region}\n"
-                if aws_default_region:
-                    msg += (
-                        f"You have environment variable AWS_DEFAULT_REGION={aws_default_region}\n"
+                    self.stderr.write(
+                        f"Your bucket {bucket_name!r} is in region {bucket_region!r}\n"
                     )
-                msg += "Please fix your AWS_REGION/AWS_DEFAULT_REGION environment variables.\n"
-                self.stderr.write(msg)
+                _print_region_env_warnings(self.stderr)
                 return
 
             assert file_contents == response.text.strip()
