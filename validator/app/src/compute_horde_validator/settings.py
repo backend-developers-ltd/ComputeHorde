@@ -3,7 +3,6 @@ Django settings for compute_horde_validator project.
 """
 
 import inspect
-import logging
 import pathlib
 from datetime import timedelta
 from functools import wraps
@@ -12,6 +11,8 @@ import bittensor
 import environ
 from celery.schedules import crontab
 from compute_horde import base  # noqa
+
+from compute_horde_validator.validator.sentry import init_sentry
 
 root = environ.Path(__file__) - 2
 
@@ -665,22 +666,6 @@ S3_BUCKET_NAME_ANSWERS = env("S3_BUCKET_NAME_ANSWERS", default=None)
 
 # Sentry
 if SENTRY_DSN := env("SENTRY_DSN", default=""):
-    import sentry_sdk
-    from sentry_sdk.integrations.celery import CeleryIntegration
-    from sentry_sdk.integrations.django import DjangoIntegration
-    from sentry_sdk.integrations.logging import LoggingIntegration
-    from sentry_sdk.integrations.redis import RedisIntegration
+    init_sentry(SENTRY_DSN, ENV)
 
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        environment=ENV,
-        integrations=[
-            DjangoIntegration(),
-            CeleryIntegration(),
-            RedisIntegration(),
-            LoggingIntegration(
-                level=logging.INFO,  # Capture info and above as breadcrumbs
-                event_level=logging.ERROR,  # Send error events from log messages
-            ),
-        ],
-    )
+FETCH_SENTRY_DSN_RETRY_INTERVAL = env.float("FETCH_SENTRY_DSN_RETRY_INTERVAL", default=30 * 60)
