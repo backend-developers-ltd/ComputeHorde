@@ -55,10 +55,10 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         return 48  # it takes around 42s - we add 15% buffer
 
     def base_docker_image_name(self) -> str:
-        return "docker.io/backenddevelopersltd/compute-horde-prompt-solver:v0-latest"
+        return "docker.io/backenddevelopersltd/compute-horde-prompt-solver-staging:v0-latest"
 
     def docker_image_name(self) -> str:
-        return "docker.io/backenddevelopersltd/compute-horde-prompt-solver:v0-latest"
+        return "docker.io/backenddevelopersltd/compute-horde-prompt-solver-staging:v0-latest"
 
     def docker_run_options_preset(self) -> DockerRunOptionsPreset:
         return "nvidia_all"
@@ -75,6 +75,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
             cmd.append("--server")
         else:
             cmd.extend(["--seed", str(self.seed)])
+        # cmd.append("--mock")
         cmd.append(f"/volume/{self.input_filename}")
         return cmd
 

@@ -1490,13 +1490,17 @@ async def _trigger_streaming_job(
                             f"Successfully triggered job execution for {job_uuid} on {url}"
                         )
                     else:
+                        logger.error(
+                            f"Bad response triggering streaming job {job_uuid} execution {url}: {r.status_code}, {r.text}"
+                        )
                         raise Exception(
                             f"Bad response triggering streaming job {job_uuid} execution {url}: {r.status_code}, {r.text}"
                         )
                 except Exception as e:
-                    raise Exception(
-                        f"Error triggering streaming job {job_uuid} execution {url}: {e}"
-                    )
+                    logger.error(f"Error triggering streaming job {job_uuid} execution {url}: {e}")
+                    # raise Exception(
+                    #     f"Error triggering streaming job {job_uuid} execution {url}: {e}"
+                    # )
 
                 # shedule the job to terminate
                 url = f"https://{response.ip}:{response.port}/terminate"
@@ -1505,13 +1509,15 @@ async def _trigger_streaming_job(
                     if r.status_code == 200:
                         logger.debug(f"Successfully sheduled streaming job {job_uuid} termination")
                     else:
+                        logger.error(f'Bad response sheduling streaming job {job_uuid} termination on {url}: {r.status_code}, {r.text}')
                         raise Exception(
                             f"Bad response sheduling streaming job {job_uuid} termination on {url}: {r.status_code}, {r.text}"
                         )
                 except Exception as e:
-                    raise Exception(
-                        f"Error sheduling streaming job {job_uuid} termination on {url}: {e}"
-                    )
+                    logger.error(f"Error sheduling streaming job {job_uuid} termination on {url}: {e}")
+                    # raise Exception(
+                    #     f"Error sheduling streaming job {job_uuid} termination on {url}: {e}"
+                    # )
 
 
 async def _multi_send_job_request(ctx: BatchContext) -> None:
