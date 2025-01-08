@@ -42,7 +42,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
             prefix=self.s3_output_prefix,
         )
 
-    def _url_for_download(self) -> str:
+    def url_for_download(self) -> str:
         return get_public_url(
             key=self.s3_output_key,
             bucket_name=self.s3_output_bucket,
@@ -92,7 +92,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         )
 
     async def download_answers(self):
-        response = await download_file_content(self._url_for_download())
+        response = await download_file_content(self.url_for_download())
         self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(response)
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:

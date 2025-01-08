@@ -1533,6 +1533,25 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
             ),
         )
 
+        # NOTE: We generally want data to be dict[str, str].
+        # Since this code block is here only for debugging purpose,
+        # we are passing non-conforming data here with 'type: ignore'.
+        if isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator):
+            job.system_event(
+                type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_MISSING,
+                description="failed synthetic llm job details",
+                data={
+                    "prompts_url": job.job_generator.s3_url,
+                    "answers_url": job.job_generator.url_for_download(),
+                    "seed": job.job_generator.seed,  # type: ignore
+                    "known_answers": {  # type: ignore
+                        p.content: p.answer for p in job.job_generator.expected_prompts
+                    },
+                    "job_response": job.job_response.model_dump(mode="json"),  # type: ignore
+                },
+            )
+
     logger.info(
         "%s finished with %s in %.2f seconds with score %.6g: %s",
         job.name,
