@@ -924,7 +924,7 @@ class Command(BaseCommand):
                         ip = await get_docker_container_ip(
                             job_runner.nginx_container_name, bridge_network=True
                         )
-                        logger.debug(f"Checking if streaming job is ready at {ip}")
+                        logger.debug(f"Checking streaming job readiness on http://{ip}/health")
                         job_ready = await check_endpoint(
                             f"http://{ip}/health", WAIT_FOR_STREAMING_JOB_TIMEOUT
                         )
