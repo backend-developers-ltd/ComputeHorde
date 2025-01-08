@@ -52,7 +52,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         )
 
     def timeout_seconds(self) -> int:
-        return 120
+        return 240
 
     def base_docker_image_name(self) -> str:
         return "docker.io/backenddevelopersltd/compute-horde-prompt-solver-staging:v0-latest"
