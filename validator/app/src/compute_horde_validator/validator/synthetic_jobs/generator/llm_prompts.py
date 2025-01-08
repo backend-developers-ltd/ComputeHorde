@@ -75,7 +75,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
             cmd.append("--server")
         else:
             cmd.extend(["--seed", str(self.seed)])
-        cmd.append("--mock")
+        # cmd.append("--mock")
         cmd.append(f"/volume/{self.input_filename}")
         return cmd
 
