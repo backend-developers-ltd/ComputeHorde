@@ -503,7 +503,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             ).model_dump_json()
         )
         logger.debug(
-            f"Readiness for streaming job {job_uuid} reported to validator {self.validator_key}"
+            f"Streaming readiness for job {job_uuid} reported to validator {self.validator_key}"
         )
 
     async def _streaming_job_failed_to_prepare(self, msg: StreamingJobFailedToPrepare):
@@ -513,7 +513,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             miner_requests.V0StreamingJobNotReadyRequest(job_uuid=job_uuid).model_dump_json()
         )
         logger.debug(
-            f"Failure in preparation for streaming job {job_uuid} reported to validator {self.validator_key}"
+            f"Failure in streaming preparation for job {job_uuid} reported to validator {self.validator_key}"
         )
 
     async def _executor_finished(self, msg: ExecutorFinished):

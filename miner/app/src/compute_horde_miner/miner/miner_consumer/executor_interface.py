@@ -116,6 +116,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             await self.job.asave()
             await self.send_executor_failed_to_prepare(self.executor_token)
         if isinstance(msg, executor_requests.V0StreamingJobReadyRequest):
+            # Job status is RUNNING
             await self.send_streaming_job_ready(
                 self.executor_token,
                 public_key=msg.public_key,

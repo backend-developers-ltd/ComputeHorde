@@ -56,6 +56,7 @@ async def test_receipt_is_saved(
     executor = mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.current")
     executor.executor_manager.get_manifest = AsyncMock(return_value={})
     executor.executor_manager.reserve_executor_class = AsyncMock()
+    executor.executor_manager.get_executor_public_address = AsyncMock()
 
     settings.DEBUG_TURN_AUTHENTICATION_OFF = True
     settings.BITTENSOR_WALLET = lambda: miner_wallet
