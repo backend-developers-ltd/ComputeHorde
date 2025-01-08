@@ -79,15 +79,16 @@ class Command(BaseCommand):
             help="Only for debug: IP port of miner to fetch receipts from",
         )
         parser.add_argument(
-            "--interval",
-            type=float,
-            help="If provided, runs in daemon mode and polls for changes every `interval` seconds.",
+            "--daemon",
+            action="store_true",
+            default=False,
+            help="Run indefinitely. (otherwise performs a single transfer)",
         )
 
     @async_to_sync
     async def handle(
         self,
-        interval: float | None,
+        daemon: bool,
         debug_miner_hotkey: str | None,
         debug_miner_ip: str | None,
         debug_miner_port: int | None,
@@ -144,16 +145,16 @@ class Command(BaseCommand):
             - less timeouts due to CPU time being stolen by CPU heavy tasks
         """
 
-        if interval is None:
-            await self.run_once(cutoff, miners)
-        else:
+        if daemon:
             while True:
                 try:
-                    await self.run_in_loop(interval, cutoff, miners)
+                    await self.run_in_loop(cutoff, miners)
                 except TransferIsDisabled:
                     # Sleep instead of exiting in case the transfer gets dynamically re-enabled.
                     logger.info("Transfer is currently disabled. Sleeping for a minute.")
                     await asyncio.sleep(60)
+        else:
+            await self.run_once(cutoff, miners)
 
     async def run_once(
         self, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]
@@ -170,7 +171,7 @@ class Command(BaseCommand):
             )
 
     async def run_in_loop(
-        self, interval: float, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]
+        self, cutoff: datetime, miners: Callable[[], Awaitable[list[MinerInfo]]]
     ) -> None:
         """
         Do a full catch-up + listen for changes in latest 2 pages indefinitely
@@ -200,7 +201,6 @@ class Command(BaseCommand):
                 ),
                 # Keep up with latest pages continuously in parallel
                 self.keep_up(
-                    interval=interval,
                     miners=miners,
                     session=session,
                     semaphore=asyncio.Semaphore(50),
@@ -247,7 +247,6 @@ class Command(BaseCommand):
 
     async def keep_up(
         self,
-        interval: float,
         miners: Callable[[], Awaitable[list[MinerInfo]]],
         session: aiohttp.ClientSession,
         semaphore: asyncio.Semaphore,
@@ -257,6 +256,7 @@ class Command(BaseCommand):
         """
         while True:
             await self._throw_if_disabled()
+            interval: int = await aget_config("DYNAMIC_RECEIPT_TRANSFER_INTERVAL")
 
             start_time = time.monotonic()
             current_page = LocalFilesystemPagedReceiptStore.current_page()

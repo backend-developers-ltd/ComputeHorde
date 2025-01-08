@@ -294,6 +294,11 @@ CONSTANCE_CONFIG = {
         "Whether receipt transfer between miners and validators should be enabled",
         bool,
     ),
+    "DYNAMIC_RECEIPT_TRANSFER_INTERVAL": (
+        2,
+        "Seconds between consecutive receipt polling",
+        int,
+    ),
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 
