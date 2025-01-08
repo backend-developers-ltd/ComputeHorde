@@ -1485,7 +1485,8 @@ async def _trigger_streaming_job(
                 url = f"https://{response.ip}:{response.port}/execute-job"
                 try:
                     r = await client.post(url, json={"seed": seed}, headers={"Host": response.ip})
-                    r.raise_for_status()
+                    logger.info(f"EXECUTE ~~~~~~~~ {r.status_code}, {r.is_success} {r.text} -- {r.headers}")
+                    # r.raise_for_status()
                 except Exception as e:
                     msg = f"Streaming job {job_uuid} communication error on {url}: {e}"
                     logger.warning(msg)
@@ -1495,7 +1496,8 @@ async def _trigger_streaming_job(
                 url = f"https://{response.ip}:{response.port}/terminate"
                 try:
                     r = await client.get(url, headers={"Host": response.ip})
-                    r.raise_for_status()
+                    logger.info(f"TERMINATE ~~~~~~~~ {r.status_code}, {r.is_success} {r.text}")
+                    # r.raise_for_status()
                 except Exception as e:
                     msg = f"Streaming job {job_uuid} communication error on {url}: {e}"
                     logger.warning(msg)
