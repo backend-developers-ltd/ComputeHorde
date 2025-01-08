@@ -1479,7 +1479,7 @@ async def _trigger_streaming_job(
             await streaming_start_barrier.wait()
 
             async with httpx.AsyncClient(
-                verify=str(executor_cert_path), cert=ctx.own_certs
+                verify=str(executor_cert_path), cert=ctx.own_certs, timeout = 120
             ) as client:
                 # send the seed to the executor to start the streaming job
                 url = f"https://{response.ip}:{response.port}/execute-job"
