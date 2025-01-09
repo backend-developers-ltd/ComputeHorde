@@ -1,5 +1,6 @@
 import sys
 
+import bittensor
 from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.core.management.base import BaseCommand
@@ -37,6 +38,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--miner_hotkey", default=None, type=str, help="Miner Hotkey")
+        parser.add_argument("--miner_address", default=None, type=str, help="Miner IPv4 address")
+        parser.add_argument("--miner_port", default=None, type=int, help="Miner port")
         parser.add_argument(
             "--executor_class", type=str, help="Executor class", default=DEFAULT_EXECUTOR_CLASS
         )
@@ -76,11 +79,25 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         hotkey = options["miner_hotkey"]
+        address = options["miner_address"]
+        port = options["miner_port"]
+
+        miner = None
+        miner_axon_info = None
         if hotkey:
-            miner = Miner.objects.filter(hotkey=hotkey).first()
+            miner = Miner.objects.get_or_create(hotkey=hotkey)[0]
             miner_blacklisted = MinerBlacklist.objects.filter(miner=miner).exists()
             if miner_blacklisted:
                 raise ValueError(f"miner with hotkey {hotkey} is blacklisted")
+            if address and port:
+                miner_axon_info = bittensor.AxonInfo(
+                    version=4,
+                    ip=address,
+                    ip_type=4,
+                    port=port,
+                    hotkey=hotkey,
+                    coldkey=hotkey,
+                )
         else:
             miner = Miner.objects.exclude(minerblacklist__isnull=False).first()
 
@@ -103,7 +120,9 @@ class Command(BaseCommand):
         )
 
         try:
-            async_to_sync(run_admin_job_request)(job_request.pk, callback=notify_job_status_update)
+            async_to_sync(run_admin_job_request)(
+                job_request.pk, callback=notify_job_status_update, miner_axon_info=miner_axon_info
+            )
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)
