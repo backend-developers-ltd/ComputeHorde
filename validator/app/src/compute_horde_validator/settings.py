@@ -289,6 +289,11 @@ CONSTANCE_CONFIG = {
         "Maximum retries for organic jobs",
         int,
     ),
+    "DYNAMIC_SYSTEM_EVENT_LIMITS": (
+        "MINER_SYNTHETIC_JOB_FAILURE,LLM_PROMPT_ANSWERS_MISSING,10",
+        "Limits of system events produced for each type-subtype pairs in a synthetic job run. Format: TYPE1,SUBTYPE1,100;TYPE2,SUBTYPE2,200",
+        str,
+    ),
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 

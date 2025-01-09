@@ -2,13 +2,15 @@ import asyncio
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from typing import Any
+from typing import Any, TypeAlias
 
 import constance.utils
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
+
+from compute_horde_validator.validator.models import SystemEvent
 
 
 class DynamicConfigHolder:
@@ -82,3 +84,22 @@ def get_executor_class_weights() -> dict[ExecutorClass, float]:
     return executor_class_value_map_parser(
         config.DYNAMIC_EXECUTOR_CLASS_WEIGHTS, value_parser=float
     )
+
+
+LimitsDict: TypeAlias = dict[tuple[SystemEvent.EventType, SystemEvent.EventSubType], int]
+
+
+def parse_system_event_limits(raw_limits: str) -> LimitsDict:
+    limits = {}
+    for limit_item in raw_limits.split(";"):
+        with suppress(ValueError):
+            type_str, subtype_str, limit_str = limit_item.split(",")
+            type_ = SystemEvent.EventType(type_str)
+            subtype = SystemEvent.EventSubType(subtype_str)
+            limits[(type_, subtype)] = int(limit_str)
+    return limits
+
+
+async def get_system_event_limits() -> LimitsDict:
+    raw_limits: str = await aget_config("DYNAMIC_SYSTEM_EVENT_LIMITS")
+    return parse_system_event_limits(raw_limits)

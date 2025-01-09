@@ -58,7 +58,11 @@ from django.db import transaction
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q
 from pydantic import BaseModel, JsonValue
 
-from compute_horde_validator.validator.dynamic_config import get_miner_max_executors_per_class
+from compute_horde_validator.validator.dynamic_config import (
+    LimitsDict,
+    get_miner_max_executors_per_class,
+    get_system_event_limits,
+)
 from compute_horde_validator.validator.models import (
     Miner,
     MinerManifest,
@@ -456,6 +460,11 @@ class BatchContext:
     events: list[SystemEvent]
     event_count: int
 
+    # limit system events by type-subtype pairs configured in dynamic config
+    event_limits: LimitsDict
+    # events count per type-subtype, this is needed for enforcing limits
+    event_limits_usage: LimitsDict
+
     stage_start_time: dict[str, datetime]
     average_job_send_time: timedelta | None = None
 
@@ -476,6 +485,14 @@ class BatchContext:
         func: str | None = None,
         append: bool = True,
     ) -> SystemEvent | None:
+        if (type, subtype) in self.event_limits:
+            if self.event_limits_usage[(type, subtype)] >= self.event_limits[(type, subtype)]:
+                logger.warning(
+                    f"Discarding system event for exceeding limit {type=} {subtype=} {description=}"
+                )
+                return None
+        self.event_limits_usage[(type, subtype)] += 1
+
         if data is None:
             data = {}
 
@@ -743,7 +760,7 @@ class _MinerClientFactoryProtocol(Protocol):
     def __call__(self, ctx: BatchContext, miner_hotkey: str) -> MinerClient: ...
 
 
-def _init_context(
+async def _init_context(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     batch_id: int | None = None,
@@ -752,6 +769,7 @@ def _init_context(
     own_wallet = settings.BITTENSOR_WALLET()
     own_keypair = own_wallet.get_hotkey()
     create_miner_client = create_miner_client or MinerClient
+    event_limits = await get_system_event_limits()
 
     ctx = BatchContext(
         batch_id=batch_id,
@@ -772,6 +790,8 @@ def _init_context(
         jobs={},
         events=[],
         event_count=0,
+        event_limits=event_limits,
+        event_limits_usage=defaultdict(int),
         stage_start_time={},
         _loop=asyncio.get_running_loop(),
     )
@@ -1913,7 +1933,7 @@ async def execute_synthetic_batch_run(
     # randomize the order of miners each batch to avoid systemic bias
     random.shuffle(serving_miners)
 
-    ctx = _init_context(axons, serving_miners, batch_id, create_miner_client)
+    ctx = await _init_context(axons, serving_miners, batch_id, create_miner_client)
     await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
     try:
