@@ -3,7 +3,7 @@ import uuid
 import bittensor
 import pytest
 import pytest_asyncio
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, DEFAULT_LLM_EXECUTOR_CLASS
 from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.mv_protocol import miner_requests
 from django.utils.timezone import now
@@ -98,6 +98,19 @@ def manifest_message():
         manifest=miner_requests.ExecutorManifest(
             executor_classes=[
                 miner_requests.ExecutorClassManifest(executor_class=DEFAULT_EXECUTOR_CLASS, count=1)
+            ]
+        )
+    ).model_dump_json()
+
+
+@pytest.fixture
+def streaming_manifest_message():
+    return miner_requests.V0ExecutorManifestRequest(
+        manifest=miner_requests.ExecutorManifest(
+            executor_classes=[
+                miner_requests.ExecutorClassManifest(
+                    executor_class=DEFAULT_LLM_EXECUTOR_CLASS, count=1
+                )
             ]
         )
     ).model_dump_json()
