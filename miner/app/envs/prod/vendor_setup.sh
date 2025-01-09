@@ -9,7 +9,7 @@ else
     echo "VENDOR_DIRECTORY does not exist: ${VENDOR_DIRECTORY}"
   else
     # Add VENDOR_DIRECTORY to PYTHONPATH
-    export PYTHONPATH="${VENDOR_DIRECTORY}:${PYTHONPATH}"
+    export PYTHONPATH="${VENDOR_DIRECTORY}:${PYTHONPATH:-}"
     # Check if setup.sh exists in VENDOR_DIRECTORY
     if [ -f "${VENDOR_DIRECTORY}/setup.sh" ]; then
       # Run setup.sh

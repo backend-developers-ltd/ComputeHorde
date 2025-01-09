@@ -40,6 +40,7 @@ RUN apt-get update \
 WORKDIR /root/src/
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/root/src/.venv/bin:$PATH"
+ENV PIP_PREFIX="/root/src/.venv"
 
 COPY --from=base-image /root/src/ /root/src/
 

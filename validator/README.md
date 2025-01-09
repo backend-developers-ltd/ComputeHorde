@@ -105,7 +105,7 @@ export AWS_DEFAULT_REGION=BUCKETS_REGION
 
 At the end of the script, it will show the values for `S3_BUCKET_NAME_PROMPTS`, `S3_BUCKET_NAME_ANSWERS`.
 If you use the `--create-user` flag, it will also show the values for `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
-opy these variables in your validator `.env` file and restart your validator.
+Copy these variables in your validator `.env` file and restart your validator.
 
 > [!WARNING]  
 > Even if you did not use `--create-user`, you still need to provide `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your validator `.env` file.
@@ -113,6 +113,36 @@ opy these variables in your validator `.env` file and restart your validator.
 
 > [!NOTE]
 > We have tested the AWS S3. The buckets allow quick and concurrent upload and download of multiple (but tiny) text files.
+
+## Verifying S3 bucket configurations
+
+After setting up your `.env` file by following the above section,
+you can verify your S3 setup with the following command:
+
+```sh
+docker compose exec validator-runner docker compose exec app python manage.py check_s3_setup
+```
+
+If your some reason your S3 setup does not work,
+you can try checking different values of for S3 configurations with this command's flags:
+
+```
+--aws-access-key-id AWS_ACCESS_KEY_ID
+                      Override the value of AWS_ACCESS_KEY_ID from .env
+--aws-secret-access-key AWS_SECRET_ACCESS_KEY
+                      Override the value of AWS_SECRET_ACCESS_KEY from .env
+--aws-region-name AWS_REGION_NAME
+                      Override the value of AWS region (by default read from environment variable AWS_DEFAULT_REGION)
+--aws-endpoint-url AWS_ENDPOINT_URL
+                      Override the value of AWS_ENDPOINT_URL from .env
+--s3-bucket-name-prompts S3_BUCKET_NAME_PROMPTS
+                      Override the value of S3_BUCKET_NAME_PROMPTS from .env
+--s3-bucket-name-answers S3_BUCKET_NAME_ANSWERS
+                      Override the value of S3_BUCKET_NAME_ANSWERS from .env
+```
+
+After finding the configuration values for which the script works,
+copy the values in your validator `.env` file and restart your validator. 
 
 ## Updated validator .env
 

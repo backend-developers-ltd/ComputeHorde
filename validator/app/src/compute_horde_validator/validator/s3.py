@@ -1,5 +1,6 @@
 import functools
 import logging
+from typing import Any
 
 import boto3
 import httpx
@@ -10,12 +11,25 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def get_s3_client():
+def get_s3_client(
+    aws_access_key_id=None,
+    aws_secret_access_key=None,
+    region_name=None,
+    endpoint_url=None,
+):
+    if aws_access_key_id is None:
+        aws_access_key_id = settings.AWS_ACCESS_KEY_ID
+    if aws_secret_access_key is None:
+        aws_secret_access_key = settings.AWS_SECRET_ACCESS_KEY
+    if endpoint_url is None:
+        endpoint_url = settings.AWS_ENDPOINT_URL
+
     return boto3.client(
         "s3",
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        endpoint_url=settings.AWS_ENDPOINT_URL,
+        region_name=region_name,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        endpoint_url=endpoint_url,
     )
 
 
@@ -26,8 +40,10 @@ def _generate_presigned_url(
     bucket_name: str,
     prefix: str = "",
     expiration: int = 3600,
+    s3_client: Any = None,
 ) -> str:
-    s3_client = get_s3_client()
+    if s3_client is None:
+        s3_client = get_s3_client()
 
     return s3_client.generate_presigned_url(  # type: ignore
         method,
@@ -40,8 +56,10 @@ generate_upload_url = functools.partial(_generate_presigned_url, "put_object")
 generate_download_url = functools.partial(_generate_presigned_url, "get_object")
 
 
-def get_public_url(key: str, *, bucket_name: str, prefix: str = "") -> str:
-    endpoint_url = settings.AWS_ENDPOINT_URL or "https://s3.amazonaws.com"
+def get_public_url(key: str, *, bucket_name: str, prefix: str = "", s3_client: Any = None) -> str:
+    if s3_client is None:
+        s3_client = get_s3_client()
+    endpoint_url = s3_client.meta.endpoint_url
     return f"{endpoint_url}/{bucket_name}/{prefix}{key}"
 
 

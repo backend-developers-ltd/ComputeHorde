@@ -263,7 +263,9 @@ SHARED_CELERY_BEAT_SCHEDULE = {
     "fetch_dynamic_config": {
         "task": "compute_horde_miner.miner.tasks.fetch_dynamic_config",
         "schedule": timedelta(minutes=5),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
     },
 }
 
@@ -271,22 +273,30 @@ PROD_CELERY_BEAT_SCHEDULE = {
     "announce_address_and_port": {
         "task": "compute_horde_miner.miner.tasks.announce_address_and_port",
         "schedule": 60,
-        "options": {},
+        "options": {
+            "expires": 60,
+        },
     },
     "evict_old_data": {
         "task": "compute_horde_miner.miner.tasks.evict_old_data",
         "schedule": timedelta(days=1),
-        "options": {},
+        "options": {
+            "expires": timedelta(days=1).total_seconds(),
+        },
     },
     "fetch_validators": {
         "task": "compute_horde_miner.miner.tasks.fetch_validators",
         "schedule": 60,
-        "options": {},
+        "options": {
+            "expires": 60,
+        },
     },
     "get_receipts_from_old_miner": {
         "task": "compute_horde_miner.miner.tasks.get_receipts_from_old_miner",
         "schedule": timedelta(minutes=10),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=10).total_seconds(),
+        },
     },
 }
 
@@ -411,7 +421,8 @@ def BITTENSOR_WALLET() -> bittensor.wallet:
 
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "compute_horde_miner.channel_layer.channel_layer.ECRedisChannelLayer",
+        # Apparently pubsub backend is in "beta" state, yet seems more stable than the older redis backend.
+        "BACKEND": env.str("CHANNELS_BACKEND", "channels_redis.pubsub.RedisPubSubChannelLayer"),
         "CONFIG": {
             "hosts": [
                 (env.str("REDIS_HOST", default="redis"), env.int("REDIS_PORT", default="6379"))

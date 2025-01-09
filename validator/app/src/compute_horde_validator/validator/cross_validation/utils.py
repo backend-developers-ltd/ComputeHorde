@@ -1,11 +1,35 @@
 import logging
 
+import bittensor
 from asgiref.sync import sync_to_async
+from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.transport import AbstractTransport
 from django.core.cache import cache
 
 from compute_horde_validator.validator.models import SystemEvent
 
 logger = logging.getLogger(__name__)
+
+TRUSTED_MINER_FAKE_KEY = "0" * 48
+
+
+class TrustedMinerClient(OrganicMinerClient):
+    def __init__(
+        self,
+        miner_address: str,
+        miner_port: int,
+        job_uuid: str,
+        my_keypair: bittensor.Keypair,
+        transport: AbstractTransport | None = None,
+    ) -> None:
+        super().__init__(
+            miner_hotkey=TRUSTED_MINER_FAKE_KEY,
+            miner_address=miner_address,
+            miner_port=miner_port,
+            job_uuid=job_uuid,
+            my_keypair=my_keypair,
+            transport=transport,
+        )
 
 
 @sync_to_async
