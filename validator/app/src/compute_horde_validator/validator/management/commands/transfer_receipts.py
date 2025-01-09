@@ -43,6 +43,10 @@ class Command(BaseCommand):
             "miners",
             documentation="Number of miners to transfer from",
         )
+        self.m_successful_transfers = Counter(
+            "successful_transfers",
+            documentation="Number of transfers that didn't explicitly fail. (this includes 404s though)",
+        )
         self.m_line_errors = Counter(
             "line_errors",
             labelnames=["exc_type"],
@@ -55,7 +59,7 @@ class Command(BaseCommand):
         )
         self.m_transfer_duration = Histogram(
             "transfer_duration",
-            documentation="Total time to transfer all required pages",
+            documentation="Total time to transfer latest page deltas from all miners",
         )
         self.m_catchup_pages_left = Gauge(
             "catchup_pages_left",
@@ -238,6 +242,7 @@ class Command(BaseCommand):
                 f"{page=} ({idx + 1}/{len(pages)}) "
                 f"receipts={result.n_receipts} "
                 f"{elapsed=:.3f} "
+                f"successful_transfers={result.n_successful_transfers} "
                 f"transfer_errors={len(result.transfer_errors)} "
                 f"line_errors={len(result.line_errors)} "
             )
@@ -276,6 +281,7 @@ class Command(BaseCommand):
                 f"{pages=} "
                 f"receipts={result.n_receipts} "
                 f"{elapsed=:.3f} "
+                f"successful_transfers={result.n_successful_transfers} "
                 f"transfer_errors={len(result.transfer_errors)} "
                 f"line_errors={len(result.line_errors)} "
             )
@@ -289,12 +295,14 @@ class Command(BaseCommand):
                 time.sleep(interval - elapsed)
 
     def _push_common_metrics(self, result: TransferResult) -> None:
+        # Push line error counts grouped by the exception type
         n_line_errors: defaultdict[type[Exception], int] = defaultdict(int)
         for line_error in result.line_errors:
             n_line_errors[type(line_error)] += 1
         for exc_type, exc_count in n_line_errors.items():
             self.m_line_errors.labels(exc_type=exc_type.__name__).inc(exc_count)
 
+        # Push transfer error counts grouped by the exception type
         n_transfer_errors: defaultdict[type[Exception], int] = defaultdict(int)
         for transfer_error in result.transfer_errors:
             n_transfer_errors[type(transfer_error)] += 1
@@ -302,6 +310,7 @@ class Command(BaseCommand):
             self.m_transfer_errors.labels(exc_type=exc_type.__name__).inc(exc_count)
 
         self.m_receipts.inc(result.n_receipts)
+        self.m_successful_transfers.inc(result.n_successful_transfers)
 
     async def _throw_if_disabled(self):
         try:

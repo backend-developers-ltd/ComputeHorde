@@ -26,6 +26,10 @@ MinerInfo: TypeAlias = tuple[str, str, int]
 
 
 class TransferException(Exception):
+    """
+    Transfer exception means the request for receipts completely failed - timed out, got an error response etc.
+    """
+
     def __init__(self, miner: MinerInfo, page: int):
         super().__init__(f"Transfer failed: {miner=} {page=}")
         self.miner: MinerInfo = miner
@@ -33,6 +37,10 @@ class TransferException(Exception):
 
 
 class LineException(Exception):
+    """
+    A line exception means that, while processing a correct response, one of the receipt lines could not be processed.
+    """
+
     def __init__(
         self,
         cause: pydantic.ValidationError | BadMinerReceiptSignature | BadValidatorReceiptSignature,
@@ -44,6 +52,7 @@ class LineException(Exception):
 @dataclass
 class TransferResult:
     n_receipts: int
+    n_successful_transfers: int
     transfer_errors: list[TransferException]
     line_errors: list[LineException]
 
@@ -99,6 +108,7 @@ class ReceiptsTransfer:
         # Place received receipts into buckets based on receipt model type
         receipts_by_type: defaultdict[type[ReceiptModel], list[ReceiptModel]] = defaultdict(list)
         total_receipts = 0
+        successful_transfers = 0
         transfer_errors: list[TransferException] = []
         line_errors: list[LineException] = []
 
@@ -107,6 +117,7 @@ class ReceiptsTransfer:
             try:
                 transferred_batch, batch_line_errors = await transfer_task
                 line_errors.extend(batch_line_errors)
+                successful_transfers += 1
                 for receipt in transferred_batch:
                     model = receipt_to_django_model(receipt)
                     model_type = type(model)
@@ -127,7 +138,7 @@ class ReceiptsTransfer:
             total_receipts += len(bucket)
             logger.info(f"Stored {len(bucket)} {model_type.__name__} receipts")
 
-        return TransferResult(total_receipts, transfer_errors, line_errors)
+        return TransferResult(total_receipts, successful_transfers, transfer_errors, line_errors)
 
     def __init__(self, server_url: str):
         self._receipts_url = server_url.rstrip("/")
