@@ -1203,9 +1203,8 @@ async def _send_initial_job_request(
 async def _send_job_request(
     ctx: BatchContext,
     start_barrier: asyncio.Barrier,
-    streaming_start_barrier: asyncio.Barrier,
+    streaming_start_barrier: asyncio.Barrier | None,
     job_uuid: str,
-    is_streaming: bool,
 ) -> None:
     await start_barrier.wait()
     barrier_time = datetime.now(tz=UTC)
@@ -1234,7 +1233,8 @@ async def _send_job_request(
         await client.send_check(request_json)
         job.job_after_sent_time = datetime.now(tz=UTC)
 
-        if is_streaming:
+        # if streaming job
+        if streaming_start_barrier is not None:
             await _trigger_streaming_job(ctx, streaming_start_barrier, job_uuid)
 
         await job.job_response_event.wait()
@@ -1529,11 +1529,17 @@ async def _multi_send_job_request(ctx: BatchContext) -> None:
     logger.info("Sending job requests for %d ready jobs", len(executor_ready_jobs))
     start_barrier = asyncio.Barrier(len(executor_ready_jobs))
 
-    streaming_start_barrier = asyncio.Barrier(len([x for x in executor_ready_jobs if x[1]]))
+    num_streaming_jobs = len([x for x in executor_ready_jobs if x[1]])
+    if num_streaming_jobs > 0:
+        streaming_start_barrier = asyncio.Barrier(num_streaming_jobs)
+    else:
+        streaming_start_barrier = None
 
     tasks = [
         asyncio.create_task(
-            _send_job_request(ctx, start_barrier, streaming_start_barrier, job_uuid, is_streaming),
+            _send_job_request(
+                ctx, start_barrier, streaming_start_barrier if is_streaming else None, job_uuid
+            ),
             name=f"{job_uuid}._send_job_request",
         )
         for job_uuid, is_streaming in executor_ready_jobs
@@ -2047,7 +2053,11 @@ async def execute_synthetic_batch_run(
         await ctx.checkpoint_system_event("_get_total_executor_count")
         total_executor_count = _get_total_executor_count(ctx)
 
-        if total_executor_count > 0:
+        if total_executor_count <= 0:
+            logger.warning("No executors available")
+        elif len(ctx.job_uuids) > 0:
+            logger.warning("No jobs generated")
+        else:
             await ctx.checkpoint_system_event("_generate_jobs")
             await _generate_jobs(ctx)
 
@@ -2090,9 +2100,6 @@ async def execute_synthetic_batch_run(
 
             await ctx.checkpoint_system_event("_emit_decline_or_failure_events")
             _emit_decline_or_failure_events(ctx)
-
-        else:
-            logger.warning("No executors available")
 
         await ctx.checkpoint_system_event("loop_profiler.close")
         await ctx.loop_profiler.close()
