@@ -15,6 +15,9 @@ _JOB_FINISHED_REQUEST = V0JobFinishedRequest(
 )
 
 
+@pytest.mark.override_config(
+    DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT="",
+)
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_llm_prompts_generator_basic(
