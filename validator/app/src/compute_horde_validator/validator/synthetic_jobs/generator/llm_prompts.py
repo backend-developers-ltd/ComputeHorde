@@ -53,7 +53,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         )
 
     def timeout_seconds(self) -> int:
-        return 48  # it takes around 42s - we add 15% buffer
+        return 60  # it takes around 42s - add buffer for streaming
 
     def base_docker_image_name(self) -> str:
         return "docker.io/backenddevelopersltd/compute-horde-prompt-solver:v0-latest"
@@ -76,6 +76,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
             cmd.append("--server")
         else:
             cmd.extend(["--seed", str(self.seed)])
+        # cmd.append("--mock")
         cmd.append(f"/volume/{self.input_filename}")
         return cmd
 
@@ -145,4 +146,4 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
         return True, "", 1.0
 
     def job_description(self) -> str:
-        return "LLM prompts synthetic job"
+        return "Streaming LLM prompts synthetic job"

@@ -1515,39 +1515,25 @@ async def _trigger_streaming_job(
             await streaming_start_barrier.wait()
 
             async with httpx.AsyncClient(
-                verify=str(executor_cert_path), cert=ctx.own_certs
+                verify=str(executor_cert_path),
+                cert=ctx.own_certs,
+                timeout=job.job_generator.timeout_seconds(),
             ) as client:
                 # send the seed to the executor to start the streaming job
                 url = f"https://{response.ip}:{response.port}/execute-job"
                 try:
                     r = await client.post(url, json={"seed": seed}, headers={"Host": response.ip})
-                    if r.status_code == 200:
-                        logger.debug(
-                            f"Successfully triggered job execution for {job_uuid} on {url}"
-                        )
-                    else:
-                        raise Exception(
-                            f"Bad response triggering streaming job {job_uuid} execution {url}: {r.status_code}, {r.text}"
-                        )
+                    r.raise_for_status()
                 except Exception as e:
-                    raise Exception(
-                        f"Error triggering streaming job {job_uuid} execution {url}: {e}"
-                    )
-
-                # shedule the job to terminate
-                url = f"https://{response.ip}:{response.port}/terminate"
-                try:
+                    msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
+                    logger.warning(msg)
+                    raise Exception(msg)
+                finally:
+                    # shedule the job to terminate
+                    url = f"https://{response.ip}:{response.port}/terminate"
                     r = await client.get(url, headers={"Host": response.ip})
-                    if r.status_code == 200:
-                        logger.debug(f"Successfully sheduled streaming job {job_uuid} termination")
-                    else:
-                        raise Exception(
-                            f"Bad response sheduling streaming job {job_uuid} termination on {url}: {r.status_code}, {r.text}"
-                        )
-                except Exception as e:
-                    raise Exception(
-                        f"Error sheduling streaming job {job_uuid} termination on {url}: {e}"
-                    )
+                    if r.status_code != 200:
+                        logger.warning(f"Failed to terminate streaming job {job_uuid} on {url}")
 
 
 async def _multi_send_job_request(ctx: BatchContext) -> None:
