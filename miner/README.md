@@ -26,6 +26,8 @@ Miners are encouraged to optimize their setup by implementing their own executor
 
 3. To use your custom executor, set the `EXECUTOR_MANAGER_CLASS_PATH` variable in the `.env` file of the miner runner.
 
+4. Note that for streaming jobs, there is an NGINX_PORT for users to interface with the job. This port should be provided as an environment variable when triggering the `run_executor` command, otherwise it will use the default value. The executor manager should handle the port allocation.
+
 To create a custom executor manager, follow these steps:
 
 1. Create a directory for your code, e.g., `/home/ubuntu/custom_executor`.

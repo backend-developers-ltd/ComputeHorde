@@ -266,6 +266,12 @@ LOGGING = {
 }
 
 MINER_ADDRESS = env.str("MINER_ADDRESS")
+
+# Default port exposed for users to interface with a streaming type job
+# To be provided as an environment variable when triggering the run_executor command
+# The executor manager should handle the port allocation
+NGINX_PORT = env("NGINX_PORT", default=6006)
+
 EXECUTOR_TOKEN = env.str("EXECUTOR_TOKEN")
 VOLUME_MAX_SIZE_BYTES = env.int("VOLUME_MAX_SIZE_BYTES", default=2147483648)  # 2GB
 OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES = env.int(

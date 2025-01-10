@@ -27,6 +27,8 @@ from compute_horde_miner.miner.miner_consumer.layer_utils import (
     ExecutorFinished,
     ExecutorReady,
     ExecutorSpecs,
+    StreamingJobFailedToPrepare,
+    StreamingJobReady,
     ValidatorInterfaceMixin,
 )
 from compute_horde_miner.miner.models import (
@@ -287,7 +289,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 )
                 return
 
-        if isinstance(msg, validator_requests.V0InitialJobRequest):
+        if isinstance(msg, validator_requests.V0InitialJobRequest) or isinstance(
+            msg, validator_requests.V1InitialJobRequest
+        ):
             await self.handle_initial_job_request(msg)
 
         if isinstance(msg, validator_requests.V0JobRequest):
@@ -303,7 +307,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         ) and self.verify_receipt_payload(msg.payload, msg.signature):
             await self.handle_job_finished_receipt(msg)
 
-    async def handle_initial_job_request(self, msg: validator_requests.V0InitialJobRequest):
+    async def handle_initial_job_request(
+        self, msg: validator_requests.V0InitialJobRequest | validator_requests.V1InitialJobRequest
+    ):
         validator_blacklisted = await ValidatorBlacklist.objects.filter(
             validator=self.validator
         ).aexists()
@@ -336,9 +342,13 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         self.pending_jobs[msg.job_uuid] = job
 
         try:
-            await current.executor_manager.reserve_executor_class(
+            executor = await current.executor_manager.reserve_executor_class(
                 token, msg.executor_class, msg.timeout_seconds
             )
+            executor_address = await current.executor_manager.get_executor_public_address(executor)
+            job.executor_address = executor_address
+            await job.asave()
+
         except ExecutorUnavailable:
             await self.send(
                 miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
@@ -478,6 +488,32 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         )
         logger.debug(
             f"Failure in preparation for job {str(job.job_uuid)} reported to validator {self.validator_key}"
+        )
+
+    async def _streaming_job_ready(self, msg: StreamingJobReady):
+        job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
+        job_uuid = str(job.job_uuid)
+
+        await self.send(
+            miner_requests.V0StreamingJobReadyRequest(
+                job_uuid=job_uuid,
+                public_key=msg.public_key,
+                ip=msg.ip,
+                port=msg.port,
+            ).model_dump_json()
+        )
+        logger.debug(
+            f"Streaming readiness for job {job_uuid} reported to validator {self.validator_key}"
+        )
+
+    async def _streaming_job_failed_to_prepare(self, msg: StreamingJobFailedToPrepare):
+        job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
+        job_uuid = str(job.job_uuid)
+        await self.send(
+            miner_requests.V0StreamingJobNotReadyRequest(job_uuid=job_uuid).model_dump_json()
+        )
+        logger.debug(
+            f"Failure in streaming preparation for job {job_uuid} reported to validator {self.validator_key}"
         )
 
     async def _executor_finished(self, msg: ExecutorFinished):

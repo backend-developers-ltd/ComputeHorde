@@ -3,6 +3,7 @@ import logging
 import os
 import subprocess
 
+from compute_horde.certificate import get_docker_container_ip
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
@@ -11,6 +12,9 @@ from compute_horde_miner.miner.executor_manager._internal.base import (
 )
 from compute_horde_miner.miner.executor_manager._internal.selector import (
     HistoricalRandomMinerSelector,
+)
+from compute_horde_miner.miner.executor_manager.executor_port_dispenser import (
+    executor_port_dispenser,
 )
 
 PULLING_TIMEOUT = 300
@@ -22,7 +26,7 @@ logger = logging.getLogger(__name__)
 class DockerExecutor:
     def __init__(self, process_executor, token):
         self.process_executor = process_executor
-        self.token = token
+        self.token = token  # used as container name
 
 
 class DockerExecutorManager(BaseExecutorManager):
@@ -45,19 +49,7 @@ class DockerExecutorManager(BaseExecutorManager):
                 .decode()
                 .strip()
             )
-            address = (
-                subprocess.check_output(
-                    [
-                        "docker",
-                        "inspect",
-                        "-f",
-                        "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
-                        container_id,
-                    ]
-                )
-                .decode()
-                .strip()
-            )
+            address = await get_docker_container_ip(container_id)
         if not settings.DEBUG_SKIP_PULLING_EXECUTOR_IMAGE:
             process = await asyncio.create_subprocess_exec(
                 "docker", "pull", settings.EXECUTOR_IMAGE
@@ -80,6 +72,8 @@ class DockerExecutorManager(BaseExecutorManager):
             if settings.HF_ACCESS_TOKEN is None
             else ["-e", f"HF_ACCESS_TOKEN={settings.HF_ACCESS_TOKEN}"]
         )
+
+        nginx_port = executor_port_dispenser.get_port()
         process_executor = await asyncio.create_subprocess_exec(  # noqa: S607
             "docker",
             "run",
@@ -88,6 +82,8 @@ class DockerExecutorManager(BaseExecutorManager):
             f"MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS}",
             "-e",
             f"EXECUTOR_TOKEN={token}",
+            "-e",
+            f"NGINX_PORT={nginx_port}",
             *hf_args,
             "--name",
             token,
@@ -138,3 +134,6 @@ class DockerExecutorManager(BaseExecutorManager):
         my_address = settings.BITTENSOR_WALLET().hotkey.ss58_address  # type: str
 
         return selected == my_address
+
+    async def get_executor_public_address(self, executor: DockerExecutor) -> str | None:
+        return await get_docker_container_ip(executor.token)
