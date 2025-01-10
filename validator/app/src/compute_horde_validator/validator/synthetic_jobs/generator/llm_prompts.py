@@ -55,10 +55,10 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         return 60  # it takes around 42s - add buffer for streaming
 
     def base_docker_image_name(self) -> str:
-        return "docker.io/backenddevelopersltd/compute-horde-prompt-solver:v0-latest"
+        return "docker.io/backenddevelopersltd/compute-horde-prompt-solver-staging:v0-latest"
 
     def docker_image_name(self) -> str:
-        return "docker.io/backenddevelopersltd/compute-horde-prompt-solver:v0-latest"
+        return "docker.io/backenddevelopersltd/compute-horde-prompt-solver-staging:v0-latest"
 
     def docker_run_options_preset(self) -> DockerRunOptionsPreset:
         return "nvidia_all"
