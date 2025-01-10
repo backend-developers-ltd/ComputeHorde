@@ -1275,7 +1275,7 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 description="refused",
             )
-        if isinstance(job.streaming_job_ready_response, V0StreamingJobReadyRequest):
+        if isinstance(job.streaming_job_ready_response, V0StreamingJobNotReadyRequest):
             logger.warning("%s failed to start streaming", job.name)
             job.system_event(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
