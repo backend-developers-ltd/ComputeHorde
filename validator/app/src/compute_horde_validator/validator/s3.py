@@ -1,3 +1,4 @@
+import contextlib
 import functools
 import logging
 from typing import Any
@@ -101,8 +102,12 @@ def download_prompts_from_s3_url(s3_url: str) -> list[str]:
     return response.text.splitlines()
 
 
-async def download_file_content(s3_url: str) -> bytes:
-    async with httpx.AsyncClient() as client:
+async def download_file_content(s3_url: str, client: httpx.AsyncClient | None = None) -> bytes:
+    if not client:
+        ctx = httpx.AsyncClient()
+    else:
+        ctx = contextlib.nullcontext(client)  # type: ignore
+    async with ctx as client:
         response = await client.get(s3_url, timeout=5)
         response.raise_for_status()
         return response.content

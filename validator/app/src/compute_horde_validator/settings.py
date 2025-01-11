@@ -294,6 +294,11 @@ CONSTANCE_CONFIG = {
         "Limits of system events produced for each type-subtype pairs in a synthetic job run. Format: TYPE1,SUBTYPE1,100;TYPE2,SUBTYPE2,200",
         str,
     ),
+    "DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS": (
+        5.0,
+        "Total timeout for downloading answer files from S3.",
+        float,
+    )
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 

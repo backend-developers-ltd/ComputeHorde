@@ -61,6 +61,7 @@ from pydantic import BaseModel, JsonValue
 
 from compute_horde_validator.validator.dynamic_config import (
     LimitsDict,
+    aget_config,
     get_miner_max_executors_per_class,
     get_system_event_limits,
 )
@@ -461,12 +462,13 @@ class BatchContext:
     events: list[SystemEvent]
     event_count: int
 
-    # limit system events by type-subtype pairs configured in dynamic config
-    event_limits: LimitsDict
     # events count per type-subtype, this is needed for enforcing limits
     event_limits_usage: LimitsDict
 
     stage_start_time: dict[str, datetime]
+
+    batch_config: 'BatchConfig'
+
     average_job_send_time: timedelta | None = None
 
     loop_profiler: "LoopProfiler | None" = None
@@ -486,8 +488,8 @@ class BatchContext:
         func: str | None = None,
         append: bool = True,
     ) -> SystemEvent | None:
-        if (type, subtype) in self.event_limits:
-            if self.event_limits_usage[(type, subtype)] >= self.event_limits[(type, subtype)]:
+        if (type, subtype) in self.batch_config.event_limits:
+            if self.event_limits_usage[(type, subtype)] >= self.batch_config.event_limits[(type, subtype)]:
                 logger.warning(
                     f"Discarding system event for exceeding limit {type=} {subtype=} {description=}"
                 )
@@ -761,6 +763,16 @@ class _MinerClientFactoryProtocol(Protocol):
     def __call__(self, ctx: BatchContext, miner_hotkey: str) -> MinerClient: ...
 
 
+class BatchConfig:
+    def __init__(self):
+        self.event_limits: LimitsDict | None = None
+        self.llm_answer_s3_download_timeout: float | None = None
+
+    async def populate(self):
+        self.event_limits = await get_system_event_limits()
+        self.llm_answer_s3_download_timeout = await aget_config('DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS')
+
+
 async def _init_context(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
@@ -770,7 +782,8 @@ async def _init_context(
     own_wallet = settings.BITTENSOR_WALLET()
     own_keypair = own_wallet.get_hotkey()
     create_miner_client = create_miner_client or MinerClient
-    event_limits = await get_system_event_limits()
+    batch_config = BatchConfig()
+    await batch_config.populate()
 
     ctx = BatchContext(
         batch_id=batch_id,
@@ -791,10 +804,10 @@ async def _init_context(
         jobs={},
         events=[],
         event_count=0,
-        event_limits=event_limits,
         event_limits_usage=defaultdict(int),
         stage_start_time={},
         _loop=asyncio.get_running_loop(),
+        batch_config=batch_config,
     )
 
     for miner in serving_miners:
@@ -1602,6 +1615,7 @@ class LlmAnswerDownloadTaskFailed(Exception):
 
 async def _download_llm_prompts_answers_worker(
     queue: asyncio.Queue[LlmAnswerDownloadTask],
+    client: httpx.AsyncClient,
 ) -> list[LlmAnswerDownloadTaskFailed]:
     failures = []
     while True:
@@ -1623,7 +1637,7 @@ async def _download_llm_prompts_answers_worker(
                 await asyncio.sleep(sleep_time.total_seconds())
 
         try:
-            await task.job_generator.download_answers()
+            await task.job_generator.download_answers(client)
         except httpx.HTTPError as exc:
             logger.warning(
                 "llm prompt answers download failed at attempt %s with exception: %r",
@@ -1658,8 +1672,9 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
             task_queue.put_nowait(LlmAnswerDownloadTask(job))
 
     num_workers = min(task_queue.qsize(), _LLM_ANSWERS_DOWNLOAD_MAX_WORKERS)
-    workers = [_download_llm_prompts_answers_worker(task_queue) for _ in range(num_workers)]
-    results = await asyncio.gather(*workers, return_exceptions=True)
+    async with httpx.AsyncClient(timeout=ctx.batch_config.llm_answer_s3_download_timeout) as client:
+        workers = [_download_llm_prompts_answers_worker(task_queue, client) for _ in range(num_workers)]
+        results = await asyncio.gather(*workers, return_exceptions=True)
 
     for result in results:
         if isinstance(result, BaseException):
