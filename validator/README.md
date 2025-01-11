@@ -139,6 +139,8 @@ you can try checking different values of for S3 configurations with this command
                       Override the value of S3_BUCKET_NAME_PROMPTS from .env
 --s3-bucket-name-answers S3_BUCKET_NAME_ANSWERS
                       Override the value of S3_BUCKET_NAME_ANSWERS from .env
+--aws-signature-version AWS_SIGNATURE_VERSION
+                      Override the value of AWS_SIGNATURE_VERSION from .env
 ```
 
 After finding the configuration values for which the script works,
