@@ -3,6 +3,7 @@ import logging
 import random
 import statistics
 import time
+import traceback
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -1593,9 +1594,10 @@ class LlmAnswerDownloadTask:
 
 
 class LlmAnswerDownloadTaskFailed(Exception):
-    def __init__(self, msg: str, task: LlmAnswerDownloadTask):
+    def __init__(self, msg: str, task: LlmAnswerDownloadTask, last_exception_tb: str | None = None):
         super().__init__(msg)
         self.task = task
+        self.last_exception_tb = last_exception_tb
 
 
 async def _download_llm_prompts_answers_worker(
@@ -1610,12 +1612,6 @@ async def _download_llm_prompts_answers_worker(
             # Note: if a task is put back into the queue for retry after this worker exits,
             # the worker putting it back should still be alive. So the task will not be ignored.
             break
-
-        if task.attempt >= _LLM_ANSWERS_DOWNLOAD_MAX_ATTEMPTS:
-            msg = "llm prompt answer download task exceeded max attempts"
-            logging.warning(msg)
-            failures.append(LlmAnswerDownloadTaskFailed(msg, task))
-            continue
 
         if task.last_tried:
             backoff_seconds = (
@@ -1636,7 +1632,12 @@ async def _download_llm_prompts_answers_worker(
             )
             task.last_tried = datetime.now(tz=UTC)
             task.attempt += 1
-            queue.put_nowait(task)
+            if task.attempt < _LLM_ANSWERS_DOWNLOAD_MAX_ATTEMPTS:
+                queue.put_nowait(task)
+            else:
+                msg = "llm prompt answer download task exceeded max attempts"
+                logging.warning(msg)
+                failures.append(LlmAnswerDownloadTaskFailed(msg, task, last_exception_tb=traceback.format_exc()))
 
     return failures
 
@@ -1678,6 +1679,7 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
                 ctx.system_event(
                     type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
                     subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
+                    data={"last_exception": exc.last_exception_tb},
                     description=repr(exc),
                     miner_hotkey=job.miner_hotkey,
                     func="_download_llm_prompts_answers",
