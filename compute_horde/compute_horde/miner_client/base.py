@@ -116,7 +116,6 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
                     logger.info(error_msg)
                     self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
                     continue
-    
                 try:
                     await self.handle_message(msg)
                 except UnsupportedMessageReceived:
