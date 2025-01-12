@@ -108,6 +108,6 @@ async def download_file_content(s3_url: str, client: httpx.AsyncClient | None = 
     else:
         ctx = contextlib.nullcontext(client)  # type: ignore
     async with ctx as client:
-        response = await client.get(s3_url, timeout=5)
+        response = await client.get(s3_url)
         response.raise_for_status()
         return response.content
