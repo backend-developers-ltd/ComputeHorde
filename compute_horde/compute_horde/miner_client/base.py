@@ -107,21 +107,25 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
         self.deferred_send_tasks.append(task)
 
     async def read_messages(self):
-        async for msg in self.transport:
-            try:
-                msg = self.accepted_request_type().parse(msg)
-            except ValidationError as ex:
-                error_msg = f"Malformed message from miner {self.miner_name}: {str(ex)}"
-                logger.info(error_msg)
-                self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
-                continue
-
-            try:
-                await self.handle_message(msg)
-            except UnsupportedMessageReceived:
-                error_msg = f"Unsupported message from miner {self.miner_name}"
-                logger.exception(error_msg)
-                self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
+        try:
+            async for msg in self.transport:
+                try:
+                    msg = self.accepted_request_type().parse(msg)
+                except ValidationError as ex:
+                    error_msg = f"Malformed message from miner {self.miner_name}: {str(ex)}"
+                    logger.info(error_msg)
+                    self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
+                    continue
+    
+                try:
+                    await self.handle_message(msg)
+                except UnsupportedMessageReceived:
+                    error_msg = f"Unsupported message from miner {self.miner_name}"
+                    logger.exception(error_msg)
+                    self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
+        except TransportConnectionError as exc:
+            logger.warning("%s connection error when trying to receive: %r", self.miner_name, exc)
+            self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
 
 
 class UnsupportedMessageReceived(Exception):
