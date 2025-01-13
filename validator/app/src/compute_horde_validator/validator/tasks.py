@@ -555,13 +555,16 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-async def run_admin_job_request(job_request_id: int, callback=None):
+async def run_admin_job_request(
+    job_request_id: int, callback=None, *, miner_axon_info: bittensor.AxonInfo | None = None
+):
     job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
         id=job_request_id
     )
     try:
         miner = job_request.miner
-        miner_axon_info = await get_miner_axon_info(miner.hotkey)
+        if miner_axon_info is None:
+            miner_axon_info = await get_miner_axon_info(miner.hotkey)
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
             miner=miner,

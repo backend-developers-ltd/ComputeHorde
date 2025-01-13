@@ -6,6 +6,9 @@ import sys
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.base import BaseExecutorManager
+from compute_horde_miner.miner.executor_manager.executor_port_dispenser import (
+    executor_port_dispenser,
+)
 
 this_dir = pathlib.Path(__file__).parent
 executor_dir = this_dir / ".." / ".." / ".." / ".." / ".." / ".." / ".." / "executor"
@@ -13,12 +16,14 @@ executor_dir = this_dir / ".." / ".." / ".." / ".." / ".." / ".." / ".." / "exec
 
 class DevExecutorManager(BaseExecutorManager):
     async def start_new_executor(self, token, executor_class, timeout):
+        nginx_port = executor_port_dispenser.get_port()
         return subprocess.Popen(
             [sys.executable, "app/src/manage.py", "run_executor"],
             env={
                 "MINER_ADDRESS": f"ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
                 "EXECUTOR_TOKEN": token,
                 "PATH": os.environ["PATH"],
+                "NGINX_PORT": str(nginx_port),
             },
             cwd=executor_dir,
         )
@@ -40,3 +45,6 @@ class DevExecutorManager(BaseExecutorManager):
 
     async def is_active(self) -> bool:
         return True
+
+    async def get_executor_public_address(self, executor: str) -> str | None:
+        return "127.0.0.1"

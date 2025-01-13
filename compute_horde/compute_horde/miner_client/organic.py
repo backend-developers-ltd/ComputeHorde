@@ -31,6 +31,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
     V0JobFinishedRequest,
     V0MachineSpecsRequest,
+    V0StreamingJobReadyRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
@@ -105,6 +106,11 @@ class OrganicMinerClient(AbstractMinerClient):
             V0ExecutorReadyRequest | V0ExecutorFailedRequest
         ] = loop.create_future()
         self.executor_ready_or_failed_timestamp: int = 0
+
+        self.streaming_job_ready_or_not_future: asyncio.Future[
+            V0StreamingJobReadyRequest | miner_requests.V0StreamingJobNotReadyRequest
+        ] = loop.create_future()
+        self.streaming_job_ready_or_not_timestamp: int = 0
 
         self.miner_finished_or_failed_future: asyncio.Future[
             V0JobFailedRequest | V0JobFinishedRequest
@@ -196,6 +202,14 @@ class OrganicMinerClient(AbstractMinerClient):
             try:
                 self.executor_ready_or_failed_future.set_result(msg)
                 self.executor_ready_or_failed_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
+        elif isinstance(
+            msg, V0StreamingJobReadyRequest | miner_requests.V0StreamingJobNotReadyRequest
+        ):
+            try:
+                self.streaming_job_ready_or_not_future.set_result(msg)
+                self.streaming_job_ready_or_not_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
         elif isinstance(msg, V0JobFailedRequest | V0JobFinishedRequest):
@@ -332,6 +346,7 @@ class FailureReason(enum.Enum):
     FINAL_RESPONSE_TIMED_OUT = enum.auto()
     JOB_DECLINED = enum.auto()
     EXECUTOR_FAILED = enum.auto()
+    STREAMING_JOB_READY_TIMED_OUT = enum.auto()
     JOB_FAILED = enum.auto()
 
 

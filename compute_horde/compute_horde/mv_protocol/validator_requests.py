@@ -24,6 +24,7 @@ SAFE_DOMAIN_REGEX = re.compile(r".*")
 class RequestType(enum.Enum):
     V0AuthenticateRequest = "V0AuthenticateRequest"
     V0InitialJobRequest = "V0InitialJobRequest"
+    V1InitialJobRequest = "V1InitialJobRequest"
     V0MachineSpecsRequest = "V0MachineSpecsRequest"
     V0JobRequest = "V0JobRequest"
     V0JobAcceptedReceiptRequest = "V0JobAcceptedReceiptRequest"
@@ -69,6 +70,11 @@ class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
         if bool(self.volume) and bool(self.volume_type):
             raise ValueError("Expected either `volume` or `volume_type`, got both")
         return self
+
+
+class V1InitialJobRequest(V0InitialJobRequest):
+    message_type: RequestType = RequestType.V1InitialJobRequest
+    public_key: str
 
 
 class V0JobRequest(BaseValidatorRequest, JobMixin):

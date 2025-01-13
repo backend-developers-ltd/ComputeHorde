@@ -69,18 +69,42 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             return
 
         await self.group_add(self.executor_token)
-        initial_job_details = validator_requests.V0InitialJobRequest(**job.initial_job_details)
-        await self.send(
-            miner_requests.V0InitialJobRequest(
-                job_uuid=initial_job_details.job_uuid,
-                base_docker_image_name=initial_job_details.base_docker_image_name,
-                timeout_seconds=initial_job_details.timeout_seconds,
-                volume=initial_job_details.volume,
-                volume_type=initial_job_details.volume_type.value
-                if initial_job_details.volume_type
-                else None,
-            ).model_dump_json()
-        )
+
+        request_type = job.initial_job_details.get("message_type", None)
+        if request_type == validator_requests.RequestType.V0InitialJobRequest.value:
+            request = validator_requests.V0InitialJobRequest(**job.initial_job_details)
+            miner_initial_job_request = miner_requests.V0InitialJobRequest(
+                job_uuid=request.job_uuid,
+                base_docker_image_name=request.base_docker_image_name,
+                timeout_seconds=request.timeout_seconds,
+                volume=request.volume,
+                volume_type=request.volume_type.value if request.volume_type else None,
+            )
+        elif request_type == validator_requests.RequestType.V1InitialJobRequest.value:
+            request = validator_requests.V1InitialJobRequest(**job.initial_job_details)
+            miner_initial_job_request = miner_requests.V1InitialJobRequest(
+                job_uuid=request.job_uuid,
+                base_docker_image_name=request.base_docker_image_name,
+                timeout_seconds=request.timeout_seconds,
+                volume=request.volume,
+                volume_type=request.volume_type.value if request.volume_type else None,
+                public_key=request.public_key,
+                executor_ip=self.get_executor_ip(),
+            )
+        else:
+            raise ValueError(f"Unknown job message type {request_type}")
+
+        await self.send(miner_initial_job_request.model_dump_json())
+
+    def get_executor_ip(self) -> str:
+        if self.job.executor_address:
+            return str(self.job.executor_address)
+        # Get the real IP from the headers
+        for key, value in self.scope["headers"]:
+            if key.decode("utf-8").lower() == "x-real-ip":
+                return str(value.decode("utf-8"))
+        # Fallback to client's IP if header is not present
+        return str(self.scope["client"][0])
 
     async def handle(self, msg: BaseExecutorRequest):
         if isinstance(msg, executor_requests.V0ReadyRequest):
@@ -91,6 +115,18 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             self.job.status = AcceptedJob.Status.FAILED
             await self.job.asave()
             await self.send_executor_failed_to_prepare(self.executor_token)
+        if isinstance(msg, executor_requests.V0StreamingJobReadyRequest):
+            # Job status is RUNNING
+            await self.send_streaming_job_ready(
+                self.executor_token,
+                public_key=msg.public_key,
+                ip=self.get_executor_ip(),
+                port=msg.port,
+            )
+        if isinstance(msg, executor_requests.V0StreamingJobFailedToPrepareRequest):
+            self.job.status = AcceptedJob.Status.FAILED
+            await self.job.asave()
+            await self.send_streaming_job_failed_to_prepare(self.executor_token)
         if isinstance(msg, executor_requests.V0FinishedRequest):
             self.job.status = AcceptedJob.Status.FINISHED
             self.job.stderr = msg.docker_process_stderr

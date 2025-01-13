@@ -3,6 +3,7 @@ import logging
 import random
 import statistics
 import time
+import traceback
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -58,7 +59,12 @@ from django.db import transaction
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q
 from pydantic import BaseModel, JsonValue
 
-from compute_horde_validator.validator.dynamic_config import get_miner_max_executors_per_class
+from compute_horde_validator.validator.dynamic_config import (
+    LimitsDict,
+    aget_config,
+    get_miner_max_executors_per_class,
+    get_system_event_limits,
+)
 from compute_horde_validator.validator.models import (
     Miner,
     MinerManifest,
@@ -456,7 +462,13 @@ class BatchContext:
     events: list[SystemEvent]
     event_count: int
 
+    # events count per type-subtype, this is needed for enforcing limits
+    event_limits_usage: LimitsDict
+
     stage_start_time: dict[str, datetime]
+
+    batch_config: "BatchConfig"
+
     average_job_send_time: timedelta | None = None
 
     loop_profiler: "LoopProfiler | None" = None
@@ -476,6 +488,17 @@ class BatchContext:
         func: str | None = None,
         append: bool = True,
     ) -> SystemEvent | None:
+        if (type, subtype) in self.batch_config.event_limits:
+            if (
+                self.event_limits_usage[(type, subtype)]
+                >= self.batch_config.event_limits[(type, subtype)]
+            ):
+                logger.warning(
+                    f"Discarding system event for exceeding limit {type=} {subtype=} {description=}"
+                )
+                return None
+        self.event_limits_usage[(type, subtype)] += 1
+
         if data is None:
             data = {}
 
@@ -743,7 +766,19 @@ class _MinerClientFactoryProtocol(Protocol):
     def __call__(self, ctx: BatchContext, miner_hotkey: str) -> MinerClient: ...
 
 
-def _init_context(
+class BatchConfig:
+    def __init__(self):
+        self.event_limits: LimitsDict | None = None
+        self.llm_answer_s3_download_timeout: float | None = None
+
+    async def populate(self):
+        self.event_limits = await get_system_event_limits()
+        self.llm_answer_s3_download_timeout = await aget_config(
+            "DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS"
+        )
+
+
+async def _init_context(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     batch_id: int | None = None,
@@ -752,6 +787,8 @@ def _init_context(
     own_wallet = settings.BITTENSOR_WALLET()
     own_keypair = own_wallet.get_hotkey()
     create_miner_client = create_miner_client or MinerClient
+    batch_config = BatchConfig()
+    await batch_config.populate()
 
     ctx = BatchContext(
         batch_id=batch_id,
@@ -772,8 +809,10 @@ def _init_context(
         jobs={},
         events=[],
         event_count=0,
+        event_limits_usage=defaultdict(int),
         stage_start_time={},
         _loop=asyncio.get_running_loop(),
+        batch_config=batch_config,
     )
 
     for miner in serving_miners:
@@ -1533,6 +1572,25 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
             ),
         )
 
+        # NOTE: We generally want data to be dict[str, str].
+        # Since this code block is here only for debugging purpose,
+        # we are passing non-conforming data here with 'type: ignore'.
+        if isinstance(job.job_generator, LlmPromptsSyntheticJobGenerator):
+            job.system_event(
+                type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                subtype=SystemEvent.EventSubType.LLM_PROMPT_ANSWERS_MISSING,
+                description="failed synthetic llm job details",
+                data={
+                    "prompts_url": job.job_generator.s3_url,
+                    "answers_url": job.job_generator.url_for_download(),
+                    "seed": job.job_generator.seed,  # type: ignore
+                    "known_answers": {  # type: ignore
+                        p.content: p.answer for p in job.job_generator.expected_prompts
+                    },
+                    "job_response": job.job_response.model_dump(mode="json"),  # type: ignore
+                },
+            )
+
     logger.info(
         "%s finished with %s in %.2f seconds with score %.6g: %s",
         job.name,
@@ -1554,13 +1612,15 @@ class LlmAnswerDownloadTask:
 
 
 class LlmAnswerDownloadTaskFailed(Exception):
-    def __init__(self, msg: str, task: LlmAnswerDownloadTask):
+    def __init__(self, msg: str, task: LlmAnswerDownloadTask, last_exception_tb: str | None = None):
         super().__init__(msg)
         self.task = task
+        self.last_exception_tb = last_exception_tb
 
 
 async def _download_llm_prompts_answers_worker(
     queue: asyncio.Queue[LlmAnswerDownloadTask],
+    client: httpx.AsyncClient,
 ) -> list[LlmAnswerDownloadTaskFailed]:
     failures = []
     while True:
@@ -1572,12 +1632,6 @@ async def _download_llm_prompts_answers_worker(
             # the worker putting it back should still be alive. So the task will not be ignored.
             break
 
-        if task.attempt >= _LLM_ANSWERS_DOWNLOAD_MAX_ATTEMPTS:
-            msg = "llm prompt answer download task exceeded max attempts"
-            logging.warning(msg)
-            failures.append(LlmAnswerDownloadTaskFailed(msg, task))
-            continue
-
         if task.last_tried:
             backoff_seconds = (
                 _LLM_ANSWERS_DOWNLOAD_RETRY_MIN_BACKOFF * (2**task.attempt) + 0.1 * random.random()
@@ -1588,7 +1642,7 @@ async def _download_llm_prompts_answers_worker(
                 await asyncio.sleep(sleep_time.total_seconds())
 
         try:
-            await task.job_generator.download_answers()
+            await task.job_generator.download_answers(client)
         except httpx.HTTPError as exc:
             logger.warning(
                 "llm prompt answers download failed at attempt %s with exception: %r",
@@ -1597,7 +1651,14 @@ async def _download_llm_prompts_answers_worker(
             )
             task.last_tried = datetime.now(tz=UTC)
             task.attempt += 1
-            queue.put_nowait(task)
+            if task.attempt < _LLM_ANSWERS_DOWNLOAD_MAX_ATTEMPTS:
+                queue.put_nowait(task)
+            else:
+                msg = "llm prompt answer download task exceeded max attempts"
+                logging.warning(msg)
+                failures.append(
+                    LlmAnswerDownloadTaskFailed(msg, task, last_exception_tb=traceback.format_exc())
+                )
 
     return failures
 
@@ -1618,8 +1679,11 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
             task_queue.put_nowait(LlmAnswerDownloadTask(job))
 
     num_workers = min(task_queue.qsize(), _LLM_ANSWERS_DOWNLOAD_MAX_WORKERS)
-    workers = [_download_llm_prompts_answers_worker(task_queue) for _ in range(num_workers)]
-    results = await asyncio.gather(*workers, return_exceptions=True)
+    async with httpx.AsyncClient(timeout=ctx.batch_config.llm_answer_s3_download_timeout) as client:
+        workers = [
+            _download_llm_prompts_answers_worker(task_queue, client) for _ in range(num_workers)
+        ]
+        results = await asyncio.gather(*workers, return_exceptions=True)
 
     for result in results:
         if isinstance(result, BaseException):
@@ -1639,6 +1703,7 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
                 ctx.system_event(
                     type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
                     subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
+                    data={"last_exception": exc.last_exception_tb},
                     description=repr(exc),
                     miner_hotkey=job.miner_hotkey,
                     func="_download_llm_prompts_answers",
@@ -1894,7 +1959,7 @@ async def execute_synthetic_batch_run(
     # randomize the order of miners each batch to avoid systemic bias
     random.shuffle(serving_miners)
 
-    ctx = _init_context(axons, serving_miners, batch_id, create_miner_client)
+    ctx = await _init_context(axons, serving_miners, batch_id, create_miner_client)
     await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
     try:

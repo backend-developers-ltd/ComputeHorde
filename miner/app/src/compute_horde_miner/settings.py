@@ -268,7 +268,9 @@ SHARED_CELERY_BEAT_SCHEDULE = {
     "fetch_dynamic_config": {
         "task": "compute_horde_miner.miner.tasks.fetch_dynamic_config",
         "schedule": timedelta(minutes=5),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
     },
 }
 
@@ -276,17 +278,23 @@ PROD_CELERY_BEAT_SCHEDULE = {
     "announce_address_and_port": {
         "task": "compute_horde_miner.miner.tasks.announce_address_and_port",
         "schedule": 60,
-        "options": {},
+        "options": {
+            "expires": 60,
+        },
     },
     "evict_old_data": {
         "task": "compute_horde_miner.miner.tasks.evict_old_data",
         "schedule": timedelta(days=1),
-        "options": {},
+        "options": {
+            "expires": timedelta(days=1).total_seconds(),
+        },
     },
     "fetch_validators": {
         "task": "compute_horde_miner.miner.tasks.fetch_validators",
         "schedule": 60,
-        "options": {},
+        "options": {
+            "expires": 60,
+        },
     },
     "archive_receipt_pages": {
         "task": "compute_horde_miner.miner.tasks.archive_receipt_pages",

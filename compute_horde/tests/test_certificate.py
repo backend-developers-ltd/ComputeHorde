@@ -1,7 +1,5 @@
+import asyncio
 import os
-import subprocess
-import time
-import uuid
 
 import pytest
 import requests
@@ -12,12 +10,51 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from compute_horde.certificate import (
     generate_certificate,
     generate_certificate_at,
+    save_public_key,
+    start_nginx,
     write_certificate,
 )
+
+NGINX_PORT = 8443
+NGINX_URI = f"https://localhost:{NGINX_PORT}"
+
+NGINX_CONF = """
+http {
+    server {
+        listen 443 ssl;
+        server_name example.com;
+
+        ssl_certificate /etc/nginx/ssl/certificate.pem;
+        ssl_certificate_key /etc/nginx/ssl/private_key.pem;
+
+        ssl_client_certificate /etc/nginx/ssl/client.crt;
+        ssl_verify_client on;
+
+        location / {
+            if ($ssl_client_verify != SUCCESS) { return 403; }
+            return 200 'Hello World!';
+            add_header Content-Type text/plain;
+        }
+    }
+    
+    server {
+        listen 80;
+        server_name localhost;
+
+        # for checking if nginx is running
+        location /ok { return 200; }
+    }
+}
+
+events {
+    worker_connections 1024;
+}
+"""
 
 
 def test_generate_ca_and_server_certs(tmp_path):
     generate_certificate_at(tmp_path, "blabla")
+    tmp_path = tmp_path / "ssl"
 
     assert set(os.listdir(tmp_path)) == {"certificate.pem", "private_key.pem"}
 
@@ -29,80 +66,75 @@ def test_generate_ca_and_server_certs(tmp_path):
     assert isinstance(key, RSAPrivateKey)
 
 
-NGINX_CONF = """
-http {
-    server {
-        listen 443 ssl;
-        server_name example.com;
+async def start_nginx_with_certificates(
+    nginx_conf: str,
+    public_key: str,
+    port: int,
+    container_name: str,
+) -> tuple[str, str]:
+    tmp_path, _, cert = generate_certificate_at()
+    save_public_key(public_key, tmp_path)
 
-        ssl_certificate /etc/nginx/ssl/certificate.pem;
-        ssl_certificate_key /etc/nginx/ssl/private_key.pem;
+    job_network = f"{container_name}_network"
+    process = await asyncio.create_subprocess_exec(
+        "docker", "network", "create", "--internal", job_network
+    )
+    await process.wait()
 
-        location / {
-            return 200 'Hello World!';
-            add_header Content-Type text/plain;
-        }
-    }
-}
-
-events {
-    worker_connections 1024;
-}
-"""
+    await start_nginx(
+        nginx_conf, port, tmp_path, job_network=job_network, container_name=container_name
+    )
+    return cert
 
 
-def certificates_with_nginx_helper(tmp_path, docker_name_prefix):
-    certs_dir = tmp_path / "ssl"
-    certs_dir.mkdir()
-    generate_certificate_at(certs_dir, "127.0.0.1")
-    nginx_conf_file = tmp_path / "nginx.conf"
-    nginx_conf_file.write_text(NGINX_CONF)
+async def cleanup_docker(container_name):
+    process = await asyncio.create_subprocess_exec(
+        "docker", "network", "rm", f"{container_name}_network"
+    )
+    await process.wait()
+    process = await asyncio.create_subprocess_exec("docker", "kill", container_name)
+    await process.wait()
 
-    container_name = f"{docker_name_prefix}_{uuid.uuid4()}"
-    subprocess.run(
-        [
-            "docker",
-            "run",
-            "--detach",
-            "--rm",
-            "--name",
-            container_name,
-            "-p",
-            "8080:80",
-            "-p",
-            "8443:443",
-            "-v",
-            f"{nginx_conf_file}:/etc/nginx/nginx.conf",
-            "-v",
-            f"{certs_dir}:/etc/nginx/ssl",
-            "nginx:1.26-alpine",
-        ]
+
+@pytest.mark.asyncio
+async def test_certificates_with_nginx__success(tmp_path, container_name):
+    _, public_key, cert = generate_certificate_at(tmp_path)
+    nginx_cert_path, _ = await start_nginx_with_certificates(
+        NGINX_CONF, public_key, NGINX_PORT, container_name
     )
 
-    # wait for nginx to start
-    time.sleep(1)
-
-    return container_name, certs_dir
-
-
-def test_certificates_with_nginx_success(tmp_path, docker_name_prefix):
-    container_name, certs_dir = certificates_with_nginx_helper(tmp_path, docker_name_prefix)
-
-    resp = requests.get("https://localhost:8443", verify=str(certs_dir / "certificate.pem"))
+    resp = requests.get(NGINX_URI, verify=nginx_cert_path, cert=cert)
     assert resp.status_code == 200
     assert resp.text.strip() == "Hello World!"
 
-    subprocess.run(["docker", "kill", container_name])
+    await cleanup_docker(container_name)
 
 
-def test_certificates_with_nginx_fail(tmp_path, docker_name_prefix):
-    container_name, _ = certificates_with_nginx_helper(tmp_path, docker_name_prefix)
+@pytest.mark.asyncio
+async def test_certificates_with_nginx__no_cert(tmp_path, container_name):
+    _, public_key, _ = generate_certificate_at(tmp_path)
+    nginx_cert_path, _ = await start_nginx_with_certificates(
+        NGINX_CONF, public_key, NGINX_PORT, container_name
+    )
+
+    resp = requests.get(NGINX_URI, verify=nginx_cert_path)
+
+    # 400 no cert, 403 wrong cert
+    assert resp.status_code != 200
+
+    await cleanup_docker(container_name)
+
+
+@pytest.mark.asyncio
+async def test_certificates_with_nginx__fail(tmp_path, container_name):
+    _, public_key, _ = generate_certificate_at(tmp_path)
+    _ = await start_nginx_with_certificates(NGINX_CONF, public_key, NGINX_PORT, container_name)
 
     cert_path = tmp_path / "wrong_certificate.pem"
     certificate, _ = generate_certificate("127.0.0.1")
     write_certificate(certificate, cert_path)
 
     with pytest.raises(requests.exceptions.SSLError):
-        requests.get("https://localhost:8443", verify=str(cert_path))
+        requests.get(NGINX_URI, verify=str(cert_path))
 
-    subprocess.run(["docker", "kill", container_name])
+    await cleanup_docker(container_name)

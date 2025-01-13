@@ -54,6 +54,7 @@ test = [
     "pytest-asyncio>=0.24.0",
     "responses>=0.25.0",
     "freezegun>=1.5.1",
+    "faker>=33.1.0",
     "pytest-django>=4.9.0",
 ]
 

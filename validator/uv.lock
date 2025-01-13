@@ -665,6 +665,7 @@ lint = [
 ]
 release = [{ name = "towncrier", specifier = ">=23.11.0,<24" }]
 test = [
+    { name = "faker", specifier = ">=33.1.0" },
     { name = "freezegun", specifier = ">=1.5.1" },
     { name = "pytest", specifier = ">=8.2.1" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
@@ -1303,16 +1304,15 @@ wheels = [
 
 [[package]]
 name = "kombu"
-version = "5.5.0rc2"
+version = "5.3.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "amqp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "tzdata", marker = "(sys_platform == 'darwin' and python_full_version == '3.11.*') or (sys_platform == 'linux' and python_full_version == '3.11.*')" },
     { name = "vine", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/94/64/cc39be8782edd463a7c6c7c2505fd67d15452d5f1a310981da5c6bdf2275/kombu-5.5.0rc2.tar.gz", hash = "sha256:f581f3b2945a46d5de540a8fde920e87725308cfed6bdeed6983fa4124879cd0", size = 458112 }
+sdist = { url = "https://files.pythonhosted.org/packages/99/3a/2fb09708fef243e35c286414f2bf78543dc311ae7d3de5d343bd8437e38d/kombu-5.3.7.tar.gz", hash = "sha256:011c4cd9a355c14a1de8d35d257314a1d2456d52b7140388561acac3cf1a97bf", size = 439344 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/9b/8384970b77ec1cd9f106be81a5a2f34da2674df3266c35746720127039fc/kombu-5.5.0rc2-py3-none-any.whl", hash = "sha256:213dc124de2a9dada467aa3387c638d8594e91a9dff2dcf6206cd9c6bcf84a5d", size = 208778 },
+    { url = "https://files.pythonhosted.org/packages/b4/9a/1951f2261271d6994f0df5a55b3e9cdad42ed1fc3020a0dc7f6de80a4566/kombu-5.3.7-py3-none-any.whl", hash = "sha256:5634c511926309c7f9789f1433e9ed402616b56836ef9878f01bd59267b4c7a9", size = 200190 },
 ]
 
 [[package]]
@@ -2573,6 +2573,7 @@ dependencies = [
     { name = "gunicorn", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "kombu", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "nox", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "prometheus-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "psycopg2-binary", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2637,6 +2638,7 @@ requires-dist = [
     { name = "gunicorn", specifier = "==20.1.0" },
     { name = "httpx", specifier = "~=0.26.0" },
     { name = "ipython", specifier = "~=8.14.0" },
+    { name = "kombu", specifier = "~=5.3.0" },
     { name = "nox", specifier = "==2024.10.9" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
     { name = "psycopg2-binary", specifier = "~=2.9.7" },

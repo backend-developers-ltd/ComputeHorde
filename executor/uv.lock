@@ -598,6 +598,7 @@ lint = [
 ]
 release = [{ name = "towncrier", specifier = ">=23.11.0,<24" }]
 test = [
+    { name = "faker", specifier = ">=33.1.0" },
     { name = "freezegun", specifier = ">=1.5.1" },
     { name = "pytest", specifier = ">=8.2.1" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },

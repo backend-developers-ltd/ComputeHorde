@@ -1,8 +1,9 @@
 import importlib
 import logging
 import os
+from pathlib import Path
 
-from celery import Celery, signals
+from celery import Celery, bootsteps, signals
 from celery.signals import worker_process_shutdown
 from django.conf import settings
 from prometheus_client import multiprocess
@@ -38,6 +39,8 @@ TASK_QUEUE_MAP = {
 
 CELERY_TASK_QUEUES = list(set(TASK_QUEUE_MAP.values()))
 
+WORKER_HEALTHCHECK_FILE = Path(settings.WORKER_HEALTHCHECK_FILE_PATH)
+
 
 def route_task(name, args, kwargs, options, task=None, **kw):
     if name not in TASK_QUEUE_MAP:
@@ -67,3 +70,34 @@ def get_num_tasks_in_queue(queue_name: str) -> int:
             return int(conn.default_channel.client.llen(queue_name))
         except (TypeError, ValueError, ConnectionError):
             return 0
+
+
+# Worker healthcheck
+# Taken from https://github.com/celery/celery/issues/4079#issuecomment-1128954283
+class LivenessProbe(bootsteps.StartStopStep):
+    requires = ("celery.worker.components:Timer",)
+
+    def __init__(self, worker, **kwargs):
+        super().__init__(worker, **kwargs)
+        self.tref = None
+
+    def start(self, worker):
+        # Create the parent directory if it doesn't exist
+        WORKER_HEALTHCHECK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        # Ensure the file exists
+        WORKER_HEALTHCHECK_FILE.touch()
+        self.tref = worker.timer.call_repeatedly(
+            10.0,
+            self.update_heartbeat_file,
+            (worker,),
+            priority=10,
+        )
+
+    def stop(self, worker):
+        WORKER_HEALTHCHECK_FILE.unlink(missing_ok=True)
+
+    def update_heartbeat_file(self, worker):
+        WORKER_HEALTHCHECK_FILE.touch()
+
+
+app.steps["worker"].add(LivenessProbe)

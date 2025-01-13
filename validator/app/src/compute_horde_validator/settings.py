@@ -289,6 +289,16 @@ CONSTANCE_CONFIG = {
         "Maximum retries for organic jobs",
         int,
     ),
+    "DYNAMIC_SYSTEM_EVENT_LIMITS": (
+        "MINER_SYNTHETIC_JOB_FAILURE,LLM_PROMPT_ANSWERS_MISSING,10",
+        "Limits of system events produced for each type-subtype pairs in a synthetic job run. Format: TYPE1,SUBTYPE1,100;TYPE2,SUBTYPE2,200",
+        str,
+    ),
+    "DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS": (
+        5.0,
+        "Total timeout for downloading answer files from S3.",
+        float,
+    ),
     "DYNAMIC_RECEIPT_TRANSFER_ENABLED": (
         False,
         "Whether receipt transfer between miners and validators should be enabled",
@@ -441,17 +451,25 @@ CELERY_BEAT_SCHEDULE = {
     "schedule_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
         "schedule": timedelta(minutes=1),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=1).total_seconds(),
+        },
     },
     "run_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.run_synthetic_jobs",
         "schedule": timedelta(seconds=env.int("DEBUG_RUN_SYNTHETIC_JOBS_SECONDS", default=30)),
-        "options": {},
+        "options": {
+            "expires": timedelta(
+                seconds=env.int("DEBUG_RUN_SYNTHETIC_JOBS_SECONDS", default=30)
+            ).total_seconds(),
+        },
     },
     "check_missed_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.check_missed_synthetic_jobs",
         "schedule": timedelta(minutes=10),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=10).total_seconds(),
+        },
     },
     "set_scores": {
         "task": "compute_horde_validator.validator.tasks.set_scores",
@@ -459,42 +477,58 @@ CELERY_BEAT_SCHEDULE = {
             minute=env("DEBUG_SET_SCORES_MINUTE", default="*/1"),
             hour=env("DEBUG_SET_SCORES_HOUR", default="*"),
         ),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=1).total_seconds(),
+        },
     },
     "reveal_scores": {
         "task": "compute_horde_validator.validator.tasks.reveal_scores",
         "schedule": timedelta(minutes=1),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=1).total_seconds(),
+        },
     },
     "send_events_to_facilitator": {
         "task": "compute_horde_validator.validator.tasks.send_events_to_facilitator",
         "schedule": timedelta(minutes=5),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
     },
     "fetch_dynamic_config": {
         "task": "compute_horde_validator.validator.tasks.fetch_dynamic_config",
         "schedule": timedelta(minutes=5),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
     },
     "llm_prompt_generation": {
         "task": "compute_horde_validator.validator.tasks.llm_prompt_generation",
         "schedule": timedelta(minutes=5),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
     },
     "llm_prompt_sampling": {
         "task": "compute_horde_validator.validator.tasks.llm_prompt_sampling",
         "schedule": timedelta(minutes=30),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=30).total_seconds(),
+        },
     },
     "llm_prompt_answering": {
         "task": "compute_horde_validator.validator.tasks.llm_prompt_answering",
         "schedule": timedelta(minutes=5),
-        "options": {},
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
     },
     "evict_old_data": {
         "task": "compute_horde_validator.validator.tasks.evict_old_data",
         "schedule": timedelta(days=1),
-        "options": {},
+        "options": {
+            "expires": timedelta(days=1).total_seconds(),
+        },
     },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
@@ -511,6 +545,10 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("CELERY_WORKER_PREFETCH_MULTIPLIER", default=10)
 CELERY_BROKER_POOL_LIMIT = env.int("CELERY_BROKER_POOL_LIMIT", default=50)
+
+WORKER_HEALTHCHECK_FILE_PATH = env(
+    "WORKER_HEALTHCHECK_FILE_PATH", default="/tmp/worker-healthcheck"
+)
 
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.filebased.EmailBackend")
 EMAIL_FILE_PATH = env("EMAIL_FILE_PATH", default="/tmp/email")
@@ -655,6 +693,7 @@ CHANNEL_LAYERS = {
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
 AWS_ENDPOINT_URL = env("AWS_ENDPOINT_URL", default=None)
+AWS_SIGNATURE_VERSION = env("AWS_SIGNATURE_VERSION", default=None)
 
 S3_BUCKET_NAME_PROMPTS = env("S3_BUCKET_NAME_PROMPTS", default=None)
 S3_BUCKET_NAME_ANSWERS = env("S3_BUCKET_NAME_ANSWERS", default=None)
