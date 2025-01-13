@@ -32,9 +32,6 @@ TASK_QUEUE_MAP = {
     "compute_horde_validator.validator.tasks.reveal_scores": "weights",
     "compute_horde_validator.validator.tasks.set_scores": "weights",
     "compute_horde_validator.validator.tasks.do_set_weights": "weights",
-    # Receipts
-    "compute_horde_validator.validator.tasks.fetch_receipts": "receipts",
-    "compute_horde_validator.validator.tasks.fetch_receipts_from_miner": "receipts",
     # Misc
     "compute_horde_validator.validator.tasks.send_events_to_facilitator": DEFAULT_QUEUE,
     "compute_horde_validator.validator.tasks.fetch_dynamic_config": DEFAULT_QUEUE,

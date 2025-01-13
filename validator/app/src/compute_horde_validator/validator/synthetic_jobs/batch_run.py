@@ -467,7 +467,7 @@ class BatchContext:
 
     stage_start_time: dict[str, datetime]
 
-    batch_config: 'BatchConfig'
+    batch_config: "BatchConfig"
 
     average_job_send_time: timedelta | None = None
 
@@ -489,7 +489,10 @@ class BatchContext:
         append: bool = True,
     ) -> SystemEvent | None:
         if (type, subtype) in self.batch_config.event_limits:
-            if self.event_limits_usage[(type, subtype)] >= self.batch_config.event_limits[(type, subtype)]:
+            if (
+                self.event_limits_usage[(type, subtype)]
+                >= self.batch_config.event_limits[(type, subtype)]
+            ):
                 logger.warning(
                     f"Discarding system event for exceeding limit {type=} {subtype=} {description=}"
                 )
@@ -770,7 +773,9 @@ class BatchConfig:
 
     async def populate(self):
         self.event_limits = await get_system_event_limits()
-        self.llm_answer_s3_download_timeout = await aget_config('DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS')
+        self.llm_answer_s3_download_timeout = await aget_config(
+            "DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS"
+        )
 
 
 async def _init_context(
@@ -1651,7 +1656,9 @@ async def _download_llm_prompts_answers_worker(
             else:
                 msg = "llm prompt answer download task exceeded max attempts"
                 logging.warning(msg)
-                failures.append(LlmAnswerDownloadTaskFailed(msg, task, last_exception_tb=traceback.format_exc()))
+                failures.append(
+                    LlmAnswerDownloadTaskFailed(msg, task, last_exception_tb=traceback.format_exc())
+                )
 
     return failures
 
@@ -1673,7 +1680,9 @@ async def _download_llm_prompts_answers(ctx: BatchContext) -> None:
 
     num_workers = min(task_queue.qsize(), _LLM_ANSWERS_DOWNLOAD_MAX_WORKERS)
     async with httpx.AsyncClient(timeout=ctx.batch_config.llm_answer_s3_download_timeout) as client:
-        workers = [_download_llm_prompts_answers_worker(task_queue, client) for _ in range(num_workers)]
+        workers = [
+            _download_llm_prompts_answers_worker(task_queue, client) for _ in range(num_workers)
+        ]
         results = await asyncio.gather(*workers, return_exceptions=True)
 
     for result in results:

@@ -108,15 +108,6 @@ services:
       - WORKER_HEALTHCHECK_TIMEOUT=30
     command: ./celery-entrypoint.sh -Q llm
 
-  celery-worker-receipts:
-    <<: *celery-worker
-    environment:
-      - DEBUG=off
-      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-receipts
-      - WORKER_HEALTHCHECK_FILE_PATH=/tmp/worker-healthcheck
-      - WORKER_HEALTHCHECK_TIMEOUT=30
-    command: ./celery-entrypoint.sh -Q receipts
-
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.40.0
     devices:
@@ -248,6 +239,21 @@ services:
     volumes:
       - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     command: python manage.py connect_facilitator
+    depends_on:
+      - redis
+      - db
+    logging:
+      <<: *logging
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  transfer-receipts:
+    image: backenddevelopersltd/${VALIDATOR_IMAGE_REPO}:v0-latest
+    pull_policy: ${PULL_POLICY:-always}
+    init: true
+    restart: unless-stopped
+    env_file: ./.env
+    command: python manage.py transfer_receipts --daemon
     depends_on:
       - redis
       - db

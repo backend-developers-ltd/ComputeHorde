@@ -149,6 +149,11 @@ CONSTANCE_CONFIG = {
     ),
     "OLD_MINER_IP": ("", "IP address of old miner for migration", str),
     "OLD_MINER_PORT": (8000, "PORT of old miner for migration", int),
+    "DYNAMIC_RECEIPT_TRANSFER_ENABLED": (
+        False,
+        "Whether continuous receipt transfer between miners and validators should be enabled",
+        bool,
+    ),
 }
 
 # Content Security Policy
@@ -291,12 +296,10 @@ PROD_CELERY_BEAT_SCHEDULE = {
             "expires": 60,
         },
     },
-    "get_receipts_from_old_miner": {
-        "task": "compute_horde_miner.miner.tasks.get_receipts_from_old_miner",
-        "schedule": timedelta(minutes=10),
-        "options": {
-            "expires": timedelta(minutes=10).total_seconds(),
-        },
+    "archive_receipt_pages": {
+        "task": "compute_horde_miner.miner.tasks.archive_receipt_pages",
+        "schedule": timedelta(minutes=1),
+        "options": {},
     },
 }
 
@@ -376,11 +379,6 @@ DEBUG_SKIP_PULLING_EXECUTOR_IMAGE = env.bool("DEBUG_SKIP_PULLING_EXECUTOR_IMAGE"
 ADDRESS_FOR_EXECUTORS = env.str("ADDRESS_FOR_EXECUTORS", default="")
 PORT_FOR_EXECUTORS = env.int("PORT_FOR_EXECUTORS")
 
-RECEIPT_STORE_CLASS_PATH = env.str(
-    "RECEIPT_STORE_CLASS_PATH",
-    default="compute_horde_miner.miner.receipt_store.local:LocalReceiptStore",
-)
-LOCAL_RECEIPTS_URL = env.str("LOCAL_RECEIPTS_URL", default="/receipts/")
 LOCAL_RECEIPTS_ROOT = env.path("LOCAL_RECEIPTS_ROOT", default=root("..", "..", "receipts"))
 
 BITTENSOR_MINER_PORT = env.int("BITTENSOR_MINER_PORT")

@@ -36,7 +36,7 @@ from compute_horde_miner.miner.models import (
     Validator,
     ValidatorBlacklist,
 )
-from compute_horde_miner.miner.tasks import prepare_receipts
+from compute_horde_miner.miner.receipts import current_store
 
 logger = logging.getLogger(__name__)
 
@@ -401,7 +401,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         if not self.verify_receipt_payload(payload, signature):
             return
 
-        await JobStartedReceipt.objects.acreate(
+        receipt = await JobStartedReceipt.objects.acreate(
             job_uuid=payload.job_uuid,
             validator_hotkey=payload.validator_hotkey,
             miner_hotkey=payload.miner_hotkey,
@@ -413,6 +413,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             is_organic=payload.is_organic,
             ttl=payload.ttl,
         )
+        (await current_store()).store([receipt.to_receipt()])
 
     async def handle_job_accepted_receipt(
         self, msg: validator_requests.V0JobAcceptedReceiptRequest
@@ -425,7 +426,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         if settings.IS_LOCAL_MINER:
             return
 
-        await JobAcceptedReceipt.objects.acreate(
+        created_receipt = await JobAcceptedReceipt.objects.acreate(
             validator_signature=msg.signature,
             miner_signature=get_miner_signature(msg),
             job_uuid=msg.payload.job_uuid,
@@ -435,7 +436,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             time_accepted=msg.payload.time_accepted,
             ttl=msg.payload.ttl,
         )
-        prepare_receipts.delay()
+
+        (await current_store()).store([created_receipt.to_receipt()])
 
     async def handle_job_finished_receipt(
         self, msg: validator_requests.V0JobFinishedReceiptRequest
@@ -453,7 +455,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         if settings.IS_LOCAL_MINER:
             return
 
-        await JobFinishedReceipt.objects.acreate(
+        created_receipt = await JobFinishedReceipt.objects.acreate(
             validator_signature=msg.signature,
             miner_signature=get_miner_signature(msg),
             job_uuid=msg.payload.job_uuid,
@@ -464,7 +466,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             time_took_us=msg.payload.time_took_us,
             score_str=msg.payload.score_str,
         )
-        prepare_receipts.delay()
+
+        (await current_store()).store([created_receipt.to_receipt()])
 
     async def _executor_ready(self, msg: ExecutorReady):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)

@@ -450,6 +450,7 @@ name = "compute-horde"
 version = "0.0.18"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "bittensor" },
     { name = "celery" },
     { name = "cryptography" },
@@ -491,6 +492,7 @@ type-check = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.10.10" },
     { name = "bittensor", specifier = ">=8.3.1,<9.0.0" },
     { name = "celery", specifier = ">=5.3.0,<6" },
     { name = "cryptography", specifier = ">=42.0.8" },

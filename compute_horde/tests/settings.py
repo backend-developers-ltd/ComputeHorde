@@ -1,4 +1,13 @@
-from compute_horde.settings import *
+from compute_horde.settings import *  # noqa
+
+USE_TZ = True
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": ":memory:",
+    }
+}
 
 INSTALLED_APPS += [
     "tests.test_app",
