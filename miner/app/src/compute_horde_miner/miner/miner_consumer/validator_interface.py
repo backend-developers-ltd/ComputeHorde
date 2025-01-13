@@ -16,7 +16,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_miner.miner.executor_manager import current
-from compute_horde_miner.miner.executor_manager.base import ExecutorUnavailable
+from compute_horde_miner.miner.executor_manager.base import ExecutorUnavailable, ExecutorFailedToStart
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
     BaseConsumer,
     log_errors_explicitly,
@@ -348,16 +348,22 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             executor_address = await current.executor_manager.get_executor_public_address(executor)
             job.executor_address = executor_address
             await job.asave()
-
+            await self.send(miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json())
         except ExecutorUnavailable:
+            # TODO: Send a "decline" with some receipts as evidence and make this DRY
             await self.send(
                 miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
             )
             await self.group_discard(token)
             await job.adelete()
             self.pending_jobs.pop(msg.job_uuid)
-            return
-        await self.send(miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json())
+        except ExecutorFailedToStart:
+            await self.send(
+                miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
+            )
+            await self.group_discard(token)
+            await job.adelete()
+            self.pending_jobs.pop(msg.job_uuid)
 
     async def handle_job_request(self, msg: validator_requests.V0JobRequest):
         job = self.pending_jobs.get(msg.job_uuid)
