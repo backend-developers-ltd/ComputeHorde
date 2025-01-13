@@ -1,3 +1,4 @@
+import contextlib
 import functools
 import logging
 from typing import Any
@@ -6,6 +7,7 @@ import boto3
 import httpx
 import requests
 import tenacity
+from botocore.config import Config
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -16,6 +18,7 @@ def get_s3_client(
     aws_secret_access_key=None,
     region_name=None,
     endpoint_url=None,
+    signature_version=None,
 ):
     if aws_access_key_id is None:
         aws_access_key_id = settings.AWS_ACCESS_KEY_ID
@@ -24,12 +27,21 @@ def get_s3_client(
     if endpoint_url is None:
         endpoint_url = settings.AWS_ENDPOINT_URL
 
+    if signature_version is None:
+        signature_version = settings.AWS_SIGNATURE_VERSION
+
+    if signature_version:
+        config_kwargs = {'config': Config(signature_version=signature_version)}
+    else:
+        config_kwargs = {}
+
     return boto3.client(
         "s3",
         region_name=region_name,
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
         endpoint_url=endpoint_url,
+        **config_kwargs,
     )
 
 
@@ -90,8 +102,12 @@ def download_prompts_from_s3_url(s3_url: str) -> list[str]:
     return response.text.splitlines()
 
 
-async def download_file_content(s3_url: str) -> bytes:
-    async with httpx.AsyncClient() as client:
-        response = await client.get(s3_url, timeout=5)
+async def download_file_content(s3_url: str, client: httpx.AsyncClient | None = None) -> bytes:
+    if not client:
+        ctx = httpx.AsyncClient()
+    else:
+        ctx = contextlib.nullcontext(client)  # type: ignore
+    async with ctx as client:
+        response = await client.get(s3_url)
         response.raise_for_status()
         return response.content
