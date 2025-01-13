@@ -203,6 +203,9 @@ Note: The `AWS_DEFAULT_REGION` property is optional. Use it when your buckets ar
 
 Export `AWS_ENDPOINT_URL` to use another cloud object storage (s3-compatible) provider. If not given, AWS S3 will be used.
 
+Some cloud configuration may require you to specify a signature version (used for presigning links). You can do
+that by adding `AWS_SIGNATURE_VERSION=...` to your validator's `.env`.
+
 Then execute the following command from the same terminal session:
 
 ```shell

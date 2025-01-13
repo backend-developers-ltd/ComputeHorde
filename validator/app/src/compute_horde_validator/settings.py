@@ -294,6 +294,11 @@ CONSTANCE_CONFIG = {
         "Limits of system events produced for each type-subtype pairs in a synthetic job run. Format: TYPE1,SUBTYPE1,100;TYPE2,SUBTYPE2,200",
         str,
     ),
+    "DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS": (
+        5.0,
+        "Total timeout for downloading answer files from S3.",
+        float,
+    )
 }
 DYNAMIC_CONFIG_CACHE_TIMEOUT = 300
 
@@ -668,6 +673,7 @@ CHANNEL_LAYERS = {
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
 AWS_ENDPOINT_URL = env("AWS_ENDPOINT_URL", default=None)
+AWS_SIGNATURE_VERSION = env("AWS_SIGNATURE_VERSION", default=None)
 
 S3_BUCKET_NAME_PROMPTS = env("S3_BUCKET_NAME_PROMPTS", default=None)
 S3_BUCKET_NAME_ANSWERS = env("S3_BUCKET_NAME_ANSWERS", default=None)

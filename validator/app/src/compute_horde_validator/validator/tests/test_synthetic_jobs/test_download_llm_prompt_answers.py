@@ -43,7 +43,8 @@ async def test_download_worker_successful_download():
     task = LlmAnswerDownloadTask(mock_job)
     queue.put_nowait(task)
 
-    failures = await _download_llm_prompts_answers_worker(queue)
+    async with httpx.AsyncClient() as client:
+        failures = await _download_llm_prompts_answers_worker(queue, client)
 
     assert len(failures) == 0
     assert mock_job.job_generator.download_answers.call_count == 1
@@ -66,7 +67,8 @@ async def test_download_worker_http_retry():
     task = LlmAnswerDownloadTask(mock_job)
     queue.put_nowait(task)
 
-    failures = await _download_llm_prompts_answers_worker(queue)
+    async with httpx.AsyncClient() as client:
+        failures = await _download_llm_prompts_answers_worker(queue, client)
 
     assert len(failures) == 0
     assert mock_job.job_generator.download_answers.call_count == 2
@@ -89,7 +91,8 @@ async def test_download_worker_max_attempts_exceeded(mocker: MockerFixture):
     task = LlmAnswerDownloadTask(mock_job)
     queue.put_nowait(task)
 
-    failures = await _download_llm_prompts_answers_worker(queue)
+    async with httpx.AsyncClient() as client:
+        failures = await _download_llm_prompts_answers_worker(queue, client)
 
     assert len(failures) == 1
     assert isinstance(failures[0], LlmAnswerDownloadTaskFailed)
@@ -110,7 +113,8 @@ async def test_download_worker_backoff_delay():
     queue.put_nowait(task)
 
     start_time = datetime.now(tz=UTC)
-    await _download_llm_prompts_answers_worker(queue)
+    async with httpx.AsyncClient() as client:
+        await _download_llm_prompts_answers_worker(queue, client)
     end_time = datetime.now(tz=UTC)
     wait_time = (end_time - start_time).total_seconds()
 

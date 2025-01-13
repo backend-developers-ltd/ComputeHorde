@@ -57,6 +57,10 @@ class Command(BaseCommand):
             "--s3-bucket-name-answers",
             help="Override the value of S3_BUCKET_NAME_ANSWERS from .env",
         )
+        parser.add_argument(
+            "--aws-signature-version",
+            help="Override the value of AWS_SIGNATURE_VERSION from .env",
+        )
 
     def handle(self, *args, **options):
         logging.basicConfig(level="ERROR")
@@ -66,6 +70,7 @@ class Command(BaseCommand):
             aws_secret_access_key=options["aws_secret_access_key"],
             region_name=options["aws_region_name"],
             endpoint_url=options["aws_endpoint_url"],
+            signature_version=options["aws_signature_version"],
         )
 
         prompts_bucket = options["s3_bucket_name_prompts"] or settings.S3_BUCKET_NAME_PROMPTS
