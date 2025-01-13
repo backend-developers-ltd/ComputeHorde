@@ -1311,7 +1311,7 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 description="refused",
             )
-        if isinstance(job.streaming_job_ready_response, V0StreamingJobReadyRequest):
+        if isinstance(job.streaming_job_ready_response, V0StreamingJobNotReadyRequest):
             logger.warning("%s failed to start streaming", job.name)
             job.system_event(
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
@@ -1529,7 +1529,7 @@ async def _trigger_streaming_job(
                     logger.warning(msg)
                     raise Exception(msg)
                 finally:
-                    # shedule the job to terminate
+                    # schedule the job to terminate
                     url = f"https://{response.ip}:{response.port}/terminate"
                     r = await client.get(url, headers={"Host": response.ip})
                     if r.status_code != 200:
