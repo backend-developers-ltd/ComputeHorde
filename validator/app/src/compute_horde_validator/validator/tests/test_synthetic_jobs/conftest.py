@@ -83,6 +83,14 @@ def job_generator_factory(job_uuids: list[uuid.UUID]):
 
 
 @pytest.fixture(autouse=True)
+def _patch_get_streaming_job_executor_classes(mocker: MockerFixture):
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.batch_run.get_streaming_job_executor_classes",
+        return_value={},
+    )
+
+
+@pytest.fixture(autouse=True)
 def _patch_generator_factory(
     mocker: MockerFixture, job_generator_factory: MockSyntheticJobGeneratorFactory
 ):

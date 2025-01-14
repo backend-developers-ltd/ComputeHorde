@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from compute_horde.base.docker import DockerRunOptionsPreset
@@ -7,10 +8,19 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 
+from compute_horde_validator.validator.models import (
+    Prompt,
+    PromptSample,
+)
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
     BaseSyntheticJobGeneratorFactory,
 )
+from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
+    LlmPromptsSyntheticJobGenerator,
+)
+
+logger = logging.getLogger(__name__)
 
 MOCK_SCORE = 0.8
 NOT_SCORED = 0.0
@@ -62,6 +72,28 @@ class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
     async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
         _uuid = self._uuids.pop(0)
         return MockSyntheticJobGenerator(_uuid, **kwargs)
+
+
+class LlmPromptsSyntheticJobGeneratorFactory:
+    def __init__(
+        self, uuids: list[uuid.UUID], prompt_samples: list[PromptSample], prompts: list[Prompt]
+    ):
+        self._uuids = uuids
+        self._prompt_samples = prompt_samples
+        self._prompts = prompts
+
+    async def create(
+        self, executor_class: ExecutorClass, *args, **kwargs
+    ) -> BaseSyntheticJobGenerator:
+        generator = LlmPromptsSyntheticJobGenerator(
+            prompt_sample=self._prompt_samples.pop(0),
+            expected_prompts=self._prompts,
+            s3_url="mock",
+            seed=0,
+            streaming=False,
+        )
+        generator._uuid = self._uuids.pop(0)
+        return generator
 
 
 class TimeTookScoreMockSyntheticJobGeneratorFactory(MockSyntheticJobGeneratorFactory):

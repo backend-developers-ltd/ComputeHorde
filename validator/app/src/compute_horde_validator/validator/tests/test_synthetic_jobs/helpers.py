@@ -5,6 +5,7 @@ from datetime import timedelta
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
+    Prompt,
     PromptSample,
     PromptSeries,
     SolveWorkload,
@@ -31,7 +32,7 @@ async def check_miner_job_system_events(
     assert results == set(expected), f"Expected {expected}\ngot {results}"
 
 
-async def generate_prompt_samples(num_miners: int = 1):
+async def generate_prompts(num_miners: int = 1) -> (list[Prompt], list[PromptSample]):
     current_time = now()
 
     prompt_series = await PromptSeries.objects.acreate(
@@ -50,14 +51,25 @@ async def generate_prompt_samples(num_miners: int = 1):
     ]
     created_workloads = await SolveWorkload.objects.abulk_create(workloads)
 
-    prompt_samples = [
-        PromptSample(
-            series=prompt_series,
-            workload=workload,
-            synthetic_job=None,
-            created_at=current_time,
-        )
-        for workload in created_workloads
-    ]
-    await PromptSample.objects.abulk_create(prompt_samples)
-    return prompt_samples
+    prompt_samples = await PromptSample.objects.abulk_create(
+        [
+            PromptSample(
+                series=prompt_series,
+                workload=workload,
+                synthetic_job=None,
+                created_at=current_time,
+            )
+            for workload in created_workloads
+        ]
+    )
+    prompts = await Prompt.objects.abulk_create(
+        [
+            Prompt(
+                sample=prompt_sample,
+                content="mock",
+                answer="mock",
+            )
+            for prompt_sample in prompt_samples
+        ]
+    )
+    return prompts, prompt_samples

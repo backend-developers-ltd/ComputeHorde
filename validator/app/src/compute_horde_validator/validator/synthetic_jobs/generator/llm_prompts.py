@@ -146,4 +146,4 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
         return True, "", 1.0
 
     def job_description(self) -> str:
-        return "Streaming LLM prompts synthetic job"
+        return ("Streaming " if self.streaming else "") + "LLM prompts synthetic job"
