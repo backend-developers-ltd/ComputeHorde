@@ -310,7 +310,7 @@ CONSTANCE_CONFIG = {
         int,
     ),
     "DYNAMIC_SYNTHETIC_STREAMING_JOB_EXECUTOR_CLASSES": (
-        "always_on.llm.a6000",
+        "",
         "Comma separated list of classes to run streaming jobs on during synthetic jobs batch runs",
         str,
     ),
