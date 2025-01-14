@@ -35,6 +35,7 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
+from compute_horde_validator.validator.tasks import get_subtensor
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
@@ -344,6 +345,9 @@ class FacilitatorClient:
 
     async def miner_driver(self, miner: Miner, job_request: JobRequest) -> bool:
         """drive a miner client from job start to completion, then close miner connection"""
+        subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+        current_block = subtensor_.get_current_block()
+
         miner_axon_info = await self.get_miner_axon_info(miner.hotkey)
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
@@ -353,6 +357,7 @@ class FacilitatorClient:
             miner_port=miner_axon_info.port,
             executor_class=job_request.executor_class,
             job_description="User job from facilitator",
+            block=current_block,
         )
 
         miner_client = self.MINER_CLIENT_CLASS(

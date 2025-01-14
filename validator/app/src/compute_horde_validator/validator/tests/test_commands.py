@@ -10,6 +10,7 @@ from compute_horde_validator.validator.models import AdminJobRequest, Miner, Org
 
 from .helpers import (
     MockMinerClient,
+    MockSubtensor,
     MockSuccessfulMinerClient,
     check_system_events,
     mock_get_miner_axon_info,
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
     mock_get_miner_axon_info,
 )
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockSuccessfulMinerClient)
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_completed():
     # random miner to be picked
@@ -55,6 +57,7 @@ def test_debug_run_organic_job_command__job_completed():
     mock_get_miner_axon_info,
 )
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_timeout():
     # random miner to be picked
@@ -86,6 +89,7 @@ def test_debug_run_organic_job_command__job_timeout():
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", throw_error)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockSuccessfulMinerClient)
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_not_created():
     Miner.objects.create(hotkey="miner_client")
@@ -112,6 +116,7 @@ def test_debug_run_organic_job_command__job_not_created():
     mock_get_miner_axon_info,
 )
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockSuccessfulMinerClient)
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_debug_run_organic_job_command__job_created_but_not_triggered():
     Miner.objects.create(hotkey="miner_client")

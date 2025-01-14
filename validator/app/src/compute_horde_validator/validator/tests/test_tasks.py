@@ -37,6 +37,7 @@ from .helpers import (
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
+@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_trigger_run_admin_job__should_trigger_job():
     miner = Miner.objects.create(hotkey="miner_client_1")
