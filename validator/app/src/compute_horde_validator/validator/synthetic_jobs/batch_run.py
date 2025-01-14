@@ -516,7 +516,7 @@ class BatchContext:
         func: str | None = None,
         append: bool = True,
     ) -> SystemEvent | None:
-        if (type, subtype) in self.batch_config.event_limits:
+        if self.batch_config.event_limits and (type, subtype) in self.batch_config.event_limits:
             if (
                 self.event_limits_usage[(type, subtype)]
                 >= self.batch_config.event_limits[(type, subtype)]
