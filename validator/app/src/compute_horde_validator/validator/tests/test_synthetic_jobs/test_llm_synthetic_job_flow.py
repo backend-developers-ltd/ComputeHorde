@@ -47,9 +47,6 @@ def mocked_job_generator_factory(prompts):
         yield factory
 
 
-@pytest.mark.override_config(
-    DYNAMIC_SYNTHETIC_STREAMING_JOB_EXECUTOR_CLASSES="",
-)
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 async def test_llm_synthetic_jobs_flow(

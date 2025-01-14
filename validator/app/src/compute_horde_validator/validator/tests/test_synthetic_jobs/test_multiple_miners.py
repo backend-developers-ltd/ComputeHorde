@@ -1,4 +1,5 @@
 import asyncio
+import re
 import uuid
 from collections.abc import Callable
 from unittest.mock import patch
@@ -6,15 +7,20 @@ from unittest.mock import patch
 import bittensor
 import pytest
 import pytest_asyncio
+from compute_horde.executor_class import ExecutorClass
 from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.mv_protocol import miner_requests
+from pytest_httpx import HTTPXMock
+from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.models import (
     Miner,
+    Prompt,
     PromptSample,
     SyntheticJob,
     SystemEvent,
 )
+from compute_horde_validator.validator.s3 import get_public_url
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     BatchContext,
     MinerClient,
@@ -141,7 +147,40 @@ async def test_all_streaming_succeed(
     job_uuids: list[uuid.UUID],
     streaming_manifest_message: str,
     mock_prompt_samples: list[PromptSample],
+    llm_job_generator_factory,
+    httpx_mock: HTTPXMock,
+    mocker: MockerFixture,
+    settings,
 ):
+    llm_job_generator_factory._uuids = job_uuids.copy()
+    llm_job_generator_factory._prompt_samples = mock_prompt_samples.copy()
+    prompts = [
+        Prompt(
+            sample=prompt_sample,
+            content="mock",
+            answer="mock",
+        )
+        for prompt_sample in mock_prompt_samples
+    ]
+    llm_job_generator_factory._prompts = await Prompt.objects.abulk_create(prompts)
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.batch_run.get_streaming_job_executor_classes",
+        return_value={ExecutorClass.always_on__llm__a6000},
+    )
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
+        llm_job_generator_factory,
+    )
+
+    httpx_mock.add_response(
+        url=re.compile(
+            get_public_url(key=".*", bucket_name=settings.S3_BUCKET_NAME_ANSWERS, prefix="solved/")
+        ),
+        json={p.content: p.answer for p in prompts},
+    )
+    # generator will solve to the right answer
+    MOCK_SCORE = 1.0
+
     for job_uuid, transport in zip(job_uuids, transports):
         await transport.add_message(streaming_manifest_message, send_before=1)
 

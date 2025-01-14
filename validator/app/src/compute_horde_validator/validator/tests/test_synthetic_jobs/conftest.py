@@ -22,7 +22,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts impo
 )
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
-from .mock_generator import MockSyntheticJobGeneratorFactory
+from .mock_generator import LlmPromptsSyntheticJobGeneratorFactory, MockSyntheticJobGeneratorFactory
 
 
 @pytest.fixture
@@ -80,6 +80,25 @@ def job_uuids(job_uuid: uuid.UUID):
 @pytest.fixture
 def job_generator_factory(job_uuids: list[uuid.UUID]):
     return MockSyntheticJobGeneratorFactory(uuids=job_uuids)
+
+
+@pytest.fixture
+def llm_job_generator_factory(
+    job_uuids: list[uuid.UUID], prompt_sample: list[PromptSample], prompts: list[Prompt]
+):
+    gen = LlmPromptsSyntheticJobGeneratorFactory()
+    gen._uuids = job_uuids
+    gen._prompt_samples = prompt_sample
+    gen._prompts = prompts
+    return gen
+
+
+@pytest.fixture(autouse=True)
+def _patch_get_streaming_job_executor_classes(mocker: MockerFixture):
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.batch_run.get_streaming_job_executor_classes",
+        return_value={},
+    )
 
 
 @pytest.fixture(autouse=True)
