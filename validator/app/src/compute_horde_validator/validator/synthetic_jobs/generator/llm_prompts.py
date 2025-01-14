@@ -23,11 +23,13 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         self,
         s3_url: str,
         seed: int,
+        streaming: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.seed = seed
         self.s3_url = s3_url
+        self.streaming = streaming
         file_uuid = str(uuid.uuid4())
         self.input_filename = file_uuid + ".txt"
         self.s3_output_key = file_uuid + ".json"
@@ -51,7 +53,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         )
 
     def timeout_seconds(self) -> int:
-        return 48  # it takes around 42s - we add 15% buffer
+        return 60  # it takes around 42s - add buffer for streaming
 
     def base_docker_image_name(self) -> str:
         return "docker.io/backenddevelopersltd/compute-horde-prompt-solver:v0-latest"
@@ -63,14 +65,20 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         return "nvidia_all"
 
     def docker_run_cmd(self) -> list[str]:
-        return [
+        cmd = [
             "--temperature=0.5",
             "--top-p=0.8",
             "--max-tokens=256",
-            "--seed",
-            str(self.seed),
-            f"/volume/{self.input_filename}",
         ]
+        if self.streaming:
+            # for streaming jobs, do not pass the seed yet, just run it in server mode
+            # the job will be triggered hitting /execute-job endpoint with the seed as payload
+            cmd.append("--server")
+        else:
+            cmd.extend(["--seed", str(self.seed)])
+        # cmd.append("--mock")
+        cmd.append(f"/volume/{self.input_filename}")
+        return cmd
 
     async def volume(self) -> Volume | None:
         return MultiVolume(
@@ -116,11 +124,13 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
         expected_prompts: list[Prompt],
         s3_url: str,
         seed: int,
+        streaming: bool = False,
         **kwargs,
     ):
         super().__init__(
             s3_url=s3_url,
             seed=seed,
+            streaming=streaming,
             **kwargs,
         )
         self.prompt_sample: PromptSample = prompt_sample
@@ -136,4 +146,4 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
         return True, "", 1.0
 
     def job_description(self) -> str:
-        return "LLM prompts synthetic job"
+        return ("Streaming " if self.streaming else "") + "LLM prompts synthetic job"

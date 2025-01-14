@@ -729,8 +729,9 @@ class JobRunner:
             stderr=asyncio.subprocess.DEVNULL,
         )
         await process.wait()
-        await asyncio.create_subprocess_exec("docker", "network", "rm", self.job_network_name)
         self.temp_dir.rmdir()
+        if self.is_streaming_job:
+            await asyncio.create_subprocess_exec("docker", "network", "rm", self.job_network_name)
 
     async def _unpack_volume(self, volume: Volume | None):
         assert str(self.volume_mount_dir) not in {"~", "/"}

@@ -6,6 +6,7 @@ from unittest.mock import patch
 import bittensor
 import pytest
 from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClass
+from pytest_mock import MockerFixture
 
 from .helpers import MockNeuron, MockSyntheticMinerClient
 
@@ -17,6 +18,14 @@ def some() -> Generator[int, None, None]:
     # setup code
     yield 1
     # teardown code
+
+
+@pytest.fixture(autouse=True)
+def _patch_get_streaming_job_executor_classes(mocker: MockerFixture):
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.batch_run.get_streaming_job_executor_classes",
+        return_value={},
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
