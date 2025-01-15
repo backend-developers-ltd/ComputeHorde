@@ -1,8 +1,8 @@
 from compute_horde_miner.miner.executor_manager.v0 import (
     EXECUTOR_TIMEOUT,
     BaseExecutorManager,
-    ExecutorUnavailable,
     ExecutorFailedToStart,
+    ExecutorUnavailable,
 )
 
 __all__ = [

@@ -96,10 +96,6 @@ async def dummy_manager():
 
 @pytest.mark.asyncio
 @patch(
-    "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.RESERVATION_TIMEOUT",
-    0,
-)
-@patch(
     "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.POOL_CLEANUP_PERIOD",
     0.1,
 )
@@ -156,10 +152,6 @@ async def test_executor_class_pool(dummy_manager):
 
 @pytest.mark.asyncio
 @patch(
-    "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.RESERVATION_TIMEOUT",
-    0,
-)
-@patch(
     "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.POOL_CLEANUP_PERIOD",
     0.1,
 )
@@ -180,10 +172,6 @@ async def test_manager_reserve_executor_class(dummy_manager):
 
 @pytest.mark.asyncio
 @patch(
-    "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.RESERVATION_TIMEOUT",
-    0,
-)
-@patch(
     "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.POOL_CLEANUP_PERIOD",
     0.1,
 )
@@ -200,10 +188,6 @@ async def test_manifest_update(dummy_manager):
 
 
 @pytest.mark.asyncio
-@patch(
-    "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.RESERVATION_TIMEOUT",
-    0,
-)
 @patch(
     "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.POOL_CLEANUP_PERIOD",
     0.1,

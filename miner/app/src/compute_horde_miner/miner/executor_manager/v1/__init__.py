@@ -7,8 +7,8 @@ from compute_horde.executor_class import (
 from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
     ExecutorClassPool,
-    ExecutorUnavailable,
     ExecutorFailedToStart,
+    ExecutorUnavailable,
     ReservedExecutor,
 )
 from compute_horde_miner.miner.executor_manager._internal.dev import DevExecutorManager
