@@ -10,6 +10,21 @@ from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
     ExecutorUnavailable,
 )
+from compute_horde_miner.miner.executor_manager.base import (
+    BaseExecutorManager as BaseBaseExecutorManager,
+)
+from compute_horde_miner.miner.executor_manager.v0 import (
+    BaseExecutorManager as V0BaseExecutorManager,
+)
+from compute_horde_miner.miner.executor_manager.v0 import (
+    DockerExecutorManager as V0DockerExecutorManager,
+)
+from compute_horde_miner.miner.executor_manager.v1 import (
+    BaseExecutorManager as V1BaseExecutorManager,
+)
+from compute_horde_miner.miner.executor_manager.v1 import (
+    DockerExecutorManager as V1DockerExecutorManager,
+)
 
 
 class DummyExecutor:
@@ -62,9 +77,6 @@ class DummyExecutorManager(BaseExecutorManager):
 
     async def get_manifest(self):
         return self.manifest
-
-    async def is_active(self) -> bool:
-        return True
 
 
 @pytest_asyncio.fixture
@@ -209,3 +221,41 @@ async def test_concurrent_reservations(dummy_manager):
     results = await asyncio.gather(*[reserve(i) for i in range(5)])
     assert results.count(True) == 2
     assert results.count(False) == 3
+
+
+@pytest.mark.parametrize(
+    "base_class,overrides",
+    [
+        (
+            BaseBaseExecutorManager,
+            ["get_manifest", "_kill_executor", "_reserve_executor", "_wait_for_executor"],
+        ),
+        (
+            V0BaseExecutorManager,
+            ["get_manifest", "_kill_executor", "_reserve_executor", "_wait_for_executor"],
+        ),
+        (
+            V1BaseExecutorManager,
+            ["get_manifest", "kill_executor", "start_new_executor", "wait_for_executor"],
+        ),
+        (V0DockerExecutorManager, []),
+        (V1DockerExecutorManager, []),
+    ],
+)
+def test_subclassing_executor_manager(base_class: type, overrides: list[str]) -> None:
+    """
+    This is a dead-simple test that should stop us from adding abstract methods to public(-ish) executor managers, in
+    which case miners' custom executor managers would blow up.
+    This is by no means an exhaustive compatibility check.
+    """
+
+    async def async_noop(self):
+        pass
+
+    DerivedManager = type(
+        "DerivedManager",
+        (base_class,),
+        {method: async_noop for method in overrides},
+    )
+
+    instance = DerivedManager()  # noqa
