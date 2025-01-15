@@ -8,6 +8,7 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, Protocol
 
 import bittensor
@@ -17,6 +18,7 @@ from channels.layers import get_channel_layer
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
+from compute_horde.certificate import generate_certificate_at
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
@@ -36,6 +38,8 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
     V0JobFinishedRequest,
     V0MachineSpecsRequest,
+    V0StreamingJobNotReadyRequest,
+    V0StreamingJobReadyRequest,
 )
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
@@ -44,6 +48,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
     V0JobRequest,
+    V1InitialJobRequest,
 )
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import (
@@ -63,6 +68,7 @@ from compute_horde_validator.validator.dynamic_config import (
     LimitsDict,
     aget_config,
     get_miner_max_executors_per_class,
+    get_streaming_job_executor_classes,
     get_system_event_limits,
 )
 from compute_horde_validator.validator.models import (
@@ -79,6 +85,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
 )
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
+    LlmPromptsJobGenerator,
     LlmPromptsSyntheticJobGenerator,
 )
 from compute_horde_validator.validator.synthetic_jobs.scoring import get_manifest_multiplier
@@ -283,6 +290,13 @@ class Job:
     executor_response_time: datetime | None = None
     executor_response_event: asyncio.Event = field(default_factory=asyncio.Event)
 
+    # streaming job support
+    streaming_job_ready_response: (
+        V0StreamingJobReadyRequest | V0StreamingJobNotReadyRequest | None
+    ) = None
+    streaming_job_ready_response_time: datetime | None = None
+    streaming_job_ready_response_event: asyncio.Event = field(default_factory=asyncio.Event)
+
     job_barrier_time: datetime | None = None
     job_before_sent_time: datetime | None = None
     job_after_sent_time: datetime | None = None
@@ -334,6 +348,14 @@ class Job:
                     self.executor_response = msg
                     self.executor_response_time = datetime.now(tz=UTC)
                     self.executor_response_event.set()
+                else:
+                    duplicate = True
+
+            case V0StreamingJobReadyRequest() | V0StreamingJobNotReadyRequest():
+                if self.streaming_job_ready_response is None:
+                    self.streaming_job_ready_response = msg
+                    self.streaming_job_ready_response_time = datetime.now(tz=UTC)
+                    self.streaming_job_ready_response_event.set()
                 else:
                     duplicate = True
 
@@ -392,6 +414,7 @@ class Job:
             accept_response=_model_dump(self.accept_response),
             accept_response_time=_datetime_dump(self.accept_response_time),
             executor_response=_model_dump(self.executor_response),
+            streaming_job_ready_response=_model_dump(self.streaming_job_ready_response),
             executor_response_time=_datetime_dump(self.executor_response_time),
             job_barrier_time=_datetime_dump(self.job_barrier_time),
             job_before_sent_time=_datetime_dump(self.job_before_sent_time),
@@ -429,6 +452,11 @@ class BatchContext:
     uuid: str
     own_keypair: bittensor.Keypair
 
+    # validator creds for streaming jobs
+    own_public_key: str
+    own_certs: tuple[str, str]
+    certs_basepath: Path
+
     # randomized, but order preserving list of miner.hotkeys
     # used to go from indices returned by asyncio.gather() back to miner.hotkey
     hotkeys: list[str]
@@ -437,7 +465,7 @@ class BatchContext:
     axons: dict[str, bittensor.AxonInfo]
     # full name for easier debugging: "{miner_hotkey}({ip}:{port})"
     names: dict[str, str]
-    miners: dict[str, Miner]
+    miners: dict[str, Miner]  # hotkey -> Miner
     clients: dict[str, MinerClient]
     executors: dict[str, defaultdict[ExecutorClass, int]]
     job_generators: dict[str, dict[ExecutorClass, list[BaseSyntheticJobGenerator]]]
@@ -488,7 +516,7 @@ class BatchContext:
         func: str | None = None,
         append: bool = True,
     ) -> SystemEvent | None:
-        if (type, subtype) in self.batch_config.event_limits:
+        if self.batch_config.event_limits and (type, subtype) in self.batch_config.event_limits:
             if (
                 self.event_limits_usage[(type, subtype)]
                 >= self.batch_config.event_limits[(type, subtype)]
@@ -569,6 +597,7 @@ class BatchContext:
             for msg in (
                 job.accept_response,
                 job.executor_response,
+                job.streaming_job_ready_response,
                 job.job_response,
                 job.machine_specs,
             ):
@@ -790,10 +819,17 @@ async def _init_context(
     batch_config = BatchConfig()
     await batch_config.populate()
 
+    # TODO move somewhere else - gen a certificate per batch or not?
+    # Generate validator certificate
+    dir_path, public_key, certs = generate_certificate_at()
+
     ctx = BatchContext(
         batch_id=batch_id,
         uuid=str(uuid.uuid4()),
         own_keypair=own_keypair,
+        certs_basepath=dir_path,
+        own_public_key=public_key,
+        own_certs=certs,
         hotkeys=[],
         axons={},
         names={},
@@ -1054,6 +1090,7 @@ async def get_llm_prompt_samples(ctx: BatchContext) -> list[PromptSample] | None
 
 
 async def _generate_jobs(ctx: BatchContext) -> None:
+    streaming_classes = await get_streaming_job_executor_classes()
     start_time = time.time()
     generated_job_count = 0
 
@@ -1084,6 +1121,9 @@ async def _generate_jobs(ctx: BatchContext) -> None:
                         "s3_url": prompt_sample.series.s3_url,
                         "seed": prompt_sample.workload.seed,
                     }
+                    # enable streaming for specific llm jobs executor classes
+                    if executor_class in streaming_classes:
+                        kwargs["streaming"] = True
 
                 job_generator = await current.synthetic_job_generator_factory.create(
                     executor_class, **kwargs
@@ -1118,6 +1158,7 @@ async def _send_initial_job_request(
 ) -> None:
     job: Job | None = None
     try:
+        streaming_classes = await get_streaming_job_executor_classes()
         await start_barrier.wait()
         barrier_time = datetime.now(tz=UTC)
 
@@ -1132,14 +1173,27 @@ async def _send_initial_job_request(
         stagger_wait_interval = max_spin_up_time - job.get_spin_up_time()
         assert stagger_wait_interval >= 0
 
-        request = V0InitialJobRequest(
-            job_uuid=job.uuid,
-            executor_class=job.executor_class,
-            base_docker_image_name=job.job_generator.base_docker_image_name(),
-            timeout_seconds=job.job_generator.timeout_seconds(),
-            volume=job.volume if job.job_generator.volume_in_initial_req() else None,
-            job_started_receipt_payload=job.job_started_receipt_payload,
-            job_started_receipt_signature=job.job_started_receipt_signature,
+        request = (
+            V1InitialJobRequest(
+                job_uuid=job.uuid,
+                executor_class=job.executor_class,
+                base_docker_image_name=job.job_generator.base_docker_image_name(),
+                timeout_seconds=job.job_generator.timeout_seconds(),
+                volume=job.volume if job.job_generator.volume_in_initial_req() else None,
+                job_started_receipt_payload=job.job_started_receipt_payload,
+                job_started_receipt_signature=job.job_started_receipt_signature,
+                public_key=ctx.own_public_key,
+            )
+            if job.executor_class in streaming_classes
+            else V0InitialJobRequest(
+                job_uuid=job.uuid,
+                executor_class=job.executor_class,
+                base_docker_image_name=job.job_generator.base_docker_image_name(),
+                timeout_seconds=job.job_generator.timeout_seconds(),
+                volume=job.volume if job.job_generator.volume_in_initial_req() else None,
+                job_started_receipt_payload=job.job_started_receipt_payload,
+                job_started_receipt_signature=job.job_started_receipt_signature,
+            )
         )
         request_json = request.model_dump_json()
 
@@ -1183,7 +1237,10 @@ async def _send_initial_job_request(
 
 
 async def _send_job_request(
-    ctx: BatchContext, start_barrier: asyncio.Barrier, job_uuid: str
+    ctx: BatchContext,
+    start_barrier: asyncio.Barrier,
+    streaming_start_barrier: asyncio.Barrier | None,
+    job_uuid: str,
 ) -> None:
     await start_barrier.wait()
     barrier_time = datetime.now(tz=UTC)
@@ -1211,6 +1268,10 @@ async def _send_job_request(
         job.job_before_sent_time = datetime.now(tz=UTC)
         await client.send_check(request_json)
         job.job_after_sent_time = datetime.now(tz=UTC)
+
+        # if streaming job
+        if streaming_start_barrier is not None:
+            await _trigger_streaming_job(ctx, streaming_start_barrier, job_uuid)
 
         await job.job_response_event.wait()
 
@@ -1249,6 +1310,13 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
                 type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 description="refused",
+            )
+        if isinstance(job.streaming_job_ready_response, V0StreamingJobNotReadyRequest):
+            logger.warning("%s failed to start streaming", job.name)
+            job.system_event(
+                type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
+                description="failed to start streaming",
             )
         if isinstance(job.job_response, V0JobFailedRequest):
             returncode = job.job_response.docker_process_exit_status
@@ -1421,9 +1489,58 @@ async def _multi_send_initial_job_request(ctx: BatchContext) -> None:
     _handle_exceptions(ctx, exceptions)
 
 
+async def _trigger_streaming_job(
+    ctx: BatchContext, streaming_start_barrier: asyncio.Barrier, job_uuid: str
+) -> None:
+    job = ctx.jobs[job_uuid]
+    timeout = await aget_config("DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT")
+    async with asyncio.timeout(timeout):
+        await job.streaming_job_ready_response_event.wait()
+        logger.debug(f"Received streaming job ready response for {job_uuid}")
+
+        response = job.streaming_job_ready_response
+        if isinstance(response, V0StreamingJobReadyRequest):
+            # Save job certificate received from executor
+            executor_cert_path = ctx.certs_basepath / "ssl" / f"executor_certificate_{job_uuid}.pem"
+            executor_cert_path.write_text(response.public_key)
+
+            # provide the synthetic job prompt seed to the streaming job
+            if isinstance(job.job_generator, LlmPromptsJobGenerator):
+                seed = job.job_generator.seed
+            else:
+                logger.error(f"Bad streaming job generator type: {job.job_generator}")
+                return
+
+            # wait to trigger all streaming jobs at the same time
+            await streaming_start_barrier.wait()
+
+            async with httpx.AsyncClient(
+                verify=str(executor_cert_path),
+                cert=ctx.own_certs,
+                timeout=job.job_generator.timeout_seconds(),
+            ) as client:
+                # send the seed to the executor to start the streaming job
+                url = f"https://{response.ip}:{response.port}/execute-job"
+                try:
+                    r = await client.post(url, json={"seed": seed}, headers={"Host": response.ip})
+                    r.raise_for_status()
+                except Exception as e:
+                    msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
+                    logger.warning(msg)
+                    raise Exception(msg)
+                finally:
+                    # schedule the job to terminate
+                    url = f"https://{response.ip}:{response.port}/terminate"
+                    r = await client.get(url, headers={"Host": response.ip})
+                    if r.status_code != 200:
+                        logger.warning(f"Failed to terminate streaming job {job_uuid} on {url}")
+
+
 async def _multi_send_job_request(ctx: BatchContext) -> None:
-    executor_ready_job_uuids = [
-        job.uuid
+    streaming_classes = await get_streaming_job_executor_classes()
+
+    executor_ready_jobs = [
+        (job.uuid, job.executor_class in streaming_classes)
         for job in ctx.jobs.values()
         if isinstance(job.executor_response, V0ExecutorReadyRequest)
         # occasionally we can get a job response (V0JobFailedRequest | V0JobFinishedRequest)
@@ -1431,14 +1548,23 @@ async def _multi_send_job_request(ctx: BatchContext) -> None:
         # the executor decide to abort the job before the details were sent
         and job.job_response is None
     ]
-    logger.info("Sending job requests for %d ready jobs", len(executor_ready_job_uuids))
-    start_barrier = asyncio.Barrier(len(executor_ready_job_uuids))
+    logger.info("Sending job requests for %d ready jobs", len(executor_ready_jobs))
+    start_barrier = asyncio.Barrier(len(executor_ready_jobs))
+
+    num_streaming_jobs = len([x for x in executor_ready_jobs if x[1]])
+    if num_streaming_jobs > 0:
+        streaming_start_barrier = asyncio.Barrier(num_streaming_jobs)
+    else:
+        streaming_start_barrier = None
+
     tasks = [
         asyncio.create_task(
-            _send_job_request(ctx, start_barrier, job_uuid),
+            _send_job_request(
+                ctx, start_barrier, streaming_start_barrier if is_streaming else None, job_uuid
+            ),
             name=f"{job_uuid}._send_job_request",
         )
-        for job_uuid in executor_ready_job_uuids
+        for job_uuid, is_streaming in executor_ready_jobs
     ]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1446,7 +1572,7 @@ async def _multi_send_job_request(ctx: BatchContext) -> None:
     exceptions: list[ExceptionInfo] = []
     for i, result in enumerate(results):
         if isinstance(result, BaseException):
-            job_uuid = executor_ready_job_uuids[i]
+            job_uuid = executor_ready_jobs[i][0]
             job = ctx.jobs[job_uuid]
             job.exception = result
             job.exception_time = datetime.now(tz=UTC)

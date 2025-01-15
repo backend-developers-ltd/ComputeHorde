@@ -12,6 +12,7 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     _LLM_ANSWERS_DOWNLOAD_MAX_ATTEMPTS,
     _LLM_ANSWERS_DOWNLOAD_RETRY_MIN_BACKOFF,
     LLM_EXECUTOR_CLASS,
+    BatchConfig,
     BatchContext,
     LlmAnswerDownloadTask,
     LlmAnswerDownloadTaskFailed,
@@ -134,6 +135,7 @@ async def test_download_llm_prompts_answers_integration(mocker: MockerFixture, m
     )
 
     mock_context = MagicMock(spec=BatchContext)
+    mock_context.batch_config = BatchConfig()
 
     successful_jobs = []
     for i in range(7):
