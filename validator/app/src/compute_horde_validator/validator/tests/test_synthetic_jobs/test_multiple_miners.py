@@ -1,4 +1,5 @@
 import asyncio
+import re
 import uuid
 from collections.abc import Callable
 from unittest.mock import patch
@@ -6,10 +7,18 @@ from unittest.mock import patch
 import bittensor
 import pytest
 import pytest_asyncio
+from compute_horde.executor_class import DEFAULT_LLM_EXECUTOR_CLASS
 from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.mv_protocol import miner_requests
+from pytest_httpx import HTTPXMock
+from pytest_mock import MockerFixture
 
-from compute_horde_validator.validator.models import Miner, SyntheticJob, SystemEvent
+from compute_horde_validator.validator.models import (
+    Miner,
+    SyntheticJob,
+    SystemEvent,
+)
+from compute_horde_validator.validator.s3 import get_public_url
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     BatchContext,
     MinerClient,
@@ -17,8 +26,8 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
 )
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
-from .helpers import check_miner_job_system_events, check_synthetic_job
-from .mock_generator import MOCK_SCORE, NOT_SCORED
+from .helpers import check_miner_job_system_events, check_synthetic_job, generate_prompts
+from .mock_generator import MOCK_SCORE, NOT_SCORED, LlmPromptsSyntheticJobGeneratorFactory
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -103,6 +112,73 @@ async def test_all_succeed(
             job_uuid=str(job_uuid)
         ).model_dump_json()
         await transport.add_message(executor_ready_message, send_before=0)
+
+        job_finish_message = miner_requests.V0JobFinishedRequest(
+            job_uuid=str(job_uuid), docker_process_stdout="", docker_process_stderr=""
+        ).model_dump_json()
+
+        await transport.add_message(job_finish_message, send_before=2)
+
+    await asyncio.wait_for(
+        execute_synthetic_batch_run(
+            axon_dict,
+            miners,
+            create_miner_client=create_simulation_miner_client,
+        ),
+        timeout=1,
+    )
+
+    for job_uuid, miner in zip(job_uuids, miners):
+        await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, MOCK_SCORE)
+
+
+async def test_all_streaming_succeed(
+    axon_dict: dict[str, bittensor.AxonInfo],
+    transports: list[MinerSimulationTransport],
+    miners: list[Miner],
+    create_simulation_miner_client: Callable,
+    job_uuids: list[uuid.UUID],
+    streaming_manifest_message: str,
+    httpx_mock: HTTPXMock,
+    mocker: MockerFixture,
+    settings,
+):
+    prompts, prompt_samples = await generate_prompts(num_miners=len(job_uuids))
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.batch_run.get_streaming_job_executor_classes",
+        return_value={DEFAULT_LLM_EXECUTOR_CLASS},
+    )
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
+        LlmPromptsSyntheticJobGeneratorFactory(
+            uuids=job_uuids.copy(), prompt_samples=prompt_samples, prompts=prompts
+        ),
+    )
+
+    httpx_mock.add_response(
+        url=re.compile(
+            get_public_url(key=".*", bucket_name=settings.S3_BUCKET_NAME_ANSWERS, prefix="solved/")
+        ),
+        json={p.content: p.answer for p in prompts},
+    )
+    # generator will solve to the right answer
+    MOCK_SCORE = 1.0
+
+    for job_uuid, transport in zip(job_uuids, transports):
+        await transport.add_message(streaming_manifest_message, send_before=1)
+
+        accept_message = miner_requests.V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+        await transport.add_message(accept_message, send_before=1)
+
+        executor_ready_message = miner_requests.V0ExecutorReadyRequest(
+            job_uuid=str(job_uuid)
+        ).model_dump_json()
+        await transport.add_message(executor_ready_message, send_before=0)
+
+        streaming_ready_message = miner_requests.V0StreamingJobReadyRequest(
+            job_uuid=str(job_uuid), public_key="123", ip="127.0.0.1", port=8000
+        ).model_dump_json()
+        await transport.add_message(streaming_ready_message, send_before=0)
 
         job_finish_message = miner_requests.V0JobFinishedRequest(
             job_uuid=str(job_uuid), docker_process_stdout="", docker_process_stderr=""

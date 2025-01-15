@@ -310,6 +310,16 @@ CONSTANCE_CONFIG = {
         "Seconds between consecutive receipt polling",
         int,
     ),
+    "DYNAMIC_SYNTHETIC_STREAMING_JOB_EXECUTOR_CLASSES": (
+        "",
+        "Comma separated list of classes to run streaming jobs on during synthetic jobs batch runs",
+        str,
+    ),
+    "DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT": (
+        300,
+        "Timeout for waiting for a streaming job to be ready to accept connections from the user",
+        int,
+    ),
 }
 
 # Content Security Policy
