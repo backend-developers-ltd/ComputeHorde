@@ -224,6 +224,14 @@ class SyntheticJob(JobBase):
 class OrganicJob(JobBase):
     stdout = models.TextField(blank=True, default="")
     stderr = models.TextField(blank=True, default="")
+    block = models.BigIntegerField(
+        null=True, help_text="Block number on which this job is scheduled"
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["block"]),
+        ]
 
     def get_absolute_url(self):
         return f"/admin/validator/organicjob/{self.pk}/change/"
