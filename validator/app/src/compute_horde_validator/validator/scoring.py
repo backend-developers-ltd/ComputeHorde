@@ -33,17 +33,17 @@ def horde_score(
 ) -> float:
     """Proportionally scores horde benchmarks allowing increasing significance for chosen features
 
-    By default scores are proportional to horde "strength" - having 10 executors would have the same
+    By default, scores are proportional to horde "strength" - having 10 executors would have the same
     score as separate 10 single executor miners. Subnet owner can control significance of defined features:
 
     alpha - controls significance of average score, so smaller horde can have higher score if executors are stronger;
-            best values are from range [0, 1], with 0 meaning no effect
+            the best values are from range [0, 1], with 0 meaning no effect
     beta - controls sigmoid function steepness; sigmoid function is over `-(1 / horde_size)`, so larger hordes can be
            more significant than smaller ones, even if summary strength of a horde is the same;
-           best values are from range [0,5] (or more, but higher values does not change sigmoid steepnes much),
+           the best values are from range [0,5] (or more, but higher values does not change sigmoid steepness much),
            with 0 meaning no effect
     delta - controls where sigmoid function has 0.5 value allowing for better control over effect of beta param;
-            best values are from range [0, 1]
+            the best values are from range [0, 1]
     """
     sum_agent = sum(benchmarks)
     inverted_n = 1 / len(benchmarks)
@@ -75,11 +75,11 @@ def score_batch(batch):
         if job.executor_class in executor_class_weights:
             executor_class_jobs[job.executor_class].append(job)
 
-    parametriezed_horde_score: Callable[[list[float]], float] = partial(
+    parameterized_horde_score: Callable[[list[float]], float] = partial(
         horde_score,
         # scaling factor for avg_score of a horde - best in range [0, 1] (0 means no effect on score)
         alpha=settings.HORDE_SCORE_AVG_PARAM,
-        # sigmoid steepnes param - best in range [0, 5] (0 means no effect on score)
+        # sigmoid steepness param - best in range [0, 5] (0 means no effect on score)
         beta=settings.HORDE_SCORE_SIZE_PARAM,
         # horde size for 0.5 value of sigmoid - sigmoid is for 1 / horde_size
         delta=1 / settings.HORDE_SCORE_CENTRAL_SIZE_PARAM,
@@ -89,7 +89,7 @@ def score_batch(batch):
     for executor_class, jobs in executor_class_jobs.items():
         executor_class_weight = executor_class_weights[executor_class]
         if executor_class == ExecutorClass.spin_up_4min__gpu_24gb:
-            score_aggregation = parametriezed_horde_score
+            score_aggregation = parameterized_horde_score
         else:
             score_aggregation = sum
 
