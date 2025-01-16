@@ -70,7 +70,7 @@ To create a custom executor manager, follow these steps:
 
    You need to implement 4 methods (`start_new_executor`, `kill_executor`, `wait_for_executor` and `get_manifest`) to make the executor work. For reference, you can check the implementation in `compute_horde_miner.miner.executor_manager.docker`.
 
-If you don't implement `get_executor_public_address` the executor's public address will be "guessed" by miner's at connection time - might not work well if your miner<->executor connection uses a local network. the input of this method is the outcome of `start_new_executor`. **IMPORTANT!** If you don't supply the right public addresses of your executors all [streaming jobs](/docs/job_flow#streaming-organic-job-flow) will fail.
+If you don't implement `get_executor_public_address` the executor's public address will be "guessed" by miner's at connection time - might not work well if your miner<->executor connection uses a local network. the input of this method is the outcome of `start_new_executor`. **IMPORTANT!** If you don't supply the right public addresses of your executors all [streaming jobs](/docs/job_flow.md#streaming-organic-job-flow) will fail.
 
 3. Update your `.env` file with the following variables:
 
