@@ -32,3 +32,6 @@ def BITTENSOR_WALLET() -> bittensor.wallet:  # type: ignore
     )
     wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
     return wallet
+
+
+CONSTANCE_DATABASE_CACHE_BACKEND = None
