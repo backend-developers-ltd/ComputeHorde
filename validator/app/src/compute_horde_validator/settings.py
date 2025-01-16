@@ -274,6 +274,21 @@ CONSTANCE_CONFIG = {
         ),
         str,
     ),
+    "DYNAMIC_ORGANIC_JOB_SCORE": (
+        1.0,
+        "Score of each successful organic job",
+        float,
+    ),
+    "DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT": (
+        -1,
+        "Maximum number of organic jobs each miner can get scores for. Negative value means unlimited.",
+        int,
+    ),
+    "DYNAMIC_REJECTED_SYNTHETIC_JOB_SCORE": (
+        1.0,
+        "Score for each properly rejected synthetic job",
+        float,
+    ),
     "DYNAMIC_ORGANIC_JOB_TIMEOUT": (
         300,
         "Timeout for the run of an organic jobs in seconds",

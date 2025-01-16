@@ -5,10 +5,12 @@ from functools import partial
 
 import numpy as np
 from compute_horde.executor_class import ExecutorClass
+from constance import config
 from django.conf import settings
+from django.db.models import Count
 
 from .dynamic_config import get_executor_class_weights
-from .models import SyntheticJob, SyntheticJobBatch
+from .models import Cycle, OrganicJob, SyntheticJob, SyntheticJobBatch
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +55,7 @@ def horde_score(
     return scaled_avg_benchmark * sum_agent * scaled_inverted_n
 
 
-def score_jobs(
+def score_synthetic_jobs(
     jobs: Sequence[SyntheticJob],
     score_aggregation: Callable[[list[float]], float] = sum,
     normalization_weight: float = 1,
@@ -68,10 +70,37 @@ def score_jobs(
     return normalize(score_per_hotkey, weight=normalization_weight)
 
 
+def score_organic_jobs(cycle: Cycle) -> dict[str, float]:
+    batch_scores: defaultdict[str, float] = defaultdict(float)
+    organic_job_counts = (
+        OrganicJob.objects.filter(
+            block__gte=cycle.start,
+            block__lt=cycle.stop,
+            status=OrganicJob.Status.COMPLETED,
+        )
+        .values("miner__hotkey")
+        .annotate(count=Count("*"))
+    )
+    score = config.DYNAMIC_ORGANIC_JOB_SCORE
+    limit = config.DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT
+    for organic_job_count in organic_job_counts:
+        if limit < 0:
+            count = organic_job_count["count"]
+        else:
+            count = min(limit, organic_job_count["count"])
+        hotkey = organic_job_count["miner__hotkey"]
+        batch_scores[hotkey] += count * score
+
+    return batch_scores
+
+
 def score_batch(batch):
     executor_class_weights = get_executor_class_weights()
     executor_class_jobs = defaultdict(list)
+    rejected_jobs = []
     for job in batch.synthetic_jobs.select_related("miner"):
+        if job.status == "PROPERLY_REJECTED":  # FIXME: update with proper value
+            rejected_jobs.append(job)
         if job.executor_class in executor_class_weights:
             executor_class_jobs[job.executor_class].append(job)
 
@@ -93,13 +122,24 @@ def score_batch(batch):
         else:
             score_aggregation = sum
 
-        executors_class_scores = score_jobs(
+        executors_class_scores = score_synthetic_jobs(
             jobs,
             score_aggregation=score_aggregation,
             normalization_weight=executor_class_weight,
         )
         for hotkey, score in executors_class_scores.items():
             batch_scores[hotkey] += score
+
+    # TODO: Properly rejected jobs should have their scores set in batch_run.
+    #       This code block will be unnecessary when scoring is implemented there.
+    rejected_score = config.DYNAMIC_REJECTED_SYNTHETIC_JOB_SCORE
+    for job in rejected_jobs:
+        batch_scores[job.miner.hotkey] += rejected_score
+
+    organic_job_scores = score_organic_jobs(batch.cycle)
+    for hotkey, score in organic_job_scores.items():
+        batch_scores[hotkey] += score
+
     return dict(batch_scores)
 
 

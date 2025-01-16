@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from compute_horde_validator.validator.models import Miner, SyntheticJob, SyntheticJobBatch
+from compute_horde_validator.validator.models import Cycle, Miner, SyntheticJob, SyntheticJobBatch
 from compute_horde_validator.validator.scoring import ExecutorClass, score_batches
 
 EXECUTOR_CLASS_WEIGHTS_OVERRIDE = "spin_up-4min.gpu-24gb=8,always_on.gpu-24gb=2"
@@ -19,7 +19,8 @@ def setup_data():
 
     # Create batch
     batch = SyntheticJobBatch.objects.create(
-        accepting_results_until=timezone.now() + timedelta(hours=1)
+        accepting_results_until=timezone.now() + timedelta(hours=1),
+        cycle=Cycle.objects.create(start=708, stop=1430),
     )
 
     # Common job parameters
@@ -133,7 +134,8 @@ def test_score_batches_executor_classes_weights():
 
     # Create batch
     batch = SyntheticJobBatch.objects.create(
-        accepting_results_until=timezone.now() + timedelta(hours=1)
+        accepting_results_until=timezone.now() + timedelta(hours=1),
+        cycle=Cycle.objects.create(start=708, stop=1430),
     )
 
     # Common job parameters
