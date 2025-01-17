@@ -358,6 +358,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json()
             )
         except ExecutorUnavailable:
+            await self.group_discard(token)
+            await job.adelete()
+            self.pending_jobs.pop(msg.job_uuid)
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
@@ -365,19 +368,16 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                     receipts=[],  # TODO: Add relevant receipts
                 ).model_dump_json()
             )
+        except ExecutorFailedToStart:
             await self.group_discard(token)
             await job.adelete()
             self.pending_jobs.pop(msg.job_uuid)
-        except ExecutorFailedToStart:
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
                     reason=miner_requests.V0DeclineJobRequest.Reason.EXECUTOR_FAILURE,
                 ).model_dump_json()
             )
-            await self.group_discard(token)
-            await job.adelete()
-            self.pending_jobs.pop(msg.job_uuid)
 
     async def handle_job_request(self, msg: validator_requests.V0JobRequest):
         job = self.pending_jobs.get(msg.job_uuid)
