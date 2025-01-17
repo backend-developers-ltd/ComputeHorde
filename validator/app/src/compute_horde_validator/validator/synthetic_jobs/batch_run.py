@@ -1267,6 +1267,7 @@ async def _excuse_is_valid(ctx: BatchContext, job: Job, receipts: list[Receipt])
     allowed_validators: set[str] = {
         ctx.own_keypair.ss58_address
     }  # TODO: Allow other valis with minimum stake
+    leeway = timedelta(seconds=2)  # TODO: Dynamic config
 
     valid_receipts = [
         receipt
@@ -1275,9 +1276,8 @@ async def _excuse_is_valid(ctx: BatchContext, job: Job, receipts: list[Receipt])
         and receipt.payload.miner_hotkey == miner_hotkey
         and receipt.payload.job_uuid != job.uuid
         and receipt.payload.executor_class == job.executor_class
-        and receipt.payload.timestamp <= now  # TODO: Time leeway
-        and now
-        <= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl)  # TODO: Time leeway
+        and receipt.payload.timestamp <= now - leeway
+        and now <= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
         and receipt.payload.validator_hotkey in allowed_validators
         and receipt.verify_validator_signature()
     ]
