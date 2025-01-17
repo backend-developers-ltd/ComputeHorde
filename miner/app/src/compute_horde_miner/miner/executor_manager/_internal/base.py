@@ -160,7 +160,5 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
 
     def get_total_timeout(self, executor_class, job_timeout):
         spec = EXECUTOR_CLASS.get(executor_class)
-        spin_up_time = 0
-        if spec is not None and spec.spin_up_time is not None:
-            spin_up_time = spec.spin_up_time
+        spin_up_time = spec.spin_up_time if spec else 0
         return spin_up_time + job_timeout + self.EXECUTOR_TIMEOUT_LEEWAY

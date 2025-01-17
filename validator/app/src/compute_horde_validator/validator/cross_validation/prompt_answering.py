@@ -68,7 +68,7 @@ async def answer_prompts(
         total_job_timeout=(
             job_generator.timeout_seconds()
             + max(
-                EXECUTOR_CLASS[ExecutorClass.always_on__llm__a6000].spin_up_time or 0,
+                EXECUTOR_CLASS[ExecutorClass.always_on__llm__a6000].spin_up_time,
                 MIN_SPIN_UP_TIME,
             )
         ),
