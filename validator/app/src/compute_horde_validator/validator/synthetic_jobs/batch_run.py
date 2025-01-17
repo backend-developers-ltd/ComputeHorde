@@ -8,8 +8,9 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from enum import Enum
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, assert_never
 
 import bittensor
 import httpx
@@ -50,6 +51,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobRequest,
     V1InitialJobRequest,
 )
+from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
@@ -258,6 +260,13 @@ class ExceptionInfo:
     stage: str
 
 
+class JobResultType(Enum):
+    Success = "success"
+    Failure = "failure"
+    Excused = "excused"
+    Declined = "declined"
+
+
 @dataclass
 class Job:
     ctx: "BatchContext"
@@ -321,6 +330,9 @@ class Job:
     time_took: timedelta | None = None
     correct: bool | None = None  # returned correct answer (even if outside time limit)
     success: bool = False  # returned correct answer within time limit
+    declined: bool = False
+    decline_reason: V0DeclineJobRequest.Reason | None = None
+    excuse_is_valid: bool = False
     comment: str = "failed"
     score: float = 0
     # dancing bonus
@@ -668,6 +680,7 @@ class BatchContext:
             total=len(jobs),
             failed=sum(1 for job in jobs if not job.success),
             successful=sum(1 for job in jobs if job.success),
+            # TODO: Metrics for other job results
             correct=sum(1 for job in jobs if job.correct),
             # don't count None as incorrect
             incorrect=sum(1 for job in jobs if job.correct is False),
@@ -1217,23 +1230,68 @@ async def _send_initial_job_request(
         job.accept_after_sent_time = datetime.now(tz=UTC)
 
         await job.accept_response_event.wait()
-        if isinstance(job.accept_response, V0AcceptJobRequest):
-            _generate_job_accepted_receipt(ctx, job)
-            assert job.job_accepted_receipt is not None
-            try:
-                receipt_json = job.job_accepted_receipt.model_dump_json()
-                async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
-                    await client.send_check(receipt_json)
-            except (Exception, asyncio.CancelledError) as exc:
-                logger.warning("%s failed to send job accepted receipt: %r", job.name, exc)
-                job.system_event(
-                    type=SystemEvent.EventType.RECEIPT_FAILURE,
-                    subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
-                    description=repr(exc),
-                    func="_send_initial_job_request",
-                )
+        match job.accept_response:
+            case V0AcceptJobRequest():
+                await _handle_job_accepted(client, ctx, job)
+            case V0DeclineJobRequest():
+                await _handle_job_declined(ctx, job, job.accept_response)
+            case None:
+                logger.error("Job accept response event fired, but response is missing.")
+            case _:
+                assert_never(job.accept_response)
 
-            await job.executor_response_event.wait()
+
+async def _handle_job_declined(ctx: BatchContext, job: Job, msg: V0DeclineJobRequest) -> None:
+    job.declined = True
+    job.decline_reason = msg.reason
+
+    if msg.reason == V0DeclineJobRequest.Reason.BUSY:
+        job.excuse_is_valid = await _excuse_is_valid(ctx, job, msg.receipts)
+
+
+async def _excuse_is_valid(ctx: BatchContext, job: Job, receipts: list[Receipt]) -> bool:
+    assert job.accept_before_sent_time is not None
+    now = job.accept_before_sent_time
+    miner_hotkey = job.miner_hotkey
+    executor_count = ctx.executors[miner_hotkey][job.executor_class]
+    allowed_validators: set[str] = {
+        ctx.own_keypair.ss58_address
+    }  # TODO: Allow other valis with minimum stake
+
+    valid_receipts = [
+        receipt
+        for receipt in receipts
+        if isinstance(receipt.payload, JobStartedReceiptPayload)
+        and receipt.payload.job_uuid != job.uuid
+        and receipt.payload.executor_class == job.executor_class
+        and receipt.payload.timestamp <= now  # TODO: Time leeway
+        and now
+        <= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl)  # TODO: Time leeway
+        and receipt.payload.validator_hotkey in allowed_validators
+        and receipt.verify_validator_signature()
+    ]
+
+    # TODO: Filter out non-unique receipts
+
+    return len(valid_receipts) >= executor_count
+
+
+async def _handle_job_accepted(client: MinerClient, ctx: BatchContext, job: Job) -> None:
+    _generate_job_accepted_receipt(ctx, job)
+    assert job.job_accepted_receipt is not None
+    try:
+        receipt_json = job.job_accepted_receipt.model_dump_json()
+        async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
+            await client.send_check(receipt_json)
+    except (Exception, asyncio.CancelledError) as exc:
+        logger.warning("%s failed to send job accepted receipt: %r", job.name, exc)
+        job.system_event(
+            type=SystemEvent.EventType.RECEIPT_FAILURE,
+            subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
+            description=repr(exc),
+            func="_send_initial_job_request",
+        )
+    await job.executor_response_event.wait()
 
 
 async def _send_job_request(
@@ -1616,6 +1674,22 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     job.average_job_send_time_bonus = None
     job.success = False
     job.comment = "failed"
+
+    if job.declined and job.excuse_is_valid:
+        # TODO: job.score = ...
+        job.comment = "excused"
+        logger.info("%s %s", job.name, job.comment)
+        return
+
+    if job.declined:
+        job.comment = "declined"
+        logger.info(
+            "%s %s (reason=%s)",
+            job.name,
+            job.comment,
+            job.decline_reason.value if job.decline_reason else None,
+        )
+        return
 
     if job.job_response is None:
         job.comment = "timed out"
