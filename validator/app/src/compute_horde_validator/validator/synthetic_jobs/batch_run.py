@@ -1272,6 +1272,7 @@ async def _excuse_is_valid(ctx: BatchContext, job: Job, receipts: list[Receipt])
         receipt
         for receipt in receipts
         if isinstance(receipt.payload, JobStartedReceiptPayload)
+        and receipt.payload.miner_hotkey == miner_hotkey
         and receipt.payload.job_uuid != job.uuid
         and receipt.payload.executor_class == job.executor_class
         and receipt.payload.timestamp <= now  # TODO: Time leeway
