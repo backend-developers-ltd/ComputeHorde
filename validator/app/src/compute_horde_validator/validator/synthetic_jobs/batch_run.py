@@ -909,6 +909,14 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
     assert job.job_started_receipt_payload is None
     assert job.job_started_receipt_signature is None
 
+    # TODO: Get this from dynamic config
+    ttl_leeway_seconds = 5
+    ttl_min = 5
+    ttl_max = 60 * 5
+
+    ttl = job.get_spin_up_time() + EXECUTOR_CLASS[job.executor_class].spin_up_time + ttl_leeway_seconds
+    ttl_clamped = max(ttl_min, min(ttl_max, ttl))
+
     max_timeout = job.job_generator.timeout_seconds()
     payload = JobStartedReceiptPayload(
         job_uuid=job.uuid,
@@ -918,7 +926,7 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
         executor_class=ExecutorClass(job.executor_class),
         max_timeout=max_timeout,
         is_organic=False,
-        ttl=job.get_spin_up_time(),
+        ttl=ttl_clamped,
     )
     signature = f"0x{ctx.own_keypair.sign(payload.blob_for_signing()).hex()}"
     job.job_started_receipt_payload = payload
@@ -1262,13 +1270,13 @@ async def _excuse_is_valid(ctx: BatchContext, job: Job, receipts: list[Receipt])
         receipt
         for receipt in receipts
         if isinstance(receipt.payload, JobStartedReceiptPayload)
-        and receipt.payload.job_uuid != job.uuid
-        and receipt.payload.executor_class == job.executor_class
-        and receipt.payload.timestamp <= now  # TODO: Time leeway
-        and now
-        <= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl)  # TODO: Time leeway
-        and receipt.payload.validator_hotkey in allowed_validators
-        and receipt.verify_validator_signature()
+           and receipt.payload.job_uuid != job.uuid
+           and receipt.payload.executor_class == job.executor_class
+           and receipt.payload.timestamp <= now  # TODO: Time leeway
+           and now
+           <= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl)  # TODO: Time leeway
+           and receipt.payload.validator_hotkey in allowed_validators
+           and receipt.verify_validator_signature()
     ]
 
     # TODO: Filter out non-unique receipts
@@ -1601,10 +1609,10 @@ async def _multi_send_job_request(ctx: BatchContext) -> None:
         (job.uuid, job.executor_class in streaming_classes)
         for job in ctx.jobs.values()
         if isinstance(job.executor_response, V0ExecutorReadyRequest)
-        # occasionally we can get a job response (V0JobFailedRequest | V0JobFinishedRequest)
-        # before sending the actual job request (V0JobRequest), for example because
-        # the executor decide to abort the job before the details were sent
-        and job.job_response is None
+           # occasionally we can get a job response (V0JobFailedRequest | V0JobFinishedRequest)
+           # before sending the actual job request (V0JobRequest), for example because
+           # the executor decide to abort the job before the details were sent
+           and job.job_response is None
     ]
     logger.info("Sending job requests for %d ready jobs", len(executor_ready_jobs))
     start_barrier = asyncio.Barrier(len(executor_ready_jobs))
@@ -1834,7 +1842,7 @@ async def _download_llm_prompts_answers_worker(
 
         if task.last_tried:
             backoff_seconds = (
-                _LLM_ANSWERS_DOWNLOAD_RETRY_MIN_BACKOFF * (2**task.attempt) + 0.1 * random.random()
+                _LLM_ANSWERS_DOWNLOAD_RETRY_MIN_BACKOFF * (2 ** task.attempt) + 0.1 * random.random()
             )
             sleep_until = task.last_tried + timedelta(seconds=backoff_seconds)
             if sleep_until > datetime.now(tz=UTC):

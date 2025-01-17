@@ -37,7 +37,7 @@ class JobStartedReceiptPayload(BaseReceiptPayload):
 class JobAcceptedReceiptPayload(BaseReceiptPayload):
     receipt_type: Literal[ReceiptType.JobAcceptedReceipt] = ReceiptType.JobAcceptedReceipt
     time_accepted: datetime.datetime
-    ttl: int
+    ttl: int  # unused
 
 
 class JobFinishedReceiptPayload(BaseReceiptPayload):
