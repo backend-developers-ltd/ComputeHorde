@@ -1269,20 +1269,30 @@ async def _excuse_is_valid(ctx: BatchContext, job: Job, receipts: list[Receipt])
     }  # TODO: Allow other valis with minimum stake
     leeway = timedelta(seconds=2)  # TODO: Dynamic config
 
-    valid_receipts = [
-        receipt
-        for receipt in receipts
-        if isinstance(receipt.payload, JobStartedReceiptPayload)
-        and receipt.payload.miner_hotkey == miner_hotkey
-        and receipt.payload.job_uuid != job.uuid
-        and receipt.payload.executor_class == job.executor_class
-        and receipt.payload.timestamp <= now - leeway
-        and now <= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
-        and receipt.payload.validator_hotkey in allowed_validators
-        and receipt.verify_validator_signature()
-    ]
+    seen_receipts: set[str] = set()
+    valid_receipts: list[Receipt] = []
 
-    # TODO: Filter out non-unique receipts
+    for receipt in receipts:
+        if (
+            isinstance(receipt.payload, JobStartedReceiptPayload)
+            # The same receipt must only count as one excuse, in case it's sent multiple times
+            and receipt.validator_signature not in seen_receipts
+            # It must be issued for the miner we are talking to.
+            and receipt.payload.miner_hotkey == miner_hotkey
+            # The receipt for a job cannot be used to excuse the job itself
+            and receipt.payload.job_uuid != job.uuid
+            # The receipt must be for a job in the same executor class
+            and receipt.payload.executor_class == job.executor_class
+            # The receipt mut be in its validity period
+            and receipt.payload.timestamp <= now - leeway
+            and now <= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
+            # Only validators active at the time of this batch and with a minimum stake can issue excuses
+            and receipt.payload.validator_hotkey in allowed_validators
+            # Check that the receipt has not been tampered with since it was issued
+            and receipt.verify_validator_signature()
+        ):
+            seen_receipts.add(receipt.validator_signature)
+            valid_receipts.append(receipt)
 
     return len(valid_receipts) >= executor_count
 
