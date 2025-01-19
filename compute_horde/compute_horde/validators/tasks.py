@@ -32,12 +32,13 @@ def fetch_validators():
     to_deactivate = []
     to_create = []
     for validator in Validator.objects.all():
-        if validator.public_key in validator_keys:
+        hotkey = getattr(validator, key_field)
+        if hotkey in validator_keys:
             to_activate.append(validator)
-            validator.active = True
-            validator_keys.remove(validator.public_key)
+            setattr(validator, active_field, True)
+            validator_keys.remove(hotkey)
         else:
-            validator.active = False
+            setattr(validator, active_field, False)
             to_deactivate.append(validator)
 
     for key in validator_keys:
