@@ -1536,22 +1536,33 @@ async def _trigger_streaming_job(
                         logger.warning(f"Failed to terminate streaming job {job_uuid} on {url}")
 
 
-async def _multi_send_job_request(ctx: BatchContext) -> None:
+async def _get_executor_ready_jobs(ctx: BatchContext) -> list[tuple[str, bool]]:
     streaming_classes = await get_streaming_job_executor_classes()
 
     executor_ready_jobs = [
         (job.uuid, job.executor_class in streaming_classes)
         for job in ctx.jobs.values()
-        if isinstance(job.executor_response, V0ExecutorReadyRequest)
+        if isinstance(job.accept_response, V0AcceptJobRequest)
+        and isinstance(job.executor_response, V0ExecutorReadyRequest)
         # occasionally we can get a job response (V0JobFailedRequest | V0JobFinishedRequest)
         # before sending the actual job request (V0JobRequest), for example because
         # the executor decide to abort the job before the details were sent
         and job.job_response is None
     ]
+    return executor_ready_jobs
+
+
+async def _multi_send_job_request(
+    ctx: BatchContext, executor_ready_jobs: list[tuple[str, bool]]
+) -> None:
+    assert executor_ready_jobs
     logger.info("Sending job requests for %d ready jobs", len(executor_ready_jobs))
+
     start_barrier = asyncio.Barrier(len(executor_ready_jobs))
 
-    num_streaming_jobs = len([x for x in executor_ready_jobs if x[1]])
+    num_streaming_jobs = len(
+        [job_uuid for job_uuid, is_streaming in executor_ready_jobs if is_streaming]
+    )
     if num_streaming_jobs > 0:
         streaming_start_barrier = asyncio.Barrier(num_streaming_jobs)
     else:
@@ -2111,11 +2122,10 @@ async def execute_synthetic_batch_run(
             await ctx.checkpoint_system_event("_multi_send_initial_job_request")
             await _multi_send_initial_job_request(ctx)
 
-            if any(
-                isinstance(job.accept_response, V0AcceptJobRequest) for job in ctx.jobs.values()
-            ):
+            executor_ready_jobs = await _get_executor_ready_jobs(ctx)
+            if executor_ready_jobs:
                 await ctx.checkpoint_system_event("_multi_send_job_request")
-                await _multi_send_job_request(ctx)
+                await _multi_send_job_request(ctx, executor_ready_jobs)
 
                 # don't persist system events before this point, we want to minimize
                 # any extra interactions which could slow down job processing before
