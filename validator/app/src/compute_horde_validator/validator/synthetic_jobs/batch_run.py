@@ -60,6 +60,7 @@ from compute_horde.receipts.schemas import (
 )
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
+from compute_horde.utils import get_validators
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
@@ -332,7 +333,7 @@ class Job:
     success: bool = False  # returned correct answer within time limit
     declined: bool = False
     decline_reason: V0DeclineJobRequest.Reason | None = None
-    excuse_is_valid: bool = False
+    decline_valid_receipts: list[Receipt] = field(default_factory=list)
     comment: str = "failed"
     score: float = 0
     # dancing bonus
@@ -908,14 +909,14 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
     assert job.job_started_receipt_signature is None
 
     # TODO: Get this from dynamic config
-    ttl_leeway_seconds = 5
+    spinup_leeway = 5
     ttl_min = 5
     ttl_max = 60 * 5
 
     ttl = (
         job.get_spin_up_time()
         + EXECUTOR_CLASS[job.executor_class].spin_up_time
-        + ttl_leeway_seconds
+        + spinup_leeway
     )
     ttl_clamped = max(ttl_min, min(ttl_max, ttl))
 
@@ -1256,45 +1257,53 @@ async def _handle_job_declined(ctx: BatchContext, job: Job, msg: V0DeclineJobReq
     job.decline_reason = msg.reason
 
     if msg.reason == V0DeclineJobRequest.Reason.BUSY:
-        job.excuse_is_valid = await _excuse_is_valid(ctx, job, msg.receipts)
+        job.decline_valid_receipts.extend(await _filter_only_valid_excuse_receipts(ctx, job, msg.receipts))
 
 
-async def _excuse_is_valid(ctx: BatchContext, job: Job, receipts: list[Receipt]) -> bool:
+async def _filter_only_valid_excuse_receipts(ctx: BatchContext, job: Job, receipts: list[Receipt]) -> list[Receipt]:
     assert job.accept_before_sent_time is not None
-    now = job.accept_before_sent_time
-    miner_hotkey = job.miner_hotkey
-    executor_count = ctx.executors[miner_hotkey][job.executor_class]
-    allowed_validators: set[str] = {
-        ctx.own_keypair.ss58_address
-    }  # TODO: Allow other valis with minimum stake
+
+    # Use the time when the receipt for this job was generated as an excuse time cutoff time
+    job_request_time = job.job_started_receipt_payload.timestamp
+
+    # We need time leeway so that if the miner receipts an organic job around the same time as the synthetic, a slight
+    # time difference caused by clock desync and network latencies doesn't cause the miner to lose score when they
+    # accept an organic job and get a synthetic job request a couple of seconds "from the past"
     leeway = timedelta(seconds=2)  # TODO: Dynamic config
 
-    seen_receipts: set[str] = set()
-    valid_receipts: list[Receipt] = []
+    # This only retrieves validators with a minimum stake (currently at 1000 tao), which is desired.
+    # TODO: Do this once per batch, or completely outside of the batch
+    validator_neurons = get_validators(
+        netuid=settings.BITTENSOR_NETUID,
+        network=settings.BITTENSOR_NETWORK,
+    )
+    allowed_validators: set[str] = {
+        # Vali should probably trust itself in any case.
+        ctx.own_keypair.ss58_address,
+        *(n.hotkey for n in validator_neurons)
+    }
 
+    # Reject duplicate receipts - use the receipts' validator signature as unique ID
+    seen_receipts: set[str] = set()
+
+    valid_receipts: list[Receipt] = []
     for receipt in receipts:
         if (
             isinstance(receipt.payload, JobStartedReceiptPayload)
-            # The same receipt must only count as one excuse, in case it's sent multiple times
-            and receipt.validator_signature not in seen_receipts
-            # It must be issued for the miner we are talking to.
-            and receipt.payload.miner_hotkey == miner_hotkey
-            # The receipt for a job cannot be used to excuse the job itself
+            and receipt.payload.is_organic
+            and receipt.payload.miner_hotkey == job.miner_hotkey
             and receipt.payload.job_uuid != job.uuid
-            # The receipt must be for a job in the same executor class
-            and receipt.payload.executor_class == job.executor_class
-            # The receipt mut be in its validity period
-            and receipt.payload.timestamp <= now - leeway
-            and now <= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
-            # Only validators active at the time of this batch and with a minimum stake can issue excuses
             and receipt.payload.validator_hotkey in allowed_validators
-            # Check that the receipt has not been tampered with since it was issued
-            and receipt.verify_validator_signature()
+            and receipt.validator_signature not in seen_receipts
+            and receipt.payload.executor_class == job.executor_class
+            and receipt.payload.timestamp < job_request_time
+            and job_request_time < receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
+            and receipt.verify_validator_signature(throw=False)
         ):
             seen_receipts.add(receipt.validator_signature)
             valid_receipts.append(receipt)
 
-    return len(valid_receipts) >= executor_count
+    return valid_receipts
 
 
 async def _handle_job_accepted(client: MinerClient, ctx: BatchContext, job: Job) -> None:
@@ -1696,21 +1705,33 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     job.success = False
     job.comment = "failed"
 
-    if job.declined and job.excuse_is_valid:
-        # TODO: job.score = ...
-        job.comment = "excused"
-        logger.info("%s %s", job.name, job.comment)
-        return
-
     if job.declined:
-        job.comment = "declined"
-        logger.info(
-            "%s %s (reason=%s)",
-            job.name,
-            job.comment,
-            job.decline_reason.value if job.decline_reason else None,
-        )
-        return
+        relevant_executor_count = ctx.executors[job.miner_hotkey][job.executor_class]
+        valid_excuse_receipts = job.decline_valid_receipts
+        accepted_jobs = [
+            other_job for other_job in ctx.jobs.values()
+            if other_job.miner_hotkey == job.miner_hotkey
+            and other_job.executor_class == job.executor_class
+            and isinstance(other_job.accept_response, V0AcceptJobRequest)
+        ]
+
+        excuse_is_valid = len(accepted_jobs) + len(valid_excuse_receipts) >= relevant_executor_count
+
+        if excuse_is_valid:
+            # TODO: job.score = ...
+            job.comment = "excused"
+            logger.info("%s %s", job.name, job.comment)
+            return
+        else:
+            # TODO: job.score = ...
+            job.comment = "declined"
+            logger.info(
+                "%s %s (reason=%s)",
+                job.name,
+                job.comment,
+                job.decline_reason.value if job.decline_reason else None,
+            )
+            return
 
     if job.job_response is None:
         job.comment = "timed out"
