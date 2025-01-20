@@ -36,33 +36,33 @@ class Command(BaseCommand):
         super().__init__(*args, **kwargs)
 
         self.m_receipts = Counter(
-            "receipts",
+            "receipt_transfer_receipts",
             documentation="Number of transferred receipts",
         )
         self.m_miners = Gauge(
-            "miners",
+            "receipt_transfer_miners",
             documentation="Number of miners to transfer from",
         )
         self.m_successful_transfers = Counter(
-            "successful_transfers",
+            "receipt_transfer_successful_transfers",
             documentation="Number of transfers that didn't explicitly fail. (this includes 404s though)",
         )
         self.m_line_errors = Counter(
-            "line_errors",
+            "receipt_transfer_line_errors",
             labelnames=["exc_type"],
             documentation="Number of invalid lines in received pages",
         )
         self.m_transfer_errors = Counter(
-            "transfer_errors",
+            "receipt_transfer_transfer_errors",
             labelnames=["exc_type"],
             documentation="Number of completely failed page transfers",
         )
         self.m_transfer_duration = Histogram(
-            "transfer_duration",
+            "receipt_transfer_transfer_duration",
             documentation="Total time to transfer latest page deltas from all miners",
         )
         self.m_catchup_pages_left = Gauge(
-            "catchup_pages_left",
+            "receipt_transfer_catchup_pages_left",
             documentation="Pages waiting for catch-up",
         )
 
