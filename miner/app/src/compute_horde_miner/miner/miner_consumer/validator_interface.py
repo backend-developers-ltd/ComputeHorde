@@ -367,6 +367,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 valid_until=F("timestamp") + F("ttl"),
             ).filter(
                 job_uuid__ne=msg.job_uuid,
+                is_organic=True,
                 executor_class=msg.executor_class,
                 timestamp__lte=now,
                 valid_until__gte=now,
