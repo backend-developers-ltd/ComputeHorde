@@ -9,8 +9,8 @@ from constance import config
 from django.conf import settings
 from django.db.models import Count
 
-from .dynamic_config import get_executor_class_weights
-from .models import Cycle, OrganicJob, SyntheticJob, SyntheticJobBatch
+from .dynamic_config import get_executor_class_weights, get_weights_version
+from .models import Cycle, MinerManifest, OrganicJob, SyntheticJob, SyntheticJobBatch
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +140,16 @@ def score_batch(batch):
     for hotkey, score in organic_job_scores.items():
         batch_scores[hotkey] += score
 
+    # apply manifest bonus
+    previous_batch = SyntheticJobBatch.objects.order_by("-id").exclude(id=batch.id).first()
+    previous_executor_counts = get_executor_counts(previous_batch)
+    current_executor_counts = get_executor_counts(batch)
+    for hotkey in organic_job_scores:
+        previous_online_executors = previous_executor_counts.get(hotkey)
+        current_online_executors = current_executor_counts.get(hotkey, 0)
+        multiplier = get_manifest_multiplier(previous_online_executors, current_online_executors)
+        batch_scores[hotkey] *= multiplier
+
     return dict(batch_scores)
 
 
@@ -150,3 +160,36 @@ def score_batches(batches: Sequence[SyntheticJobBatch]) -> dict[str, float]:
         for hotkey, score in batch_scores.items():
             hotkeys_scores[hotkey] += score
     return dict(hotkeys_scores)
+
+
+def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, int]:
+    if not batch:
+        return {}
+
+    result = defaultdict(int)
+
+    for manifest in MinerManifest.objects.select_related("miner").filter(batch_id=batch.id):
+        result[manifest.miner.hotkey] += manifest.online_executor_count
+    # for manifest in MinerManifest.objects.select_related("miner").filter(batch_id=batch.id).values("miner__hotkey", "online_executor_count"):
+    #     result[manifest["miner__hotkey"]] += manifest["online_executor_count"]
+
+    return result
+
+
+def get_manifest_multiplier(
+    previous_online_executors: int | None,
+    current_online_executors: int,
+) -> float:
+    weights_version = get_weights_version()
+    multiplier = 1.0
+    if weights_version >= 2:
+        if previous_online_executors is None:
+            multiplier = config.DYNAMIC_MANIFEST_SCORE_MULTIPLIER
+        else:
+            low, high = sorted([previous_online_executors, current_online_executors])
+            # low can be 0 if previous_online_executors == 0, but we make it that way to
+            # make this function correct for any kind of input
+            threshold = config.DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD
+            if low == 0 or high / low >= threshold:
+                multiplier = config.DYNAMIC_MANIFEST_SCORE_MULTIPLIER
+    return multiplier

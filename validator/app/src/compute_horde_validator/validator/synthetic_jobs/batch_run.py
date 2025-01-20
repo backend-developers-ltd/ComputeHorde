@@ -88,7 +88,6 @@ from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts impo
     LlmPromptsJobGenerator,
     LlmPromptsSyntheticJobGenerator,
 )
-from compute_horde_validator.validator.synthetic_jobs.scoring import get_manifest_multiplier
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
@@ -323,8 +322,6 @@ class Job:
     success: bool = False  # returned correct answer within time limit
     comment: str = "failed"
     score: float = 0
-    # dancing bonus
-    score_manifest_multiplier: float | None = None
     average_job_send_time_bonus: timedelta | None = None
 
     def handle_message(self, msg: BaseRequest) -> None:
@@ -427,7 +424,6 @@ class Job:
             correct=self.correct,
             comment=self.comment,
             score=self.score,
-            score_manifest_multiplier=self.score_manifest_multiplier,
             average_job_send_time_bonus=_timedelta_dump(self.average_job_send_time_bonus),
         )
         return self.ctx.system_event(
@@ -470,7 +466,6 @@ class BatchContext:
     executors: dict[str, defaultdict[ExecutorClass, int]]
     job_generators: dict[str, dict[ExecutorClass, list[BaseSyntheticJobGenerator]]]
     online_executor_count: dict[str, defaultdict[ExecutorClass, int]]
-    previous_online_executor_count: dict[str, defaultdict[ExecutorClass, int]]
 
     manifests: dict[str, ExecutorManifest | None]
     manifest_events: dict[str, asyncio.Event]
@@ -838,7 +833,6 @@ async def _init_context(
         executors={},
         job_generators={},
         online_executor_count={},
-        previous_online_executor_count={},
         manifests={},
         manifest_events={},
         job_uuids=[],
@@ -862,7 +856,6 @@ async def _init_context(
         ctx.executors[hotkey] = defaultdict(int)
         ctx.job_generators[hotkey] = {}
         ctx.online_executor_count[hotkey] = defaultdict(int)
-        ctx.previous_online_executor_count[hotkey] = defaultdict(int)
         ctx.manifests[hotkey] = None
         ctx.manifest_events[hotkey] = asyncio.Event()
 
@@ -1612,7 +1605,6 @@ def _compute_average_send_time(ctx: BatchContext) -> None:
 
 async def _score_job(ctx: BatchContext, job: Job) -> None:
     job.score = 0
-    job.score_manifest_multiplier = None
     job.average_job_send_time_bonus = None
     job.success = False
     job.comment = "failed"
@@ -1860,48 +1852,6 @@ async def _score_jobs(ctx: BatchContext) -> None:
         if job.success:
             ctx.online_executor_count[job.miner_hotkey][job.executor_class] += 1
 
-    # apply manifest bonus
-    # do not combine with the previous loop, we use online_executor_count
-    for job in ctx.jobs.values():
-        if job.success:
-            try:
-                job.score_manifest_multiplier = await get_manifest_multiplier(
-                    ctx.previous_online_executor_count[job.miner_hotkey].get(
-                        job.executor_class, None
-                    ),
-                    ctx.online_executor_count[job.miner_hotkey].get(job.executor_class, 0),
-                )
-            except (Exception, asyncio.CancelledError) as exc:
-                logger.warning("%s failed to score: %r", job.name, exc)
-                job.system_event(
-                    type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                    subtype=SystemEvent.EventSubType.MINER_SCORING_ERROR,
-                    description=repr(exc),
-                    func="_score_jobs",
-                )
-            if job.score_manifest_multiplier is not None:
-                job.score *= job.score_manifest_multiplier
-
-
-# sync_to_async is needed since we use the sync Django ORM
-@sync_to_async
-def _db_get_previous_online_executor_count(ctx: BatchContext) -> None:
-    previous_batch_qs = SyntheticJobBatch.objects.order_by("-id")
-    if ctx.batch_id is not None:
-        previous_batch_qs = previous_batch_qs.exclude(id=ctx.batch_id)
-    previous_batch = previous_batch_qs.first()
-
-    if previous_batch is None:
-        return
-
-    for manifest in MinerManifest.objects.filter(batch_id=previous_batch.id):
-        # only update if the miner is still serving
-        if manifest.miner.hotkey in ctx.previous_online_executor_count:
-            executor_class = ExecutorClass(manifest.executor_class)
-            ctx.previous_online_executor_count[manifest.miner.hotkey][executor_class] = (
-                manifest.online_executor_count
-            )
-
 
 # sync_to_async is needed since we use the sync Django ORM
 @sync_to_async
@@ -2093,9 +2043,6 @@ async def execute_synthetic_batch_run(
 
     try:
         ctx.loop_profiler = LoopProfiler(ctx)
-
-        await ctx.checkpoint_system_event("_db_get_previous_online_executor_count")
-        await _db_get_previous_online_executor_count(ctx)
 
         await ctx.checkpoint_system_event("_multi_get_miner_manifest")
         await _multi_get_miner_manifest(ctx)
