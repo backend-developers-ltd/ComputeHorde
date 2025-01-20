@@ -2028,7 +2028,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     ttl=started_payload.ttl,
                 )
             )
-    JobStartedReceipt.objects.bulk_create(job_started_receipts)
+    JobStartedReceipt.objects.bulk_create(job_started_receipts, ignore_conflicts=True)
 
     job_accepted_receipts: list[JobAcceptedReceipt] = []
     for job in ctx.jobs.values():
@@ -2045,7 +2045,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     ttl=accepted_payload.ttl,
                 )
             )
-    JobAcceptedReceipt.objects.bulk_create(job_accepted_receipts)
+    JobAcceptedReceipt.objects.bulk_create(job_accepted_receipts, ignore_conflicts=True)
 
     job_finished_receipts: list[JobFinishedReceipt] = []
     for job in ctx.jobs.values():
@@ -2063,7 +2063,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     score_str=finished_payload.score_str,
                 )
             )
-    JobFinishedReceipt.objects.bulk_create(job_finished_receipts)
+    JobFinishedReceipt.objects.bulk_create(job_finished_receipts, ignore_conflicts=True)
 
     duration = time.time() - start_time
     logger.info("Persisted to database in %.2f seconds", duration)
