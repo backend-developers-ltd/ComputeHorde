@@ -166,14 +166,10 @@ def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, int]:
     if not batch:
         return {}
 
-    result = defaultdict(int)
-
+    result: defaultdict[str, int] = defaultdict(int)
     for manifest in MinerManifest.objects.select_related("miner").filter(batch_id=batch.id):
         result[manifest.miner.hotkey] += manifest.online_executor_count
-    # for manifest in MinerManifest.objects.select_related("miner").filter(batch_id=batch.id).values("miner__hotkey", "online_executor_count"):
-    #     result[manifest["miner__hotkey"]] += manifest["online_executor_count"]
-
-    return result
+    return dict(result)
 
 
 def get_manifest_multiplier(

@@ -1850,6 +1850,7 @@ async def _score_jobs(ctx: BatchContext) -> None:
     # compute for each hotkey how many executors finished successfully
     for job in ctx.jobs.values():
         if job.success:
+            # TODO: also add properly rejected jobs?
             ctx.online_executor_count[job.miner_hotkey][job.executor_class] += 1
 
 
