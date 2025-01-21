@@ -5,7 +5,9 @@ import sys
 
 from django.conf import settings
 
-from compute_horde_miner.miner.executor_manager._internal.base import BaseExecutorManager, ExecutorUnavailable
+from compute_horde_miner.miner.executor_manager._internal.base import (
+    BaseExecutorManager,
+)
 from compute_horde_miner.miner.executor_manager.executor_port_dispenser import (
     executor_port_dispenser,
 )

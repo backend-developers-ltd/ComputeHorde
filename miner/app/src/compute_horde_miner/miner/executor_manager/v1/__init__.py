@@ -7,8 +7,8 @@ from compute_horde.executor_class import (
 from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
     ExecutorClassPool,
-    ExecutorFailedToStart,
-    ExecutorUnavailable,
+    ExecutorFailed,
+    NoExecutorUnavailable,
     ReservedExecutor,
 )
 from compute_horde_miner.miner.executor_manager._internal.dev import DevExecutorManager
@@ -25,8 +25,8 @@ __all__ = [
     "MAX_EXECUTOR_TIMEOUT",
     "BaseExecutorManager",
     "ExecutorClassPool",
-    "ExecutorUnavailable",
-    "ExecutorFailedToStart",
+    "NoExecutorUnavailable",
+    "ExecutorFailed",
     "ReservedExecutor",
     "DOCKER_STOP_TIMEOUT",
     "PULLING_TIMEOUT",

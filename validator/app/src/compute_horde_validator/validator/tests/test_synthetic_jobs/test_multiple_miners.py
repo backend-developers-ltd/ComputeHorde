@@ -399,7 +399,7 @@ async def test_complex(
         [
             (
                 SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                SystemEvent.EventSubType.JOB_NOT_STARTED,
+                SystemEvent.EventSubType.JOB_REJECTED,
             ),
             (
                 SystemEvent.EventType.VALIDATOR_TELEMETRY,

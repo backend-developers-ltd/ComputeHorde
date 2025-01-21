@@ -265,7 +265,7 @@ mock_synthetic_job_generator_factory = MagicMock(name="MockSyntheticJobGenerator
             NOT_SCORED,
             (
                 SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                SystemEvent.EventSubType.JOB_NOT_STARTED,
+                SystemEvent.EventSubType.JOB_REJECTED,
                 1,
             ),
         ),

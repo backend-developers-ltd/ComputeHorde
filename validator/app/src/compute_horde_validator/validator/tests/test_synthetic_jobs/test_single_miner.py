@@ -148,7 +148,7 @@ async def test_execute_miner_synthetic_jobs_job_declined(
 
     await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.FAILED, NOT_SCORED)
     await sync_to_async(check_system_events)(
-        SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE, SystemEvent.EventSubType.JOB_NOT_STARTED
+        SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE, SystemEvent.EventSubType.JOB_REJECTED
     )
 
 

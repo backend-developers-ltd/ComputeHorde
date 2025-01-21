@@ -331,7 +331,7 @@ class Job:
     time_took: timedelta | None = None
     correct: bool | None = None  # returned correct answer (even if outside time limit)
     success: bool = False  # returned correct answer within time limit
-    excused: bool = False  # declined but provided valid excuse
+    excused: bool = False  # declined (reason=busy) but provided valid excuse
     comment: str = "failed"
     score: float = 0
     # dancing bonus
@@ -480,8 +480,7 @@ class Job:
             network=settings.BITTENSOR_NETWORK,
         )
         allowed_validators: set[str] = {
-            # Vali should probably trust itself in any case.
-            self.ctx.own_keypair.ss58_address,
+            self.ctx.own_keypair.ss58_address,  # Vali should probably trust itself in any case.
             *(n.hotkey for n in validator_neurons),
         }
 
