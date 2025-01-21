@@ -331,9 +331,7 @@ class Job:
     time_took: timedelta | None = None
     correct: bool | None = None  # returned correct answer (even if outside time limit)
     success: bool = False  # returned correct answer within time limit
-    declined: bool = False
-    decline_reason: V0DeclineJobRequest.Reason | None = None
-    decline_valid_receipts: list[Receipt] = field(default_factory=list)
+    excused: bool = False  # declined but provided valid excuse
     comment: str = "failed"
     score: float = 0
     # dancing bonus
@@ -454,6 +452,62 @@ class Job:
         spin_up_time = EXECUTOR_CLASS[self.executor_class].spin_up_time
         spin_up_time = max(spin_up_time, _MIN_SPIN_UP_TIME)
         return spin_up_time
+
+    def is_declined(self) -> bool:
+        return isinstance(self.accept_response, V0DeclineJobRequest)
+
+    def decline_reason(self) -> V0DeclineJobRequest.Reason | None:
+        if isinstance(self.accept_response, V0DeclineJobRequest):
+            return self.accept_response.reason
+        return None
+
+    def get_valid_decline_excuse_receipts(self) -> list[Receipt]:
+        assert self.job_started_receipt_payload is not None
+        assert isinstance(self.accept_response, V0DeclineJobRequest)
+
+        # Use the time when the receipt for this job was generated as an excuse time cutoff time
+        job_request_time = self.job_started_receipt_payload.timestamp
+
+        # We need time leeway so that if the miner receipts an organic job around the same time as the synthetic, a slight
+        # time difference caused by clock desync and network latencies doesn't cause the miner to lose score when they
+        # accept an organic job and get a synthetic job request a couple of seconds "from the past"
+        leeway = timedelta(seconds=2)  # TODO: Dynamic config
+
+        # This only retrieves validators with a minimum stake (currently at 1000 tao), which is desired.
+        # TODO: Do this once per batch, or completely outside of the batch
+        validator_neurons = get_validators(
+            netuid=settings.BITTENSOR_NETUID,
+            network=settings.BITTENSOR_NETWORK,
+        )
+        allowed_validators: set[str] = {
+            # Vali should probably trust itself in any case.
+            self.ctx.own_keypair.ss58_address,
+            *(n.hotkey for n in validator_neurons),
+            "5DtDLm5rQHShDqojQpsvcN8tRXHVFaecfDoRet1SU6BFD9Fi",
+        }
+
+        # Reject duplicate receipts - use the receipts' validator signature as unique ID
+        seen_receipts: set[str] = set()
+
+        valid_receipts: list[Receipt] = []
+        for receipt in self.accept_response.receipts:
+            if (
+                isinstance(receipt.payload, JobStartedReceiptPayload)
+                and receipt.payload.is_organic
+                and receipt.payload.miner_hotkey == self.miner_hotkey
+                and receipt.payload.job_uuid != self.uuid
+                and receipt.payload.validator_hotkey in allowed_validators
+                and receipt.validator_signature not in seen_receipts
+                and receipt.payload.executor_class == self.executor_class
+                and receipt.payload.timestamp < job_request_time
+                and job_request_time
+                < receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
+                and receipt.verify_validator_signature(throw=False)
+            ):
+                seen_receipts.add(receipt.validator_signature)
+                valid_receipts.append(receipt)
+
+        return valid_receipts
 
 
 @dataclass
@@ -678,9 +732,9 @@ class BatchContext:
             jobs = [job for job in jobs if job.executor_class == executor_class]
         return dict(
             total=len(jobs),
-            failed=sum(1 for job in jobs if not job.success),
+            failed=sum(1 for job in jobs if not job.success and not job.excused),
             successful=sum(1 for job in jobs if job.success),
-            # TODO: Metrics for other job results
+            excused=sum(1 for job in jobs if job.excused),
             correct=sum(1 for job in jobs if job.correct),
             # don't count None as incorrect
             incorrect=sum(1 for job in jobs if job.correct is False),
@@ -913,11 +967,7 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
     ttl_min = 5
     ttl_max = 60 * 5
 
-    ttl = (
-        job.get_spin_up_time()
-        + EXECUTOR_CLASS[job.executor_class].spin_up_time
-        + spinup_leeway
-    )
+    ttl = job.get_spin_up_time() + EXECUTOR_CLASS[job.executor_class].spin_up_time + spinup_leeway
     ttl_clamped = max(ttl_min, min(ttl_max, ttl))
 
     max_timeout = job.job_generator.timeout_seconds()
@@ -1243,67 +1293,19 @@ async def _send_initial_job_request(
         await job.accept_response_event.wait()
         match job.accept_response:
             case V0AcceptJobRequest():
+                logger.info("%s accepted job %s", job.miner_hotkey, job.uuid)
                 await _handle_job_accepted(client, ctx, job)
             case V0DeclineJobRequest():
-                await _handle_job_declined(ctx, job, job.accept_response)
+                logger.info(
+                    "%s declined job %s (reason=%s)",
+                    job.miner_hotkey,
+                    job.uuid,
+                    job.accept_response.reason.value if job.accept_response.reason else None,
+                )
             case None:
                 logger.error("Job accept response event fired, but response is missing.")
             case _:
                 assert_never(job.accept_response)
-
-
-async def _handle_job_declined(ctx: BatchContext, job: Job, msg: V0DeclineJobRequest) -> None:
-    job.declined = True
-    job.decline_reason = msg.reason
-
-    if msg.reason == V0DeclineJobRequest.Reason.BUSY:
-        job.decline_valid_receipts.extend(await _filter_only_valid_excuse_receipts(ctx, job, msg.receipts))
-
-
-async def _filter_only_valid_excuse_receipts(ctx: BatchContext, job: Job, receipts: list[Receipt]) -> list[Receipt]:
-    assert job.accept_before_sent_time is not None
-
-    # Use the time when the receipt for this job was generated as an excuse time cutoff time
-    job_request_time = job.job_started_receipt_payload.timestamp
-
-    # We need time leeway so that if the miner receipts an organic job around the same time as the synthetic, a slight
-    # time difference caused by clock desync and network latencies doesn't cause the miner to lose score when they
-    # accept an organic job and get a synthetic job request a couple of seconds "from the past"
-    leeway = timedelta(seconds=2)  # TODO: Dynamic config
-
-    # This only retrieves validators with a minimum stake (currently at 1000 tao), which is desired.
-    # TODO: Do this once per batch, or completely outside of the batch
-    validator_neurons = get_validators(
-        netuid=settings.BITTENSOR_NETUID,
-        network=settings.BITTENSOR_NETWORK,
-    )
-    allowed_validators: set[str] = {
-        # Vali should probably trust itself in any case.
-        ctx.own_keypair.ss58_address,
-        *(n.hotkey for n in validator_neurons)
-    }
-
-    # Reject duplicate receipts - use the receipts' validator signature as unique ID
-    seen_receipts: set[str] = set()
-
-    valid_receipts: list[Receipt] = []
-    for receipt in receipts:
-        if (
-            isinstance(receipt.payload, JobStartedReceiptPayload)
-            and receipt.payload.is_organic
-            and receipt.payload.miner_hotkey == job.miner_hotkey
-            and receipt.payload.job_uuid != job.uuid
-            and receipt.payload.validator_hotkey in allowed_validators
-            and receipt.validator_signature not in seen_receipts
-            and receipt.payload.executor_class == job.executor_class
-            and receipt.payload.timestamp < job_request_time
-            and job_request_time < receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
-            and receipt.verify_validator_signature(throw=False)
-        ):
-            seen_receipts.add(receipt.validator_signature)
-            valid_receipts.append(receipt)
-
-    return valid_receipts
 
 
 async def _handle_job_accepted(client: MinerClient, ctx: BatchContext, job: Job) -> None:
@@ -1393,12 +1395,21 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
         if isinstance(job.accept_response, V0DeclineJobRequest) or isinstance(
             job.executor_response, V0ExecutorFailedRequest
         ):
-            logger.warning("%s refused", job.name)
-            job.system_event(
-                type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
-                description="refused",
-            )
+            if job.excused:
+                logger.warning("%s excused", job.name)
+                job.system_event(
+                    type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                    subtype=SystemEvent.EventSubType.JOB_EXCUSED,
+                    description="excused",
+                )
+            else:
+                logger.warning("%s declined", job.name)
+                job.system_event(
+                    type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                    subtype=SystemEvent.EventSubType.JOB_REJECTED,
+                    description="declined",
+                )
+
         if isinstance(job.streaming_job_ready_response, V0StreamingJobNotReadyRequest):
             logger.warning("%s failed to start streaming", job.name)
             job.system_event(
@@ -1406,6 +1417,7 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 description="failed to start streaming",
             )
+
         if isinstance(job.job_response, V0JobFailedRequest):
             returncode = job.job_response.docker_process_exit_status
             text = f"failed: {returncode=}"
@@ -1714,35 +1726,37 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     job.score_manifest_multiplier = None
     job.average_job_send_time_bonus = None
     job.success = False
+    job.excused = False
     job.comment = "failed"
 
-    if job.declined:
+    if job.decline_reason() == V0DeclineJobRequest.Reason.BUSY:
         relevant_executor_count = ctx.executors[job.miner_hotkey][job.executor_class]
-        valid_excuse_receipts = job.decline_valid_receipts
-        accepted_jobs = [
-            other_job for other_job in ctx.jobs.values()
+        valid_excuse_receipts = len(job.get_valid_decline_excuse_receipts())
+        accepted_jobs = sum(
+            1
+            for other_job in ctx.jobs.values()
             if other_job.miner_hotkey == job.miner_hotkey
             and other_job.executor_class == job.executor_class
             and isinstance(other_job.accept_response, V0AcceptJobRequest)
-        ]
+        )
+        excuse_ok = accepted_jobs + valid_excuse_receipts >= relevant_executor_count
 
-        excuse_is_valid = len(accepted_jobs) + len(valid_excuse_receipts) >= relevant_executor_count
-
-        if excuse_is_valid:
-            # TODO: job.score = ...
-            job.comment = "excused"
+        if excuse_ok:
+            # TODO: job.score = 1 ?
+            job.excused = True
+            job.comment = "excused (pass)"
             logger.info("%s %s", job.name, job.comment)
             return
         else:
-            # TODO: job.score = ...
-            job.comment = "declined"
-            logger.info(
-                "%s %s (reason=%s)",
-                job.name,
-                job.comment,
-                job.decline_reason.value if job.decline_reason else None,
-            )
+            job.comment = "badly excused (fail)"
+            logger.info("%s %s", job.name, job.comment)
             return
+
+    if job.is_declined():
+        # TODO: job.score = ...
+        job.comment = "declined"
+        logger.info("%s %s (reason=%s)", job.name, job.comment, job.decline_reason())
+        return
 
     if job.job_response is None:
         job.comment = "timed out"
@@ -2239,6 +2253,9 @@ async def execute_synthetic_batch_run(
             await _multi_send_initial_job_request(ctx)
 
             executor_ready_jobs = await _get_executor_ready_jobs(ctx)
+            any_job_busy = any(
+                job.decline_reason() == V0DeclineJobRequest.Reason.BUSY for job in ctx.jobs.values()
+            )
             if executor_ready_jobs:
                 await ctx.checkpoint_system_event("_multi_send_job_request")
                 await _multi_send_job_request(ctx, executor_ready_jobs)
@@ -2255,15 +2272,17 @@ async def execute_synthetic_batch_run(
                 await ctx.checkpoint_system_event("_download_llm_prompts_answers")
                 await _download_llm_prompts_answers(ctx)
 
+            if executor_ready_jobs or any_job_busy:
                 await ctx.checkpoint_system_event("_score_jobs")
                 await _score_jobs(ctx)
 
+            if executor_ready_jobs:
                 await _db_persist_system_events(ctx)
 
                 await ctx.checkpoint_system_event("_send_job_finished_receipts")
                 await _send_job_finished_receipts(ctx)
 
-            else:
+            if not executor_ready_jobs:
                 logger.warning("No jobs accepted")
 
             await _db_persist_system_events(ctx)

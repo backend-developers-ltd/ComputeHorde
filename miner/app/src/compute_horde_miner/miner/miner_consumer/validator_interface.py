@@ -2,6 +2,7 @@ import datetime as dt
 import logging
 import time
 import uuid
+from datetime import timedelta
 from functools import cached_property
 from typing import Protocol
 
@@ -13,7 +14,7 @@ from compute_horde.mv_protocol.validator_requests import (
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload, ReceiptPayload
 from django.conf import settings
-from django.db.models import F
+from django.db.models import DateTimeField, ExpressionWrapper, F
 from django.utils import timezone
 
 from compute_horde_miner.miner.executor_manager import current
@@ -363,27 +364,37 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await job.adelete()
             self.pending_jobs.pop(msg.job_uuid)
             now = msg.job_started_receipt_payload.timestamp
-            receipts = JobStartedReceipt.objects.annotate(
-                valid_until=F("timestamp") + F("ttl"),
-            ).filter(
-                job_uuid__ne=msg.job_uuid,
-                is_organic=True,
-                executor_class=msg.executor_class,
-                timestamp__lte=now,
-                valid_until__gte=now,
-                miner_signature__isnull=False,  # miner signature is needed to build a valid Receipt
+            receipts = (
+                JobStartedReceipt.objects.annotate(
+                    valid_until=ExpressionWrapper(
+                        F("timestamp") + F("ttl") * timedelta(seconds=1),
+                        output_field=DateTimeField(),
+                    ),
+                )
+                .filter(
+                    is_organic=True,
+                    executor_class=msg.executor_class,
+                    timestamp__lte=now,
+                    valid_until__gte=now,
+                    miner_signature__isnull=False,  # miner signature is needed to build a valid Receipt
+                )
+                .exclude(
+                    job_uuid=msg.job_uuid,  # UUIDField doesn't support "__ne=..."
+                )
             )
+            logger.info(f"Declining job {msg.job_uuid}: executor unavailable")
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
                     reason=miner_requests.V0DeclineJobRequest.Reason.BUSY,
-                    receipts=[r.to_receipt() for r in receipts],
+                    receipts=[r.to_receipt() async for r in receipts],
                 ).model_dump_json()
             )
         except ExecutorFailedToStart:
             await self.group_discard(token)
             await job.adelete()
             self.pending_jobs.pop(msg.job_uuid)
+            logger.info(f"Declining job {msg.job_uuid}: executor failed to start")
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
