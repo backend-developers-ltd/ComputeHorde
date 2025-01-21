@@ -962,22 +962,22 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
     assert job.job_started_receipt_payload is None
     assert job.job_started_receipt_signature is None
 
+    job_timeout = job.job_generator.timeout_seconds()
     # TODO: Get this from dynamic config
     spinup_leeway = 5
     ttl_min = 5
     ttl_max = 60 * 5
 
-    ttl = job.get_spin_up_time() + EXECUTOR_CLASS[job.executor_class].spin_up_time + spinup_leeway
+    ttl = job.get_spin_up_time() + job_timeout + spinup_leeway
     ttl_clamped = max(ttl_min, min(ttl_max, ttl))
 
-    max_timeout = job.job_generator.timeout_seconds()
     payload = JobStartedReceiptPayload(
         job_uuid=job.uuid,
         miner_hotkey=job.miner_hotkey,
         validator_hotkey=ctx.own_keypair.ss58_address,
         timestamp=datetime.now(tz=UTC),
         executor_class=ExecutorClass(job.executor_class),
-        max_timeout=max_timeout,
+        max_timeout=job_timeout,
         is_organic=False,
         ttl=ttl_clamped,
     )
