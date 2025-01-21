@@ -119,6 +119,7 @@ async def test_miner_driver(
         miner_port=9999,
         executor_class=DEFAULT_EXECUTOR_CLASS,
         job_description="User job from facilitator",
+        block=42,
     )
     miner_client = get_miner_client(MockMinerClient, job_uuid)
     f0, f1, f2 = futures_result

@@ -565,6 +565,18 @@ async def run_admin_job_request(
         miner = job_request.miner
         if miner_axon_info is None:
             miner_axon_info = await get_miner_axon_info(miner.hotkey)
+
+        # FIXME: The following code blocks the event loop.
+        #        This function is run from either a management command (a new process),
+        #        or from django admin for debugging (infrequent).
+        #        So the blocking loop should not be a big problem.
+        #        Hopefully.
+        try:
+            subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+            current_block = subtensor_.get_current_block()
+        except Exception:
+            raise
+
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
             miner=miner,
@@ -573,6 +585,7 @@ async def run_admin_job_request(
             miner_port=miner_axon_info.port,
             executor_class=job_request.executor_class,
             job_description="Validator Job from Admin Panel",
+            block=current_block,
         )
 
         my_keypair = get_keypair()

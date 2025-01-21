@@ -43,9 +43,8 @@ AWS_SECRET_ACCESS_KEY = "fake_secret_access_key"
 S3_BUCKET_NAME_PROMPTS = "fake_bucket_prompts"
 S3_BUCKET_NAME_ANSWERS = "fake_bucket_answers"
 
-DYNAMIC_CONFIG_CACHE_TIMEOUT = 0
-
 TRUSTED_MINER_ADDRESS = "fakehost"
 TRUSTED_MINER_PORT = 1234
 
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+CONSTANCE_DATABASE_CACHE_BACKEND = None
