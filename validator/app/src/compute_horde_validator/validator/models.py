@@ -199,6 +199,7 @@ class JobBase(models.Model):
         PENDING = "PENDING"
         COMPLETED = "COMPLETED"
         FAILED = "FAILED"
+        EXCUSED = "EXCUSED"
 
     job_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
     miner = models.ForeignKey(Miner, on_delete=models.CASCADE)

@@ -88,9 +88,11 @@ class Receipt(BaseModel):
 
     def verify_validator_signature(self, throw=False):
         validator_keypair = bittensor.Keypair(ss58_address=self.payload.validator_hotkey)
-        is_valid = validator_keypair.verify(
-            self.payload.blob_for_signing(), self.validator_signature
-        )
+        blob = self.payload.blob_for_signing()
+        try:
+            is_valid = validator_keypair.verify(blob, self.validator_signature)
+        except Exception:
+            is_valid = False
         if throw and not is_valid:
             raise BadValidatorReceiptSignature(self)
         return is_valid

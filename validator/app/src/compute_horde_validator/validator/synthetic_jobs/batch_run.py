@@ -483,7 +483,6 @@ class Job:
             # Vali should probably trust itself in any case.
             self.ctx.own_keypair.ss58_address,
             *(n.hotkey for n in validator_neurons),
-            "5DtDLm5rQHShDqojQpsvcN8tRXHVFaecfDoRet1SU6BFD9Fi",
         }
 
         # Reject duplicate receipts - use the receipts' validator signature as unique ID
@@ -2086,7 +2085,12 @@ def _db_persist_critical(ctx: BatchContext) -> None:
         for job in ctx.jobs.values():
             axon = ctx.axons[job.miner_hotkey]
             miner = ctx.miners[job.miner_hotkey]
-            status = SyntheticJob.Status.COMPLETED if job.success else SyntheticJob.Status.FAILED
+            if job.success:
+                status = SyntheticJob.Status.COMPLETED
+            elif job.excused:
+                status = SyntheticJob.Status.EXCUSED
+            else:
+                status = SyntheticJob.Status.FAILED
             synthetic_job = SyntheticJob(
                 job_uuid=job.uuid,
                 batch=batch,

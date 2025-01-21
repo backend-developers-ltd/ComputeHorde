@@ -371,16 +371,16 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                         output_field=DateTimeField(),
                     ),
                 )
-                .filter(
-                    is_organic=True,
-                    executor_class=msg.executor_class,
-                    timestamp__lte=now,
-                    valid_until__gte=now,
-                    miner_signature__isnull=False,  # miner signature is needed to build a valid Receipt
-                )
-                .exclude(
-                    job_uuid=msg.job_uuid,  # UUIDField doesn't support "__ne=..."
-                )
+                # .filter(
+                #     is_organic=True,
+                #     executor_class=msg.executor_class,
+                #     timestamp__lte=now,
+                #     valid_until__gte=now,
+                #     miner_signature__isnull=False,  # miner signature is needed to build a valid Receipt
+                # )
+                # .exclude(
+                    # job_uuid=msg.job_uuid,  # UUIDField doesn't support "__ne=..."
+                # )
             )
             logger.info(f"Declining job {msg.job_uuid}: executor unavailable")
             await self.send(

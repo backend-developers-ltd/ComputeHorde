@@ -9,6 +9,7 @@ from django.conf import settings
 from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
     ExecutorUnavailable,
+    ExecutorFailedToStart,
 )
 from compute_horde_miner.miner.executor_manager._internal.selector import (
     HistoricalRandomMinerSelector,
@@ -60,13 +61,13 @@ class DockerExecutorManager(BaseExecutorManager):
                     logger.error(
                         f"Pulling executor container failed with returncode={process.returncode}"
                     )
-                    raise ExecutorUnavailable("Failed to pull executor image")
+                    raise ExecutorFailedToStart("Failed to pull executor image")
             except TimeoutError:
                 process.kill()
                 logger.error(
                     "Pulling executor container timed out, pulling it from shell might provide more details"
                 )
-                raise ExecutorUnavailable("Failed to pull executor image")
+                raise ExecutorFailedToStart("Failed to pull executor image")
         hf_args = (
             []
             if settings.HF_ACCESS_TOKEN is None
