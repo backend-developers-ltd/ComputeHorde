@@ -1196,6 +1196,7 @@ async def _send_initial_job_request(
             )
         )
         request_json = request.model_dump_json()
+        logger.info("Sending initial job request for %s", job.name)
 
     finally:
         # !!! it's very important we wait on this barrier, no matter what happens above,
@@ -1496,7 +1497,7 @@ async def _trigger_streaming_job(
     timeout = await aget_config("DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT")
     async with asyncio.timeout(timeout):
         await job.streaming_job_ready_response_event.wait()
-        logger.debug(f"Received streaming job ready response for {job_uuid}")
+        logger.info(f"Received streaming job ready response for {job_uuid}")
 
         response = job.streaming_job_ready_response
         if isinstance(response, V0StreamingJobReadyRequest):
@@ -1524,6 +1525,7 @@ async def _trigger_streaming_job(
                 try:
                     r = await client.post(url, json={"seed": seed}, headers={"Host": response.ip})
                     r.raise_for_status()
+                    logger.info(f"Successfully executed streaming job {job_uuid} on {url}")
                 except Exception as e:
                     msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
                     logger.warning(msg)
@@ -1534,10 +1536,13 @@ async def _trigger_streaming_job(
                     r = await client.get(url, headers={"Host": response.ip})
                     if r.status_code != 200:
                         logger.warning(f"Failed to terminate streaming job {job_uuid} on {url}")
+                    else:
+                        logger.info(f"Successfully terminated streaming job {job_uuid} on {url}")
 
 
 async def _get_executor_ready_jobs(ctx: BatchContext) -> list[tuple[str, bool]]:
     streaming_classes = await get_streaming_job_executor_classes()
+    logger.info(f"--- got streaming executor classes: {streaming_classes}")
 
     executor_ready_jobs = [
         (job.uuid, job.executor_class in streaming_classes)
@@ -1564,8 +1569,10 @@ async def _multi_send_job_request(
         [job_uuid for job_uuid, is_streaming in executor_ready_jobs if is_streaming]
     )
     if num_streaming_jobs > 0:
+        logger.info("--- Will wait for %d streaming jobs to be ready", num_streaming_jobs)
         streaming_start_barrier = asyncio.Barrier(num_streaming_jobs)
     else:
+        logger.info("--- No streaming jobs to wait for")
         streaming_start_barrier = None
 
     tasks = [
@@ -2124,6 +2131,7 @@ async def execute_synthetic_batch_run(
 
             executor_ready_jobs = await _get_executor_ready_jobs(ctx)
             if executor_ready_jobs:
+                logger.info("--- Executor ready jobs: %d", len(executor_ready_jobs))
                 await ctx.checkpoint_system_event("_multi_send_job_request")
                 await _multi_send_job_request(ctx, executor_ready_jobs)
 
