@@ -34,7 +34,7 @@ class V0InitialJobRequest(BaseMinerRequest, JobMixin):
         return self
 
 
-class V1InitialJobRequest(V0InitialJobRequest):
+class V1InitialJobRequest(BaseMinerRequest, V0InitialJobRequest):
     message_type: RequestType = RequestType.V1PrepareJobRequest
     public_key: str
     executor_ip: str
