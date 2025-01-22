@@ -92,3 +92,12 @@ jobs:
         working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_streaming_job_tests
       - name: Run unit tests
         run: nox -vs test
+      - name: Executor Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          check_name: "Executor test report"
+          files: "executor/app/src/test-report.xml"
+          fail_on: "nothing"
+          comment_mode: "failures"
+          check_run: true

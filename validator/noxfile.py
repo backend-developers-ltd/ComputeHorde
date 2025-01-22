@@ -160,6 +160,8 @@ def test(session):
             "-vv",
             "-n",
             "auto",
+            "--junitxml",
+            "test-report.xml",
             "compute_horde_validator",
             *session.posargs,
         )
