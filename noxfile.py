@@ -33,6 +33,8 @@ def test(session):
         "-s",
         "-x",
         "-vv",
+        "--junitxml",
+        "test-report.xml",
         "tests",
         *session.posargs,
     )
