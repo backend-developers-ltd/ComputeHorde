@@ -15,6 +15,7 @@ import typing
 import zipfile
 
 import httpx
+import packaging.version
 import pydantic
 from asgiref.sync import sync_to_async
 from compute_horde.base.docker import DockerRunOptionsPreset
@@ -66,6 +67,7 @@ from compute_horde_executor.executor.output_uploader import OutputUploader, Outp
 logger = logging.getLogger(__name__)
 
 CVE_2022_0492_TIMEOUT_SECONDS = 120
+CVE_2024_0132_TIMEOUT_SECONDS = 120
 MAX_RESULT_SIZE_IN_RESPONSE = 2000
 TRUNCATED_RESPONSE_PREFIX_LEN = 1000
 TRUNCATED_RESPONSE_SUFFIX_LEN = 1000
@@ -73,6 +75,7 @@ INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 60 * 15
 CVE_2022_0492_IMAGE = (
     "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
 )
+NVIDIA_CONTAINER_TOOLKIT_CVE_2024_0132_FIXED_VERSION = packaging.version.parse("1.16.2")
 
 NGINX_CONF = """
 http {
@@ -904,6 +907,61 @@ class Command(BaseCommand):
 
         return True
 
+    async def is_nvidia_toolkit_version_safe_cve_2024_0132(self):
+        process = await asyncio.create_subprocess_exec(
+            "docker",
+            "run",
+            "--rm",
+            "--privileged",
+            "-v",
+            "/:/host:ro",
+            "-v",
+            "/usr/bin:/usr/bin",
+            "-v",
+            "/usr/lib:/usr/lib",
+            "ubuntu:latest",
+            "bash",
+            "-c",
+            "nvidia-container-toolkit --version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(), CVE_2024_0132_TIMEOUT_SECONDS
+            )
+        except TimeoutError:
+            logger.error("NVIDIA Container Toolkit Version for CVE-2024-0132 check timed out")
+            return False
+
+        if process.returncode != 0:
+            logger.error(
+                f'NVIDIA Container Toolkit Version for CVE-2024-0132 check failed: stdout="{stdout.decode()}"\nstderr="{stderr.decode()}'
+            )
+            return False
+        lines = stdout.decode().splitlines()
+        if not lines:
+            logger.error(
+                f'NVIDIA Container Toolkit Version for CVE-2024-0132 check failed: stdout="{stdout.decode()}"\nstderr="{stderr.decode()}'
+            )
+            return False
+        version = lines[0].rpartition(" ")[2]
+
+        is_fixed_version = (
+            packaging.version.parse(version) >= NVIDIA_CONTAINER_TOOLKIT_CVE_2024_0132_FIXED_VERSION
+        )
+
+        if not is_fixed_version:
+            logger.error(
+                f"VIDIA Container Toolkit Version for CVE-2024-0132 check failed: "
+                f'{version}" not >= {NVIDIA_CONTAINER_TOOLKIT_CVE_2024_0132_FIXED_VERSION}'
+                f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}'
+            )
+            return False
+
+        return True
+
     async def _executor_loop(self):
         logger.debug(f"Connecting to miner: {settings.MINER_ADDRESS}")
         miner_client = self.MINER_CLIENT_CLASS(settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN)
@@ -920,6 +978,11 @@ class Command(BaseCommand):
                 return
             logger.debug("Checking for CVE-2022-0492 vulnerability")
             if not await self.is_system_safe_for_cve_2022_0492():
+                await miner_client.send_failed_to_prepare()
+                return
+
+            logger.debug("Checking for CVE-2024-0132 vulnerability")
+            if not await self.is_nvidia_toolkit_version_safe_cve_2024_0132():
                 await miner_client.send_failed_to_prepare()
                 return
 
