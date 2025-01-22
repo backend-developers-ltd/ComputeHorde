@@ -20,9 +20,6 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
     V0JobFinishedRequest,
 )
-from compute_horde.mv_protocol.validator_requests import (
-    V0JobFinishedReceiptRequest,
-)
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
@@ -49,7 +46,7 @@ from .helpers import (
     check_system_events,
 )
 
-MOCK_SCORE = 0.8
+MOCK_SCORE = 1
 MANIFEST_INCENTIVE_MULTIPLIER = 1.05
 MANIFEST_DANCE_RATIO_THRESHOLD = 1.4
 MANIFEST_INCENTIVE_APPLIED_SCORE = MOCK_SCORE * MANIFEST_INCENTIVE_MULTIPLIER
@@ -59,6 +56,12 @@ logger = logging.getLogger(__name__)
 
 
 class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
+    def verify_time(self, time_took: float) -> bool | None:
+        return True
+
+    def verify_correctness(self, msg: V0JobFinishedRequest) -> tuple[bool, str]:
+        return True, "mock"
+
     async def ainit(self, miner_hotkey: str):
         return
 
@@ -79,9 +82,6 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
 
     async def volume(self) -> Volume | None:
         return InlineVolume(contents="mock")
-
-    def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
-        return True, "mock", MOCK_SCORE
 
     def job_description(self) -> str:
         return "mock"
@@ -468,13 +468,8 @@ async def test_manifest_dance_incentives(
         interaction_callback,
     )
 
-    miner_client = mocked_synthetic_miner_client.instance
     async for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
-        receipt = miner_client._query_sent_models(
-            lambda m, j=job: m.payload.job_uuid == str(j.job_uuid), V0JobFinishedReceiptRequest
-        )[0]
-        time_took = receipt.payload.time_took_us / 1_000_000
-        assert abs(job.score * time_took - expected_multiplier) < 0.0001
+        assert abs(job.score - expected_multiplier) < 0.0001
 
 
 @patch(
@@ -556,13 +551,8 @@ def test_create_and_run_synthetic_job_batch(
         miner_hotkey="miner_hotkey",
     )
 
-    miner_client = mocked_synthetic_miner_client.instance
     for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
-        receipt = miner_client._query_sent_models(
-            lambda m, j=job: m.payload.job_uuid == str(j.job_uuid), V0JobFinishedReceiptRequest
-        )[0]
-        time_took = receipt.payload.time_took_us / 1_000_000
-        assert abs(job.score * time_took - expected_multiplier) < 0.0001
+        assert abs(job.score - expected_multiplier) < 0.0001
 
 
 mocked_metagraph_1 = MagicMock(side_effect=[ValueError, TypeError, MockMetagraph()])
