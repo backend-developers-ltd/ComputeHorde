@@ -70,7 +70,10 @@ def score_synthetic_jobs(
     return normalize(score_per_hotkey, weight=normalization_weight)
 
 
-def score_organic_jobs(cycle: Cycle) -> dict[str, float]:
+def score_organic_jobs(cycle: Cycle | None) -> dict[str, float]:
+    if not cycle:
+        return {}
+
     batch_scores: defaultdict[str, float] = defaultdict(float)
     organic_job_counts = (
         OrganicJob.objects.filter(
@@ -94,7 +97,10 @@ def score_organic_jobs(cycle: Cycle) -> dict[str, float]:
     return batch_scores
 
 
-def get_base_synthetic_scores(batch):
+def get_base_synthetic_scores(batch: SyntheticJobBatch | None) -> dict[str, float]:
+    if not batch:
+        return {}
+
     executor_class_weights = get_executor_class_weights()
     executor_class_jobs = defaultdict(list)
     rejected_jobs = []
@@ -102,7 +108,8 @@ def get_base_synthetic_scores(batch):
         if job.status == "PROPERLY_REJECTED":  # FIXME: update with proper value
             rejected_jobs.append(job)
         if job.executor_class in executor_class_weights:
-            executor_class_jobs[job.executor_class].append(job)
+            executor_class = ExecutorClass(job.executor_class)
+            executor_class_jobs[executor_class].append(job)
 
     parameterized_horde_score: Callable[[list[float]], float] = partial(
         horde_score,
@@ -139,7 +146,7 @@ def get_base_synthetic_scores(batch):
     return batch_scores
 
 
-def score_batch(batch):
+def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
     previous_batch = SyntheticJobBatch.objects.order_by("-id").exclude(id=batch.id).first()
     previous_batch_scores = get_base_synthetic_scores(previous_batch)
     batch_scores = get_base_synthetic_scores(batch)
