@@ -10,7 +10,7 @@ from django.conf import settings
 from django.db.models import Count
 
 from .dynamic_config import get_executor_class_weights, get_weights_version
-from .models import Cycle, MinerManifest, OrganicJob, SyntheticJob, SyntheticJobBatch
+from .models import Cycle, OrganicJob, SyntheticJob, SyntheticJobBatch
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ def score_organic_jobs(cycle: Cycle) -> dict[str, float]:
     return batch_scores
 
 
-def score_batch(batch):
+def get_base_synthetic_scores(batch):
     executor_class_weights = get_executor_class_weights()
     executor_class_jobs = defaultdict(list)
     rejected_jobs = []
@@ -136,19 +136,27 @@ def score_batch(batch):
     for job in rejected_jobs:
         batch_scores[job.miner.hotkey] += rejected_score
 
+    return batch_scores
+
+
+def score_batch(batch):
+    previous_batch = SyntheticJobBatch.objects.order_by("-id").exclude(id=batch.id).first()
+    previous_batch_scores = get_base_synthetic_scores(previous_batch)
+    batch_scores = get_base_synthetic_scores(batch)
+
+    manifest_multipliers = {}
+    for hotkey, current_base_synthetic_score in batch_scores.items():
+        previous_base_synthetic_score = previous_batch_scores.get(hotkey)
+        manifest_multipliers[hotkey] = get_manifest_multiplier(
+            previous_base_synthetic_score, current_base_synthetic_score
+        )
+
     organic_job_scores = score_organic_jobs(batch.cycle)
     for hotkey, score in organic_job_scores.items():
         batch_scores[hotkey] += score
 
-    # apply manifest bonus
-    previous_batch = SyntheticJobBatch.objects.order_by("-id").exclude(id=batch.id).first()
-    previous_executor_counts = get_executor_counts(previous_batch)
-    current_executor_counts = get_executor_counts(batch)
-    for hotkey in organic_job_scores:
-        previous_online_executors = previous_executor_counts.get(hotkey)
-        current_online_executors = current_executor_counts.get(hotkey, 0)
-        multiplier = get_manifest_multiplier(previous_online_executors, current_online_executors)
-        batch_scores[hotkey] *= multiplier
+    for hotkey in batch_scores:
+        batch_scores[hotkey] *= manifest_multipliers[hotkey]
 
     return dict(batch_scores)
 
@@ -162,27 +170,17 @@ def score_batches(batches: Sequence[SyntheticJobBatch]) -> dict[str, float]:
     return dict(hotkeys_scores)
 
 
-def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, int]:
-    if not batch:
-        return {}
-
-    result: defaultdict[str, int] = defaultdict(int)
-    for manifest in MinerManifest.objects.select_related("miner").filter(batch_id=batch.id):
-        result[manifest.miner.hotkey] += manifest.online_executor_count
-    return dict(result)
-
-
 def get_manifest_multiplier(
-    previous_online_executors: int | None,
-    current_online_executors: int,
+    previous_base_synthetic_score: float | None,
+    current_base_synthetic_score: float,
 ) -> float:
     weights_version = get_weights_version()
     multiplier = 1.0
     if weights_version >= 2:
-        if previous_online_executors is None:
+        if previous_base_synthetic_score is None:
             multiplier = config.DYNAMIC_MANIFEST_SCORE_MULTIPLIER
         else:
-            low, high = sorted([previous_online_executors, current_online_executors])
+            low, high = sorted([previous_base_synthetic_score, current_base_synthetic_score])
             # low can be 0 if previous_online_executors == 0, but we make it that way to
             # make this function correct for any kind of input
             threshold = config.DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD
