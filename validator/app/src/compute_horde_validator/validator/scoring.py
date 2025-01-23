@@ -91,13 +91,13 @@ def score_batch(batch):
             executor_class = ExecutorClass(job.executor_class)
             executor_class_synthetic_jobs[executor_class].append(job)
 
-    organic_jobs = OrganicJob.objects.select_related("miner").filter(
+    batch_organic_jobs = OrganicJob.objects.select_related("miner").filter(
         block__gte=batch.cycle.start,
         block__lt=batch.cycle.stop,
         status=OrganicJob.Status.COMPLETED,
     )
     executor_class_organic_jobs = defaultdict(list)
-    for job in organic_jobs:
+    for job in batch_organic_jobs:
         if job.executor_class in executor_class_weights:
             executor_class = ExecutorClass(job.executor_class)
             executor_class_organic_jobs[executor_class].append(job)
@@ -130,7 +130,7 @@ def score_batch(batch):
         executor_class_organic_scores = score_organic_jobs(organic_jobs)
 
         # combine synthetic and organic scores
-        executor_class_scores = defaultdict(float)
+        executor_class_scores: defaultdict[str, float] = defaultdict(float)
         for hotkey, score in executor_class_synthetic_scores.items():
             executor_class_scores[hotkey] += score
         for hotkey, score in executor_class_organic_scores.items():
@@ -177,9 +177,7 @@ def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, dict[Execu
     if not batch:
         return {}
 
-    result: defaultdict[str, defaultdict[ExecutorClass, int]] = defaultdict(
-        lambda: defaultdict(int)
-    )
+    result: dict[str, dict[ExecutorClass, int]] = defaultdict(lambda: defaultdict(int))
 
     for manifest in MinerManifest.objects.select_related("miner").filter(batch_id=batch.id):
         executor_class = ExecutorClass(manifest.executor_class)
@@ -192,7 +190,7 @@ def get_base_synthetic_score(
     executor_counts: dict[ExecutorClass, int],
     executor_class_weights: dict[ExecutorClass, float],
 ) -> float:
-    score = 0
+    score = 0.0
     for executor_class, weight in executor_class_weights.items():
         score += weight * executor_counts.get(executor_class, 0)
     return score
