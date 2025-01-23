@@ -3,6 +3,7 @@ import base64
 import csv
 import io
 import logging
+import os
 import pathlib
 import random
 import re
@@ -389,6 +390,9 @@ class DownloadManager:
         self, relative_path: pathlib.Path, repo_id: str, revision: str | None
     ):
         try:
+            # enable hf_transfer download acceleration package
+            # https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfhubenablehftransfer
+            os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
             snapshot_download(
                 repo_id=repo_id,
                 revision=revision,
