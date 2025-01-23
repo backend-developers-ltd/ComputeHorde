@@ -37,6 +37,7 @@ async def test_synthetic_job_batch(
     create_simulation_miner_client: Callable,
     transport: MinerSimulationTransport,
     small_spin_up_times,
+    override_weights_version_v2,
 ):
     executor_count = 10
     job_uuids = [uuid.uuid4() for _ in range(executor_count)]
