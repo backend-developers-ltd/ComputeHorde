@@ -3,7 +3,13 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from compute_horde_validator.validator.models import Cycle, Miner, SyntheticJob, SyntheticJobBatch
+from compute_horde_validator.validator.models import (
+    Cycle,
+    Miner,
+    OrganicJob,
+    SyntheticJob,
+    SyntheticJobBatch,
+)
 from compute_horde_validator.validator.scoring import ExecutorClass, score_batches
 
 EXECUTOR_CLASS_WEIGHTS_OVERRIDE = "spin_up-4min.gpu-24gb=8,always_on.gpu-24gb=2"
@@ -162,3 +168,90 @@ def test_score_batches_executor_classes_weights():
     total = scores["hotkey1"] + scores["hotkey2"]
     assert 0.8 - 0.01 < scores["hotkey1"] / total < 0.8 + 0.01
     assert 0.2 - 0.01 < scores["hotkey2"] / total < 0.2 + 0.01
+
+
+@pytest.mark.override_config(DYNAMIC_EXECUTOR_CLASS_WEIGHTS=EXECUTOR_CLASS_WEIGHTS_OVERRIDE)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_rejected_synthetic_jobs_scored():
+    miner1 = Miner.objects.create(hotkey="hotkey1")
+    miner2 = Miner.objects.create(hotkey="hotkey2")
+
+    # Create batch
+    batch = SyntheticJobBatch.objects.create(
+        accepting_results_until=timezone.now() + timedelta(hours=1),
+        cycle=Cycle.objects.create(start=708, stop=1430),
+    )
+
+    # Common job parameters
+    common_params = {
+        "miner_address": "127.0.0.1",
+        "miner_address_ip_version": 4,
+        "miner_port": 8080,
+        "batch": batch,
+        "executor_class": ExecutorClass.spin_up_4min__gpu_24gb,
+    }
+
+    # create a completed job and a rejected job for two different miners
+    SyntheticJob.objects.create(
+        miner=miner1,
+        status=SyntheticJob.Status.COMPLETED,
+        score=1,
+        **common_params,
+    )
+    SyntheticJob.objects.create(
+        miner=miner2,
+        status="PROPERLY_REJECTED",  # TODO: fix after merging with Kordian's PR
+        score=0,  # TODO: fix after merging, this should be 1 (scored in batch_run)
+        **common_params,
+    )
+
+    scores = score_batches([batch])
+    assert scores.get("hotkey1", 0) > 0
+    assert scores.get("hotkey2", 0) > 0
+
+
+@pytest.mark.override_config(DYNAMIC_EXECUTOR_CLASS_WEIGHTS=EXECUTOR_CLASS_WEIGHTS_OVERRIDE)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_organic_jobs_scored():
+    miner1 = Miner.objects.create(hotkey="hotkey1")
+    miner2 = Miner.objects.create(hotkey="hotkey2")
+
+    # Create batch
+    cycle = Cycle.objects.create(start=708, stop=1430)
+    batch = SyntheticJobBatch.objects.create(
+        accepting_results_until=timezone.now() + timedelta(hours=1),
+        cycle=cycle,
+    )
+
+    # Common job parameters
+    common_params = {
+        "miner_address": "127.0.0.1",
+        "miner_address_ip_version": 4,
+        "miner_port": 8080,
+        "executor_class": ExecutorClass.spin_up_4min__gpu_24gb,
+        "status": SyntheticJob.Status.COMPLETED,
+    }
+
+    # create a completed job and a rejected job for two different miners
+    SyntheticJob.objects.create(
+        miner=miner1,
+        batch=batch,
+        score=1,
+        **common_params,
+    )
+    SyntheticJob.objects.create(
+        miner=miner2,
+        batch=batch,
+        score=1,
+        **common_params,
+    )
+    OrganicJob.objects.create(
+        miner=miner2,
+        block=1000,
+        **common_params,
+    )
+
+    scores = score_batches([batch])
+    assert scores.get("hotkey1", 0) > 0
+    assert scores.get("hotkey2", 0) > 0
+    assert scores.get("hotkey2", 0) > scores.get("hotkey1", 0)
