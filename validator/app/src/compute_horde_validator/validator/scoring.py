@@ -7,10 +7,9 @@ import numpy as np
 from compute_horde.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
-from django.db.models import Count
 
 from .dynamic_config import get_executor_class_weights, get_weights_version
-from .models import Cycle, OrganicJob, SyntheticJob, SyntheticJobBatch
+from .models import MinerManifest, OrganicJob, SyntheticJob, SyntheticJobBatch
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +57,6 @@ def horde_score(
 def score_synthetic_jobs(
     jobs: Sequence[SyntheticJob],
     score_aggregation: Callable[[list[float]], float] = sum,
-    normalization_weight: float = 1,
 ) -> dict[str, float]:
     batch_scores = defaultdict(list)
     score_per_hotkey = {}
@@ -67,49 +65,42 @@ def score_synthetic_jobs(
         batch_scores[hotkey].append(job.score)
     for hotkey, hotkey_batch_scores in batch_scores.items():
         score_per_hotkey[hotkey] = score_aggregation(hotkey_batch_scores)
-    return normalize(score_per_hotkey, weight=normalization_weight)
+    return score_per_hotkey
 
 
-def score_organic_jobs(cycle: Cycle | None) -> dict[str, float]:
-    if not cycle:
-        return {}
-
+def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
     batch_scores: defaultdict[str, float] = defaultdict(float)
-    organic_job_counts = (
-        OrganicJob.objects.filter(
-            block__gte=cycle.start,
-            block__lt=cycle.stop,
-            status=OrganicJob.Status.COMPLETED,
-        )
-        .values("miner__hotkey")
-        .annotate(count=Count("*"))
-    )
     score = config.DYNAMIC_ORGANIC_JOB_SCORE
     limit = config.DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT
-    for organic_job_count in organic_job_counts:
-        if limit < 0:
-            count = organic_job_count["count"]
-        else:
-            count = min(limit, organic_job_count["count"])
-        hotkey = organic_job_count["miner__hotkey"]
-        batch_scores[hotkey] += count * score
+
+    for job in jobs:
+        batch_scores[job.miner.hotkey] += score
+
+    if limit >= 0:
+        for hotkey, score in batch_scores.items():
+            batch_scores[hotkey] = min(score, limit * score)
 
     return batch_scores
 
 
-def get_base_synthetic_scores(batch: SyntheticJobBatch | None) -> dict[str, float]:
-    if not batch:
-        return {}
-
+def score_batch(batch):
     executor_class_weights = get_executor_class_weights()
-    executor_class_jobs = defaultdict(list)
-    rejected_jobs = []
+    executor_class_synthetic_jobs = defaultdict(list)
     for job in batch.synthetic_jobs.select_related("miner"):
-        if job.status == "PROPERLY_REJECTED":  # FIXME: update with proper value
-            rejected_jobs.append(job)
         if job.executor_class in executor_class_weights:
             executor_class = ExecutorClass(job.executor_class)
-            executor_class_jobs[executor_class].append(job)
+            executor_class_synthetic_jobs[executor_class].append(job)
+
+    organic_jobs = OrganicJob.objects.select_related("miner").filter(
+        block__gte=batch.cycle.start,
+        block__lt=batch.cycle.stop,
+        status=OrganicJob.Status.COMPLETED,
+    )
+    executor_class_organic_jobs = defaultdict(list)
+    for job in organic_jobs:
+        if job.executor_class in executor_class_weights:
+            executor_class = ExecutorClass(job.executor_class)
+            executor_class_organic_jobs[executor_class].append(job)
 
     parameterized_horde_score: Callable[[list[float]], float] = partial(
         horde_score,
@@ -122,48 +113,52 @@ def get_base_synthetic_scores(batch: SyntheticJobBatch | None) -> dict[str, floa
     )
 
     batch_scores: defaultdict[str, float] = defaultdict(float)
-    for executor_class, jobs in executor_class_jobs.items():
-        executor_class_weight = executor_class_weights[executor_class]
+    for executor_class, executor_class_weight in executor_class_weights.items():
+        # score synthetic jobs
+        synthetic_jobs = executor_class_synthetic_jobs.get(executor_class, [])
         if executor_class == ExecutorClass.spin_up_4min__gpu_24gb:
             score_aggregation = parameterized_horde_score
         else:
             score_aggregation = sum
-
-        executors_class_scores = score_synthetic_jobs(
-            jobs,
+        executor_class_synthetic_scores = score_synthetic_jobs(
+            synthetic_jobs,
             score_aggregation=score_aggregation,
-            normalization_weight=executor_class_weight,
         )
-        for hotkey, score in executors_class_scores.items():
+
+        # score organic jobs
+        organic_jobs = executor_class_organic_jobs.get(executor_class, [])
+        executor_class_organic_scores = score_organic_jobs(organic_jobs)
+
+        # combine synthetic and organic scores
+        executor_class_scores = defaultdict(float)
+        for hotkey, score in executor_class_synthetic_scores.items():
+            executor_class_scores[hotkey] += score
+        for hotkey, score in executor_class_organic_scores.items():
+            executor_class_scores[hotkey] += score
+
+        # normalize scores for executor class weight
+        normalized_scores = normalize(executor_class_scores, executor_class_weight)
+        for hotkey, score in normalized_scores.items():
             batch_scores[hotkey] += score
 
-    # TODO: Properly rejected jobs should have their scores set in batch_run.
-    #       This code block will be unnecessary when scoring is implemented there.
-    rejected_score = config.DYNAMIC_REJECTED_SYNTHETIC_JOB_SCORE
-    for job in rejected_jobs:
-        batch_scores[job.miner.hotkey] += rejected_score
-
-    return batch_scores
-
-
-def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
+    # apply manifest bonus
     previous_batch = SyntheticJobBatch.objects.order_by("-id").exclude(id=batch.id).first()
-    previous_batch_scores = get_base_synthetic_scores(previous_batch)
-    batch_scores = get_base_synthetic_scores(batch)
-
-    manifest_multipliers = {}
-    for hotkey, current_base_synthetic_score in batch_scores.items():
-        previous_base_synthetic_score = previous_batch_scores.get(hotkey)
-        manifest_multipliers[hotkey] = get_manifest_multiplier(
-            previous_base_synthetic_score, current_base_synthetic_score
-        )
-
-    organic_job_scores = score_organic_jobs(batch.cycle)
-    for hotkey, score in organic_job_scores.items():
-        batch_scores[hotkey] += score
-
+    previous_executor_counts = get_executor_counts(previous_batch)
+    current_executor_counts = get_executor_counts(batch)
     for hotkey in batch_scores:
-        batch_scores[hotkey] *= manifest_multipliers[hotkey]
+        previous_base_synthetic_score = get_base_synthetic_score(
+            previous_executor_counts.get(hotkey, {}),
+            executor_class_weights,
+        )
+        current_base_synthetic_score = get_base_synthetic_score(
+            current_executor_counts.get(hotkey, {}),
+            executor_class_weights,
+        )
+        multiplier = get_manifest_multiplier(
+            previous_base_synthetic_score,
+            current_base_synthetic_score,
+        )
+        batch_scores[hotkey] *= multiplier
 
     return dict(batch_scores)
 
@@ -175,6 +170,32 @@ def score_batches(batches: Sequence[SyntheticJobBatch]) -> dict[str, float]:
         for hotkey, score in batch_scores.items():
             hotkeys_scores[hotkey] += score
     return dict(hotkeys_scores)
+
+
+def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, dict[ExecutorClass, int]]:
+    """In a given batch, get the number of online executors per miner per executor class"""
+    if not batch:
+        return {}
+
+    result: defaultdict[str, defaultdict[ExecutorClass, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+
+    for manifest in MinerManifest.objects.select_related("miner").filter(batch_id=batch.id):
+        executor_class = ExecutorClass(manifest.executor_class)
+        result[manifest.miner.hotkey][executor_class] += manifest.online_executor_count
+
+    return result
+
+
+def get_base_synthetic_score(
+    executor_counts: dict[ExecutorClass, int],
+    executor_class_weights: dict[ExecutorClass, float],
+) -> float:
+    score = 0
+    for executor_class, weight in executor_class_weights.items():
+        score += weight * executor_counts.get(executor_class, 0)
+    return score
 
 
 def get_manifest_multiplier(

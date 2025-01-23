@@ -201,7 +201,7 @@ def test_rejected_synthetic_jobs_scored():
     SyntheticJob.objects.create(
         miner=miner2,
         status="PROPERLY_REJECTED",  # TODO: fix after merging with Kordian's PR
-        score=0,  # TODO: fix after merging, this should be 1 (scored in batch_run)
+        score=1,
         **common_params,
     )
 
