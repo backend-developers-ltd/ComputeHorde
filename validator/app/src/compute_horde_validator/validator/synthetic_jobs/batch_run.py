@@ -1993,7 +1993,7 @@ async def _score_jobs(ctx: BatchContext) -> None:
 
     # compute for each hotkey how many executors finished successfully
     for job in ctx.jobs.values():
-        if job.success:
+        if job.success or job.excused:
             ctx.online_executor_count[job.miner_hotkey][job.executor_class] += 1
 
     # apply manifest bonus
