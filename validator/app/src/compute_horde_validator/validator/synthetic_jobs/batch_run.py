@@ -856,12 +856,14 @@ class BatchConfig:
     def __init__(self):
         self.event_limits: LimitsDict | None = None
         self.llm_answer_s3_download_timeout: float | None = None
+        self.excused_synthetic_job_score: float | None = None
 
     async def populate(self):
         self.event_limits = await get_system_event_limits()
         self.llm_answer_s3_download_timeout = await aget_config(
             "DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS"
         )
+        self.excused_synthetic_job_score = await aget_config("DYNAMIC_EXCUSED_SYNTHETIC_JOB_SCORE")
 
 
 async def _init_context(
@@ -1742,7 +1744,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
         excuse_ok = accepted_jobs + valid_excuse_receipts >= relevant_executor_count
 
         if excuse_ok:
-            # TODO: job.score = 1 ?
+            job.score = ctx.batch_config.excused_synthetic_job_score or 0
             job.excused = True
             job.comment = "excused (pass)"
             logger.info("%s %s", job.name, job.comment)
@@ -1753,7 +1755,6 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
             return
 
     if job.is_declined():
-        # TODO: job.score = ...
         job.comment = "declined"
         logger.info("%s %s (reason=%s)", job.name, job.comment, job.decline_reason())
         return
