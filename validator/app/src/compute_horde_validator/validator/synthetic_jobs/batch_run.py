@@ -8,7 +8,6 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol, assert_never
 
@@ -261,13 +260,6 @@ class ExceptionInfo:
     stage: str
 
 
-class JobResultType(Enum):
-    Success = "success"
-    Failure = "failure"
-    Excused = "excused"
-    Declined = "declined"
-
-
 @dataclass
 class Job:
     ctx: "BatchContext"
@@ -468,7 +460,7 @@ class Job:
         # Use the time when the receipt for this job was generated as an excuse time cutoff time
         job_request_time = self.job_started_receipt_payload.timestamp
 
-        # We need time leeway so that if the miner receipts an organic job around the same time as the synthetic, a slight
+        # We need time leeway so that if the miner receives an organic job around the same time as the synthetic, a slight
         # time difference caused by clock desync and network latencies doesn't cause the miner to lose score when they
         # accept an organic job and get a synthetic job request a couple of seconds "from the past"
         leeway = timedelta(seconds=2)  # TODO: Dynamic config

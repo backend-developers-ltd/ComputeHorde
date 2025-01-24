@@ -12,7 +12,7 @@ EXECUTOR_TIMEOUT = DEFAULT_EXECUTOR_TIMEOUT
 DockerExecutor = v1.DockerExecutor
 PULLING_TIMEOUT = v1.PULLING_TIMEOUT
 DOCKER_STOP_TIMEOUT = v1.DOCKER_STOP_TIMEOUT
-ExecutorUnavailable = v1.NoExecutorUnavailable
+ExecutorUnavailable = v1.ExecutorUnavailable
 ExecutorFailedToStart = v1.ExecutorFailed
 
 

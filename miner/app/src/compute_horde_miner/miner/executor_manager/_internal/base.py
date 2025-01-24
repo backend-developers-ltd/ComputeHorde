@@ -13,7 +13,7 @@ from compute_horde.executor_class import (
 logger = logging.getLogger(__name__)
 
 
-class NoExecutorUnavailable(Exception):
+class ExecutorUnavailable(Exception):
     """
     Thrown when no executor is available to handle a request.
     """
@@ -52,7 +52,7 @@ class ExecutorClassPool:
         async with self._reservation_lock:
             if self.get_availability() == 0:
                 logger.warning("No executor available")
-                raise NoExecutorUnavailable()
+                raise ExecutorUnavailable()
 
             try:
                 executor = await self.manager.start_new_executor(

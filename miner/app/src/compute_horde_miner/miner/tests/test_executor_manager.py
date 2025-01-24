@@ -8,7 +8,7 @@ from compute_horde.executor_class import ExecutorClass
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
-    NoExecutorUnavailable,
+    ExecutorUnavailable,
 )
 from compute_horde_miner.miner.executor_manager.base import (
     BaseExecutorManager as BaseBaseExecutorManager,
@@ -112,7 +112,7 @@ async def test_executor_class_pool(dummy_manager):
     assert pool.get_availability() == 0
 
     # Test ExecutorUnavailable exception
-    with pytest.raises(NoExecutorUnavailable):
+    with pytest.raises(ExecutorUnavailable):
         await pool.reserve_executor("token3", 20)
 
     # Test executor completion
@@ -166,7 +166,7 @@ async def test_manager_reserve_executor_class(dummy_manager):
         await dummy_manager.get_executor_class_pool(ExecutorClass.always_on__gpu_24gb)
     ).get_availability() == 0
 
-    with pytest.raises(NoExecutorUnavailable):
+    with pytest.raises(ExecutorUnavailable):
         await dummy_manager.reserve_executor_class("token3", ExecutorClass.always_on__gpu_24gb, 10)
 
 
@@ -199,7 +199,7 @@ async def test_concurrent_reservations(dummy_manager):
                 f"token{i}", ExecutorClass.always_on__gpu_24gb, 5
             )
             return True
-        except NoExecutorUnavailable:
+        except ExecutorUnavailable:
             return False
 
     results = await asyncio.gather(*[reserve(i) for i in range(5)])
