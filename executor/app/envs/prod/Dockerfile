@@ -41,6 +41,7 @@ RUN apt-get update \
 WORKDIR /root/src/
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/root/src/.venv/bin:$PATH"
+ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
 COPY --from=base-image /root/src/ /root/src/
 
