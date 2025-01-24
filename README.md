@@ -280,7 +280,7 @@ To perform a hard restart of all ComputeHorde Docker containers, run the followi
 
 ```bash
 docker compose down --remove-orphans
-docker compose up
+docker compose up -d
 ```
 
 Afterwards, use `docker ps` to verify that the containers have started successfully.
