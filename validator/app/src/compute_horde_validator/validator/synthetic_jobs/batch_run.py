@@ -1502,6 +1502,7 @@ async def _trigger_streaming_job(
 
             response = job.streaming_job_ready_response
             if not isinstance(response, V0StreamingJobReadyRequest):
+                logger.warning(f"Bad job ready response for {job_uuid}: {response}")
                 return
 
             # Save job certificate received from executor
@@ -1519,7 +1520,9 @@ async def _trigger_streaming_job(
         # !!! it's very important we wait on this barrier, no matter what happens above,
         #     if we don't wait, other concurrent jobs will hang forever since they will
         #     never pass this barrier
+        logger.debug(f"Waiting for streaming start barrier for {job_uuid}")
         await streaming_start_barrier.wait()
+        logger.debug(f"Passed streaming start barrier for {job_uuid}")
 
     if not isinstance(response, V0StreamingJobReadyRequest):
         return
