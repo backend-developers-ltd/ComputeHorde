@@ -1493,13 +1493,17 @@ async def _trigger_streaming_job(
     ctx: BatchContext, streaming_start_barrier: asyncio.Barrier, job_uuid: str
 ) -> None:
     job = ctx.jobs[job_uuid]
-    timeout = await aget_config("DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT")
-    async with asyncio.timeout(timeout):
-        await job.streaming_job_ready_response_event.wait()
-        logger.debug(f"Received streaming job ready response for {job_uuid}")
+    response = None
+    try:
+        timeout = await aget_config("DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT")
+        async with asyncio.timeout(timeout):
+            await job.streaming_job_ready_response_event.wait()
+            logger.debug(f"Received streaming job ready response for {job_uuid}")
 
-        response = job.streaming_job_ready_response
-        if isinstance(response, V0StreamingJobReadyRequest):
+            response = job.streaming_job_ready_response
+            if not isinstance(response, V0StreamingJobReadyRequest):
+                return
+
             # Save job certificate received from executor
             executor_cert_path = ctx.certs_basepath / "ssl" / f"executor_certificate_{job_uuid}.pem"
             executor_cert_path.write_text(response.public_key)
@@ -1511,29 +1515,35 @@ async def _trigger_streaming_job(
                 logger.error(f"Bad streaming job generator type: {job.job_generator}")
                 return
 
-            # wait to trigger all streaming jobs at the same time
-            await streaming_start_barrier.wait()
+    finally:
+        # !!! it's very important we wait on this barrier, no matter what happens above,
+        #     if we don't wait, other concurrent jobs will hang forever since they will
+        #     never pass this barrier
+        await streaming_start_barrier.wait()
 
-            async with httpx.AsyncClient(
-                verify=str(executor_cert_path),
-                cert=ctx.own_certs,
-                timeout=job.job_generator.timeout_seconds(),
-            ) as client:
-                # send the seed to the executor to start the streaming job
-                url = f"https://{response.ip}:{response.port}/execute-job"
-                try:
-                    r = await client.post(url, json={"seed": seed}, headers={"Host": response.ip})
-                    r.raise_for_status()
-                except Exception as e:
-                    msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
-                    logger.warning(msg)
-                    raise Exception(msg)
-                finally:
-                    # schedule the job to terminate
-                    url = f"https://{response.ip}:{response.port}/terminate"
-                    r = await client.get(url, headers={"Host": response.ip})
-                    if r.status_code != 200:
-                        logger.warning(f"Failed to terminate streaming job {job_uuid} on {url}")
+    if not isinstance(response, V0StreamingJobReadyRequest):
+        return
+
+    async with httpx.AsyncClient(
+        verify=str(executor_cert_path),
+        cert=ctx.own_certs,
+        timeout=job.job_generator.timeout_seconds(),
+    ) as client:
+        # send the seed to the executor to start the streaming job
+        url = f"https://{response.ip}:{response.port}/execute-job"
+        try:
+            r = await client.post(url, json={"seed": seed}, headers={"Host": response.ip})
+            r.raise_for_status()
+        except Exception as e:
+            msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
+            logger.warning(msg)
+            raise Exception(msg)
+        finally:
+            # schedule the job to terminate
+            url = f"https://{response.ip}:{response.port}/terminate"
+            r = await client.get(url, headers={"Host": response.ip})
+            if r.status_code != 200:
+                logger.warning(f"Failed to terminate streaming job {job_uuid} on {url}")
 
 
 async def _get_executor_ready_jobs(ctx: BatchContext) -> list[tuple[str, bool]]:
