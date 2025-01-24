@@ -4,6 +4,7 @@ import time
 import bittensor
 import uvloop
 from asgiref.sync import async_to_sync
+from compute_horde.utils import get_validators
 from django.conf import settings
 
 from compute_horde_validator.validator.models import Miner, SystemEvent
@@ -49,6 +50,7 @@ def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id:
                 hotkey=hotkey,
                 coldkey=hotkey,  # I hope it does not matter
             )
+        validator_hotkeys = []
     else:
         try:
             metagraph = try_to_get_metagraph(netuid, network=network)
@@ -69,8 +71,11 @@ def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id:
             for miner in miners
             if miner.hotkey in axons_by_key and axons_by_key[miner.hotkey].is_serving
         ]
+        validator_hotkeys = [n.hotkey for n in get_validators(metagraph=metagraph)]
 
-    async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners, synthetic_jobs_batch_id)
+    async_to_sync(execute_synthetic_batch_run)(
+        axons_by_key, miners, validator_hotkeys, synthetic_jobs_batch_id
+    )
 
 
 def get_miners(metagraph) -> list[Miner]:

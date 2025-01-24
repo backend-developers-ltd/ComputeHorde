@@ -59,7 +59,6 @@ from compute_horde.receipts.schemas import (
 )
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
-from compute_horde.utils import get_validators
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
@@ -465,17 +464,6 @@ class Job:
         # accept an organic job and get a synthetic job request a couple of seconds "from the past"
         leeway = timedelta(seconds=2)  # TODO: Dynamic config
 
-        # This only retrieves validators with a minimum stake (currently at 1000 tao), which is desired.
-        # TODO: Do this once per batch, or completely outside of the batch
-        validator_neurons = get_validators(
-            netuid=settings.BITTENSOR_NETUID,
-            network=settings.BITTENSOR_NETWORK,
-        )
-        allowed_validators: set[str] = {
-            self.ctx.own_keypair.ss58_address,  # Vali should probably trust itself in any case.
-            *(n.hotkey for n in validator_neurons),
-        }
-
         # Reject duplicate receipts - use the receipts' validator signature as unique ID
         seen_receipts: set[str] = set()
 
@@ -486,7 +474,7 @@ class Job:
                 and receipt.payload.is_organic
                 and receipt.payload.miner_hotkey == self.miner_hotkey
                 and receipt.payload.job_uuid != self.uuid
-                and receipt.payload.validator_hotkey in allowed_validators
+                and receipt.payload.validator_hotkey in self.ctx.allowed_validators_for_excuse
                 and receipt.validator_signature not in seen_receipts
                 and receipt.payload.executor_class == self.executor_class
                 and receipt.payload.timestamp < job_request_time
@@ -537,6 +525,9 @@ class BatchContext:
 
     # job.uuid as key
     jobs: dict[str, Job]
+
+    # list of validator hotkeys for which busy excuses are considered valid
+    allowed_validators_for_excuse: set[str]
 
     # telemetry
 
@@ -869,6 +860,7 @@ class BatchConfig:
 async def _init_context(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
+    validator_hotkeys: list[str],
     batch_id: int | None = None,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> BatchContext:
@@ -881,6 +873,10 @@ async def _init_context(
     # TODO move somewhere else - gen a certificate per batch or not?
     # Generate validator certificate
     dir_path, public_key, certs = generate_certificate_at()
+
+    allowed_validators = set(validator_hotkeys)
+    # Vali should probably trust itself in any case.
+    allowed_validators.add(own_keypair.ss58_address)
 
     ctx = BatchContext(
         batch_id=batch_id,
@@ -902,6 +898,7 @@ async def _init_context(
         manifest_events={},
         job_uuids=[],
         jobs={},
+        allowed_validators_for_excuse=allowed_validators,
         events=[],
         event_count=0,
         event_limits_usage=defaultdict(int),
@@ -2219,6 +2216,7 @@ def _db_persist(ctx: BatchContext) -> None:
 async def execute_synthetic_batch_run(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
+    validator_hotkeys: list[str],
     batch_id: int | None = None,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> None:
@@ -2232,7 +2230,9 @@ async def execute_synthetic_batch_run(
     # randomize the order of miners each batch to avoid systemic bias
     random.shuffle(serving_miners)
 
-    ctx = await _init_context(axons, serving_miners, batch_id, create_miner_client)
+    ctx = await _init_context(
+        axons, serving_miners, validator_hotkeys, batch_id, create_miner_client
+    )
     await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
     try:

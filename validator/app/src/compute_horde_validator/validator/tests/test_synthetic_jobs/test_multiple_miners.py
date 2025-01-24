@@ -123,6 +123,7 @@ async def test_all_succeed(
         execute_synthetic_batch_run(
             axon_dict,
             miners,
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -190,6 +191,7 @@ async def test_all_streaming_succeed(
         execute_synthetic_batch_run(
             axon_dict,
             miners,
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -335,6 +337,7 @@ async def test_complex(
         execute_synthetic_batch_run(
             axon_dict,
             miners,
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=2,

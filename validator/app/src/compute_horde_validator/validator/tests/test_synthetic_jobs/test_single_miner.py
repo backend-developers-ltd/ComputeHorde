@@ -48,6 +48,7 @@ async def test_execute_miner_synthetic_jobs_success(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -82,6 +83,7 @@ async def test_execute_miner_synthetic_jobs_success_timeout(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=3,
@@ -114,6 +116,7 @@ async def test_execute_miner_synthetic_jobs_job_failed(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -141,6 +144,7 @@ async def test_execute_miner_synthetic_jobs_job_declined(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -162,6 +166,7 @@ async def test_execute_miner_synthetic_jobs_no_manifest(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
