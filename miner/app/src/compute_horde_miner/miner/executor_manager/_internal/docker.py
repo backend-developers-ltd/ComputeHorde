@@ -101,6 +101,8 @@ class DockerExecutorManager(BaseExecutorManager):
 
     async def kill_executor(self, executor):
         # kill executor container first so it would not be able to report anything - job simply timeouts
+        logger.info("Stopping executor %s", executor.token)
+
         process = await asyncio.create_subprocess_exec("docker", "stop", executor.token)
         try:
             await asyncio.wait_for(process.wait(), timeout=DOCKER_STOP_TIMEOUT)

@@ -1,3 +1,4 @@
+import logging
 import os
 import pathlib
 import subprocess
@@ -9,6 +10,8 @@ from compute_horde_miner.miner.executor_manager._internal.base import BaseExecut
 from compute_horde_miner.miner.executor_manager.executor_port_dispenser import (
     executor_port_dispenser,
 )
+
+logger = logging.getLogger(__name__)
 
 this_dir = pathlib.Path(__file__).parent
 executor_dir = this_dir / ".." / ".." / ".." / ".." / ".." / ".." / ".." / "executor"
@@ -24,15 +27,19 @@ class DevExecutorManager(BaseExecutorManager):
                 "EXECUTOR_TOKEN": token,
                 "PATH": os.environ["PATH"],
                 "NGINX_PORT": str(nginx_port),
+                # Enable hf_transfer download acceleration package
+                # https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfhubenablehftransfer
+                "HF_HUB_ENABLE_HF_TRANSFER": "1",
             },
             cwd=executor_dir,
         )
 
     async def kill_executor(self, executor):
+        logger.info("Killing executor process, PID=%s", getattr(executor, "pid", None))
         try:
             executor.kill()
-        except OSError:
-            pass
+        except OSError as e:
+            logger.error("Failed to kill executor: %s", e)
 
     async def wait_for_executor(self, executor, timeout):
         try:
