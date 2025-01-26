@@ -1262,18 +1262,25 @@ async def _send_job_request(
     request_json = request.model_dump_json()
 
     timeout = job.job_generator.timeout_seconds() + _JOB_RESPONSE_EXTRA_TIMEOUT
-    async with asyncio.timeout(timeout):
-        # send can block, so take a timestamp
-        # on both sides to detect long send times
-        job.job_before_sent_time = datetime.now(tz=UTC)
-        await client.send_check(request_json)
-        job.job_after_sent_time = datetime.now(tz=UTC)
 
-        # if streaming job
-        if streaming_start_barrier is not None:
-            await _trigger_streaming_job(ctx, streaming_start_barrier, job_uuid)
+    barrier_done = {"yes": False}
+    try:
+        async with asyncio.timeout(timeout):
+            # send can block, so take a timestamp
+            # on both sides to detect long send times
+            job.job_before_sent_time = datetime.now(tz=UTC)
+            await client.send_check(request_json)
+            job.job_after_sent_time = datetime.now(tz=UTC)
 
-        await job.job_response_event.wait()
+            # if streaming job
+            if streaming_start_barrier is not None:
+                await _trigger_streaming_job(ctx, streaming_start_barrier, job_uuid, barrier_done)
+
+            await job.job_response_event.wait()
+    except:
+        if not barrier_done["yes"]:
+            await streaming_start_barrier.wait()
+        raise
 
 
 async def _send_job_finished_receipts(ctx: BatchContext) -> None:
@@ -1490,7 +1497,7 @@ async def _multi_send_initial_job_request(ctx: BatchContext) -> None:
 
 
 async def _trigger_streaming_job(
-    ctx: BatchContext, streaming_start_barrier: asyncio.Barrier, job_uuid: str
+    ctx: BatchContext, streaming_start_barrier: asyncio.Barrier, job_uuid: str, barrier_done,
 ) -> None:
     job = ctx.jobs[job_uuid]
     response = None
@@ -1500,32 +1507,36 @@ async def _trigger_streaming_job(
             await job.streaming_job_ready_response_event.wait()
             logger.debug(f"Received streaming job ready response for {job_uuid}")
 
-            response = job.streaming_job_ready_response
-            if not isinstance(response, V0StreamingJobReadyRequest):
-                logger.warning(f"Bad job ready response for {job_uuid}: {response}")
-                return
+        response = job.streaming_job_ready_response
+        if not isinstance(response, V0StreamingJobReadyRequest):
+            logger.warning(f"Bad job ready response for {job_uuid}: {response}")
+            return
 
-            # Save job certificate received from executor
-            executor_cert_path = ctx.certs_basepath / "ssl" / f"executor_certificate_{job_uuid}.pem"
-            executor_cert_path.write_text(response.public_key)
+        # Save job certificate received from executor
+        executor_cert_path = ctx.certs_basepath / "ssl" / f"executor_certificate_{job_uuid}.pem"
+        executor_cert_path.write_text(response.public_key)
 
-            # provide the synthetic job prompt seed to the streaming job
-            if isinstance(job.job_generator, LlmPromptsJobGenerator):
-                seed = job.job_generator.seed
-            else:
-                logger.error(f"Bad streaming job generator type: {job.job_generator}")
-                return
+        # provide the synthetic job prompt seed to the streaming job
+        if isinstance(job.job_generator, LlmPromptsJobGenerator):
+            seed = job.job_generator.seed
+        else:
+            logger.error(f"Bad streaming job generator type: {job.job_generator}")
+            return
 
     finally:
         # !!! it's very important we wait on this barrier, no matter what happens above,
         #     if we don't wait, other concurrent jobs will hang forever since they will
         #     never pass this barrier
         logger.debug(f"Waiting for streaming start barrier for {job_uuid}")
+        barrier_done["yes"] = True
         await streaming_start_barrier.wait()
         logger.debug(f"Passed streaming start barrier for {job_uuid}")
 
     if not isinstance(response, V0StreamingJobReadyRequest):
         return
+
+    url = f"https://{response.ip}:{response.port}/execute-job"
+    logger.debug("About to send seed to %s (job_uuid=%s)", url, job_uuid)
 
     async with httpx.AsyncClient(
         verify=str(executor_cert_path),
@@ -1533,20 +1544,36 @@ async def _trigger_streaming_job(
         timeout=job.job_generator.timeout_seconds(),
     ) as client:
         # send the seed to the executor to start the streaming job
-        url = f"https://{response.ip}:{response.port}/execute-job"
         try:
             r = await client.post(url, json={"seed": seed}, headers={"Host": response.ip})
-            r.raise_for_status()
         except Exception as e:
             msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
-            logger.warning(msg)
-            raise Exception(msg)
-        finally:
-            # schedule the job to terminate
-            url = f"https://{response.ip}:{response.port}/terminate"
+            logger.debug(msg)
+        else:
+            try:
+                r.raise_for_status()
+            except Exception as e:
+                msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]}"
+                logger.debug(msg)
+            else:
+                logger.debug("Successfully sent seed to %s (job_uuid=%s), the result is: %s", url, job_uuid,
+                             r.content[:100])
+
+        url = f"https://{response.ip}:{response.port}/terminate"
+        logger.debug("About to terminate (job_uuid=%s)", job_uuid)
+        try:
             r = await client.get(url, headers={"Host": response.ip})
-            if r.status_code != 200:
-                logger.warning(f"Failed to terminate streaming job {job_uuid} on {url}")
+        except Exception as e:
+            msg = f"Failed to terminate streaming job {job_uuid} on {url}: {e}"
+            logger.debug(msg)
+        else:
+            try:
+                r.raise_for_status()
+            except Exception as e:
+                msg = f"Failed to terminate streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]}"
+                logger.debug(msg)
+            else:
+                logger.debug("Successfully terminated %s (job_uuid=%s)", url, job_uuid, r.content[:100])
 
 
 async def _get_executor_ready_jobs(ctx: BatchContext) -> list[tuple[str, bool]]:
