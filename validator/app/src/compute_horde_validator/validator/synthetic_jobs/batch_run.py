@@ -1729,6 +1729,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     job.comment = "failed"
 
     if job.decline_reason() == V0DeclineJobRequest.Reason.BUSY:
+        raise Exception('Catch me if you can 2')
         relevant_executor_count = ctx.executors[job.miner_hotkey][job.executor_class]
         valid_excuse_receipts = len(job.get_valid_decline_excuse_receipts())
         accepted_jobs = sum(

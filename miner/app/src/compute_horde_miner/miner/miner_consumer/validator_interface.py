@@ -383,6 +383,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 )
             )
             logger.info(f"Declining job {msg.job_uuid}: executor unavailable")
+            raise Exception('Catch me if you can 1')
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
