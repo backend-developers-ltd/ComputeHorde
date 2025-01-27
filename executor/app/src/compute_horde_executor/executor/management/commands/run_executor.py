@@ -466,9 +466,9 @@ class JobRunner:
         self.specs_volume_mount_dir = self.temp_dir / "specs"
         self.download_manager = DownloadManager()
 
-        self.job_container_name = f"{settings.EXECUTOR_TOKEN}-job"
-        self.nginx_container_name = f"{settings.EXECUTOR_TOKEN}-nginx"
-        self.job_network_name = f"{settings.EXECUTOR_TOKEN}-network"
+        self.job_container_name = f"ch-{settings.EXECUTOR_TOKEN}-job"
+        self.nginx_container_name = f"ch-{settings.EXECUTOR_TOKEN}-nginx"
+        self.job_network_name = f"ch-{settings.EXECUTOR_TOKEN}-network"
         self.process: asyncio.subprocess.Process | None = None
         self.cmd: list[str] = []
 
@@ -482,9 +482,17 @@ class JobRunner:
             save_public_key(self.initial_job_request.public_key, self.nginx_dir_path)
             self.is_streaming_job = True
 
+    async def cleanup_potential_old_jobs(self):
+        await (await asyncio.create_subprocess_shell(
+            "docker kill $(docker ps -q --filter 'name=ch-.*-job')")).communicate()
+        await (await asyncio.create_subprocess_shell(
+            "docker kill $(docker ps -q --filter 'name=ch-.*-nginx')")).communicate()
+
     async def prepare(self):
         self.volume_mount_dir.mkdir(exist_ok=True)
         self.output_volume_mount_dir.mkdir(exist_ok=True)
+
+        await self.cleanup_potential_old_jobs()
 
         if self.initial_job_request.base_docker_image_name is not None:
             process = await asyncio.create_subprocess_exec(
