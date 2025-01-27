@@ -23,8 +23,10 @@ class VolumeType(str, enum.Enum):
 class HuggingfaceVolume(pydantic.BaseModel):
     volume_type: Literal[VolumeType.huggingface_volume] = VolumeType.huggingface_volume
     repo_id: str
+    repo_type: str | None = None
     revision: str | None = None  # Git revision id: branch name / tag / commit hash
     relative_path: str | None = None
+    allow_patterns: str | list[str] | None = None
 
     def is_safe(self) -> bool:
         return True

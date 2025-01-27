@@ -386,14 +386,21 @@ class DownloadManager:
         self.max_retries = max_retries
 
     def download_from_huggingface(
-        self, relative_path: pathlib.Path, repo_id: str, revision: str | None
+        self,
+        relative_path: pathlib.Path,
+        repo_id: str,
+        revision: str | None,
+        repo_type: str | None = None,
+        allow_patterns: str | list[str] | None = None,
     ):
         try:
             snapshot_download(
                 repo_id=repo_id,
+                repo_type=repo_type,
                 revision=revision,
                 token=settings.HF_ACCESS_TOKEN,
                 local_dir=relative_path,
+                allow_patterns=allow_patterns,
             )
         except Exception as e:
             logger.error(f"Failed to download model from Hugging Face: {e}")
@@ -791,7 +798,11 @@ class JobRunner:
             if volume.relative_path:
                 extraction_path /= volume.relative_path
             await sync_to_async(self.download_manager.download_from_huggingface)(
-                extraction_path, volume.repo_id, volume.revision
+                relative_path=extraction_path,
+                repo_id=volume.repo_id,
+                revision=volume.revision,
+                repo_type=volume.repo_type,
+                allow_patterns=volume.allow_patterns,
             )
 
     async def _unpack_single_file_volume(self, volume: SingleFileVolume):
