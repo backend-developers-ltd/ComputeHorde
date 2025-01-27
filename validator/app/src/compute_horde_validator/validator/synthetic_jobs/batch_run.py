@@ -1588,10 +1588,13 @@ async def _trigger_job_execution(
     streaming_jobs = [job_uuid for job_uuid, is_streaming in executor_ready_jobs if is_streaming]
     buffered_jobs = [job_uuid for job_uuid, is_streaming in executor_ready_jobs if not is_streaming]
 
-    logger.info("Sending job requests for %d ready jobs - %s streaming and %s buffered",
-                len(executor_ready_jobs), len(streaming_jobs), len(buffered_jobs))
+    streaming_jobs = [job_uuid for job_uuid in streaming_jobs
+                      if isinstance(ctx.jobs[job_uuid].streaming_job_ready_response, V0StreamingJobReadyRequest)]
 
-    start_barrier = asyncio.Barrier(len(executor_ready_jobs))
+    logger.info("Sending job requests for %d ready jobs - %s streaming and %s buffered",
+                len(streaming_jobs) + len(buffered_jobs), len(streaming_jobs), len(buffered_jobs))
+
+    start_barrier = asyncio.Barrier(len(streaming_jobs) + len(buffered_jobs))
 
     buffered_tasks = [
         asyncio.create_task(
@@ -1615,7 +1618,7 @@ async def _trigger_job_execution(
             ),
             name=f"{job_uuid}._trigger_job_execution",
         )
-        for job_uuid in buffered_jobs
+        for job_uuid in streaming_jobs
     ]
 
     results = await asyncio.gather(*(streaming_tasks + buffered_tasks), return_exceptions=True)
@@ -1623,6 +1626,7 @@ async def _trigger_job_execution(
     exceptions: list[ExceptionInfo] = []
     for i, result in enumerate(results):
         if isinstance(result, BaseException):
+            logger.exception('When running Synthetic jobs', exc_info=result)
             job_uuid = executor_ready_jobs[i][0]
             job = ctx.jobs[job_uuid]
             job.exception = result
@@ -1710,13 +1714,12 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
     time_took_sec = job.time_took.total_seconds()
 
-    # TODO separate correctness check from scoring in job generator
-    job.correct, comment, score = job.job_generator.verify(
+    job.correct, comment = job.job_generator.verify_correctness(
         job.job_response,
-        time_took_sec,
     )
 
-    if time_took_sec > job.job_generator.timeout_seconds():
+    if job.job_generator.verify_time(time_took_sec) == False:  # it can be None, in which case we
+        # don't trigger the code below
         job.comment = f"took too long: {time_took_sec=:.2f}"
         logger.info("%s %s", job.name, job.comment)
         job.system_event(
@@ -1728,7 +1731,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
     job.success = job.correct
     job.comment = comment
-    job.score = score
+    job.score = float(job.correct)
 
     if job.success:
         job.system_event(
