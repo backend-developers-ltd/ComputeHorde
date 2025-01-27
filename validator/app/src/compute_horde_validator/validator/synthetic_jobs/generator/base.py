@@ -1,4 +1,5 @@
 import abc
+import asyncio
 import uuid
 
 from compute_horde.base.docker import DockerRunOptionsPreset
@@ -32,6 +33,21 @@ class BaseSyntheticJobGenerator(abc.ABC):
 
     @abc.abstractmethod
     def docker_run_options_preset(self) -> DockerRunOptionsPreset: ...
+
+    async def streaming_preparation_timeout(self) -> float | None:
+        """For streaming jobs, the timeout between sending a JobRequest and receiving StreamingReadyRequest"""
+        return None
+
+    async def trigger_streaming_job_execution(
+        self,
+        job_uuid,
+        start_barrier: asyncio.Barrier,
+        server_public_key,
+        client_key_pair,
+        server_address,
+        server_port,
+    ):
+        raise NotImplementedError
 
     def docker_run_cmd(self) -> list[str]:
         return []

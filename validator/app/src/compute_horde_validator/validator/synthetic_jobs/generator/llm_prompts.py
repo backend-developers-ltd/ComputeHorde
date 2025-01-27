@@ -1,3 +1,6 @@
+import asyncio
+import logging
+import tempfile
 import uuid
 
 import httpx
@@ -16,6 +19,10 @@ from compute_horde_validator.validator.s3 import (
 )
 
 from .base import BaseSyntheticJobGenerator
+from ...dynamic_config import aget_config
+
+
+logger = logging.getLogger(__name__)
 
 
 class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
@@ -116,6 +123,11 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
     def volume_in_initial_req(self) -> bool:
         return True
 
+    async def streaming_preparation_timeout(self) -> float | None:
+        """For streaming jobs, the timeout between sending a JobRequest and receiving StreamingReadyRequest"""
+        # TODO: caching
+        return await aget_config("DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT")
+
 
 class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
     def __init__(
@@ -147,3 +159,59 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
 
     def job_description(self) -> str:
         return ("Streaming " if self.streaming else "") + "LLM prompts synthetic job"
+
+    async def trigger_streaming_job_execution(
+        self,
+        job_uuid,
+        start_barrier: asyncio.Barrier,
+        server_public_key,
+        client_key_pair,
+        server_address,
+        server_port,
+    ):
+        with tempfile.NamedTemporaryFile(delete=True, mode='w+') as executor_cert_file:
+            executor_cert_file.write(server_public_key)
+
+            logger.debug(f"Waiting for streaming start barrier for {job_uuid}")
+            await start_barrier.wait()
+            logger.debug(f"Passed streaming start barrier for {job_uuid}")
+
+        url = f"https://{server_address}:{server_port}/execute-job"
+        logger.debug("About to send seed to %s (job_uuid=%s)", url, job_uuid)
+
+        async with httpx.AsyncClient(
+            verify=executor_cert_file.name,
+            cert=client_key_pair,
+            timeout=30,  # TODO: parametrize
+        ) as client:
+            # send the seed to the executor to start the streaming job
+            try:
+                r = await client.post(url, json={"seed": self.seed}, headers={"Host": server_address})
+            except Exception as e:
+                msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
+                logger.debug(msg)
+            else:
+                try:
+                    r.raise_for_status()
+                except Exception as e:
+                    msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]}"
+                    logger.debug(msg)
+                else:
+                    logger.debug("Successfully sent seed to %s (job_uuid=%s), the result is: %s", url, job_uuid,
+                                 r.content[:100])
+
+            url = f"https://{server_address}:{server_port}/terminate"
+            logger.debug("About to terminate (job_uuid=%s)", job_uuid)
+            try:
+                r = await client.get(url, headers={"Host": server_address})
+            except Exception as e:
+                msg = f"Failed to terminate streaming job {job_uuid} on {url}: {e}"
+                logger.debug(msg)
+            else:
+                try:
+                    r.raise_for_status()
+                except Exception as e:
+                    msg = f"Failed to terminate streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]}"
+                    logger.debug(msg)
+                else:
+                    logger.debug("Successfully terminated %s (job_uuid=%s)", url, job_uuid, r.content[:100])

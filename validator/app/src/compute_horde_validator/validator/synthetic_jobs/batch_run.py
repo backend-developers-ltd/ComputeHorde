@@ -1239,7 +1239,6 @@ async def _send_initial_job_request(
 async def _send_job_request(
     ctx: BatchContext,
     start_barrier: asyncio.Barrier,
-    streaming_start_barrier: asyncio.Barrier | None,
     job_uuid: str,
 ) -> None:
     await start_barrier.wait()
@@ -1263,24 +1262,94 @@ async def _send_job_request(
 
     timeout = job.job_generator.timeout_seconds() + _JOB_RESPONSE_EXTRA_TIMEOUT
 
-    barrier_done = {"yes": False}
+    async with asyncio.timeout(timeout):
+        # send can block, so take a timestamp
+        # on both sides to detect long send times
+        job.job_before_sent_time = datetime.now(tz=UTC)
+        await client.send_check(request_json)
+        job.job_after_sent_time = datetime.now(tz=UTC)
+
+        await job.job_response_event.wait()
+
+
+async def _send_job_request_for_streaming(
+    ctx: BatchContext,
+    job_uuid: str,
+):
+    job = ctx.jobs[job_uuid]
+    client = ctx.clients[job.miner_hotkey]
+
+    request = V0JobRequest(
+        job_uuid=job.uuid,
+        executor_class=job.executor_class,
+        docker_image_name=job.job_generator.docker_image_name(),
+        docker_run_options_preset=job.job_generator.docker_run_options_preset(),
+        docker_run_cmd=job.job_generator.docker_run_cmd(),
+        raw_script=job.job_generator.raw_script(),
+        volume=job.volume if not job.job_generator.volume_in_initial_req() else None,
+        output_upload=job.output_upload,
+    )
+    request_json = request.model_dump_json()
+
+    job.job_before_sent_time = datetime.now(tz=UTC)
+    await client.send_check(request_json)
+    job.job_after_sent_time = datetime.now(tz=UTC)
+
     try:
-        async with asyncio.timeout(timeout):
-            # send can block, so take a timestamp
-            # on both sides to detect long send times
-            job.job_before_sent_time = datetime.now(tz=UTC)
-            await client.send_check(request_json)
-            job.job_after_sent_time = datetime.now(tz=UTC)
+        async with asyncio.timeout(await job.job_generator.streaming_preparation_timeout()):
+            await job.streaming_job_ready_response_event.wait()
+    except asyncio.TimeoutError:
+        logger.debug("Timeout waiting for StreamingJobReadyRequest for job_uuid=%s", job_uuid)
+        return
 
-            # if streaming job
-            if streaming_start_barrier is not None:
-                await _trigger_streaming_job(ctx, streaming_start_barrier, job_uuid, barrier_done)
+    logger.debug(f"Received streaming job ready response for {job_uuid}")
 
-            await job.job_response_event.wait()
-    except:
-        if not barrier_done["yes"]:
-            await streaming_start_barrier.wait()
-        raise
+    response = job.streaming_job_ready_response
+    if not isinstance(response, V0StreamingJobReadyRequest):
+        logger.warning(f"Bad job ready response for {job_uuid}: {response}")
+
+
+async def _multi_send_job_request_for_streaming(
+    ctx: BatchContext,
+    executor_ready_jobs: list[tuple[str, bool]],
+):
+    streaming_jobs = [job_uuid for job_uuid, is_streaming in executor_ready_jobs if is_streaming]
+    if not streaming_jobs:
+        logger.debug("No streaming jobs to run")
+        return
+    logger.debug("Sending job request for %s streaming jobs", len(streaming_jobs))
+
+    tasks = [
+        asyncio.create_task(
+            _send_job_request_for_streaming(
+                ctx, job_uuid
+            ),
+            name=f"{job_uuid}._send_job_request_for_streaming",
+        )
+        for job_uuid in streaming_jobs
+    ]
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    exceptions: list[ExceptionInfo] = []
+    for i, result in enumerate(results):
+        if isinstance(result, BaseException):
+            job_uuid = streaming_jobs[i][0]
+            job = ctx.jobs[job_uuid]
+            job.exception = result
+            job.exception_time = datetime.now(tz=UTC)
+            job.exception_stage = "_send_job_request_for_streaming"
+            exceptions.append(
+                ExceptionInfo(
+                    exception=job.exception,
+                    miner_hotkey=job.miner_hotkey,
+                    job_uuid=job.uuid,
+                    stage=job.exception_stage,
+                )
+            )
+        else:
+            assert result is None
+    _handle_exceptions(ctx, exceptions)
 
 
 async def _send_job_finished_receipts(ctx: BatchContext) -> None:
@@ -1496,86 +1565,6 @@ async def _multi_send_initial_job_request(ctx: BatchContext) -> None:
     _handle_exceptions(ctx, exceptions)
 
 
-async def _trigger_streaming_job(
-    ctx: BatchContext, streaming_start_barrier: asyncio.Barrier, job_uuid: str, barrier_done,
-) -> None:
-    job = ctx.jobs[job_uuid]
-    response = None
-    try:
-        timeout = await aget_config("DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT")
-        async with asyncio.timeout(timeout):
-            await job.streaming_job_ready_response_event.wait()
-            logger.debug(f"Received streaming job ready response for {job_uuid}")
-
-        response = job.streaming_job_ready_response
-        if not isinstance(response, V0StreamingJobReadyRequest):
-            logger.warning(f"Bad job ready response for {job_uuid}: {response}")
-            return
-
-        # Save job certificate received from executor
-        executor_cert_path = ctx.certs_basepath / "ssl" / f"executor_certificate_{job_uuid}.pem"
-        executor_cert_path.write_text(response.public_key)
-
-        # provide the synthetic job prompt seed to the streaming job
-        if isinstance(job.job_generator, LlmPromptsJobGenerator):
-            seed = job.job_generator.seed
-        else:
-            logger.error(f"Bad streaming job generator type: {job.job_generator}")
-            return
-
-    finally:
-        # !!! it's very important we wait on this barrier, no matter what happens above,
-        #     if we don't wait, other concurrent jobs will hang forever since they will
-        #     never pass this barrier
-        logger.debug(f"Waiting for streaming start barrier for {job_uuid}")
-        barrier_done["yes"] = True
-        await streaming_start_barrier.wait()
-        logger.debug(f"Passed streaming start barrier for {job_uuid}")
-
-    if not isinstance(response, V0StreamingJobReadyRequest):
-        return
-
-    url = f"https://{response.ip}:{response.port}/execute-job"
-    logger.debug("About to send seed to %s (job_uuid=%s)", url, job_uuid)
-
-    async with httpx.AsyncClient(
-        verify=str(executor_cert_path),
-        cert=ctx.own_certs,
-        timeout=job.job_generator.timeout_seconds(),
-    ) as client:
-        # send the seed to the executor to start the streaming job
-        try:
-            r = await client.post(url, json={"seed": seed}, headers={"Host": response.ip})
-        except Exception as e:
-            msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
-            logger.debug(msg)
-        else:
-            try:
-                r.raise_for_status()
-            except Exception as e:
-                msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]}"
-                logger.debug(msg)
-            else:
-                logger.debug("Successfully sent seed to %s (job_uuid=%s), the result is: %s", url, job_uuid,
-                             r.content[:100])
-
-        url = f"https://{response.ip}:{response.port}/terminate"
-        logger.debug("About to terminate (job_uuid=%s)", job_uuid)
-        try:
-            r = await client.get(url, headers={"Host": response.ip})
-        except Exception as e:
-            msg = f"Failed to terminate streaming job {job_uuid} on {url}: {e}"
-            logger.debug(msg)
-        else:
-            try:
-                r.raise_for_status()
-            except Exception as e:
-                msg = f"Failed to terminate streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]}"
-                logger.debug(msg)
-            else:
-                logger.debug("Successfully terminated %s (job_uuid=%s)", url, job_uuid, r.content[:100])
-
-
 async def _get_executor_ready_jobs(ctx: BatchContext) -> list[tuple[str, bool]]:
     streaming_classes = await get_streaming_job_executor_classes()
 
@@ -1592,33 +1581,44 @@ async def _get_executor_ready_jobs(ctx: BatchContext) -> list[tuple[str, bool]]:
     return executor_ready_jobs
 
 
-async def _multi_send_job_request(
+async def _trigger_job_execution(
     ctx: BatchContext, executor_ready_jobs: list[tuple[str, bool]]
 ) -> None:
     assert executor_ready_jobs
-    logger.info("Sending job requests for %d ready jobs", len(executor_ready_jobs))
+    streaming_jobs = [job_uuid for job_uuid, is_streaming in executor_ready_jobs if is_streaming]
+    buffered_jobs = [job_uuid for job_uuid, is_streaming in executor_ready_jobs if not is_streaming]
+
+    logger.info("Sending job requests for %d ready jobs - %s streaming and %s buffered",
+                len(executor_ready_jobs), len(streaming_jobs), len(buffered_jobs))
 
     start_barrier = asyncio.Barrier(len(executor_ready_jobs))
 
-    num_streaming_jobs = len(
-        [job_uuid for job_uuid, is_streaming in executor_ready_jobs if is_streaming]
-    )
-    if num_streaming_jobs > 0:
-        streaming_start_barrier = asyncio.Barrier(num_streaming_jobs)
-    else:
-        streaming_start_barrier = None
-
-    tasks = [
+    buffered_tasks = [
         asyncio.create_task(
             _send_job_request(
-                ctx, start_barrier, streaming_start_barrier if is_streaming else None, job_uuid
+                ctx, start_barrier, job_uuid
             ),
-            name=f"{job_uuid}._send_job_request",
+            name=f"{job_uuid}._trigger_job_execution",
         )
-        for job_uuid, is_streaming in executor_ready_jobs
+        for job_uuid in buffered_jobs
     ]
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    streaming_tasks = [
+        asyncio.create_task(
+            ctx.jobs[job_uuid].job_generator.trigger_streaming_job_execution(
+                job_uuid,
+                start_barrier,
+                ctx.jobs[job_uuid].streaming_job_ready_response.public_key,
+                ctx.own_certs,
+                ctx.jobs[job_uuid].streaming_job_ready_response.ip,
+                ctx.jobs[job_uuid].streaming_job_ready_response.port,
+            ),
+            name=f"{job_uuid}._trigger_job_execution",
+        )
+        for job_uuid in buffered_jobs
+    ]
+
+    results = await asyncio.gather(*(streaming_tasks + buffered_tasks), return_exceptions=True)
 
     exceptions: list[ExceptionInfo] = []
     for i, result in enumerate(results):
@@ -1627,7 +1627,7 @@ async def _multi_send_job_request(
             job = ctx.jobs[job_uuid]
             job.exception = result
             job.exception_time = datetime.now(tz=UTC)
-            job.exception_stage = "_send_job_request"
+            job.exception_stage = "_trigger_job_execution"
             exceptions.append(
                 ExceptionInfo(
                     exception=job.exception,
@@ -2163,9 +2163,14 @@ async def execute_synthetic_batch_run(
             await _multi_send_initial_job_request(ctx)
 
             executor_ready_jobs = await _get_executor_ready_jobs(ctx)
+
+            await ctx.checkpoint_system_event("_multi_send_job_request_for_streaming")
+            await _multi_send_job_request_for_streaming(ctx, executor_ready_jobs)
+
             if executor_ready_jobs:
-                await ctx.checkpoint_system_event("_multi_send_job_request")
-                await _multi_send_job_request(ctx, executor_ready_jobs)
+                await ctx.checkpoint_system_event("_trigger_job_execution")
+
+                await _trigger_job_execution(ctx, executor_ready_jobs)
 
                 # don't persist system events before this point, we want to minimize
                 # any extra interactions which could slow down job processing before
