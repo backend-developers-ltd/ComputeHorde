@@ -20,6 +20,12 @@ from compute_horde_executor.executor.management.commands.run_executor import Com
 
 payload = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
 
+
+def mock_download(local_dir, **kwargs):
+    with open(local_dir / "payload.txt", "w") as file:
+        file.write(payload)
+
+
 in_memory_output = io.BytesIO()
 zipf = zipfile.ZipFile(in_memory_output, "w")
 zipf.writestr("payload.txt", payload)
@@ -170,10 +176,6 @@ def test_huggingface_volume():
     repo_id = "huggingface/model"
     revision = "main"
 
-    def mock_download(local_dir, **kwargs):
-        with open(local_dir / "payload.txt", "w") as file:
-            file.write(payload)
-
     with patch(
         "compute_horde_executor.executor.management.commands.run_executor.snapshot_download",
         mock_download,
@@ -229,6 +231,87 @@ def test_huggingface_volume():
             "job_uuid": job_uuid,
         },
     ]
+
+
+def test_huggingface_volume_dataset():
+    # Arrange
+    repo_id = "huggingface/dataset"
+    revision = "main"
+    repo_type = "dataset"
+    file_patterns = [
+        "default/train/001/01JJK16EFPA7HWY3Z7MWZ4A6N9.parquet",
+        "default/train/003/01JJK12V8K1A65RD75NSWRGECK.parquet",
+        "default/train/003/01JJKJ49N4NBSS3YJG35XQ9XPB.parquet",
+        "default/train/004/01JJKB151AFCB1TGJDCXCTBZPW.parquet",
+        "default/train/004/01JJKCK5DPEH61SBY8MC2NXTRM.parquet",
+        "default/train/004/01JJKNQADWRJYBPKKZGJHSKRSC.parquet",
+        "default/train/005/01JJKQ9QGPBV5KW18ZSM3VBTSX.parquet",
+        "default/train/008/01JJK3G51DHYK1N0JHPJQS3GFR.parquet",
+    ]
+
+    with patch(
+        "compute_horde_executor.executor.management.commands.run_executor.snapshot_download",
+        side_effect=mock_download,
+    ) as mock_snapshot_download:
+        command = CommandTested(
+            iter(
+                [
+                    json.dumps(
+                        {
+                            "message_type": "V0PrepareJobRequest",
+                            "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "timeout_seconds": None,
+                            "volume_type": "huggingface_volume",
+                            "job_uuid": job_uuid,
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "message_type": "V0RunJobRequest",
+                            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "docker_run_cmd": [],
+                            "docker_run_options_preset": "none",
+                            "volume": {
+                                "volume_type": "huggingface_volume",
+                                "repo_id": repo_id,
+                                "repo_type": repo_type,
+                                "revision": revision,
+                                "allow_patterns": file_patterns,
+                            },
+                            "job_uuid": job_uuid,
+                        }
+                    ),
+                ]
+            )
+        )
+
+        # Act
+        command.handle()
+
+    # Assert
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FinishedRequest",
+            "docker_process_stdout": payload,
+            "docker_process_stderr": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+    ]
+
+    _, kwargs = mock_snapshot_download.call_args
+    assert kwargs["repo_id"] == repo_id
+    assert kwargs["revision"] == revision
+    assert kwargs["repo_type"] == repo_type
+    assert kwargs["allow_patterns"] == file_patterns
 
 
 def test_zip_url_volume(httpx_mock: HTTPXMock):
