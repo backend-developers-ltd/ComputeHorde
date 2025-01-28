@@ -71,6 +71,8 @@ def test(session):
         "-s",
         "-x",
         "-vv",
+        "--junitxml",
+        "test-report.xml",
         "tests",
         *session.posargs,
         env={"DJANGO_SETTINGS_MODULE": "tests.settings"},
