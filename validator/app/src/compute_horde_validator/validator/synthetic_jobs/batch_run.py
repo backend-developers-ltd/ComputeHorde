@@ -475,14 +475,14 @@ class Job:
                 and receipt.payload.miner_hotkey == self.miner_hotkey
                 and receipt.payload.job_uuid != self.uuid
                 and receipt.payload.validator_hotkey in self.ctx.allowed_validators_for_excuse
-                and receipt.validator_signature not in seen_receipts
+                and receipt.payload.job_uuid not in seen_receipts
                 and receipt.payload.executor_class == self.executor_class
                 and receipt.payload.timestamp < job_request_time
                 and job_request_time
                 < receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
                 and receipt.verify_validator_signature(throw=False)
             ):
-                seen_receipts.add(receipt.validator_signature)
+                seen_receipts.add(receipt.payload.job_uuid)
                 valid_receipts.append(receipt)
 
         return valid_receipts
