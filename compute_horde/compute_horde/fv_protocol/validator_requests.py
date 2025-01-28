@@ -26,7 +26,7 @@ class V0AuthenticationRequest(BaseModel, extra="forbid"):
 
     def verify_signature(self) -> bool:
         public_key_bytes = bytes.fromhex(self.public_key)
-        keypair = bittensor.Keypair(public_key=public_key_bytes, ss58_format=42)
+        keypair = bittensor.Keypair(public_key=self.public_key, ss58_format=42)
         # make mypy happy
         valid: bool = keypair.verify(public_key_bytes, self.signature)
         return valid
@@ -34,9 +34,7 @@ class V0AuthenticationRequest(BaseModel, extra="forbid"):
     @property
     def ss58_address(self) -> str:
         # make mypy happy
-        address: str = bittensor.Keypair(
-            public_key=bytes.fromhex(self.public_key), ss58_format=42
-        ).ss58_address
+        address: str = bittensor.Keypair(public_key=self.public_key, ss58_format=42).ss58_address
         return address
 
 
