@@ -323,6 +323,9 @@ class Job:
     correct: bool | None = None  # returned correct answer (even if outside time limit)
     success: bool = False  # returned correct answer within time limit
     excused: bool = False  # declined (reason=busy) but provided valid excuse
+    excused_with: list[Receipt] = field(
+        default_factory=list
+    )  # if excused, this is the list of valid excuse receipts.
     comment: str = "failed"
     score: float = 0
     # dancing bonus
@@ -384,7 +387,7 @@ class Job:
         subtype: SystemEvent.EventSubType,
         description: str,
         func: str | None = None,
-        data: dict[str, str] | None = None,
+        data: dict[str, Any] | None = None,
     ) -> SystemEvent | None:
         return self.ctx.system_event(
             type=type,
@@ -1385,11 +1388,14 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
             job.executor_response, V0ExecutorFailedRequest
         ):
             if job.excused:
+                # Excused job is a special case of a declined job.
                 logger.warning("%s excused", job.name)
+                excused_by = list(set(r.payload.validator_hotkey for r in job.excused_with))
                 job.system_event(
                     type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
                     subtype=SystemEvent.EventSubType.JOB_EXCUSED,
                     description="excused",
+                    data={"excused_by": excused_by},
                 )
             else:
                 logger.warning("%s declined", job.name)
@@ -1730,7 +1736,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
     if job.decline_reason() == V0DeclineJobRequest.Reason.BUSY:
         relevant_executor_count = ctx.executors[job.miner_hotkey][job.executor_class]
-        valid_excuse_receipts = len(job.get_valid_decline_excuse_receipts())
+        valid_excuse_receipts = job.get_valid_decline_excuse_receipts()
         accepted_jobs = sum(
             1
             for other_job in ctx.jobs.values()
@@ -1738,11 +1744,12 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
             and other_job.executor_class == job.executor_class
             and isinstance(other_job.accept_response, V0AcceptJobRequest)
         )
-        excuse_ok = accepted_jobs + valid_excuse_receipts >= relevant_executor_count
+        excuse_ok = accepted_jobs + len(valid_excuse_receipts) >= relevant_executor_count
 
         if excuse_ok:
             job.score = ctx.batch_config.excused_synthetic_job_score or 0
             job.excused = True
+            job.excused_with = valid_excuse_receipts
             job.comment = "excused (pass)"
             logger.info("%s %s", job.name, job.comment)
             return
@@ -1848,11 +1855,11 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
                 data={
                     "prompts_url": job.job_generator.s3_url,
                     "answers_url": job.job_generator.url_for_download(),
-                    "seed": job.job_generator.seed,  # type: ignore
-                    "known_answers": {  # type: ignore
+                    "seed": job.job_generator.seed,
+                    "known_answers": {
                         p.content: p.answer for p in job.job_generator.expected_prompts
                     },
-                    "job_response": job.job_response.model_dump(mode="json"),  # type: ignore
+                    "job_response": job.job_response.model_dump(mode="json"),
                 },
             )
 
