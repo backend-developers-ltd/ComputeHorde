@@ -624,7 +624,7 @@ wheels = [
 
 [[package]]
 name = "compute-horde"
-version = "0.0.18"
+version = "0.0.21"
 source = { editable = "../compute_horde" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
