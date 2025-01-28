@@ -48,3 +48,5 @@ TRUSTED_MINER_PORT = 1234
 
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 CONSTANCE_DATABASE_CACHE_BACKEND = None
+
+DEBUG_MINER_KEY = None
