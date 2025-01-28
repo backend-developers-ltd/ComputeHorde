@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from compute_horde_miner.miner.executor_manager import current
 from compute_horde_miner.miner.executor_manager.base import (
-    ExecutorFailedToStart,
+    AllExecutorsBusy,
     ExecutorUnavailable,
 )
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
@@ -359,7 +359,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await self.send(
                 miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json()
             )
-        except ExecutorUnavailable:
+        except AllExecutorsBusy:
             await self.group_discard(token)
             await job.adelete()
             self.pending_jobs.pop(msg.job_uuid)
@@ -390,7 +390,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                     receipts=[r.to_receipt() async for r in receipts],
                 ).model_dump_json()
             )
-        except ExecutorFailedToStart:
+        except ExecutorUnavailable:
             await self.group_discard(token)
             await job.adelete()
             self.pending_jobs.pop(msg.job_uuid)

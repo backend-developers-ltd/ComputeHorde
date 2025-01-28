@@ -13,15 +13,15 @@ from compute_horde.executor_class import (
 logger = logging.getLogger(__name__)
 
 
-class ExecutorUnavailable(Exception):
-    """
-    Thrown when no executor is available to handle a request.
-    """
-
+class AllExecutorsBusy(Exception):
     pass
 
 
-class ExecutorFailed(Exception):
+class ExecutorUnavailable(Exception):
+    """
+    Thrown when an executor that should be available, but for some reason fails to spin up.
+    """
+
     pass
 
 
@@ -52,7 +52,7 @@ class ExecutorClassPool:
         async with self._reservation_lock:
             if self.get_availability() == 0:
                 logger.warning("No executor available")
-                raise ExecutorUnavailable()
+                raise AllExecutorsBusy()
 
             try:
                 executor = await self.manager.start_new_executor(
@@ -60,7 +60,7 @@ class ExecutorClassPool:
                 )
             except Exception as exc:
                 logger.error("Error occurred", exc_info=exc)
-                raise ExecutorFailed()
+                raise ExecutorUnavailable()
 
             self._executors.append(ReservedExecutor(executor, timeout))
             return executor

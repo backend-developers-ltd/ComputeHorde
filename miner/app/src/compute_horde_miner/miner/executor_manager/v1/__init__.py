@@ -5,9 +5,9 @@ from compute_horde.executor_class import (
 )
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
+    AllExecutorsBusy,
     BaseExecutorManager,
     ExecutorClassPool,
-    ExecutorFailed,
     ExecutorUnavailable,
     ReservedExecutor,
 )
@@ -26,7 +26,7 @@ __all__ = [
     "BaseExecutorManager",
     "ExecutorClassPool",
     "ExecutorUnavailable",
-    "ExecutorFailed",
+    "AllExecutorsBusy",
     "ReservedExecutor",
     "DOCKER_STOP_TIMEOUT",
     "PULLING_TIMEOUT",
