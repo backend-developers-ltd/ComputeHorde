@@ -13,6 +13,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V2JobRequest,
     to_json_array,
 )
+from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest
 from compute_horde.signature import (
     SIGNERS_REGISTRY,
     VERIFIERS_REGISTRY,
@@ -200,3 +201,9 @@ def test_signed_fields__volumes_uploads():
         output_upload=uploads[0],
     )
     assert v2_job_request.get_signed_fields() == facilitator_signed_fields
+
+
+def test_authentication_request(keypair):
+    authentication_request = V0AuthenticationRequest.from_keypair(keypair)
+    assert authentication_request.verify_signature()
+    assert authentication_request.ss58_address == keypair.ss58_address
