@@ -389,7 +389,9 @@ async def flow_5(
     decline_message = miner_requests.V0DeclineJobRequest(
         job_uuid=str(job_uuid),
         reason=miner_requests.V0DeclineJobRequest.Reason.BUSY,
-        receipts=_build_invalid_excuse_receipts(active_valis[0], miner_wallet, job_uuid),
+        receipts=_build_invalid_excuse_receipts(
+            active_valis[0], miner_wallet, inactive_valis[0], job_uuid
+        ),
     ).model_dump_json()
     await transport.add_message(decline_message, send_before=1)
 
@@ -606,6 +608,31 @@ async def test_complex(
         miners[6].hotkey,
         job_uuids[6],
     )
+    excused_event = await SystemEvent.objects.aget(
+        type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+        subtype=SystemEvent.EventSubType.JOB_EXCUSED,
+        data__miner_hotkey=miners[6].hotkey,
+        data__job_uuid=str(job_uuids[6]),
+    )
+    assert excused_event.data["excused_by"] == [active_valis[0].ss58_address]
+
+    # Check batch telemetry counts
+    telemetry = await SystemEvent.objects.aget(
+        type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+        subtype=SystemEvent.EventSubType.SYNTHETIC_BATCH,
+    )
+    assert telemetry.data["counts"]["jobs"] == {
+        "total": 7,
+        "failed": 5,
+        "correct": 1,
+        "excused": 1,
+        "incorrect": 0,
+        "successful": 1,
+    }
+    assert (
+        telemetry.data["counts"]["jobs"]
+        == telemetry.data["counts"]["jobs:" + DEFAULT_EXECUTOR_CLASS]
+    )
 
     # TODO: Make this system event bound to the miner and the job
     assert (
@@ -620,6 +647,7 @@ async def test_complex(
 def _build_invalid_excuse_receipts(
     validator: bittensor.Keypair,
     miner: bittensor.Keypair,
+    bad_validator: bittensor.Keypair,
     job: uuid.UUID,
 ) -> list[Receipt]:
     good_payload = JobStartedReceiptPayload(
@@ -694,11 +722,10 @@ def _build_invalid_excuse_receipts(
     )
 
     # Inactive validator
-    inactive_validator = bittensor.Keypair.create_from_seed("8" * 64)
     receipts.append(
         Receipt(
             payload=good_payload,
-            validator_signature=sign_blob(inactive_validator, good_payload_blob)[:-6] + "foobar",
+            validator_signature=sign_blob(bad_validator, good_payload_blob),
             miner_signature=sign_blob(miner, good_payload_blob),
         )
     )

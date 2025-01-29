@@ -863,7 +863,7 @@ class BatchConfig:
 async def _init_context(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
-    validator_hotkeys: list[str],
+    active_validators: list[str],
     batch_id: int | None = None,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> BatchContext:
@@ -877,7 +877,7 @@ async def _init_context(
     # Generate validator certificate
     dir_path, public_key, certs = generate_certificate_at()
 
-    allowed_validators = set(validator_hotkeys)
+    allowed_validators = set(active_validators)
     # Vali should probably trust itself in any case.
     allowed_validators.add(own_keypair.ss58_address)
 
@@ -2223,7 +2223,7 @@ def _db_persist(ctx: BatchContext) -> None:
 async def execute_synthetic_batch_run(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
-    validator_hotkeys: list[str],
+    active_validators: list[str],
     batch_id: int | None = None,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> None:
@@ -2238,7 +2238,7 @@ async def execute_synthetic_batch_run(
     random.shuffle(serving_miners)
 
     ctx = await _init_context(
-        axons, serving_miners, validator_hotkeys, batch_id, create_miner_client
+        axons, serving_miners, active_validators, batch_id, create_miner_client
     )
     await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
