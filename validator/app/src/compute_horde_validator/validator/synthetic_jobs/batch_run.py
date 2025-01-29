@@ -1609,9 +1609,6 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     job.success = False
     job.comment = "failed"
 
-    # TODO: score properly rejected jobs and remove explicitly scoring
-    #       in compute_horde_validator.validator.scoring.score_batch
-
     if job.job_response is None:
         job.comment = "timed out"
         logger.info("%s %s", job.name, job.comment)
@@ -1850,7 +1847,6 @@ async def _score_jobs(ctx: BatchContext) -> None:
     # compute for each hotkey how many executors finished successfully
     for job in ctx.jobs.values():
         if job.success:
-            # TODO: also add properly rejected jobs?
             ctx.online_executor_count[job.miner_hotkey][job.executor_class] += 1
 
 
