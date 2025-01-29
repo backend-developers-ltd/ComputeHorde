@@ -99,7 +99,9 @@ async def test_receipt_is_saved(
             max_timeout=60,
             ttl=5,
         )
-        job_started_receipt_signature = sign_blob(validator_wallet.hotkey, job_started_receipt_payload.blob_for_signing())
+        job_started_receipt_signature = sign_blob(
+            validator_wallet.hotkey, job_started_receipt_payload.blob_for_signing()
+        )
         await fake_validator_channel.send_to(
             V0InitialJobRequest(
                 job_uuid=job_uuid,
@@ -125,7 +127,9 @@ async def test_receipt_is_saved(
         await fake_validator_channel.send_to(
             V0JobAcceptedReceiptRequest(
                 payload=job_accepted_receipt_payload,
-                signature=sign_blob(validator_wallet.hotkey, job_accepted_receipt_payload.blob_for_signing()),
+                signature=sign_blob(
+                    validator_wallet.hotkey, job_accepted_receipt_payload.blob_for_signing()
+                ),
             ).model_dump_json()
         )
 
@@ -141,7 +145,9 @@ async def test_receipt_is_saved(
         await fake_validator_channel.send_to(
             V0JobFinishedReceiptRequest(
                 payload=job_finished_receipt_payload,
-                signature=sign_blob(validator_wallet.hotkey, job_finished_receipt_payload.blob_for_signing()),
+                signature=sign_blob(
+                    validator_wallet.hotkey, job_finished_receipt_payload.blob_for_signing()
+                ),
             ).model_dump_json()
         )
 
