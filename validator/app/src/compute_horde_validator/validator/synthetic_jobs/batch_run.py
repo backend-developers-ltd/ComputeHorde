@@ -465,7 +465,7 @@ class Job:
         # We need time leeway so that if the miner receives an organic job around the same time as the synthetic, a slight
         # time difference caused by clock desync and network latencies doesn't cause the miner to lose score when they
         # accept an organic job and get a synthetic job request a couple of seconds "from the past"
-        leeway = timedelta(seconds=2)  # TODO: Dynamic config
+        leeway = timedelta(seconds=2)
 
         # Reject duplicate receipts - use the receipts' validator signature as unique ID
         seen_receipts: set[str] = set()
@@ -954,13 +954,12 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
     assert job.job_started_receipt_payload is None
     assert job.job_started_receipt_signature is None
 
-    job_timeout = job.job_generator.timeout_seconds()
-    # TODO: Get this from dynamic config
-    spinup_leeway = 5
+    job_timeout_seconds = job.job_generator.timeout_seconds()
+    spinup_leeway_seconds = 5
     ttl_min = 5
     ttl_max = 60 * 5
 
-    ttl = job.get_spin_up_time() + job_timeout + spinup_leeway
+    ttl = job.get_spin_up_time() + job_timeout_seconds + spinup_leeway_seconds
     ttl_clamped = max(ttl_min, min(ttl_max, ttl))
 
     payload = JobStartedReceiptPayload(
@@ -969,7 +968,7 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
         validator_hotkey=ctx.own_keypair.ss58_address,
         timestamp=datetime.now(tz=UTC),
         executor_class=ExecutorClass(job.executor_class),
-        max_timeout=job_timeout,
+        max_timeout=job_timeout_seconds,
         is_organic=False,
         ttl=ttl_clamped,
     )
