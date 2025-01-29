@@ -84,6 +84,7 @@ class ExecutorClassPool:
             if status is not None:
                 return reserved_executor, True
             elif reserved_executor.is_expired():
+                logger.warning("Executor timed out, killing it.")
                 await self.manager.kill_executor(reserved_executor.executor)
                 return reserved_executor, True
             return reserved_executor, False

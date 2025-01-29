@@ -66,10 +66,10 @@ from compute_horde_executor.executor.output_uploader import OutputUploader, Outp
 logger = logging.getLogger(__name__)
 
 CVE_2022_0492_TIMEOUT_SECONDS = 120
-MAX_RESULT_SIZE_IN_RESPONSE = 1000
-TRUNCATED_RESPONSE_PREFIX_LEN = 100
-TRUNCATED_RESPONSE_SUFFIX_LEN = 100
-INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 300
+MAX_RESULT_SIZE_IN_RESPONSE = 2000
+TRUNCATED_RESPONSE_PREFIX_LEN = 1000
+TRUNCATED_RESPONSE_SUFFIX_LEN = 1000
+INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 60 * 15
 CVE_2022_0492_IMAGE = (
     "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
 )
@@ -386,14 +386,21 @@ class DownloadManager:
         self.max_retries = max_retries
 
     def download_from_huggingface(
-        self, relative_path: pathlib.Path, repo_id: str, revision: str | None
+        self,
+        relative_path: pathlib.Path,
+        repo_id: str,
+        revision: str | None,
+        repo_type: str | None = None,
+        allow_patterns: str | list[str] | None = None,
     ):
         try:
             snapshot_download(
                 repo_id=repo_id,
+                repo_type=repo_type,
                 revision=revision,
                 token=settings.HF_ACCESS_TOKEN,
                 local_dir=relative_path,
+                allow_patterns=allow_patterns,
             )
         except Exception as e:
             logger.error(f"Failed to download model from Hugging Face: {e}")
@@ -486,7 +493,10 @@ class JobRunner:
         self.volume_mount_dir.mkdir(exist_ok=True)
         self.output_volume_mount_dir.mkdir(exist_ok=True)
 
+        logger.info("preparing in progress")
+
         if self.initial_job_request.base_docker_image_name is not None:
+            logger.info("docker pull %s", self.initial_job_request.base_docker_image_name)
             process = await asyncio.create_subprocess_exec(
                 "docker",
                 "pull",
@@ -495,6 +505,9 @@ class JobRunner:
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await process.communicate()
+
+            logger.info(stderr.decode())
+            logger.info(stdout.decode())
 
             if process.returncode != 0:
                 msg = (
@@ -785,7 +798,11 @@ class JobRunner:
             if volume.relative_path:
                 extraction_path /= volume.relative_path
             await sync_to_async(self.download_manager.download_from_huggingface)(
-                extraction_path, volume.repo_id, volume.revision
+                relative_path=extraction_path,
+                repo_id=volume.repo_id,
+                revision=volume.revision,
+                repo_type=volume.repo_type,
+                allow_patterns=volume.allow_patterns,
             )
 
     async def _unpack_single_file_volume(self, volume: SingleFileVolume):
@@ -898,6 +915,7 @@ class Command(BaseCommand):
                 try:
                     await job_runner.prepare()
                 except JobError:
+                    logger.exception("Prepare error")
                     await miner_client.send_failed_to_prepare()
                     return
 

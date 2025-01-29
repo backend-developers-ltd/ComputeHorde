@@ -1486,13 +1486,17 @@ async def _trigger_streaming_job(
     ctx: BatchContext, streaming_start_barrier: asyncio.Barrier, job_uuid: str
 ) -> None:
     job = ctx.jobs[job_uuid]
-    timeout = await aget_config("DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT")
-    async with asyncio.timeout(timeout):
-        await job.streaming_job_ready_response_event.wait()
-        logger.debug(f"Received streaming job ready response for {job_uuid}")
+    response = None
+    try:
+        timeout = await aget_config("DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT")
+        async with asyncio.timeout(timeout):
+            await job.streaming_job_ready_response_event.wait()
+            logger.debug(f"Received streaming job ready response for {job_uuid}")
 
-        response = job.streaming_job_ready_response
-        if isinstance(response, V0StreamingJobReadyRequest):
+            response = job.streaming_job_ready_response
+            if not isinstance(response, V0StreamingJobReadyRequest):
+                return
+
             # Save job certificate received from executor
             executor_cert_path = ctx.certs_basepath / "ssl" / f"executor_certificate_{job_uuid}.pem"
             executor_cert_path.write_text(response.public_key)
@@ -1504,47 +1508,64 @@ async def _trigger_streaming_job(
                 logger.error(f"Bad streaming job generator type: {job.job_generator}")
                 return
 
-            # wait to trigger all streaming jobs at the same time
-            await streaming_start_barrier.wait()
+    finally:
+        # !!! it's very important we wait on this barrier, no matter what happens above,
+        #     if we don't wait, other concurrent jobs will hang forever since they will
+        #     never pass this barrier
+        await streaming_start_barrier.wait()
 
-            async with httpx.AsyncClient(
-                verify=str(executor_cert_path),
-                cert=ctx.own_certs,
-                timeout=job.job_generator.timeout_seconds(),
-            ) as client:
-                # send the seed to the executor to start the streaming job
-                url = f"https://{response.ip}:{response.port}/execute-job"
-                try:
-                    r = await client.post(url, json={"seed": seed}, headers={"Host": response.ip})
-                    r.raise_for_status()
-                except Exception as e:
-                    msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
-                    logger.warning(msg)
-                    raise Exception(msg)
-                finally:
-                    # schedule the job to terminate
-                    url = f"https://{response.ip}:{response.port}/terminate"
-                    r = await client.get(url, headers={"Host": response.ip})
-                    if r.status_code != 200:
-                        logger.warning(f"Failed to terminate streaming job {job_uuid} on {url}")
+    if not isinstance(response, V0StreamingJobReadyRequest):
+        return
+
+    async with httpx.AsyncClient(
+        verify=str(executor_cert_path),
+        cert=ctx.own_certs,
+        timeout=job.job_generator.timeout_seconds(),
+    ) as client:
+        # send the seed to the executor to start the streaming job
+        url = f"https://{response.ip}:{response.port}/execute-job"
+        try:
+            r = await client.post(url, json={"seed": seed}, headers={"Host": response.ip})
+            r.raise_for_status()
+        except Exception as e:
+            msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
+            logger.warning(msg)
+            raise Exception(msg)
+        finally:
+            # schedule the job to terminate
+            url = f"https://{response.ip}:{response.port}/terminate"
+            r = await client.get(url, headers={"Host": response.ip})
+            if r.status_code != 200:
+                logger.warning(f"Failed to terminate streaming job {job_uuid} on {url}")
 
 
-async def _multi_send_job_request(ctx: BatchContext) -> None:
+async def _get_executor_ready_jobs(ctx: BatchContext) -> list[tuple[str, bool]]:
     streaming_classes = await get_streaming_job_executor_classes()
 
     executor_ready_jobs = [
         (job.uuid, job.executor_class in streaming_classes)
         for job in ctx.jobs.values()
-        if isinstance(job.executor_response, V0ExecutorReadyRequest)
+        if isinstance(job.accept_response, V0AcceptJobRequest)
+        and isinstance(job.executor_response, V0ExecutorReadyRequest)
         # occasionally we can get a job response (V0JobFailedRequest | V0JobFinishedRequest)
         # before sending the actual job request (V0JobRequest), for example because
         # the executor decide to abort the job before the details were sent
         and job.job_response is None
     ]
+    return executor_ready_jobs
+
+
+async def _multi_send_job_request(
+    ctx: BatchContext, executor_ready_jobs: list[tuple[str, bool]]
+) -> None:
+    assert executor_ready_jobs
     logger.info("Sending job requests for %d ready jobs", len(executor_ready_jobs))
+
     start_barrier = asyncio.Barrier(len(executor_ready_jobs))
 
-    num_streaming_jobs = len([x for x in executor_ready_jobs if x[1]])
+    num_streaming_jobs = len(
+        [job_uuid for job_uuid, is_streaming in executor_ready_jobs if is_streaming]
+    )
     if num_streaming_jobs > 0:
         streaming_start_barrier = asyncio.Barrier(num_streaming_jobs)
     else:
@@ -1978,7 +1999,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     ttl=started_payload.ttl,
                 )
             )
-    JobStartedReceipt.objects.bulk_create(job_started_receipts)
+    JobStartedReceipt.objects.bulk_create(job_started_receipts, ignore_conflicts=True)
 
     job_accepted_receipts: list[JobAcceptedReceipt] = []
     for job in ctx.jobs.values():
@@ -1995,7 +2016,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     ttl=accepted_payload.ttl,
                 )
             )
-    JobAcceptedReceipt.objects.bulk_create(job_accepted_receipts)
+    JobAcceptedReceipt.objects.bulk_create(job_accepted_receipts, ignore_conflicts=True)
 
     job_finished_receipts: list[JobFinishedReceipt] = []
     for job in ctx.jobs.values():
@@ -2013,7 +2034,7 @@ def _db_persist(ctx: BatchContext) -> None:
                     score_str=finished_payload.score_str,
                 )
             )
-    JobFinishedReceipt.objects.bulk_create(job_finished_receipts)
+    JobFinishedReceipt.objects.bulk_create(job_finished_receipts, ignore_conflicts=True)
 
     duration = time.time() - start_time
     logger.info("Persisted to database in %.2f seconds", duration)
@@ -2058,11 +2079,10 @@ async def execute_synthetic_batch_run(
             await ctx.checkpoint_system_event("_multi_send_initial_job_request")
             await _multi_send_initial_job_request(ctx)
 
-            if any(
-                isinstance(job.accept_response, V0AcceptJobRequest) for job in ctx.jobs.values()
-            ):
+            executor_ready_jobs = await _get_executor_ready_jobs(ctx)
+            if executor_ready_jobs:
                 await ctx.checkpoint_system_event("_multi_send_job_request")
-                await _multi_send_job_request(ctx)
+                await _multi_send_job_request(ctx, executor_ready_jobs)
 
                 # don't persist system events before this point, we want to minimize
                 # any extra interactions which could slow down job processing before

@@ -135,13 +135,12 @@ creating a flexible and fair reward structure.
 
 ## Info pack
 
-- ComputeHorde mainnet UID: 12
-- ComputeHorde testnet UID: 174
+- ComputeHorde mainnet netuid: 12
+- ComputeHorde testnet netuid: 174
 - [ComputeHorde channel](https://discordapp.com/channels/799672011265015819/1201941624243109888) within Bittensor discord
 - Information dashboards:
   - [Subnet 12 health monitor](https://grafana.bactensor.io/d/subnet/metagraph-subnet?var-subnet=12)
   - [Subnet 12 TaoStats](https://taostats.io/subnets/12) 
-  - [Subnet 12 TaoHub](https://taohub.ai/subnets/12)
   - [Subnet 12 TaoMarketCap](https://taomarketcap.com/subnets/12)
 
 # Running ComputeHorde components
@@ -281,7 +280,7 @@ To perform a hard restart of all ComputeHorde Docker containers, run the followi
 
 ```bash
 docker compose down --remove-orphans
-docker compose up
+docker compose up -d
 ```
 
 Afterwards, use `docker ps` to verify that the containers have started successfully.

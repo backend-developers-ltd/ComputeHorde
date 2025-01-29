@@ -68,9 +68,7 @@ EXECUTOR_CLASS = {
 }
 
 
-# we split 144min 2 tempos window to 24 validators - this is total time after reservation,
-# validator may wait spin_up time of executor class to synchronize running synthetic batch
-MAX_EXECUTOR_TIMEOUT = timedelta(minutes=6).total_seconds()
+MAX_EXECUTOR_TIMEOUT = timedelta(minutes=20).total_seconds()
 
 DEFAULT_EXECUTOR_CLASS = ExecutorClass.spin_up_4min__gpu_24gb
 DEFAULT_LLM_EXECUTOR_CLASS = ExecutorClass.always_on__llm__a6000
