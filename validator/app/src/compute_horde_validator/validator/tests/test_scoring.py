@@ -2,10 +2,12 @@ from datetime import timedelta
 
 import pytest
 from django.utils import timezone
+from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
+    MinerManifest,
     OrganicJob,
     SyntheticJob,
     SyntheticJobBatch,
@@ -255,3 +257,85 @@ def test_organic_jobs_scored():
     assert scores.get("hotkey1", 0) > 0
     assert scores.get("hotkey2", 0) > 0
     assert scores.get("hotkey2", 0) > scores.get("hotkey1", 0)
+
+
+def create_batch(n: int, cycle: Cycle) -> SyntheticJobBatch:
+    """create a batch with n completed jobs"""
+    miner, _ = Miner.objects.get_or_create(hotkey="miner_hotkey")
+    batch = SyntheticJobBatch.objects.create(
+        accepting_results_until=now(),
+        cycle=cycle,
+        scored=True,
+    )
+
+    MinerManifest.objects.create(
+        miner=miner,
+        batch=batch,
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        executor_count=n,
+        online_executor_count=n,
+    )
+
+    for _ in range(n):
+        SyntheticJob.objects.create(
+            miner=miner,
+            miner_address="127.0.0.1",
+            miner_address_ip_version=4,
+            miner_port=8080,
+            status=SyntheticJob.Status.COMPLETED,
+            batch=batch,
+            executor_class=ExecutorClass.always_on__llm__a6000,
+            score=1,
+        )
+
+    return batch
+
+
+@pytest.mark.override_config(
+    DYNAMIC_EXECUTOR_CLASS_WEIGHTS="always_on.llm.a6000=100",
+    DYNAMIC_MANIFEST_SCORE_MULTIPLIER=1.5,
+    DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=2.0,
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.parametrize(
+    ("prev_online_executor_count", "expected_multiplier"),
+    [
+        (None, 1.5),
+        (5, 1.5),
+        (7, 1.0),
+        (15, 1.0),
+        (20, 1.5),
+    ],
+)
+def test_manifest_dance_incentives(
+    prev_online_executor_count,
+    expected_multiplier,
+    override_weights_version_v2,
+):
+    if prev_online_executor_count is not None:
+        _prev_batch = create_batch(
+            prev_online_executor_count, Cycle.objects.create(start=708, stop=1430)
+        )
+
+    curr_batch = create_batch(10, Cycle.objects.create(start=1430, stop=2152))
+
+    scores = score_batches([curr_batch])
+    assert "miner_hotkey" in scores
+    assert scores["miner_hotkey"] - 100 * expected_multiplier < 0.0001
+
+
+@pytest.mark.override_config(
+    DYNAMIC_EXECUTOR_CLASS_WEIGHTS="always_on.llm.a6000=100",
+    DYNAMIC_MANIFEST_SCORE_MULTIPLIER=1.5,
+    DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=2.0,
+)
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_manifest_dance_incentives_disabled_on_v1(override_weights_version_v1):
+    _prev_batch = create_batch(1, Cycle.objects.create(start=708, stop=1430))
+    curr_batch = create_batch(5, Cycle.objects.create(start=1430, stop=2152))
+
+    scores = score_batches([curr_batch])
+    assert "miner_hotkey" in scores
+
+    # there should be no bonus
+    assert scores["miner_hotkey"] - 100 < 0.0001
