@@ -85,7 +85,7 @@ def test_main_loop():
             "1000",
         ])
     for container_name in [job_container_name, nginx_container_name]:
-        output = subprocess.check_output(['docker', 'ps', '--filter', f'name={container_name}'])
+        output = subprocess.check_output(["docker", "ps", "--filter", f"name={container_name}"])
         assert container_name.encode() in output
 
     command = CommandTested(
