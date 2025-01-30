@@ -4,6 +4,7 @@ import json
 import logging
 import random
 import string
+import subprocess
 import uuid
 import zipfile
 from functools import partial
@@ -70,6 +71,25 @@ class CommandTested(Command):
 
 
 def test_main_loop():
+    job_container_name = f"ch-{uuid.uuid4()}-job"
+    nginx_container_name = f"ch-{uuid.uuid4()}-nginx"
+    for container_name in [job_container_name, nginx_container_name]:
+        subprocess.check_output(
+            [
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                container_name,
+                "busybox",
+                "sleep",
+                "1000",
+            ]
+        )
+    for container_name in [job_container_name, nginx_container_name]:
+        output = subprocess.check_output(["docker", "ps", "--filter", f"name={container_name}"])
+        assert container_name.encode() in output
+
     command = CommandTested(
         iter(
             [
@@ -116,6 +136,10 @@ def test_main_loop():
             "job_uuid": job_uuid,
         },
     ]
+
+    for container_name in [job_container_name, nginx_container_name]:
+        output = subprocess.check_output(["docker", "ps", "--filter", f"name={container_name}"])
+        assert container_name.encode() not in output
 
 
 def test_main_loop_streaming_job():

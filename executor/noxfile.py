@@ -159,7 +159,7 @@ def test(session):
             "-x",
             "-vv",
             "-n",
-            "auto",
+            "1",
             "--junitxml",
             "test-report.xml",
             "compute_horde_executor",
