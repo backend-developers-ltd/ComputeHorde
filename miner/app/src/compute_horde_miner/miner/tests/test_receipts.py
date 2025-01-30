@@ -17,16 +17,13 @@ from compute_horde.mv_protocol.validator_requests import (
 )
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobAcceptedReceiptPayload
+from compute_horde.utils import sign_blob
 from django.utils import timezone
 from pytest_mock import MockerFixture
 
 from compute_horde_miner.miner.models import Validator
 from compute_horde_miner.miner.tests.executor_manager import fake_executor
 from compute_horde_miner.miner.tests.validator import fake_validator
-
-
-def _sign(msg, key: bittensor.Keypair):
-    return f"0x{key.sign(msg.blob_for_signing()).hex()}"
 
 
 @pytest.fixture
@@ -82,7 +79,7 @@ async def test_receipt_is_saved(
         await fake_validator_channel.send_to(
             V0AuthenticateRequest(
                 payload=auth_payload,
-                signature=_sign(auth_payload, validator_wallet.hotkey),
+                signature=sign_blob(validator_wallet.hotkey, auth_payload.blob_for_signing()),
             ).model_dump_json()
         )
         response = await fake_validator_channel.receive_json_from()
@@ -102,7 +99,9 @@ async def test_receipt_is_saved(
             max_timeout=60,
             ttl=5,
         )
-        job_started_receipt_signature = _sign(job_started_receipt_payload, validator_wallet.hotkey)
+        job_started_receipt_signature = sign_blob(
+            validator_wallet.hotkey, job_started_receipt_payload.blob_for_signing()
+        )
         await fake_validator_channel.send_to(
             V0InitialJobRequest(
                 job_uuid=job_uuid,
@@ -127,9 +126,10 @@ async def test_receipt_is_saved(
         )
         await fake_validator_channel.send_to(
             V0JobAcceptedReceiptRequest(
-                job_uuid=job_uuid,
                 payload=job_accepted_receipt_payload,
-                signature=_sign(job_accepted_receipt_payload, validator_wallet.hotkey),
+                signature=sign_blob(
+                    validator_wallet.hotkey, job_accepted_receipt_payload.blob_for_signing()
+                ),
             ).model_dump_json()
         )
 
@@ -144,9 +144,10 @@ async def test_receipt_is_saved(
         )
         await fake_validator_channel.send_to(
             V0JobFinishedReceiptRequest(
-                job_uuid=job_uuid,
                 payload=job_finished_receipt_payload,
-                signature=_sign(job_finished_receipt_payload, validator_wallet.hotkey),
+                signature=sign_blob(
+                    validator_wallet.hotkey, job_finished_receipt_payload.blob_for_signing()
+                ),
             ).model_dump_json()
         )
 

@@ -281,7 +281,7 @@ def specs_msg():
 
 
 class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
-    async def serve(self, ws, path):
+    async def serve(self, ws):
         response = await asyncio.wait_for(ws.recv(), timeout=5)
         try:
             V0AuthenticationRequest.model_validate_json(response)

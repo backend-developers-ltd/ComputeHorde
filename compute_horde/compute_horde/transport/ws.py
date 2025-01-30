@@ -44,7 +44,7 @@ class WSTransport(AbstractTransport):
         url: str,
         *,
         max_retries: int = 5,
-        base_retry_delay: int = 1,
+        base_retry_delay: float = 1,
         retry_jitter: float = 1,
     ):
         super().__init__(name)
@@ -53,10 +53,10 @@ class WSTransport(AbstractTransport):
         self.retry_jitter = retry_jitter
         self.max_retries = max_retries
         self.connect_lock = asyncio.Lock()
-        self._ws: websockets.WebSocketClientProtocol | None = None
+        self._ws: websockets.ClientConnection | None = None
 
     @property
-    def ws(self) -> websockets.WebSocketClientProtocol:
+    def ws(self) -> websockets.ClientConnection:
         if self._ws is None:
             raise RuntimeError("WebSocket connection has not been established")
         return self._ws
@@ -70,11 +70,11 @@ class WSTransport(AbstractTransport):
 
     async def stop(self) -> None:
         async with self.connect_lock:
-            if self._ws and self._ws.open:
+            if self._ws and self._ws.state is websockets.State.OPEN:
                 await self._ws.close()
 
     async def connect(self):
-        if self._ws and self._ws.open:
+        if self._ws and self._ws.state is websockets.State.OPEN:
             return
 
         loop = asyncio.get_running_loop()

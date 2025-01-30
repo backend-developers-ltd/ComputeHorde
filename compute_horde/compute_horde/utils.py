@@ -23,22 +23,26 @@ class ValidatorListError(Exception):
 
 
 def get_validators(
-    netuid=12, network="finney", block: int | None = None
+    metagraph: bittensor.Metagraph | None = None,
+    netuid=12,
+    network="finney",
+    block: int | None = None,
 ) -> list[bittensor.NeuronInfo]:
     """
     Validators are top 24 neurons in terms of stake, only taking into account those that have at least 1000
     and forcibly including BAC_VALIDATOR_SS58_ADDRESS.
     The result is sorted.
     """
-    try:
-        subtensor = bittensor.subtensor(network=network)
-    except Exception as ex:
-        raise ValidatorListError(ex) from ex
+    if metagraph is None:
+        try:
+            subtensor = bittensor.subtensor(network=network)
+        except Exception as ex:
+            raise ValidatorListError(ex) from ex
 
-    try:
-        metagraph = subtensor.metagraph(netuid, block=block)
-    except SubstrateRequestException as ex:
-        raise ValidatorListError(ex) from ex
+        try:
+            metagraph = subtensor.metagraph(netuid, block=block)
+        except SubstrateRequestException as ex:
+            raise ValidatorListError(ex) from ex
 
     neurons = [
         n

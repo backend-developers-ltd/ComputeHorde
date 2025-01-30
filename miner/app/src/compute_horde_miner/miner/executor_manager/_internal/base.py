@@ -2,7 +2,6 @@ import abc
 import asyncio
 import datetime as dt
 import logging
-import time
 from typing import Any
 
 from compute_horde.executor_class import (
@@ -14,7 +13,15 @@ from compute_horde.executor_class import (
 logger = logging.getLogger(__name__)
 
 
+class AllExecutorsBusy(Exception):
+    pass
+
+
 class ExecutorUnavailable(Exception):
+    """
+    Thrown when an executor that should be available, but for some reason fails to spin up.
+    """
+
     pass
 
 
@@ -31,7 +38,6 @@ class ReservedExecutor:
 
 
 class ExecutorClassPool:
-    RESERVATION_TIMEOUT = MAX_EXECUTOR_TIMEOUT
     POOL_CLEANUP_PERIOD = 10
 
     def __init__(self, manager, executor_class: ExecutorClass, executor_count: int):
@@ -43,25 +49,21 @@ class ExecutorClassPool:
         self._pool_cleanup_task = asyncio.create_task(self._pool_cleanup_loop())
 
     async def reserve_executor(self, token, timeout):
-        start = time.time()
         async with self._reservation_lock:
-            while True:
-                if self.get_availability() == 0:
-                    if time.time() - start < self.RESERVATION_TIMEOUT:
-                        await asyncio.sleep(1)
-                    else:
-                        logger.warning("Error unavailable after timeout")
-                        raise ExecutorUnavailable()
-                else:
-                    try:
-                        executor = await self.manager.start_new_executor(
-                            token, self.executor_class, timeout
-                        )
-                    except Exception as exc:
-                        logger.error("Error occurred", exc_info=exc)
-                        raise ExecutorUnavailable()
-                    self._executors.append(ReservedExecutor(executor, timeout))
-                    return executor
+            if self.get_availability() == 0:
+                logger.warning("No executor available")
+                raise AllExecutorsBusy()
+
+            try:
+                executor = await self.manager.start_new_executor(
+                    token, self.executor_class, timeout
+                )
+            except Exception as exc:
+                logger.error("Error occurred", exc_info=exc)
+                raise ExecutorUnavailable()
+
+            self._executors.append(ReservedExecutor(executor, timeout))
+            return executor
 
     def set_count(self, executor_count):
         self._count = executor_count
@@ -163,7 +165,5 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
 
     def get_total_timeout(self, executor_class, job_timeout):
         spec = EXECUTOR_CLASS.get(executor_class)
-        spin_up_time = 0
-        if spec is not None and spec.spin_up_time is not None:
-            spin_up_time = spec.spin_up_time
+        spin_up_time = spec.spin_up_time if spec else 0
         return spin_up_time + job_timeout + self.EXECUTOR_TIMEOUT_LEEWAY

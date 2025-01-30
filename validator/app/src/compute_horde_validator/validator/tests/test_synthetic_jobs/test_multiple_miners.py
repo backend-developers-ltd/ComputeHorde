@@ -2,14 +2,28 @@ import asyncio
 import re
 import uuid
 from collections.abc import Callable
+from datetime import timedelta
 from unittest.mock import patch
 
 import bittensor
 import pytest
 import pytest_asyncio
-from compute_horde.executor_class import DEFAULT_LLM_EXECUTOR_CLASS
+from compute_horde.executor_class import (
+    DEFAULT_EXECUTOR_CLASS,
+    DEFAULT_LLM_EXECUTOR_CLASS,
+    ExecutorClass,
+)
 from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.mv_protocol import miner_requests
+from compute_horde.receipts import Receipt
+from compute_horde.receipts.schemas import (
+    JobAcceptedReceiptPayload,
+    JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+)
+from compute_horde.utils import sign_blob
+from constance.test import override_config
+from django.utils import timezone
 from pytest_httpx import HTTPXMock
 from pytest_mock import MockerFixture
 
@@ -34,10 +48,12 @@ pytestmark = [
     pytest.mark.django_db(databases=["default", "default_alias"], transaction=True),
 ]
 
+MOCK_EXCUSED_SCORE = 1.337
+
 
 @pytest.fixture
 def num_miners():
-    return 5
+    return 8
 
 
 @pytest.fixture
@@ -46,8 +62,31 @@ def job_uuids(num_miners: int):
 
 
 @pytest.fixture
-def miner_hotkeys(num_miners: int):
-    return [f"hotkey_{i}" for i in range(num_miners)]
+def miner_wallets(num_miners: int):
+    return [bittensor.Keypair.create_from_seed(f"abc{i}".ljust(64, "f")) for i in range(num_miners)]
+
+
+@pytest.fixture
+def miner_hotkeys(miner_wallets: list[bittensor.Keypair]):
+    return [k.ss58_address for k in miner_wallets]
+
+
+@pytest.fixture
+def active_valis() -> list[bittensor.Keypair]:
+    return [
+        bittensor.Keypair.create_from_seed("a" * 64),
+        bittensor.Keypair.create_from_seed("b" * 64),
+        bittensor.Keypair.create_from_seed("c" * 64),
+    ]
+
+
+@pytest.fixture
+def inactive_valis() -> list[bittensor.Keypair]:
+    return [
+        bittensor.Keypair.create_from_seed("d" * 64),
+        bittensor.Keypair.create_from_seed("e" * 64),
+        bittensor.Keypair.create_from_seed("f" * 64),
+    ]
 
 
 @pytest_asyncio.fixture
@@ -123,6 +162,7 @@ async def test_all_succeed(
         execute_synthetic_batch_run(
             axon_dict,
             miners,
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -190,6 +230,7 @@ async def test_all_streaming_succeed(
         execute_synthetic_batch_run(
             axon_dict,
             miners,
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -291,7 +332,7 @@ async def flow_3(
     transports: list[MinerSimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
 ):
     """
-    Job declined
+    Job declined - no reason
     """
 
     index = 3
@@ -305,10 +346,113 @@ async def flow_3(
 
 
 @pytest_asyncio.fixture
-async def flow_4():
+async def flow_4(
+    transports: list[MinerSimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
+):
+    """
+    Job declined - busy, but no receipts provided.
+    """
+
+    index = 4
+    transport = transports[index]
+    job_uuid = job_uuids[index]
+
+    await transport.add_message(manifest_message, send_before=1)
+
+    decline_message = miner_requests.V0DeclineJobRequest(
+        job_uuid=str(job_uuid),
+        reason=miner_requests.V0DeclineJobRequest.Reason.BUSY,
+    ).model_dump_json()
+    await transport.add_message(decline_message, send_before=1)
+
+
+@pytest_asyncio.fixture
+async def flow_5(
+    transports: list[MinerSimulationTransport],
+    manifest_message: str,
+    job_uuids: list[uuid.UUID],
+    active_valis: list[bittensor.Keypair],
+    inactive_valis: list[bittensor.Keypair],
+    miner_wallets: list[bittensor.Keypair],
+):
+    """
+    Job declined - busy, bad excuses provided.
+    """
+
+    index = 5
+    transport = transports[index]
+    job_uuid = job_uuids[index]
+    miner_wallet = miner_wallets[index]
+
+    await transport.add_message(manifest_message, send_before=1)
+
+    decline_message = miner_requests.V0DeclineJobRequest(
+        job_uuid=str(job_uuid),
+        reason=miner_requests.V0DeclineJobRequest.Reason.BUSY,
+        receipts=_build_invalid_excuse_receipts(
+            active_valis[0], miner_wallet, inactive_valis[0], job_uuid
+        ),
+    ).model_dump_json()
+    await transport.add_message(decline_message, send_before=1)
+
+
+@pytest_asyncio.fixture
+async def flow_6(
+    transports: list[MinerSimulationTransport],
+    manifest_message: str,
+    job_uuids: list[uuid.UUID],
+    active_valis: list[bittensor.Keypair],
+    inactive_valis: list[bittensor.Keypair],
+    miner_wallets: list[bittensor.Keypair],
+):
+    """
+    Job declined - busy, good excuse.
+    """
+
+    index = 6
+    transport = transports[index]
+    job_uuid = job_uuids[index]
+    miner_wallet = miner_wallets[index]
+
+    await transport.add_message(manifest_message, send_before=1)
+
+    excuse = JobStartedReceiptPayload(
+        job_uuid=str(uuid.uuid4()),
+        miner_hotkey=miner_wallet.ss58_address,
+        validator_hotkey=active_valis[0].ss58_address,
+        timestamp=timezone.now() - timedelta(seconds=10),
+        executor_class=DEFAULT_EXECUTOR_CLASS,
+        max_timeout=123,
+        is_organic=True,
+        ttl=60,
+    )
+    excuse_blob = excuse.blob_for_signing()
+
+    decline_message = miner_requests.V0DeclineJobRequest(
+        job_uuid=str(job_uuid),
+        reason=miner_requests.V0DeclineJobRequest.Reason.BUSY,
+        receipts=[
+            Receipt(
+                payload=excuse,
+                validator_signature=sign_blob(active_valis[0], excuse_blob),
+                miner_signature=sign_blob(miner_wallet, excuse_blob),
+            )
+        ],
+    ).model_dump_json()
+    await transport.add_message(decline_message, send_before=1)
+
+
+@pytest_asyncio.fixture
+async def flow_7():
     """
     No manifest. Fixture just for indication
     """
+
+
+@pytest.fixture(autouse=True)
+def mock_excuse_score():
+    with override_config(DYNAMIC_EXCUSED_SYNTHETIC_JOB_SCORE=MOCK_EXCUSED_SCORE):
+        yield
 
 
 @patch("compute_horde_validator.validator.synthetic_jobs.batch_run._GET_MANIFEST_TIMEOUT", 0.2)
@@ -327,6 +471,10 @@ async def test_complex(
     flow_2,
     flow_3,
     flow_4,
+    flow_5,
+    flow_6,
+    flow_7,
+    active_valis: list[bittensor.Keypair],
 ):
     for transport, miner in zip(transports, miners):
         assert transport.name == miner.hotkey
@@ -335,15 +483,16 @@ async def test_complex(
         execute_synthetic_batch_run(
             axon_dict,
             miners,
+            [v.ss58_address for v in active_valis],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=2,
     )
 
-    assert await SyntheticJob.objects.acount() == 4
+    assert await SyntheticJob.objects.acount() == 7
     assert (
         await SystemEvent.objects.exclude(type=SystemEvent.EventType.VALIDATOR_TELEMETRY).acount()
-        == 5
+        == 8
     )
 
     await check_synthetic_job(job_uuids[0], miners[0].pk, SyntheticJob.Status.COMPLETED, MOCK_SCORE)
@@ -399,7 +548,7 @@ async def test_complex(
         [
             (
                 SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                SystemEvent.EventSubType.JOB_NOT_STARTED,
+                SystemEvent.EventSubType.JOB_REJECTED,
             ),
             (
                 SystemEvent.EventType.VALIDATOR_TELEMETRY,
@@ -410,6 +559,81 @@ async def test_complex(
         job_uuids[3],
     )
 
+    await check_synthetic_job(job_uuids[4], miners[4].pk, SyntheticJob.Status.FAILED, NOT_SCORED)
+    await check_miner_job_system_events(
+        [
+            (
+                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                SystemEvent.EventSubType.JOB_REJECTED,
+            ),
+            (
+                SystemEvent.EventType.VALIDATOR_TELEMETRY,
+                SystemEvent.EventSubType.SYNTHETIC_JOB,
+            ),
+        ],
+        miners[4].hotkey,
+        job_uuids[4],
+    )
+
+    await check_synthetic_job(job_uuids[5], miners[5].pk, SyntheticJob.Status.FAILED, NOT_SCORED)
+    await check_miner_job_system_events(
+        [
+            (
+                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                SystemEvent.EventSubType.JOB_REJECTED,
+            ),
+            (
+                SystemEvent.EventType.VALIDATOR_TELEMETRY,
+                SystemEvent.EventSubType.SYNTHETIC_JOB,
+            ),
+        ],
+        miners[5].hotkey,
+        job_uuids[5],
+    )
+
+    await check_synthetic_job(
+        job_uuids[6], miners[6].pk, SyntheticJob.Status.EXCUSED, MOCK_EXCUSED_SCORE
+    )
+    await check_miner_job_system_events(
+        [
+            (
+                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                SystemEvent.EventSubType.JOB_EXCUSED,
+            ),
+            (
+                SystemEvent.EventType.VALIDATOR_TELEMETRY,
+                SystemEvent.EventSubType.SYNTHETIC_JOB,
+            ),
+        ],
+        miners[6].hotkey,
+        job_uuids[6],
+    )
+    excused_event = await SystemEvent.objects.aget(
+        type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+        subtype=SystemEvent.EventSubType.JOB_EXCUSED,
+        data__miner_hotkey=miners[6].hotkey,
+        data__job_uuid=str(job_uuids[6]),
+    )
+    assert excused_event.data["excused_by"] == [active_valis[0].ss58_address]
+
+    # Check batch telemetry counts
+    telemetry = await SystemEvent.objects.aget(
+        type=SystemEvent.EventType.VALIDATOR_TELEMETRY,
+        subtype=SystemEvent.EventSubType.SYNTHETIC_BATCH,
+    )
+    assert telemetry.data["counts"]["jobs"] == {
+        "total": 7,
+        "failed": 5,
+        "correct": 1,
+        "excused": 1,
+        "incorrect": 0,
+        "successful": 1,
+    }
+    assert (
+        telemetry.data["counts"]["jobs"]
+        == telemetry.data["counts"]["jobs:" + DEFAULT_EXECUTOR_CLASS]
+    )
+
     # TODO: Make this system event bound to the miner and the job
     assert (
         await SystemEvent.objects.filter(
@@ -418,3 +642,92 @@ async def test_complex(
         ).acount()
         == 1
     )
+
+
+def _build_invalid_excuse_receipts(
+    validator: bittensor.Keypair,
+    miner: bittensor.Keypair,
+    bad_validator: bittensor.Keypair,
+    job: uuid.UUID,
+) -> list[Receipt]:
+    good_payload = JobStartedReceiptPayload(
+        job_uuid=str(uuid.uuid4()),
+        miner_hotkey=miner.ss58_address,
+        validator_hotkey=validator.ss58_address,
+        timestamp=timezone.now(),
+        executor_class=DEFAULT_EXECUTOR_CLASS,
+        max_timeout=123,
+        is_organic=True,
+        ttl=60,
+    )
+    good_payload_blob = good_payload.blob_for_signing()
+
+    bad_receipt_type_1 = JobAcceptedReceiptPayload(
+        job_uuid=str(uuid.uuid4()),
+        miner_hotkey=miner.ss58_address,
+        validator_hotkey=validator.ss58_address,
+        timestamp=timezone.now(),
+        time_accepted=timezone.now(),
+        ttl=60,
+    )
+
+    bad_receipt_type_2 = JobFinishedReceiptPayload(
+        job_uuid=str(uuid.uuid4()),
+        miner_hotkey=miner.ss58_address,
+        validator_hotkey=validator.ss58_address,
+        timestamp=timezone.now(),
+        time_started=timezone.now(),
+        time_took_us=50000,
+        score_str="123",
+    )
+
+    non_organic = good_payload.__replace__(is_organic=False)
+    other_miner = good_payload.__replace__(
+        miner_hotkey=bittensor.Keypair.create_from_seed("7" * 64).ss58_address
+    )
+    same_job = good_payload.__replace__(job_uuid=str(job))
+    bad_executor_class = good_payload.__replace__(
+        executor_class=next(c for c in ExecutorClass if c != DEFAULT_EXECUTOR_CLASS)
+    )
+    future_receipt = good_payload.__replace__(timestamp=timezone.now() + timedelta(minutes=5))
+    expired_receipt = good_payload.__replace__(timestamp=timezone.now() - timedelta(minutes=5))
+
+    receipts: list[Receipt] = []
+
+    for payload in [
+        bad_receipt_type_1,
+        bad_receipt_type_2,
+        non_organic,
+        other_miner,
+        same_job,
+        bad_executor_class,
+        future_receipt,
+        expired_receipt,
+    ]:
+        blob = payload.blob_for_signing()
+        receipt = Receipt(
+            payload=payload,
+            validator_signature=sign_blob(validator, blob),
+            miner_signature=sign_blob(miner, blob),
+        )
+        receipts.append(receipt)
+
+    # Bad vali signature
+    receipts.append(
+        Receipt(
+            payload=good_payload,
+            validator_signature=sign_blob(validator, good_payload_blob)[:-6] + "foobar",
+            miner_signature=sign_blob(miner, good_payload_blob),
+        )
+    )
+
+    # Inactive validator
+    receipts.append(
+        Receipt(
+            payload=good_payload,
+            validator_signature=sign_blob(bad_validator, good_payload_blob),
+            miner_signature=sign_blob(miner, good_payload_blob),
+        )
+    )
+
+    return receipts

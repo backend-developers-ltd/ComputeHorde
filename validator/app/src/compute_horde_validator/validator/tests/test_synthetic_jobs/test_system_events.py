@@ -14,7 +14,7 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
 @pytest.mark.django_db
 async def test_not_enough_prompts_system_event_is_not_repeated():
     initial_date = datetime(2020, 1, 1)
-    ctx = await _init_context(axons={}, serving_miners=[])
+    ctx = await _init_context(axons={}, serving_miners=[], active_validators=[])
 
     with freeze_time(initial_date) as frozen_datetime:
         await _not_enough_prompts_system_event(ctx)
@@ -44,7 +44,7 @@ async def test_system_event_limits():
     #       does not get patched.
     #       This test is currently dependent on the default value of the config.
 
-    ctx = await _init_context(axons={}, serving_miners=[])
+    ctx = await _init_context(axons={}, serving_miners=[], active_validators=[])
 
     for _ in range(20):
         # limited type

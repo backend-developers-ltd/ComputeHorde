@@ -110,6 +110,7 @@ async def test_llm_synthetic_jobs_flow(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=2,

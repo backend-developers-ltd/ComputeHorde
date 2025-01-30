@@ -12,10 +12,10 @@ class WSTestServer:
     port = 8765
 
     def __init__(self):
-        self.ws_server = None
+        self.ws_server: websockets.Server | None = None
         self.received: asyncio.Queue[str] = asyncio.Queue()
 
-    async def srv(self, ws, path):
+    async def srv(self, ws: websockets.ServerConnection):
         async for message in ws:
             await self.received.put(message)
 
@@ -34,17 +34,17 @@ class WSTestServer:
         await self.stop()
 
     @property
-    def connection(self) -> websockets.WebSocketServerProtocol | None:
-        assert len(self.ws_server.websockets) <= 1
+    def connection(self) -> websockets.ServerConnection | None:
+        assert len(self.ws_server.connections) <= 1
 
         try:
-            return next(iter(self.ws_server.websockets))
+            return next(iter(self.ws_server.connections))
         except StopIteration:
             return None
 
     @property
     def is_connected(self) -> bool:
-        return self.connection is not None and self.connection.open
+        return self.connection is not None and self.connection.state is websockets.State.OPEN
 
 
 @pytest_asyncio.fixture

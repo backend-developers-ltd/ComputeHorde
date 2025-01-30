@@ -275,6 +275,11 @@ CONSTANCE_CONFIG = {
         ),
         str,
     ),
+    "DYNAMIC_EXCUSED_SYNTHETIC_JOB_SCORE": (
+        1.0,
+        "Score for each properly excused synthetic job",
+        float,
+    ),
     "DYNAMIC_ORGANIC_JOB_SCORE": (
         1.0,
         "Score of each successful organic job",
