@@ -83,24 +83,28 @@ def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
     return batch_scores
 
 
-def score_batch(batch):
+def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
     executor_class_weights = get_executor_class_weights()
     executor_class_synthetic_jobs = defaultdict(list)
-    for job in batch.synthetic_jobs.select_related("miner"):
-        if job.executor_class in executor_class_weights:
-            executor_class = ExecutorClass(job.executor_class)
-            executor_class_synthetic_jobs[executor_class].append(job)
+    for synthetic_job in batch.synthetic_jobs.select_related("miner"):
+        if synthetic_job.executor_class in executor_class_weights:
+            executor_class = ExecutorClass(synthetic_job.executor_class)
+            executor_class_synthetic_jobs[executor_class].append(synthetic_job)
 
-    batch_organic_jobs = OrganicJob.objects.select_related("miner").filter(
-        block__gte=batch.cycle.start,
-        block__lt=batch.cycle.stop,
-        status=OrganicJob.Status.COMPLETED,
-    )
+    if batch.cycle is not None:
+        batch_organic_jobs = OrganicJob.objects.select_related("miner").filter(
+            block__gte=batch.cycle.start,
+            block__lt=batch.cycle.stop,
+            status=OrganicJob.Status.COMPLETED,
+        )
+    else:
+        batch_organic_jobs = OrganicJob.objects.none()
+
     executor_class_organic_jobs = defaultdict(list)
-    for job in batch_organic_jobs:
-        if job.executor_class in executor_class_weights:
-            executor_class = ExecutorClass(job.executor_class)
-            executor_class_organic_jobs[executor_class].append(job)
+    for organic_job in batch_organic_jobs:
+        if organic_job.executor_class in executor_class_weights:
+            executor_class = ExecutorClass(organic_job.executor_class)
+            executor_class_organic_jobs[executor_class].append(organic_job)
 
     parameterized_horde_score: Callable[[list[float]], float] = partial(
         horde_score,
