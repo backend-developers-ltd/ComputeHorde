@@ -71,18 +71,18 @@ class CommandTested(Command):
 
 
 def test_main_loop():
-    job_container_name = f'ch-{uuid.uuid4()}-job'
-    nginx_container_name = f'ch-{uuid.uuid4()}-nginx'
+    job_container_name = f"ch-{uuid.uuid4()}-job"
+    nginx_container_name = f"ch-{uuid.uuid4()}-nginx"
     for container_name in [job_container_name, nginx_container_name]:
         subprocess.check_output([
-            'docker',
-            'run',
-            '-d',
-            '--name',
+            "docker",
+            "run",
+            "-d",
+            "--name",
             container_name,
-            'busybox',
-            'sleep',
-            '1000',
+            "busybox",
+            "sleep",
+            "1000",
         ])
     for container_name in [job_container_name, nginx_container_name]:
         output = subprocess.check_output(['docker', 'ps', '--filter', f'name={container_name}'])
@@ -136,7 +136,7 @@ def test_main_loop():
     ]
 
     for container_name in [job_container_name, nginx_container_name]:
-        output = subprocess.check_output(['docker', 'ps', '--filter', f'name={container_name}'])
+        output = subprocess.check_output(["docker", "ps", "--filter", f"name={container_name}"])
         assert container_name.encode() not in output
 
 
