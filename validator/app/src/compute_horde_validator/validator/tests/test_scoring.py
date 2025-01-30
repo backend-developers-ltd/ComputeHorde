@@ -321,7 +321,7 @@ def test_manifest_dance_incentives(
 
     scores = score_batches([curr_batch])
     assert "miner_hotkey" in scores
-    assert scores["miner_hotkey"] - 100 * expected_multiplier < 0.0001
+    assert abs(scores["miner_hotkey"] - 100 * expected_multiplier) < 0.0001
 
 
 @pytest.mark.override_config(
@@ -338,4 +338,4 @@ def test_manifest_dance_incentives_disabled_on_v1(override_weights_version_v1):
     assert "miner_hotkey" in scores
 
     # there should be no bonus
-    assert scores["miner_hotkey"] - 100 < 0.0001
+    assert abs(scores["miner_hotkey"] - 100) < 0.0001
