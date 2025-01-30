@@ -490,10 +490,16 @@ class JobRunner:
             self.is_streaming_job = True
 
     async def cleanup_potential_old_jobs(self):
-        await (await asyncio.create_subprocess_shell(
-            "docker kill $(docker ps -q --filter 'name=ch-.*-job')")).communicate()
-        await (await asyncio.create_subprocess_shell(
-            "docker kill $(docker ps -q --filter 'name=ch-.*-nginx')")).communicate()
+        await (
+            await asyncio.create_subprocess_shell(
+                "docker kill $(docker ps -q --filter 'name=ch-.*-job')"
+            )
+        ).communicate()
+        await (
+            await asyncio.create_subprocess_shell(
+                "docker kill $(docker ps -q --filter 'name=ch-.*-nginx')"
+            )
+        ).communicate()
 
     async def prepare(self):
         self.volume_mount_dir.mkdir(exist_ok=True)
