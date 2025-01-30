@@ -125,6 +125,7 @@ async def test_manifest_dance_incentives(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=2,
@@ -207,6 +208,7 @@ async def test_synthetic_job_batch(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
+            [],
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=2,

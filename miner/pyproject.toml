@@ -90,4 +90,4 @@ ignore = [
 
 [tool.codespell]
 skip = '*.min.js,*.lock,*/monitoring_certs/*'
-ignore-words-list = 'datas'
+ignore-words-list = 'datas,acount'

@@ -1,6 +1,9 @@
 import enum
+from enum import Enum
 
 import pydantic
+
+from compute_horde.receipts import Receipt
 
 from ..base_requests import BaseRequest, JobMixin
 from ..executor_class import ExecutorClass
@@ -45,7 +48,15 @@ class V0AcceptJobRequest(BaseMinerRequest, JobMixin):
 
 
 class V0DeclineJobRequest(BaseMinerRequest, JobMixin):
+    class Reason(Enum):
+        NOT_SPECIFIED = "not_specified"
+        BUSY = "busy"
+        EXECUTOR_FAILURE = "executor_failure"
+        VALIDATOR_BLACKLISTED = "validator_blacklisted"
+
     message_type: RequestType = RequestType.V0DeclineJobRequest
+    reason: Reason = Reason.NOT_SPECIFIED
+    receipts: list[Receipt] = pydantic.Field(default_factory=list)
 
 
 class V0ExecutorReadyRequest(BaseMinerRequest, JobMixin):

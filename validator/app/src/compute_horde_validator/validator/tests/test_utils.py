@@ -149,7 +149,7 @@ async def miner_synthetic_jobs_scheme(
 
     # create synthetic jobs task for miner
     task = asyncio.create_task(
-        execute_synthetic_batch_run({miner_hotkey: miner_axon_info}, [miner])
+        execute_synthetic_batch_run({miner_hotkey: miner_axon_info}, [miner], [])
     )
     try:
         # wait for creation of mocked MinerClient to get instance
@@ -265,7 +265,7 @@ mock_synthetic_job_generator_factory = MagicMock(name="MockSyntheticJobGenerator
             NOT_SCORED,
             (
                 SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                SystemEvent.EventSubType.JOB_NOT_STARTED,
+                SystemEvent.EventSubType.JOB_REJECTED,
                 1,
             ),
         ),

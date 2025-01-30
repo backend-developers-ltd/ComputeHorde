@@ -62,6 +62,7 @@ class SystemEvent(models.Model):
         MINER_SCORING_ERROR = "MINER_SCORING_ERROR"
         JOB_NOT_STARTED = "JOB_NOT_STARTED"
         JOB_REJECTED = "JOB_REJECTED"
+        JOB_EXCUSED = "JOB_EXCUSED"
         JOB_EXECUTION_TIMEOUT = "JOB_EXECUTION_TIMEOUT"
         RECEIPT_FETCH_ERROR = "RECEIPT_FETCH_ERROR"
         RECEIPT_SEND_ERROR = "RECEIPT_SEND_ERROR"
@@ -198,6 +199,7 @@ class JobBase(models.Model):
         PENDING = "PENDING"
         COMPLETED = "COMPLETED"
         FAILED = "FAILED"
+        EXCUSED = "EXCUSED"
 
     job_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
     miner = models.ForeignKey(Miner, on_delete=models.CASCADE)

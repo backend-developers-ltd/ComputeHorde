@@ -9,7 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, assert_never
 
 import bittensor
 import httpx
@@ -50,6 +50,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobRequest,
     V1InitialJobRequest,
 )
+from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
@@ -321,6 +322,10 @@ class Job:
     time_took: timedelta | None = None
     correct: bool | None = None  # returned correct answer (even if outside time limit)
     success: bool = False  # returned correct answer within time limit
+    excused: bool = False  # declined (reason=busy) but provided valid excuse
+    excused_with: list[Receipt] = field(
+        default_factory=list
+    )  # if excused, this is the list of valid excuse receipts.
     comment: str = "failed"
     score: float = 0
     # dancing bonus
@@ -382,7 +387,7 @@ class Job:
         subtype: SystemEvent.EventSubType,
         description: str,
         func: str | None = None,
-        data: dict[str, str] | None = None,
+        data: dict[str, Any] | None = None,
     ) -> SystemEvent | None:
         return self.ctx.system_event(
             type=type,
@@ -439,9 +444,51 @@ class Job:
 
     def get_spin_up_time(self) -> int:
         spin_up_time = EXECUTOR_CLASS[self.executor_class].spin_up_time
-        assert spin_up_time is not None
         spin_up_time = max(spin_up_time, _MIN_SPIN_UP_TIME)
         return spin_up_time
+
+    def is_declined(self) -> bool:
+        return isinstance(self.accept_response, V0DeclineJobRequest)
+
+    def decline_reason(self) -> V0DeclineJobRequest.Reason | None:
+        if isinstance(self.accept_response, V0DeclineJobRequest):
+            return self.accept_response.reason
+        return None
+
+    def get_valid_decline_excuse_receipts(self) -> list[Receipt]:
+        assert self.job_started_receipt_payload is not None
+        assert isinstance(self.accept_response, V0DeclineJobRequest)
+
+        # Use the time when the receipt for this job was generated as an excuse time cutoff time
+        job_request_time = self.job_started_receipt_payload.timestamp
+
+        # We need time leeway so that if the miner receives an organic job around the same time as the synthetic, a slight
+        # time difference caused by clock desync and network latencies doesn't cause the miner to lose score when they
+        # accept an organic job and get a synthetic job request a couple of seconds "from the past"
+        leeway = timedelta(seconds=2)
+
+        # Reject duplicate receipts - use the receipts' validator signature as unique ID
+        seen_receipts: set[str] = set()
+
+        valid_receipts: list[Receipt] = []
+        for receipt in self.accept_response.receipts:
+            if (
+                isinstance(receipt.payload, JobStartedReceiptPayload)
+                and receipt.payload.is_organic
+                and receipt.payload.miner_hotkey == self.miner_hotkey
+                and receipt.payload.job_uuid != self.uuid
+                and receipt.payload.validator_hotkey in self.ctx.allowed_validators_for_excuse
+                and receipt.payload.job_uuid not in seen_receipts
+                and receipt.payload.executor_class == self.executor_class
+                and receipt.payload.timestamp < job_request_time
+                and job_request_time
+                < receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
+                and receipt.verify_validator_signature(throw=False)
+            ):
+                seen_receipts.add(receipt.payload.job_uuid)
+                valid_receipts.append(receipt)
+
+        return valid_receipts
 
 
 @dataclass
@@ -481,6 +528,9 @@ class BatchContext:
 
     # job.uuid as key
     jobs: dict[str, Job]
+
+    # list of validator hotkeys for which busy excuses are considered valid
+    allowed_validators_for_excuse: set[str]
 
     # telemetry
 
@@ -666,8 +716,9 @@ class BatchContext:
             jobs = [job for job in jobs if job.executor_class == executor_class]
         return dict(
             total=len(jobs),
-            failed=sum(1 for job in jobs if not job.success),
+            failed=sum(1 for job in jobs if not job.success and not job.excused),
             successful=sum(1 for job in jobs if job.success),
+            excused=sum(1 for job in jobs if job.excused),
             correct=sum(1 for job in jobs if job.correct),
             # don't count None as incorrect
             incorrect=sum(1 for job in jobs if job.correct is False),
@@ -799,17 +850,20 @@ class BatchConfig:
     def __init__(self):
         self.event_limits: LimitsDict | None = None
         self.llm_answer_s3_download_timeout: float | None = None
+        self.excused_synthetic_job_score: float | None = None
 
     async def populate(self):
         self.event_limits = await get_system_event_limits()
         self.llm_answer_s3_download_timeout = await aget_config(
             "DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS"
         )
+        self.excused_synthetic_job_score = await aget_config("DYNAMIC_EXCUSED_SYNTHETIC_JOB_SCORE")
 
 
 async def _init_context(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
+    active_validators: list[str],
     batch_id: int | None = None,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> BatchContext:
@@ -822,6 +876,10 @@ async def _init_context(
     # TODO move somewhere else - gen a certificate per batch or not?
     # Generate validator certificate
     dir_path, public_key, certs = generate_certificate_at()
+
+    allowed_validators = set(active_validators)
+    # Vali should probably trust itself in any case.
+    allowed_validators.add(own_keypair.ss58_address)
 
     ctx = BatchContext(
         batch_id=batch_id,
@@ -843,6 +901,7 @@ async def _init_context(
         manifest_events={},
         job_uuids=[],
         jobs={},
+        allowed_validators_for_excuse=allowed_validators,
         events=[],
         event_count=0,
         event_limits_usage=defaultdict(int),
@@ -875,7 +934,6 @@ def _get_max_spin_up_time(ctx: BatchContext) -> int:
         for executor_class, count in executors.items():
             if count > 0:
                 spin_up_time = EXECUTOR_CLASS[executor_class].spin_up_time
-                assert spin_up_time is not None
                 max_spin_up_time = max(max_spin_up_time, spin_up_time)
     return max_spin_up_time
 
@@ -896,16 +954,23 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
     assert job.job_started_receipt_payload is None
     assert job.job_started_receipt_signature is None
 
-    max_timeout = job.job_generator.timeout_seconds()
+    job_timeout_seconds = job.job_generator.timeout_seconds()
+    spinup_leeway_seconds = 5
+    ttl_min = 5
+    ttl_max = 60 * 5
+
+    ttl = job.get_spin_up_time() + job_timeout_seconds + spinup_leeway_seconds
+    ttl_clamped = max(ttl_min, min(ttl_max, ttl))
+
     payload = JobStartedReceiptPayload(
         job_uuid=job.uuid,
         miner_hotkey=job.miner_hotkey,
         validator_hotkey=ctx.own_keypair.ss58_address,
         timestamp=datetime.now(tz=UTC),
         executor_class=ExecutorClass(job.executor_class),
-        max_timeout=max_timeout,
+        max_timeout=job_timeout_seconds,
         is_organic=False,
-        ttl=job.get_spin_up_time(),
+        ttl=ttl_clamped,
     )
     signature = f"0x{ctx.own_keypair.sign(payload.blob_for_signing()).hex()}"
     job.job_started_receipt_payload = payload
@@ -1217,23 +1282,39 @@ async def _send_initial_job_request(
         job.accept_after_sent_time = datetime.now(tz=UTC)
 
         await job.accept_response_event.wait()
-        if isinstance(job.accept_response, V0AcceptJobRequest):
-            _generate_job_accepted_receipt(ctx, job)
-            assert job.job_accepted_receipt is not None
-            try:
-                receipt_json = job.job_accepted_receipt.model_dump_json()
-                async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
-                    await client.send_check(receipt_json)
-            except (Exception, asyncio.CancelledError) as exc:
-                logger.warning("%s failed to send job accepted receipt: %r", job.name, exc)
-                job.system_event(
-                    type=SystemEvent.EventType.RECEIPT_FAILURE,
-                    subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
-                    description=repr(exc),
-                    func="_send_initial_job_request",
+        match job.accept_response:
+            case V0AcceptJobRequest():
+                logger.info("%s accepted job %s", job.miner_hotkey, job.uuid)
+                await _handle_job_accepted(client, ctx, job)
+            case V0DeclineJobRequest():
+                logger.info(
+                    "%s declined job %s (reason=%s)",
+                    job.miner_hotkey,
+                    job.uuid,
+                    job.accept_response.reason.value if job.accept_response.reason else None,
                 )
+            case None:
+                logger.error("Job accept response event fired, but response is missing.")
+            case _:
+                assert_never(job.accept_response)
 
-            await job.executor_response_event.wait()
+
+async def _handle_job_accepted(client: MinerClient, ctx: BatchContext, job: Job) -> None:
+    _generate_job_accepted_receipt(ctx, job)
+    assert job.job_accepted_receipt is not None
+    try:
+        receipt_json = job.job_accepted_receipt.model_dump_json()
+        async with asyncio.timeout(_SEND_RECEIPT_TIMEOUT):
+            await client.send_check(receipt_json)
+    except (Exception, asyncio.CancelledError) as exc:
+        logger.warning("%s failed to send job accepted receipt: %r", job.name, exc)
+        job.system_event(
+            type=SystemEvent.EventType.RECEIPT_FAILURE,
+            subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
+            description=repr(exc),
+            func="_send_initial_job_request",
+        )
+    await job.executor_response_event.wait()
 
 
 async def _send_job_request(
@@ -1305,12 +1386,24 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
         if isinstance(job.accept_response, V0DeclineJobRequest) or isinstance(
             job.executor_response, V0ExecutorFailedRequest
         ):
-            logger.warning("%s refused", job.name)
-            job.system_event(
-                type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
-                description="refused",
-            )
+            if job.excused:
+                # Excused job is a special case of a declined job.
+                logger.warning("%s excused", job.name)
+                excused_by = list(set(r.payload.validator_hotkey for r in job.excused_with))
+                job.system_event(
+                    type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                    subtype=SystemEvent.EventSubType.JOB_EXCUSED,
+                    description="excused",
+                    data={"excused_by": excused_by},
+                )
+            else:
+                logger.warning("%s declined", job.name)
+                job.system_event(
+                    type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                    subtype=SystemEvent.EventSubType.JOB_REJECTED,
+                    description="declined",
+                )
+
         if isinstance(job.streaming_job_ready_response, V0StreamingJobNotReadyRequest):
             logger.warning("%s failed to start streaming", job.name)
             job.system_event(
@@ -1318,6 +1411,7 @@ def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 description="failed to start streaming",
             )
+
         if isinstance(job.job_response, V0JobFailedRequest):
             returncode = job.job_response.docker_process_exit_status
             text = f"failed: {returncode=}"
@@ -1636,7 +1730,37 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     job.score_manifest_multiplier = None
     job.average_job_send_time_bonus = None
     job.success = False
+    job.excused = False
     job.comment = "failed"
+
+    if job.decline_reason() == V0DeclineJobRequest.Reason.BUSY:
+        relevant_executor_count = ctx.executors[job.miner_hotkey][job.executor_class]
+        valid_excuse_receipts = job.get_valid_decline_excuse_receipts()
+        accepted_jobs = sum(
+            1
+            for other_job in ctx.jobs.values()
+            if other_job.miner_hotkey == job.miner_hotkey
+            and other_job.executor_class == job.executor_class
+            and isinstance(other_job.accept_response, V0AcceptJobRequest)
+        )
+        excuse_ok = accepted_jobs + len(valid_excuse_receipts) >= relevant_executor_count
+
+        if excuse_ok:
+            job.score = ctx.batch_config.excused_synthetic_job_score or 0
+            job.excused = True
+            job.excused_with = valid_excuse_receipts
+            job.comment = "excused (pass)"
+            logger.info("%s %s", job.name, job.comment)
+            return
+        else:
+            job.comment = "badly excused (fail)"
+            logger.info("%s %s", job.name, job.comment)
+            return
+
+    if job.is_declined():
+        job.comment = "declined"
+        logger.info("%s %s (reason=%s)", job.name, job.comment, job.decline_reason())
+        return
 
     if job.job_response is None:
         job.comment = "timed out"
@@ -1730,11 +1854,11 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
                 data={
                     "prompts_url": job.job_generator.s3_url,
                     "answers_url": job.job_generator.url_for_download(),
-                    "seed": job.job_generator.seed,  # type: ignore
-                    "known_answers": {  # type: ignore
+                    "seed": job.job_generator.seed,
+                    "known_answers": {
                         p.content: p.answer for p in job.job_generator.expected_prompts
                     },
-                    "job_response": job.job_response.model_dump(mode="json"),  # type: ignore
+                    "job_response": job.job_response.model_dump(mode="json"),
                 },
             )
 
@@ -1875,7 +1999,7 @@ async def _score_jobs(ctx: BatchContext) -> None:
 
     # compute for each hotkey how many executors finished successfully
     for job in ctx.jobs.values():
-        if job.success:
+        if job.success or job.excused:
             ctx.online_executor_count[job.miner_hotkey][job.executor_class] += 1
 
     # apply manifest bonus
@@ -1966,7 +2090,12 @@ def _db_persist_critical(ctx: BatchContext) -> None:
         for job in ctx.jobs.values():
             axon = ctx.axons[job.miner_hotkey]
             miner = ctx.miners[job.miner_hotkey]
-            status = SyntheticJob.Status.COMPLETED if job.success else SyntheticJob.Status.FAILED
+            if job.success:
+                status = SyntheticJob.Status.COMPLETED
+            elif job.excused:
+                status = SyntheticJob.Status.EXCUSED
+            else:
+                status = SyntheticJob.Status.FAILED
             synthetic_job = SyntheticJob(
                 job_uuid=job.uuid,
                 batch=batch,
@@ -2093,6 +2222,7 @@ def _db_persist(ctx: BatchContext) -> None:
 async def execute_synthetic_batch_run(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
+    active_validators: list[str],
     batch_id: int | None = None,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> None:
@@ -2106,7 +2236,9 @@ async def execute_synthetic_batch_run(
     # randomize the order of miners each batch to avoid systemic bias
     random.shuffle(serving_miners)
 
-    ctx = await _init_context(axons, serving_miners, batch_id, create_miner_client)
+    ctx = await _init_context(
+        axons, serving_miners, active_validators, batch_id, create_miner_client
+    )
     await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
     try:
@@ -2133,6 +2265,9 @@ async def execute_synthetic_batch_run(
             await _multi_send_initial_job_request(ctx)
 
             executor_ready_jobs = await _get_executor_ready_jobs(ctx)
+            any_job_busy = any(
+                job.decline_reason() == V0DeclineJobRequest.Reason.BUSY for job in ctx.jobs.values()
+            )
             if executor_ready_jobs:
                 await ctx.checkpoint_system_event("_multi_send_job_request")
                 await _multi_send_job_request(ctx, executor_ready_jobs)
@@ -2149,15 +2284,17 @@ async def execute_synthetic_batch_run(
                 await ctx.checkpoint_system_event("_download_llm_prompts_answers")
                 await _download_llm_prompts_answers(ctx)
 
+            if executor_ready_jobs or any_job_busy:
                 await ctx.checkpoint_system_event("_score_jobs")
                 await _score_jobs(ctx)
 
+            if executor_ready_jobs:
                 await _db_persist_system_events(ctx)
 
                 await ctx.checkpoint_system_event("_send_job_finished_receipts")
                 await _send_job_finished_receipts(ctx)
 
-            else:
+            if not executor_ready_jobs:
                 logger.warning("No jobs accepted")
 
             await _db_persist_system_events(ctx)

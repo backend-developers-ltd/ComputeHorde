@@ -44,7 +44,7 @@ class Command(BaseCommand):
             )
         }
         try:
-            async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners)
+            async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners, [])
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)

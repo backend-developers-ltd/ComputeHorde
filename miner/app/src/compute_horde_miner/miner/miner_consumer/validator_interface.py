@@ -2,6 +2,7 @@ import datetime as dt
 import logging
 import time
 import uuid
+from datetime import timedelta
 from functools import cached_property
 from typing import Protocol
 
@@ -13,10 +14,14 @@ from compute_horde.mv_protocol.validator_requests import (
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload, ReceiptPayload
 from django.conf import settings
+from django.db.models import DateTimeField, ExpressionWrapper, F
 from django.utils import timezone
 
 from compute_horde_miner.miner.executor_manager import current
-from compute_horde_miner.miner.executor_manager.base import ExecutorUnavailable
+from compute_horde_miner.miner.executor_manager.base import (
+    AllExecutorsBusy,
+    ExecutorUnavailable,
+)
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
     BaseConsumer,
     log_errors_explicitly,
@@ -318,7 +323,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 f"Declining job {msg.job_uuid} from blacklisted validator: {self.validator_key}"
             )
             await self.send(
-                miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
+                miner_requests.V0DeclineJobRequest(
+                    job_uuid=msg.job_uuid,
+                    reason=miner_requests.V0DeclineJobRequest.Reason.VALIDATOR_BLACKLISTED,
+                ).model_dump_json()
             )
             return
 
@@ -348,16 +356,51 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             executor_address = await current.executor_manager.get_executor_public_address(executor)
             job.executor_address = executor_address
             await job.asave()
-
-        except ExecutorUnavailable:
             await self.send(
-                miner_requests.V0DeclineJobRequest(job_uuid=msg.job_uuid).model_dump_json()
+                miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json()
             )
+        except AllExecutorsBusy:
             await self.group_discard(token)
             await job.adelete()
             self.pending_jobs.pop(msg.job_uuid)
-            return
-        await self.send(miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json())
+            now = msg.job_started_receipt_payload.timestamp
+            receipts = (
+                JobStartedReceipt.objects.annotate(
+                    valid_until=ExpressionWrapper(
+                        F("timestamp") + F("ttl") * timedelta(seconds=1),
+                        output_field=DateTimeField(),
+                    ),
+                )
+                .filter(
+                    is_organic=True,
+                    executor_class=msg.executor_class,
+                    timestamp__lte=now,
+                    valid_until__gte=now,
+                    miner_signature__isnull=False,  # miner signature is needed to build a valid Receipt
+                )
+                .exclude(
+                    job_uuid=msg.job_uuid,  # UUIDField doesn't support "__ne=..."
+                )
+            )
+            logger.info(f"Declining job {msg.job_uuid}: executor unavailable")
+            await self.send(
+                miner_requests.V0DeclineJobRequest(
+                    job_uuid=msg.job_uuid,
+                    reason=miner_requests.V0DeclineJobRequest.Reason.BUSY,
+                    receipts=[r.to_receipt() async for r in receipts],
+                ).model_dump_json()
+            )
+        except ExecutorUnavailable:
+            await self.group_discard(token)
+            await job.adelete()
+            self.pending_jobs.pop(msg.job_uuid)
+            logger.info(f"Declining job {msg.job_uuid}: executor failed to start")
+            await self.send(
+                miner_requests.V0DeclineJobRequest(
+                    job_uuid=msg.job_uuid,
+                    reason=miner_requests.V0DeclineJobRequest.Reason.EXECUTOR_FAILURE,
+                ).model_dump_json()
+            )
 
     async def handle_job_request(self, msg: validator_requests.V0JobRequest):
         job = self.pending_jobs.get(msg.job_uuid)

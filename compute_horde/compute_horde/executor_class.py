@@ -15,13 +15,13 @@ class ExecutorClass(StrEnum):
 @dataclass
 class ExecutorClassSpec:
     # mostly for user consumption, intended usage, ...
-    description: str | None = None
-    has_gpu: bool | None = None
+    description: str
+    spin_up_time: int
+    has_gpu: bool
     cpu_cores: int | None = None
     ram_gb: int | None = None
     storage_gb: int | None = None
     gpu_vram_gb: int | None = None
-    spin_up_time: int | None = None  # seconds
     docker_cached_images: list[str] | None = None
     # requirements which can't be easily standardized
     additional_requirements: str | None = None
