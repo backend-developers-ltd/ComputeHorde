@@ -44,6 +44,18 @@ def wallet():
     return wallet
 
 
+@pytest.fixture
+def validator_keypair():
+    return bittensor.Keypair.create_from_mnemonic(
+        "slot excuse valid grief praise rifle spoil auction weasel glove pen share"
+    )
+
+@pytest.fixture
+def miner_keypair():
+    return bittensor.Keypair.create_from_mnemonic(
+        "almost fatigue race slim picnic mass better clog deal solve already champion"
+    )
+
 @pytest.fixture(scope="function", autouse=True)
 def clear_cache():
     yield
