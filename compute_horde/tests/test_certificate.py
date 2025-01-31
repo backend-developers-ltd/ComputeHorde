@@ -1,6 +1,7 @@
 import asyncio
 import os
 import subprocess
+import sys
 import uuid
 
 import pytest
@@ -102,6 +103,7 @@ def cleanup_docker(container_name):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform != "linux", reason="requires linux")
 async def test_certificates_with_nginx__success(tmp_path, container_name, cleanup_docker):
     _, public_key, cert = generate_certificate_at(tmp_path)
     nginx_cert_path, _ = await start_nginx_with_certificates(
@@ -114,6 +116,7 @@ async def test_certificates_with_nginx__success(tmp_path, container_name, cleanu
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform != "linux", reason="requires linux")
 async def test_certificates_with_nginx__no_cert(tmp_path, container_name, cleanup_docker):
     _, public_key, _ = generate_certificate_at(tmp_path)
     nginx_cert_path, _ = await start_nginx_with_certificates(
@@ -127,6 +130,7 @@ async def test_certificates_with_nginx__no_cert(tmp_path, container_name, cleanu
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform != "linux", reason="requires linux")
 async def test_certificates_with_nginx__fail(tmp_path, container_name, cleanup_docker):
     _, public_key, _ = generate_certificate_at(tmp_path)
     _ = await start_nginx_with_certificates(NGINX_CONF, public_key, NGINX_PORT, container_name)
