@@ -146,14 +146,16 @@ def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
             batch_scores[hotkey] += score
 
     # apply manifest bonus
-    previous_batch = SyntheticJobBatch.objects.order_by("-id").exclude(id=batch.id).first()
+    previous_batch = get_previous_batch(batch)
     previous_executor_counts = get_executor_counts(previous_batch)
     current_executor_counts = get_executor_counts(batch)
     for hotkey in batch_scores:
-        previous_base_synthetic_score = get_base_synthetic_score(
-            previous_executor_counts.get(hotkey, {}),
-            executor_class_weights,
-        )
+        previous_base_synthetic_score: float | None = None
+        if hotkey in previous_executor_counts:
+            previous_base_synthetic_score = get_base_synthetic_score(
+                previous_executor_counts[hotkey],
+                executor_class_weights,
+            )
         current_base_synthetic_score = get_base_synthetic_score(
             current_executor_counts.get(hotkey, {}),
             executor_class_weights,
@@ -174,6 +176,17 @@ def score_batches(batches: Sequence[SyntheticJobBatch]) -> dict[str, float]:
         for hotkey, score in batch_scores.items():
             hotkeys_scores[hotkey] += score
     return dict(hotkeys_scores)
+
+
+def get_previous_batch(current_batch: SyntheticJobBatch) -> SyntheticJobBatch | None:
+    """Get the synthetic job batch of the previous cycle of current_batch"""
+    if current_batch.cycle is None:
+        return None
+    block_in_prev_cycle = current_batch.cycle.start - 1
+    return SyntheticJobBatch.objects.filter(
+        cycle__start__lte=block_in_prev_cycle,
+        cycle__stop__gt=block_in_prev_cycle,
+    ).first()
 
 
 def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, dict[ExecutorClass, int]]:
