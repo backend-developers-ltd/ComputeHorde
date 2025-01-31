@@ -13,9 +13,15 @@ def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
     assert tempo > 0
 
     interval = tempo + 1
-    last_epoch = block - 1 - (block + netuid + 1) % interval
-    next_tempo_block_start = last_epoch + interval
-    return range(last_epoch, next_tempo_block_start)
+    next_epoch = block + tempo - (block + netuid + 1) % interval
+
+    if next_epoch == block:
+        prev_epoch = next_epoch
+        next_epoch = prev_epoch + interval
+    else:
+        prev_epoch = next_epoch - interval
+
+    return range(prev_epoch, next_epoch)
 
 
 def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
