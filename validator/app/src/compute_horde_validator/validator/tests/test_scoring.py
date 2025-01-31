@@ -378,3 +378,100 @@ def test_dance_incentives_applied_on_missing_prev_cycle(override_weights_version
     scores = score_batches([batch3])
     assert "miner_hotkey" in scores
     assert scores["miner_hotkey"] == approx(100 * DYNAMIC_MANIFEST_SCORE_MULTIPLIER, abs=10**-4)
+
+
+def setup_batch_jobs(
+    batch: SyntheticJobBatch,
+    miner: Miner,
+    synthetic_completed: int = 0,
+    synthetic_excused: int = 0,
+    synthetic_failed: int = 0,
+    organic_completed: int = 0,
+    organic_failed: int = 0,
+):
+    common_params = {
+        "miner": miner,
+        "miner_address": "127.0.0.1",
+        "miner_address_ip_version": 4,
+        "miner_port": 8080,
+        "executor_class": ExecutorClass.always_on__llm__a6000,
+    }
+    for _ in range(synthetic_completed):
+        SyntheticJob.objects.create(
+            status=SyntheticJob.Status.COMPLETED,
+            batch=batch,
+            score=1,
+            **common_params,
+        )
+    for _ in range(synthetic_excused):
+        SyntheticJob.objects.create(
+            status=SyntheticJob.Status.EXCUSED,
+            batch=batch,
+            score=1,
+            **common_params,
+        )
+    for _ in range(synthetic_failed):
+        SyntheticJob.objects.create(
+            status=SyntheticJob.Status.FAILED,
+            batch=batch,
+            score=0,
+            **common_params,
+        )
+    for _ in range(organic_completed):
+        OrganicJob.objects.create(
+            status=OrganicJob.Status.COMPLETED,
+            block=batch.cycle.start,
+            **common_params,
+        )
+    for _ in range(organic_failed):
+        OrganicJob.objects.create(
+            status=OrganicJob.Status.FAILED,
+            block=batch.cycle.start,
+            **common_params,
+        )
+
+
+@pytest.mark.override_config(DYNAMIC_EXECUTOR_CLASS_WEIGHTS="always_on.llm.a6000=100")
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test_temporary_scoring_formula(override_weights_version_v1):
+    # override_weights_version_v1 is used to skip testing dancing bonus here
+
+    batch = SyntheticJobBatch.objects.create(
+        accepting_results_until=timezone.now() + timedelta(hours=1),
+        cycle=Cycle.objects.create(start=708, stop=1430),
+    )
+    miner1 = Miner.objects.create(hotkey="miner1")
+    miner2 = Miner.objects.create(hotkey="miner2")
+
+    setup_batch_jobs(
+        batch=batch,
+        miner=miner1,
+        synthetic_completed=2,
+        synthetic_excused=3,
+        synthetic_failed=5,
+        organic_completed=7,
+        organic_failed=11,
+    )
+    setup_batch_jobs(
+        batch=batch,
+        miner=miner2,
+        synthetic_completed=13,
+        synthetic_excused=17,
+        synthetic_failed=19,
+        organic_completed=23,
+        organic_failed=29,
+    )
+
+    scores = score_batches([batch])
+
+    # expected scores
+    miner1_correct = 2 + 3 + 7
+    miner2_correct = 13 + 17 + 23
+    total = miner1_correct + miner2_correct
+    miner1_score = 100 * miner1_correct / total
+    miner2_score = 100 * miner2_correct / total
+
+    assert "miner1" in scores
+    assert "miner2" in scores
+    assert scores["miner1"] == approx(miner1_score, abs=10**-4)
+    assert scores["miner2"] == approx(miner2_score, abs=10**-4)
