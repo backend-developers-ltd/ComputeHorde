@@ -1,4 +1,5 @@
 import abc
+import asyncio
 import uuid
 
 from compute_horde.base.docker import DockerRunOptionsPreset
@@ -33,6 +34,23 @@ class BaseSyntheticJobGenerator(abc.ABC):
     @abc.abstractmethod
     def docker_run_options_preset(self) -> DockerRunOptionsPreset: ...
 
+    async def streaming_preparation_timeout(self) -> float | None:
+        """For streaming jobs, the timeout between sending a JobRequest and receiving StreamingReadyRequest"""
+        return None
+
+    async def trigger_streaming_job_execution(
+        self,
+        job_uuid,
+        start_barrier: asyncio.Barrier,
+        server_public_key,
+        client_key_pair,
+        server_address,
+        server_port,
+    ):
+        """For streaming jobs, perform whatever calls are necessary to trigger actions required to perform validation
+        of given executor class."""
+        raise NotImplementedError
+
     def docker_run_cmd(self) -> list[str]:
         return []
 
@@ -46,7 +64,12 @@ class BaseSyntheticJobGenerator(abc.ABC):
         return None
 
     @abc.abstractmethod
-    def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]: ...
+    def verify_time(self, time_took: float) -> bool | None:
+        """Check whether the job finished in time. Return None if no data available (for example it didn't finish)"""
+
+    @abc.abstractmethod
+    def verify_correctness(self, msg: V0JobFinishedRequest) -> tuple[bool, str]:
+        """Check whether the job yielded the right result."""
 
     @abc.abstractmethod
     def job_description(self) -> str: ...
