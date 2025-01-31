@@ -103,25 +103,16 @@ class GPUHashcatSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def volume(self) -> Volume | None:
         return InlineVolume(contents=single_file_zip("payload.txt", self.hash_job.payload))
 
-    def score(self, time_took: float) -> float:
-        if self.weights_version == 0:
-            return MAX_SCORE * (1 - (time_took / (2 * self.timeout_seconds())))
-        elif self.weights_version in [1, 2]:
-            return 1 / time_took
-        elif self.weights_version in [3, 4]:
-            return 1 if time_took <= self.timeout_seconds() else 0
-        else:
-            raise RuntimeError(f"No score function for weights_version: {self.weights_version}")
+    def verify_time(self, time_took: float) -> bool | None:
+        return time_took <= self.timeout_seconds()
 
-    def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
+    def verify_correctness(self, msg: V0JobFinishedRequest) -> tuple[bool, str]:
         if str(msg.docker_process_stdout).strip() != str(self.expected_answer):
             return (
                 False,
                 f"result does not match expected answer: {self.expected_answer}, msg: {msg.model_dump_json()}",
-                0,
             )
-
-        return True, "", self.score(time_took)
+        return True, ""
 
     def job_description(self) -> str:
         return f"Hashcat {self.hash_job}"

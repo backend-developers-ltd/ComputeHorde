@@ -619,6 +619,16 @@ LOGGING = {
             "level": "WARNING",
             "propagate": True,
         },
+        "botocore": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": True,
+        },
+        "httpcore.http11": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": True,
+        },
     },
 }
 

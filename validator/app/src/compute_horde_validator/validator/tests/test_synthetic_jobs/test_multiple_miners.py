@@ -6,8 +6,10 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import bittensor
+import httpx
 import pytest
 import pytest_asyncio
+from compute_horde.certificate import generate_certificate_at
 from compute_horde.executor_class import (
     DEFAULT_EXECUTOR_CLASS,
     DEFAULT_LLM_EXECUTOR_CLASS,
@@ -40,8 +42,9 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
 )
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
 
+from ...synthetic_jobs.generator import llm_prompts
 from .helpers import check_miner_job_system_events, check_synthetic_job, generate_prompts
-from .mock_generator import MOCK_SCORE, NOT_SCORED, LlmPromptsSyntheticJobGeneratorFactory
+from .mock_generator import NOT_SCORED, LlmPromptsSyntheticJobGeneratorFactory
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -133,6 +136,11 @@ def create_simulation_miner_client(miner_hotkeys: list[str], transports: list[Ab
     return _create
 
 
+@pytest.fixture
+def ssl_public_key():
+    return generate_certificate_at()[1]
+
+
 async def test_all_succeed(
     axon_dict: dict[str, bittensor.AxonInfo],
     transports: list[MinerSimulationTransport],
@@ -169,19 +177,11 @@ async def test_all_succeed(
     )
 
     for job_uuid, miner in zip(job_uuids, miners):
-        await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, MOCK_SCORE)
+        await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, 1)
 
 
-async def test_all_streaming_succeed(
-    axon_dict: dict[str, bittensor.AxonInfo],
-    transports: list[MinerSimulationTransport],
-    miners: list[Miner],
-    create_simulation_miner_client: Callable,
-    job_uuids: list[uuid.UUID],
-    streaming_manifest_message: str,
-    httpx_mock: HTTPXMock,
-    mocker: MockerFixture,
-    settings,
+async def prep_mocks_for_streaming(
+    mocker: MockerFixture, httpx_mock: HTTPXMock, job_uuids: list[uuid.UUID], settings
 ):
     prompts, prompt_samples = await generate_prompts(num_miners=len(job_uuids))
     mocker.patch(
@@ -191,9 +191,14 @@ async def test_all_streaming_succeed(
     mocker.patch(
         "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
         LlmPromptsSyntheticJobGeneratorFactory(
-            uuids=job_uuids.copy(), prompt_samples=prompt_samples, prompts=prompts
+            uuids=job_uuids.copy(),
+            prompt_samples=prompt_samples,
+            prompts=prompts,
+            streaming=True,
         ),
     )
+    mocker.patch.object(llm_prompts, "STREAMING_PROCESSING_TIMEOUT", 1)
+    mocker.patch.object(llm_prompts, "STREAMING_PROCESSING_TIMEOUT_LEEWAY", 0.5)
 
     httpx_mock.add_response(
         url=re.compile(
@@ -201,9 +206,34 @@ async def test_all_streaming_succeed(
         ),
         json={p.content: p.answer for p in prompts},
     )
+
+    async def sleepy_request(*_):
+        await asyncio.sleep(2)
+        return httpx.Response(201)
+
+    httpx_mock.add_callback(sleepy_request, url=re.compile("https://127.0.0.1:8007.*"))
+
+
+@pytest.mark.override_config(
+    DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT=0.5,
+)
+async def test_some_streaming_succeed(
+    axon_dict: dict[str, bittensor.AxonInfo],
+    transports: list[MinerSimulationTransport],
+    miners: list[Miner],
+    create_simulation_miner_client: Callable,
+    job_uuids: list[uuid.UUID],
+    streaming_manifest_message: str,
+    httpx_mock: HTTPXMock,
+    mocker: MockerFixture,
+    ssl_public_key: str,
+    settings,
+):
+    await prep_mocks_for_streaming(mocker, httpx_mock, job_uuids, settings)
     # generator will solve to the right answer
     MOCK_SCORE = 1.0
 
+    port = 8000
     for job_uuid, transport in zip(job_uuids, transports):
         await transport.add_message(streaming_manifest_message, send_before=1)
 
@@ -215,16 +245,20 @@ async def test_all_streaming_succeed(
         ).model_dump_json()
         await transport.add_message(executor_ready_message, send_before=0)
 
-        streaming_ready_message = miner_requests.V0StreamingJobReadyRequest(
-            job_uuid=str(job_uuid), public_key="123", ip="127.0.0.1", port=8000
-        ).model_dump_json()
-        await transport.add_message(streaming_ready_message, send_before=0)
+        if job_uuid != job_uuids[-1]:
+            streaming_ready_message = miner_requests.V0StreamingJobReadyRequest(
+                job_uuid=str(job_uuid),
+                public_key=ssl_public_key,
+                ip="127.0.0.1",
+                port=(port := port + 1),
+            ).model_dump_json()
+            await transport.add_message(streaming_ready_message, send_before=0)
 
-        job_finish_message = miner_requests.V0JobFinishedRequest(
-            job_uuid=str(job_uuid), docker_process_stdout="", docker_process_stderr=""
-        ).model_dump_json()
+            job_finish_message = miner_requests.V0JobFinishedRequest(
+                job_uuid=str(job_uuid), docker_process_stdout="", docker_process_stderr=""
+            ).model_dump_json()
 
-        await transport.add_message(job_finish_message, send_before=2)
+            await transport.add_message(job_finish_message, send_before=2)
 
     await asyncio.wait_for(
         execute_synthetic_batch_run(
@@ -233,11 +267,22 @@ async def test_all_streaming_succeed(
             [],
             create_miner_client=create_simulation_miner_client,
         ),
-        timeout=1,
+        timeout=10,
     )
 
     for job_uuid, miner in zip(job_uuids, miners):
-        await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, MOCK_SCORE)
+        if job_uuid == job_uuids[-1]:
+            await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.FAILED, 0)
+        elif job_uuid == job_uuids[-2]:
+            await check_synthetic_job(
+                job_uuid,
+                miner.pk,
+                SyntheticJob.Status.FAILED,
+                0,
+                re.compile("took too long: time_took_sec=.*"),
+            )
+        else:
+            await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, MOCK_SCORE)
 
 
 @pytest_asyncio.fixture
@@ -495,7 +540,7 @@ async def test_complex(
         == 8
     )
 
-    await check_synthetic_job(job_uuids[0], miners[0].pk, SyntheticJob.Status.COMPLETED, MOCK_SCORE)
+    await check_synthetic_job(job_uuids[0], miners[0].pk, SyntheticJob.Status.COMPLETED, 1)
     await check_miner_job_system_events(
         [
             (

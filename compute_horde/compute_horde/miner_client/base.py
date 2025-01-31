@@ -111,7 +111,9 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
             try:
                 msg = self.accepted_request_type().parse(msg)
             except ValidationError as ex:
-                error_msg = f"Malformed message from miner {self.miner_name}: {str(ex)}"
+                if msg == "PING":
+                    continue
+                error_msg = f"Malformed message {msg} from miner {self.miner_name}: {str(ex)}"
                 logger.info(error_msg)
                 self.deferred_send_model(self.build_outgoing_generic_error(error_msg))
                 continue

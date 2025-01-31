@@ -96,9 +96,6 @@ async def check_scores(
 
         job_uuid = receipt["payload"]["job_uuid"]
 
-        time_took_us = receipt["payload"]["time_took_us"]
-        time_took = time_took_us / 1_000_000
-
         job = await SyntheticJob.objects.aget(job_uuid=job_uuid)
 
-        assert abs(job.score * time_took - 1) < 0.0001
+        assert abs(job.score - 1) < 0.0001
