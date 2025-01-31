@@ -50,9 +50,11 @@ async def verify_job_request(job_request: V2JobRequest):
     signer = signature.signatory
     signed_fields = job_request.get_signed_fields()
 
-    whitelisted = await ValidatorWhitelist.objects.filter(hotkey=signer).aexists()
-    if not whitelisted:
-        raise ValueError(f"Signatory {signer} is not in validator whitelist")
+    my_keypair = settings.BITTENSOR_WALLET().get_hotkey()
+    if signer != my_keypair.ss58_address:
+        whitelisted = await ValidatorWhitelist.objects.filter(hotkey=signer).aexists()
+        if not whitelisted:
+            raise ValueError(f"Signatory {signer} is not in validator whitelist")
 
     # verify signed payload
     verify_signature(signed_fields.model_dump_json(), signature)
