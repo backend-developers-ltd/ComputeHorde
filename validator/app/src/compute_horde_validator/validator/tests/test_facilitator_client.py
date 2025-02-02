@@ -32,11 +32,12 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.organic_jobs.facilitator_client import (
     FacilitatorClient,
-    pick_miner_for_job,
 )
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
+from ..organic_jobs import routing
+from ..organic_jobs.routing import pick_miner_for_job
 from .helpers import (
     MockFaillingMinerClient,
     MockMetagraph,
@@ -314,18 +315,18 @@ class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__no_matching_executor_class():
     await setup_db()
-    miner = await pick_miner_for_job(
-        V2JobRequest(
-            uuid=str(uuid.uuid4()),
-            executor_class=next(c for c in ExecutorClass if c != DEFAULT_EXECUTOR_CLASS),
-            docker_image="doesntmatter",
-            raw_script="doesntmatter",
-            args=[],
-            env={},
-            use_gpu=False,
+    with pytest.raises(routing.NoMinerForExecutorType):
+        await pick_miner_for_job(
+            V2JobRequest(
+                uuid=str(uuid.uuid4()),
+                executor_class=next(c for c in ExecutorClass if c != DEFAULT_EXECUTOR_CLASS),
+                docker_image="doesntmatter",
+                raw_script="doesntmatter",
+                args=[],
+                env={},
+                use_gpu=False,
+            )
         )
-    )
-    assert miner is None
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -333,18 +334,18 @@ async def test_pick_miner_for_job__no_matching_executor_class():
 async def test_pick_miner_for_job__no_online_executors():
     await setup_db()
     await MinerManifest.objects.all().aupdate(online_executor_count=0)
-    miner = await pick_miner_for_job(
-        V2JobRequest(
-            uuid=str(uuid.uuid4()),
-            executor_class=DEFAULT_EXECUTOR_CLASS,
-            docker_image="doesntmatter",
-            raw_script="doesntmatter",
-            args=[],
-            env={},
-            use_gpu=False,
+    with pytest.raises(routing.NoMinerForExecutorType):
+        await pick_miner_for_job(
+            V2JobRequest(
+                uuid=str(uuid.uuid4()),
+                executor_class=DEFAULT_EXECUTOR_CLASS,
+                docker_image="doesntmatter",
+                raw_script="doesntmatter",
+                args=[],
+                env={},
+                use_gpu=False,
+            )
         )
-    )
-    assert miner is None
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -371,18 +372,18 @@ async def test_pick_miner_for_job__all_executors_busy(validator_keypair, miner_k
             )
             await JobStartedReceipt.from_receipt(receipt).asave()
 
-        miner = await pick_miner_for_job(
-            V2JobRequest(
-                uuid=str(uuid.uuid4()),
-                executor_class=DEFAULT_EXECUTOR_CLASS,
-                docker_image="doesntmatter",
-                raw_script="doesntmatter",
-                args=[],
-                env={},
-                use_gpu=False,
+        with pytest.raises(routing.AllMinersBusy):
+            await pick_miner_for_job(
+                V2JobRequest(
+                    uuid=str(uuid.uuid4()),
+                    executor_class=DEFAULT_EXECUTOR_CLASS,
+                    docker_image="doesntmatter",
+                    raw_script="doesntmatter",
+                    args=[],
+                    env={},
+                    use_gpu=False,
+                )
             )
-        )
-        assert miner is None
 
 
 # TODO: this test is flaky, needs proper investigation

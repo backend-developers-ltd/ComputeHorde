@@ -1,10 +1,7 @@
 import asyncio
 import logging
 import os
-import random
 from collections import deque
-from datetime import timedelta
-from typing import assert_never
 
 import bittensor
 import pydantic
@@ -15,8 +12,6 @@ from compute_horde.fv_protocol.facilitator_requests import (
     Error,
     JobRequest,
     Response,
-    V0JobRequest,
-    V1JobRequest,
     V2JobRequest,
 )
 from compute_horde.fv_protocol.validator_requests import (
@@ -24,13 +19,8 @@ from compute_horde.fv_protocol.validator_requests import (
     V0Heartbeat,
     V0MachineSpecsUpdate,
 )
-from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde.signature import verify_signature
 from django.conf import settings
-from django.db.models import (
-    Count,
-)
-from django.utils import timezone
 from pydantic import BaseModel
 
 from compute_horde_validator.validator.dynamic_config import aget_config
@@ -40,11 +30,11 @@ from compute_horde_validator.validator.metagraph_client import (
 )
 from compute_horde_validator.validator.models import (
     Miner,
-    MinerManifest,
     OrganicJob,
     SystemEvent,
     ValidatorWhitelist,
 )
+from compute_horde_validator.validator.organic_jobs import routing
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
 from compute_horde_validator.validator.tasks import get_subtensor
@@ -85,56 +75,6 @@ async def save_facilitator_event(
         long_description=long_description,
         data=data or {},
     )
-
-
-async def pick_miner_for_job(request: JobRequest) -> Miner | None:
-    if isinstance(request, V2JobRequest):
-        """
-        Goes through all miners with recent manifests and online executors of the given executor class
-        And returns a random miner that may have a non-busy executor based on known receipts.
-        """
-        executor_class = request.executor_class
-        now = timezone.now()
-
-        running_miner_jobs_counts_qs = (
-            JobStartedReceipt.objects.valid_at(now)
-            .filter(executor_class=executor_class)
-            .values("miner_hotkey")
-            .annotate(count=Count("*"))
-            .values_list("miner_hotkey", "count")
-        )
-
-        running_miner_jobs_counts: dict[str, int] = {
-            hotkey: count async for hotkey, count in running_miner_jobs_counts_qs
-        }
-
-        manifests_q = MinerManifest.objects.select_related("miner").filter(
-            executor_class=str(executor_class),
-            online_executor_count__gt=0,
-            created_at__gte=timezone.now() - timedelta(hours=4),
-        )
-
-        available_manifests = [
-            manifest
-            async for manifest in manifests_q.all()
-            if running_miner_jobs_counts.get(manifest.miner.hotkey, 0)
-            < manifest.online_executor_count
-        ]
-
-        if not available_manifests:
-            return None
-
-        selected = random.choice(available_manifests)
-        return selected.miner
-
-    if isinstance(request, V1JobRequest | V0JobRequest):
-        """
-        V0 and V1 specify the miner in the job request itself - so just return that.
-        """
-        miner, _ = await Miner.objects.aget_or_create(hotkey=request.miner_hotkey)
-        return miner
-
-    assert_never(request)
 
 
 class FacilitatorClient:
@@ -342,11 +282,16 @@ class FacilitatorClient:
                 return
 
         for i in range(max_retries):
-            miner = await pick_miner_for_job(job_request)
-            if miner is None:
-                # TODO: All miners busy -> wait for some time instead?
-                await asyncio.sleep(5)
-                continue
+            try:
+                miner = await routing.pick_miner_for_job(job_request)
+            except routing.NoMinerForExecutorType:
+                logger.warning(f"No miner found for job request: {job_request.uuid}")
+                # Executor counts will not change until the next synthetic job batch. Bail out.
+                break
+            except routing.AllMinersBusy:
+                logger.warning(f"All miners busy for job: {job_request.uuid}")
+                # We know when a miner will be available - todo: wait until then?
+                break
 
             try:
                 # if exists, delete organic job from the previous attempt
