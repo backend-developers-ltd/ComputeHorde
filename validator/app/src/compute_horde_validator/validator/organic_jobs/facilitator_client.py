@@ -341,30 +341,23 @@ class FacilitatorClient:
                 logger.warning(f"Failed to verify signed payload: {e} - will not run job")
                 return
 
-            for i in range(max_retries):
-                miner = await pick_miner_for_job(job_request)
-                if miner is None:
-                    # TODO: All miners busy -> wait for some time instead?
-                    await asyncio.sleep(5)
-                    continue
-
-                try:
-                    # if exists, delete organic job from the previous attempt
-                    await OrganicJob.objects.filter(job_uuid=str(job_request.uuid)).adelete()
-                    job = await self.miner_driver(miner, job_request)
-                    if job.status == OrganicJob.Status.COMPLETED:
-                        break
-                except Exception as e:
-                    logger.warning(
-                        f"Error running organic job {job_request.uuid}: {e} - {max_retries-i-1} retries left"
-                    )
-        else:
-            # normal organic job flow
+        for i in range(max_retries):
             miner = await pick_miner_for_job(job_request)
-            if not miner:
-                logger.error("Could not find miner for job: %s", job_request.uuid)
-                return
-            await self.miner_driver(miner, job_request)
+            if miner is None:
+                # TODO: All miners busy -> wait for some time instead?
+                await asyncio.sleep(5)
+                continue
+
+            try:
+                # if exists, delete organic job from the previous attempt
+                await OrganicJob.objects.filter(job_uuid=str(job_request.uuid)).adelete()
+                job = await self.miner_driver(miner, job_request)
+                if job.status == OrganicJob.Status.COMPLETED:
+                    break
+            except Exception as e:
+                logger.warning(
+                    f"Error running organic job {job_request.uuid}: {e} - {max_retries-i-1} retries left"
+                )
 
     async def miner_driver(self, miner: Miner, job_request: JobRequest) -> OrganicJob:
         """drive a miner client from job start to completion, then close miner connection"""
