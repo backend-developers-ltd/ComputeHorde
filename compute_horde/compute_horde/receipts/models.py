@@ -1,3 +1,4 @@
+import datetime
 from datetime import timedelta
 from typing import ClassVar, Self, TypeAlias, assert_never
 
@@ -41,11 +42,26 @@ class AbstractReceipt(models.Model):
         return f"job_uuid: {self.job_uuid}"
 
 
+class JobStartedReceiptQuerySet(models.QuerySet["JobStartedReceipt"]):
+    def valid_at(self, dt: datetime.datetime):
+        return self.annotate(
+            valid_until=models.ExpressionWrapper(
+                models.F("timestamp") + models.F("ttl") * timedelta(seconds=1),
+                output_field=models.DateTimeField(),
+            ),
+        ).filter(
+            timestamp__lte=dt,
+            valid_until__gte=dt,
+        )
+
+
 class JobStartedReceipt(AbstractReceipt):
     executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
     max_timeout = models.IntegerField()
     is_organic = models.BooleanField()
     ttl = models.IntegerField()
+
+    objects = JobStartedReceiptQuerySet.as_manager()  # type: ignore
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:
