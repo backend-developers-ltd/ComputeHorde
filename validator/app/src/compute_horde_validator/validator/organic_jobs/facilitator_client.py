@@ -88,12 +88,11 @@ async def save_facilitator_event(
 
 
 async def pick_miner_for_job(request: JobRequest) -> Miner | None:
-    """
-    Goes through all miners with recent manifests and online executors of the given executor class
-    And returns a random miner that may have a non-busy executor based on known receipts.
-    """
-
     if isinstance(request, V2JobRequest):
+        """
+        Goes through all miners with recent manifests and online executors of the given executor class
+        And returns a random miner that may have a non-busy executor based on known receipts.
+        """
         executor_class = request.executor_class
         now = timezone.now()
 
@@ -129,6 +128,9 @@ async def pick_miner_for_job(request: JobRequest) -> Miner | None:
         return selected.miner
 
     if isinstance(request, V1JobRequest | V0JobRequest):
+        """
+        V0 and V1 specify the miner in the job request itself - so just return that.
+        """
         miner, _ = await Miner.objects.aget_or_create(hotkey=request.miner_hotkey)
         return miner
 
