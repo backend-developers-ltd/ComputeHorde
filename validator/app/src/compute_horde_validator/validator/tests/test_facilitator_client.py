@@ -9,8 +9,12 @@ from unittest.mock import patch
 import pytest
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.fv_protocol.facilitator_requests import JobRequest, Response
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
+from compute_horde.fv_protocol.facilitator_requests import (
+    JobRequest,
+    Response,
+    V2JobRequest,
+)
 from compute_horde.fv_protocol.validator_requests import (
     V0AuthenticationRequest,
     V0MachineSpecsUpdate,
@@ -27,7 +31,10 @@ from compute_horde_validator.validator.models import (
     OrganicJob,
     SyntheticJobBatch,
 )
-from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
+from compute_horde_validator.validator.organic_jobs.facilitator_client import (
+    FacilitatorClient,
+    pick_miner_for_job,
+)
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
@@ -314,14 +321,18 @@ class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__no_matching_executor_class():
     await setup_db()
-
-    async with async_patch_all():
-        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
-
-        miner = await client.pick_miner_for_job("NonExistentExecutorClass")
-        assert miner is None
-
-        await cancel_facilitator_tasks(client)
+    miner = await pick_miner_for_job(
+        V2JobRequest(
+            uuid=str(uuid.uuid4()),
+            executor_class=next(c for c in ExecutorClass if c != DEFAULT_EXECUTOR_CLASS),
+            docker_image="doesntmatter",
+            raw_script="doesntmatter",
+            args=[],
+            env={},
+            use_gpu=False,
+        )
+    )
+    assert miner is None
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -329,14 +340,18 @@ async def test_pick_miner_for_job__no_matching_executor_class():
 async def test_pick_miner_for_job__no_online_executors():
     await setup_db()
     await MinerManifest.objects.all().aupdate(online_executor_count=0)
-
-    async with async_patch_all():
-        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
-
-        miner = await client.pick_miner_for_job(DEFAULT_EXECUTOR_CLASS)
-        assert miner is None
-
-        await cancel_facilitator_tasks(client)
+    miner = await pick_miner_for_job(
+        V2JobRequest(
+            uuid=str(uuid.uuid4()),
+            executor_class=DEFAULT_EXECUTOR_CLASS,
+            docker_image="doesntmatter",
+            raw_script="doesntmatter",
+            args=[],
+            env={},
+            use_gpu=False,
+        )
+    )
+    assert miner is None
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -362,10 +377,20 @@ async def test_pick_miner_for_job__all_executors_busy(validator_keypair, miner_k
                 miner_signature=sign_blob(miner_keypair, blob),
             )
             await JobStartedReceipt.from_receipt(receipt).asave()
-    async with async_patch_all():
-        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
-        miner = await client.pick_miner_for_job(DEFAULT_EXECUTOR_CLASS)
+
+        miner = await pick_miner_for_job(
+            V2JobRequest(
+                uuid=str(uuid.uuid4()),
+                executor_class=DEFAULT_EXECUTOR_CLASS,
+                docker_image="doesntmatter",
+                raw_script="doesntmatter",
+                args=[],
+                env={},
+                use_gpu=False,
+            )
+        )
         assert miner is None
+
 
 # TODO: this test is flaky, needs proper investigation
 @pytest.mark.skip

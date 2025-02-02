@@ -4,14 +4,21 @@ import os
 import random
 from collections import deque
 from datetime import timedelta
+from typing import assert_never
 
 import bittensor
 import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde.executor_class import ExecutorClass
-from compute_horde.fv_protocol.facilitator_requests import Error, JobRequest, Response, V2JobRequest
+from compute_horde.fv_protocol.facilitator_requests import (
+    Error,
+    JobRequest,
+    Response,
+    V0JobRequest,
+    V1JobRequest,
+    V2JobRequest,
+)
 from compute_horde.fv_protocol.validator_requests import (
     V0AuthenticationRequest,
     V0Heartbeat,
@@ -22,12 +29,6 @@ from compute_horde.signature import verify_signature
 from django.conf import settings
 from django.db.models import (
     Count,
-    DateTimeField,
-    ExpressionWrapper,
-    F,
-    IntegerField,
-    OuterRef,
-    Subquery,
 )
 from django.utils import timezone
 from pydantic import BaseModel
@@ -86,6 +87,54 @@ async def save_facilitator_event(
         long_description=long_description,
         data=data or {},
     )
+
+
+async def pick_miner_for_job(request: JobRequest) -> Miner | None:
+    """
+    Goes through all miners with recent manifests and online executors of the given executor class
+    And returns a random miner that may have a non-busy executor based on known receipts.
+    """
+
+    if isinstance(request, V2JobRequest):
+        executor_class = request.executor_class
+        now = timezone.now()
+
+        running_miner_jobs_counts_qs = (
+            JobStartedReceipt.objects.valid_at(now)
+            .filter(executor_class=executor_class)
+            .values("miner_hotkey")
+            .annotate(count=Count("*"))
+            .values_list("miner_hotkey", "count")
+        )
+
+        running_miner_jobs_counts: dict[str, int] = {
+            hotkey: count async for hotkey, count in running_miner_jobs_counts_qs
+        }
+
+        manifests_q = MinerManifest.objects.select_related("miner").filter(
+            executor_class=str(executor_class),
+            online_executor_count__gt=0,
+            created_at__gte=timezone.now() - timedelta(hours=4),
+        )
+
+        available_manifests = [
+            manifest
+            async for manifest in manifests_q.all()
+            if running_miner_jobs_counts.get(manifest.miner.hotkey, 0)
+            < manifest.online_executor_count
+        ]
+
+        if not available_manifests:
+            return None
+
+        selected = random.choice(available_manifests)
+        return selected.miner
+
+    if isinstance(request, V1JobRequest | V0JobRequest):
+        miner, _ = await Miner.objects.aget_or_create(hotkey=request.miner_hotkey)
+        return miner
+
+    assert_never(request)
 
 
 class FacilitatorClient:
@@ -281,46 +330,6 @@ class FacilitatorClient:
     async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
         return await get_miner_axon_info(hotkey)
 
-    async def pick_miner_for_job(self, executor_class: ExecutorClass) -> Miner | None:
-        """
-        Goes through all miners with recent manifests and online executors of the given executor class
-        And returns a random miner that seems to have a non-busy executor.
-        """
-
-        now = timezone.now()
-
-        jobs_count_subq = JobStartedReceipt.objects.annotate(
-            valid_until=ExpressionWrapper(
-                F("timestamp") + F("ttl") * timedelta(seconds=1),
-                output_field=DateTimeField()
-            ),
-        ).filter(
-            executor_class=executor_class,
-            timestamp__lte=now,
-            valid_until__gte=now,
-            miner_hotkey=OuterRef("miner__hotkey"),
-        ).values(
-            "miner_hotkey"
-        ).annotate(
-            count=Count("id")
-        ).values("count")
-
-        relevant_manifests_q = MinerManifest.objects.select_related("miner").annotate(
-            ongoing_jobs=Subquery(jobs_count_subq, output_field=IntegerField()),
-        ).filter(
-            executor_class=str(executor_class),
-            online_executor_count__gt=F("ongoing_jobs"),
-            created_at__gte=timezone.now() - timedelta(hours=4),
-        )
-
-        available_manifests = [m async for m in relevant_manifests_q.all()]
-
-        if not available_manifests:
-            return None
-
-        selected = random.choice(available_manifests)
-        return selected.miner
-
     async def process_job_request(self, job_request: JobRequest):
         max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
 
@@ -333,12 +342,11 @@ class FacilitatorClient:
                 return
 
             for i in range(max_retries):
-                miner = await self.pick_miner_for_job(job_request.executor_class)
+                miner = await pick_miner_for_job(job_request)
                 if miner is None:
-                    logger.warning(
-                        f"No available miners with executor class: {job_request.executor_class} - will not run job"
-                    )
-                    return
+                    # TODO: All miners busy -> wait for some time instead?
+                    await asyncio.sleep(5)
+                    continue
 
                 try:
                     # if exists, delete organic job from the previous attempt
@@ -352,7 +360,10 @@ class FacilitatorClient:
                     )
         else:
             # normal organic job flow
-            miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
+            miner = await pick_miner_for_job(job_request)
+            if not miner:
+                logger.error("Could not find miner for job: %s", job_request.uuid)
+                return
             await self.miner_driver(miner, job_request)
 
     async def miner_driver(self, miner: Miner, job_request: JobRequest) -> OrganicJob:
