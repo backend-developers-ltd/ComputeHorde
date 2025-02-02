@@ -301,6 +301,8 @@ class FacilitatorClient:
                 job = await self.miner_driver(miner, job_request)
                 if job.status == OrganicJob.Status.COMPLETED:
                     break
+                else:
+                    logger.warning(f"Job finished with status: {job.status} - {max_retries-i-1} retries left")
             except Exception as e:
                 logger.warning(
                     f"Error running organic job {job_request.uuid}: {e} - {max_retries-i-1} retries left"
