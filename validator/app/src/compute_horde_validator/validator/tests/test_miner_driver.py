@@ -146,7 +146,7 @@ async def test_miner_driver(
         job,
         job_request,
         total_job_timeout=1,
-        wait_timeout=1,
+        executor_ready_timeout=1,
         notify_callback=track_job_status_updates,
     )
 

@@ -285,9 +285,14 @@ CONSTANCE_CONFIG = {
         "Timeout for the run of an organic jobs in seconds",
         int,
     ),
-    "DYNAMIC_ORGANIC_JOB_WAIT_TIMEOUT": (
+    "DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT": (
+        3,
+        "Timeout for miner to accept or decline an organic job in seconds",
+        int,
+    ),
+    "DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT": (
         300,
-        "Timeout for preparing an organic job in seconds",
+        "Timeout for preparing an executor for an organic job in seconds",
         int,
     ),
     "DYNAMIC_ORGANIC_JOB_MAX_RETRIES": (

@@ -293,6 +293,7 @@ class FacilitatorClient:
         for i in range(max_retries):
             try:
                 miner = await routing.pick_miner_for_job(job_request)
+                logger.info(f"Selected miner {miner.hotkey} for job {job_request.uuid} attempt {i+1}/{max_retries}")
             except routing.NoMinerForExecutorType:
                 logger.warning(f"No miner found for job request: {job_request.uuid}")
                 # Executor counts will not change until the next synthetic job batch. Bail out.
@@ -307,10 +308,10 @@ class FacilitatorClient:
                 if job_attempt.status == OrganicJob.Status.COMPLETED:
                     break
                 else:
-                    logger.warning(f"Job finished with status: {job_attempt.status} - {max_retries-i-1} retries left")
+                    logger.warning(f"Job finished with status: {job_attempt.status} - {max_retries-i-1} attempts left")
             except Exception as e:
                 logger.warning(
-                    f"Error running organic job {job_request.uuid}: {e} - {max_retries-i-1} retries left"
+                    f"Error running organic job {job_request.uuid}: {e} - {max_retries-i-1} attempts left"
                 )
 
     async def miner_driver(self, miner: Miner, job_request: JobRequest) -> OrganicJob:
@@ -348,13 +349,15 @@ class FacilitatorClient:
         )
 
         total_job_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_TIMEOUT")
-        wait_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_WAIT_TIMEOUT")
+        initial_response_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT")
+        executor_ready_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT")
         await execute_organic_job(
             miner_client,
             job,
             job_request,
             total_job_timeout=total_job_timeout,
-            wait_timeout=wait_timeout,
+            initial_response_timeout=initial_response_timeout,
+            executor_ready_timeout=executor_ready_timeout,
             notify_callback=self.send_model,
         )
 

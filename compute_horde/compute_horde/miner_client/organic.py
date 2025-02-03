@@ -390,14 +390,16 @@ class OrganicJobDetails:
 async def run_organic_job(
     client: OrganicMinerClient,
     job_details: OrganicJobDetails,
-    wait_timeout: int = 300,
+    initial_response_timeout: int = 3,
+    executor_ready_timeout: int = 300,
 ):
     """
     Run an organic job. This is a simpler way to use OrganicMinerClient.
 
     :param client: the organic miner client
     :param job_details: details specific to the job that needs to be run
-    :param wait_timeout: maximum timeout for waiting for miner responses
+    :param initial_response_timeout: timeout for waiting for job acceptance/rejection
+    :param executor_ready_timeout: timeout for waiting for executor readiness
     :return: standard out and standard error of the job container
     """
     assert client.job_uuid == job_details.job_uuid
@@ -429,12 +431,13 @@ async def run_organic_job(
                 job_started_receipt_signature=receipt_signature,
             ),
         )
+        logger.debug(f"Sent initial job request for {job_details.job_uuid}")
 
         try:
             try:
                 initial_response = await asyncio.wait_for(
                     client.miner_accepting_or_declining_future,
-                    timeout=min(job_timer.time_left(), wait_timeout),
+                    timeout=min(job_timer.time_left(), initial_response_timeout),
                 )
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
@@ -451,7 +454,7 @@ async def run_organic_job(
             try:
                 executor_readiness_response = await asyncio.wait_for(
                     client.executor_ready_or_failed_future,
-                    timeout=min(job_timer.time_left(), wait_timeout),
+                    timeout=min(job_timer.time_left(), executor_ready_timeout),
                 )
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
