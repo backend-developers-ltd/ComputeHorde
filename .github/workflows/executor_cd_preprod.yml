@@ -6,7 +6,7 @@ on:
       - 'deploy-executor-preprod'
 
 env:
-  TAG_VERSION: "v0-preprod"
+  TAG_VERSION: "v1-preprod"
   STAGING_DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-executor-staging"
   DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-executor"
   DIST_VERSION_PREFIX: "executor-preprod"
