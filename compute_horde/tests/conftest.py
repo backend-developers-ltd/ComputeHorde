@@ -1,5 +1,4 @@
 import datetime
-import uuid
 
 import bittensor
 import pytest
@@ -99,8 +98,3 @@ def receipts(validator_keypair, miner_keypair):
 def mocked_responses():
     with responses.RequestsMock() as rsps:
         yield rsps
-
-
-@pytest.fixture(scope="session")
-def container_name():
-    return str(uuid.uuid4())
