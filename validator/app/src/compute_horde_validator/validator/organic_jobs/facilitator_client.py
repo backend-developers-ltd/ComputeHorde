@@ -273,7 +273,16 @@ class FacilitatorClient:
         return await get_miner_axon_info(hotkey)
 
     async def process_job_request(self, job_request: JobRequest):
-        max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
+        max_retries = 1  # await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
+        """
+        NOTE: Retrying jobs is iffy at this point:
+        - Facilitator complains during job status updates, doesn't like the same job getting the same status twice
+        - Miner complains about... everything if it gets selected for a rerun of a job it already failed
+        - Validator's job flow would complain if it saved the job started receipt it sends to a miner. (It's not doing
+            that but it should.)
+
+        For now we'll bail and report job failure as soon as anything goes wrong.
+        """
 
         if isinstance(job_request, V2JobRequest):
             logger.debug(f"Received signed job request: {job_request}")
@@ -296,13 +305,11 @@ class FacilitatorClient:
                 break
 
             try:
-                # if exists, delete organic job from the previous attempt
-                await OrganicJob.objects.filter(job_uuid=str(job_request.uuid)).adelete()
-                job = await self.miner_driver(miner, job_request)
-                if job.status == OrganicJob.Status.COMPLETED:
+                job_attempt = await self.miner_driver(miner, job_request)
+                if job_attempt.status == OrganicJob.Status.COMPLETED:
                     break
                 else:
-                    logger.warning(f"Job finished with status: {job.status} - {max_retries-i-1} retries left")
+                    logger.warning(f"Job finished with status: {job_attempt.status} - {max_retries-i-1} retries left")
             except Exception as e:
                 logger.warning(
                     f"Error running organic job {job_request.uuid}: {e} - {max_retries-i-1} retries left"
