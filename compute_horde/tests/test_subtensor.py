@@ -3,6 +3,7 @@ import pytest
 from compute_horde.subtensor import (
     get_cycle_containing_block,
     get_epoch_containing_block,
+    get_peak_cycle,
 )
 
 
@@ -58,3 +59,26 @@ def test__get_cycle_containing_block(netuid, block, expected_cycle):
     assert (
         get_cycle_containing_block(block=block, netuid=netuid) == expected_cycle
     ), f"block: {block}, netuid: {netuid}, expected: {expected_cycle}"
+
+
+@pytest.mark.parametrize(
+    "netuid,block,expected",
+    [
+        (1, 719, range(719, 1441)),  # block in peak
+        (1, 1440, range(719, 1441)),  # block in peak
+        (1, 1441, range(719, 1441)),  # block in non-peak
+        (1, 5000, range(719, 1441)),  # block in non-peak
+        (1, 7938, range(719, 1441)),  # block in non-peak
+        (1, 7939, range(7939, 8661)),  # block in peak
+        (1, 8662, range(7939, 8661)),  # block in non-peak
+        (12, 708, range(708, 1430)),  # block in peak
+        (12, 1429, range(708, 1430)),  # block in peak
+        (12, 1430, range(708, 1430)),  # block in non-peak
+        (12, 2900, range(708, 1430)),  # block in non-peak
+        (12, 5000, range(708, 1430)),  # block in non-peak
+        (12, 7928, range(7928, 8650)),  # block in peak
+        (12, 8649, range(7928, 8650)),  # block in non-peak
+    ],
+)
+def test_get_peak_cycle(netuid, block, expected):
+    assert get_peak_cycle(block, netuid) == expected
