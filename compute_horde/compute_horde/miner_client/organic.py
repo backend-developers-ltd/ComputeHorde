@@ -41,6 +41,8 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobFinishedReceiptRequest,
     V0JobRequest,
 )
+from compute_horde.receipts import Receipt
+from compute_horde.receipts.models import JobStartedReceipt, JobAcceptedReceipt, JobFinishedReceipt
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
@@ -282,6 +284,10 @@ class OrganicMinerClient(AbstractMinerClient):
                 ttl,
             )
             await self.send_model(receipt_message)
+            await JobAcceptedReceipt.from_payload(
+                receipt_message.payload,
+                validator_signature=receipt_message.signature,
+            ).asave()
             logger.debug(f"Sent job accepted receipt for {self.job_uuid}")
         except Exception as e:
             comment = f"Failed to send job accepted receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
@@ -320,6 +326,10 @@ class OrganicMinerClient(AbstractMinerClient):
                 started_timestamp, time_took_seconds, score
             )
             await self.send_model(receipt_message)
+            await JobFinishedReceipt.from_payload(
+                receipt_message.payload,
+                validator_signature=receipt_message.signature,
+            ).asave()
             logger.debug(f"Sent job finished receipt for {self.job_uuid}")
         except Exception as e:
             comment = f"Failed to send job finished receipt to miner {self.miner_name} for job {self.job_uuid}: {e}"
@@ -433,6 +443,10 @@ async def run_organic_job(
             ),
         )
         logger.debug(f"Sent initial job request for {job_details.job_uuid}")
+        await JobStartedReceipt.from_payload(
+            receipt_payload,
+            validator_signature=receipt_signature,
+        ).asave()
 
         try:
             try:
