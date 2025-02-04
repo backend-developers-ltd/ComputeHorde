@@ -190,8 +190,14 @@ class MinerManifest(models.Model):
     batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     executor_class = models.CharField(max_length=255)
-    executor_count = models.IntegerField(default=0)
-    online_executor_count = models.IntegerField(default=0)
+    executor_count = models.IntegerField(
+        default=0,
+        help_text="The total number of available executors of this class as reported by the miner",
+    )
+    online_executor_count = models.IntegerField(
+        default=0,
+        help_text="Number of executors that finished or properly declined a job request during the batch",
+    )
 
     class Meta:
         constraints = [
