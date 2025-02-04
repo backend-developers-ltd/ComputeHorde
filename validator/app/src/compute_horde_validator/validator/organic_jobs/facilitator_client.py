@@ -350,13 +350,22 @@ class FacilitatorClient:
         subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
         current_block = subtensor_.get_current_block()
 
-        miner_axon_info = await self.get_miner_axon_info(miner.hotkey)
+        if miner.hotkey == settings.DEBUG_MINER_KEY:
+            miner_ip = settings.DEBUG_MINER_ADDRESS
+            miner_port = settings.DEBUG_MINER_PORT
+            ip_type = 4
+        else:
+            miner_axon_info = await self.get_miner_axon_info(miner.hotkey)
+            miner_ip = miner_axon_info.ip
+            miner_port = miner_axon_info.port
+            ip_type = miner_axon_info.ip_type
+
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
             miner=miner,
-            miner_address=miner_axon_info.ip,
-            miner_address_ip_version=miner_axon_info.ip_type,
-            miner_port=miner_axon_info.port,
+            miner_address=miner_ip,
+            miner_address_ip_version=ip_type,
+            miner_port=miner_port,
             executor_class=job_request.executor_class,
             job_description="User job from facilitator",
             block=current_block,
