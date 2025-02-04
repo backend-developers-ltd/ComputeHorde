@@ -8,8 +8,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V1JobRequest,
     V2JobRequest,
 )
-from compute_horde.receipts.models import JobStartedReceipt
-from django.db.models import Count
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from django.utils import timezone
 
 from compute_horde_validator.validator.models import Miner, MinerManifest
@@ -43,7 +42,6 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     Returns a random miner that may have a non-busy executor based on known receipts.
     """
     executor_class = request.executor_class
-    now = timezone.now()
 
     manifests_qs = MinerManifest.objects.select_related("miner").filter(
         executor_class=str(executor_class),
@@ -54,26 +52,33 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     if not manifests:
         raise NoMinerForExecutorType()
 
-    running_miner_jobs_counts_qs = (
-        JobStartedReceipt.objects.valid_at(now)
-        .filter(executor_class=executor_class)
-        .values("miner_hotkey")
-        .annotate(count=Count("*"))
-        .values_list("miner_hotkey", "count")
-    )
-    running_miner_jobs_counts: dict[str, int] = {
-        hotkey: count async for hotkey, count in running_miner_jobs_counts_qs
-    }
-    manifests = [
-        manifest
-        for manifest in manifests
-        if manifest.online_executor_count > running_miner_jobs_counts.get(manifest.miner.hotkey, 0)
-    ]
-    if not manifests:
-        raise AllMinersBusy()
+    random.shuffle(manifests)
 
-    selected = random.choice(manifests)
-    return selected.miner
+    for manifest in manifests:
+        miner = manifest.miner
+
+        known_started_jobs: set[str] = {
+            job_uuid async for job_uuid in JobStartedReceipt.objects
+            .valid_at(timezone.now())
+            .filter(miner_hotkey=miner.hotkey)
+            .values_list("job_uuid", flat=True)
+        }
+
+        known_finished_jobs: set[str] = {
+            job_uuid async for job_uuid in JobFinishedReceipt.objects
+            .filter(
+                job_uuid__in=known_started_jobs,
+                miner_hotkey=miner.hotkey,
+            )
+            .values_list("job_uuid", flat=True)
+        }
+
+        maybe_ongoing_jobs = known_started_jobs - known_finished_jobs
+
+        if len(maybe_ongoing_jobs) < manifest.online_executor_count:
+            return miner
+
+    raise AllMinersBusy()
 
 
 async def pick_miner_for_job_v0_v1(request: V0JobRequest | V1JobRequest) -> Miner:
