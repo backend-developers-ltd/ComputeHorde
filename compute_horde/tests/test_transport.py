@@ -9,11 +9,11 @@ from compute_horde.transport import WSTransport
 
 class WSTestServer:
     host = "localhost"
-    port = 8765
 
-    def __init__(self):
+    def __init__(self, port: int) -> None:
         self.ws_server: websockets.Server | None = None
         self.received: asyncio.Queue[str] = asyncio.Queue()
+        self.port = port
 
     async def srv(self, ws: websockets.ServerConnection):
         async for message in ws:
@@ -48,16 +48,16 @@ class WSTestServer:
 
 
 @pytest_asyncio.fixture
-async def server():
-    async with WSTestServer() as _server:
+async def server(unused_tcp_port):
+    async with WSTestServer(port=unused_tcp_port) as _server:
         yield _server
 
 
 @pytest.fixture
-def ws_transport():
+def ws_transport(server):
     return WSTransport(
         "test",
-        f"ws://{WSTestServer.host}:{WSTestServer.port}",
+        f"ws://{server.host}:{server.port}",
         base_retry_delay=0.1,
         retry_jitter=0.1,
     )

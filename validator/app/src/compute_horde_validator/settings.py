@@ -645,7 +645,9 @@ SYNTHETIC_JOB_GENERATOR_FACTORY = env.str(
     "SYNTHETIC_JOB_GENERATOR_FACTORY",
     default="compute_horde_validator.validator.synthetic_jobs.generator.factory:DefaultSyntheticJobGeneratorFactory",
 )
-FACILITATOR_URI = env.str("FACILITATOR_URI", default="wss://facilitator.computehorde.io/ws/v0/")
+FACILITATOR_URI = env.str(
+    "FACILITATOR_URI", default="wss://facilitator.computehorde.io/ws/v0/"
+).strip()
 STATS_COLLECTOR_URL = env.str(
     "STATS_COLLECTOR_URL", default="https://facilitator.computehorde.io/stats_collector/v0/"
 )

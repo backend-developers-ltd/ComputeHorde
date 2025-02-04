@@ -6,16 +6,21 @@ def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
 
     See also: https://github.com/opentensor/bittensor/pull/2168/commits/9e8745447394669c03d9445373920f251630b6b8
 
-    If given block happens to be an end of an epoch, the resulting epoch will end with it. The beginning of an epoch
-    is the first block when values like "dividends" are different (before an epoch they are constant for a full
-    tempo).
+    The beginning of an epoch is the first block when values like "dividends" are different
+    (before an epoch they are constant for a full tempo).
     """
     assert tempo > 0
 
     interval = tempo + 1
-    last_epoch = block - 1 - (block + netuid + 1) % interval
-    next_tempo_block_start = last_epoch + interval
-    return range(last_epoch, next_tempo_block_start)
+    next_epoch = block + tempo - (block + netuid + 1) % interval
+
+    if next_epoch == block:
+        prev_epoch = next_epoch
+        next_epoch = prev_epoch + interval
+    else:
+        prev_epoch = next_epoch - interval
+
+    return range(prev_epoch, next_epoch)
 
 
 def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
