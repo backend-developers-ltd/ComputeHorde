@@ -348,7 +348,7 @@ class FacilitatorClient:
         subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
         current_block = subtensor_.get_current_block()
 
-        if settings.DEBUG_MINER_KEY == miner.hotkey:
+        if miner.hotkey == settings.DEBUG_MINER_KEY:
             miner_ip = settings.DEBUG_MINER_ADDRESS
             miner_port = settings.DEBUG_MINER_PORT
             ip_type = 4
