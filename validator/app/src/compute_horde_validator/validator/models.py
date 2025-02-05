@@ -2,10 +2,12 @@ import logging
 import shlex
 import uuid
 from os import urandom
+from typing import Self
 
 from compute_horde.base.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde.base.volume import Volume, ZipUrlVolume
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.subtensor import get_cycle_containing_block
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import UniqueConstraint
@@ -150,6 +152,12 @@ class Cycle(models.Model):
 
     def __str__(self):
         return f"Cycle [{self.start};{self.stop})"
+
+    @classmethod
+    def from_block(cls, block: int, netuid: int) -> Self:
+        r = get_cycle_containing_block(block=block, netuid=netuid)
+        c, _ = cls.objects.get_or_create(start=r.start, stop=r.stop)
+        return c
 
 
 class SyntheticJobBatch(models.Model):

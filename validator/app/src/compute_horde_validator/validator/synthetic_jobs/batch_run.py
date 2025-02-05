@@ -489,7 +489,7 @@ class Job:
 @dataclass
 class BatchContext:
     # an already existing SyntheticJobBatch model can be optionally passed in
-    batch_id: int | None
+    batch_id: int
 
     uuid: str
     own_keypair: bittensor.Keypair
@@ -858,7 +858,7 @@ async def _init_context(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     active_validators: list[str],
-    batch_id: int | None = None,
+    batch_id: int,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> BatchContext:
     own_wallet = settings.BITTENSOR_WALLET()
@@ -2069,12 +2069,8 @@ def _db_persist_critical(ctx: BatchContext) -> None:
     # prevent a situation where because of a crash only some of
     # the jobs are saved, which would generate incorrect weights
     with transaction.atomic():
-        if ctx.batch_id is not None:
-            batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
-        else:
-            batch = SyntheticJobBatch(
-                started_at=ctx.stage_start_time["BATCH_BEGIN"],
-            )
+        batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
+
         # accepting_results_until is not used anywhere, it doesn't
         # matter that we pick a somewhat arbitrary time for it
         now = datetime.now(tz=UTC)
@@ -2115,10 +2111,7 @@ def _db_persist_critical(ctx: BatchContext) -> None:
 def _db_persist(ctx: BatchContext) -> None:
     start_time = time.time()
 
-    if ctx.batch_id is not None:
-        batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
-    else:
-        batch = SyntheticJobBatch.objects.get(started_at=ctx.stage_start_time["BATCH_BEGIN"])
+    batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
 
     miner_manifests: list[MinerManifest] = []
     for miner in ctx.miners.values():
@@ -2218,7 +2211,7 @@ async def execute_synthetic_batch_run(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     active_validators: list[str],
-    batch_id: int | None = None,
+    batch_id: int,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> None:
     if not axons or not serving_miners:
