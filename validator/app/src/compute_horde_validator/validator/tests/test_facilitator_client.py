@@ -265,6 +265,7 @@ async def test_facilitator_client__job_completed(ws_server_cls):
 )
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.skip(reason="Validator-side job retry is disabled for now")
 async def test_facilitator_client__failed_job_retries():
     await setup_db()
     ws_server = FacilitatorJobStatusUpdatesWsV2Retries()
