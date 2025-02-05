@@ -27,6 +27,12 @@ NOT_SCORED = 0.0
 
 
 class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
+    def verify_time(self, time_took: float) -> bool | None:
+        return True
+
+    def verify_correctness(self, msg: V0JobFinishedRequest) -> tuple[bool, str]:
+        return True, "mock"
+
     def __init__(self, _uuid: uuid.UUID, **kwargs):
         super().__init__(**kwargs)
         self._uuid = _uuid
@@ -76,11 +82,16 @@ class MockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
 
 class LlmPromptsSyntheticJobGeneratorFactory:
     def __init__(
-        self, uuids: list[uuid.UUID], prompt_samples: list[PromptSample], prompts: list[Prompt]
+        self,
+        uuids: list[uuid.UUID],
+        prompt_samples: list[PromptSample],
+        prompts: list[Prompt],
+        streaming: bool = False,
     ):
         self._uuids = uuids
         self._prompt_samples = prompt_samples
         self._prompts = prompts
+        self._streaming = streaming
 
     async def create(
         self, executor_class: ExecutorClass, *args, **kwargs
@@ -90,7 +101,7 @@ class LlmPromptsSyntheticJobGeneratorFactory:
             expected_prompts=self._prompts,
             s3_url="mock",
             seed=0,
-            streaming=False,
+            streaming=self._streaming,
         )
         generator._uuid = self._uuids.pop(0)
         return generator

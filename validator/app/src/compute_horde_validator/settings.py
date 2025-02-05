@@ -280,6 +280,16 @@ CONSTANCE_CONFIG = {
         "Score for each properly excused synthetic job",
         float,
     ),
+    "DYNAMIC_ORGANIC_JOB_SCORE": (
+        1.0,
+        "Score of each successful organic job",
+        float,
+    ),
+    "DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT": (
+        -1,
+        "Maximum number of organic jobs each miner can get scores for. Negative value means unlimited.",
+        int,
+    ),
     "DYNAMIC_ORGANIC_JOB_TIMEOUT": (
         300,
         "Timeout for the run of an organic jobs in seconds",
@@ -614,6 +624,16 @@ LOGGING = {
             "level": "WARNING",
             "propagate": True,
         },
+        "botocore": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": True,
+        },
+        "httpcore.http11": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": True,
+        },
     },
 }
 
@@ -630,7 +650,9 @@ SYNTHETIC_JOB_GENERATOR_FACTORY = env.str(
     "SYNTHETIC_JOB_GENERATOR_FACTORY",
     default="compute_horde_validator.validator.synthetic_jobs.generator.factory:DefaultSyntheticJobGeneratorFactory",
 )
-FACILITATOR_URI = env.str("FACILITATOR_URI", default="wss://facilitator.computehorde.io/ws/v0/")
+FACILITATOR_URI = env.str(
+    "FACILITATOR_URI", default="wss://facilitator.computehorde.io/ws/v0/"
+).strip()
 STATS_COLLECTOR_URL = env.str(
     "STATS_COLLECTOR_URL", default="https://facilitator.computehorde.io/stats_collector/v0/"
 )

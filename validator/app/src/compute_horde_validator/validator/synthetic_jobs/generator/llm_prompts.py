@@ -1,3 +1,7 @@
+import asyncio
+import logging
+import tempfile
+import time
 import uuid
 
 import httpx
@@ -15,7 +19,14 @@ from compute_horde_validator.validator.s3 import (
     get_public_url,
 )
 
+from ...dynamic_config import aget_config
 from .base import BaseSyntheticJobGenerator
+
+logger = logging.getLogger(__name__)
+
+
+STREAMING_PROCESSING_TIMEOUT = 30
+STREAMING_PROCESSING_TIMEOUT_LEEWAY = 5
 
 
 class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
@@ -37,6 +48,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         self.s3_output_bucket = settings.S3_BUCKET_NAME_ANSWERS
 
         self.prompt_answers: dict[str, str] = {}
+        self.streaming_processing_time: float | None = None
 
     def _url_for_upload(self) -> str:
         return generate_upload_url(
@@ -104,17 +116,26 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         response = await download_file_content(self.url_for_download(), client=client)
         self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(response)
 
-    def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
+    def verify_time(self, time_took: float) -> bool | None:
+        return True
+
+    def verify_correctness(self, msg: V0JobFinishedRequest) -> tuple[bool, str]:
         # just check if there are any answers
         if self.prompt_answers == {}:
-            return False, "no answers", 0.0
-        return True, "answers exist", 1.0
+            return False, "no answers"
+        return True, "answers exist"
 
     def job_description(self) -> str:
         return "LLM prompts job"
 
     def volume_in_initial_req(self) -> bool:
         return True
+
+    async def streaming_preparation_timeout(self) -> float | None:
+        """For streaming jobs, the timeout between sending a JobRequest and receiving StreamingReadyRequest"""
+        # TODO: caching
+        val = await aget_config("DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT")
+        return float(val) if val is not None else None
 
 
 class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
@@ -145,5 +166,90 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
 
         return True, "", 1.0
 
+    def verify_time(self, time_took: float) -> bool | None:
+        if not self.streaming:
+            return time_took <= self.timeout_seconds()
+        if self.streaming_processing_time is None:
+            return None
+        return self.streaming_processing_time <= STREAMING_PROCESSING_TIMEOUT
+
+    def verify_correctness(self, msg: V0JobFinishedRequest) -> tuple[bool, str]:
+        for expected_prompt in self.expected_prompts:
+            if expected_prompt.content not in self.prompt_answers:
+                return False, "result does not contain all answers"
+            if expected_prompt.answer != self.prompt_answers[expected_prompt.content]:
+                return False, "results does not match expected answers"
+
+        return True, ""
+
     def job_description(self) -> str:
         return ("Streaming " if self.streaming else "") + "LLM prompts synthetic job"
+
+    async def trigger_streaming_job_execution(
+        self,
+        job_uuid,
+        start_barrier: asyncio.Barrier,
+        server_public_key,
+        client_key_pair,
+        server_address,
+        server_port,
+    ):
+        with tempfile.NamedTemporaryFile(delete=True, mode="w+") as executor_cert_file:
+            executor_cert_file.write(server_public_key)
+            executor_cert_file.flush()
+
+            logger.debug(f"Waiting for streaming start barrier for {job_uuid}")
+            await start_barrier.wait()
+            logger.debug(f"Passed streaming start barrier for {job_uuid}")
+
+            url = f"https://{server_address}:{server_port}/execute-job"
+            logger.debug("About to send seed to %s (job_uuid=%s)", url, job_uuid)
+
+            async with httpx.AsyncClient(
+                verify=executor_cert_file.name,
+                cert=client_key_pair,
+                timeout=STREAMING_PROCESSING_TIMEOUT + STREAMING_PROCESSING_TIMEOUT_LEEWAY,
+            ) as client:
+                # send the seed to the executor to start the streaming job
+                try:
+                    t_before = time.time()
+                    r = await client.post(
+                        url, json={"seed": self.seed}, headers={"Host": server_address}
+                    )
+                except Exception as e:
+                    msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
+                    logger.debug(msg)
+                else:
+                    try:
+                        r.raise_for_status()
+                        self.streaming_processing_time = time.time() - t_before
+                    except Exception as e:
+                        msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]!r}"
+                        logger.debug(msg)
+                    else:
+                        logger.debug(
+                            "Successfully sent seed to %s (job_uuid=%s), the result is: %s",
+                            url,
+                            job_uuid,
+                            r.content[:100],
+                        )
+
+                url = f"https://{server_address}:{server_port}/terminate"
+                logger.debug("About to terminate (job_uuid=%s)", job_uuid)
+                try:
+                    r = await client.get(url, headers={"Host": server_address})
+                except Exception as e:
+                    msg = f"Failed to terminate streaming job {job_uuid} on {url}: {e}"
+                    logger.debug(msg)
+                else:
+                    try:
+                        r.raise_for_status()
+                    except Exception as e:
+                        msg = f"Failed to terminate streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]!r}"
+                        logger.debug(msg)
+                    else:
+                        logger.debug(
+                            "Successfully terminated %s (job_uuid=%s)",
+                            url,
+                            job_uuid,
+                        )

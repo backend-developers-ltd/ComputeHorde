@@ -18,7 +18,6 @@ from compute_horde_validator.validator.tests.transport import MinerSimulationTra
 from ..helpers import check_system_events
 from .helpers import check_synthetic_job
 from .mock_generator import (
-    MOCK_SCORE,
     NOT_SCORED,
 )
 
@@ -54,7 +53,7 @@ async def test_execute_miner_synthetic_jobs_success(
         timeout=1,
     )
 
-    await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, MOCK_SCORE)
+    await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, 1)
     await sync_to_async(check_system_events)(
         SystemEvent.EventType.MINER_SYNTHETIC_JOB_SUCCESS, SystemEvent.EventSubType.SUCCESS
     )

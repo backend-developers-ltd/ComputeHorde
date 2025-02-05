@@ -1,3 +1,4 @@
+import re
 import uuid
 from collections.abc import Sequence
 from datetime import timedelta
@@ -14,11 +15,15 @@ from compute_horde_validator.validator.models import (
 )
 
 
-async def check_synthetic_job(job_uuid: uuid.UUID, miner_id: int, status: str, score: float):
+async def check_synthetic_job(
+    job_uuid: uuid.UUID, miner_id: int, status: str, score: float, comment: re.Pattern | None = None
+):
     job = await SyntheticJob.objects.aget(job_uuid=job_uuid)
     assert job.miner_id == miner_id, f"{job.miner_id} != {miner_id}"
     assert job.status == status, f"{job.status} != {status}"
     assert job.score == score, f"{job.score} != {score}"
+    if comment:
+        assert comment.match(job.comment), f"{job.comment} does not match {comment}"
 
 
 async def check_miner_job_system_events(

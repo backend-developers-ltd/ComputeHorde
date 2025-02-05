@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 import json
@@ -68,6 +69,39 @@ class CommandTested(Command):
         transport = StubTransport("test", messages)
         self.MINER_CLIENT_CLASS = partial(MinerClient, transport=transport)
         super().__init__(*args, **kwargs)
+
+    async def is_nvidia_toolkit_version_safe_cve_2024_0132(self):
+        is_toolkit_installed = None
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "nvidia-container-toolkit",
+                "--version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except OSError:
+            is_toolkit_installed = False
+
+        if is_toolkit_installed is None:
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
+            except TimeoutError:
+                is_toolkit_installed = False
+
+        if is_toolkit_installed is None and process.returncode != 0:
+            is_toolkit_installed = False
+
+        if is_toolkit_installed is None:
+            is_toolkit_installed = True
+
+        if is_toolkit_installed:
+            return await super().is_nvidia_toolkit_version_safe_cve_2024_0132()
+        else:
+            logger.warning(
+                "NVIDIA Container Toolkit not installed - skipping CVE-2024-0132 in tests"
+            )
+            return True
 
 
 def test_main_loop():

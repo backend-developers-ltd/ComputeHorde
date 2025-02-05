@@ -56,9 +56,11 @@ async def verify_job_request(job_request: V2JobRequest):
     signer = signature.signatory
     signed_fields = job_request.get_signed_fields()
 
-    whitelisted = await ValidatorWhitelist.objects.filter(hotkey=signer).aexists()
-    if not whitelisted:
-        raise ValueError(f"Signatory {signer} is not in validator whitelist")
+    my_keypair = settings.BITTENSOR_WALLET().get_hotkey()
+    if signer != my_keypair.ss58_address:
+        whitelisted = await ValidatorWhitelist.objects.filter(hotkey=signer).aexists()
+        if not whitelisted:
+            raise ValueError(f"Signatory {signer} is not in validator whitelist")
 
     # verify signed payload
     verify_signature(signed_fields.model_dump_json(), signature)
@@ -71,7 +73,7 @@ class AuthenticationError(Exception):
 
 
 async def save_facilitator_event(
-    subtype: str, long_description: str, data: dict[str, str] | None = None, success=False
+    subtype: str, long_description: str, data: dict[str, str] | None = None
 ):
     await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
         type=SystemEvent.EventType.FACILITATOR_CLIENT_ERROR,
@@ -87,7 +89,7 @@ class FacilitatorClient:
 
     def __init__(self, keypair: bittensor.Keypair, facilitator_uri: str):
         self.keypair = keypair
-        self.ws: websockets.WebSocketClientProtocol | None = None
+        self.ws: websockets.ClientConnection | None = None
         self.facilitator_uri = facilitator_uri
         self.miner_drivers: asyncio.Queue[asyncio.Task[None] | None] = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
@@ -95,13 +97,13 @@ class FacilitatorClient:
         self.refresh_metagraph_task = self.create_metagraph_refresh_task()
         self.specs_task: asyncio.Task[None] | None = None
 
-    def connect(self):
+    def connect(self) -> websockets.connect:
         """Create an awaitable/async-iterable websockets.connect() object"""
-        extra_headers = {
+        additional_headers = {
             "X-Validator-Runner-Version": os.environ.get("VALIDATOR_RUNNER_VERSION", "unknown"),
             "X-Validator-Version": os.environ.get("VALIDATOR_VERSION", "unknown"),
         }
-        return websockets.connect(self.facilitator_uri, extra_headers=extra_headers)
+        return websockets.connect(self.facilitator_uri, additional_headers=additional_headers)
 
     async def miner_driver_awaiter(self):
         """avoid memory leak by awaiting miner driver tasks"""
@@ -159,7 +161,7 @@ class FacilitatorClient:
             self.ws = None
             logger.error("Facilitator client received cancel, stopping")
 
-    async def handle_connection(self, ws: websockets.WebSocketClientProtocol):
+    async def handle_connection(self, ws: websockets.ClientConnection):
         """handle a single websocket connection"""
         await ws.send(V0AuthenticationRequest.from_keypair(self.keypair).model_dump_json())
 

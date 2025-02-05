@@ -87,6 +87,22 @@ class Test(ActiveSubnetworkBaseTest):
             subprocess.check_call(
                 args, env={**os.environ, "DATABASE_SUFFIX": "_integration_test"}
             )
+        if os.getenv('GITHUB_ACTIONS') == 'true':
+            # we change system files here so only do so in GitHub Actions
+            # developer has to setup is machine correctly to run integration test
+            nvidia_container_toolkit_mock = """#!/bin/bash
+            echo "NVIDIA Container Runtime Hook version 1.17.4
+            commit: 9b69590c7428470a72f2ae05f826412976af1395"
+            """
+
+            # Write the script
+            with open('/tmp/nvidia-container-toolkit', 'w') as f:
+                f.write(nvidia_container_toolkit_mock)
+
+            subprocess.check_call(['sudo', 'mv', '/tmp/nvidia-container-toolkit', '/bin/nvidia-container-toolkit'])
+
+            # Make it executable
+            subprocess.check_call(['sudo', 'chmod', '+x', '/bin/nvidia-container-toolkit'])
 
     @classmethod
     def miner_environ(cls) -> dict[str, str]:
