@@ -170,6 +170,7 @@ class SyntheticJobBatch(models.Model):
     is_missed = models.BooleanField(
         default=False, help_text="Whether the batch was missed (not run)"
     )
+    should_be_scored = models.BooleanField(default=True)
 
     def __str__(self) -> str:
         return f"Scheduled validation #{self.pk} at block #{self.block}"
