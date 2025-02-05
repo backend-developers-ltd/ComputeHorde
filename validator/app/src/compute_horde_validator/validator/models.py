@@ -158,11 +158,9 @@ class SyntheticJobBatch(models.Model):
     """
 
     block = models.BigIntegerField(
-        null=True, unique=True, help_text="Block number for which this batch is scheduled"
+        unique=True, help_text="Block number for which this batch is scheduled"
     )
-    cycle = models.ForeignKey(
-        Cycle, blank=True, null=True, related_name="batches", on_delete=models.CASCADE
-    )
+    cycle = models.ForeignKey(Cycle, related_name="batches", on_delete=models.CASCADE)
     created_at = models.DateTimeField(default=now)
     started_at = models.DateTimeField(null=True)
     accepting_results_until = models.DateTimeField(null=True)
