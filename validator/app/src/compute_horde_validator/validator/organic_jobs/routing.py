@@ -1,3 +1,4 @@
+import logging
 import random
 from datetime import timedelta
 from typing import assert_never
@@ -10,9 +11,16 @@ from compute_horde.fv_protocol.facilitator_requests import (
 )
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from django.utils import timezone
+from moto.batch.utils import JobStatus
 
-from compute_horde_validator.validator.models import Miner, MinerManifest
+from compute_horde_validator.validator.models import (
+    Miner,
+    MinerBlacklist,
+    MinerManifest,
+    OrganicJob,
+)
 
+logger = logging.getLogger(__name__)
 
 class JobRoutingException(Exception):
     pass
@@ -23,6 +31,10 @@ class NoMinerForExecutorType(JobRoutingException):
 
 
 class AllMinersBusy(JobRoutingException):
+    pass
+
+
+class MinerIsBlacklisted(JobRoutingException):
     pass
 
 
@@ -44,6 +56,7 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     executor_class = request.executor_class
 
     manifests_qs = MinerManifest.objects.select_related("miner").filter(
+        miner__in=Miner.objects.non_blacklisted(),
         executor_class=str(executor_class),
         online_executor_count__gt=0,
         created_at__gte=timezone.now() - timedelta(hours=4),
@@ -83,7 +96,31 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
 
 async def pick_miner_for_job_v0_v1(request: V0JobRequest | V1JobRequest) -> Miner:
     """
-    V0 and V1 specify the miner in the job request itself - so just return that.
+    V0 and V1 requests contain miner selected by facilitator - so just return that.
     """
+    if await MinerBlacklist.objects.active().filter(miner__hotkey=request.miner.hotkey).aexists():
+        raise MinerIsBlacklisted()
+
     miner, _ = await Miner.objects.aget_or_create(hotkey=request.miner_hotkey)
+
     return miner
+
+
+async def report_miner_failed_job(job: OrganicJob):
+    if job.status != JobStatus.FAILED:
+        logger.info(f"Not blacklisting miner: job {job.job_uuid} is not failed (status={job.status})")
+        return
+
+    blacklist_until = timezone.now() + timedelta(hours=4)
+    
+    logger.info(f"Blacklisting miner {job.miner.hotkey} "
+                f"until {blacklist_until.isoformat()} "
+                f"for failed job {job.job_uuid} "
+                f"({job.comment})")
+
+    await MinerBlacklist.objects.acreate(
+        miner=job.miner,
+        expires_at=blacklist_until,
+        reason=MinerBlacklist.BlacklistReason.JOB_FAILED,
+        reason_details=job.comment,
+    )
