@@ -93,7 +93,7 @@ async def test_rejects_bad_signatures(miner_keypair, validator_keypair):
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_handles_failures(miner_keypair, mocked_checkpoint_backend):
     session = Mock()
 
