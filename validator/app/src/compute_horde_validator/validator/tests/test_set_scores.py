@@ -55,6 +55,7 @@ def setup_db(cycle_number=0):
         started_at=now(),
         accepting_results_until=now(),
         scored=False,
+        block=722 * cycle_number + 1,
         cycle=Cycle.objects.create(start=722 * cycle_number, stop=722 * (cycle_number + 1)),
     )
     for i in range(NUM_NEURONS):

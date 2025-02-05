@@ -10,6 +10,7 @@ from requests import Response
 
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
+    Cycle,
     Miner,
     OrganicJob,
     SyntheticJobBatch,
@@ -33,6 +34,10 @@ from .helpers import (
     mock_get_miner_axon_info,
     throw_error,
 )
+
+
+def _get_cycle(block: int) -> Cycle:
+    return Cycle.from_block(block, settings.BITTENSOR_NETUID)
 
 
 @patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
@@ -211,7 +216,7 @@ def test__schedule_validation_run__already_scheduled(validators_with_this_hotkey
     current_block = subtensor().get_current_block()
     assert current_block == 1000
 
-    SyntheticJobBatch.objects.create(block=current_block + 20)
+    SyntheticJobBatch.objects.create(block=current_block + 20, cycle=_get_cycle(current_block + 20))
     with patch(
         "compute_horde_validator.validator.tasks.get_validators",
         lambda *args, **kwargs: validators_with_this_hotkey,
@@ -278,7 +283,7 @@ def test__run_synthetic_jobs__debug_dont_stagger_validators__false(settings):
     from bittensor import subtensor
 
     current_block = subtensor().get_current_block()
-    SyntheticJobBatch.objects.create(block=current_block + 50)
+    SyntheticJobBatch.objects.create(block=current_block + 50, cycle=_get_cycle(current_block + 50))
 
     run_synthetic_jobs()
 
@@ -360,7 +365,7 @@ def test__run_synthetic_jobs__different_timings(
     ):
         settings.CELERY_TASK_ALWAYS_EAGER = True
 
-        SyntheticJobBatch.objects.create(block=trigger_block)
+        SyntheticJobBatch.objects.create(block=trigger_block, cycle=_get_cycle(trigger_block))
 
         with patch(
             "compute_horde_validator.validator.tasks._run_synthetic_jobs"
@@ -391,9 +396,9 @@ def test__run_synthetic_jobs__many_scheduled_runs(settings):
     from bittensor import subtensor
 
     current_block = subtensor().get_current_block()
-    SyntheticJobBatch.objects.create(block=current_block + 1)
-    SyntheticJobBatch.objects.create(block=current_block + 2)
-    SyntheticJobBatch.objects.create(block=current_block + 3)
+    SyntheticJobBatch.objects.create(block=current_block + 1, cycle=_get_cycle(current_block + 1))
+    SyntheticJobBatch.objects.create(block=current_block + 2, cycle=_get_cycle(current_block + 2))
+    SyntheticJobBatch.objects.create(block=current_block + 3, cycle=_get_cycle(current_block + 3))
 
     run_synthetic_jobs(wait_in_advance_blocks=5, poll_interval=timedelta(seconds=1))
 
@@ -414,7 +419,7 @@ def test__run_synthetic_jobs__concurrent(settings):
     from bittensor import subtensor
 
     current_block = subtensor().get_current_block()
-    SyntheticJobBatch.objects.create(block=current_block + 1)
+    SyntheticJobBatch.objects.create(block=current_block + 1, cycle=_get_cycle(current_block + 1))
 
     num_threads = 10
     with ThreadPoolExecutor(max_workers=num_threads) as pool:
@@ -443,14 +448,18 @@ def test__check_missed_synthetic_jobs(settings):
     from bittensor import subtensor
 
     current_block = subtensor().get_current_block()
-    SyntheticJobBatch.objects.create(block=current_block + 10)
+    SyntheticJobBatch.objects.create(block=current_block + 10, cycle=_get_cycle(current_block + 10))
     SyntheticJobBatch.objects.create(
-        block=current_block - 10, started_at=now() - timedelta(seconds=5)
+        block=current_block - 10,
+        cycle=_get_cycle(current_block - 10),
+        started_at=now() - timedelta(seconds=5),
     )
     check_missed_synthetic_jobs()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
-    missed_batch = SyntheticJobBatch.objects.create(block=current_block - 5)
+    missed_batch = SyntheticJobBatch.objects.create(
+        block=current_block - 5, cycle=_get_cycle(current_block - 5)
+    )
     check_missed_synthetic_jobs()
     assert (
         SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)

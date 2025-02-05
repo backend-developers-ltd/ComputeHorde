@@ -303,8 +303,14 @@ def run_synthetic_jobs(
         logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
         return
 
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    current_block = subtensor_.get_current_block()
+
     if settings.DEBUG_DONT_STAGGER_VALIDATORS:
-        batch = SyntheticJobBatch.objects.create()
+        batch = SyntheticJobBatch.objects.create(
+            block=current_block,
+            cycle=Cycle.from_block(current_block, settings.BITTENSOR_NETUID),
+        )
         _run_synthetic_jobs.apply_async(kwargs={"synthetic_jobs_batch_id": batch.id})
         return
 
@@ -314,9 +320,6 @@ def run_synthetic_jobs(
     poll_interval = poll_interval or timedelta(
         seconds=config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_POLL_INTERVAL
     )
-
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor_.get_current_block()
 
     with transaction.atomic():
         ongoing_synthetic_job_batches = list(
