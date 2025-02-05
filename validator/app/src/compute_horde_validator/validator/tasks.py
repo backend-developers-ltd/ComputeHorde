@@ -247,7 +247,9 @@ def schedule_synthetic_jobs() -> None:
 
         batch_in_current_cycle = (
             SyntheticJobBatch.objects.filter(
-                block__gte=current_cycle.start, block__lt=current_cycle.stop
+                block__gte=current_cycle.start,
+                block__lt=current_cycle.stop,
+                should_be_scored=True,
             )
             .order_by("block")
             .last()
@@ -721,6 +723,7 @@ def set_scores():
                 SyntheticJobBatch.objects.select_related("cycle")
                 .filter(
                     scored=False,
+                    should_be_scored=True,
                     started_at__gte=now() - timedelta(days=1),
                     cycle__stop__lt=current_block,
                 )

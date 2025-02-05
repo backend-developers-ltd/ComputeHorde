@@ -186,6 +186,7 @@ def get_previous_batch(current_batch: SyntheticJobBatch) -> SyntheticJobBatch | 
     return SyntheticJobBatch.objects.filter(
         cycle__start__lte=block_in_prev_cycle,
         cycle__stop__gt=block_in_prev_cycle,
+        should_be_scored=True,
     ).first()
 
 
