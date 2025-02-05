@@ -91,7 +91,9 @@ class JobStartedReceipt(AbstractReceipt):
                 f"Expected: {JobStartedReceiptPayload.__name__}"
             )
 
-        return cls.from_payload(receipt.payload, receipt.validator_signature, receipt.miner_signature)
+        return cls.from_payload(
+            receipt.payload, receipt.validator_signature, receipt.miner_signature
+        )
 
     @classmethod
     def from_payload(
@@ -143,7 +145,9 @@ class JobAcceptedReceipt(AbstractReceipt):
                 f"Expected: {JobAcceptedReceiptPayload.__name__}"
             )
 
-        return cls.from_payload(receipt.payload, receipt.validator_signature, receipt.miner_signature)
+        return cls.from_payload(
+            receipt.payload, receipt.validator_signature, receipt.miner_signature
+        )
 
     @classmethod
     def from_payload(
@@ -201,7 +205,9 @@ class JobFinishedReceipt(AbstractReceipt):
                 f"Expected: {JobFinishedReceiptPayload.__name__}"
             )
 
-        return cls.from_payload(receipt.payload, receipt.validator_signature, receipt.miner_signature)
+        return cls.from_payload(
+            receipt.payload, receipt.validator_signature, receipt.miner_signature
+        )
 
     @classmethod
     def from_payload(

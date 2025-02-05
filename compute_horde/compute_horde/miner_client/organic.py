@@ -41,8 +41,7 @@ from compute_horde.mv_protocol.validator_requests import (
     V0JobFinishedReceiptRequest,
     V0JobRequest,
 )
-from compute_horde.receipts import Receipt
-from compute_horde.receipts.models import JobStartedReceipt, JobAcceptedReceipt, JobFinishedReceipt
+from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,

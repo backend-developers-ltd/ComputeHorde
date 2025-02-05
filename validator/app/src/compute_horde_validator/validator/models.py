@@ -118,7 +118,9 @@ class MinerQueryset(models.QuerySet["Miner"]):
         active_blacklist = MinerBlacklist.objects.active()
 
         return self.annotate(
-            blacklist_count=Count(Subquery(active_blacklist.filter(miner=OuterRef("pk")).values("id"))),
+            blacklist_count=Count(
+                Subquery(active_blacklist.filter(miner=OuterRef("pk")).values("id"))
+            ),
         ).filter(
             blacklist_count=0,
         )
@@ -144,7 +146,7 @@ class MinerBlacklistQueryset(models.QuerySet["MinerBlacklist"]):
 
 class MinerBlacklist(models.Model):
     objects = MinerBlacklistQueryset.as_manager()
-    
+
     class BlacklistReason(models.TextChoices):
         MANUAL = "MANUAL", "Manual"
         JOB_FAILED = "JOB_FAILED", "Job Failed"

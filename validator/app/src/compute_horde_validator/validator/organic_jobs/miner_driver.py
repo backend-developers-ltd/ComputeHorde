@@ -156,7 +156,7 @@ async def execute_organic_job(
             )
             await notify_callback(JobStatusUpdate.from_job(job, status="failed"))
         elif exc.reason == FailureReason.INITIAL_RESPONSE_TIMED_OUT:
-            comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid} after {initial_response_timeout} seconds"
+            comment = f"Miner {miner_client.miner_name} timed out waiting for initial response {job.job_uuid} after {initial_response_timeout} seconds"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
@@ -168,7 +168,7 @@ async def execute_organic_job(
             )
             await notify_callback(JobStatusUpdate.from_job(job, "failed"))
         elif exc.reason == FailureReason.JOB_DECLINED:
-            comment = f"Miner {miner_client.miner_name} won't do job: {exc.received_str()}"
+            comment = f"Miner {miner_client.miner_name} declined job: {exc.received_str()}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
@@ -181,6 +181,20 @@ async def execute_organic_job(
             await notify_callback(JobStatusUpdate.from_job(job, "rejected"))
         elif exc.reason == FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT:
             comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid} after {executor_ready_timeout} seconds"
+            job.status = OrganicJob.Status.FAILED
+            job.comment = comment
+            await job.asave()
+
+            logger.warning(comment)
+            await save_event(
+                subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
+                long_description=comment,
+            )
+            await notify_callback(JobStatusUpdate.from_job(job, "failed"))
+        elif exc.reason == FailureReason.STREAMING_JOB_READY_TIMED_OUT:
+            comment = (
+                f"Streaming job {job.job_uuid} not ready after {executor_ready_timeout} seconds"
+            )
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()

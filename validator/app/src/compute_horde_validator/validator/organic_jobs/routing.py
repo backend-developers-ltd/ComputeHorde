@@ -22,6 +22,7 @@ from compute_horde_validator.validator.models import (
 
 logger = logging.getLogger(__name__)
 
+
 class JobRoutingException(Exception):
     pass
 
@@ -71,19 +72,18 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         miner = manifest.miner
 
         known_started_jobs: set[str] = {
-            job_uuid async for job_uuid in JobStartedReceipt.objects
-            .valid_at(timezone.now())
+            str(job_uuid)
+            async for job_uuid in JobStartedReceipt.objects.valid_at(timezone.now())
             .filter(miner_hotkey=miner.hotkey)
             .values_list("job_uuid", flat=True)
         }
 
         known_finished_jobs: set[str] = {
-            job_uuid async for job_uuid in JobFinishedReceipt.objects
-            .filter(
+            str(job_uuid)
+            async for job_uuid in JobFinishedReceipt.objects.filter(
                 job_uuid__in=known_started_jobs,
                 miner_hotkey=miner.hotkey,
-            )
-            .values_list("job_uuid", flat=True)
+            ).values_list("job_uuid", flat=True)
         }
 
         maybe_ongoing_jobs = known_started_jobs - known_finished_jobs
@@ -98,7 +98,7 @@ async def pick_miner_for_job_v0_v1(request: V0JobRequest | V1JobRequest) -> Mine
     """
     V0 and V1 requests contain miner selected by facilitator - so just return that.
     """
-    if await MinerBlacklist.objects.active().filter(miner__hotkey=request.miner.hotkey).aexists():
+    if await MinerBlacklist.objects.active().filter(miner__hotkey=request.miner_hotkey).aexists():
         raise MinerIsBlacklisted()
 
     miner, _ = await Miner.objects.aget_or_create(hotkey=request.miner_hotkey)
@@ -108,15 +108,19 @@ async def pick_miner_for_job_v0_v1(request: V0JobRequest | V1JobRequest) -> Mine
 
 async def report_miner_failed_job(job: OrganicJob):
     if job.status != JobStatus.FAILED:
-        logger.info(f"Not blacklisting miner: job {job.job_uuid} is not failed (status={job.status})")
+        logger.info(
+            f"Not blacklisting miner: job {job.job_uuid} is not failed (status={job.status})"
+        )
         return
 
     blacklist_until = timezone.now() + timedelta(hours=4)
-    
-    logger.info(f"Blacklisting miner {job.miner.hotkey} "
-                f"until {blacklist_until.isoformat()} "
-                f"for failed job {job.job_uuid} "
-                f"({job.comment})")
+
+    logger.info(
+        f"Blacklisting miner {job.miner.hotkey} "
+        f"until {blacklist_until.isoformat()} "
+        f"for failed job {job.job_uuid} "
+        f"({job.comment})"
+    )
 
     await MinerBlacklist.objects.acreate(
         miner=job.miner,
