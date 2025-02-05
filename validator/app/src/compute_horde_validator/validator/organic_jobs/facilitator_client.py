@@ -36,7 +36,11 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.organic_jobs import routing
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
-from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
+from compute_horde_validator.validator.organic_jobs.miner_driver import (
+    JobStatusMetadata,
+    JobStatusUpdate,
+    execute_organic_job,
+)
 from compute_horde_validator.validator.tasks import get_subtensor
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
@@ -273,15 +277,15 @@ class FacilitatorClient:
         return await get_miner_axon_info(hotkey)
 
     async def process_job_request(self, job_request: JobRequest):
-        max_retries = 1  # await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
+        # max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
         """
         NOTE: Retrying jobs is iffy at this point:
         - Facilitator complains during job status updates, doesn't like the same job getting the same status twice
         - Miner complains about... everything if it gets selected for a rerun of a job it already failed
-        - Validator's job flow would complain if it saved the job started receipt it sends to a miner. (It's not doing
-            that but it should.)
+        - Validator will complain about duplicate receipts (multiple job started receipts for the same job uuid)
+        - Maybe more?
 
-        For now we'll bail and report job failure as soon as anything goes wrong.
+        For now, we'll bail and report job failure as soon as anything goes wrong.
         """
 
         if isinstance(job_request, V2JobRequest):
@@ -292,29 +296,40 @@ class FacilitatorClient:
                 logger.warning(f"Failed to verify signed payload: {e} - will not run job")
                 return
 
-        for i in range(max_retries):
-            try:
-                miner = await routing.pick_miner_for_job(job_request)
-                logger.info(f"Selected miner {miner.hotkey} for job {job_request.uuid} attempt {i+1}/{max_retries}")
-            except routing.NoMinerForExecutorType:
-                logger.warning(f"No miner found for job request: {job_request.uuid}")
-                # Executor counts will not change until the next synthetic job batch. Bail out.
-                break
-            except routing.AllMinersBusy:
-                logger.warning(f"All miners busy for job: {job_request.uuid}")
-                # We know when a miner will be available - todo: wait until then?
-                break
-
-            try:
-                job_attempt = await self.miner_driver(miner, job_request)
-                if job_attempt.status == OrganicJob.Status.COMPLETED:
-                    break
-                else:
-                    logger.warning(f"Job finished with status: {job_attempt.status} - {max_retries-i-1} attempts left")
-            except Exception as e:
-                logger.warning(
-                    f"Error running organic job {job_request.uuid}: {e} - {max_retries-i-1} attempts left"
+        try:
+            miner = await routing.pick_miner_for_job(job_request)
+            logger.info(f"Selected miner {miner.hotkey} for job {job_request.uuid}")
+        except routing.NoMinerForExecutorType:
+            msg = f"No executor for job request: {job_request.uuid} ({job_request.executor_class})"
+            logger.info(f"Rejecting job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status="rejected",
+                    metadata=JobStatusMetadata(comment=msg),
                 )
+            )
+            return
+        except routing.AllMinersBusy:
+            msg = f"All miners busy for job: {job_request.uuid}"
+            logger.info(f"Rejecting job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status="rejected",
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
+
+        try:
+            job_attempt = await self.miner_driver(miner, job_request)
+            if job_attempt.status != OrganicJob.Status.COMPLETED:
+                logger.warning(f"Job finished with status: {job_attempt.status}")
+        except Exception as e:
+            logger.warning(
+                f"Error running organic job {job_request.uuid}: {e}"
+        )
 
     async def miner_driver(self, miner: Miner, job_request: JobRequest) -> OrganicJob:
         """drive a miner client from job start to completion, then close miner connection"""
