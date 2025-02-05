@@ -94,7 +94,7 @@ async def setup_db(n: int = 1):
 
 
 async def cancel_facilitator_tasks(
-    facilitator_client, run_forever_task: asyncio.Task | None = None
+        facilitator_client, run_forever_task: asyncio.Task | None = None
 ):
     tasks = [
         facilitator_client.miner_driver_awaiter_task,
