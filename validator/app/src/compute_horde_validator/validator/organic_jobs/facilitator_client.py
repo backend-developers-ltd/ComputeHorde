@@ -321,11 +321,24 @@ class FacilitatorClient:
                 )
             )
             return
+        except routing.MinerIsBlacklisted:
+            msg = f"Miner for job is blacklisted: {job_request.uuid}"
+            logger.info(f"Failing job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status="failed",
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
 
         try:
             job_attempt = await self.miner_driver(miner, job_request)
             if job_attempt.status != OrganicJob.Status.COMPLETED:
                 logger.warning(f"Job finished with status: {job_attempt.status}")
+            if job_attempt.status == OrganicJob.Status.FAILED:
+                await routing.report_miner_failed_job(job_attempt)
         except Exception as e:
             logger.warning(
                 f"Error running organic job {job_request.uuid}: {e}"
