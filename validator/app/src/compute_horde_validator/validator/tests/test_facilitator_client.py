@@ -88,7 +88,7 @@ async def setup_db(n: int = 1):
         )
 
 
-def cancel_facilitator_tasks(facilitator_client, run_forever_task: asyncio.Task | None = None):
+async def cancel_facilitator_tasks(facilitator_client, run_forever_task: asyncio.Task | None = None):
     tasks = [
         facilitator_client.miner_driver_awaiter_task,
         facilitator_client.refresh_metagraph_task,
@@ -102,7 +102,7 @@ def cancel_facilitator_tasks(facilitator_client, run_forever_task: asyncio.Task 
     for task in tasks:
         task.cancel()
 
-    return asyncio.gather(
+    await asyncio.gather(
         *tasks,
         return_exceptions=True,
     )
@@ -273,7 +273,7 @@ async def test_facilitator_client__failed_job_retries():
                 task = asyncio.create_task(facilitator_client.run_forever())
                 await ws_server.condition.wait()
 
-            cancel_facilitator_tasks(facilitator_client, task)
+            await cancel_facilitator_tasks(facilitator_client, task)
             if ws_server.facilitator_error:
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")
 
