@@ -59,7 +59,7 @@ def test_trigger_run_admin_job__should_trigger_job():
 
     assert OrganicJob.objects.count() == 1
     job = OrganicJob.objects.filter(job_uuid=job_request.uuid).first()
-    assert "timed out while preparing executor" in job.comment
+    assert "timed out waiting for initial response" in job.comment
     assert job.status == OrganicJob.Status.FAILED
 
 

@@ -11,7 +11,6 @@ from compute_horde.fv_protocol.facilitator_requests import (
 )
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from django.utils import timezone
-from moto.batch.utils import JobStatus
 
 from compute_horde_validator.validator.models import (
     Miner,
@@ -107,7 +106,7 @@ async def pick_miner_for_job_v0_v1(request: V0JobRequest | V1JobRequest) -> Mine
 
 
 async def report_miner_failed_job(job: OrganicJob):
-    if job.status != JobStatus.FAILED:
+    if job.status != OrganicJob.Status.FAILED:
         logger.info(
             f"Not blacklisting miner: job {job.job_uuid} is not failed (status={job.status})"
         )
