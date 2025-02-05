@@ -297,7 +297,7 @@ CONSTANCE_CONFIG = {
     ),
     "DYNAMIC_ORGANIC_JOB_MAX_RETRIES": (
         3,
-        "Maximum retries for organic jobs",
+        "Maximum retries for organic jobs (Currently ignored)",
         int,
     ),
     "DYNAMIC_SYSTEM_EVENT_LIMITS": (

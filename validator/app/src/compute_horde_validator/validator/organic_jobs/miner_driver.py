@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Awaitable, Callable
 from functools import partial
-from typing import Literal
+from typing import Literal, assert_never
 
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.fv_protocol.facilitator_requests import JobRequest
@@ -228,4 +228,6 @@ async def execute_organic_job(
             logger.info(comment)
             await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
             await notify_callback(JobStatusUpdate.from_job(job, "failed", "V0JobFailedRequest"))
+        else:
+            assert_never(exc.reason)
         return False
