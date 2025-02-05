@@ -340,9 +340,7 @@ class FacilitatorClient:
             if job_attempt.status == OrganicJob.Status.FAILED:
                 await routing.report_miner_failed_job(job_attempt)
         except Exception as e:
-            logger.warning(
-                f"Error running organic job {job_request.uuid}: {e}"
-        )
+            logger.warning(f"Error running organic job {job_request.uuid}: {e}")
 
     async def miner_driver(self, miner: Miner, job_request: JobRequest) -> OrganicJob:
         """drive a miner client from job start to completion, then close miner connection"""
