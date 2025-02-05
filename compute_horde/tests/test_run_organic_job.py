@@ -34,6 +34,7 @@ class MinerStubTransport(StubTransport):
 
 
 @pytest.mark.asyncio
+@pytest.mark.django_db
 async def test_run_organic_job__success(keypair):
     mock_transport = MinerStubTransport(
         "mock",
