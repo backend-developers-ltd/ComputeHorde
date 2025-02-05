@@ -293,7 +293,15 @@ class FacilitatorClient:
             try:
                 await verify_job_request(job_request)
             except Exception as e:
-                logger.warning(f"Failed to verify signed payload: {e} - will not run job")
+                msg = f"Failed to verify signed payload: {e} - will not run job"
+                logger.warning(msg)
+                await self.send_model(
+                    JobStatusUpdate(
+                        uuid=job_request.uuid,
+                        status="failed",
+                        metadata=JobStatusMetadata(comment=msg),
+                    )
+                )
                 return
 
         try:
