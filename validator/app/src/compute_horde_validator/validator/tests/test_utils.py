@@ -20,13 +20,10 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
     V0JobFinishedRequest,
 )
-from django.utils.timezone import now
 
 from compute_horde_validator.validator.models import (
     Miner,
-    MinerManifest,
     SyntheticJob,
-    SyntheticJobBatch,
     SystemEvent,
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
@@ -357,161 +354,23 @@ async def test_execute_synthetic_job(
         assert await SystemEvent.objects.aget() == 0
 
 
-async def create_mock_job_batches(miner):
-    return [
-        await SyntheticJobBatch.objects.acreate(
-            started_at=f"2021-01-01 00:0{i}:00",
-            accepting_results_until=f"2021-01-01 00:0{i+1}:00",
-        )
-        for i in range(5)
-    ]
-
-
 class TimeToookScoreMockSyntheticJobGeneratorFactory(BaseSyntheticJobGeneratorFactory):
     async def create(self, executor_class: ExecutorClass, **kwargs) -> BaseSyntheticJobGenerator:
         return TimeToookScoreMockSyntheticJobGenerator(**kwargs)
 
 
-time_took_mock_synthetic_job_generator_factory = MagicMock(
-    name="TimeToookScoreMockSyntheticJobGeneratorFactory"
-)
-
-
-@patch(
-    "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
-    TimeToookScoreMockSyntheticJobGeneratorFactory(),
-)
-@pytest.mark.asyncio
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.override_config(
-    DYNAMIC_MANIFEST_SCORE_MULTIPLIER=MANIFEST_INCENTIVE_MULTIPLIER,
-    DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=MANIFEST_DANCE_RATIO_THRESHOLD,
-)
-@pytest.mark.parametrize(
-    "curr_online_executor_count,prev_online_executor_count,expected_multiplier",
-    [
-        # None -> 3
-        (3, None, MANIFEST_INCENTIVE_MULTIPLIER),
-        # 0 -> 3 - e.g. all executors failed to start cause docker images were not cached
-        (3, 0, MANIFEST_INCENTIVE_MULTIPLIER),
-        # 10 -> below ratio
-        (10, int(10 * MANIFEST_DANCE_RATIO_THRESHOLD) - 1, 1),
-        # below ratio -> 10
-        (int(10 * MANIFEST_DANCE_RATIO_THRESHOLD) - 1, 10, 1),
-        # 10 -> above ratio
-        (
-            int(10 * MANIFEST_DANCE_RATIO_THRESHOLD) + 1,
-            10,
-            MANIFEST_INCENTIVE_MULTIPLIER,
-        ),
-        # above ratio -> 10
-        (
-            10,
-            int(10 * MANIFEST_DANCE_RATIO_THRESHOLD) + 1,
-            MANIFEST_INCENTIVE_MULTIPLIER,
-        ),
-    ],
-)
-async def test_manifest_dance_incentives(
-    curr_online_executor_count,
-    prev_online_executor_count,
-    expected_multiplier,
-    mocked_synthetic_miner_client,
-    override_weights_version_v2,
-    small_spin_up_times,
-):
-    miner_hotkey = "miner_hotkey"
-    miner, _ = await Miner.objects.aget_or_create(hotkey=miner_hotkey)
-    if prev_online_executor_count:
-        batch = await SyntheticJobBatch.objects.acreate(accepting_results_until=now(), scored=True)
-        await MinerManifest.objects.acreate(
-            miner=miner,
-            batch=batch,
-            executor_class=DEFAULT_EXECUTOR_CLASS,
-            executor_count=prev_online_executor_count,
-            online_executor_count=prev_online_executor_count,
-        )
-
-    manifest = ExecutorManifest(
-        executor_classes=[
-            ExecutorClassManifest(
-                executor_class=DEFAULT_EXECUTOR_CLASS, count=curr_online_executor_count
-            )
-        ]
-    )
-    manifest_request = V0ExecutorManifestRequest(manifest=manifest)
-    job_uuids = []
-
-    async def manifest_callback(miner_client):
-        await miner_client.handle_message(manifest_request)
-
-    async def interaction_callback(miner_client, after_job_sent):
-        for job_uuid in miner_client.ctx.job_uuids:
-            job_uuids.append(job_uuid)
-            if not after_job_sent:
-                await miner_client.handle_message(V0AcceptJobRequest(job_uuid=job_uuid))
-                await miner_client.handle_message(V0ExecutorReadyRequest(job_uuid=job_uuid))
-            else:
-                await miner_client.handle_message(
-                    V0JobFinishedRequest(
-                        job_uuid=job_uuid,
-                        docker_process_stdout="",
-                        docker_process_stderr="",
-                    )
-                )
-        return True
-
-    await miner_synthetic_jobs_scheme(
-        mocked_synthetic_miner_client,
-        manifest_callback,
-        curr_online_executor_count,
-        interaction_callback,
-    )
-
-    async for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
-        assert abs(job.score - expected_multiplier) < 0.0001
-
-
 @patch(
     "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
     TimeToookScoreMockSyntheticJobGeneratorFactory(),
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.parametrize(
-    "weights_version_override,expected_multiplier,current_online_executors,previous_online_executors",
-    [
-        # no effect on v1
-        ("override_weights_version_v1", 1, 1, None),
-        # basic test for v2
-        ("override_weights_version_v2", MANIFEST_INCENTIVE_MULTIPLIER, 1, None),
-        # just basic test for previous executors on single current executor
-        ("override_weights_version_v2", MANIFEST_INCENTIVE_MULTIPLIER, 1, 100),
-    ],
-)
 def test_create_and_run_synthetic_job_batch(
-    weights_version_override,
     settings,
     mocked_synthetic_miner_client,
-    request,
-    expected_multiplier,
-    current_online_executors,
-    previous_online_executors,
     small_spin_up_times,
+    override_weights_version_v2,
 ):
-    request.getfixturevalue(weights_version_override)
-    miner_hotkey = "miner_hotkey"
-    miner = Miner.objects.get_or_create(hotkey=miner_hotkey)[0]
-
-    if previous_online_executors:
-        batch = SyntheticJobBatch.objects.create(accepting_results_until=now(), scored=True)
-        MinerManifest.objects.create(
-            miner=miner,
-            batch=batch,
-            executor_class=DEFAULT_EXECUTOR_CLASS,
-            executor_count=previous_online_executors,
-            online_executor_count=previous_online_executors,
-        )
-
+    current_online_executors = 2
     manifest = ExecutorManifest(
         executor_classes=[
             ExecutorClassManifest(
@@ -552,7 +411,7 @@ def test_create_and_run_synthetic_job_batch(
     )
 
     for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
-        assert abs(job.score - expected_multiplier) < 0.0001
+        assert abs(job.score - 1) < 0.0001
 
 
 mocked_metagraph_1 = MagicMock(side_effect=[ValueError, TypeError, MockMetagraph()])
