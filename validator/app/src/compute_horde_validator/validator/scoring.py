@@ -92,15 +92,11 @@ def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
             executor_class = ExecutorClass(synthetic_job.executor_class)
             executor_class_synthetic_jobs[executor_class].append(synthetic_job)
 
-    if batch.cycle is not None:
-        batch_organic_jobs = OrganicJob.objects.select_related("miner").filter(
-            block__gte=batch.cycle.start,
-            block__lt=batch.cycle.stop,
-            status=OrganicJob.Status.COMPLETED,
-        )
-    else:
-        batch_organic_jobs = OrganicJob.objects.none()
-
+    batch_organic_jobs = OrganicJob.objects.select_related("miner").filter(
+        block__gte=batch.cycle.start,
+        block__lt=batch.cycle.stop,
+        status=OrganicJob.Status.COMPLETED,
+    )
     executor_class_organic_jobs = defaultdict(list)
     for organic_job in batch_organic_jobs:
         if organic_job.executor_class in executor_class_weights:
@@ -146,23 +142,22 @@ def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
         for hotkey, score in normalized_scores.items():
             batch_scores[hotkey] += score
 
-    assert batch.block is not None
     curr_peak_cycle = get_peak_cycle(batch.block, netuid=settings.BITTENSOR_NETUID)
     prev_peak_cycle = get_peak_cycle(curr_peak_cycle.start - 1, netuid=settings.BITTENSOR_NETUID)
 
     curr_peak_batch = SyntheticJobBatch.objects.filter(
         block__gte=curr_peak_cycle.start,
         block__lt=curr_peak_cycle.stop,
+        should_be_scored=True,
     ).first()
     prev_peak_batch = SyntheticJobBatch.objects.filter(
         block__gte=prev_peak_cycle.start,
         block__lt=prev_peak_cycle.stop,
+        should_be_scored=True,
     ).first()
 
     curr_peak_executor_counts = get_executor_counts(curr_peak_batch)
     prev_peak_executor_counts = get_executor_counts(prev_peak_batch)
-
-    curr_executor_counts = get_executor_counts(batch)
 
     # apply manifest bonus
     for hotkey in batch_scores:
@@ -185,6 +180,7 @@ def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
         batch_scores[hotkey] *= multiplier
 
         if batch.block not in curr_peak_cycle:
+            curr_executor_counts = get_executor_counts(batch)
             curr_base_synthetic_score = get_base_synthetic_score(
                 curr_executor_counts.get(hotkey, {}),
                 executor_class_weights,
@@ -205,18 +201,6 @@ def score_batches(batches: Sequence[SyntheticJobBatch]) -> dict[str, float]:
         for hotkey, score in batch_scores.items():
             hotkeys_scores[hotkey] += score
     return dict(hotkeys_scores)
-
-
-def get_previous_batch(current_batch: SyntheticJobBatch) -> SyntheticJobBatch | None:
-    """Get the synthetic job batch of the previous cycle of current_batch"""
-    if current_batch.cycle is None:
-        return None
-    block_in_prev_cycle = current_batch.cycle.start - 1
-    return SyntheticJobBatch.objects.filter(
-        cycle__start__lte=block_in_prev_cycle,
-        cycle__stop__gt=block_in_prev_cycle,
-        should_be_scored=True,
-    ).first()
 
 
 def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, dict[ExecutorClass, int]]:
