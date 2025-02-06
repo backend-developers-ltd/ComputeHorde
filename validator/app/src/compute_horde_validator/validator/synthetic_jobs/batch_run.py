@@ -1665,6 +1665,29 @@ async def _get_executor_ready_jobs(ctx: BatchContext) -> list[tuple[str, bool]]:
     return executor_ready_jobs
 
 
+async def _trigger_streaming_job_and_wait_for_job_finish(
+    ctx,
+    job_uuid,
+    start_barrier,
+):
+    job = ctx.jobs[job_uuid]
+    if not isinstance(job.streaming_job_ready_response, V0StreamingJobReadyRequest):
+        logger.debug(f"Not triggering execution for streaming job {job_uuid}")
+        return
+
+    await job.job_generator.trigger_streaming_job_execution(
+        job_uuid,
+        start_barrier,
+        job.streaming_job_ready_response.public_key,
+        ctx.own_certs,
+        job.streaming_job_ready_response.ip,
+        job.streaming_job_ready_response.port,
+    )
+
+    async with asyncio.timeout(job.job_generator.timeout_seconds()):
+        await job.job_response_event.wait()
+
+
 async def _trigger_job_execution(
     ctx: BatchContext, executor_ready_jobs: list[tuple[str, bool]]
 ) -> None:
@@ -1694,18 +1717,15 @@ async def _trigger_job_execution(
                 )
             )
         elif isinstance(
-            streaming_response := ctx.jobs[job_uuid].streaming_job_ready_response,
+            ctx.jobs[job_uuid].streaming_job_ready_response,
             V0StreamingJobReadyRequest,
         ):
             streaming_tasks.append(
                 asyncio.create_task(
-                    ctx.jobs[job_uuid].job_generator.trigger_streaming_job_execution(
+                    _trigger_streaming_job_and_wait_for_job_finish(
+                        ctx,
                         job_uuid,
                         start_barrier,
-                        streaming_response.public_key,
-                        ctx.own_certs,
-                        streaming_response.ip,
-                        streaming_response.port,
                     ),
                     name=f"{job_uuid}._trigger_job_execution",
                 )
@@ -1801,6 +1821,12 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
         return
 
     if job.job_response is None:
+        print(
+            "DDDUPA\n\n",
+            job.job_generator.response_hash,
+            job.job_generator.downloaded_answers_hash,
+            job.job_generator.streaming_processing_time,
+        )
         job.comment = "timed out"
         logger.info("%s %s", job.name, job.comment)
         return

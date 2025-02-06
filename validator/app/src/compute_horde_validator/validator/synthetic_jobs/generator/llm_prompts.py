@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import tempfile
 import time
@@ -49,6 +50,8 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
 
         self.prompt_answers: dict[str, str] = {}
         self.streaming_processing_time: float | None = None
+
+        self.downloaded_answers_hash: str | None = None
 
     def _url_for_upload(self) -> str:
         return generate_upload_url(
@@ -114,6 +117,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
 
     async def download_answers(self, client: httpx.AsyncClient | None = None):
         response = await download_file_content(self.url_for_download(), client=client)
+        self.downloaded_answers_hash = hashlib.sha256(response).hexdigest()
         self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(response)
 
     def verify_time(self, time_took: float) -> bool | None:
@@ -154,6 +158,7 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
             streaming=streaming,
             **kwargs,
         )
+        self.response_hash: str | None = None
         self.prompt_sample: PromptSample = prompt_sample
         self.expected_prompts: list[Prompt] = expected_prompts
 
@@ -174,6 +179,11 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
         return self.streaming_processing_time <= STREAMING_PROCESSING_TIMEOUT
 
     def verify_correctness(self, msg: V0JobFinishedRequest) -> tuple[bool, str]:
+        if self.response_hash is None:
+            return False, "Response did not contain a valid answer file hash or timed out"
+        if self.response_hash != self.downloaded_answers_hash:
+            return False, (f"Response hash and downloaded file hash don't match: "
+                           f"{self.response_hash=}, {self.downloaded_answers_hash=}")
         for expected_prompt in self.expected_prompts:
             if expected_prompt.content not in self.prompt_answers:
                 return False, "result does not contain all answers"
@@ -233,6 +243,10 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
                             job_uuid,
                             r.content[:100],
                         )
+                        try:
+                            self.response_hash = next(iter(r.json().values()), None)
+                        except:
+                            logger.debug("Malformed response from %s (job_uuid=%s)", url, job_uuid)
 
                 url = f"https://{server_address}:{server_port}/terminate"
                 logger.debug("About to terminate (job_uuid=%s)", job_uuid)
