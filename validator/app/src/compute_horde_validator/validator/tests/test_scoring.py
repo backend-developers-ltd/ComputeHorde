@@ -32,6 +32,7 @@ def setup_data():
     # Create batch
     batch = SyntheticJobBatch.objects.create(
         accepting_results_until=timezone.now() + timedelta(hours=1),
+        block=1000,
         cycle=Cycle.objects.create(start=708, stop=1430),
     )
 
@@ -147,6 +148,7 @@ def test_score_batches_executor_classes_weights():
     # Create batch
     batch = SyntheticJobBatch.objects.create(
         accepting_results_until=timezone.now() + timedelta(hours=1),
+        block=1000,
         cycle=Cycle.objects.create(start=708, stop=1430),
     )
 
@@ -185,6 +187,7 @@ def test_rejected_synthetic_jobs_scored():
     # Create batch
     batch = SyntheticJobBatch.objects.create(
         accepting_results_until=timezone.now() + timedelta(hours=1),
+        block=1000,
         cycle=Cycle.objects.create(start=708, stop=1430),
     )
 
@@ -226,6 +229,7 @@ def test_organic_jobs_scored():
     cycle = Cycle.objects.create(start=708, stop=1430)
     batch = SyntheticJobBatch.objects.create(
         accepting_results_until=timezone.now() + timedelta(hours=1),
+        block=1000,
         cycle=cycle,
     )
 
@@ -268,6 +272,7 @@ def create_batch(n: int, cycle: Cycle) -> SyntheticJobBatch:
     miner, _ = Miner.objects.get_or_create(hotkey="miner_hotkey")
     batch = SyntheticJobBatch.objects.create(
         accepting_results_until=now(),
+        block=cycle.start + 1,
         cycle=cycle,
         scored=True,
     )
@@ -438,6 +443,7 @@ def test_temporary_scoring_formula(override_weights_version_v1):
 
     batch = SyntheticJobBatch.objects.create(
         accepting_results_until=timezone.now() + timedelta(hours=1),
+        block=1000,
         cycle=Cycle.objects.create(start=708, stop=1430),
     )
     miner1 = Miner.objects.create(hotkey="miner1")

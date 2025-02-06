@@ -29,7 +29,7 @@ def try_to_get_metagraph(netuid, network, tries=3):
             time.sleep(try_number + 1)
 
 
-def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id: int | None = None):
+def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id: int) -> None:
     uvloop.install()
 
     if settings.DEBUG_MINER_KEY:

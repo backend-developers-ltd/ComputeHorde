@@ -12,12 +12,14 @@ from compute_horde.mv_protocol import miner_requests
 from pytest_httpx import HTTPXMock
 
 from compute_horde_validator.validator.models import (
+    Cycle,
     Miner,
     Prompt,
     PromptSample,
     PromptSeries,
     SolveWorkload,
     SyntheticJob,
+    SyntheticJobBatch,
 )
 from compute_horde_validator.validator.s3 import get_public_url
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
@@ -106,11 +108,16 @@ async def test_llm_synthetic_jobs_flow(
 
     assert prompt_sample.synthetic_job_id is None
 
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
             [],
+            batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=2,

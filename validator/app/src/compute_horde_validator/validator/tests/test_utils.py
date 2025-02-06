@@ -22,8 +22,10 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 
 from compute_horde_validator.validator.models import (
+    Cycle,
     Miner,
     SyntheticJob,
+    SyntheticJobBatch,
     SystemEvent,
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
@@ -145,8 +147,12 @@ async def miner_synthetic_jobs_scheme(
     )
 
     # create synthetic jobs task for miner
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     task = asyncio.create_task(
-        execute_synthetic_batch_run({miner_hotkey: miner_axon_info}, [miner], [])
+        execute_synthetic_batch_run({miner_hotkey: miner_axon_info}, [miner], [], batch.id)
     )
     try:
         # wait for creation of mocked MinerClient to get instance
@@ -186,11 +192,16 @@ def syntethic_batch_scheme_single_miner(
     settings.DEBUG_MINER_ADDRESS = "ignore"
     settings.DEBUG_MINER_PORT = 9999
 
+    batch = SyntheticJobBatch.objects.create(
+        block=1000,
+        cycle=Cycle.objects.create(start=708, stop=1430),
+    )
+
     async def as_coro(fun, *args, **kwargs):
         fun(*args, *kwargs)
 
     thread = threading.Thread(
-        target=create_and_run_synthetic_job_batch, args=(1, "test"), daemon=True
+        target=create_and_run_synthetic_job_batch, args=(1, "test", batch.id), daemon=True
     )
     thread.start()
 

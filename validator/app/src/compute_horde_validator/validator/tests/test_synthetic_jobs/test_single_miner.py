@@ -8,8 +8,10 @@ import pytest
 from asgiref.sync import sync_to_async
 
 from compute_horde_validator.validator.models import (
+    Cycle,
     Miner,
     SyntheticJob,
+    SyntheticJobBatch,
     SystemEvent,
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
@@ -43,11 +45,16 @@ async def test_execute_miner_synthetic_jobs_success(
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(job_finish_message, send_before=2)
 
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
             [],
+            batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -78,11 +85,16 @@ async def test_execute_miner_synthetic_jobs_success_timeout(
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(job_finish_message, send_before=2, sleep_before=2)
 
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
             [],
+            batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=3,
@@ -111,11 +123,16 @@ async def test_execute_miner_synthetic_jobs_job_failed(
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(job_failed_message, send_before=2)
 
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
             [],
+            batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -139,11 +156,16 @@ async def test_execute_miner_synthetic_jobs_job_declined(
     await transport.add_message(manifest_message, send_before=1)
     await transport.add_message(decline_job_message, send_before=1)
 
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
             [],
+            batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -161,11 +183,16 @@ async def test_execute_miner_synthetic_jobs_no_manifest(
     axon_dict: dict[str, bittensor.AxonInfo],
     create_simulation_miner_client: Callable,
 ):
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
             [],
+            batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,

@@ -9,8 +9,10 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol import miner_requests
 
 from compute_horde_validator.validator.models import (
+    Cycle,
     Miner,
     SyntheticJob,
+    SyntheticJobBatch,
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
@@ -72,11 +74,16 @@ async def test_synthetic_job_batch(
         docker_process_stderr="",
     )
 
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             axon_dict,
             [miner],
             [],
+            batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=2,

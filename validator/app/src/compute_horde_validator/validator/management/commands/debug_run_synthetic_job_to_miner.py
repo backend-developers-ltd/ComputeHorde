@@ -5,9 +5,10 @@ import bittensor
 import uvloop
 from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.models import Cycle, Miner, SyntheticJobBatch
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,15 @@ class Command(BaseCommand):
             )
         }
         try:
-            async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners, [])
+            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+            current_block = subtensor.get_current_block()
+            cycle = Cycle.from_block(current_block, settings.BITTENSOR_NETUID)
+            batch = SyntheticJobBatch.objects.create(
+                block=current_block,
+                cycle=cycle,
+                should_be_scored=False,
+            )
+            async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners, [], batch.id)
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)
