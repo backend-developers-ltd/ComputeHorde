@@ -1821,12 +1821,6 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
         return
 
     if job.job_response is None:
-        print(
-            "DDDUPA\n\n",
-            job.job_generator.response_hash,
-            job.job_generator.downloaded_answers_hash,
-            job.job_generator.streaming_processing_time,
-        )
         job.comment = "timed out"
         logger.info("%s %s", job.name, job.comment)
         return
