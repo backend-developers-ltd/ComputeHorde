@@ -41,7 +41,7 @@ async def db_setup():
 
 
 async def mock_download_file_content(*args, **kwargs):
-    return json.dumps({f"prompt{i}": f"answer{i}" for i in range(1, 4)})
+    return json.dumps({f"prompt{i}": f"answer{i}" for i in range(1, 4)}).encode()
 
 
 async def mock_throw_error(*args, **kwargs):
