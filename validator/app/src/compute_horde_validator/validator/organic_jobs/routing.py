@@ -38,7 +38,7 @@ class MinerIsBlacklisted(JobRoutingException):
     pass
 
 
-async def pick_miner_for_job(request: JobRequest) -> Miner:
+async def pick_miner_for_job_request(request: JobRequest) -> Miner:
     if isinstance(request, V0JobRequest | V1JobRequest):
         return await pick_miner_for_job_v0_v1(request)
 
