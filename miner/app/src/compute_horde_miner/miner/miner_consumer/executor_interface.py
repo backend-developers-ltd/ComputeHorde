@@ -131,6 +131,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             self.job.status = AcceptedJob.Status.FINISHED
             self.job.stderr = msg.docker_process_stderr
             self.job.stdout = msg.docker_process_stdout
+            self.job.artifacts = msg.artifacts or {}
 
             await self.job.asave()
             await self.send_executor_finished(
@@ -138,6 +139,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 executor_token=self.executor_token,
                 stdout=msg.docker_process_stdout,
                 stderr=msg.docker_process_stderr,
+                artifacts=msg.artifacts,
             )
         if isinstance(msg, executor_requests.V0MachineSpecsRequest):
             await self.send_executor_specs(
@@ -168,6 +170,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 docker_run_cmd=msg.docker_run_cmd,
                 volume=msg.volume,
                 output_upload=msg.output_upload,
+                artifacts_dir=msg.artifacts_dir,
             ).model_dump_json()
         )
 
