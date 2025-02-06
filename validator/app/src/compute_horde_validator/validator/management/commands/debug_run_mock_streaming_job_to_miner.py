@@ -127,6 +127,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     docker_run_cmd=job_details.docker_run_cmd,
                     volume=job_details.volume,
                     output_upload=job_details.output,
+                    artifacts_dir=job_details.artifacts_dir,
                 )
             )
 

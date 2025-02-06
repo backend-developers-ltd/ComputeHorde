@@ -3,6 +3,7 @@ import base64
 import csv
 import io
 import logging
+import os
 import pathlib
 import random
 import re
@@ -69,6 +70,7 @@ logger = logging.getLogger(__name__)
 CVE_2022_0492_TIMEOUT_SECONDS = 120
 CVE_2024_0132_TIMEOUT_SECONDS = 120
 MAX_RESULT_SIZE_IN_RESPONSE = 2000
+MAX_ARTIFACT_SIZE = 16000
 TRUNCATED_RESPONSE_PREFIX_LEN = 1000
 TRUNCATED_RESPONSE_SUFFIX_LEN = 1000
 INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 60 * 15
@@ -234,6 +236,7 @@ class MinerClient(AbstractMinerClient):
                 job_uuid=self.job_uuid,
                 docker_process_stdout=job_result.stdout,
                 docker_process_stderr=job_result.stderr,
+                artifacts=job_result.artifacts,
             )
         )
 
@@ -276,6 +279,7 @@ class JobResult(pydantic.BaseModel):
     timeout: bool
     stdout: str
     stderr: str
+    artifacts: dict[str, str]
     specs: MachineSpecs | None = None
 
 
@@ -474,6 +478,7 @@ class JobRunner:
         self.volume_mount_dir = self.temp_dir / "volume"
         self.output_volume_mount_dir = self.temp_dir / "output"
         self.specs_volume_mount_dir = self.temp_dir / "specs"
+        self.artifacts_mount_dir = self.temp_dir / "artifacts"
         self.download_manager = DownloadManager()
 
         self.job_container_name = f"ch-{settings.EXECUTOR_TOKEN}-job"
@@ -507,6 +512,7 @@ class JobRunner:
     async def prepare(self):
         self.volume_mount_dir.mkdir(exist_ok=True)
         self.output_volume_mount_dir.mkdir(exist_ok=True)
+        self.artifacts_mount_dir.mkdir(exist_ok=True)
 
         logger.info("preparing in progress")
 
@@ -554,6 +560,7 @@ class JobRunner:
                 timeout=False,
                 stdout=ex.description,
                 stderr="",
+                artifacts={},
             )
 
         docker_image = job_request.docker_image_name
@@ -582,6 +589,7 @@ class JobRunner:
                 timeout=False,
                 stdout="",
                 stderr="",
+                artifacts={},
                 exit_status=None,
             )
 
@@ -594,6 +602,12 @@ class JobRunner:
                 "docker", "network", "create", "--internal", self.job_network_name
             )
             await process.wait()
+
+        if job_request.artifacts_dir:
+            extra_volume_flags += [
+                "-v",
+                f"{self.artifacts_mount_dir.as_posix()}/:{job_request.artifacts_dir}",
+            ]
 
         self.cmd = [
             "docker",
@@ -648,6 +662,7 @@ class JobRunner:
                     stdout="",
                     stderr=msg,
                     exit_status=None,
+                    artifacts={},
                 )
 
         return None
@@ -708,6 +723,18 @@ class JobRunner:
 
         success = exit_status == 0
 
+        artifacts = {}
+        for artifact_filename in os.listdir(self.artifacts_mount_dir):
+            artifact_path = self.artifacts_mount_dir / artifact_filename
+            if os.path.isfile(artifact_path):
+                with open(artifact_path, "rb") as f:
+                    content = f.read()
+                artifact_size = len(content)
+                if artifact_size < MAX_ARTIFACT_SIZE:
+                    artifacts[artifact_filename] = base64.b64encode(content).decode()
+                else:
+                    logger.error(f"Artefact {artifact_filename} too large: {artifact_size:,} bytes")
+
         if success:
             # upload the output if requested and job succeeded
             if job_request.output_upload:
@@ -740,6 +767,7 @@ class JobRunner:
             timeout=timeout,
             stdout=stdout,
             stderr=stderr,
+            artifacts=artifacts,
         )
 
     async def clean(self):

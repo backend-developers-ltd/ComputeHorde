@@ -86,6 +86,7 @@ class V0JobRequest(BaseValidatorRequest, JobMixin):
     docker_run_cmd: list[str]
     volume: Volume | None = None
     output_upload: OutputUpload | None = None
+    artifacts_dir: str | None = None
 
     @model_validator(mode="after")
     def validate_at_least_docker_image_or_raw_script(self) -> Self:
