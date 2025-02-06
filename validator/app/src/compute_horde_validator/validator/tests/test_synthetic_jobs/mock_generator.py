@@ -19,6 +19,9 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
     LlmPromptsSyntheticJobGenerator,
 )
+from compute_horde_validator.validator.tests.test_synthetic_jobs.helpers import (
+    generate_related_uuid,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,14 +99,16 @@ class LlmPromptsSyntheticJobGeneratorFactory:
     async def create(
         self, executor_class: ExecutorClass, *args, **kwargs
     ) -> BaseSyntheticJobGenerator:
+        this_uuid = self._uuids.pop(0)
         generator = LlmPromptsSyntheticJobGenerator(
             prompt_sample=self._prompt_samples.pop(0),
-            expected_prompts=self._prompts,
+            expected_prompts=[self._prompts.pop(0)],
             s3_url="mock",
             seed=0,
             streaming=self._streaming,
+            file_uuid=str(generate_related_uuid(this_uuid)),
         )
-        generator._uuid = self._uuids.pop(0)
+        generator._uuid = this_uuid
         return generator
 
 
