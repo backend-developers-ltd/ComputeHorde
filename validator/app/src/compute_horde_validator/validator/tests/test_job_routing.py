@@ -10,38 +10,54 @@ from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde.utils import sign_blob
 from django.utils import timezone
 
-from compute_horde_validator.validator.models import Miner, MinerManifest, SyntheticJobBatch
+from compute_horde_validator.validator.models import (
+    Miner,
+    MinerBlacklist,
+    MinerManifest,
+    SyntheticJobBatch,
+)
 from compute_horde_validator.validator.organic_jobs import routing
 
+JOB_REQUEST = V2JobRequest(
+    uuid=str(uuid.uuid4()),
+    executor_class=DEFAULT_EXECUTOR_CLASS,
+    docker_image="doesntmatter",
+    raw_script="doesntmatter",
+    args=[],
+    env={},
+    use_gpu=False,
+)
 
-async def setup_db(n: int = 1):
+
+@pytest.fixture(autouse=True)
+def setup_db():
     now = timezone.now()
-    batch = await SyntheticJobBatch.objects.acreate(block=1, created_at=now)
-    miners = [await Miner.objects.acreate(hotkey=f"miner_{i}") for i in range(0, n)]
+    batch = SyntheticJobBatch.objects.create(block=1, created_at=now)
+    miners = [Miner.objects.create(hotkey=f"miner_{i}") for i in range(5)]
     for i, miner in enumerate(miners):
-        await MinerManifest.objects.acreate(
+        MinerManifest.objects.create(
             miner=miner,
             batch=batch,
             created_at=now - timedelta(minutes=i * 2),
             executor_class=DEFAULT_EXECUTOR_CLASS,
+            executor_count=5,
             online_executor_count=5,
         )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+async def test_pick_miner_for_job__picks_a_miner():
+    assert await routing.pick_miner_for_job_request(JOB_REQUEST) is not None
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_pick_miner_for_job__no_matching_executor_class():
-    await setup_db()
     with pytest.raises(routing.NoMinerForExecutorType):
-        await routing.pick_miner_for_job(
-            V2JobRequest(
-                uuid=str(uuid.uuid4()),
-                executor_class=next(c for c in ExecutorClass if c != DEFAULT_EXECUTOR_CLASS),
-                docker_image="doesntmatter",
-                raw_script="doesntmatter",
-                args=[],
-                env={},
-                use_gpu=False,
+        await routing.pick_miner_for_job_request(
+            JOB_REQUEST.__replace__(
+                executor_class=next(c for c in ExecutorClass if c != DEFAULT_EXECUTOR_CLASS)
             )
         )
 
@@ -49,26 +65,41 @@ async def test_pick_miner_for_job__no_matching_executor_class():
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__no_online_executors():
-    await setup_db()
     await MinerManifest.objects.all().aupdate(online_executor_count=0)
     with pytest.raises(routing.NoMinerForExecutorType):
-        await routing.pick_miner_for_job(
-            V2JobRequest(
-                uuid=str(uuid.uuid4()),
-                executor_class=DEFAULT_EXECUTOR_CLASS,
-                docker_image="doesntmatter",
-                raw_script="doesntmatter",
-                args=[],
-                env={},
-                use_gpu=False,
-            )
+        await routing.pick_miner_for_job_request(JOB_REQUEST)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__miner_banned():
+    async for miner in Miner.objects.all():
+        await MinerBlacklist.objects.acreate(
+            miner=miner,
+            reason=MinerBlacklist.BlacklistReason.JOB_FAILED,
+            expires_at=timezone.now() + timedelta(minutes=5),
         )
+
+    with pytest.raises(routing.NoMinerForExecutorType):
+        await routing.pick_miner_for_job_request(JOB_REQUEST)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__miner_blacklist_expires():
+    async for miner in Miner.objects.all():
+        await MinerBlacklist.objects.acreate(
+            miner=miner,
+            reason=MinerBlacklist.BlacklistReason.JOB_FAILED,
+            expires_at=timezone.now() - timedelta(minutes=15),
+        )
+
+    await routing.pick_miner_for_job_request(JOB_REQUEST)
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__all_executors_busy(validator_keypair, miner_keypair):
-    await setup_db()
     async for miner in Miner.objects.all():
         for _ in range(5):
             payload = JobStartedReceiptPayload(
@@ -89,15 +120,5 @@ async def test_pick_miner_for_job__all_executors_busy(validator_keypair, miner_k
             )
             await JobStartedReceipt.from_receipt(receipt).asave()
 
-        with pytest.raises(routing.AllMinersBusy):
-            await routing.pick_miner_for_job(
-                V2JobRequest(
-                    uuid=str(uuid.uuid4()),
-                    executor_class=DEFAULT_EXECUTOR_CLASS,
-                    docker_image="doesntmatter",
-                    raw_script="doesntmatter",
-                    args=[],
-                    env={},
-                    use_gpu=False,
-                )
-            )
+    with pytest.raises(routing.AllMinersBusy):
+        await routing.pick_miner_for_job_request(JOB_REQUEST)
