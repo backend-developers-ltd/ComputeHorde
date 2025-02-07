@@ -41,7 +41,6 @@ from compute_horde_validator.validator.organic_jobs.miner_driver import (
     JobStatusUpdate,
     execute_organic_job,
 )
-from compute_horde_validator.validator.tasks import get_subtensor
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
@@ -348,12 +347,10 @@ class FacilitatorClient:
             if job_attempt.status == OrganicJob.Status.FAILED:
                 await routing.report_miner_failed_job(job_attempt)
         except Exception as e:
-            logger.warning(f"Error running organic job {job_request.uuid}: {e}")
+            logger.warning(f"Error running organic job {job_request.uuid}: {e}", exc_info=True)
 
     async def miner_driver(self, miner: Miner, job_request: JobRequest) -> OrganicJob:
         """drive a miner client from job start to completion, then close miner connection"""
-        subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-        current_block = subtensor_.get_current_block()
 
         if miner.hotkey == settings.DEBUG_MINER_KEY:
             miner_ip = settings.DEBUG_MINER_ADDRESS
@@ -373,7 +370,7 @@ class FacilitatorClient:
             miner_port=miner_port,
             executor_class=job_request.executor_class,
             job_description="User job from facilitator",
-            block=current_block,
+            block=await self.get_current_block(),
         )
 
         miner_client = self.MINER_CLIENT_CLASS(
@@ -398,3 +395,9 @@ class FacilitatorClient:
         )
 
         return job
+
+    async def get_current_block(self) -> int:
+        # TODO: Use the new block timer
+        subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+        current_block = subtensor_.get_current_block()
+        return current_block
