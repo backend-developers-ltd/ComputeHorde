@@ -1,4 +1,5 @@
 import re
+import secrets
 import uuid
 from collections.abc import Sequence
 from datetime import timedelta
@@ -15,15 +16,28 @@ from compute_horde_validator.validator.models import (
 )
 
 
+def generate_related_uuid(input_uuid: uuid.UUID):
+    """Generate one UUID based on another in a stable manner - the output ONLY relies on the input, but they don't
+    look similar"""
+
+    namespace_uuid = uuid.UUID("12345678123456781234567812345678")
+    related_uuid = uuid.uuid5(namespace_uuid, str(input_uuid))
+    return related_uuid
+
+
 async def check_synthetic_job(
     job_uuid: uuid.UUID, miner_id: int, status: str, score: float, comment: re.Pattern | None = None
 ):
     job = await SyntheticJob.objects.aget(job_uuid=job_uuid)
-    assert job.miner_id == miner_id, f"{job.miner_id} != {miner_id}"
-    assert job.status == status, f"{job.status} != {status}"
-    assert job.score == score, f"{job.score} != {score}"
-    if comment:
-        assert comment.match(job.comment), f"{job.comment} does not match {comment}"
+    assert (job.miner_id, job.status, job.score, True) == (
+        miner_id,
+        status,
+        score,
+        bool(comment.match(job.comment)) if comment else True,
+    ), (
+        f"{job.miner_id=} != {miner_id=} or {job.status=} != {status=} or {job.score=} != {score=} "
+        f"or '{job.comment}' does not match '{comment}'"
+    )
 
 
 async def check_miner_job_system_events(
@@ -71,8 +85,8 @@ async def generate_prompts(num_miners: int = 1) -> (list[Prompt], list[PromptSam
         [
             Prompt(
                 sample=prompt_sample,
-                content="mock",
-                answer="mock",
+                content=secrets.token_urlsafe(),
+                answer=secrets.token_urlsafe(),
             )
             for prompt_sample in prompt_samples
         ]

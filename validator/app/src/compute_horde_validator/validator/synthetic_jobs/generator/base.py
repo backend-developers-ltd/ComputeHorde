@@ -77,6 +77,11 @@ class BaseSyntheticJobGenerator(abc.ABC):
     def volume_in_initial_req(self) -> bool:
         return False
 
+    def get_execution_time(self) -> float | None:
+        """Return just the execution time of a job (for reporting reasons) - useful if the job has custom logic of
+        measuring time. If None, reports will contain the broad time the job took."""
+        return None
+
 
 class BaseSyntheticJobGeneratorFactory(abc.ABC):
     @abc.abstractmethod

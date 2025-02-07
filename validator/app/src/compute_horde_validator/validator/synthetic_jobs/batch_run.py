@@ -396,6 +396,10 @@ class Job:
         )
 
     def emit_telemetry_event(self) -> SystemEvent | None:
+        job_execution_time = self.job_generator.get_execution_time()
+        if job_execution_time is None:
+            job_execution_time = _timedelta_dump(self.time_took)
+
         data = dict(
             job_uuid=self.uuid,
             miner_hotkey=self.miner_hotkey,
@@ -423,7 +427,8 @@ class Job:
             job_response=_model_dump(self.job_response),
             job_response_time=_datetime_dump(self.job_response_time),
             machine_specs=_model_dump(self.machine_specs),
-            time_took=_timedelta_dump(self.time_took),
+            total_job_time=_timedelta_dump(self.time_took),
+            job_execution_time=job_execution_time,
             success=self.success,
             correct=self.correct,
             comment=self.comment,
@@ -1665,6 +1670,29 @@ async def _get_executor_ready_jobs(ctx: BatchContext) -> list[tuple[str, bool]]:
     return executor_ready_jobs
 
 
+async def _trigger_streaming_job_and_wait_for_job_finish(
+    ctx,
+    job_uuid,
+    start_barrier,
+):
+    job = ctx.jobs[job_uuid]
+    if not isinstance(job.streaming_job_ready_response, V0StreamingJobReadyRequest):
+        logger.debug(f"Not triggering execution for streaming job {job_uuid}")
+        return
+
+    await job.job_generator.trigger_streaming_job_execution(
+        job_uuid,
+        start_barrier,
+        job.streaming_job_ready_response.public_key,
+        ctx.own_certs,
+        job.streaming_job_ready_response.ip,
+        job.streaming_job_ready_response.port,
+    )
+
+    async with asyncio.timeout(job.job_generator.timeout_seconds()):
+        await job.job_response_event.wait()
+
+
 async def _trigger_job_execution(
     ctx: BatchContext, executor_ready_jobs: list[tuple[str, bool]]
 ) -> None:
@@ -1694,18 +1722,15 @@ async def _trigger_job_execution(
                 )
             )
         elif isinstance(
-            streaming_response := ctx.jobs[job_uuid].streaming_job_ready_response,
+            ctx.jobs[job_uuid].streaming_job_ready_response,
             V0StreamingJobReadyRequest,
         ):
             streaming_tasks.append(
                 asyncio.create_task(
-                    ctx.jobs[job_uuid].job_generator.trigger_streaming_job_execution(
+                    _trigger_streaming_job_and_wait_for_job_finish(
+                        ctx,
                         job_uuid,
                         start_barrier,
-                        streaming_response.public_key,
-                        ctx.own_certs,
-                        streaming_response.ip,
-                        streaming_response.port,
                     ),
                     name=f"{job_uuid}._trigger_job_execution",
                 )
@@ -2207,6 +2232,10 @@ def _db_persist(ctx: BatchContext) -> None:
     logger.info("Persisted to database in %.2f seconds", duration)
 
 
+def shuffled(list_: list[Any]) -> list[Any]:
+    return random.sample(list_, len(list_))
+
+
 async def execute_synthetic_batch_run(
     axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
@@ -2222,7 +2251,7 @@ async def execute_synthetic_batch_run(
     logger.info("Executing synthetic jobs batch for %d miners", len(serving_miners))
 
     # randomize the order of miners each batch to avoid systemic bias
-    random.shuffle(serving_miners)
+    shuffled(serving_miners)
 
     ctx = await _init_context(
         axons, serving_miners, active_validators, batch_id, create_miner_client
@@ -2244,7 +2273,7 @@ async def execute_synthetic_batch_run(
             await _generate_jobs(ctx)
 
             # randomize the order of jobs each batch to avoid systemic bias
-            random.shuffle(ctx.job_uuids)
+            shuffled(ctx.job_uuids)
 
             await ctx.checkpoint_system_event("_multi_send_initial_job_request")
             await _multi_send_initial_job_request(ctx)

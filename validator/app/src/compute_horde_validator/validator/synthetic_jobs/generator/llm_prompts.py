@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import tempfile
 import time
@@ -35,13 +36,15 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         s3_url: str,
         seed: int,
         streaming: bool = False,
+        file_uuid: str | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.seed = seed
         self.s3_url = s3_url
         self.streaming = streaming
-        file_uuid = str(uuid.uuid4())
+        if not file_uuid:
+            file_uuid = str(uuid.uuid4())
         self.input_filename = file_uuid + ".txt"
         self.s3_output_key = file_uuid + ".json"
         self.s3_output_prefix = "solved/"
@@ -49,6 +52,8 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
 
         self.prompt_answers: dict[str, str] = {}
         self.streaming_processing_time: float | None = None
+
+        self.downloaded_answers_hash: str | None = None
 
     def _url_for_upload(self) -> str:
         return generate_upload_url(
@@ -114,6 +119,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
 
     async def download_answers(self, client: httpx.AsyncClient | None = None):
         response = await download_file_content(self.url_for_download(), client=client)
+        self.downloaded_answers_hash = hashlib.sha256(response).hexdigest()
         self.prompt_answers = pydantic.TypeAdapter(dict[str, str]).validate_json(response)
 
     def verify_time(self, time_took: float) -> bool | None:
@@ -154,8 +160,10 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
             streaming=streaming,
             **kwargs,
         )
+        self.response_hash: str | None = None
         self.prompt_sample: PromptSample = prompt_sample
         self.expected_prompts: list[Prompt] = expected_prompts
+        self.fail_reason: str | None = None
 
     def verify(self, msg: V0JobFinishedRequest, time_took: float) -> tuple[bool, str, float]:
         for expected_prompt in self.expected_prompts:
@@ -174,6 +182,17 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
         return self.streaming_processing_time <= STREAMING_PROCESSING_TIMEOUT
 
     def verify_correctness(self, msg: V0JobFinishedRequest) -> tuple[bool, str]:
+        if self.response_hash is None:
+            return (
+                False,
+                self.fail_reason
+                or "Response did not contain a valid answer file hash or timed out",
+            )
+        if self.response_hash != self.downloaded_answers_hash:
+            return False, (
+                f"Response hash and downloaded file hash don't match: "
+                f"{self.response_hash=}, {self.downloaded_answers_hash=}"
+            )
         for expected_prompt in self.expected_prompts:
             if expected_prompt.content not in self.prompt_answers:
                 return False, "result does not contain all answers"
@@ -184,6 +203,9 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
 
     def job_description(self) -> str:
         return ("Streaming " if self.streaming else "") + "LLM prompts synthetic job"
+
+    def get_execution_time(self):
+        return self.streaming_processing_time
 
     async def trigger_streaming_job_execution(
         self,
@@ -219,6 +241,7 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
                 except Exception as e:
                     msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
                     logger.debug(msg)
+                    self.fail_reason = msg
                 else:
                     try:
                         r.raise_for_status()
@@ -226,6 +249,7 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
                     except Exception as e:
                         msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]!r}"
                         logger.debug(msg)
+                        self.fail_reason = msg
                     else:
                         logger.debug(
                             "Successfully sent seed to %s (job_uuid=%s), the result is: %s",
@@ -233,6 +257,13 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
                             job_uuid,
                             r.content[:100],
                         )
+                        try:
+                            self.response_hash = next(iter(r.json().values()), None)
+                            assert isinstance(self.response_hash, str)
+                        except Exception as e:
+                            msg = f"Malformed response from {url} (job_uuid={job_uuid}), reason={str(e)}"
+                            logger.debug(msg)
+                            self.fail_reason = msg
 
                 url = f"https://{server_address}:{server_port}/terminate"
                 logger.debug("About to terminate (job_uuid=%s)", job_uuid)
