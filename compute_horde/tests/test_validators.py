@@ -42,7 +42,7 @@ def _generate_validator_mocks(hotkeys: Iterable[str]):
     return [MagicMock(hotkey=key) for key in hotkeys]
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_fetch_validators_creates_new_active_validators(
     faker: Faker, mock_get_validators: MagicMock
 ):
@@ -55,7 +55,7 @@ def test_fetch_validators_creates_new_active_validators(
         assert Validator.objects.filter(public_key=key, active=True).exists()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_fetch_validators_updates_existing_validators(
     inactive_validators_keys: list[str],
     active_validators: list[Validator],
@@ -74,7 +74,7 @@ def test_fetch_validators_updates_existing_validators(
         assert Validator.objects.filter(public_key=key, active=True).exists()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_fetch_validators_debug(
     active_validators: list[Validator],
     active_validators_keys: list[str],
@@ -95,7 +95,7 @@ def test_fetch_validators_debug(
     ) | {debug_validator_key}
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_fetch_validators_debug_inactive(
     active_validators_keys: list[str],
     mock_get_validators: MagicMock,

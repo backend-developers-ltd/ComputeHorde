@@ -5,10 +5,10 @@ from collections import deque
 from compute_horde.miner_client.base import AbstractTransport
 
 
-class MinerSimulationTransport(AbstractTransport):
+class SimulationTransport(AbstractTransport):
     """
-    A simulation transport layer mimicking the behavior of a real miner.
-    Feed the messages to be received (miner responses) in a sequence and the transport
+    A simulation transport layer mimicking the behavior of a WSTransport.
+    Feed the messages to be received in a sequence and the transport
     will receive them in the same order. Each message can be set to be received after a
     specified number of sent messages replicating the real communication flow.
     """

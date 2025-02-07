@@ -42,7 +42,7 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     MinerClient,
     execute_synthetic_batch_run,
 )
-from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 from ...synthetic_jobs.generator import llm_prompts
 from .helpers import check_miner_job_system_events, check_synthetic_job, generate_prompts
@@ -123,7 +123,7 @@ def axon_dict(miner_axon_infos: list[bittensor.AxonInfo]):
 
 @pytest_asyncio.fixture
 async def transports(miner_hotkeys: str):
-    return [MinerSimulationTransport(hotkey) for hotkey in miner_hotkeys]
+    return [SimulationTransport(hotkey) for hotkey in miner_hotkeys]
 
 
 @pytest.fixture
@@ -145,7 +145,7 @@ def ssl_public_key():
 
 async def test_all_succeed(
     axon_dict: dict[str, bittensor.AxonInfo],
-    transports: list[MinerSimulationTransport],
+    transports: list[SimulationTransport],
     miners: list[Miner],
     create_simulation_miner_client: Callable,
     job_uuids: list[uuid.UUID],
@@ -226,7 +226,7 @@ async def prep_mocks_for_streaming(
 )
 async def test_some_streaming_succeed(
     axon_dict: dict[str, bittensor.AxonInfo],
-    transports: list[MinerSimulationTransport],
+    transports: list[SimulationTransport],
     miners: list[Miner],
     create_simulation_miner_client: Callable,
     job_uuids: list[uuid.UUID],
@@ -299,7 +299,7 @@ async def test_some_streaming_succeed(
 
 @pytest_asyncio.fixture
 async def flow_0(
-    transports: list[MinerSimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
+    transports: list[SimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
 ):
     """
     Job successfully finished
@@ -328,7 +328,7 @@ async def flow_0(
 
 @pytest_asyncio.fixture
 async def flow_1(
-    transports: list[MinerSimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
+    transports: list[SimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
 ):
     """
     Job timed out
@@ -357,7 +357,7 @@ async def flow_1(
 
 @pytest_asyncio.fixture
 async def flow_2(
-    transports: list[MinerSimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
+    transports: list[SimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
 ):
     """
     Job failed
@@ -386,7 +386,7 @@ async def flow_2(
 
 @pytest_asyncio.fixture
 async def flow_3(
-    transports: list[MinerSimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
+    transports: list[SimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
 ):
     """
     Job declined - no reason
@@ -404,7 +404,7 @@ async def flow_3(
 
 @pytest_asyncio.fixture
 async def flow_4(
-    transports: list[MinerSimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
+    transports: list[SimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
 ):
     """
     Job declined - busy, but no receipts provided.
@@ -425,7 +425,7 @@ async def flow_4(
 
 @pytest_asyncio.fixture
 async def flow_5(
-    transports: list[MinerSimulationTransport],
+    transports: list[SimulationTransport],
     manifest_message: str,
     job_uuids: list[uuid.UUID],
     active_valis: list[bittensor.Keypair],
@@ -455,7 +455,7 @@ async def flow_5(
 
 @pytest_asyncio.fixture
 async def flow_6(
-    transports: list[MinerSimulationTransport],
+    transports: list[SimulationTransport],
     manifest_message: str,
     job_uuids: list[uuid.UUID],
     active_valis: list[bittensor.Keypair],

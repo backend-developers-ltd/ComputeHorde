@@ -82,7 +82,9 @@ async def setup_db(n: int = 1):
         )
 
 
-def cancel_facilitator_tasks(facilitator_client, run_forever_task: asyncio.Task | None = None):
+async def cancel_facilitator_tasks(
+    facilitator_client, run_forever_task: asyncio.Task | None = None
+):
     tasks = [
         facilitator_client.miner_driver_awaiter_task,
         facilitator_client.refresh_metagraph_task,
@@ -96,7 +98,7 @@ def cancel_facilitator_tasks(facilitator_client, run_forever_task: asyncio.Task 
     for task in tasks:
         task.cancel()
 
-    return asyncio.gather(
+    await asyncio.gather(
         *tasks,
         return_exceptions=True,
     )
@@ -267,7 +269,7 @@ async def test_facilitator_client__failed_job_retries():
                 task = asyncio.create_task(facilitator_client.run_forever())
                 await ws_server.condition.wait()
 
-            cancel_facilitator_tasks(facilitator_client, task)
+            await cancel_facilitator_tasks(facilitator_client, task)
             if ws_server.facilitator_error:
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")
 
@@ -320,7 +322,7 @@ async def test_fetch_miner_for_cross_validation__wrap_around():
             assert miner.hotkey == expected_hotkey
             assert client.last_miner_cross_validated == expected_hotkey
 
-        cancel_facilitator_tasks(client)
+        await cancel_facilitator_tasks(client)
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -336,7 +338,7 @@ async def test_fetch_miner_for_cross_validation__no_matching_executor_class():
         assert miner is None
         assert client.last_miner_cross_validated is None
 
-        cancel_facilitator_tasks(client)
+        await cancel_facilitator_tasks(client)
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -353,7 +355,7 @@ async def test_fetch_miner_for_cross_validation__no_online_executors():
         assert miner is None
         assert client.last_miner_cross_validated is None
 
-        cancel_facilitator_tasks(client)
+        await cancel_facilitator_tasks(client)
 
 
 # TODO: this test is flaky, needs proper investigation
@@ -377,4 +379,4 @@ async def test_wait_for_specs(specs_msg: dict):
                 task = asyncio.create_task(facilitator_client.run_forever())
                 await asyncio.wait_for(ws_server.condition.wait(), timeout=5)
 
-            cancel_facilitator_tasks(facilitator_client, task)
+            await cancel_facilitator_tasks(facilitator_client, task)
