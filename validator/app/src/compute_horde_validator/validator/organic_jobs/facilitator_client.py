@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 from collections import deque
+from typing import cast
 
 import bittensor
 import pydantic
@@ -400,4 +401,4 @@ class FacilitatorClient:
         # TODO: Use the new block timer
         subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
         current_block = subtensor_.get_current_block()
-        return current_block
+        return cast(int, current_block)

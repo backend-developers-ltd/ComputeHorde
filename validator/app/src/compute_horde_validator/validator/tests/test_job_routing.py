@@ -11,6 +11,7 @@ from compute_horde.utils import sign_blob
 from django.utils import timezone
 
 from compute_horde_validator.validator.models import (
+    Cycle,
     Miner,
     MinerBlacklist,
     MinerManifest,
@@ -32,7 +33,8 @@ JOB_REQUEST = V2JobRequest(
 @pytest.fixture(autouse=True)
 def setup_db():
     now = timezone.now()
-    batch = SyntheticJobBatch.objects.create(block=1, created_at=now)
+    cycle = Cycle.objects.create(start=1, stop=2)
+    batch = SyntheticJobBatch.objects.create(block=1, created_at=now, cycle=cycle)
     miners = [Miner.objects.create(hotkey=f"miner_{i}") for i in range(5)]
     for i, miner in enumerate(miners):
         MinerManifest.objects.create(

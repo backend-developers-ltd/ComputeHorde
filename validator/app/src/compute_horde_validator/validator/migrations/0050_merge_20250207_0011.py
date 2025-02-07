@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('validator', '0048_minerblacklist_blacklisted_at_and_more'),
-        ('validator', '0049_alter_syntheticjobbatch_block_and_more'),
+        ("validator", "0048_minerblacklist_blacklisted_at_and_more"),
+        ("validator", "0049_alter_syntheticjobbatch_block_and_more"),
     ]
 
-    operations = [
-    ]
+    operations = []
