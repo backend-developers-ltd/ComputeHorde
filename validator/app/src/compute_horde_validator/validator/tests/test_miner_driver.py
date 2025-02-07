@@ -133,6 +133,7 @@ async def test_miner_driver(
                 job_uuid=job_uuid,
                 docker_process_stdout="mocked stdout",
                 docker_process_stderr="mocked stderr",
+                artifacts={},
             )
         )
 

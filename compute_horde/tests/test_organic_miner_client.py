@@ -57,6 +57,7 @@ def get_miner_client(
                 job_uuid=JOB_UUID,
                 docker_process_stdout="stdout",
                 docker_process_stderr="stderr",
+                artifacts={},
             ),
         ),
     ],
@@ -149,6 +150,7 @@ async def test_organic_miner_client__skip_different_job__initial_future(initial_
             job_uuid=str(uuid.uuid4()),
             docker_process_stdout="stdout",
             docker_process_stderr="stderr",
+            artifacts={},
         ),
     ],
 )
