@@ -2,10 +2,12 @@ import logging
 import shlex
 import uuid
 from os import urandom
+from typing import Self
 
 from compute_horde.base.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde.base.volume import Volume, ZipUrlVolume
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.subtensor import get_cycle_containing_block
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Count, OuterRef, Subquery, UniqueConstraint
@@ -189,6 +191,12 @@ class Cycle(models.Model):
     def __str__(self):
         return f"Cycle [{self.start};{self.stop})"
 
+    @classmethod
+    def from_block(cls, block: int, netuid: int) -> Self:
+        r = get_cycle_containing_block(block=block, netuid=netuid)
+        c, _ = cls.objects.get_or_create(start=r.start, stop=r.stop)
+        return c
+
 
 class SyntheticJobBatch(models.Model):
     """
@@ -196,11 +204,9 @@ class SyntheticJobBatch(models.Model):
     """
 
     block = models.BigIntegerField(
-        null=True, unique=True, help_text="Block number for which this batch is scheduled"
+        unique=True, help_text="Block number for which this batch is scheduled"
     )
-    cycle = models.ForeignKey(
-        Cycle, blank=True, null=True, related_name="batches", on_delete=models.CASCADE
-    )
+    cycle = models.ForeignKey(Cycle, related_name="batches", on_delete=models.CASCADE)
     created_at = models.DateTimeField(default=now)
     started_at = models.DateTimeField(null=True)
     accepting_results_until = models.DateTimeField(null=True)
@@ -208,6 +214,7 @@ class SyntheticJobBatch(models.Model):
     is_missed = models.BooleanField(
         default=False, help_text="Whether the batch was missed (not run)"
     )
+    should_be_scored = models.BooleanField(default=True)
 
     def __str__(self) -> str:
         return f"Scheduled validation #{self.pk} at block #{self.block}"

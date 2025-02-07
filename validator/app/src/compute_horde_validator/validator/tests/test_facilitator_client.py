@@ -21,6 +21,7 @@ from compute_horde.fv_protocol.validator_requests import (
 from django.utils import timezone
 
 from compute_horde_validator.validator.models import (
+    Cycle,
     Miner,
     MinerManifest,
     OrganicJob,
@@ -70,7 +71,11 @@ async def async_patch_all():
 
 async def setup_db(n: int = 1):
     now = timezone.now()
-    batch = await SyntheticJobBatch.objects.acreate(block=1, created_at=now)
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1,
+        cycle=await Cycle.objects.acreate(start=-14, stop=708),
+        created_at=now,
+    )
     miners = [await Miner.objects.acreate(hotkey=f"miner_{i}") for i in range(0, n)]
     for i, miner in enumerate(miners):
         await MinerManifest.objects.acreate(

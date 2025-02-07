@@ -30,8 +30,10 @@ from pytest_httpx import HTTPXMock
 from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.models import (
+    Cycle,
     Miner,
     SyntheticJob,
+    SyntheticJobBatch,
     SystemEvent,
 )
 from compute_horde_validator.validator.s3 import get_public_url
@@ -166,11 +168,16 @@ async def test_all_succeed(
 
         await transport.add_message(job_finish_message, send_before=2)
 
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             axon_dict,
             miners,
             [],
+            batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=1,
@@ -260,11 +267,16 @@ async def test_some_streaming_succeed(
 
             await transport.add_message(job_finish_message, send_before=2)
 
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             axon_dict,
             miners,
             [],
+            batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=10,
@@ -524,11 +536,16 @@ async def test_complex(
     for transport, miner in zip(transports, miners):
         assert transport.name == miner.hotkey
 
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             axon_dict,
             miners,
             [v.ss58_address for v in active_valis],
+            batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=2,
