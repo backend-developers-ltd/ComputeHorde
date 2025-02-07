@@ -14,7 +14,11 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
     SyntheticJobBatch,
 )
-from compute_horde_validator.validator.scoring import ExecutorClass, score_batches
+from compute_horde_validator.validator.scoring import (
+    ExecutorClass,
+    get_penalty_multiplier,
+    score_batches,
+)
 
 EXECUTOR_CLASS_WEIGHTS_OVERRIDE = "spin_up-4min.gpu-24gb=8,always_on.gpu-24gb=2"
 DYNAMIC_MANIFEST_SCORE_MULTIPLIER = 1.5
@@ -332,6 +336,12 @@ def create_batch(n: int, cycle: Cycle) -> SyntheticJobBatch:
         (20, 20, 1, DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER),
         # both bonus + penalty applied
         (10, 20, 1, DYNAMIC_MANIFEST_SCORE_MULTIPLIER * DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER),
+        (
+            None,
+            20,
+            1,
+            DYNAMIC_MANIFEST_SCORE_MULTIPLIER * DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER,
+        ),
     ],
 )
 def test_dance_incentives_and_penalties_multiplier_for_non_peak_cycle(
@@ -549,3 +559,38 @@ def test_temporary_scoring_formula(override_weights_version_v1):
     assert "miner2" in scores
     assert scores["miner1"] == approx(miner1_score, abs=10**-4)
     assert scores["miner2"] == approx(miner2_score, abs=10**-4)
+
+
+@pytest.mark.django_db
+@pytest.mark.override_config(
+    DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO=0.1,
+    DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER=0.5,
+)
+@pytest.mark.parametrize(
+    ("curr_class1_count", "curr_class2_count", "expected_multiplier"),
+    [
+        # no executors found (only did organic jobs?)
+        (None, None, 0.5),
+        # at least one class has less than 10% executors
+        (20, None, 0.5),
+        (20, 9, 0.5),
+        (None, 10, 0.5),
+        (19, 10, 0.5),
+        # both classes have 10% executors
+        (20, 10, 1.0),
+    ],
+)
+def test_non_peak_penalty_multi_class(curr_class1_count, curr_class2_count, expected_multiplier):
+    class1 = ExecutorClass.always_on__llm__a6000
+    class2 = ExecutorClass.always_on__gpu_24gb
+    peak_counts = {class1: 200, class2: 100}
+
+    curr_counts = {}
+    if curr_class1_count is not None:
+        curr_counts[class1] = curr_class1_count
+    if curr_class2_count is not None:
+        curr_counts[class2] = curr_class2_count
+    if not curr_counts:
+        curr_counts = None
+
+    assert get_penalty_multiplier(peak_counts, curr_counts) == approx(expected_multiplier)
