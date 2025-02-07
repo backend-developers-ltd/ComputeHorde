@@ -20,7 +20,7 @@ dependencies = [
     "nox==2024.10.09",
     "channels[daphne]==4.*",
     "channels-redis==4.2.0",
-    "compute-horde",
+    "compute-horde==0.21.0",
     "prometheus-client~=0.17.0",
     "django-prometheus==2.3.1",
     "django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01",
