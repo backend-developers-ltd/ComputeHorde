@@ -72,6 +72,7 @@ async def test_synthetic_job_batch(
         sleep_before=0.05,
         docker_process_stdout="",
         docker_process_stderr="",
+        artifacts={},
     )
 
     batch = await SyntheticJobBatch.objects.acreate(

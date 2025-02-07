@@ -134,6 +134,7 @@ class MockSuccessfulMinerClient(MockMinerClient):
                 job_uuid=self.job_uuid,
                 docker_process_stdout="",
                 docker_process_stderr="",
+                artifacts={},
             )
         )
 

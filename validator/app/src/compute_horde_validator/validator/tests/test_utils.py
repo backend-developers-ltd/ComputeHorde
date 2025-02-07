@@ -346,6 +346,7 @@ async def test_execute_synthetic_job(
                     job_uuid=job_uuid,
                     docker_process_stdout="",
                     docker_process_stderr="",
+                    artifacts={},
                 )
             )
         return f2 is not None
@@ -409,6 +410,7 @@ def test_create_and_run_synthetic_job_batch(
                         job_uuid=job_uuid,
                         docker_process_stdout="",
                         docker_process_stderr="",
+                        artifacts={},
                     )
                 )
 
