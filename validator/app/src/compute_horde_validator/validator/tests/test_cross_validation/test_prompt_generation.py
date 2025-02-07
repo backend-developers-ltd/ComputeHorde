@@ -7,7 +7,7 @@ from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.models import PromptSeries
-from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -21,7 +21,7 @@ pytestmark = [
 
 
 async def test_generate_prompts(
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     create_miner_client: Callable,
     manifest_message: str,
     executor_ready_message: str,
@@ -71,7 +71,7 @@ async def test_generate_prompts(
 
 
 async def test_generate_prompts_job_failed(
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     create_miner_client: Callable,
     manifest_message: str,
     executor_ready_message: str,
@@ -92,7 +92,7 @@ async def test_generate_prompts_job_failed(
 
 
 async def test_generate_prompts_timeout(
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     create_miner_client: Callable,
     manifest_message: str,
     job_uuid: uuid.UUID,

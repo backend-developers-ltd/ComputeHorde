@@ -27,7 +27,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.base import (
 from compute_horde_validator.validator.synthetic_jobs.generator.factory import (
     DefaultSyntheticJobGeneratorFactory,
 )
-from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
 class JobGeneratorFactory(DefaultSyntheticJobGeneratorFactory):
@@ -53,7 +53,7 @@ async def test_llm_synthetic_jobs_flow(
     miner: Miner,
     axon_dict: dict[str, bittensor.AxonInfo],
     create_simulation_miner_client: Callable,
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     override_weights_version_v2,
     small_spin_up_times,
     prompt_series: PromptSeries,

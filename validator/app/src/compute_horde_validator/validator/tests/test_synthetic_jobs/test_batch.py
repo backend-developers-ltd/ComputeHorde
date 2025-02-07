@@ -13,7 +13,7 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
-from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 from .mock_generator import (
     TimeTookScoreMockSyntheticJobGeneratorFactory,
@@ -35,7 +35,7 @@ async def test_synthetic_job_batch(
     miner: Miner,
     axon_dict: dict[str, bittensor.AxonInfo],
     create_simulation_miner_client: Callable,
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     small_spin_up_times,
     override_weights_version_v2,
 ):
@@ -87,7 +87,7 @@ async def test_synthetic_job_batch(
 
 async def check_scores(
     job_uuids: list[uuid.UUID],
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
 ):
     job_finished_messages = transport.sent[-len(job_uuids) :]
 

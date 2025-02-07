@@ -13,7 +13,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
-from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 from ..helpers import check_system_events
 from .helpers import check_synthetic_job
@@ -35,7 +35,7 @@ async def test_execute_miner_synthetic_jobs_success(
     accept_job_message: str,
     job_finish_message: str,
     create_simulation_miner_client: Callable,
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     job_uuid: uuid.UUID,
 ):
     await transport.add_message(manifest_message, send_before=1)
@@ -70,7 +70,7 @@ async def test_execute_miner_synthetic_jobs_success_timeout(
     accept_job_message: str,
     job_finish_message: str,
     create_simulation_miner_client: Callable,
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     job_uuid: uuid.UUID,
 ):
     await transport.add_message(manifest_message, send_before=1)
@@ -103,7 +103,7 @@ async def test_execute_miner_synthetic_jobs_job_failed(
     accept_job_message: str,
     job_failed_message: str,
     create_simulation_miner_client: Callable,
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     job_uuid: uuid.UUID,
 ):
     await transport.add_message(manifest_message, send_before=1)
@@ -133,7 +133,7 @@ async def test_execute_miner_synthetic_jobs_job_declined(
     manifest_message: str,
     decline_job_message: str,
     create_simulation_miner_client: Callable,
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     job_uuid: uuid.UUID,
 ):
     await transport.add_message(manifest_message, send_before=1)

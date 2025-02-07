@@ -12,7 +12,7 @@ from compute_horde_validator.validator.models import (
     PromptSeries,
     SolveWorkload,
 )
-from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -53,7 +53,7 @@ async def mock_throw_error(*args, **kwargs):
     mock_download_file_content,
 )
 async def test_answer_prompts__success(
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     create_miner_client: Callable,
     manifest_message: str,
     executor_ready_message: str,
@@ -85,7 +85,7 @@ async def test_answer_prompts__success(
     mock_download_file_content,
 )
 async def test_answer_prompts__missing_answers(
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     create_miner_client: Callable,
     manifest_message: str,
     executor_ready_message: str,
@@ -110,7 +110,7 @@ async def test_answer_prompts__missing_answers(
 
 
 async def test_answer_prompts__job_failed(
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     create_miner_client: Callable,
     manifest_message: str,
     executor_ready_message: str,
@@ -143,7 +143,7 @@ async def test_answer_prompts__job_failed(
 )
 async def test_answer_prompts__download_failed(
     settings,
-    transport: MinerSimulationTransport,
+    transport: SimulationTransport,
     create_miner_client: Callable,
     manifest_message: str,
     executor_ready_message: str,
