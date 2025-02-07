@@ -12,6 +12,7 @@ from compute_horde.receipts.schemas import (
     JobStartedReceiptPayload,
     Receipt,
 )
+from compute_horde.utils import sign_blob
 
 
 @pytest.fixture
@@ -58,8 +59,8 @@ def receipts(validator_keypair, miner_keypair):
     )
     receipt1 = Receipt(
         payload=payload1,
-        validator_signature=f"0x{validator_keypair.sign(payload1.blob_for_signing()).hex()}",
-        miner_signature=f"0x{miner_keypair.sign(payload1.blob_for_signing()).hex()}",
+        validator_signature=sign_blob(validator_keypair, payload1.blob_for_signing()),
+        miner_signature=sign_blob(miner_keypair, payload1.blob_for_signing()),
     )
 
     payload2 = JobAcceptedReceiptPayload(
@@ -72,8 +73,8 @@ def receipts(validator_keypair, miner_keypair):
     )
     receipt2 = Receipt(
         payload=payload2,
-        validator_signature=f"0x{validator_keypair.sign(payload2.blob_for_signing()).hex()}",
-        miner_signature=f"0x{miner_keypair.sign(payload2.blob_for_signing()).hex()}",
+        validator_signature=sign_blob(validator_keypair, payload2.blob_for_signing()),
+        miner_signature=sign_blob(miner_keypair, payload2.blob_for_signing()),
     )
 
     payload3 = JobFinishedReceiptPayload(
@@ -87,8 +88,8 @@ def receipts(validator_keypair, miner_keypair):
     )
     receipt3 = Receipt(
         payload=payload3,
-        validator_signature=f"0x{validator_keypair.sign(payload3.blob_for_signing()).hex()}",
-        miner_signature=f"0x{miner_keypair.sign(payload3.blob_for_signing()).hex()}",
+        validator_signature=sign_blob(validator_keypair, payload3.blob_for_signing()),
+        miner_signature=sign_blob(miner_keypair, payload3.blob_for_signing()),
     )
 
     return [receipt1, receipt2, receipt3]

@@ -8,12 +8,12 @@ from compute_horde.mv_protocol import miner_requests
 from compute_horde_validator.validator.cross_validation.utils import (
     TrustedMinerClient,
 )
-from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
 @pytest_asyncio.fixture
 async def transport():
-    return MinerSimulationTransport("miner_hotkey")
+    return SimulationTransport("miner_hotkey")
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def job_uuid():
 
 
 @pytest.fixture
-def create_miner_client(transport: MinerSimulationTransport):
+def create_miner_client(transport: SimulationTransport):
     def _create(*args, **kwargs):
         kwargs["transport"] = transport
         return TrustedMinerClient(*args, **kwargs)

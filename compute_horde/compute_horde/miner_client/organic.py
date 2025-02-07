@@ -47,7 +47,7 @@ from compute_horde.receipts.schemas import (
     JobStartedReceiptPayload,
 )
 from compute_horde.transport import AbstractTransport, TransportConnectionError, WSTransport
-from compute_horde.utils import MachineSpecs, Timer
+from compute_horde.utils import MachineSpecs, Timer, sign_blob
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +230,7 @@ class OrganicMinerClient(AbstractMinerClient):
             timestamp=int(time.time()),
         )
         return V0AuthenticateRequest(
-            payload=payload, signature=f"0x{self.my_keypair.sign(payload.blob_for_signing()).hex()}"
+            payload=payload, signature=sign_blob(self.my_keypair, payload.blob_for_signing())
         )
 
     def generate_job_started_receipt_message(
@@ -249,7 +249,7 @@ class OrganicMinerClient(AbstractMinerClient):
             is_organic=True,
             ttl=ttl,
         )
-        signature = f"0x{self.my_keypair.sign(receipt_payload.blob_for_signing()).hex()}"
+        signature = sign_blob(self.my_keypair, receipt_payload.blob_for_signing())
         return receipt_payload, signature
 
     def generate_job_accepted_receipt_message(
@@ -268,7 +268,7 @@ class OrganicMinerClient(AbstractMinerClient):
         )
         return V0JobAcceptedReceiptRequest(
             payload=receipt_payload,
-            signature=f"0x{self.my_keypair.sign(receipt_payload.blob_for_signing()).hex()}",
+            signature=sign_blob(self.my_keypair, receipt_payload.blob_for_signing()),
         )
 
     async def send_job_accepted_receipt_message(
@@ -306,7 +306,7 @@ class OrganicMinerClient(AbstractMinerClient):
         )
         return V0JobFinishedReceiptRequest(
             payload=receipt_payload,
-            signature=f"0x{self.my_keypair.sign(receipt_payload.blob_for_signing()).hex()}",
+            signature=sign_blob(self.my_keypair, receipt_payload.blob_for_signing()),
         )
 
     async def send_job_finished_receipt_message(

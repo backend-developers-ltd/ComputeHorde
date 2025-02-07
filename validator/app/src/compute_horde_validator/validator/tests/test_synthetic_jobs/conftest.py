@@ -20,7 +20,7 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import BatchCont
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
     LlmPromptsSyntheticJobGenerator,
 )
-from compute_horde_validator.validator.tests.transport import MinerSimulationTransport
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 from .mock_generator import MockSyntheticJobGeneratorFactory
 
@@ -56,7 +56,7 @@ async def miner(miner_hotkey: str):
 
 @pytest_asyncio.fixture
 async def transport(miner_hotkey: str):
-    return MinerSimulationTransport(miner_hotkey)
+    return SimulationTransport(miner_hotkey)
 
 
 @pytest.fixture
