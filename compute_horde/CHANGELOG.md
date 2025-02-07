@@ -2,6 +2,12 @@
 
 <!-- towncrier release notes start -->
 
+## [0.0.22](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.22) - 2025-02-07
+
+
+Artifacts support.
+
+
 ## [0.0.21](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.21) - 2025-01-28
 
 
