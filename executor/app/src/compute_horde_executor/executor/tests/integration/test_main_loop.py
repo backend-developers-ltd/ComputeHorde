@@ -181,6 +181,7 @@ def test_main_loop_basic():
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -243,6 +244,7 @@ def test_main_loop_streaming_job():
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": mock.ANY,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -305,6 +307,7 @@ def test_huggingface_volume():
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -380,6 +383,7 @@ def test_huggingface_volume_dataset():
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -438,6 +442,7 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -551,6 +556,7 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -675,6 +681,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -741,6 +748,7 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -865,6 +873,7 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -922,6 +931,7 @@ def test_raw_script_job():
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": f"{payload}\n",
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -1006,6 +1016,7 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -1094,6 +1105,7 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]
@@ -1177,6 +1189,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
+            "artifacts": {},
             "job_uuid": job_uuid,
         },
     ]

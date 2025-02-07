@@ -44,6 +44,7 @@ async def test_run_organic_job__success(keypair):
                 job_uuid=JOB_UUID,
                 docker_process_stdout="stdout",
                 docker_process_stderr="stderr",
+                artifacts={},
             ).model_dump_json(),
         ],
     )

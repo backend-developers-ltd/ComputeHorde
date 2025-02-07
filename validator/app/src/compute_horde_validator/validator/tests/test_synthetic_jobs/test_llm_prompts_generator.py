@@ -12,6 +12,7 @@ _JOB_FINISHED_REQUEST = V0JobFinishedRequest(
     job_uuid="CF8753B2-C86C-45A3-A01F-84295C3BAD8F",
     docker_process_stdout="",
     docker_process_stderr="",
+    artifacts={},
 )
 
 
