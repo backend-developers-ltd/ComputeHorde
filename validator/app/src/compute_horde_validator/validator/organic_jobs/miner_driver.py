@@ -173,7 +173,7 @@ async def execute_organic_job(
             )
             await notify_callback(JobStatusUpdate.from_job(job, "failed"))
         elif exc.reason == FailureReason.JOB_DECLINED:
-            comment = f"Miner {miner_client.miner_name} declined job: {exc.received_str()}"
+            comment = f"Miner declined job {miner_client.miner_name}: {exc.received_str()}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
