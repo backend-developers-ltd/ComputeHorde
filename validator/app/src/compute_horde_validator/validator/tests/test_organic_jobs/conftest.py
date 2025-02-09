@@ -72,18 +72,31 @@ def let_it_rip(faci_transport, miner_transport, validator_keypair):
     The transports should be requested as fixtures by the test function to define the sequence of messages.
     """
 
-    async def actually_let_it_rip(until: Callable[[], bool]):
+    async def actually_let_it_rip(until: Callable[[], bool], timeout_seconds: int = 3):
         def fake_miner_client_factory(*args, **kwargs):
             return OrganicMinerClient(*args, **kwargs, transport=miner_transport)
 
         faci_client = FacilitatorClient(validator_keypair, "")
         faci_client.MINER_CLIENT_CLASS = fake_miner_client_factory
 
-        async with faci_client, faci_transport.receive_condition, asyncio.timeout(10):
+        async def wait_for_condition(cond, until):
+            async with cond:
+                await cond.wait_for(until)
+
+        fs = [
+            asyncio.create_task(wait_for_condition(faci_transport.receive_condition, until)),
+            asyncio.create_task(wait_for_condition(miner_transport.receive_condition, until)),
+        ]
+
+        async with faci_client, asyncio.timeout(timeout_seconds):
             faci_loop = asyncio.create_task(
                 faci_client.handle_connection(_SimulationTransportWsAdapter(faci_transport))
             )
-            await faci_transport.receive_condition.wait_for(until)
+            _, pending = await asyncio.wait(fs, return_when=asyncio.FIRST_COMPLETED)
+
+        for f in fs:
+            if not f.done():
+                f.cancel()
 
         faci_loop.cancel()
         try:
