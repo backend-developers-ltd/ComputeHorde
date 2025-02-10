@@ -1,4 +1,5 @@
 import asyncio
+from asyncio import CancelledError
 from collections import namedtuple
 from collections.abc import Callable
 from unittest.mock import AsyncMock, Mock, patch
@@ -72,18 +73,22 @@ def let_it_rip(faci_transport, miner_transport, validator_keypair):
     The transports should be requested as fixtures by the test function to define the sequence of messages.
     """
 
-    async def actually_let_it_rip(until: Callable[[], bool], timeout_seconds: int = 3):
+    async def actually_let_it_rip(until: Callable[[], bool], timeout_seconds: int = 1):
         def fake_miner_client_factory(*args, **kwargs):
+            """
+            Creates a real organic miner client, but replaces the WS transport with a pre-programmed sequence.
+            """
             return OrganicMinerClient(*args, **kwargs, transport=miner_transport)
 
+        # The actual client being tested
         faci_client = FacilitatorClient(validator_keypair, "")
         faci_client.MINER_CLIENT_CLASS = fake_miner_client_factory
 
-        async def wait_for_condition(cond, until):
-            async with cond:
-                await cond.wait_for(until)
+        async def wait_for_condition(condition: asyncio.Condition, until: Callable[[], bool]):
+            async with condition:
+                await condition.wait_for(until)
 
-        fs = [
+        finish_events = [
             asyncio.create_task(wait_for_condition(faci_transport.receive_condition, until)),
             asyncio.create_task(wait_for_condition(miner_transport.receive_condition, until)),
         ]
@@ -92,16 +97,18 @@ def let_it_rip(faci_transport, miner_transport, validator_keypair):
             faci_loop = asyncio.create_task(
                 faci_client.handle_connection(_SimulationTransportWsAdapter(faci_transport))
             )
-            _, pending = await asyncio.wait(fs, return_when=asyncio.FIRST_COMPLETED)
+            _, pending = await asyncio.wait(finish_events, return_when=asyncio.FIRST_COMPLETED)
 
-        for f in fs:
+        for f in finish_events:
             if not f.done():
                 f.cancel()
-
         faci_loop.cancel()
+
         try:
+            # This await is crucial as it allows multiple other tasks to get cancelled properly
+            # Otherwise "cancelling" tasks will persist until the end of the event loop and asyncio doesn't like that
             await faci_loop
-        except asyncio.CancelledError:
+        except CancelledError:
             pass
 
     with (
