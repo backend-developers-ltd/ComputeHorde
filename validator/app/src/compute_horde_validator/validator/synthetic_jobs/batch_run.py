@@ -389,7 +389,7 @@ class Job:
             type=type,
             subtype=subtype,
             description=description,
-            data={**(data or {}), **{"description": description}},
+            data={**(data or {}), "description": description},
             job_uuid=self.uuid,
             miner_hotkey=self.miner_hotkey,
             func=func,
