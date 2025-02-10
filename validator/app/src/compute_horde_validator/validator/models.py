@@ -168,10 +168,6 @@ class MinerBlacklist(models.Model):
     def __str__(self):
         return f"hotkey: {self.miner.hotkey}"
 
-    @classmethod
-    async def acleanup(cls):
-        await cls.objects.expired().adelete()
-
 
 class ValidatorWhitelist(models.Model):
     hotkey = models.CharField(max_length=255, unique=True)
