@@ -35,9 +35,9 @@ class SimulationTransport(AbstractTransport):
         self.logger.debug(f"Sent message: {message}")
 
     async def receive(self) -> str:
-        try:
+        if len(self.to_receive):
             receive_at, sleep_before, message = self.to_receive.popleft()
-        except IndexError:
+        else:
             self.logger.debug("No more messages to receive")
             await asyncio.Future()
 

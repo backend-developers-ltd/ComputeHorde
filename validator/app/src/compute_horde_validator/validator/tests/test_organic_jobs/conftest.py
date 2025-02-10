@@ -1,6 +1,5 @@
 import asyncio
 import uuid
-from asyncio import CancelledError
 from collections import namedtuple
 from collections.abc import Callable
 from unittest.mock import AsyncMock, Mock, patch
@@ -57,7 +56,7 @@ class _SimulationTransportWsAdapter:
 
 @pytest_asyncio.fixture
 async def miner_transport():
-    return SimulationTransport("miner")
+    return SimulationTransport("miner_01")
 
 
 @pytest_asyncio.fixture
@@ -68,19 +67,35 @@ async def faci_transport():
     return transport
 
 
+@pytest_asyncio.fixture
+async def miner_transports(miner_transport):
+    """
+    In case of multiple job attempts within a single test, the transports will be used sequentially.
+    This does not mean each one will use a different miner - the miner used depends on actual job routing.
+    The first transport is the same as returned by the singular `miner_transport` fixture.
+    """
+    return [
+        miner_transport,
+        SimulationTransport("miner_02"),
+        SimulationTransport("miner_03"),
+    ]
+
+
 @pytest.fixture
-def execute_scenario(faci_transport, miner_transport, validator_keypair):
+def execute_scenario(faci_transport, miner_transports, validator_keypair):
     """
     Returns a coroutine that will execute the messages programmed into the faci and miner transports.
     The transports should be requested as fixtures by the test function to define the sequence of messages.
     """
 
     async def actually_execute_scenario(until: Callable[[], bool], timeout_seconds: int = 1):
+        miner_transport_iter = iter(miner_transports)
+
         def fake_miner_client_factory(*args, **kwargs):
             """
             Creates a real organic miner client, but replaces the WS transport with a pre-programmed sequence.
             """
-            return OrganicMinerClient(*args, **kwargs, transport=miner_transport)
+            return OrganicMinerClient(*args, **kwargs, transport=next(miner_transport_iter))
 
         # The actual client being tested
         faci_client = FacilitatorClient(validator_keypair, "")
@@ -92,26 +107,28 @@ def execute_scenario(faci_transport, miner_transport, validator_keypair):
 
         finish_events = [
             asyncio.create_task(wait_for_condition(faci_transport.receive_condition, until)),
-            asyncio.create_task(wait_for_condition(miner_transport.receive_condition, until)),
+            *(
+                asyncio.create_task(wait_for_condition(miner_transport.receive_condition, until))
+                for miner_transport in miner_transports
+            ),
         ]
 
-        async with faci_client, asyncio.timeout(timeout_seconds):
-            faci_loop = asyncio.create_task(
-                faci_client.handle_connection(_SimulationTransportWsAdapter(faci_transport))
-            )
-            _, pending = await asyncio.wait(finish_events, return_when=asyncio.FIRST_COMPLETED)
-
-        for f in finish_events:
-            if not f.done():
-                f.cancel()
-        faci_loop.cancel()
-
         try:
-            # This await is crucial as it allows multiple other tasks to get cancelled properly
-            # Otherwise "cancelling" tasks will persist until the end of the event loop and asyncio doesn't like that
-            await faci_loop
-        except CancelledError:
+            async with faci_client, asyncio.timeout(timeout_seconds):
+                faci_loop = asyncio.create_task(
+                    faci_client.handle_connection(_SimulationTransportWsAdapter(faci_transport))
+                )
+                _, pending = await asyncio.wait(finish_events, return_when=asyncio.FIRST_COMPLETED)
+        except TimeoutError:
             pass
+
+        for future in (*finish_events, faci_loop):
+            if not future.done():
+                future.cancel()
+
+        # This await is crucial as it allows multiple other tasks to get cancelled properly
+        # Otherwise "cancelling" tasks will persist until the end of the event loop and asyncio doesn't like that
+        await asyncio.sleep(0)
 
     with (
         patch.object(FacilitatorClient, "heartbeat", AsyncMock()),
