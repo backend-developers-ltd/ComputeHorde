@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from asyncio import CancelledError
 from collections import namedtuple
 from collections.abc import Callable
@@ -7,6 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 import pytest_asyncio
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.fv_protocol import facilitator_requests
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
 
@@ -67,13 +69,13 @@ async def faci_transport():
 
 
 @pytest.fixture
-def let_it_rip(faci_transport, miner_transport, validator_keypair):
+def execute_scenario(faci_transport, miner_transport, validator_keypair):
     """
     Returns a coroutine that will execute the messages programmed into the faci and miner transports.
     The transports should be requested as fixtures by the test function to define the sequence of messages.
     """
 
-    async def actually_let_it_rip(until: Callable[[], bool], timeout_seconds: int = 1):
+    async def actually_execute_scenario(until: Callable[[], bool], timeout_seconds: int = 1):
         def fake_miner_client_factory(*args, **kwargs):
             """
             Creates a real organic miner client, but replaces the WS transport with a pre-programmed sequence.
@@ -129,4 +131,22 @@ def let_it_rip(faci_transport, miner_transport, validator_keypair):
             AsyncMock(),
         ),
     ):
-        yield actually_let_it_rip
+        yield actually_execute_scenario
+
+
+@pytest.fixture()
+def job_request():
+    return facilitator_requests.V2JobRequest(
+        uuid=str(uuid.uuid4()),
+        executor_class=DEFAULT_EXECUTOR_CLASS,
+        docker_image="doesntmatter",
+        raw_script="doesntmatter",
+        args=[],
+        env={},
+        use_gpu=False,
+    )
+
+
+@pytest.fixture()
+def another_job_request(job_request):
+    return job_request.__replace__(uuid=str(uuid.uuid4()))

@@ -94,7 +94,7 @@ async def execute_organic_job(
     job: OrganicJob,
     job_request: JobRequest | AdminJobRequest,
     total_job_timeout: int = 300,
-    initial_response_timeout: int = 5,
+    initial_response_timeout: int = 3,
     executor_ready_timeout: int = 300,
     notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] = _dummy_notify_callback,
 ) -> bool:

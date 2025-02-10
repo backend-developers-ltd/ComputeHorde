@@ -3,6 +3,7 @@ import logging
 from collections import deque
 
 from compute_horde.miner_client.base import AbstractTransport
+from pydantic import BaseModel
 
 
 class SimulationTransport(AbstractTransport):
@@ -52,13 +53,15 @@ class SimulationTransport(AbstractTransport):
         return message
 
     async def add_message(
-        self, message: str, send_before: int = 0, sleep_before: float = 0
+        self, message: str | BaseModel, send_before: int = 0, sleep_before: float = 0
     ) -> None:
         """
         Add a message to be received after a certain number of sent messages.
         Receives the message immediately if send_before is 0.
         Optionally sleep before receiving the message.
         """
+        if isinstance(message, BaseModel):
+            message = message.model_dump_json()
 
         self.receive_at_counter += send_before
         self.to_receive.append((self.receive_at_counter, sleep_before, message))
