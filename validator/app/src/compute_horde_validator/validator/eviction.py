@@ -5,7 +5,7 @@ from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt
 from django.conf import settings
 from django.utils.timezone import now
 
-from .models import OrganicJob, SolveWorkload, SyntheticJobBatch, SystemEvent
+from .models import MinerBlacklist, OrganicJob, SolveWorkload, SyntheticJobBatch, SystemEvent
 
 RECEIPTS_RETENTION_PERIOD = timedelta(days=2)
 SYNTHETIC_JOBS_RETENTION_PERIOD = timedelta(days=2)
@@ -22,6 +22,7 @@ def evict_all() -> None:
     evict_synthetic_jobs()
     evict_dangling_prompts()
     evict_system_events()
+    evict_miner_blacklist()
 
 
 def evict_system_events() -> None:
@@ -56,3 +57,7 @@ def evict_receipts() -> None:
     JobStartedReceipt.objects.filter(timestamp__lt=cutoff).delete()
     JobAcceptedReceipt.objects.filter(timestamp__lt=cutoff).delete()
     JobFinishedReceipt.objects.filter(timestamp__lt=cutoff).delete()
+
+
+def evict_miner_blacklist() -> None:
+    MinerBlacklist.objects.expired().delete()
