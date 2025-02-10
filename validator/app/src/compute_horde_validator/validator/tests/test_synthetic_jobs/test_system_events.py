@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pytest
 from freezegun import freeze_time
 
-from compute_horde_validator.validator.models import SystemEvent
+from compute_horde_validator.validator.models import Cycle, SyntheticJobBatch, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     _init_context,
     _not_enough_prompts_system_event,
@@ -11,10 +11,14 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_not_enough_prompts_system_event_is_not_repeated():
     initial_date = datetime(2020, 1, 1)
-    ctx = await _init_context(axons={}, serving_miners=[], active_validators=[], batch_id=1)
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
+    ctx = await _init_context(axons={}, serving_miners=[], active_validators=[], batch_id=batch.id)
 
     with freeze_time(initial_date) as frozen_datetime:
         await _not_enough_prompts_system_event(ctx)
@@ -44,7 +48,11 @@ async def test_system_event_limits():
     #       does not get patched.
     #       This test is currently dependent on the default value of the config.
 
-    ctx = await _init_context(axons={}, serving_miners=[], active_validators=[], batch_id=1)
+    batch = await SyntheticJobBatch.objects.acreate(
+        block=1000,
+        cycle=await Cycle.objects.acreate(start=708, stop=1430),
+    )
+    ctx = await _init_context(axons={}, serving_miners=[], active_validators=[], batch_id=batch.id)
 
     for _ in range(20):
         # limited type

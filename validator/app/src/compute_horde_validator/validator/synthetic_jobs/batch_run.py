@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import random
 import statistics
 import time
@@ -57,6 +58,7 @@ from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
+from compute_horde.subtensor import get_peak_cycle
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
 from django.conf import settings
@@ -81,6 +83,7 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
     SystemEvent,
 )
+from compute_horde_validator.validator.scoring import get_executor_counts
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
@@ -493,8 +496,7 @@ class Job:
 
 @dataclass
 class BatchContext:
-    # an already existing SyntheticJobBatch model can be optionally passed in
-    batch_id: int
+    batch: SyntheticJobBatch
 
     uuid: str
     own_keypair: bittensor.Keypair
@@ -850,6 +852,7 @@ class BatchConfig:
         self.event_limits: LimitsDict | None = None
         self.llm_answer_s3_download_timeout: float | None = None
         self.excused_synthetic_job_score: float | None = None
+        self.non_peak_cycle_executor_min_ratio: float = 1.0
 
     async def populate(self):
         self.event_limits = await get_system_event_limits()
@@ -857,6 +860,9 @@ class BatchConfig:
             "DYNAMIC_LLM_ANSWER_S3_DOWNLOAD_TIMEOUT_SECONDS"
         )
         self.excused_synthetic_job_score = await aget_config("DYNAMIC_EXCUSED_SYNTHETIC_JOB_SCORE")
+        self.non_peak_cycle_executor_min_ratio = await aget_config(
+            "DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO"
+        )
 
 
 async def _init_context(
@@ -866,6 +872,8 @@ async def _init_context(
     batch_id: int,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> BatchContext:
+    batch = await SyntheticJobBatch.objects.aget(id=batch_id)
+
     own_wallet = settings.BITTENSOR_WALLET()
     own_keypair = own_wallet.get_hotkey()
     create_miner_client = create_miner_client or MinerClient
@@ -881,7 +889,7 @@ async def _init_context(
     allowed_validators.add(own_keypair.ss58_address)
 
     ctx = BatchContext(
-        batch_id=batch_id,
+        batch=batch,
         uuid=str(uuid.uuid4()),
         own_keypair=own_keypair,
         certs_basepath=dir_path,
@@ -1594,6 +1602,32 @@ async def _adjust_miner_max_executors_per_class(ctx: BatchContext) -> None:
                 # TODO: add a system event?
 
 
+@sync_to_async
+def _limit_non_peak_executors_per_class(ctx: BatchContext) -> None:
+    peak_cycle = get_peak_cycle(ctx.batch.block, netuid=settings.BITTENSOR_NETUID)
+    if ctx.batch.block in peak_cycle:
+        return
+
+    peak_batch = SyntheticJobBatch.objects.filter(
+        block__gte=peak_cycle.start,
+        block__lt=peak_cycle.stop,
+        should_be_scored=True,
+    ).first()
+    if not peak_batch:
+        return
+
+    peak_counts = get_executor_counts(peak_batch)
+    for hotkey, executors in ctx.executors.items():
+        if hotkey not in peak_counts:
+            continue
+
+        miner_peak_counts = peak_counts[hotkey]
+        for executor_class, count in executors.items():
+            peak_count = miner_peak_counts.get(executor_class, 0)
+            max_count = math.ceil(peak_count * ctx.batch_config.non_peak_cycle_executor_min_ratio)
+            ctx.executors[hotkey][executor_class] = min(max_count, count)
+
+
 async def _multi_close_client(ctx: BatchContext) -> None:
     tasks = [
         asyncio.create_task(
@@ -2094,13 +2128,11 @@ def _db_persist_critical(ctx: BatchContext) -> None:
     # prevent a situation where because of a crash only some of
     # the jobs are saved, which would generate incorrect weights
     with transaction.atomic():
-        batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
-
         # accepting_results_until is not used anywhere, it doesn't
         # matter that we pick a somewhat arbitrary time for it
         now = datetime.now(tz=UTC)
-        batch.accepting_results_until = ctx.stage_start_time.get("_multi_send_job_request", now)
-        batch.save()
+        ctx.batch.accepting_results_until = ctx.stage_start_time.get("_multi_send_job_request", now)
+        ctx.batch.save()
 
         synthetic_jobs: list[SyntheticJob] = []
         for job in ctx.jobs.values():
@@ -2114,7 +2146,7 @@ def _db_persist_critical(ctx: BatchContext) -> None:
                 status = SyntheticJob.Status.FAILED
             synthetic_job = SyntheticJob(
                 job_uuid=job.uuid,
-                batch=batch,
+                batch=ctx.batch,
                 miner=miner,
                 miner_address=axon.ip,
                 miner_address_ip_version=axon.ip_type,
@@ -2136,8 +2168,6 @@ def _db_persist_critical(ctx: BatchContext) -> None:
 def _db_persist(ctx: BatchContext) -> None:
     start_time = time.time()
 
-    batch = SyntheticJobBatch.objects.get(id=ctx.batch_id)
-
     miner_manifests: list[MinerManifest] = []
     for miner in ctx.miners.values():
         for executor_class, count in ctx.executors[miner.hotkey].items():
@@ -2145,7 +2175,7 @@ def _db_persist(ctx: BatchContext) -> None:
             miner_manifests.append(
                 MinerManifest(
                     miner=miner,
-                    batch=batch,
+                    batch=ctx.batch,
                     executor_class=executor_class,
                     executor_count=count,
                     online_executor_count=online_executor_count,
@@ -2155,7 +2185,8 @@ def _db_persist(ctx: BatchContext) -> None:
 
     # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {
-        str(synthetic_job.job_uuid): synthetic_job for synthetic_job in batch.synthetic_jobs.all()
+        str(synthetic_job.job_uuid): synthetic_job
+        for synthetic_job in ctx.batch.synthetic_jobs.all()
     }
     prompt_samples: list[PromptSample] = []
 
@@ -2264,6 +2295,9 @@ async def execute_synthetic_batch_run(
         await ctx.checkpoint_system_event("_multi_get_miner_manifest")
         await _multi_get_miner_manifest(ctx)
         await _adjust_miner_max_executors_per_class(ctx)
+
+        await ctx.checkpoint_system_event("_limit_non_peak_executors_per_class")
+        await _limit_non_peak_executors_per_class(ctx)
 
         await ctx.checkpoint_system_event("_get_total_executor_count")
         total_executor_count = _get_total_executor_count(ctx)
