@@ -41,9 +41,8 @@ class SimulationTransport(AbstractTransport):
             self.logger.debug("No more messages to receive")
             await asyncio.Future()
 
-        if len(self.sent) < receive_at:
-            async with self.receive_condition:
-                await self.receive_condition.wait_for(lambda: len(self.sent) >= receive_at)
+        async with self.receive_condition:
+            await self.receive_condition.wait_for(lambda: len(self.sent) >= receive_at)
 
         await asyncio.sleep(sleep_before)
 
