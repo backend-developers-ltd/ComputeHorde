@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from compute_horde import mv_protocol
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol import facilitator_requests
 from compute_horde.mv_protocol import miner_requests
@@ -178,3 +179,102 @@ async def test_miner_is_blacklisted__after_timing_out(
         status_message = JobStatusUpdate.model_validate_json(faci_transport.sent[i])
         assert status_message.status == status
         assert comment in status_message.metadata.comment
+
+
+async def test_miner_is_blacklisted__after_failing_to_start_executor(
+    faci_transport,
+    miner_transport,
+    let_it_rip,
+):
+    # Faci -> vali: V2 job request
+    await faci_transport.add_message(_JOB_REQUEST.model_dump_json(), send_before=0)
+
+    # Vali -> miner: initial job request
+
+    # Miner -> vali: accept job
+    accept_job_msg = miner_requests.V0AcceptJobRequest(job_uuid=_JOB_REQUEST.uuid)
+    await miner_transport.add_message(accept_job_msg.model_dump_json(), send_before=1)
+
+    # Vali -> Miner: receipt for accepting the job
+    # Vali -> Faci: job status update
+
+    # Miner -> vali: executor failed to start
+    await miner_transport.add_message(
+        mv_protocol.miner_requests.V0ExecutorFailedRequest(
+            job_uuid=_JOB_REQUEST.uuid
+        ).model_dump_json(),
+        send_before=1,
+    )
+
+    # Faci: request another job
+    await faci_transport.add_message(
+        _ANOTHER_JOB_REQUEST.model_dump_json(),
+        send_before=2,  # job status=accepted, job status=failed
+    )
+
+    await let_it_rip(
+        until=lambda: len(faci_transport.sent) >= 4,
+        timeout_seconds=3,
+    )
+
+    accepted_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[1])
+    failed_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[2])
+    rejected_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[3])
+
+    assert accepted_status_msg.status == "accepted"
+    assert failed_status_msg.status == "failed"
+    assert rejected_status_msg.status == "rejected"
+
+
+async def test_miner_is_blacklisted__after_failing_job(
+    faci_transport,
+    miner_transport,
+    let_it_rip,
+):
+    # Faci -> vali: V2 job request
+    await faci_transport.add_message(_JOB_REQUEST.model_dump_json(), send_before=0)
+
+    # Vali -> miner: initial job request
+
+    # Miner -> vali: accept job
+    accept_job_msg = miner_requests.V0AcceptJobRequest(job_uuid=_JOB_REQUEST.uuid)
+    await miner_transport.add_message(accept_job_msg.model_dump_json(), send_before=1)
+
+    # Vali -> Miner: receipt for accepting the job
+    # Vali -> Faci: job status update
+
+    # Miner -> vali: executor is ready
+    executor_ready_msg = miner_requests.V0ExecutorReadyRequest(job_uuid=_JOB_REQUEST.uuid)
+    await miner_transport.add_message(executor_ready_msg.model_dump_json(), send_before=1)
+
+    # Vali -> Miner: actual job request
+
+    # Miner -> vali: job failed
+    await miner_transport.add_message(
+        mv_protocol.miner_requests.V0JobFailedRequest(
+            job_uuid=_JOB_REQUEST.uuid,
+            docker_process_exit_status=1,
+            docker_process_stdout="stdout",
+            docker_process_stderr="stderr",
+        ).model_dump_json(),
+        send_before=1,
+    )
+
+    # Faci: request another job
+    await faci_transport.add_message(
+        _ANOTHER_JOB_REQUEST.model_dump_json(),
+        send_before=2,  # job status=accepted, job status=failed
+    )
+
+    await let_it_rip(
+        until=lambda: len(faci_transport.sent) >= 4,
+        timeout_seconds=3,
+    )
+
+    accepted_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[1])
+    failed_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[2])
+    rejected_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[3])
+
+    assert accepted_status_msg.status == "accepted"
+    assert failed_status_msg.status == "failed"
+    assert rejected_status_msg.status == "rejected"
