@@ -70,7 +70,7 @@ class LlmPromptsJobGenerator(BaseSyntheticJobGenerator):
         )
 
     def timeout_seconds(self) -> int:
-        return 60  # it takes around 42s - add buffer for streaming
+        return 150
 
     def base_docker_image_name(self) -> str:
         return "docker.io/backenddevelopersltd/compute-horde-prompt-solver:v0-latest"
