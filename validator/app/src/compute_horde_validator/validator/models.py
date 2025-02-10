@@ -140,7 +140,9 @@ class Miner(models.Model):
 
 class MinerBlacklistQueryset(models.QuerySet["MinerBlacklist"]):
     def active(self):
-        return self.filter(expires_at__gt=timezone.now())
+        return self.filter(
+            models.Q(expires_at__gt=timezone.now()) | models.Q(expires_at__isnull=True)
+        )
 
     def expired(self):
         return self.filter(expires_at__lte=timezone.now())
