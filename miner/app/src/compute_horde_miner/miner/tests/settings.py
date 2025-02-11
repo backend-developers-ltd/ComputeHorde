@@ -17,6 +17,9 @@ PROMETHEUS_EXPORT_MIGRATIONS = False
 EXECUTOR_MANAGER_CLASS_PATH = "compute_horde_miner.miner.tests.executor_manager:StubExecutorManager"
 DEBUG_TURN_AUTHENTICATION_OFF = True
 
+BITTENSOR_NETUID = 49
+BITTENSOR_NETWORK = "test"
+
 BITTENSOR_WALLET_DIRECTORY = pathlib.Path("~").expanduser() / ".bittensor" / "wallets"
 BITTENSOR_WALLET_NAME = "test_miner"
 BITTENSOR_WALLET_HOTKEY_NAME = "default"
