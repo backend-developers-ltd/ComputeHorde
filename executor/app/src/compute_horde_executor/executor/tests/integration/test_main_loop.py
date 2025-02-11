@@ -104,20 +104,33 @@ class CommandTested(Command):
             return True
 
 
-def test_main_loop():
+def test_main_loop_basic():
     job_container_name = f"ch-{uuid.uuid4()}-job"
     nginx_container_name = f"ch-{uuid.uuid4()}-nginx"
+    network_name = f"ch-{uuid.uuid4()}"
+    subprocess.check_output(["docker", "network", "create", "--internal", network_name])
     for container_name in [job_container_name, nginx_container_name]:
         subprocess.check_output(
             [
                 "docker",
                 "run",
                 "-d",
+                "--network",
+                "bridge",
                 "--name",
                 container_name,
                 "busybox",
                 "sleep",
                 "1000",
+            ]
+        )
+        subprocess.check_output(
+            [
+                "docker",
+                "network",
+                "connect",
+                network_name,
+                container_name,
             ]
         )
     for container_name in [job_container_name, nginx_container_name]:
@@ -174,6 +187,11 @@ def test_main_loop():
     for container_name in [job_container_name, nginx_container_name]:
         output = subprocess.check_output(["docker", "ps", "--filter", f"name={container_name}"])
         assert container_name.encode() not in output
+
+    output = subprocess.check_output(
+        ["docker", "network", "ls", "--filter", f"name={network_name}"]
+    )
+    assert network_name.encode() not in output
 
 
 def test_main_loop_streaming_job():

@@ -466,6 +466,18 @@ class DownloadManager:
             raise JobError(f"Download failed after {self.max_retries} retries")
 
 
+def job_container_name(docker_objects_infix: str) -> str:
+    return f"ch-{docker_objects_infix}-job"
+
+
+def nginx_container_name(docker_objects_infix: str) -> str:
+    return f"ch-{docker_objects_infix}-nginx"
+
+
+def network_name(docker_objects_infix: str) -> str:
+    return f"ch-{docker_objects_infix}"
+
+
 class JobRunner:
     def __init__(self, initial_job_request: V0InitialJobRequest | V1InitialJobRequest):
         self.initial_job_request = initial_job_request
@@ -476,9 +488,9 @@ class JobRunner:
         self.specs_volume_mount_dir = self.temp_dir / "specs"
         self.download_manager = DownloadManager()
 
-        self.job_container_name = f"ch-{settings.EXECUTOR_TOKEN}-job"
-        self.nginx_container_name = f"ch-{settings.EXECUTOR_TOKEN}-nginx"
-        self.job_network_name = f"ch-{settings.EXECUTOR_TOKEN}-network"
+        self.job_container_name = job_container_name(settings.EXECUTOR_TOKEN)
+        self.nginx_container_name = nginx_container_name(settings.EXECUTOR_TOKEN)
+        self.job_network_name = network_name(settings.EXECUTOR_TOKEN)
         self.process: asyncio.subprocess.Process | None = None
         self.cmd: list[str] = []
 
@@ -495,12 +507,17 @@ class JobRunner:
     async def cleanup_potential_old_jobs(self):
         await (
             await asyncio.create_subprocess_shell(
-                "docker kill $(docker ps -q --filter 'name=ch-.*-job')"
+                f"docker kill $(docker ps -q --filter 'name={job_container_name('.*')}')"
             )
         ).communicate()
         await (
             await asyncio.create_subprocess_shell(
-                "docker kill $(docker ps -q --filter 'name=ch-.*-nginx')"
+                f"docker kill $(docker ps -q --filter 'name={nginx_container_name('.*')}')"
+            )
+        ).communicate()
+        await (
+            await asyncio.create_subprocess_shell(
+                f"docker network rm $(docker network ls -q --filter 'name={network_name('.*')}')"
             )
         ).communicate()
 
