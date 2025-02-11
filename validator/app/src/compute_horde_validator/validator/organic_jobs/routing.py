@@ -60,20 +60,23 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         .filter(
             miner__in=Miner.objects.non_blacklisted(),
             executor_class=str(executor_class),
-            online_executor_count__gt=0,
             created_at__gte=timezone.now() - timedelta(hours=4),
         )
         .order_by("created_at")
     )
     manifests = [manifest async for manifest in manifests_qs.all()]
-    if not manifests:
-        raise NoMinerForExecutorType()
 
     # Only accept the latest manifest for each miner
     latest_miner_manifest: dict[str, MinerManifest] = {}
     for manifest in manifests:
         latest_miner_manifest[manifest.miner.hotkey] = manifest
     manifests = list(latest_miner_manifest.values())
+
+    # Discard manifests that explicitly say there are no executors of this type
+    manifests = [manifest for manifest in manifests if manifest.online_executor_count > 0]
+
+    if not manifests:
+        raise NoMinerForExecutorType()
 
     random.shuffle(manifests)
 
