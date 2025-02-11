@@ -44,7 +44,7 @@ EXECUTOR_CLASS = {
         description="always on, NVIDIA RTX A6000 GPU machine for LLM prompts solving",
         has_gpu=True,
         gpu_vram_gb=48,
-        spin_up_time=int(timedelta(minutes=4).total_seconds()),
+        spin_up_time=int(timedelta(minutes=1).total_seconds()),
     ),
     # ExecutorClass.always_on__cpu_16c__ram_64gb: ExecutorClassSpec(
     #     cpu_cores=16,
