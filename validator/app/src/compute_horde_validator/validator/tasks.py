@@ -988,11 +988,11 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
             data={"weights_id": weights.id},
         )
     else:
+        current_block = "unknown"
         try:
             current_block = subtensor_.get_current_block()
         except Exception as e:
             logger.warning("Failed to get current block: %s", e)
-            current_block = "unknown"
         finally:
             save_weight_setting_failure(
                 subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,
