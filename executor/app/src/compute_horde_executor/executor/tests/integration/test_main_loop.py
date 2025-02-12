@@ -87,6 +87,7 @@ class CommandTested(Command):
             try:
                 stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
             except TimeoutError:
+                process.kill()
                 is_toolkit_installed = False
 
         if is_toolkit_installed is None and process.returncode != 0:
