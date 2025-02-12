@@ -2,15 +2,19 @@ import asyncio
 import logging
 import os
 from collections import deque
-from datetime import timedelta
+from typing import cast
 
 import bittensor
 import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde.executor_class import ExecutorClass
-from compute_horde.fv_protocol.facilitator_requests import Error, JobRequest, Response, V2JobRequest
+from compute_horde.fv_protocol.facilitator_requests import (
+    Error,
+    JobRequest,
+    Response,
+    V2JobRequest,
+)
 from compute_horde.fv_protocol.validator_requests import (
     V0AuthenticationRequest,
     V0Heartbeat,
@@ -18,7 +22,6 @@ from compute_horde.fv_protocol.validator_requests import (
 )
 from compute_horde.signature import verify_signature
 from django.conf import settings
-from django.utils import timezone
 from pydantic import BaseModel
 
 from compute_horde_validator.validator.dynamic_config import aget_config
@@ -28,14 +31,17 @@ from compute_horde_validator.validator.metagraph_client import (
 )
 from compute_horde_validator.validator.models import (
     Miner,
-    MinerManifest,
     OrganicJob,
     SystemEvent,
     ValidatorWhitelist,
 )
+from compute_horde_validator.validator.organic_jobs import routing
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
-from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
-from compute_horde_validator.validator.tasks import get_subtensor
+from compute_horde_validator.validator.organic_jobs.miner_driver import (
+    JobStatusMetadata,
+    JobStatusUpdate,
+    execute_organic_job,
+)
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
@@ -90,8 +96,6 @@ class FacilitatorClient:
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
         self.refresh_metagraph_task = self.create_metagraph_refresh_task()
         self.specs_task: asyncio.Task[None] | None = None
-
-        self.last_miner_cross_validated: str | None = None
 
     def connect(self) -> websockets.connect:
         """Create an awaitable/async-iterable websockets.connect() object"""
@@ -272,83 +276,82 @@ class FacilitatorClient:
     async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
         return await get_miner_axon_info(hotkey)
 
-    async def fetch_miner_for_cross_validation(
-        self, executor_class: ExecutorClass, num_hours_ago_valid_manifests=4
-    ) -> Miner | None:
-        """
-        Goes through all miners with recent manifests and online executors of the given executor class
-        And returns the miner that follows alphabetically or loops back to the first miner in the list
-        If no miner is found, returns None
-        """
-
-        available_miner_manifests = (
-            MinerManifest.objects.select_related("miner")
-            .filter(
-                executor_class=str(executor_class),
-                online_executor_count__gt=0,
-                created_at__gte=timezone.now() - timedelta(hours=num_hours_ago_valid_manifests),
-            )
-            .order_by("miner__hotkey")
-        )
-
-        # get the next miner to cross validate
-        miner_manifest = None
-        if self.last_miner_cross_validated:
-            miner_manifest = await available_miner_manifests.filter(
-                miner__hotkey__gt=self.last_miner_cross_validated
-            ).afirst()
-
-        # if no next miner, go back to the first miner
-        if miner_manifest is None:
-            miner_manifest = await available_miner_manifests.afirst()
-
-        if miner_manifest is None:
-            self.last_miner_cross_validated = None
-            return None
-
-        miner = miner_manifest.miner
-        self.last_miner_cross_validated = miner.hotkey
-        return miner
-
     async def process_job_request(self, job_request: JobRequest):
-        max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
+        # max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
+        """
+        NOTE: Retrying jobs is iffy at this point:
+        - Facilitator complains during job status updates, doesn't like the same job getting the same status twice
+        - Miner complains about... everything if it gets selected for a rerun of a job it already failed
+        - Validator will complain about duplicate receipts (multiple job started receipts for the same job uuid)
+        - Maybe more?
 
-        if job_request.message_type == "V2JobRequest":
+        For now, we'll bail and report job failure as soon as anything goes wrong.
+        """
+
+        if isinstance(job_request, V2JobRequest):
             logger.debug(f"Received signed job request: {job_request}")
             try:
                 await verify_job_request(job_request)
             except Exception as e:
-                logger.warning(f"Failed to verify signed payload: {e} - will not run job")
+                msg = f"Failed to verify signed payload: {e} - will not run job"
+                logger.warning(msg)
+                await self.send_model(
+                    JobStatusUpdate(
+                        uuid=job_request.uuid,
+                        status="failed",
+                        metadata=JobStatusMetadata(comment=msg),
+                    )
+                )
                 return
 
-            for i in range(max_retries):
-                miner = await self.fetch_miner_for_cross_validation(job_request.executor_class)
-                if miner is None:
-                    logger.warning(
-                        f"No available miners with executor class: {job_request.executor_class} - will not run job"
-                    )
-                    return
+        try:
+            miner = await routing.pick_miner_for_job_request(job_request)
+            logger.info(f"Selected miner {miner.hotkey} for job {job_request.uuid}")
+        except routing.NoMinerForExecutorType:
+            msg = f"No executor for job request: {job_request.uuid} ({job_request.executor_class})"
+            logger.info(f"Rejecting job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status="rejected",
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
+        except routing.AllMinersBusy:
+            msg = f"All miners busy for job: {job_request.uuid}"
+            logger.info(f"Rejecting job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status="rejected",
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
+        except routing.MinerIsBlacklisted:
+            msg = f"Miner for job is blacklisted: {job_request.uuid}"
+            logger.info(f"Failing job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status="failed",
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
 
-                try:
-                    # if exists, delete organic job from the previous attempt
-                    await OrganicJob.objects.filter(job_uuid=str(job_request.uuid)).adelete()
+        try:
+            job_attempt = await self.miner_driver(miner, job_request)
+            if job_attempt.status != OrganicJob.Status.COMPLETED:
+                logger.warning(f"Job finished with status: {job_attempt.status}")
+            if job_attempt.status == OrganicJob.Status.FAILED:
+                await routing.report_miner_failed_job(job_attempt)
+        except Exception as e:
+            logger.warning(f"Error running organic job {job_request.uuid}: {e}", exc_info=True)
 
-                    job_completed = await self.miner_driver(miner, job_request)
-                    if job_completed:
-                        break
-                except Exception as e:
-                    logger.warning(
-                        f"Error running organic job {job_request.uuid}: {e} - {max_retries-i-1} retries left"
-                    )
-        else:
-            # normal organic job flow
-            miner, _ = await Miner.objects.aget_or_create(hotkey=job_request.miner_hotkey)
-            await self.miner_driver(miner, job_request)
-
-    async def miner_driver(self, miner: Miner, job_request: JobRequest) -> bool:
+    async def miner_driver(self, miner: Miner, job_request: JobRequest) -> OrganicJob:
         """drive a miner client from job start to completion, then close miner connection"""
-        subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-        current_block = subtensor_.get_current_block()
 
         if miner.hotkey == settings.DEBUG_MINER_KEY:
             miner_ip = settings.DEBUG_MINER_ADDRESS
@@ -368,7 +371,7 @@ class FacilitatorClient:
             miner_port=miner_port,
             executor_class=job_request.executor_class,
             job_description="User job from facilitator",
-            block=current_block,
+            block=await self.get_current_block(),
         )
 
         miner_client = self.MINER_CLIENT_CLASS(
@@ -380,12 +383,22 @@ class FacilitatorClient:
         )
 
         total_job_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_TIMEOUT")
-        wait_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_WAIT_TIMEOUT")
-        return await execute_organic_job(
+        initial_response_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT")
+        executor_ready_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT")
+        await execute_organic_job(
             miner_client,
             job,
             job_request,
             total_job_timeout=total_job_timeout,
-            wait_timeout=wait_timeout,
+            initial_response_timeout=initial_response_timeout,
+            executor_ready_timeout=executor_ready_timeout,
             notify_callback=self.send_model,
         )
+
+        return job
+
+    async def get_current_block(self) -> int:
+        # TODO: Use the new block timer
+        subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+        current_block = subtensor_.get_current_block()
+        return cast(int, current_block)

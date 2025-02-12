@@ -10,7 +10,8 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.subtensor import get_cycle_containing_block
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
-from django.db.models import UniqueConstraint
+from django.db.models import Count, OuterRef, Subquery, UniqueConstraint
+from django.utils import timezone
 from django.utils.timezone import now
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,22 @@ class SystemEvent(models.Model):
         return f"SystemEvent({self.id}, {self.type}, {self.subtype})"
 
 
+class MinerQueryset(models.QuerySet["Miner"]):
+    def non_blacklisted(self):
+        active_blacklist = MinerBlacklist.objects.active()
+
+        return self.annotate(
+            blacklist_count=Count(
+                Subquery(active_blacklist.filter(miner=OuterRef("pk")).values("id"))
+            ),
+        ).filter(
+            blacklist_count=0,
+        )
+
+
 class Miner(models.Model):
+    objects = MinerQueryset.as_manager()
+
     hotkey = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -122,8 +138,28 @@ class Miner(models.Model):
         return f"hotkey: {self.hotkey}"
 
 
+class MinerBlacklistQueryset(models.QuerySet["MinerBlacklist"]):
+    def active(self):
+        return self.filter(
+            models.Q(expires_at__gt=timezone.now()) | models.Q(expires_at__isnull=True)
+        )
+
+    def expired(self):
+        return self.filter(expires_at__lte=timezone.now())
+
+
 class MinerBlacklist(models.Model):
-    miner = models.OneToOneField(Miner, on_delete=models.CASCADE)
+    objects = MinerBlacklistQueryset.as_manager()
+
+    class BlacklistReason(models.TextChoices):
+        MANUAL = "MANUAL", "Manual"
+        JOB_FAILED = "JOB_FAILED", "Job Failed"
+
+    miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
+    blacklisted_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    reason = models.TextField(choices=BlacklistReason.choices, default=BlacklistReason.MANUAL)
+    reason_details = models.TextField(blank=True, default="")
 
     class Meta:
         verbose_name = "Blacklisted Miner"
@@ -187,8 +223,14 @@ class MinerManifest(models.Model):
     batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     executor_class = models.CharField(max_length=255)
-    executor_count = models.IntegerField(default=0)
-    online_executor_count = models.IntegerField(default=0)
+    executor_count = models.IntegerField(
+        default=0,
+        help_text="The total number of available executors of this class as reported by the miner",
+    )
+    online_executor_count = models.IntegerField(
+        default=0,
+        help_text="Number of executors that finished or properly declined a job request during the batch",
+    )
 
     class Meta:
         constraints = [

@@ -10,7 +10,10 @@ import pytest
 import websockets
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.fv_protocol.facilitator_requests import JobRequest, Response
+from compute_horde.fv_protocol.facilitator_requests import (
+    JobRequest,
+    Response,
+)
 from compute_horde.fv_protocol.validator_requests import (
     V0AuthenticationRequest,
     V0MachineSpecsUpdate,
@@ -24,7 +27,9 @@ from compute_horde_validator.validator.models import (
     OrganicJob,
     SyntheticJobBatch,
 )
-from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
+from compute_horde_validator.validator.organic_jobs.facilitator_client import (
+    FacilitatorClient,
+)
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
@@ -254,6 +259,7 @@ async def test_facilitator_client__job_completed(ws_server_cls):
 )
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.skip(reason="Validator-side job retry is disabled for now")
 async def test_facilitator_client__failed_job_retries():
     await setup_db()
     ws_server = FacilitatorJobStatusUpdatesWsV2Retries()
@@ -305,57 +311,6 @@ class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
             else:
                 async with self.condition:
                     self.condition.notify()
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.asyncio
-async def test_fetch_miner_for_cross_validation__wrap_around():
-    await setup_db(n := 5)
-
-    async with async_patch_all():
-        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
-
-        # loop twice to check wrap-around behavior
-        for i in range(n * 2):
-            miner = await client.fetch_miner_for_cross_validation(DEFAULT_EXECUTOR_CLASS)
-            expected_hotkey = f"miner_{i % n}"
-            assert miner.hotkey == expected_hotkey
-            assert client.last_miner_cross_validated == expected_hotkey
-
-        await cancel_facilitator_tasks(client)
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.asyncio
-async def test_fetch_miner_for_cross_validation__no_matching_executor_class():
-    await setup_db()
-
-    async with async_patch_all():
-        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
-        client.last_miner_cross_validated = "some_miner"
-
-        miner = await client.fetch_miner_for_cross_validation("NonExistentExecutorClass")
-        assert miner is None
-        assert client.last_miner_cross_validated is None
-
-        await cancel_facilitator_tasks(client)
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@pytest.mark.asyncio
-async def test_fetch_miner_for_cross_validation__no_online_executors():
-    await setup_db()
-    await MinerManifest.objects.all().aupdate(online_executor_count=0)
-
-    async with async_patch_all():
-        client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:0/")
-        client.last_miner_cross_validated = "some_miner"
-
-        miner = await client.fetch_miner_for_cross_validation(DEFAULT_EXECUTOR_CLASS)
-        assert miner is None
-        assert client.last_miner_cross_validated is None
-
-        await cancel_facilitator_tasks(client)
 
 
 # TODO: this test is flaky, needs proper investigation
