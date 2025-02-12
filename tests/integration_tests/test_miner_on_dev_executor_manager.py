@@ -244,4 +244,5 @@ class Test(ActiveSubnetworkBaseTest):
                 "job_uuid": job_uuid,
                 "docker_process_stdout": payload,
                 "docker_process_stderr": mock.ANY,
+                "artifacts": {},
             }

@@ -45,6 +45,7 @@ class JobRequest(pydantic.BaseModel):
     docker_run_cmd: list[str]
     volume: Volume | None = None
     output_upload: OutputUpload | None = None
+    artifacts_dir: str | None = None
 
     @model_validator(mode="after")
     def validate_at_least_docker_image_or_raw_script(self) -> Self:
@@ -62,6 +63,7 @@ class ExecutorFinished(pydantic.BaseModel):
     job_uuid: str
     docker_process_stdout: str
     docker_process_stderr: str
+    artifacts: dict[str, str] | None
 
 
 class ExecutorFailed(pydantic.BaseModel):
@@ -180,6 +182,7 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
                     docker_run_cmd=job_request.docker_run_cmd,
                     volume=job_request.volume,
                     output_upload=job_request.output_upload,
+                    artifacts_dir=job_request.artifacts_dir,
                 ).model_dump(),
             },
         )
@@ -252,7 +255,12 @@ class ExecutorInterfaceMixin(BaseMixin):
         )
 
     async def send_executor_finished(
-        self, job_uuid: str, executor_token: str, stdout: str, stderr: str
+        self,
+        job_uuid: str,
+        executor_token: str,
+        stdout: str,
+        stderr: str,
+        artifacts: dict[str, str] | None,
     ):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
         await self.channel_layer.group_send(
@@ -263,6 +271,7 @@ class ExecutorInterfaceMixin(BaseMixin):
                     job_uuid=job_uuid,
                     docker_process_stdout=stdout,
                     docker_process_stderr=stderr,
+                    artifacts=artifacts,
                 ).model_dump(),
             },
         )

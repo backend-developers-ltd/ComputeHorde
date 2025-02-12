@@ -134,6 +134,7 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
             "job_uuid": job_uuid,
             "docker_process_stdout": "some stdout",
             "docker_process_stderr": "some stderr",
+            "artifacts": {},
         }
 
 

@@ -182,6 +182,7 @@ async def drive_executor() -> float:
             contents=get_dummy_inline_zip_volume(),
         ),
         output_upload=None,
+        artifacts_dir=None,
     )
 
     validator, _ = await Validator.objects.aget_or_create(
@@ -227,6 +228,7 @@ async def drive_executor() -> float:
                 docker_run_cmd=job_request.docker_run_cmd,
                 volume=job_request.volume,
                 output_upload=job_request.output_upload,
+                artifacts_dir=job_request.artifacts_dir,
             ).model_dump(),
         },
     )

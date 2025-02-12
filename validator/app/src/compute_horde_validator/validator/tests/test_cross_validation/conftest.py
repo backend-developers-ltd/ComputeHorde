@@ -57,6 +57,7 @@ def job_finish_message(job_uuid: uuid.UUID):
         job_uuid=str(job_uuid),
         docker_process_stdout="",
         docker_process_stderr="",
+        artifacts={},
     ).model_dump_json()
 
 

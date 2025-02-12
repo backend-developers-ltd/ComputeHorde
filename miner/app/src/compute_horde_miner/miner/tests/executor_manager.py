@@ -39,6 +39,7 @@ async def fake_executor(token):
         "docker_run_cmd": [],
         "volume": {"volume_type": "inline", "contents": "nonsense", "relative_path": None},
         "output_upload": mock.ANY,
+        "artifacts_dir": None,
     }, response
     await communicator.send_json_to(
         {
@@ -46,6 +47,7 @@ async def fake_executor(token):
             "job_uuid": fake_executor.job_uuid,
             "docker_process_stdout": "some stdout",
             "docker_process_stderr": "some stderr",
+            "artifacts": {},
         }
     )
     await communicator.disconnect()
