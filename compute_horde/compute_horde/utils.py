@@ -3,7 +3,6 @@ from typing import Any
 
 import bittensor
 import pydantic
-from substrateinterface.exceptions import SubstrateRequestException
 
 BAC_VALIDATOR_SS58_ADDRESS = "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
 MIN_STAKE = 1000
@@ -41,7 +40,7 @@ def get_validators(
 
         try:
             metagraph = subtensor.metagraph(netuid, block=block)
-        except SubstrateRequestException as ex:
+        except Exception as ex:
             raise ValidatorListError(ex) from ex
 
     neurons = [
