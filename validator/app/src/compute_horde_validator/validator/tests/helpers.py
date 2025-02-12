@@ -13,6 +13,7 @@ import bittensor
 import constance
 import numpy as np
 from asgiref.sync import async_to_sync
+from bittensor.core.errors import SubstrateRequestException
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     Signature,
@@ -28,7 +29,6 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 from django.conf import settings
-from substrateinterface.exceptions import SubstrateRequestException
 
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient

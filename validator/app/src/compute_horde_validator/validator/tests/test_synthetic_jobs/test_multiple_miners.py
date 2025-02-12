@@ -78,7 +78,7 @@ def job_uuids(num_miners: int):
 
 @pytest.fixture
 def miner_wallets(num_miners: int):
-    return [bittensor.Keypair.create_from_seed(f"abc{i}".ljust(64, "f")) for i in range(num_miners)]
+    return [bittensor.Keypair.create_from_seed(bytes([*range(31), i])) for i in range(num_miners)]
 
 
 @pytest.fixture
@@ -89,18 +89,18 @@ def miner_hotkeys(miner_wallets: list[bittensor.Keypair]):
 @pytest.fixture
 def active_valis() -> list[bittensor.Keypair]:
     return [
-        bittensor.Keypair.create_from_seed("a" * 64),
-        bittensor.Keypair.create_from_seed("b" * 64),
-        bittensor.Keypair.create_from_seed("c" * 64),
+        bittensor.Keypair.create_from_seed(b"a" * 32),
+        bittensor.Keypair.create_from_seed(b"b" * 32),
+        bittensor.Keypair.create_from_seed(b"c" * 32),
     ]
 
 
 @pytest.fixture
 def inactive_valis() -> list[bittensor.Keypair]:
     return [
-        bittensor.Keypair.create_from_seed("d" * 64),
-        bittensor.Keypair.create_from_seed("e" * 64),
-        bittensor.Keypair.create_from_seed("f" * 64),
+        bittensor.Keypair.create_from_seed(b"d" * 32),
+        bittensor.Keypair.create_from_seed(b"e" * 32),
+        bittensor.Keypair.create_from_seed(b"f" * 32),
     ]
 
 
@@ -963,7 +963,7 @@ def _build_invalid_excuse_receipts(
 
     non_organic = good_payload.__replace__(is_organic=False)
     other_miner = good_payload.__replace__(
-        miner_hotkey=bittensor.Keypair.create_from_seed("7" * 64).ss58_address
+        miner_hotkey=bittensor.Keypair.create_from_seed(b"7" * 32).ss58_address
     )
     same_job = good_payload.__replace__(job_uuid=str(job))
     bad_executor_class = good_payload.__replace__(
