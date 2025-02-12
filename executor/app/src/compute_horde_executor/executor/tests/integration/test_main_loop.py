@@ -18,7 +18,11 @@ from compute_horde.transport import StubTransport
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
 
-from compute_horde_executor.executor.management.commands.run_executor import Command, MinerClient
+from compute_horde_executor.executor.management.commands.run_executor import (
+    Command,
+    JobRunner,
+    MinerClient,
+)
 
 payload = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
 
@@ -1209,3 +1213,93 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     assert request2 is not None
     assert request2.url == url3
     assert request2.method == "GET"
+
+
+def test_artifacts():
+    original_JobRunner_prepare = JobRunner.prepare
+
+    async def patch_JobRunner_prepare(self):
+        await original_JobRunner_prepare(self)
+
+        with open(self.artifacts_mount_dir / "empty", "wb") as f:
+            pass
+
+        with open(self.artifacts_mount_dir / "space", "wb") as f:
+            f.write(b" ")
+
+        with open(self.artifacts_mount_dir / "text.txt", "wb") as f:
+            f.write(b"artifact 2\nsecond line\nx=1,y=2\n")
+
+        with open(self.artifacts_mount_dir / "data.json", "wb") as f:
+            f.write(b'{"a": 1, b: [2, 3]}')
+
+        with open(self.artifacts_mount_dir / "large artifact.bin", "wb") as f:
+            f.write(b"x" * 999_000)
+
+        with open(self.artifacts_mount_dir / "very-large.bin", "wb") as f:
+            f.write(b"x" * 1_000_000)
+
+    with patch(
+        "compute_horde_executor.executor.management.commands.run_executor.JobRunner.prepare",
+        new=patch_JobRunner_prepare,
+    ):
+        command = CommandTested(
+            iter(
+                [
+                    json.dumps(
+                        {
+                            "message_type": "V0PrepareJobRequest",
+                            "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "timeout_seconds": None,
+                            "volume_type": "inline",
+                            "job_uuid": job_uuid,
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "message_type": "V0RunJobRequest",
+                            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "docker_run_cmd": [],
+                            "docker_run_options_preset": "none",
+                            "job_uuid": job_uuid,
+                            "volume": {
+                                "volume_type": "inline",
+                                "contents": base64_zipfile,
+                            },
+                            "artifacts_dir": "/artifacts",
+                        }
+                    ),
+                ]
+            )
+        )
+
+        # Act
+        command.handle()
+
+    # Assert
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FinishedRequest",
+            "docker_process_stdout": payload,
+            "docker_process_stderr": mock.ANY,
+            "artifacts": {
+                "empty": "",
+                "space": "IA==",
+                "text.txt": "YXJ0aWZhY3QgMgpzZWNvbmQgbGluZQp4PTEseT0yCg==",
+                "data.json": "eyJhIjogMSwgYjogWzIsIDNdfQ==",
+                "large artifact.bin": base64.b64encode(b"x" * 999_000).decode(),
+                # very large artifact is not included
+                # "very-large.bin"
+            },
+            "job_uuid": job_uuid,
+        },
+    ]
