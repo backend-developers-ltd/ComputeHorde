@@ -31,12 +31,17 @@ def _patch_get_streaming_job_executor_classes(mocker: MockerFixture):
 @pytest.fixture(scope="session", autouse=True)
 def wallet():
     wallet = bittensor.wallet(name="test_validator")
-    try:
-        # workaround the overwrite flag
-        wallet.regenerate_coldkey(seed="a" * 64, use_password=False, overwrite=True)
-        wallet.regenerate_hotkey(seed="b" * 64, use_password=False, overwrite=True)
-    except Exception as e:
-        logger.error(f"Failed to create wallet: {e}")
+    wallet.regenerate_coldkey(
+        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
+        use_password=False,
+        overwrite=True,
+    )
+    wallet.regenerate_hotkey(
+        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
+        use_password=False,
+        overwrite=True,
+    )
+    return wallet
 
 
 @pytest.fixture(scope="function", autouse=True)

@@ -29,23 +29,31 @@ logger = logging.getLogger(__name__)
 
 def get_miner_wallet():
     wallet = bittensor.wallet(name="test_miner")
-    try:
-        # workaround the overwrite flag
-        wallet.regenerate_coldkey(seed="c" * 64, use_password=False, overwrite=True)
-        wallet.regenerate_hotkey(seed="d" * 64, use_password=False, overwrite=True)
-    except Exception as e:
-        logger.error(f"Failed to create wallet: {e}")
+    wallet.regenerate_coldkey(
+        mnemonic="marine oyster umbrella sail over speak emerge rude matrix glue argue learn",
+        use_password=False,
+        overwrite=True,
+    )
+    wallet.regenerate_hotkey(
+        mnemonic="radio busy purpose chicken nose soccer private bridge nephew float ten media",
+        use_password=False,
+        overwrite=True,
+    )
     return wallet
 
 
 def get_validator_wallet():
     wallet = bittensor.wallet(name="test_validator")
-    try:
-        # workaround the overwrite flag
-        wallet.regenerate_coldkey(seed="a" * 64, use_password=False, overwrite=True)
-        wallet.regenerate_hotkey(seed="b" * 64, use_password=False, overwrite=True)
-    except Exception as e:
-        logger.error(f"Failed to create wallet: {e}")
+    wallet.regenerate_coldkey(
+        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
+        use_password=False,
+        overwrite=True,
+    )
+    wallet.regenerate_hotkey(
+        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
+        use_password=False,
+        overwrite=True,
+    )
     return wallet
 
 
