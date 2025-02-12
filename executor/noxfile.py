@@ -156,7 +156,6 @@ def test(session):
         session.run(
             "pytest",
             "-s",
-            "-x",
             "-vv",
             "-n",
             "1",

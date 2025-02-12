@@ -1,7 +1,7 @@
 import random
 from uuid import uuid4
 
-from bittensor_wallet import Keypair
+from bittensor import Keypair
 from django.utils import timezone
 
 from compute_horde.executor_class import ExecutorClass
@@ -41,4 +41,4 @@ def random_receipt(
 
 
 def random_keypair() -> Keypair:
-    return Keypair.create_from_seed("".join(random.sample("0123456789abcdef" * 10, 64)))
+    return Keypair.create_from_seed(bytes(random.randint(0, 255) for _ in range(32)))
