@@ -26,15 +26,19 @@ class ExecutorUnavailable(Exception):
 
 
 class ReservedExecutor:
-    def __init__(self, executor, timeout):
+    def __init__(self, executor, timeout, token):
         self.executor = executor
         self.timeout = timeout
         self.start_time = dt.datetime.now()
+        self.token = token
 
     def is_expired(self):
         return (dt.datetime.now() - self.start_time).total_seconds() > min(
             MAX_EXECUTOR_TIMEOUT, self.timeout
         )
+
+    def __str__(self):
+        return f"ReservedExecutor(start_time={self.start_time}, timeout={self.timeout}, token={self.token})"
 
 
 class ExecutorClassPool:
@@ -51,7 +55,11 @@ class ExecutorClassPool:
     async def reserve_executor(self, token, timeout):
         async with self._reservation_lock:
             if self.get_availability() == 0:
-                logger.warning("No executor available")
+                logger.debug(
+                    "No executor available, current list is:\n %s",
+                    "\n".join(str(r) for r in self._executors),
+                )
+
                 raise AllExecutorsBusy()
 
             try:
@@ -62,7 +70,9 @@ class ExecutorClassPool:
                 logger.error("Error occurred", exc_info=exc)
                 raise ExecutorUnavailable()
 
-            self._executors.append(ReservedExecutor(executor, timeout))
+            reserved_executor = ReservedExecutor(executor, timeout, token)
+            self._executors.append(reserved_executor)
+            logger.debug("Added %s", reserved_executor)
             return executor
 
     def set_count(self, executor_count):
@@ -84,9 +94,10 @@ class ExecutorClassPool:
         async def check_executor(reserved_executor):
             status = await self.manager.wait_for_executor(reserved_executor.executor, 1)
             if status is not None:
+                logger.debug("%s finished", reserved_executor)
                 return reserved_executor, True
             elif reserved_executor.is_expired():
-                logger.warning("Executor timed out, killing it.")
+                logger.debug("%s timed out, killing it.", reserved_executor)
                 await self.manager.kill_executor(reserved_executor.executor)
                 return reserved_executor, True
             return reserved_executor, False
