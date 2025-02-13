@@ -41,6 +41,7 @@ class SystemEvent(models.Model):
         LLM_PROMPT_GENERATION = "LLM_PROMPT_GENERATION"
         LLM_PROMPT_ANSWERING = "LLM_PROMPT_ANSWERING"
         LLM_PROMPT_SAMPLING = "LLM_PROMPT_SAMPLING"
+        BURNING_INCENTIVE = "BURNING_INCENTIVE"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -88,6 +89,8 @@ class SystemEvent(models.Model):
         ERROR_UPLOADING_TO_S3 = "ERROR_UPLOADING_TO_S3"
         ERROR_DOWNLOADING_FROM_S3 = "ERROR_DOWNLOADING_FROM_S3"
         LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED = "LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED"
+        APPLIED_BURNING = "APPLIED_BURNING"
+        NO_BURNING = "NO_BURNING"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
