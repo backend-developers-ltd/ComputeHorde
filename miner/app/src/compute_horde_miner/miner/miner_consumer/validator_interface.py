@@ -394,13 +394,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             await self.group_discard(token)
             await job.adelete()
             self.pending_jobs.pop(msg.job_uuid)
-            logger.info(f"Declining job {msg.job_uuid}: executor failed to start")
-            await self.send(
-                miner_requests.V0DeclineJobRequest(
-                    job_uuid=msg.job_uuid,
-                    reason=miner_requests.V0DeclineJobRequest.Reason.EXECUTOR_FAILURE,
-                ).model_dump_json()
-            )
+            logger.info("Failing job: executor failed to start")
+            await self.send(miner_requests.V0ExecutorFailedRequest(job_uuid=msg.job_uuid).model_dump_json())
 
     async def handle_job_request(self, msg: validator_requests.V0JobRequest):
         job = self.pending_jobs.get(msg.job_uuid)
