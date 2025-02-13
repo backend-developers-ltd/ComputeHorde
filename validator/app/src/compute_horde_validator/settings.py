@@ -335,6 +335,23 @@ CONSTANCE_CONFIG = {
         "Timeout for waiting for a streaming job to be ready to accept connections from the user",
         int,
     ),
+    "DYNAMIC_BURN_TARGET_SS58ADDRESSES": (
+        "Comma-separated list of ss58 addresses that will receive 'DYNAMIC_BURN_RATE' fraction of all incentives",
+        "",
+        str,
+    ),
+    "DYNAMIC_BURN_RATE": (
+        0.0,
+        "(0.0 - 1.0) fraction of miner incentives that will be directed to 'DYNAMIC_BURN_TARGET_SS58ADDRESSES' ",
+        float,
+    ),
+    "DYNAMIC_BURN_PARTITION": (
+        0.0,
+        "(0.0 - 1.0) each time miner incentive is burned, if there is more than one hotkey registered from among "
+        "'DYNAMIC_BURN_TARGET_SS58ADDRESSES', one will be chosen as the primary at random (but random seed is the same "
+        "across all validators) and will receive 'DYNAMIC_BURN_PARTITION' fraction of all the burn.",
+        float,
+    ),
 }
 
 # Content Security Policy
