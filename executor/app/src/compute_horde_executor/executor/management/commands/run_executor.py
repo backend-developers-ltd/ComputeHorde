@@ -949,6 +949,7 @@ class Command(BaseCommand):
                 process.communicate(), CVE_2024_0132_TIMEOUT_SECONDS
             )
         except TimeoutError:
+            process.kill()
             logger.error("NVIDIA Container Toolkit Version for CVE-2024-0132 check timed out")
             return False
 
