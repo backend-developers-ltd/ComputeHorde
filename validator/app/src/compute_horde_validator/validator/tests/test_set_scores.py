@@ -43,11 +43,16 @@ def _default_commit_reveal_params():
         DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET=361,
         DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER=15,
         DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER=15,
+        DYNAMIC_BURN_TARGET_SS58ADDRESSES="",
+        DYNAMIC_BURN_RATE=0.0,
+        DYNAMIC_BURN_PARTITION=0.0,
     ):
         yield
 
 
-def setup_db(cycle_number=0):
+def setup_db(cycle_number=0, hotkey_to_score=None):
+    if hotkey_to_score is None:
+        hotkey_to_score = {f"hotkey_{i}": i for i in range(NUM_NEURONS)}
     for i in range(NUM_NEURONS):
         Miner.objects.update_or_create(hotkey=f"hotkey_{i}")
 
@@ -58,12 +63,12 @@ def setup_db(cycle_number=0):
         block=722 * cycle_number + 1,
         cycle=Cycle.objects.create(start=722 * cycle_number, stop=722 * (cycle_number + 1)),
     )
-    for i in range(NUM_NEURONS):
+    for hotkey, score in hotkey_to_score.items():
         SyntheticJob.objects.create(
             batch=job_batch,
-            score=i,
+            score=score,
             job_uuid=uuid.uuid4(),
-            miner=Miner.objects.get(hotkey=f"hotkey_{i}"),
+            miner=Miner.objects.get(hotkey=hotkey),
             miner_address="ignore",
             miner_address_ip_version=4,
             miner_port=9999,
@@ -101,20 +106,173 @@ def test_set_scores__too_early(settings):
 @pytest.mark.override_config(DYNAMIC_EXECUTOR_CLASS_WEIGHTS="spin_up-4min.gpu-24gb=100")
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
-def test_set_scores__set_weight_success(settings):
-    subtensor_ = MockSubtensor(override_block_number=723)
+@pytest.mark.parametrize(
+    "cycle_number,burn_rate,burn_partition,burn_targets,hotkey_to_score,expected_weights_set",
+    [
+        # no burn, either effectively or by configuration:
+        (0, 0.0, 0.0, "", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (0, 0.5, 0.5, "", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (0, 0.0, 0.5, "hotkey_1", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (0, 0.5, 0.5, "hotkey_100", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (0, 0.5, 0.5, "hotkey_100,hotkey_200", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        # burn burn:
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_2",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2360, 1: 7282, 2: 65535, 3: 2360, 4: 3371},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_2",
+            {"hotkey_0": 140, "hotkey_3": 140, "hotkey_4": 200},
+            {0: 2360, 1: 7282, 2: 65535, 3: 2360, 4: 3371},
+        ),
+        (
+            1,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_2",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2360, 1: 65535, 2: 7282, 3: 2360, 4: 3371},
+        ),
+        (
+            1,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_200",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2124, 1: 65535, 3: 2124, 4: 3034},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_3",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2278, 1: 7029, 3: 65535, 4: 3254},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_3",
+            {"hotkey_0": 70, "hotkey_1": 70, "hotkey_2": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 1457, 1: 8577, 2: 1457, 3: 65535, 4: 2082},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_2,hotkey_3",
+            {"hotkey_0": 70, "hotkey_1": 70, "hotkey_2": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 1457, 1: 5017, 2: 65535, 3: 5017, 4: 2082},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_2,hotkey_3",
+            {"hotkey_0": 70, "hotkey_4": 100},
+            {0: 3331, 1: 3641, 2: 65535, 3: 3641, 4: 4759},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_3,hotkey_200",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2278, 1: 7029, 3: 65535, 4: 3254},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_3,hotkey_200",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2278, 1: 7029, 3: 65535, 4: 3254},
+        ),
+        # burn burn again but params are different
+        (
+            0,
+            0.7,
+            0.8,
+            "hotkey_1,hotkey_2",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 10240, 1: 16384, 2: 65535, 3: 10240, 4: 14628},
+        ),
+        (
+            0,
+            0.7,
+            0.8,
+            "hotkey_1,hotkey_2",
+            {"hotkey_0": 140, "hotkey_3": 140, "hotkey_4": 200},
+            {0: 10240, 1: 16384, 2: 65535, 3: 10240, 4: 14628},
+        ),
+        (
+            1,
+            0.7,
+            0.8,
+            "hotkey_1,hotkey_200",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 8192, 1: 65535, 3: 8192, 4: 11703},
+        ),
+        (
+            0,
+            0.7,
+            0.8,
+            "hotkey_1,hotkey_2,hotkey_3",
+            {"hotkey_0": 70, "hotkey_1": 70, "hotkey_2": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 5886, 1: 13342, 2: 65535, 3: 13342, 4: 8409},
+        ),
+        (
+            0,
+            0.7,
+            0.8,
+            "hotkey_1,hotkey_2,hotkey_3",
+            {"hotkey_0": 70, "hotkey_4": 100},
+            {0: 14456, 1: 8192, 2: 65535, 3: 8192, 4: 20652},
+        ),
+    ],
+)
+def test_set_scores__set_weight_success(
+    settings,
+    cycle_number,
+    burn_rate,
+    burn_partition,
+    burn_targets,
+    hotkey_to_score,
+    expected_weights_set,
+):
+    def _normalize_weights(weights: dict[int, int]) -> dict[int, float]:
+        total = sum(weights.values())
+        return {uid: w / total for uid, w in weights.items()}
+
+    subtensor_ = MockSubtensor(override_block_number=723 + cycle_number * 722)
     with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
-        setup_db()
-        set_scores()
-        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
-        assert subtensor_.weights_set == [
-            [
-                0.10000000149011612,
-                0.20000000298023224,
-                0.30000001192092896,
-                0.4000000059604645,
-            ]
-        ]
+        setup_db(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score)
+        with override_config(
+            DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
+            DYNAMIC_BURN_RATE=burn_rate,
+            DYNAMIC_BURN_PARTITION=burn_partition,
+        ):
+            set_scores()
+        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
+
+        # reconcile weights set with expected ones, disregarding rounding errors:
+        # (the very precise comparisons can be found in the weight commiting tests and commit-reveal is the one used
+        # in production anyway
+        assert subtensor_.weights_set
+        expected_weights_set = _normalize_weights(expected_weights_set)
+        for uid, w in expected_weights_set.items():
+            actual_w = subtensor_.weights_set[0].get(uid)
+            if actual_w is not None and ((w - actual_w) / w < 0.001):
+                expected_weights_set[uid] = actual_w
+        assert subtensor_.weights_set == [expected_weights_set]
         check_system_events(
             SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
             SystemEvent.EventSubType.SET_WEIGHTS_SUCCESS,
@@ -135,7 +293,7 @@ def test_set_scores__set_weight_success(settings):
 def test_set_scores__set_weight_failure(settings):
     setup_db()
     set_scores()
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
@@ -168,7 +326,7 @@ def test_set_scores__set_weight_eventual_success(settings):
     weight_set_attempts = 0
     setup_db()
     set_scores()
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 4
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
@@ -194,7 +352,7 @@ def test_set_scores__set_weight_eventual_success(settings):
 def test_set_scores__set_weight__exception(settings):
     setup_db()
     set_scores()
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
@@ -241,7 +399,7 @@ def test_set_scores__set_weight_timeout(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = False  # to make it timeout
     setup_db()
     set_scores()
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 3
     check_system_events(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
@@ -259,8 +417,149 @@ def test_set_scores__set_weight_timeout(settings):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": 722})
-def test_set_scores__set_weight__commit(settings):
-    current_block = 1084
+@pytest.mark.parametrize(
+    "cycle_number,burn_rate,burn_partition,burn_targets,hotkey_to_score,expected_weights_committed",
+    [
+        # no burn, either effectively or by configuration:
+        (0, 0.0, 0.0, "", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (0, 0.5, 0.5, "", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (0, 0.0, 0.5, "hotkey_1", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (0, 0.5, 0.5, "hotkey_100", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        (0, 0.5, 0.5, "hotkey_100,hotkey_200", None, {1: 16384, 2: 32768, 3: 49151, 4: 65535}),
+        # burn burn:
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_2",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2360, 1: 7282, 2: 65535, 3: 2360, 4: 3371},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_2",
+            {"hotkey_0": 140, "hotkey_3": 140, "hotkey_4": 200},
+            {0: 2360, 1: 7282, 2: 65535, 3: 2360, 4: 3371},
+        ),
+        (
+            1,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_2",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2360, 1: 65535, 2: 7282, 3: 2360, 4: 3371},
+        ),
+        (
+            1,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_200",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2124, 1: 65535, 3: 2124, 4: 3034},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_3",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2278, 1: 7029, 3: 65535, 4: 3254},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_3",
+            {"hotkey_0": 70, "hotkey_1": 70, "hotkey_2": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 1457, 1: 8577, 2: 1457, 3: 65535, 4: 2082},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_2,hotkey_3",
+            {"hotkey_0": 70, "hotkey_1": 70, "hotkey_2": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 1457, 1: 5017, 2: 65535, 3: 5017, 4: 2082},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_2,hotkey_3",
+            {"hotkey_0": 70, "hotkey_4": 100},
+            {0: 3331, 1: 3641, 2: 65535, 3: 3641, 4: 4759},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_3,hotkey_200",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2278, 1: 7029, 3: 65535, 4: 3254},
+        ),
+        (
+            0,
+            0.9,
+            0.9,
+            "hotkey_1,hotkey_3,hotkey_200",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 2278, 1: 7029, 3: 65535, 4: 3254},
+        ),
+        # burn burn again but params are different
+        (
+            0,
+            0.7,
+            0.8,
+            "hotkey_1,hotkey_2",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 10240, 1: 16384, 2: 65535, 3: 10240, 4: 14628},
+        ),
+        (
+            0,
+            0.7,
+            0.8,
+            "hotkey_1,hotkey_2",
+            {"hotkey_0": 140, "hotkey_3": 140, "hotkey_4": 200},
+            {0: 10240, 1: 16384, 2: 65535, 3: 10240, 4: 14628},
+        ),
+        (
+            1,
+            0.7,
+            0.8,
+            "hotkey_1,hotkey_200",
+            {"hotkey_0": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 8192, 1: 65535, 3: 8192, 4: 11703},
+        ),
+        (
+            0,
+            0.7,
+            0.8,
+            "hotkey_1,hotkey_2,hotkey_3",
+            {"hotkey_0": 70, "hotkey_1": 70, "hotkey_2": 70, "hotkey_3": 70, "hotkey_4": 100},
+            {0: 5886, 1: 13342, 2: 65535, 3: 13342, 4: 8409},
+        ),
+        (
+            0,
+            0.7,
+            0.8,
+            "hotkey_1,hotkey_2,hotkey_3",
+            {"hotkey_0": 70, "hotkey_4": 100},
+            {0: 14456, 1: 8192, 2: 65535, 3: 8192, 4: 20652},
+        ),
+    ],
+)
+def test_set_scores__set_weight__commit(
+    settings,
+    cycle_number,
+    burn_rate,
+    burn_partition,
+    burn_targets,
+    hotkey_to_score,
+    expected_weights_committed,
+):
+    current_block = 1084 + cycle_number * 722
 
     subtensor_ = MockSubtensor(
         override_block_number=current_block,
@@ -269,24 +568,22 @@ def test_set_scores__set_weight__commit(settings):
         ),
     )
     with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
-        setup_db()
-        set_scores()
+        setup_db(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score)
+        with override_config(
+            DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
+            DYNAMIC_BURN_RATE=burn_rate,
+            DYNAMIC_BURN_PARTITION=burn_partition,
+        ):
+            set_scores()
 
-        assert subtensor_.weights_committed == [
-            [
-                16384,
-                32768,
-                49151,
-                65535,
-            ]
-        ]
+        assert subtensor_.weights_committed == [expected_weights_committed]
 
         from_db = Weights.objects.get()
         assert from_db.block == current_block
         assert from_db.revealed_at is None
 
         assert (
-            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 1
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
         ), SystemEvent.objects.all()
         check_system_events(
             SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
@@ -486,7 +783,7 @@ async def test_set_scores__multiple_starts(settings):
     tasks = [sync_to_async(set_scores, thread_sensitive=False)() for _ in range(5)]
     await asyncio.gather(*tasks)
 
-    assert await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acount() == 2
+    assert await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acount() == 3
     await sync_to_async(check_system_events)(
         SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
         SystemEvent.EventSubType.WRITING_TO_CHAIN_TIMEOUT,
