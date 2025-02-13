@@ -3,7 +3,7 @@ from typing import Any
 
 import bittensor
 import pydantic
-from substrateinterface.exceptions import SubstrateRequestException
+from bittensor.core.errors import SubstrateRequestException
 
 BAC_VALIDATOR_SS58_ADDRESS = "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
 MIN_STAKE = 1000

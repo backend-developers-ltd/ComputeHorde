@@ -13,8 +13,8 @@ import bittensor
 import celery.exceptions
 import numpy as np
 import requests
-import substrateinterface.exceptions
 from asgiref.sync import async_to_sync
+from bittensor.core.errors import SubstrateRequestException
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
@@ -489,7 +489,7 @@ def do_set_weights(
                 wait_for_finalization=wait_for_finalization,
                 max_retries=2,
             )
-        except substrateinterface.exceptions.SubstrateRequestException as e:
+        except SubstrateRequestException as e:
             # Consider the following exception as success:
             # The transaction has too low priority to replace another transaction already in the pool.
             if e.args[0]["code"] == 1014:
@@ -968,7 +968,7 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
             wait_for_finalization=True,
             max_retries=2,
         )
-    except substrateinterface.exceptions.SubstrateRequestException as e:
+    except SubstrateRequestException as e:
         # Consider the following exception as success:
         # The transaction has too low priority to replace another transaction already in the pool.
         if e.args[0]["code"] == 1014:
