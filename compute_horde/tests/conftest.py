@@ -40,8 +40,8 @@ def miner_keypair():
 def signature_wallet():
     wallet = bittensor.wallet(name="test_signature")
     # workaround the overwrite flag
-    wallet.regenerate_coldkey(seed="8" * 32, use_password=False, overwrite=True)
-    wallet.regenerate_hotkey(seed="9" * 32, use_password=False, overwrite=True)
+    wallet.regenerate_coldkey(seed="8" * 64, use_password=False, overwrite=True)
+    wallet.regenerate_hotkey(seed="9" * 64, use_password=False, overwrite=True)
     return wallet
 
 

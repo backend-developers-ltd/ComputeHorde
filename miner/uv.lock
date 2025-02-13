@@ -146,7 +146,7 @@ wheels = [
 
 [[package]]
 name = "async-substrate-interface"
-version = "1.0.0rc14"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "asyncstdlib", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -157,9 +157,9 @@ dependencies = [
     { name = "wheel", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "xxhash", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/75/6d/5cdb34c4357d06791d0f2e7dc49955dd63c4dc87090b5937dbe7441f1b05/async_substrate_interface-1.0.0rc14.tar.gz", hash = "sha256:bb8b9aa0c727015115debb8f2aa1c190f600bb8cc06a1fcea6a27d22a3edc5ca", size = 59709 }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/ce/34b012bfd118eb58c6dfd29ea30db4424bbe3f7243460768a69ad94c6ab9/async_substrate_interface-1.0.0.tar.gz", hash = "sha256:1b045fa9fb4077bd20dbe5e670efe1a7346a50db1a126380c9fa4e32b03cb5de", size = 59686 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/0b/7c3706d11ca96b3395535656dd4346bb1fa546b5f5752922fd45695eba99/async_substrate_interface-1.0.0rc14-py3-none-any.whl", hash = "sha256:8befdf8528a1493e48c25438b8fc303eb76723b914766df619984f56864681f4", size = 63133 },
+    { url = "https://files.pythonhosted.org/packages/4b/8b/f3a1281f9b378da724cf5350ab48cf3e685e5682c3b847b334319ce094a2/async_substrate_interface-1.0.0-py3-none-any.whl", hash = "sha256:1df2107e221559c5127e4673c55c42db310bf72a344a7da0aaaa4cde400d28c0", size = 63085 },
 ]
 
 [[package]]
@@ -265,7 +265,7 @@ wheels = [
 
 [[package]]
 name = "bittensor"
-version = "9.0.0rc6"
+version = "9.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -296,14 +296,14 @@ dependencies = [
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "wheel", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/43/29/dc9a66f551a9d2ef347afca40a919051fcba906434333e81bab1f529faaa/bittensor-9.0.0rc6.tar.gz", hash = "sha256:d7933b77114aee3993a5c802459e4064a038ae0b06731534d48951da3f1d16b7", size = 222581 }
+sdist = { url = "https://files.pythonhosted.org/packages/b9/e4/8aea55941376f752f5a8074e5b3531579c0686d78c7f9628d92ef65542c7/bittensor-9.0.0.tar.gz", hash = "sha256:64321a5f3acc07dbde41ecb81d753f05d0a8fcd19a22f35cb56e5af8e15e81aa", size = 223046 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/b1/3242086fa808162b27764d79e7ee39a451a287c97f7a40c1a723979da04d/bittensor-9.0.0rc6-py3-none-any.whl", hash = "sha256:7cd371a0f065be7cabf5d9307429853bef642ea3157873560a295286e5a54729", size = 263960 },
+    { url = "https://files.pythonhosted.org/packages/a0/d5/46f94a11ff179e291b42f9cb770f6cb0facdc8480f8d6326548a7a70a7e9/bittensor-9.0.0-py3-none-any.whl", hash = "sha256:1f5e97d2333b46c535b03e780b7e3d58204e2ed116db6244227433449f6616cc", size = 264260 },
 ]
 
 [[package]]
 name = "bittensor-cli"
-version = "9.0.0rc3"
+version = "9.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -329,9 +329,9 @@ dependencies = [
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "wheel", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ed/bc/00d6dfecba8b67f8fe62d6ff03ec1cd3c985ed9131c049c1bd20ad03d348/bittensor-cli-9.0.0rc3.tar.gz", hash = "sha256:6f8cd9c53228f29e085769fd7fc119d3ef70554c83344da46e31b2439d54e666", size = 177521 }
+sdist = { url = "https://files.pythonhosted.org/packages/78/7a/d605c7ea004d0f789da0eaf96a96b0ea0f5e75a7843c5c54979cda59a5dc/bittensor-cli-9.0.0.tar.gz", hash = "sha256:f775c24b6acf574c4b64d009d8728f2657c2894fecb15385478fd8ac4501f0fd", size = 178898 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6c/84/51011679996a49afbc014345ed3bd374e0cb2368e86fb1ced3adc63d55c3/bittensor_cli-9.0.0rc3-py3-none-any.whl", hash = "sha256:db30fb13d48739137123b03d44bfde9d237a171c78621ac770119b28037c442a", size = 189833 },
+    { url = "https://files.pythonhosted.org/packages/6f/3b/468ed436a02b242197643979e829fa2655f660037e97baf0d036b1611641/bittensor_cli-9.0.0-py3-none-any.whl", hash = "sha256:211334018e878dd4145d1b7998630edd2e3a486ac4e992493b535306e3d0c178", size = 191161 },
 ]
 
 [[package]]
@@ -348,7 +348,7 @@ wheels = [
 
 [[package]]
 name = "bittensor-wallet"
-version = "3.0.2"
+version = "3.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -359,12 +359,12 @@ dependencies = [
     { name = "rich", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "termcolor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/01/43/66bcdbe90cfea5036af11cf1b9f8cf2937187d56ded6bb17bdb5fff2900e/bittensor_wallet-3.0.2.tar.gz", hash = "sha256:2e4d1caf290e07ed4fa7cc78acdcae5b380501100e17929c06630fc622a5d24b", size = 73164 }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/fd/d795b144a50e9c213d380d75cce937c6b4d0f0b26f7aac2f80e619986090/bittensor_wallet-3.0.3.tar.gz", hash = "sha256:60e534e1f1c256e4dac788acac4724ec92c445c24058954b7e12a3aca6828e1b", size = 73104 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/46/68bdd35a098fea39a0d260fbdeebc145e8196475484df35d51a33da30080/bittensor_wallet-3.0.2-cp311-cp311-macosx_10_12_x86_64.whl", hash = "sha256:157d4f62b2567fc2926bb0524fe330922ddca74ac65d696f2c986711cd326aad", size = 820879 },
-    { url = "https://files.pythonhosted.org/packages/bc/60/4e07437dd51d9a8b0a5a9d0399130a5cf2dca40d2886ca989bbe2e328894/bittensor_wallet-3.0.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:eb01fc99d8862362bf17502376e02e13c39ba66e2f8a9c96fce58538b99daaab", size = 771199 },
-    { url = "https://files.pythonhosted.org/packages/e9/f3/d230074a6139eaa64663db8b6ff31a8d9e76cc6ac7c1b197477a8cac2df4/bittensor_wallet-3.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5b2a95a01878f2a25442620b05203e8f14ecbb41715950ba6dbe323fe17507b7", size = 3165771 },
-    { url = "https://files.pythonhosted.org/packages/53/59/3956f3dc34ee1f481a16ae17caed71370a2e942e9b377c29d3fb74124602/bittensor_wallet-3.0.2-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:52a3b23e97d2fd0f541cbcf5ffb47ffeb0f650df412c899e07eeb0ffda976a96", size = 2971201 },
+    { url = "https://files.pythonhosted.org/packages/9e/c9/e6862729db476e627057f1ea9d19726a9a79616bc8372eae2688a602a830/bittensor_wallet-3.0.3-cp311-cp311-macosx_10_12_x86_64.whl", hash = "sha256:3060507bd941edf2677661e2ea6680cfd950211b4855db926071541afb36e46c", size = 822516 },
+    { url = "https://files.pythonhosted.org/packages/d8/b7/1ae8d80c4c2e5edc70bceeea36c5bf7a88a152059befe643f846ee93094c/bittensor_wallet-3.0.3-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:a0ac0e96c139fb191241ae4a751763357fcbf5d333c5d5496429bd3396cfc180", size = 771394 },
+    { url = "https://files.pythonhosted.org/packages/dd/7b/e23376bb11a9145c84071270503b36b13eabd90931c5f7e8934d26a17d0f/bittensor_wallet-3.0.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:158600cb19a05a91eeab79e39e5d87eb1cde247ba19de2a3eb5738ae6ac73222", size = 3166534 },
+    { url = "https://files.pythonhosted.org/packages/b0/1d/3bd9c4b4258c3ee9581b4c77c5753f73d9a807b0ffdfef914d88b6b7b215/bittensor_wallet-3.0.3-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:1600afcabf42f2463bc84f1a8ff07230e8aa6e301dff22ab2fd1df60bdb95daf", size = 2971237 },
 ]
 
 [[package]]
@@ -600,7 +600,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.10.10" },
-    { name = "bittensor", specifier = "==9.0.0rc6" },
+    { name = "bittensor", specifier = ">=9.0.0,<9.1" },
     { name = "celery", specifier = ">=5.3.0,<6" },
     { name = "cryptography", specifier = ">=42.0.8" },
     { name = "django", specifier = "~=4.2.4" },
