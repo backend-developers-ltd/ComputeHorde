@@ -751,6 +751,8 @@ class JobRunner:
                     artifacts[artifact_filename] = base64.b64encode(content).decode()
                 else:
                     logger.error(f"Artifact {artifact_filename} too large: {artifact_size:,} bytes")
+            else:
+                logger.error(f"Directory found in artifacts: {artifact_filename}")
 
         if success:
             # upload the output if requested and job succeeded
