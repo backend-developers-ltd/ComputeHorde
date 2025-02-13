@@ -1292,13 +1292,13 @@ def test_artifacts():
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {
-                "empty": "",
-                "space": "IA==",
-                "text.txt": "YXJ0aWZhY3QgMgpzZWNvbmQgbGluZQp4PTEseT0yCg==",
-                "data.json": "eyJhIjogMSwgYjogWzIsIDNdfQ==",
-                "large artifact.bin": base64.b64encode(b"x" * 999_000).decode(),
+                "/artifacts/empty": "",
+                "/artifacts/space": "IA==",
+                "/artifacts/text.txt": "YXJ0aWZhY3QgMgpzZWNvbmQgbGluZQp4PTEseT0yCg==",
+                "/artifacts/data.json": "eyJhIjogMSwgYjogWzIsIDNdfQ==",
+                "/artifacts/large artifact.bin": base64.b64encode(b"x" * 999_000).decode(),
                 # very large artifact is not included
-                # "very-large.bin"
+                # "/artifacts/very-large.bin"
             },
             "job_uuid": job_uuid,
         },

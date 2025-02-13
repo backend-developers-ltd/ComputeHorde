@@ -748,7 +748,9 @@ class JobRunner:
                     content = f.read()
                 artifact_size = len(content)
                 if artifact_size < MAX_ARTIFACT_SIZE:
-                    artifacts[artifact_filename] = base64.b64encode(content).decode()
+                    artifacts[f"{job_request.artifacts_dir}/{artifact_filename}"] = (
+                        base64.b64encode(content).decode()
+                    )
                 else:
                     logger.error(f"Artifact {artifact_filename} too large: {artifact_size:,} bytes")
             else:
