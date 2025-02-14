@@ -77,7 +77,7 @@ def setup_db(cycle_number=0, hotkey_to_score=None):
             status=SyntheticJob.Status.COMPLETED,
         )
         MinerManifest.objects.create(
-            miner=Miner.objects.get(hotkey=f"hotkey_{i}"),
+            miner=Miner.objects.get(hotkey=hotkey),
             batch=job_batch,
             executor_class=DEFAULT_EXECUTOR_CLASS,
             executor_count=1,
