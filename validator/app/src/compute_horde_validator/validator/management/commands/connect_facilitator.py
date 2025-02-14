@@ -15,6 +15,7 @@ class Command(BaseCommand):
     @async_to_sync
     async def handle(self, *args, **options):
         keypair = settings.BITTENSOR_WALLET().get_hotkey()
+        logging.info(f"Connecting to facilitator at {settings.FACILITATOR_URI}")
         facilitator_client = self.FACILITATOR_CLIENT_CLASS(keypair, settings.FACILITATOR_URI)
         async with facilitator_client:
             await facilitator_client.run_forever()
