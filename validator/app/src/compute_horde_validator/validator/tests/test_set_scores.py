@@ -14,6 +14,7 @@ from django.utils.timezone import now
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
+    MinerManifest,
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
@@ -74,6 +75,13 @@ def setup_db(cycle_number=0, hotkey_to_score=None):
             miner_port=9999,
             executor_class=DEFAULT_EXECUTOR_CLASS,
             status=SyntheticJob.Status.COMPLETED,
+        )
+        MinerManifest.objects.create(
+            miner=Miner.objects.get(hotkey=hotkey),
+            batch=job_batch,
+            executor_class=DEFAULT_EXECUTOR_CLASS,
+            executor_count=1,
+            online_executor_count=1,
         )
 
 

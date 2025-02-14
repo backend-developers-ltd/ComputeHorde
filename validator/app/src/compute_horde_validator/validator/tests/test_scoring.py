@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 import pytest
-from compute_horde.subtensor import get_cycle_containing_block
+from compute_horde.subtensor import get_cycle_containing_block, get_peak_cycle
 from django.utils import timezone
 from django.utils.timezone import now
 from pytest import approx
@@ -14,11 +14,17 @@ from compute_horde_validator.validator.models import (
     SyntheticJob,
     SyntheticJobBatch,
 )
-from compute_horde_validator.validator.scoring import ExecutorClass, score_batches
+from compute_horde_validator.validator.scoring import (
+    ExecutorClass,
+    get_penalty_multiplier,
+    score_batches,
+)
 
 EXECUTOR_CLASS_WEIGHTS_OVERRIDE = "spin_up-4min.gpu-24gb=8,always_on.gpu-24gb=2"
 DYNAMIC_MANIFEST_SCORE_MULTIPLIER = 1.5
 DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD = 2.0
+DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO = 0.1
+DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER = 0.8
 
 
 @pytest.fixture
@@ -242,7 +248,7 @@ def test_organic_jobs_scored():
         "status": SyntheticJob.Status.COMPLETED,
     }
 
-    # create a completed job and a rejected job for two different miners
+    # create synthetic jobs and an organic job for two different miners
     SyntheticJob.objects.create(
         miner=miner1,
         batch=batch,
@@ -304,35 +310,68 @@ def create_batch(n: int, cycle: Cycle) -> SyntheticJobBatch:
     DYNAMIC_EXECUTOR_CLASS_WEIGHTS="always_on.llm.a6000=100",
     DYNAMIC_MANIFEST_SCORE_MULTIPLIER=DYNAMIC_MANIFEST_SCORE_MULTIPLIER,
     DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD,
+    DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO=DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO,
+    DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER=DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER,
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
-    ("prev_online_executor_count", "expected_multiplier"),
+    (
+        "prev_peak_executor_count",
+        "curr_peak_executor_count",
+        "curr_executor_count",
+        "expected_multiplier",
+    ),
     [
-        (None, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
-        (5, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
-        (7, 1.0),
-        (15, 1.0),
-        (20, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
+        # bonus applied if miner didn't participate in any of current or previous peak cycles, no penalty
+        (None, None, 10, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
+        (10, None, 10, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
+        (None, 10, 10, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
+        # dance bonus applied for maintaining threshold, no penalty
+        (5, 10, 10, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
+        (10, 5, 5, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
+        # dance bonus not applied for not maintaining threshold, no penalty
+        (7, 10, 10, 1.0),
+        (15, 10, 10, 1.0),
+        # no bonus, penalty applied for not maintaining peak to non-peak ratio
+        (20, 20, 1, DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER),
+        # both bonus + penalty applied
+        (10, 20, 1, DYNAMIC_MANIFEST_SCORE_MULTIPLIER * DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER),
+        (
+            None,
+            20,
+            1,
+            DYNAMIC_MANIFEST_SCORE_MULTIPLIER * DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER,
+        ),
     ],
 )
-def test_manifest_dance_incentives(
-    prev_online_executor_count,
-    expected_multiplier,
-    override_weights_version_v2,
+def test_dance_incentives_and_penalties_multiplier_for_non_peak_cycle(
+    prev_peak_executor_count: int | None,
+    curr_peak_executor_count: int | None,
+    curr_executor_count: int,
+    expected_multiplier: float,
+    override_weights_version_v2: None,
     settings,
 ):
-    curr_cycle_range = get_cycle_containing_block(1000, settings.BITTENSOR_NETUID)
-    curr_cycle = Cycle.objects.create(start=curr_cycle_range.start, stop=curr_cycle_range.stop)
-    curr_batch = create_batch(10, curr_cycle)
+    curr_cycle_range = get_cycle_containing_block(10_000, settings.BITTENSOR_NETUID)
+    curr_peak_cycle_range = get_peak_cycle(curr_cycle_range.start, settings.BITTENSOR_NETUID)
+    prev_peak_cycle_range = get_peak_cycle(
+        curr_peak_cycle_range.start - 1, settings.BITTENSOR_NETUID
+    )
 
-    if prev_online_executor_count is not None:
-        prev_cycle_range = get_cycle_containing_block(
-            curr_cycle_range.start - 1,
-            settings.BITTENSOR_NETUID,
+    curr_cycle = Cycle.objects.create(start=curr_cycle_range.start, stop=curr_cycle_range.stop)
+    curr_batch = create_batch(curr_executor_count, curr_cycle)
+
+    if curr_peak_executor_count:
+        curr_peak_cycle = Cycle.objects.create(
+            start=curr_peak_cycle_range.start, stop=curr_peak_cycle_range.stop
         )
-        prev_cycle = Cycle.objects.create(start=prev_cycle_range.start, stop=prev_cycle_range.stop)
-        _prev_batch = create_batch(prev_online_executor_count, prev_cycle)
+        _curr_peak_batch = create_batch(curr_peak_executor_count, curr_peak_cycle)
+
+    if prev_peak_executor_count:
+        prev_peak_cycle = Cycle.objects.create(
+            start=prev_peak_cycle_range.start, stop=prev_peak_cycle_range.stop
+        )
+        _prev_peak_batch = create_batch(prev_peak_executor_count, prev_peak_cycle)
 
     scores = score_batches([curr_batch])
     assert "miner_hotkey" in scores
@@ -343,46 +382,85 @@ def test_manifest_dance_incentives(
     DYNAMIC_EXECUTOR_CLASS_WEIGHTS="always_on.llm.a6000=100",
     DYNAMIC_MANIFEST_SCORE_MULTIPLIER=DYNAMIC_MANIFEST_SCORE_MULTIPLIER,
     DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD,
+    DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO=DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO,
+    DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER=DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER,
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_dance_incentives_disabled_on_v1(override_weights_version_v1, settings):
-    prev_cycle_range = get_cycle_containing_block(1000, settings.BITTENSOR_NETUID)
-    curr_cycle_range = get_cycle_containing_block(
-        prev_cycle_range.stop + 1, settings.BITTENSOR_NETUID
+@pytest.mark.parametrize(
+    ("prev_peak_executor_count", "expected_multiplier"),
+    [
+        # bonus applied if miner didn't participate in previous peak cycle
+        (None, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
+        # dance bonus applied for maintaining threshold
+        (5, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
+        (20, DYNAMIC_MANIFEST_SCORE_MULTIPLIER),
+        # dance bonus not applied for not maintaining threshold
+        (7, 1.0),
+        (15, 1.0),
+    ],
+)
+def test_dance_incentives_and_penalties_multiplier_for_peak_cycle(
+    prev_peak_executor_count: int | None,
+    expected_multiplier: float,
+    override_weights_version_v2: None,
+    settings,
+):
+    curr_peak_cycle_range = get_peak_cycle(10_000, settings.BITTENSOR_NETUID)
+    prev_peak_cycle_range = get_peak_cycle(
+        curr_peak_cycle_range.start - 1, settings.BITTENSOR_NETUID
     )
-    prev_cycle = Cycle.objects.create(start=prev_cycle_range.start, stop=prev_cycle_range.stop)
-    curr_cycle = Cycle.objects.create(start=curr_cycle_range.start, stop=curr_cycle_range.stop)
 
-    _prev_batch = create_batch(1, prev_cycle)
-    curr_batch = create_batch(5, curr_cycle)
+    curr_peak_cycle = Cycle.objects.create(
+        start=curr_peak_cycle_range.start, stop=curr_peak_cycle_range.stop
+    )
+    curr_peak_batch = create_batch(10, curr_peak_cycle)
 
-    scores = score_batches([curr_batch])
+    if prev_peak_executor_count:
+        prev_peak_cycle = Cycle.objects.create(
+            start=prev_peak_cycle_range.start, stop=prev_peak_cycle_range.stop
+        )
+        _prev_peak_batch = create_batch(prev_peak_executor_count, prev_peak_cycle)
+
+    scores = score_batches([curr_peak_batch])
     assert "miner_hotkey" in scores
-
-    # there should be no bonus
-    assert abs(scores["miner_hotkey"] - 100) < 0.0001
+    assert abs(scores["miner_hotkey"] - 100 * expected_multiplier) < 0.0001
 
 
 @pytest.mark.override_config(
     DYNAMIC_EXECUTOR_CLASS_WEIGHTS="always_on.llm.a6000=100",
     DYNAMIC_MANIFEST_SCORE_MULTIPLIER=DYNAMIC_MANIFEST_SCORE_MULTIPLIER,
     DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD=DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD,
+    DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO=DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO,
+    DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER=DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER,
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_dance_incentives_applied_on_missing_prev_cycle(override_weights_version_v2, settings):
-    cycle1_range = get_cycle_containing_block(1000, settings.BITTENSOR_NETUID)
-    cycle2_range = get_cycle_containing_block(cycle1_range.stop + 1, settings.BITTENSOR_NETUID)
-    cycle3_range = get_cycle_containing_block(cycle2_range.stop + 1, settings.BITTENSOR_NETUID)
-    cycle1 = Cycle.objects.create(start=cycle1_range.start, stop=cycle1_range.stop)
-    cycle3 = Cycle.objects.create(start=cycle3_range.start, stop=cycle3_range.stop)
+def test_dance_incentives_disabled_on_v1(override_weights_version_v1, settings):
+    curr_cycle_range = get_cycle_containing_block(10_000, settings.BITTENSOR_NETUID)
+    curr_peak_cycle_range = get_peak_cycle(curr_cycle_range.start, settings.BITTENSOR_NETUID)
+    prev_peak_cycle_range = get_peak_cycle(
+        curr_peak_cycle_range.start - 1, settings.BITTENSOR_NETUID
+    )
 
-    _batch1 = create_batch(10, cycle1)
-    # batch2 is missing
-    batch3 = create_batch(10, cycle3)
+    # 2 previous peak cycles have 1 vs 5 executors, so eligible for bonus
 
-    scores = score_batches([batch3])
+    prev_peak_cycle = Cycle.objects.create(
+        start=prev_peak_cycle_range.start, stop=prev_peak_cycle_range.stop
+    )
+    _prev_peak_batch = create_batch(1, prev_peak_cycle)
+
+    curr_peak_cycle = Cycle.objects.create(
+        start=curr_peak_cycle_range.start, stop=curr_peak_cycle_range.stop
+    )
+    _curr_peak_batch = create_batch(5, curr_peak_cycle)
+
+    curr_cycle = Cycle.objects.create(start=curr_cycle_range.start, stop=curr_cycle_range.stop)
+    curr_batch = create_batch(5, curr_cycle)
+
+    scores = score_batches([curr_batch])
     assert "miner_hotkey" in scores
-    assert scores["miner_hotkey"] == approx(100 * DYNAMIC_MANIFEST_SCORE_MULTIPLIER, abs=10**-4)
+
+    # but there should be no bonus, since weights version is 1
+    assert abs(scores["miner_hotkey"] - 100) < 0.0001
 
 
 def setup_batch_jobs(
@@ -481,3 +559,38 @@ def test_temporary_scoring_formula(override_weights_version_v1):
     assert "miner2" in scores
     assert scores["miner1"] == approx(miner1_score, abs=10**-4)
     assert scores["miner2"] == approx(miner2_score, abs=10**-4)
+
+
+@pytest.mark.django_db
+@pytest.mark.override_config(
+    DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO=0.1,
+    DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER=0.5,
+)
+@pytest.mark.parametrize(
+    ("curr_class1_count", "curr_class2_count", "expected_multiplier"),
+    [
+        # no executors found (only did organic jobs?)
+        (None, None, 0.5),
+        # at least one class has less than 10% executors
+        (20, None, 0.5),
+        (20, 9, 0.5),
+        (None, 10, 0.5),
+        (19, 10, 0.5),
+        # both classes have 10% executors
+        (20, 10, 1.0),
+    ],
+)
+def test_non_peak_penalty_multi_class(curr_class1_count, curr_class2_count, expected_multiplier):
+    class1 = ExecutorClass.always_on__llm__a6000
+    class2 = ExecutorClass.always_on__gpu_24gb
+    peak_counts = {class1: 200, class2: 100}
+
+    curr_counts = {}
+    if curr_class1_count is not None:
+        curr_counts[class1] = curr_class1_count
+    if curr_class2_count is not None:
+        curr_counts[class2] = curr_class2_count
+    if not curr_counts:
+        curr_counts = None
+
+    assert get_penalty_multiplier(peak_counts, curr_counts) == approx(expected_multiplier)

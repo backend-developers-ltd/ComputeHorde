@@ -4,11 +4,13 @@ import datetime as dt
 import logging
 from typing import Any
 
+from asgiref.sync import sync_to_async
 from compute_horde.executor_class import (
     EXECUTOR_CLASS,
     MAX_EXECUTOR_TIMEOUT,
     ExecutorClass,
 )
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -178,3 +180,13 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         spec = EXECUTOR_CLASS.get(executor_class)
         spin_up_time = spec.spin_up_time if spec else 0
         return spin_up_time + job_timeout + self.EXECUTOR_TIMEOUT_LEEWAY
+
+    @sync_to_async(thread_sensitive=False)
+    def is_peak(self) -> bool:
+        import bittensor
+        from compute_horde.subtensor import get_peak_cycle
+
+        subtensor = bittensor.Subtensor(network=settings.BITTENSOR_NETWORK)
+        current_block = subtensor.get_current_block()
+        peak_cycle = get_peak_cycle(current_block, settings.BITTENSOR_NETUID)
+        return current_block in peak_cycle

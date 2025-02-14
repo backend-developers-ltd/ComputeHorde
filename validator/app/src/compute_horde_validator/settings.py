@@ -145,6 +145,16 @@ CONSTANCE_CONFIG = {
         float,
     ),
     "DYNAMIC_WEIGHTS_VERSION": (1, "The weights version for synthetic jobs", int),
+    "DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO": (
+        0.1,
+        "Ratio of the number of executors in peak cycle that needs to be present in non-peak cycle",
+        float,
+    ),
+    "DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER": (
+        0.8,  # 0.8 means, 20% score reduction
+        "Penalty multiplier for non-peak cycle when a miner does not maintain the DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO",
+        float,
+    ),
     "DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION": (
         1,
         "The synthetic jobs flow version",
