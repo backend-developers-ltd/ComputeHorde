@@ -296,7 +296,7 @@ CONSTANCE_CONFIG = {
         int,
     ),
     "DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT": (
-        3,
+        10,
         "Timeout for miner to accept or decline an organic job in seconds",
         int,
     ),
