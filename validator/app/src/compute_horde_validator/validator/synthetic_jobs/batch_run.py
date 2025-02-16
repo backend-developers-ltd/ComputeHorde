@@ -65,6 +65,7 @@ from django.db import transaction
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q
 from pydantic import BaseModel, JsonValue
 
+from compute_horde_validator.validator import job_excuses
 from compute_horde_validator.validator.dynamic_config import (
     LimitsDict,
     aget_config,
@@ -450,40 +451,20 @@ class Job:
             return self.accept_response.reason
         return None
 
-    def get_valid_decline_excuse_receipts(self) -> list[Receipt]:
+    async def get_valid_decline_excuse_receipts(self) -> list[Receipt]:
         assert self.job_started_receipt_payload is not None
         assert isinstance(self.accept_response, V0DeclineJobRequest)
 
         # Use the time when the receipt for this job was generated as an excuse time cutoff time
-        job_request_time = self.job_started_receipt_payload.timestamp
-
-        # We need time leeway so that if the miner receives an organic job around the same time as the synthetic, a slight
-        # time difference caused by clock desync and network latencies doesn't cause the miner to lose score when they
-        # accept an organic job and get a synthetic job request a couple of seconds "from the past"
-        leeway = timedelta(seconds=2)
-
-        # Reject duplicate receipts - use the receipts' validator signature as unique ID
-        seen_receipts: set[str] = set()
-
-        valid_receipts: list[Receipt] = []
-        for receipt in self.accept_response.receipts:
-            if (
-                isinstance(receipt.payload, JobStartedReceiptPayload)
-                and receipt.payload.is_organic
-                and receipt.payload.miner_hotkey == self.miner_hotkey
-                and receipt.payload.job_uuid != self.uuid
-                and receipt.payload.validator_hotkey in self.ctx.allowed_validators_for_excuse
-                and receipt.payload.job_uuid not in seen_receipts
-                and receipt.payload.executor_class == self.executor_class
-                and receipt.payload.timestamp < job_request_time
-                and job_request_time
-                < receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
-                and receipt.verify_validator_signature(throw=False)
-            ):
-                seen_receipts.add(receipt.payload.job_uuid)
-                valid_receipts.append(receipt)
-
-        return valid_receipts
+        return await job_excuses.filter_valid_excuse_receipts(
+            receipts_to_check=self.accept_response.receipts,
+            check_time=self.job_started_receipt_payload.timestamp,
+            declined_job_uuid=self.uuid,
+            declined_job_executor_class=self.executor_class,
+            declined_job_is_synthetic=True,
+            miner_hotkey=self.miner_hotkey,
+            allowed_validators=self.ctx.allowed_validators_for_excuse,
+        )
 
 
 @dataclass
@@ -1773,7 +1754,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
 
     if job.decline_reason() == V0DeclineJobRequest.Reason.BUSY:
         relevant_executor_count = ctx.executors[job.miner_hotkey][job.executor_class]
-        valid_excuse_receipts = job.get_valid_decline_excuse_receipts()
+        valid_excuse_receipts = await job.get_valid_decline_excuse_receipts()
         accepted_jobs = sum(
             1
             for other_job in ctx.jobs.values()
