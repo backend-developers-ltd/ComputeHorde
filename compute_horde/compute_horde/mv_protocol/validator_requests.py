@@ -57,9 +57,9 @@ class V0AuthenticateRequest(BaseValidatorRequest):
 
 class V0InitialJobRequest(BaseValidatorRequest, JobMixin):
     message_type: RequestType = RequestType.V0InitialJobRequest
-    executor_class: ExecutorClass | None = None
+    executor_class: ExecutorClass
     base_docker_image_name: str | None = None
-    timeout_seconds: int | None = None
+    timeout_seconds: int
     volume: Volume | None = None
     volume_type: VolumeType | None = None
     job_started_receipt_payload: JobStartedReceiptPayload
