@@ -340,11 +340,11 @@ CONSTANCE_CONFIG = {
         "Timeout for waiting for a streaming job to be ready to accept connections from the user",
         int,
     ),
-    "DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS": {
-        timedelta(hours=4).total_seconds(),
+    "DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS": (
+        int(timedelta(hours=4).total_seconds()),
         "Amount of time a miner will be temporarily blacklisted for after failing an organic job.",
         int,
-    },
+    ),
 }
 
 # Content Security Policy
