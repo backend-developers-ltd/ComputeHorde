@@ -2,6 +2,7 @@ import abc
 import asyncio
 import datetime as dt
 import logging
+from collections import defaultdict
 from typing import Any
 
 from compute_horde.executor_class import (
@@ -22,6 +23,10 @@ class ExecutorUnavailable(Exception):
     Thrown when an executor that should be available, but for some reason fails to spin up.
     """
 
+    pass
+
+
+class ExecutorReservationTimeout(Exception):
     pass
 
 
@@ -47,19 +52,29 @@ class ExecutorClassPool:
         self._executors: list[ReservedExecutor] = []
         self._reservation_lock = asyncio.Lock()
         self._pool_cleanup_task = asyncio.create_task(self._pool_cleanup_loop())
+        self._reservation_futures: defaultdict[str, asyncio.Future[None]] = defaultdict(
+            asyncio.Future
+        )
 
-    async def reserve_executor(self, token, timeout):
+    async def reserve_executor(self, token: str, timeout: float) -> object:
         async with self._reservation_lock:
+            future = self._reservation_futures[token]
+            del self._reservation_futures[token]
+
             if self.get_availability() == 0:
-                logger.warning("No executor available")
+                logger.warning(f"No executor available ({token}")
+                future.set_exception(AllExecutorsBusy())
                 raise AllExecutorsBusy()
+
+            # Reservation succeeded - resolve the future to let the listeners know.
+            future.set_result(None)
 
             try:
                 executor = await self.manager.start_new_executor(
                     token, self.executor_class, timeout
                 )
             except Exception as exc:
-                logger.error("Error occurred", exc_info=exc)
+                logger.error("Error during executor startup", exc_info=exc)
                 raise ExecutorUnavailable()
 
             self._executors.append(ReservedExecutor(executor, timeout))
@@ -77,7 +92,7 @@ class ExecutorClassPool:
             try:
                 await self._pool_cleanup()
             except Exception as exc:
-                logger.error("Error occurred", exc_info=exc)
+                logger.error("Error during pool cleanup", exc_info=exc)
             await asyncio.sleep(self.POOL_CLEANUP_PERIOD)
 
     async def _pool_cleanup(self):
@@ -105,12 +120,18 @@ class ExecutorClassPool:
             if reserved_executor not in executors_to_drop
         ]
 
+    async def wait_for_executor_reservation(self, token: str, timeout: float) -> None:
+        try:
+            await asyncio.wait_for(self._reservation_futures[token], timeout)
+        except TimeoutError:
+            raise ExecutorReservationTimeout()
+
 
 class BaseExecutorManager(metaclass=abc.ABCMeta):
     EXECUTOR_TIMEOUT_LEEWAY = dt.timedelta(seconds=30).total_seconds()
 
     def __init__(self):
-        self._executor_class_pools = {}
+        self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
 
     @abc.abstractmethod
     async def start_new_executor(self, token, executor_class, timeout):
@@ -155,13 +176,26 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
             else:
                 pool.set_count(executor_count)
 
-    async def get_executor_class_pool(self, executor_class):
+    async def get_executor_class_pool(self, executor_class: ExecutorClass) -> ExecutorClassPool:
         await self._sync_pools_with_manifest()
         return self._executor_class_pools[executor_class]
 
-    async def reserve_executor_class(self, token, executor_class, timeout):
+    async def reserve_executor_class(
+        self, token: str, executor_class: ExecutorClass, timeout: float
+    ) -> object:
         pool = await self.get_executor_class_pool(executor_class)
         return await pool.reserve_executor(token, self.get_total_timeout(executor_class, timeout))
+
+    async def wait_for_executor_reservation(
+        self, token: str, executor_class: ExecutorClass, timeout: float
+    ) -> None:
+        """
+        Resolves as soon as the executor is reserved - before it's launched.
+        If there are no free executors, raises AllExecutorsBusy.
+        If the reservation times out, raises ExecutorReservationTimeout.
+        """
+        pool = await self.get_executor_class_pool(executor_class)
+        await pool.wait_for_executor_reservation(token, timeout)
 
     def get_total_timeout(self, executor_class, job_timeout):
         spec = EXECUTOR_CLASS.get(executor_class)
