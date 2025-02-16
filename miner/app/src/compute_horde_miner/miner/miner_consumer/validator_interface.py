@@ -405,7 +405,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                     job_uuid=msg.job_uuid,  # UUIDField doesn't support "__ne=..."
                 )
             )
-            logger.info(f"Declining job {msg.job_uuid}: executor unavailable")
+            logger.info(f"Declining job {msg.job_uuid}: all executors busy")
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
@@ -419,7 +419,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.status = AcceptedJob.Status.FAILED
             await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
-            logger.info("Failing job: executor failed to start")
+            logger.info("Declining job: executor failed to start")
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
@@ -432,7 +432,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.status = AcceptedJob.Status.FAILED
             await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
-            logger.info("Failing job: executor reservation timed out")
+            logger.info("Declining job: executor reservation timed out")
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
