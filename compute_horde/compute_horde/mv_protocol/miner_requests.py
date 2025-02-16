@@ -51,6 +51,7 @@ class V0DeclineJobRequest(BaseMinerRequest, JobMixin):
     class Reason(Enum):
         NOT_SPECIFIED = "not_specified"
         BUSY = "busy"
+        EXECUTOR_RESERVATION_FAILURE = "executor_reservation_failure"
         EXECUTOR_FAILURE = "executor_failure"
         VALIDATOR_BLACKLISTED = "validator_blacklisted"
 
