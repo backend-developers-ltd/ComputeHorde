@@ -70,6 +70,7 @@ from pydantic import BaseModel, JsonValue
 from compute_horde_validator.validator.dynamic_config import (
     LimitsDict,
     aget_config,
+    get_default_executor_limits_for_missed_peak,
     get_miner_max_executors_per_class,
     get_streaming_job_executor_classes,
     get_system_event_limits,
@@ -853,6 +854,7 @@ class BatchConfig:
         self.llm_answer_s3_download_timeout: float | None = None
         self.excused_synthetic_job_score: float | None = None
         self.non_peak_cycle_executor_min_ratio: float = 1.0
+        self.default_executor_limits_for_missed_peak: dict[ExecutorClass, int] = {}
 
     async def populate(self):
         self.event_limits = await get_system_event_limits()
@@ -862,6 +864,9 @@ class BatchConfig:
         self.excused_synthetic_job_score = await aget_config("DYNAMIC_EXCUSED_SYNTHETIC_JOB_SCORE")
         self.non_peak_cycle_executor_min_ratio = await aget_config(
             "DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO"
+        )
+        self.default_executor_limits_for_missed_peak = (
+            await get_default_executor_limits_for_missed_peak()
         )
 
 
@@ -1613,19 +1618,22 @@ def _limit_non_peak_executors_per_class(ctx: BatchContext) -> None:
         block__lt=peak_cycle.stop,
         should_be_scored=True,
     ).first()
-    if not peak_batch:
-        return
 
     peak_counts = get_executor_counts(peak_batch)
     for hotkey, executors in ctx.executors.items():
-        if hotkey not in peak_counts:
-            continue
-
-        miner_peak_counts = peak_counts[hotkey]
+        miner_peak_counts = peak_counts.get(hotkey, {})
         for executor_class, count in executors.items():
-            peak_count = miner_peak_counts.get(executor_class, 0)
-            max_count = math.ceil(peak_count * ctx.batch_config.non_peak_cycle_executor_min_ratio)
-            ctx.executors[hotkey][executor_class] = min(max_count, count)
+            if executor_class in miner_peak_counts:
+                peak_count = miner_peak_counts.get(executor_class, 0)
+                max_count = math.ceil(
+                    peak_count * ctx.batch_config.non_peak_cycle_executor_min_ratio
+                )
+                allowed_count = min(max_count, count)
+            else:
+                allowed_count = ctx.batch_config.default_executor_limits_for_missed_peak.get(
+                    executor_class, 0
+                )
+            ctx.executors[hotkey][executor_class] = allowed_count
 
 
 async def _multi_close_client(ctx: BatchContext) -> None:

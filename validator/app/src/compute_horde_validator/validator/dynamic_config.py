@@ -71,6 +71,11 @@ async def get_miner_max_executors_per_class() -> dict[ExecutorClass, int]:
     return result
 
 
+async def get_default_executor_limits_for_missed_peak() -> dict[ExecutorClass, int]:
+    default_limits: str = await aget_config("DYNAMIC_DEFAULT_EXECUTOR_LIMITS_FOR_MISSED_PEAK")
+    return executor_class_value_map_parser(default_limits, value_parser=int)
+
+
 def get_executor_class_weights() -> dict[ExecutorClass, float]:
     return executor_class_value_map_parser(
         config.DYNAMIC_EXECUTOR_CLASS_WEIGHTS, value_parser=float
