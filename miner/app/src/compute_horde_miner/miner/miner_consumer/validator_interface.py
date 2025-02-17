@@ -3,7 +3,6 @@ import datetime as dt
 import logging
 import time
 import uuid
-from asyncio import InvalidStateError
 from datetime import timedelta
 from functools import cached_property
 from typing import Protocol
@@ -441,12 +440,12 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
         finally:
             # In any case, the spinup task must be cleaned up.
-            if not executor_spinup.done():
-                executor_spinup.cancel()
+            executor_spinup.cancel()
             try:
-                executor_spinup.exception()
-            except InvalidStateError:
-                # Happens if there's no exception to retrieve. This is fine.
+                await executor_spinup
+            except (asyncio.CancelledError, Exception):
+                # As we're awaiting this task for the second time, just silence the exceptions as
+                # they have been already thrown during the previous await.
                 pass
 
     async def handle_job_request(self, msg: validator_requests.V0JobRequest):
