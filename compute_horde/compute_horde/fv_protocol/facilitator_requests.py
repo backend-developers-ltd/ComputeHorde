@@ -140,6 +140,7 @@ class SignedFields(BaseModel):
     env: dict[str, str]
     use_gpu: bool
     artifacts_dir: str
+    on_trusted_miner: bool
 
     volumes: list[JsonValue]
     uploads: list[JsonValue]
@@ -156,6 +157,7 @@ class SignedFields(BaseModel):
             env=typing.cast(dict[str, str], data.get("env", None)),
             use_gpu=typing.cast(bool, data.get("use_gpu")),
             artifacts_dir=str(data.get("artifacts_dir", "")),
+            on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
             volumes=typing.cast(list[JsonValue], data.get("volumes", [])),
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
         )
@@ -186,6 +188,7 @@ class V2JobRequest(BaseModel, extra="forbid"):
     volume: Volume | None = None
     output_upload: OutputUpload | None = None
     artifacts_dir: str | None = None
+    on_trusted_miner: bool = False
     # !!! all fields above are included in the signed json payload
 
     def get_args(self):
@@ -219,6 +222,7 @@ class V2JobRequest(BaseModel, extra="forbid"):
             env=self.env,
             use_gpu=self.use_gpu,
             artifacts_dir=self.artifacts_dir or "",
+            on_trusted_miner=self.on_trusted_miner,
             volumes=volumes,
             uploads=uploads,
         )
