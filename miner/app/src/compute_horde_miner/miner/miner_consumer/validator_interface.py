@@ -230,6 +230,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                         job_uuid=str(job.job_uuid),
                         docker_process_stdout=job.stdout,
                         docker_process_stderr=job.stderr,
+                        artifacts=job.artifacts,
                     ).model_dump_json()
                 )
                 logger.debug(
@@ -614,6 +615,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 job_uuid=msg.job_uuid,
                 docker_process_stdout=msg.docker_process_stdout,
                 docker_process_stderr=msg.docker_process_stderr,
+                artifacts=msg.artifacts,
             ).model_dump_json()
         )
         logger.debug(f"Finished job {msg.job_uuid} reported to validator {self.validator_key}")

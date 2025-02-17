@@ -390,6 +390,7 @@ class OrganicJobDetails:
     total_job_timeout: int = 300
     volume: Volume | None = None
     output: OutputUpload | None = None
+    artifacts_dir: str | None = None
 
     def __post_init__(self):
         if (self.docker_image, self.raw_script) == (None, None):
@@ -486,6 +487,7 @@ async def run_organic_job(
                     docker_run_cmd=job_details.docker_run_cmd,
                     volume=job_details.volume,
                     output_upload=job_details.output,
+                    artifacts_dir=job_details.artifacts_dir,
                 )
             )
 
@@ -503,7 +505,11 @@ async def run_organic_job(
                     score=0,  # no score for organic jobs (at least right now)
                 )
 
-                return final_response.docker_process_stdout, final_response.docker_process_stderr
+                return (
+                    final_response.docker_process_stdout,
+                    final_response.docker_process_stderr,
+                    final_response.artifacts,
+                )
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
         except Exception:

@@ -173,7 +173,10 @@ async def test_all_succeed(
         await transport.add_message(executor_ready_message, send_before=0)
 
         job_finish_message = miner_requests.V0JobFinishedRequest(
-            job_uuid=str(job_uuid), docker_process_stdout="", docker_process_stderr=""
+            job_uuid=str(job_uuid),
+            docker_process_stdout="",
+            docker_process_stderr="",
+            artifacts={},
         ).model_dump_json()
 
         await transport.add_message(job_finish_message, send_before=2)
@@ -410,7 +413,10 @@ async def test_some_streaming_succeed(
             await transport.add_message(streaming_ready_message, send_before=0)
 
             job_finish_message = miner_requests.V0JobFinishedRequest(
-                job_uuid=str(job_uuid), docker_process_stdout="", docker_process_stderr=""
+                job_uuid=str(job_uuid),
+                docker_process_stdout="",
+                docker_process_stderr="",
+                artifacts={},
             ).model_dump_json()
 
             await transport.add_message(job_finish_message, send_before=2)
@@ -538,7 +544,10 @@ async def flow_0(
     await transport.add_message(executor_ready_message, send_before=0)
 
     job_finish_message = miner_requests.V0JobFinishedRequest(
-        job_uuid=str(job_uuid), docker_process_stdout="", docker_process_stderr=""
+        job_uuid=str(job_uuid),
+        docker_process_stdout="",
+        docker_process_stderr="",
+        artifacts={},
     ).model_dump_json()
 
     await transport.add_message(job_finish_message, send_before=2)
@@ -567,7 +576,10 @@ async def flow_1(
     await transport.add_message(executor_ready_message, send_before=0)
 
     job_finish_message = miner_requests.V0JobFinishedRequest(
-        job_uuid=str(job_uuid), docker_process_stdout="", docker_process_stderr=""
+        job_uuid=str(job_uuid),
+        docker_process_stdout="",
+        docker_process_stderr="",
+        artifacts={},
     ).model_dump_json()
 
     await transport.add_message(job_finish_message, send_before=2, sleep_before=2)

@@ -4,7 +4,7 @@ from functools import partial
 from typing import Literal, assert_never
 
 from compute_horde.executor_class import ExecutorClass
-from compute_horde.fv_protocol.facilitator_requests import JobRequest
+from compute_horde.fv_protocol.facilitator_requests import JobRequest, V2JobRequest
 from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,
@@ -37,6 +37,7 @@ class MinerResponse(BaseModel, extra="allow"):
     message_type: None | str
     docker_process_stderr: str
     docker_process_stdout: str
+    artifacts: dict[str, str]
 
 
 class JobStatusMetadata(BaseModel, extra="allow"):
@@ -62,6 +63,7 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
                 message_type=message_type,
                 docker_process_stdout=job.stdout,
                 docker_process_stderr=job.stderr,
+                artifacts=job.artifacts,
             )
         else:
             miner_response = None
@@ -116,6 +118,7 @@ async def execute_organic_job(
     miner_client.notify_job_accepted = notify_job_accepted  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
 
+    artifacts_dir = job_request.artifacts_dir if isinstance(job_request, V2JobRequest) else None
     job_details = OrganicJobDetails(
         job_uuid=str(job.job_uuid),  # TODO: fix uuid field in AdminJobRequest
         executor_class=ExecutorClass(job_request.executor_class),
@@ -126,10 +129,11 @@ async def execute_organic_job(
         total_job_timeout=total_job_timeout,
         volume=job_request.volume,
         output=job_request.output_upload,
+        artifacts_dir=artifacts_dir,
     )
 
     try:
-        stdout, stderr = await run_organic_job(
+        stdout, stderr, artifacts = await run_organic_job(
             miner_client,
             job_details,
             initial_response_timeout=initial_response_timeout,
@@ -139,6 +143,7 @@ async def execute_organic_job(
         comment = f"Miner {miner_client.miner_name} finished: {stdout=} {stderr=}"
         job.stdout = stdout
         job.stderr = stderr
+        job.artifacts = artifacts
         job.status = OrganicJob.Status.COMPLETED
         job.comment = comment
         await job.asave()
