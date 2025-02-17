@@ -419,7 +419,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.status = AcceptedJob.Status.FAILED
             await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
-            logger.info("Declining job: executor failed to start")
+            logger.info(f"Declining job {msg.job_uuid}: executor failed to start")
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
@@ -432,7 +432,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.status = AcceptedJob.Status.FAILED
             await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
-            logger.info("Declining job: executor reservation timed out")
+            logger.info(f"Declining job {msg.job_uuid}: executor reservation timed out")
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
