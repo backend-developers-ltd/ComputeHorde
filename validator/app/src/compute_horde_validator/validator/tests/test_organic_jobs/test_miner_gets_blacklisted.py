@@ -35,7 +35,7 @@ async def test_miner_is_blacklisted__after_rejecting_job(
     # Vali -> faci: job failed
 
     # Faci: request another job
-    await faci_transport.add_message(another_job_request, send_before=1)
+    await faci_transport.add_message(another_job_request, send_before=1, sleep_before=0.2)
 
     # Vali -> faci: job rejected (no miners to take it)
     await execute_scenario(until=lambda: len(faci_transport.sent) >= 3)
@@ -46,7 +46,11 @@ async def test_miner_is_blacklisted__after_rejecting_job(
     vali_rejected = JobStatusUpdate.model_validate_json(faci_transport.sent[-1])
 
     assert miner_rejected.status == "rejected"
-    assert miner_rejected.metadata.comment.startswith("Miner declined job")
+    assert miner_rejected.metadata.comment.startswith(
+        "Miner failed to excuse"
+        if reason == miner_requests.V0DeclineJobRequest.Reason.BUSY
+        else "Miner declined job"
+    )
     assert miner_rejected.metadata.miner_response is not None
 
     assert vali_rejected.status == "rejected"
@@ -107,6 +111,7 @@ async def test_miner_is_blacklisted__after_timing_out(
     await faci_transport.add_message(
         another_job_request,
         send_before=1 if timeout_stage == 0 else 2,
+        sleep_before=0.2,
     )
 
     await execute_scenario(
@@ -140,6 +145,7 @@ async def test_miner_is_blacklisted__after_failing_to_start_executor(
     await faci_transport.add_message(
         another_job_request,
         send_before=2,  # job status=accepted, job status=failed
+        sleep_before=0.2,
     )
 
     await execute_scenario(until=lambda: len(faci_transport.sent) >= 4, timeout_seconds=3)
@@ -175,12 +181,13 @@ async def test_miner_is_blacklisted__after_failing_job(
             docker_process_stdout="stdout",
             docker_process_stderr="stderr",
         ),
-        send_before=1,
+        send_before=2,
     )
 
     await faci_transport.add_message(
         another_job_request,
         send_before=2,  # job status=accepted, job status=failed
+        sleep_before=0.2,  # needed to ensure validator finishes the job flow
     )
 
     await execute_scenario(until=lambda: len(faci_transport.sent) >= 4, timeout_seconds=3)

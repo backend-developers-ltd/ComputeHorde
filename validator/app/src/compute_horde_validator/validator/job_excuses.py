@@ -22,6 +22,9 @@ async def filter_valid_excuse_receipts(
     miner_hotkey: str,
     allowed_validators: set[str] | None = None,
 ) -> list[Receipt]:
+    if not receipts_to_check:
+        return []
+
     if allowed_validators is None:
         allowed_validators = {
             neuron.hotkey
