@@ -402,7 +402,7 @@ async def run_organic_job(
     job_details: OrganicJobDetails,
     initial_response_timeout: int = 3,
     executor_ready_timeout: int = 300,
-):
+) -> tuple[str, str, dict[str, str]]:  # stdout, stderr, artifacts
     """
     Run an organic job. This is a simpler way to use OrganicMinerClient.
 
@@ -410,7 +410,7 @@ async def run_organic_job(
     :param job_details: details specific to the job that needs to be run
     :param initial_response_timeout: timeout for waiting for job acceptance/rejection
     :param executor_ready_timeout: timeout for waiting for executor readiness
-    :return: standard out and standard error of the job container
+    :return: standard out, standard error of the job container and artifacts
     """
     assert client.job_uuid == job_details.job_uuid
 
@@ -508,10 +508,11 @@ async def run_organic_job(
                 return (
                     final_response.docker_process_stdout,
                     final_response.docker_process_stderr,
-                    final_response.artifacts,
+                    final_response.artifacts or {},
                 )
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
+
         except Exception:
             await client.send_job_finished_receipt_message(
                 started_timestamp=job_timer.start_time.timestamp(),
@@ -519,3 +520,5 @@ async def run_organic_job(
                 score=0,
             )
             raise
+
+    raise Exception("Organic job flow ended with no result")

@@ -41,7 +41,7 @@ async def test_basic_flow_works(job_request, faci_transport, miner_transport, ex
 
     await execute_scenario(until=lambda: len(faci_transport.sent) >= 3)
 
-    assert JobStatusUpdate.model_validate_json(faci_transport.sent[-1]).status == "completed"
+    assert JobStatusUpdate.model_validate_json(faci_transport.sent[2]).status == "completed"
     assert (
         await OrganicJob.objects.aget(job_uuid=job_request.uuid)
     ).status == OrganicJob.Status.COMPLETED
