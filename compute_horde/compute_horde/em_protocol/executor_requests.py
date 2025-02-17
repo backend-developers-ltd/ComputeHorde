@@ -55,6 +55,7 @@ class V0FinishedRequest(BaseExecutorRequest, JobMixin):
     message_type: RequestType = RequestType.V0FinishedRequest
     docker_process_stdout: str  # TODO: add max_length
     docker_process_stderr: str  # TODO: add max_length
+    artifacts: dict[str, str] | None = None
 
 
 class GenericError(BaseExecutorRequest):

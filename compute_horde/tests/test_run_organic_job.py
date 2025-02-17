@@ -44,6 +44,7 @@ async def test_run_organic_job__success(keypair):
                 job_uuid=JOB_UUID,
                 docker_process_stdout="stdout",
                 docker_process_stderr="stderr",
+                artifacts={},
             ).model_dump_json(),
         ],
     )
@@ -56,7 +57,7 @@ async def test_run_organic_job__success(keypair):
         transport=mock_transport,
     )
     job_details = OrganicJobDetails(job_uuid=JOB_UUID, docker_image="mock")
-    stdout, stderr = await run_organic_job(client, job_details, wait_timeout=2)
+    stdout, stderr, artifacts = await run_organic_job(client, job_details, wait_timeout=2)
 
     assert stdout == "stdout"
     assert stderr == "stderr"

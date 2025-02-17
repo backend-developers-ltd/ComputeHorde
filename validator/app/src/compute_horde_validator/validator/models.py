@@ -236,6 +236,7 @@ class SyntheticJob(JobBase):
 class OrganicJob(JobBase):
     stdout = models.TextField(blank=True, default="")
     stderr = models.TextField(blank=True, default="")
+    artifacts = models.JSONField(blank=True, default=dict)
     block = models.BigIntegerField(
         null=True, help_text="Block number on which this job is scheduled"
     )
