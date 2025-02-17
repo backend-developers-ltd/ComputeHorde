@@ -1,3 +1,7 @@
+REFERENCE_BLOCK_IN_PEAK_CYCLE = 1000
+CYCLES_IN_TESTING_DAY = 10  # 1 peak cycle + 9 non-peak cycles
+
+
 def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
     """
     Reimplementing the logic from subtensor's Rust function:
@@ -44,3 +48,13 @@ def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
         )
 
     return range(first_epoch.start, second_epoch.stop)
+
+
+def get_peak_cycle(block: int, netuid: int, tempo: int = 360) -> range:
+    """Get the peak cycle of testing day containing block"""
+    cycle_interval = 2 * (tempo + 1)
+    testing_day_interval = cycle_interval * CYCLES_IN_TESTING_DAY
+    reference_peak_cycle = get_cycle_containing_block(REFERENCE_BLOCK_IN_PEAK_CYCLE, netuid, tempo)
+    excess_blocks = (block - reference_peak_cycle.start) % testing_day_interval
+    peak_cycle = get_cycle_containing_block(block - excess_blocks, netuid, tempo)
+    return peak_cycle

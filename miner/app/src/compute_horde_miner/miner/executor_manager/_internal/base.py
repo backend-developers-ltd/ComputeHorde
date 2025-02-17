@@ -5,11 +5,13 @@ import logging
 from collections import defaultdict
 from typing import Any
 
+from asgiref.sync import sync_to_async
 from compute_horde.executor_class import (
     EXECUTOR_CLASS,
     MAX_EXECUTOR_TIMEOUT,
     ExecutorClass,
 )
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,15 +33,19 @@ class ExecutorReservationTimeout(Exception):
 
 
 class ReservedExecutor:
-    def __init__(self, executor, timeout):
+    def __init__(self, executor, timeout, token):
         self.executor = executor
         self.timeout = timeout
         self.start_time = dt.datetime.now()
+        self.token = token
 
     def is_expired(self):
         return (dt.datetime.now() - self.start_time).total_seconds() > min(
             MAX_EXECUTOR_TIMEOUT, self.timeout
         )
+
+    def __str__(self):
+        return f"ReservedExecutor(start_time={self.start_time}, timeout={self.timeout}, token={self.token})"
 
 
 class ExecutorClassPool:
@@ -62,7 +68,10 @@ class ExecutorClassPool:
             del self._reservation_futures[token]
 
             if self.get_availability() == 0:
-                logger.warning(f"No executor available ({token}")
+                logger.debug(
+                    "No executor available, current list is:\n %s",
+                    "\n".join(str(r) for r in self._executors),
+                )
                 future.set_exception(AllExecutorsBusy())
                 raise AllExecutorsBusy()
 
@@ -77,7 +86,9 @@ class ExecutorClassPool:
                 logger.error("Error during executor startup", exc_info=exc)
                 raise ExecutorUnavailable()
 
-            self._executors.append(ReservedExecutor(executor, timeout))
+            reserved_executor = ReservedExecutor(executor, timeout, token)
+            self._executors.append(reserved_executor)
+            logger.debug("Added %s", reserved_executor)
             return executor
 
     def set_count(self, executor_count):
@@ -99,9 +110,10 @@ class ExecutorClassPool:
         async def check_executor(reserved_executor):
             status = await self.manager.wait_for_executor(reserved_executor.executor, 1)
             if status is not None:
+                logger.debug("%s finished", reserved_executor)
                 return reserved_executor, True
             elif reserved_executor.is_expired():
-                logger.warning("Executor timed out, killing it.")
+                logger.debug("%s timed out, killing it.", reserved_executor)
                 await self.manager.kill_executor(reserved_executor.executor)
                 return reserved_executor, True
             return reserved_executor, False
@@ -201,3 +213,13 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         spec = EXECUTOR_CLASS.get(executor_class)
         spin_up_time = spec.spin_up_time if spec else 0
         return spin_up_time + job_timeout + self.EXECUTOR_TIMEOUT_LEEWAY
+
+    @sync_to_async(thread_sensitive=False)
+    def is_peak(self) -> bool:
+        import bittensor
+        from compute_horde.subtensor import get_peak_cycle
+
+        subtensor = bittensor.Subtensor(network=settings.BITTENSOR_NETWORK)
+        current_block = subtensor.get_current_block()
+        peak_cycle = get_peak_cycle(current_block, settings.BITTENSOR_NETUID)
+        return current_block in peak_cycle

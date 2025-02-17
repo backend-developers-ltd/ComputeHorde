@@ -24,6 +24,7 @@ def populate_null_blocks_and_cycles(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    atomic = False
     dependencies = [
         ("validator", "0047_syntheticjobbatch_should_be_scored"),
     ]

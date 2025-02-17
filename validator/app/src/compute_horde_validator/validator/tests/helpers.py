@@ -13,6 +13,7 @@ import bittensor
 import constance
 import numpy as np
 from asgiref.sync import async_to_sync
+from bittensor.core.errors import SubstrateRequestException
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     Signature,
@@ -28,7 +29,6 @@ from compute_horde.mv_protocol.miner_requests import (
 )
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 from django.conf import settings
-from substrateinterface.exceptions import SubstrateRequestException
 
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
@@ -293,8 +293,8 @@ class MockSubtensor:
             commit_reveal_weights_interval=1000,
             max_weight_limit=65535,
         )
-        self.weights_set: list[list[numbers.Number]] = []
-        self.weights_committed: list[list[numbers.Number]] = []
+        self.weights_set: list[dict[int, numbers.Number]] = []
+        self.weights_committed: list[dict[int, numbers.Number]] = []
         self.weights_revealed: list[list[numbers.Number]] = []
         self.init_time = monotonic()
         self.block_duration = block_duration
@@ -338,11 +338,11 @@ class MockSubtensor:
     ) -> tuple[bool, str]:
         if not isinstance(weights, list):
             weights = weights.tolist()
-        self.weights_set.append(weights)
+        self.weights_set.append({uid: weight for uid, weight in zip(uids, weights)})
         return self.mocked_set_weights()
 
-    def commit_weights(self, weights, **kwargs) -> tuple[bool, str]:
-        self.weights_committed.append(weights)
+    def commit_weights(self, weights, uids, **kwargs) -> tuple[bool, str]:
+        self.weights_committed.append({uid: weight for uid, weight in zip(uids, weights)})
         if self.hyperparameters.commit_reveal_weights_enabled:
             return self.mocked_commit_weights()
         return False, "MockSubtensor doesn't support commit_weights"

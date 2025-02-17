@@ -7,14 +7,16 @@ import uuid
 from datetime import timedelta
 from functools import cached_property
 from math import ceil, floor
+from typing import Union
 
 import billiard.exceptions
 import bittensor
+import bittensor.core.metagraph
 import celery.exceptions
 import numpy as np
 import requests
-import substrateinterface.exceptions
 from asgiref.sync import async_to_sync
+from bittensor.core.errors import SubstrateRequestException
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
@@ -26,6 +28,7 @@ from constance import config
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
+from numpy.typing import NDArray
 from pydantic import JsonValue
 
 from compute_horde_validator.celery import app
@@ -63,6 +66,9 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 from . import eviction
 from .models import AdminJobRequest
 from .scoring import score_batches
+
+if False:
+    import torch
 
 logger = get_task_logger(__name__)
 
@@ -489,7 +495,7 @@ def do_set_weights(
                 wait_for_finalization=wait_for_finalization,
                 max_retries=2,
             )
-        except substrateinterface.exceptions.SubstrateRequestException as e:
+        except SubstrateRequestException as e:
             # Consider the following exception as success:
             # The transaction has too low priority to replace another transaction already in the pool.
             if e.args[0]["code"] == 1014:
@@ -685,6 +691,126 @@ def get_metagraph(subtensor, netuid):
         return subtensor.metagraph(netuid=netuid)
 
 
+def normalize_batch_scores(
+    hotkey_scores: dict[str, float],
+    subtensor,
+    metagraph,
+) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
+    neurons = metagraph.neurons
+    hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
+    score_per_uid = {}
+
+    for hotkey, score in hotkey_scores.items():
+        uid = hotkey_to_uid.get(hotkey)
+        if uid is None:
+            continue
+        score_per_uid[uid] = score
+
+    uids = np.zeros(len(neurons), dtype=np.int64)
+    weights = np.zeros(len(neurons), dtype=np.float32)
+
+    if not score_per_uid:
+        logger.warning("Batch produced no scores")
+        return uids, weights
+
+    for ind, n in enumerate(neurons):
+        uids[ind] = n.uid
+        weights[ind] = score_per_uid.get(n.uid, 0)
+
+    uids, weights = process_weights_for_netuid(
+        uids,
+        weights,
+        settings.BITTENSOR_NETUID,
+        subtensor,
+        metagraph,
+    )
+
+    return uids, weights
+
+
+def apply_dancing_burners(
+    uids: Union["torch.Tensor", NDArray[np.int64]],
+    weights: Union["torch.FloatTensor", NDArray[np.float32]],
+    subtensor,
+    metagraph: bittensor.core.metagraph.NonTorchMetagraph,
+    cycle_block_start: int,
+) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
+    burner_hotkeys = config.DYNAMIC_BURN_TARGET_SS58ADDRESSES.split(",")
+    burn_rate = config.DYNAMIC_BURN_RATE
+    burn_partition = config.DYNAMIC_BURN_PARTITION
+
+    registered_burner_hotkeys = sorted([h for h in burner_hotkeys if h in metagraph.hotkeys])
+    se_data = {
+        "registered_burner_hotkeys": registered_burner_hotkeys,
+        "burner_hotkeys": burner_hotkeys,
+        "burn_rate": burn_rate,
+        "burn_partition": burn_partition,
+        "cycle_block_start": cycle_block_start,
+    }
+
+    if not registered_burner_hotkeys or not burn_rate:
+        logger.info(
+            "None of the burner hotkeys registered or burn_rate=0, not applying burn incentive"
+        )
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.BURNING_INCENTIVE,
+            subtype=SystemEvent.EventSubType.NO_BURNING,
+            long_description="",
+            data=se_data,
+        )
+        return uids, weights
+
+    if len(registered_burner_hotkeys) == 1:
+        logger.info("Single burner hotkey registered, applying all burn incentive to it")
+        weight_adjustment = {registered_burner_hotkeys[0]: burn_rate}
+        main_burner = registered_burner_hotkeys[0]
+
+    else:
+        main_burner = random.Random(cycle_block_start).choice(registered_burner_hotkeys)
+        logger.info(
+            "Main burner: %s, other burners: %s",
+            main_burner,
+            [h for h in registered_burner_hotkeys if h != main_burner],
+        )
+        weight_adjustment = {
+            main_burner: burn_rate * burn_partition,
+            **{
+                h: burn_rate * (1 - burn_partition) / (len(registered_burner_hotkeys) - 1)
+                for h in registered_burner_hotkeys
+                if h != main_burner
+            },
+        }
+
+    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        type=SystemEvent.EventType.BURNING_INCENTIVE,
+        subtype=SystemEvent.EventSubType.APPLIED_BURNING,
+        long_description="",
+        data={**se_data, "main_burner": main_burner, "weight_adjustment": weight_adjustment},
+    )
+
+    weights = weights * (1 - burn_rate)
+
+    hotkey_to_uid = {n.hotkey: n.uid for n in metagraph.neurons}
+    for hotkey, weight in weight_adjustment.items():
+        uid = hotkey_to_uid[hotkey]
+        if uid not in uids:
+            uids = np.append(uids, uid)
+            weights = np.append(weights, weight)
+        else:
+            index = np.where(uids == uid)[0]
+            weights[index] = weights[index] + weight
+
+    uids, weights = process_weights_for_netuid(
+        uids,
+        weights,
+        settings.BITTENSOR_NETUID,
+        subtensor,
+        metagraph,
+    )
+
+    return uids, weights
+
+
 @app.task
 def set_scores():
     if not config.SERVING:
@@ -716,9 +842,6 @@ def set_scores():
                 return
 
             metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
-            neurons = metagraph.neurons
-            hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
-            score_per_uid = {}
             batches = list(
                 SyntheticJobBatch.objects.select_related("cycle")
                 .filter(
@@ -745,33 +868,11 @@ def set_scores():
             )
 
             hotkey_scores = score_batches(batches)
-            for hotkey, score in hotkey_scores.items():
-                uid = hotkey_to_uid.get(hotkey)
-                if uid is None:
-                    continue
-                score_per_uid[uid] = score
 
-            if not score_per_uid:
-                logger.warning(
-                    "Batches produced no scores. Marking them as scored and skipping setting weights."
-                )
-                for batch in batches:
-                    batch.scored = True
-                    batch.save()
-                return
+            uids, weights = normalize_batch_scores(hotkey_scores, subtensor, metagraph)
 
-            uids = np.zeros(len(neurons), dtype=np.int64)
-            weights = np.zeros(len(neurons), dtype=np.float32)
-            for ind, n in enumerate(neurons):
-                uids[ind] = n.uid
-                weights[ind] = score_per_uid.get(n.uid, 0)
-
-            uids, weights = process_weights_for_netuid(
-                uids,
-                weights,
-                settings.BITTENSOR_NETUID,
-                subtensor,
-                metagraph,
+            uids, weights = apply_dancing_burners(
+                uids, weights, subtensor, metagraph, batches[-1].cycle.start
             )
 
             for batch in batches:
@@ -968,7 +1069,7 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
             wait_for_finalization=True,
             max_retries=2,
         )
-    except substrateinterface.exceptions.SubstrateRequestException as e:
+    except SubstrateRequestException as e:
         # Consider the following exception as success:
         # The transaction has too low priority to replace another transaction already in the pool.
         if e.args[0]["code"] == 1014:
@@ -988,11 +1089,11 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
             data={"weights_id": weights.id},
         )
     else:
+        current_block = "unknown"
         try:
             current_block = subtensor_.get_current_block()
         except Exception as e:
             logger.warning("Failed to get current block: %s", e)
-            current_block = "unknown"
         finally:
             save_weight_setting_failure(
                 subtype=SystemEvent.EventSubType.REVEAL_WEIGHTS_ERROR,

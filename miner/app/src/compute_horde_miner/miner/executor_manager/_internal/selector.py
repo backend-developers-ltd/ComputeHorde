@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 import asgiref.sync
 import bittensor
-import substrateinterface.exceptions
+from bittensor.core.errors import SubstrateRequestException
 from compute_horde.subtensor import get_cycle_containing_block
 from django.conf import settings
 
@@ -55,7 +55,7 @@ class HistoricalRandomMinerSelector(BaseSelector):
     def fetch_neurons(self, netuid: int, block: int) -> list[bittensor.NeuronInfoLite]:
         try:
             return self.subtensor.neurons_lite(netuid, block)  # type: ignore
-        except substrateinterface.exceptions.SubstrateRequestException as e:
+        except SubstrateRequestException as e:
             if e.args[0]["code"] != UNKNOWN_BLOCK_ERROR:
                 raise
 

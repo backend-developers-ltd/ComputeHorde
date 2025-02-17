@@ -145,6 +145,16 @@ CONSTANCE_CONFIG = {
         float,
     ),
     "DYNAMIC_WEIGHTS_VERSION": (1, "The weights version for synthetic jobs", int),
+    "DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO": (
+        0.1,
+        "Ratio of the number of executors in peak cycle that needs to be present in non-peak cycle",
+        float,
+    ),
+    "DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER": (
+        0.8,  # 0.8 means, 20% score reduction
+        "Penalty multiplier for non-peak cycle when a miner does not maintain the DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO",
+        float,
+    ),
     "DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION": (
         1,
         "The synthetic jobs flow version",
@@ -344,6 +354,23 @@ CONSTANCE_CONFIG = {
         int(timedelta(hours=4).total_seconds()),
         "Amount of time a miner will be temporarily blacklisted for after failing an organic job.",
         int,
+    ),
+    "DYNAMIC_BURN_TARGET_SS58ADDRESSES": (
+        "Comma-separated list of ss58 addresses that will receive 'DYNAMIC_BURN_RATE' fraction of all incentives",
+        "",
+        str,
+    ),
+    "DYNAMIC_BURN_RATE": (
+        0.0,
+        "(0.0 - 1.0) fraction of miner incentives that will be directed to 'DYNAMIC_BURN_TARGET_SS58ADDRESSES' ",
+        float,
+    ),
+    "DYNAMIC_BURN_PARTITION": (
+        0.0,
+        "(0.0 - 1.0) each time miner incentive is burned, if there is more than one hotkey registered from among "
+        "'DYNAMIC_BURN_TARGET_SS58ADDRESSES', one will be chosen as the primary at random (but random seed is the same "
+        "across all validators) and will receive 'DYNAMIC_BURN_PARTITION' fraction of all the burn.",
+        float,
     ),
 }
 
@@ -637,6 +664,12 @@ LOGGING = {
         "httpcore.http11": {
             "handlers": ["console"],
             "level": "WARNING",
+            "propagate": True,
+        },
+        # Fix spamming DEBUG-level logs in manage.py shell and shell_plus.
+        "parso": {
+            "handlers": ["console"],
+            "level": "INFO",
             "propagate": True,
         },
     },

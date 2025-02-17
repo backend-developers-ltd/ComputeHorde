@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 import pytest_asyncio
 from compute_horde.executor_class import ExecutorClass
+from compute_horde.subtensor import REFERENCE_BLOCK_IN_PEAK_CYCLE
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
     AllExecutorsBusy,
@@ -243,3 +244,31 @@ def test_subclassing_executor_manager(base_class: type, overrides: list[str]) ->
     )
 
     instance = DerivedManager()  # noqa
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("current_block", "expected"),
+    [
+        # peak cycle
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE, True),
+        # following non-peak cycles, 722 = cycle length
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE + 722, False),
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE + 722 * 2, False),
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE + 722 * 3, False),
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE + 722 * 4, False),
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE + 722 * 5, False),
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE + 722 * 6, False),
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE + 722 * 7, False),
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE + 722 * 8, False),
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE + 722 * 9, False),
+        # next peak cycle
+        (REFERENCE_BLOCK_IN_PEAK_CYCLE + 722 * 10, True),
+    ],
+)
+async def test_executor_manager_peak(current_block, expected, dummy_manager):
+    with patch("bittensor.Subtensor") as mock_subtensor:
+        mock_subtensor.return_value.get_current_block.return_value = current_block
+
+        is_peak = await dummy_manager.is_peak()
+        assert is_peak is expected
