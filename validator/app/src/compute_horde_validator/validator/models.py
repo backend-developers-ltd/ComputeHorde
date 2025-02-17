@@ -10,7 +10,7 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.subtensor import get_cycle_containing_block
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
-from django.db.models import Count, OuterRef, Subquery, UniqueConstraint
+from django.db.models import Exists, OuterRef, UniqueConstraint
 from django.utils import timezone
 from django.utils.timezone import now
 
@@ -123,12 +123,8 @@ class MinerQueryset(models.QuerySet["Miner"]):
         active_blacklist = MinerBlacklist.objects.active()
 
         return self.annotate(
-            blacklist_count=Count(
-                Subquery(active_blacklist.filter(miner=OuterRef("pk")).values("id"))
-            ),
-        ).filter(
-            blacklist_count=0,
-        )
+            is_blacklisted=Exists(active_blacklist.filter(miner=OuterRef("id"))),
+        ).filter(is_blacklisted=False)
 
 
 class Miner(models.Model):
@@ -167,9 +163,6 @@ class MinerBlacklist(models.Model):
     class Meta:
         verbose_name = "Blacklisted Miner"
         verbose_name_plural = "Blacklisted Miners"
-
-    def __str__(self):
-        return f"hotkey: {self.miner.hotkey}"
 
 
 class ValidatorWhitelist(models.Model):

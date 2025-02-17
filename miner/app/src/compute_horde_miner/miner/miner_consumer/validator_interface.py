@@ -1,3 +1,4 @@
+import asyncio
 import datetime as dt
 import logging
 import time
@@ -22,6 +23,7 @@ from compute_horde_miner.miner.executor_manager.base import (
     AllExecutorsBusy,
     ExecutorUnavailable,
 )
+from compute_horde_miner.miner.executor_manager.v0 import ExecutorReservationTimeout
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
     BaseConsumer,
     log_errors_explicitly,
@@ -335,33 +337,52 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         )
 
         # TODO add rate limiting per validator key here
-        token = f"{msg.job_uuid}-{uuid.uuid4()}"
-        await self.group_add(token)
+        executor_token = f"{msg.job_uuid}-{uuid.uuid4()}"
+        await self.group_add(executor_token)
         # let's create the job object before spinning up the executor, so if this process dies before getting
         # confirmation from the executor_manager the object is there and the executor will get the job details
         job = AcceptedJob(
             validator=self.validator,
             job_uuid=msg.job_uuid,
-            executor_token=token,
+            executor_token=executor_token,
             initial_job_details=msg.model_dump(),
             status=AcceptedJob.Status.WAITING_FOR_EXECUTOR,
         )
         await job.asave()
         self.pending_jobs[msg.job_uuid] = job
 
+        # This reserves AND starts the executor.
+        executor_spinup = asyncio.create_task(
+            current.executor_manager.reserve_executor_class(
+                executor_token, msg.executor_class, msg.timeout_seconds
+            ),
+        )
+
         try:
-            executor = await current.executor_manager.reserve_executor_class(
-                token, msg.executor_class, msg.timeout_seconds
+            # First, wait for a second for the manager to confirm an executor will be available
+            # so that we can accept the job. This should not take longer than that, the validator
+            # is only waiting for a couple of seconds for this, and the asyncio loop may be busy
+            # with other things - so this must return very fast.
+            await current.executor_manager.wait_for_executor_reservation(
+                executor_token, msg.executor_class, timeout=1
             )
-            executor_address = await current.executor_manager.get_executor_public_address(executor)
-            job.executor_address = executor_address
-            await job.asave()
+
+            # If there is no executor, the above future throws an appropriate exception so we will
+            # never proceed further down.
             await self.send(
                 miner_requests.V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json()
             )
+
+            # Then, wait for the executor to actually start up.
+            executor = await executor_spinup
+            executor_address = await current.executor_manager.get_executor_public_address(executor)
+            job.executor_address = executor_address
+            await job.asave()
+
         except AllExecutorsBusy:
-            await self.group_discard(token)
-            await job.adelete()
+            await self.group_discard(executor_token)
+            job.status = AcceptedJob.Status.REJECTED
+            await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
             now = msg.job_started_receipt_payload.timestamp
             receipts = (
@@ -382,7 +403,7 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                     job_uuid=msg.job_uuid,  # UUIDField doesn't support "__ne=..."
                 )
             )
-            logger.info(f"Declining job {msg.job_uuid}: executor unavailable")
+            logger.info(f"Declining job {msg.job_uuid}: all executors busy")
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
@@ -390,9 +411,11 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                     receipts=[r.to_receipt() async for r in receipts],
                 ).model_dump_json()
             )
+
         except ExecutorUnavailable:
-            await self.group_discard(token)
-            await job.adelete()
+            await self.group_discard(executor_token)
+            job.status = AcceptedJob.Status.FAILED
+            await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
             logger.info(f"Declining job {msg.job_uuid}: executor failed to start")
             await self.send(
@@ -401,6 +424,29 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                     reason=miner_requests.V0DeclineJobRequest.Reason.EXECUTOR_FAILURE,
                 ).model_dump_json()
             )
+
+        except ExecutorReservationTimeout:
+            await self.group_discard(executor_token)
+            job.status = AcceptedJob.Status.FAILED
+            await job.asave()
+            self.pending_jobs.pop(msg.job_uuid)
+            logger.info(f"Declining job {msg.job_uuid}: executor reservation timed out")
+            await self.send(
+                miner_requests.V0DeclineJobRequest(
+                    job_uuid=msg.job_uuid,
+                    reason=miner_requests.V0DeclineJobRequest.Reason.EXECUTOR_RESERVATION_FAILURE,
+                ).model_dump_json()
+            )
+
+        finally:
+            # In any case, the spinup task must be cleaned up.
+            executor_spinup.cancel()
+            try:
+                await executor_spinup
+            except (asyncio.CancelledError, Exception):
+                # As we're awaiting this task for the second time, just silence the exceptions as
+                # they have been already thrown during the previous await.
+                pass
 
     async def handle_job_request(self, msg: validator_requests.V0JobRequest):
         job = self.pending_jobs.get(msg.job_uuid)

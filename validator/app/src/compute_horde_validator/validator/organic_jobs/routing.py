@@ -12,6 +12,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from django.utils import timezone
 
+from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     Miner,
     MinerBlacklist,
@@ -125,7 +126,8 @@ async def report_miner_failed_job(job: OrganicJob):
         )
         return
 
-    blacklist_until = timezone.now() + timedelta(hours=4)
+    blacklist_time = await aget_config("DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS")
+    blacklist_until = timezone.now() + timedelta(seconds=blacklist_time)
 
     logger.info(
         f"Blacklisting miner {job.miner.hotkey} "
