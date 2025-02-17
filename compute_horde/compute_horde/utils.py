@@ -3,7 +3,7 @@ from typing import Any
 
 import bittensor
 import pydantic
-from substrateinterface.exceptions import SubstrateRequestException
+from bittensor.core.errors import SubstrateRequestException
 
 BAC_VALIDATOR_SS58_ADDRESS = "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
 MIN_STAKE = 1000
@@ -47,7 +47,17 @@ def get_validators(
     neurons = [
         n
         for n in metagraph.neurons
-        if (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS or n.stake.tao >= MIN_STAKE)
+        if (
+            n.hotkey
+            in (
+                BAC_VALIDATOR_SS58_ADDRESS,
+                "5FFApaS75bv5pJHfAp2FVLBj9ZaXuFDjEypsaBNc1wCfe52v",
+                "5F4tQyWrhfGVcNhoqeiNsR6KjD4wMZ2kfhLj4oHYuyHbZAc3",
+                "5F2CsUDVbRbVMXTh9fAzF9GacjVX7UapvRxidrxe7z8BYckQ",
+                "5HEo565WAy4Dbq3Sv271SAi7syBSofyfhhwRNjFNSM2gP9M2",
+            )
+            or n.stake.tao >= MIN_STAKE
+        )
     ]
     neurons = sorted(
         neurons, key=lambda n: (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS, n.stake), reverse=True

@@ -1,8 +1,12 @@
 import asyncio
+import hashlib
+import json
+import random
 import re
 import uuid
 from collections.abc import Callable
 from datetime import timedelta
+from typing import Any, Literal, assert_never
 from unittest.mock import patch
 
 import bittensor
@@ -32,11 +36,12 @@ from pytest_mock import MockerFixture
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
+    Prompt,
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
 )
-from compute_horde_validator.validator.s3 import get_public_url
+from compute_horde_validator.validator.synthetic_jobs import batch_run
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     BatchContext,
     MinerClient,
@@ -45,7 +50,12 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 from ...synthetic_jobs.generator import llm_prompts
-from .helpers import check_miner_job_system_events, check_synthetic_job, generate_prompts
+from .helpers import (
+    check_miner_job_system_events,
+    check_synthetic_job,
+    generate_prompts,
+    generate_related_uuid,
+)
 from .mock_generator import NOT_SCORED, LlmPromptsSyntheticJobGeneratorFactory
 
 pytestmark = [
@@ -68,7 +78,7 @@ def job_uuids(num_miners: int):
 
 @pytest.fixture
 def miner_wallets(num_miners: int):
-    return [bittensor.Keypair.create_from_seed(f"abc{i}".ljust(64, "f")) for i in range(num_miners)]
+    return [bittensor.Keypair.create_from_seed(bytes([*range(31), i])) for i in range(num_miners)]
 
 
 @pytest.fixture
@@ -79,18 +89,18 @@ def miner_hotkeys(miner_wallets: list[bittensor.Keypair]):
 @pytest.fixture
 def active_valis() -> list[bittensor.Keypair]:
     return [
-        bittensor.Keypair.create_from_seed("a" * 64),
-        bittensor.Keypair.create_from_seed("b" * 64),
-        bittensor.Keypair.create_from_seed("c" * 64),
+        bittensor.Keypair.create_from_seed(b"a" * 32),
+        bittensor.Keypair.create_from_seed(b"b" * 32),
+        bittensor.Keypair.create_from_seed(b"c" * 32),
     ]
 
 
 @pytest.fixture
 def inactive_valis() -> list[bittensor.Keypair]:
     return [
-        bittensor.Keypair.create_from_seed("d" * 64),
-        bittensor.Keypair.create_from_seed("e" * 64),
-        bittensor.Keypair.create_from_seed("f" * 64),
+        bittensor.Keypair.create_from_seed(b"d" * 32),
+        bittensor.Keypair.create_from_seed(b"e" * 32),
+        bittensor.Keypair.create_from_seed(b"f" * 32),
     ]
 
 
@@ -187,38 +197,46 @@ async def test_all_succeed(
         await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, 1)
 
 
-async def prep_mocks_for_streaming(
-    mocker: MockerFixture, httpx_mock: HTTPXMock, job_uuids: list[uuid.UUID], settings
-):
-    prompts, prompt_samples = await generate_prompts(num_miners=len(job_uuids))
-    mocker.patch(
-        "compute_horde_validator.validator.synthetic_jobs.batch_run.get_streaming_job_executor_classes",
-        return_value={DEFAULT_LLM_EXECUTOR_CLASS},
-    )
-    mocker.patch(
-        "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
-        LlmPromptsSyntheticJobGeneratorFactory(
-            uuids=job_uuids.copy(),
-            prompt_samples=prompt_samples,
-            prompts=prompts,
-            streaming=True,
-        ),
-    )
-    mocker.patch.object(llm_prompts, "STREAMING_PROCESSING_TIMEOUT", 1)
-    mocker.patch.object(llm_prompts, "STREAMING_PROCESSING_TIMEOUT_LEEWAY", 0.5)
+class MinerBehaviour:
+    def __init__(
+        self,
+        transport: SimulationTransport,
+        job_uuid: uuid.UUID,
+        index_: int,
+        miner_id: int,
+        prompt: Prompt,
+        ws_messages_pattern: Literal["all_good", "up_until_executor_ready"],
+        http_message_pattern: Literal[
+            "all_good", "timeout", "malformed", "wrong_hash", "500", "not_called"
+        ],
+        expected_job_status: str,
+        expected_job_score: float,
+        expect_job_comment: re.Pattern | None = None,
+    ):
+        self.transport = transport
+        self.job_uuid = job_uuid
+        self.index_ = index_
+        self.miner_id = miner_id
+        self.prompt = prompt
+        self.ws_messages_pattern = ws_messages_pattern
+        self.http_message_pattern = http_message_pattern
+        self.expected_job_status = expected_job_status
+        self.expected_job_score = expected_job_score
+        self.expect_job_comment = expect_job_comment
 
-    httpx_mock.add_response(
-        url=re.compile(
-            get_public_url(key=".*", bucket_name=settings.S3_BUCKET_NAME_ANSWERS, prefix="solved/")
-        ),
-        json={p.content: p.answer for p in prompts},
-    )
+    def get_streaming_port(self):
+        # this has to be unique across all miner behaviours used in a single test, otherwise httpx mocks will go nuts
+        return 8000 + self.index_
 
-    async def sleepy_request(*_):
-        await asyncio.sleep(2)
-        return httpx.Response(201)
+    def get_s3_file_contents(self):
+        return json.dumps({self.prompt.content: self.prompt.answer}).encode()
 
-    httpx_mock.add_callback(sleepy_request, url=re.compile("https://127.0.0.1:8007.*"))
+
+shuffling_seed = random.random()
+
+
+def shuffled(list_: list[Any]) -> list[Any]:
+    return random.Random(shuffling_seed).sample(list_, len(list_))
 
 
 @pytest.mark.override_config(
@@ -236,12 +254,142 @@ async def test_some_streaming_succeed(
     ssl_public_key: str,
     settings,
 ):
-    await prep_mocks_for_streaming(mocker, httpx_mock, job_uuids, settings)
     # generator will solve to the right answer
     MOCK_SCORE = 1.0
 
-    port = 8000
-    for job_uuid, transport in zip(job_uuids, transports):
+    mocker.patch.object(batch_run, "shuffled", shuffled)
+
+    prompts, prompt_samples = await generate_prompts(num_miners=len(job_uuids))
+
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.batch_run.get_streaming_job_executor_classes",
+        return_value={DEFAULT_LLM_EXECUTOR_CLASS},
+    )
+    mocker.patch(
+        "compute_horde_validator.validator.synthetic_jobs.generator.current.synthetic_job_generator_factory",
+        LlmPromptsSyntheticJobGeneratorFactory(
+            uuids=job_uuids.copy(),
+            prompt_samples=prompt_samples.copy(),
+            prompts=prompts.copy(),
+            streaming=True,
+        ),
+    )
+    mocker.patch.object(llm_prompts, "STREAMING_PROCESSING_TIMEOUT", 1)
+    mocker.patch.object(llm_prompts, "STREAMING_PROCESSING_TIMEOUT_LEEWAY", 0.5)
+
+    miner_behaviours = [
+        MinerBehaviour(
+            transports[0],
+            job_uuids[0],
+            1,
+            miners[0].id,
+            prompts[0],
+            "all_good",
+            "all_good",
+            SyntheticJob.Status.COMPLETED,
+            MOCK_SCORE,
+        ),
+        MinerBehaviour(
+            transports[1],
+            job_uuids[1],
+            2,
+            miners[1].id,
+            prompts[1],
+            "up_until_executor_ready",
+            "not_called",
+            SyntheticJob.Status.FAILED,
+            0,
+            re.compile("timed out"),
+        ),
+        MinerBehaviour(
+            transports[2],
+            job_uuids[2],
+            3,
+            miners[2].id,
+            prompts[2],
+            "all_good",
+            "timeout",
+            SyntheticJob.Status.FAILED,
+            0,
+            re.compile("took too long: time_took_sec=.*"),
+        ),
+        MinerBehaviour(
+            transports[3],
+            job_uuids[3],
+            4,
+            miners[3].id,
+            prompts[3],
+            "all_good",
+            "malformed",
+            SyntheticJob.Status.FAILED,
+            0,
+            re.compile(
+                "Malformed response from https://127.0.0.1:8004/execute-job "
+                f"\(job_uuid={job_uuids[3]}\), "
+                "reason='list' object has no attribute 'values'"
+            ),
+        ),
+        MinerBehaviour(
+            transports[4],
+            job_uuids[4],
+            5,
+            miners[4].id,
+            prompts[4],
+            "all_good",
+            "wrong_hash",
+            SyntheticJob.Status.FAILED,
+            0,
+            re.compile(
+                "Response hash and downloaded file hash don't match: "
+                "self.response_hash='.*?', "
+                "self.downloaded_answers_hash='.*?'"
+            ),
+        ),
+        MinerBehaviour(
+            transports[5],
+            job_uuids[5],
+            6,
+            miners[5].id,
+            prompts[5],
+            "all_good",
+            "500",
+            SyntheticJob.Status.FAILED,
+            0,
+            re.compile(
+                f"Failed to execute streaming job {job_uuids[5]} on "
+                f"https://127.0.0.1:8006/execute-job: "
+                f"Server error '500 Internal Server Error' for url "
+                f"'https://127.0.0.1:8006/execute-job"
+            ),
+        ),
+        MinerBehaviour(
+            transports[6],
+            job_uuids[6],
+            7,
+            miners[6].id,
+            prompts[6],
+            "all_good",
+            "all_good",
+            SyntheticJob.Status.COMPLETED,
+            MOCK_SCORE,
+        ),
+        MinerBehaviour(
+            transports[7],
+            job_uuids[7],
+            8,
+            miners[7].id,
+            prompts[7],
+            "all_good",
+            "all_good",
+            SyntheticJob.Status.COMPLETED,
+            MOCK_SCORE,
+        ),
+    ]
+    for miner_behaviour in miner_behaviours:
+        job_uuid = miner_behaviour.job_uuid
+        transport = miner_behaviour.transport
+
+        # WS configuration
         await transport.add_message(streaming_manifest_message, send_before=1)
 
         accept_message = miner_requests.V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
@@ -252,12 +400,12 @@ async def test_some_streaming_succeed(
         ).model_dump_json()
         await transport.add_message(executor_ready_message, send_before=0)
 
-        if job_uuid != job_uuids[-1]:
+        if miner_behaviour.ws_messages_pattern == "all_good":
             streaming_ready_message = miner_requests.V0StreamingJobReadyRequest(
                 job_uuid=str(job_uuid),
                 public_key=ssl_public_key,
                 ip="127.0.0.1",
-                port=(port := port + 1),
+                port=miner_behaviour.get_streaming_port(),
             ).model_dump_json()
             await transport.add_message(streaming_ready_message, send_before=0)
 
@@ -266,6 +414,74 @@ async def test_some_streaming_succeed(
             ).model_dump_json()
 
             await transport.add_message(job_finish_message, send_before=2)
+        elif miner_behaviour.ws_messages_pattern == "up_until_executor_ready":
+            pass
+        else:
+            assert_never(miner_behaviour.ws_messages_pattern)
+        # end of WS configuration
+
+        # HTTP Streaming Server and S3 configuration
+
+        streaming_url = re.compile(f"https://127.0.0.1:{miner_behaviour.get_streaming_port()}.*")
+        s3_url = re.compile(f".*{generate_related_uuid(job_uuid)}\.json.*")
+
+        if miner_behaviour.http_message_pattern == "all_good":
+            httpx_mock.add_response(
+                201,
+                url=streaming_url,
+                content=json.dumps(
+                    {
+                        f"/some/prefix/{generate_related_uuid(job_uuid)}": hashlib.sha256(
+                            miner_behaviour.get_s3_file_contents()
+                        ).hexdigest()
+                    }
+                ).encode(),
+            )
+            httpx_mock.add_response(200, url=s3_url, content=miner_behaviour.get_s3_file_contents())
+
+        elif miner_behaviour.http_message_pattern == "timeout":
+
+            async def sleepy_request(*_):
+                await asyncio.sleep(2)
+                return httpx.Response(201)
+
+            httpx_mock.add_callback(sleepy_request, url=streaming_url)
+            httpx_mock.add_response(200, url=s3_url, content=miner_behaviour.get_s3_file_contents())
+
+        elif miner_behaviour.http_message_pattern == "malformed":
+            httpx_mock.add_response(201, url=streaming_url, content=json.dumps([]).encode())
+            httpx_mock.add_response(200, url=s3_url, content=miner_behaviour.get_s3_file_contents())
+
+        elif miner_behaviour.http_message_pattern == "wrong_hash":
+            httpx_mock.add_response(
+                201,
+                url=streaming_url,
+                content=json.dumps(
+                    {
+                        f"/some/prefix/{generate_related_uuid(job_uuid)}": hashlib.sha256(
+                            hashlib.sha256(miner_behaviour.get_s3_file_contents())
+                            .hexdigest()
+                            .encode()
+                        ).hexdigest()
+                    }
+                ).encode(),
+            )
+            httpx_mock.add_response(200, url=s3_url, content=miner_behaviour.get_s3_file_contents())
+
+        elif miner_behaviour.http_message_pattern == "500":
+            httpx_mock.add_response(
+                500,
+                url=streaming_url,
+            )
+            httpx_mock.add_response(200, url=s3_url, content=miner_behaviour.get_s3_file_contents())
+
+        elif miner_behaviour.http_message_pattern == "not_called":
+            pass
+
+        else:
+            assert_never(miner_behaviour.http_message_pattern)
+
+    # end of HTTP Streaming Server and S3 configuration
 
     batch = await SyntheticJobBatch.objects.acreate(
         block=1000,
@@ -282,19 +498,21 @@ async def test_some_streaming_succeed(
         timeout=10,
     )
 
-    for job_uuid, miner in zip(job_uuids, miners):
-        if job_uuid == job_uuids[-1]:
-            await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.FAILED, 0)
-        elif job_uuid == job_uuids[-2]:
-            await check_synthetic_job(
-                job_uuid,
-                miner.pk,
-                SyntheticJob.Status.FAILED,
-                0,
-                re.compile("took too long: time_took_sec=.*"),
-            )
-        else:
-            await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, MOCK_SCORE)
+    for miner_behaviour in miner_behaviours:
+        job_uuid = miner_behaviour.job_uuid
+        miner_id = miner_behaviour.miner_id
+        await check_synthetic_job(
+            job_uuid,
+            miner_id,
+            miner_behaviour.expected_job_status,
+            miner_behaviour.expected_job_score,
+            miner_behaviour.expect_job_comment,
+        )
+    assert prompt_samples
+    assert len(prompt_samples) == len(job_uuids)
+    for ps, job_uuid in zip(prompt_samples, job_uuids):
+        await ps.arefresh_from_db()
+        assert ps.synthetic_job_id == (await SyntheticJob.objects.aget(job_uuid=job_uuid)).id
 
 
 @pytest_asyncio.fixture
@@ -745,7 +963,7 @@ def _build_invalid_excuse_receipts(
 
     non_organic = good_payload.__replace__(is_organic=False)
     other_miner = good_payload.__replace__(
-        miner_hotkey=bittensor.Keypair.create_from_seed("7" * 64).ss58_address
+        miner_hotkey=bittensor.Keypair.create_from_seed(b"7" * 32).ss58_address
     )
     same_job = good_payload.__replace__(job_uuid=str(job))
     bad_executor_class = good_payload.__replace__(

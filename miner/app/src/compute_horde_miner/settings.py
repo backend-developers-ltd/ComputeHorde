@@ -373,6 +373,12 @@ LOGGING = {
             "level": "INFO",
             "propagate": True,
         },
+        # Fix spamming DEBUG-level logs in manage.py shell and shell_plus.
+        "parso": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
+        },
     },
 }
 
@@ -381,7 +387,7 @@ EXECUTOR_MANAGER_CLASS_PATH = env.str(
     default="compute_horde_miner.miner.executor_manager.v1:DockerExecutorManager",
 )
 EXECUTOR_IMAGE = env.str(
-    "EXECUTOR_IMAGE", default="backenddevelopersltd/compute-horde-executor:v0-latest"
+    "EXECUTOR_IMAGE", default="backenddevelopersltd/compute-horde-executor:v1-latest"
 )
 DEFAULT_EXECUTOR_CLASS = (
     env.str("DEFAULT_EXECUTOR_CLASS", None) or executor_class.DEFAULT_EXECUTOR_CLASS

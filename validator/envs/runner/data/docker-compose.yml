@@ -198,6 +198,8 @@ services:
       - redis
     links:
       - redis
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     logging:
       <<: *logging
 

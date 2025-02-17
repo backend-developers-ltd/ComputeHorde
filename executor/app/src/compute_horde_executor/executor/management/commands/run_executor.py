@@ -68,9 +68,9 @@ logger = logging.getLogger(__name__)
 
 CVE_2022_0492_TIMEOUT_SECONDS = 120
 CVE_2024_0132_TIMEOUT_SECONDS = 120
-MAX_RESULT_SIZE_IN_RESPONSE = 2000
-TRUNCATED_RESPONSE_PREFIX_LEN = 1000
-TRUNCATED_RESPONSE_SUFFIX_LEN = 1000
+MAX_RESULT_SIZE_IN_RESPONSE = 1_000_000  # 1 MB
+TRUNCATED_RESPONSE_PREFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
+TRUNCATED_RESPONSE_SUFFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 60 * 15
 CVE_2022_0492_IMAGE = (
     "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
@@ -466,6 +466,18 @@ class DownloadManager:
             raise JobError(f"Download failed after {self.max_retries} retries")
 
 
+def job_container_name(docker_objects_infix: str) -> str:
+    return f"ch-{docker_objects_infix}-job"
+
+
+def nginx_container_name(docker_objects_infix: str) -> str:
+    return f"ch-{docker_objects_infix}-nginx"
+
+
+def network_name(docker_objects_infix: str) -> str:
+    return f"ch-{docker_objects_infix}"
+
+
 class JobRunner:
     def __init__(self, initial_job_request: V0InitialJobRequest | V1InitialJobRequest):
         self.initial_job_request = initial_job_request
@@ -476,9 +488,9 @@ class JobRunner:
         self.specs_volume_mount_dir = self.temp_dir / "specs"
         self.download_manager = DownloadManager()
 
-        self.job_container_name = f"ch-{settings.EXECUTOR_TOKEN}-job"
-        self.nginx_container_name = f"ch-{settings.EXECUTOR_TOKEN}-nginx"
-        self.job_network_name = f"ch-{settings.EXECUTOR_TOKEN}-network"
+        self.job_container_name = job_container_name(settings.EXECUTOR_TOKEN)
+        self.nginx_container_name = nginx_container_name(settings.EXECUTOR_TOKEN)
+        self.job_network_name = network_name(settings.EXECUTOR_TOKEN)
         self.process: asyncio.subprocess.Process | None = None
         self.cmd: list[str] = []
 
@@ -495,12 +507,17 @@ class JobRunner:
     async def cleanup_potential_old_jobs(self):
         await (
             await asyncio.create_subprocess_shell(
-                "docker kill $(docker ps -q --filter 'name=ch-.*-job')"
+                f"docker kill $(docker ps -q --filter 'name={job_container_name('.*')}')"
             )
         ).communicate()
         await (
             await asyncio.create_subprocess_shell(
-                "docker kill $(docker ps -q --filter 'name=ch-.*-nginx')"
+                f"docker kill $(docker ps -q --filter 'name={nginx_container_name('.*')}')"
+            )
+        ).communicate()
+        await (
+            await asyncio.create_subprocess_shell(
+                f"docker network rm $(docker network ls -q --filter 'name={network_name('.*')}')"
             )
         ).communicate()
 
@@ -932,6 +949,7 @@ class Command(BaseCommand):
                 process.communicate(), CVE_2024_0132_TIMEOUT_SECONDS
             )
         except TimeoutError:
+            process.kill()
             logger.error("NVIDIA Container Toolkit Version for CVE-2024-0132 check timed out")
             return False
 
