@@ -10,6 +10,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V2JobRequest,
 )
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_validator.validator.dynamic_config import aget_config
@@ -40,6 +41,10 @@ class MinerIsBlacklisted(JobRoutingException):
 
 
 async def pick_miner_for_job_request(request: JobRequest) -> Miner:
+    if settings.DEBUG_MINER_KEY:
+        miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
+        return miner
+
     if isinstance(request, V0JobRequest | V1JobRequest):
         return await pick_miner_for_job_v0_v1(request)
 
