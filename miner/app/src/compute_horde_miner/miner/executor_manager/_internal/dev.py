@@ -6,6 +6,7 @@ import sys
 
 from django.conf import settings
 
+from compute_horde.executor_class import ExecutorClass
 from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
 )
@@ -50,7 +51,7 @@ class DevExecutorManager(BaseExecutorManager):
             pass
 
     async def get_manifest(self):
-        return {settings.DEFAULT_EXECUTOR_CLASS: 1}
+        return {ExecutorClass.always_on__llm__a6000: 1}
 
     async def get_executor_public_address(self, executor: str) -> str | None:
         return "127.0.0.1"

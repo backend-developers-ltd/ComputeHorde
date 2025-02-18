@@ -6,6 +6,7 @@ import subprocess
 from compute_horde.certificate import get_docker_container_ip
 from django.conf import settings
 
+from compute_horde.executor_class import ExecutorClass
 from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
     ExecutorUnavailable,
@@ -127,7 +128,7 @@ class DockerExecutorManager(BaseExecutorManager):
             pass
 
     async def get_manifest(self):
-        return {settings.DEFAULT_EXECUTOR_CLASS: 1}
+        return {ExecutorClass.always_on__llm__a6000: 1}
 
     async def is_active(self) -> bool:
         selected = await self.selector.active(

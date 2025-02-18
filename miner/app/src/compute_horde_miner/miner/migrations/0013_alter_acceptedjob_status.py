@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("miner", "0011_acceptedjob_executor_address"),
+        ("miner", "0012_acceptedjob_artifacts"),
     ]
 
     operations = [

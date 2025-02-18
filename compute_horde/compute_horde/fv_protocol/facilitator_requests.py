@@ -119,7 +119,7 @@ class SignedFields(BaseModel):
     executor_class: str
     docker_image: str
     raw_script: str
-    args: str
+    args: list[str]
     env: dict[str, str]
     use_gpu: bool
     artifacts_dir: str
@@ -198,7 +198,7 @@ class V2JobRequest(BaseModel, extra="forbid"):
             executor_class=self.executor_class,
             docker_image=self.docker_image,
             raw_script=self.raw_script,
-            args=" ".join(self.args),
+            args=self.args,
             env=self.env,
             use_gpu=self.use_gpu,
             artifacts_dir=self.artifacts_dir or "",

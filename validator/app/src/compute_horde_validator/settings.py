@@ -367,7 +367,7 @@ CONSTANCE_CONFIG = {
         "across all validators) and will receive 'DYNAMIC_BURN_PARTITION' fraction of all the burn.",
         float,
     ),
-    "DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS": {
+    "DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS": (
         int(timedelta(hours=4).total_seconds()),
         "Amount of time a miner will be temporarily blacklisted for after failing an organic job.",
         int,

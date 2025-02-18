@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("validator", "0050_alter_systemevent_subtype_alter_systemevent_type"),
+        ("validator", "0051_merge_20250217_1128"),
     ]
 
     operations = [

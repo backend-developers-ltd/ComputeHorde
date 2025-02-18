@@ -3,6 +3,8 @@ import random
 from datetime import timedelta
 from typing import assert_never
 
+from django.conf import settings
+
 from compute_horde.fv_protocol.facilitator_requests import (
     JobRequest,
     V0JobRequest,
@@ -55,6 +57,10 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     Returns a random miner that may have a non-busy executor based on known receipts.
     """
     executor_class = request.executor_class
+
+    if settings.DEBUG_MINER_KEY:
+        miner = (await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY))[0]
+        return miner
 
     manifests_qs = (
         MinerManifest.objects.select_related("miner")
