@@ -353,7 +353,11 @@ class FacilitatorClient:
     async def miner_driver(self, miner: Miner, job_request: JobRequest) -> OrganicJob:
         """drive a miner client from job start to completion, then close miner connection"""
 
-        if miner.hotkey == settings.DEBUG_MINER_KEY:
+        if (
+            miner.hotkey == settings.DEBUG_MINER_KEY
+            and settings.DEBUG_MINER_ADDRESS
+            and settings.DEBUG_MINER_PORT
+        ):
             miner_ip = settings.DEBUG_MINER_ADDRESS
             miner_port = settings.DEBUG_MINER_PORT
             ip_type = 4
