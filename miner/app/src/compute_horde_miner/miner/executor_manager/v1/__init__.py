@@ -8,6 +8,7 @@ from compute_horde_miner.miner.executor_manager._internal.base import (
     AllExecutorsBusy,
     BaseExecutorManager,
     ExecutorClassPool,
+    ExecutorReservationTimeout,
     ExecutorUnavailable,
     ReservedExecutor,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "MAX_EXECUTOR_TIMEOUT",
     "BaseExecutorManager",
     "ExecutorClassPool",
+    "ExecutorReservationTimeout",
     "ExecutorUnavailable",
     "AllExecutorsBusy",
     "ReservedExecutor",

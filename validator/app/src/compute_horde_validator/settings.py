@@ -305,14 +305,19 @@ CONSTANCE_CONFIG = {
         "Timeout for the run of an organic jobs in seconds",
         int,
     ),
-    "DYNAMIC_ORGANIC_JOB_WAIT_TIMEOUT": (
+    "DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT": (
+        10,
+        "Timeout for miner to accept or decline an organic job in seconds",
+        int,
+    ),
+    "DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT": (
         300,
-        "Timeout for preparing an organic job in seconds",
+        "Timeout for preparing an executor for an organic job in seconds",
         int,
     ),
     "DYNAMIC_ORGANIC_JOB_MAX_RETRIES": (
         3,
-        "Maximum retries for organic jobs",
+        "Maximum retries for organic jobs (Currently ignored)",
         int,
     ),
     "DYNAMIC_SYSTEM_EVENT_LIMITS": (
@@ -343,6 +348,11 @@ CONSTANCE_CONFIG = {
     "DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT": (
         300,
         "Timeout for waiting for a streaming job to be ready to accept connections from the user",
+        int,
+    ),
+    "DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS": (
+        int(timedelta(hours=4).total_seconds()),
+        "Amount of time a miner will be temporarily blacklisted for after failing an organic job.",
         int,
     ),
     "DYNAMIC_BURN_TARGET_SS58ADDRESSES": (

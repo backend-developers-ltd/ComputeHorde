@@ -40,6 +40,7 @@ class AcceptedJob(models.Model):
         RUNNING = "RUNNING"
         FINISHED = "FINISHED"
         FAILED = "FAILED"
+        REJECTED = "REJECTED"
 
     validator = models.ForeignKey(Validator, on_delete=models.CASCADE)
     job_uuid = models.UUIDField()

@@ -34,6 +34,7 @@ class MinerStubTransport(StubTransport):
 
 
 @pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
 async def test_run_organic_job__success(keypair):
     mock_transport = MinerStubTransport(
         "mock",
@@ -57,7 +58,9 @@ async def test_run_organic_job__success(keypair):
         transport=mock_transport,
     )
     job_details = OrganicJobDetails(job_uuid=JOB_UUID, docker_image="mock")
-    stdout, stderr, artifacts = await run_organic_job(client, job_details, wait_timeout=2)
+    stdout, stderr, artifacts = await run_organic_job(
+        client, job_details, executor_ready_timeout=2, initial_response_timeout=2
+    )
 
     assert stdout == "stdout"
     assert stderr == "stderr"

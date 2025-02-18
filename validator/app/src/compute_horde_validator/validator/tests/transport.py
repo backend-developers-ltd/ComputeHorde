@@ -1,8 +1,10 @@
 import asyncio
 import logging
 from collections import deque
+from collections.abc import Awaitable, Callable
 
 from compute_horde.miner_client.base import AbstractTransport
+from pydantic import BaseModel
 
 
 class SimulationTransport(AbstractTransport):
@@ -18,7 +20,9 @@ class SimulationTransport(AbstractTransport):
         self.received: list[str] = []
         self.sent: list[str] = []
         self.receive_at_counter: int = 0
-        self.to_receive: deque[tuple[int, float, str]] = deque()
+        self.to_receive: deque[
+            tuple[int, float, str, Callable[[], None | Awaitable[None]] | None]
+        ] = deque()
         self.receive_condition = asyncio.Condition()
         self.logger = logging.getLogger(f"transport.{name}")
 
@@ -34,9 +38,9 @@ class SimulationTransport(AbstractTransport):
         self.logger.debug(f"Sent message: {message}")
 
     async def receive(self) -> str:
-        try:
-            receive_at, sleep_before, message = self.to_receive.popleft()
-        except IndexError:
+        if len(self.to_receive):
+            receive_at, sleep_before, message, side_effect = self.to_receive.popleft()
+        else:
             self.logger.debug("No more messages to receive")
             await asyncio.Future()
 
@@ -48,16 +52,27 @@ class SimulationTransport(AbstractTransport):
         self.logger.debug(f"Received message: {message}")
         self.received.append(message)
 
+        if asyncio.iscoroutinefunction(side_effect):
+            await side_effect()
+        elif side_effect is not None:
+            side_effect()
+
         return message
 
     async def add_message(
-        self, message: str, send_before: int = 0, sleep_before: float = 0
+        self,
+        message: str | BaseModel,
+        send_before: int = 0,
+        sleep_before: float = 0,
+        side_effect: Callable[[], None | Awaitable[None]] | None = None,
     ) -> None:
         """
         Add a message to be received after a certain number of sent messages.
         Receives the message immediately if send_before is 0.
         Optionally sleep before receiving the message.
         """
+        if isinstance(message, BaseModel):
+            message = message.model_dump_json()
 
         self.receive_at_counter += send_before
-        self.to_receive.append((self.receive_at_counter, sleep_before, message))
+        self.to_receive.append((self.receive_at_counter, sleep_before, message, side_effect))

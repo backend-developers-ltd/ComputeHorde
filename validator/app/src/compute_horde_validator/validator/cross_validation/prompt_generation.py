@@ -66,7 +66,7 @@ async def generate_prompts(
     )
 
     try:
-        await run_organic_job(miner_client, job_details, wait_timeout=wait_timeout)
+        await run_organic_job(miner_client, job_details, executor_ready_timeout=wait_timeout)
     except Exception as e:
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_GENERATION,

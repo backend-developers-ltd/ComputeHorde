@@ -1,3 +1,4 @@
+import datetime
 from datetime import timedelta
 from typing import ClassVar, Self, TypeAlias, assert_never
 
@@ -41,11 +42,26 @@ class AbstractReceipt(models.Model):
         return f"job_uuid: {self.job_uuid}"
 
 
+class JobStartedReceiptQuerySet(models.QuerySet["JobStartedReceipt"]):
+    def valid_at(self, dt: datetime.datetime):
+        return self.annotate(
+            valid_until=models.ExpressionWrapper(
+                models.F("timestamp") + models.F("ttl") * timedelta(seconds=1),
+                output_field=models.DateTimeField(),
+            ),
+        ).filter(
+            timestamp__lte=dt,
+            valid_until__gte=dt,
+        )
+
+
 class JobStartedReceipt(AbstractReceipt):
     executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
     max_timeout = models.IntegerField()
     is_organic = models.BooleanField()
     ttl = models.IntegerField()
+
+    objects = JobStartedReceiptQuerySet.as_manager()  # type: ignore
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:
@@ -75,17 +91,27 @@ class JobStartedReceipt(AbstractReceipt):
                 f"Expected: {JobStartedReceiptPayload.__name__}"
             )
 
+        return cls.from_payload(
+            receipt.payload, receipt.validator_signature, receipt.miner_signature
+        )
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: JobStartedReceiptPayload,
+        validator_signature: str,
+        miner_signature: str | None = None,
+    ) -> "JobStartedReceipt":
         return JobStartedReceipt(
-            job_uuid=receipt.payload.job_uuid,
-            miner_hotkey=receipt.payload.miner_hotkey,
-            validator_hotkey=receipt.payload.validator_hotkey,
-            miner_signature=receipt.miner_signature,
-            validator_signature=receipt.validator_signature,
-            timestamp=receipt.payload.timestamp,
-            executor_class=receipt.payload.executor_class,
-            max_timeout=receipt.payload.max_timeout,
-            is_organic=receipt.payload.is_organic,
-            ttl=receipt.payload.ttl,
+            job_uuid=payload.job_uuid,
+            miner_hotkey=payload.miner_hotkey,
+            validator_signature=validator_signature,
+            miner_signature=miner_signature,
+            timestamp=payload.timestamp,
+            executor_class=payload.executor_class,
+            max_timeout=payload.max_timeout,
+            is_organic=payload.is_organic,
+            ttl=payload.ttl,
         )
 
 
@@ -119,15 +145,25 @@ class JobAcceptedReceipt(AbstractReceipt):
                 f"Expected: {JobAcceptedReceiptPayload.__name__}"
             )
 
+        return cls.from_payload(
+            receipt.payload, receipt.validator_signature, receipt.miner_signature
+        )
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: JobAcceptedReceiptPayload,
+        validator_signature: str,
+        miner_signature: str | None = None,
+    ) -> "JobAcceptedReceipt":
         return JobAcceptedReceipt(
-            job_uuid=receipt.payload.job_uuid,
-            miner_hotkey=receipt.payload.miner_hotkey,
-            validator_hotkey=receipt.payload.validator_hotkey,
-            miner_signature=receipt.miner_signature,
-            validator_signature=receipt.validator_signature,
-            timestamp=receipt.payload.timestamp,
-            time_accepted=receipt.payload.time_accepted,
-            ttl=receipt.payload.ttl,
+            job_uuid=payload.job_uuid,
+            miner_hotkey=payload.miner_hotkey,
+            validator_signature=validator_signature,
+            miner_signature=miner_signature,
+            timestamp=payload.timestamp,
+            time_accepted=payload.time_accepted,
+            ttl=payload.ttl,
         )
 
 
@@ -169,16 +205,26 @@ class JobFinishedReceipt(AbstractReceipt):
                 f"Expected: {JobFinishedReceiptPayload.__name__}"
             )
 
+        return cls.from_payload(
+            receipt.payload, receipt.validator_signature, receipt.miner_signature
+        )
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: JobFinishedReceiptPayload,
+        validator_signature: str,
+        miner_signature: str | None = None,
+    ) -> "JobFinishedReceipt":
         return JobFinishedReceipt(
-            job_uuid=receipt.payload.job_uuid,
-            miner_hotkey=receipt.payload.miner_hotkey,
-            validator_hotkey=receipt.payload.validator_hotkey,
-            miner_signature=receipt.miner_signature,
-            validator_signature=receipt.validator_signature,
-            timestamp=receipt.payload.timestamp,
-            time_started=receipt.payload.time_started,
-            time_took_us=receipt.payload.time_took_us,
-            score_str=receipt.payload.score_str,
+            job_uuid=payload.job_uuid,
+            miner_hotkey=payload.miner_hotkey,
+            validator_signature=validator_signature,
+            miner_signature=miner_signature,
+            timestamp=payload.timestamp,
+            time_started=payload.time_started,
+            time_took_us=payload.time_took_us,
+            score_str=payload.score_str,
         )
 
 

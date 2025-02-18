@@ -137,8 +137,14 @@ async def test_reject_as_busy_when_busy(job_uuid, validator_wallet, miner_wallet
         )
         await JobStartedReceipt.from_receipt(receipt).asave()
 
-    with patch.object(executor_manager, "reserve_executor_class") as reserve_executor_class:
+    with (
+        patch.object(executor_manager, "reserve_executor_class") as reserve_executor_class,
+        patch.object(
+            executor_manager, "wait_for_executor_reservation"
+        ) as wait_for_executor_reservation,
+    ):
         reserve_executor_class.side_effect = AllExecutorsBusy()
+        wait_for_executor_reservation.side_effect = AllExecutorsBusy()
 
         async with fake_validator(validator_wallet) as validator_channel:
             await _authenticate(

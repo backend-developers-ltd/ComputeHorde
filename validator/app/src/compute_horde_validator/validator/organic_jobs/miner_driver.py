@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Awaitable, Callable
 from functools import partial
-from typing import Literal
+from typing import Literal, assert_never
 
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.fv_protocol.facilitator_requests import JobRequest, V2JobRequest
@@ -11,10 +11,16 @@ from compute_horde.miner_client.organic import (
     OrganicJobError,
     run_organic_job,
 )
-from compute_horde.mv_protocol.miner_requests import V0AcceptJobRequest, V0JobFailedRequest
+from compute_horde.mv_protocol.miner_requests import (
+    V0AcceptJobRequest,
+    V0DeclineJobRequest,
+    V0JobFailedRequest,
+)
+from compute_horde.receipts.models import JobStartedReceipt
 from django.conf import settings
 from pydantic import BaseModel, JsonValue
 
+from compute_horde_validator.validator import job_excuses
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
     JobBase,
@@ -94,7 +100,8 @@ async def execute_organic_job(
     job: OrganicJob,
     job_request: JobRequest | AdminJobRequest,
     total_job_timeout: int = 300,
-    wait_timeout: int = 300,
+    initial_response_timeout: int = 3,
+    executor_ready_timeout: int = 300,
     notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] = _dummy_notify_callback,
 ) -> bool:
     """
@@ -126,7 +133,12 @@ async def execute_organic_job(
     )
 
     try:
-        stdout, stderr, artifacts = await run_organic_job(miner_client, job_details, wait_timeout)
+        stdout, stderr, artifacts = await run_organic_job(
+            miner_client,
+            job_details,
+            initial_response_timeout=initial_response_timeout,
+            executor_ready_timeout=executor_ready_timeout,
+        )
 
         comment = f"Miner {miner_client.miner_name} finished: {stdout=} {stderr=}"
         job.stdout = stdout
@@ -135,61 +147,124 @@ async def execute_organic_job(
         job.status = OrganicJob.Status.COMPLETED
         job.comment = comment
         await job.asave()
-
         logger.info(comment)
         await save_event(
             subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
         )
         await notify_callback(JobStatusUpdate.from_job(job, "completed", "V0JobFinishedRequest"))
         return True
+
     except OrganicJobError as exc:
         if exc.reason == FailureReason.MINER_CONNECTION_FAILED:
             comment = f"Miner connection error: {exc}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
-
             logger.warning(comment)
             await save_event(
                 subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR, long_description=comment
             )
             await notify_callback(JobStatusUpdate.from_job(job, status="failed"))
+
         elif exc.reason == FailureReason.INITIAL_RESPONSE_TIMED_OUT:
-            comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid} after {wait_timeout} seconds"
+            comment = f"Miner {miner_client.miner_name} timed out waiting for initial response {job.job_uuid} after {initial_response_timeout} seconds"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
-
             logger.warning(comment)
             await save_event(
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 long_description=comment,
             )
             await notify_callback(JobStatusUpdate.from_job(job, "failed"))
+
+        elif (
+            exc.reason == FailureReason.JOB_DECLINED
+            and isinstance(exc.received, V0DeclineJobRequest)
+            and exc.received.reason == V0DeclineJobRequest.Reason.BUSY
+        ):
+            # Check when the job was requested to validate excuses against that timestamp
+            job_request_time = (
+                await JobStartedReceipt.objects.aget(job_uuid=job.job_uuid)
+            ).timestamp
+            valid_excuses = await job_excuses.filter_valid_excuse_receipts(
+                receipts_to_check=exc.received.receipts or [],
+                check_time=job_request_time,
+                declined_job_uuid=str(job.job_uuid),
+                declined_job_executor_class=ExecutorClass(job.executor_class),
+                declined_job_is_synthetic=False,
+                miner_hotkey=job.miner.hotkey,
+            )
+            expected_executor_count = await job_excuses.get_expected_miner_executor_count(
+                check_time=job_request_time,
+                miner_hotkey=job.miner.hotkey,
+                executor_class=ExecutorClass(job.executor_class),
+            )
+            if len(valid_excuses) >= expected_executor_count:
+                comment = (
+                    f"Miner properly excused job {miner_client.miner_name}: {exc.received_str()}"
+                )
+                job.status = OrganicJob.Status.EXCUSED
+                job.comment = comment
+                await job.asave()
+                logger.info(comment)
+                await save_event(
+                    subtype=SystemEvent.EventSubType.JOB_EXCUSED,
+                    long_description=comment,
+                )
+                await notify_callback(JobStatusUpdate.from_job(job, "rejected"))
+            else:
+                comment = (
+                    f"Miner failed to excuse job {miner_client.miner_name}: {exc.received_str()}"
+                )
+                job.status = OrganicJob.Status.FAILED
+                job.comment = comment
+                await job.asave()
+                logger.info(comment)
+                await save_event(
+                    subtype=SystemEvent.EventSubType.JOB_REJECTED,
+                    long_description=comment,
+                )
+                await notify_callback(JobStatusUpdate.from_job(job, "rejected"))
+
         elif exc.reason == FailureReason.JOB_DECLINED:
-            comment = f"Miner {miner_client.miner_name} won't do job: {exc.received_str()}"
+            comment = f"Miner declined job {miner_client.miner_name}: {exc.received_str()}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
-
             logger.info(comment)
             await save_event(
                 subtype=SystemEvent.EventSubType.JOB_REJECTED,
                 long_description=comment,
             )
             await notify_callback(JobStatusUpdate.from_job(job, "rejected"))
+
         elif exc.reason == FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT:
-            comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid} after {wait_timeout} seconds"
+            comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid} after {executor_ready_timeout} seconds"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
-
             logger.warning(comment)
             await save_event(
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 long_description=comment,
             )
             await notify_callback(JobStatusUpdate.from_job(job, "failed"))
+
+        elif exc.reason == FailureReason.STREAMING_JOB_READY_TIMED_OUT:
+            comment = (
+                f"Streaming job {job.job_uuid} not ready after {executor_ready_timeout} seconds"
+            )
+            job.status = OrganicJob.Status.FAILED
+            job.comment = comment
+            await job.asave()
+            logger.warning(comment)
+            await save_event(
+                subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
+                long_description=comment,
+            )
+            await notify_callback(JobStatusUpdate.from_job(job, "failed"))
+
         elif exc.reason == FailureReason.EXECUTOR_FAILED:
             comment = (
                 f"Miner {miner_client.miner_name} failed to start executor: {exc.received_str()}"
@@ -197,24 +272,24 @@ async def execute_organic_job(
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
-
             logger.info(comment)
             await save_event(
                 subtype=SystemEvent.EventSubType.JOB_REJECTED,
                 long_description=comment,
             )
             await notify_callback(JobStatusUpdate.from_job(job, "failed"))
+
         elif exc.reason == FailureReason.FINAL_RESPONSE_TIMED_OUT:
             comment = f"Miner {miner_client.miner_name} timed out after {total_job_timeout} seconds"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
-
             logger.warning(comment)
             await save_event(
                 subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=comment
             )
             await notify_callback(JobStatusUpdate.from_job(job, "failed"))
+
         elif exc.reason == FailureReason.JOB_FAILED:
             comment = f"Miner {miner_client.miner_name} failed: {exc.received_str()}"
             if isinstance(exc.received, V0JobFailedRequest):
@@ -223,8 +298,10 @@ async def execute_organic_job(
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
-
             logger.info(comment)
             await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
             await notify_callback(JobStatusUpdate.from_job(job, "failed", "V0JobFailedRequest"))
+
+        else:
+            assert_never(exc.reason)
         return False
