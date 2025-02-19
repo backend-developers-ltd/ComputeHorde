@@ -73,6 +73,7 @@ MAX_RESULT_SIZE_IN_RESPONSE = 1_000_000  # 1 MB
 TRUNCATED_RESPONSE_PREFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 TRUNCATED_RESPONSE_SUFFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 MAX_ARTIFACT_SIZE = 1_000_000
+DOCKER_STOP_TIMEOUT_SECONDS = 15
 INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 60 * 15
 CVE_2022_0492_IMAGE = (
     "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
@@ -720,13 +721,13 @@ class JobRunner:
             # stop the associated nginx server
             try:
                 await asyncio.sleep(1)
-                await asyncio.create_subprocess_exec(
+                process = await asyncio.create_subprocess_exec(
                     "docker",
                     "stop",
                     self.nginx_container_name,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
                 )
+                await asyncio.wait_for(process.wait(), DOCKER_STOP_TIMEOUT_SECONDS)
+
             except Exception as e:
                 logger.error(f"Failed to stop Nginx: {e}")
 
