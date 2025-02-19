@@ -48,6 +48,16 @@ class Signature(BaseModel, extra="forbid"):
         return base64.b64encode(signature).decode("utf-8")
 
 
+class V0JobCheated(BaseModel, extra="forbid"):
+    """Message sent from facilitator to report cheated job"""
+
+    # this points to a `ValidatorConsumer.job_cheated` handler (fuck you django-channels!)
+    type: Literal["job.cheated"] = "job.cheated"
+    message_type: Literal["V0JobCheated"] = "V0JobCheated"
+
+    job_uuid: str
+
+
 class V0JobRequest(BaseModel, extra="forbid"):
     """Message sent from facilitator to validator to request a job execution"""
 
