@@ -15,6 +15,10 @@ class RequestType(enum.Enum):
     GenericError = "GenericError"
 
 
+class ErrorType(enum.StrEnum):
+    HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
+
+
 class BaseExecutorRequest(BaseRequest):
     message_type: RequestType
 
@@ -44,6 +48,8 @@ class V0FailedRequest(BaseExecutorRequest, JobMixin):
     timeout: bool
     docker_process_stdout: str  # TODO: add max_length
     docker_process_stderr: str  # TODO: add max_length
+    error_type: ErrorType | None = None
+    error_detail: str | None = None
 
 
 class V0MachineSpecsRequest(BaseExecutorRequest, JobMixin):
