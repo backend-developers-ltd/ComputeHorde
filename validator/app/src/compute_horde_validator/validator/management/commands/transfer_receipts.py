@@ -119,11 +119,10 @@ class Command(BaseCommand):
         else:
             # 3rd, if no specific miners were specified, get from metagraph.
             logger.info("Will fetch receipts from metagraph miners")
+            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
 
             async def miners():
-                metagraph = bittensor.metagraph(
-                    netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK
-                )
+                metagraph = subtensor.metagraph(netuid=settings.BITTENSOR_NETUID)
                 return [
                     (
                         cast(str, neuron.hotkey),

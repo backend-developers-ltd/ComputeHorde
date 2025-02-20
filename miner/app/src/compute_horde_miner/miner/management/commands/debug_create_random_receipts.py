@@ -97,11 +97,15 @@ class Command(BaseCommand):
 
     @cached_property
     def miner_keys(self) -> bittensor.Keypair:
-        return bittensor.Keypair.create_from_seed("2" * 64)
+        return bittensor.Keypair.create_from_mnemonic(
+            "gallery steel bronze gap miracle ivory broken vote assist twice tourist depart"
+        )
 
     @cached_property
     def validator_keys(self) -> bittensor.Keypair:
-        return bittensor.Keypair.create_from_seed("1" * 64)
+        return bittensor.Keypair.create_from_mnemonic(
+            "cupboard girl nature rack project syrup crunch home empty abstract test craft"
+        )
 
 
 def _generate_job_accepted_receipt(
