@@ -395,11 +395,18 @@ class FacilitatorClient:
             miner_ip = settings.DEBUG_MINER_ADDRESS
             miner_port = settings.DEBUG_MINER_PORT
             ip_type = 4
+            on_trusted_miner = False
+        elif miner.hotkey == "TRUSTED_MINER":
+            miner_ip = settings.TRUSTED_MINER_ADDRESS
+            miner_port = settings.TRUSTED_MINER_PORT
+            ip_type = 4
+            on_trusted_miner = True
         else:
             miner_axon_info = await self.get_miner_axon_info(miner.hotkey)
             miner_ip = miner_axon_info.ip
             miner_port = miner_axon_info.port
             ip_type = miner_axon_info.ip_type
+            on_trusted_miner = False
 
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
@@ -410,6 +417,7 @@ class FacilitatorClient:
             executor_class=job_request.executor_class,
             job_description="User job from facilitator",
             block=await self.get_current_block(),
+            on_trusted_miner=on_trusted_miner,
         )
 
         miner_client = self.MINER_CLIENT_CLASS(
