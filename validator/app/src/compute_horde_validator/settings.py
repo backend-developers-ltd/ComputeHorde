@@ -325,6 +325,11 @@ CONSTANCE_CONFIG = {
         "Maximum retries for organic jobs (Currently ignored)",
         int,
     ),
+    "DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS": (
+        True,
+        "Disable system events for organic jobs run on trusted miner",
+        bool,
+    ),
     "DYNAMIC_SYSTEM_EVENT_LIMITS": (
         "MINER_SYNTHETIC_JOB_FAILURE,LLM_PROMPT_ANSWERS_MISSING,10",
         "Limits of system events produced for each type-subtype pairs in a synthetic job run. Format: TYPE1,SUBTYPE1,100;TYPE2,SUBTYPE2,200",
