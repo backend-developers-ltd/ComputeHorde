@@ -155,6 +155,11 @@ CONSTANCE_CONFIG = {
         "Penalty multiplier for non-peak cycle when a miner does not maintain the DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO",
         float,
     ),
+    "DYNAMIC_DEFAULT_EXECUTOR_LIMITS_FOR_MISSED_PEAK": (
+        "always_on.llm.a6000=2",
+        "The limits of executors per class per miner, if the miner or this validator missed the peak batch",
+        str,
+    ),
     "DYNAMIC_SYNTHETIC_JOBS_FLOW_VERSION": (
         1,
         "The synthetic jobs flow version",
