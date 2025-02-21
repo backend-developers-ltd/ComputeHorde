@@ -19,6 +19,7 @@ from compute_horde_validator.validator.models import (
     MinerBlacklist,
     MinerManifest,
     OrganicJob,
+    SystemEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,18 +133,39 @@ async def report_miner_failed_job(job: OrganicJob):
         return
 
     blacklist_time = await aget_config("DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS")
-    blacklist_until = timezone.now() + timedelta(seconds=blacklist_time)
+    await blacklist_miner(job, MinerBlacklist.BlacklistReason.JOB_FAILED, blacklist_time)
 
-    logger.info(
+
+async def blacklist_miner(
+    job: OrganicJob, reason: MinerBlacklist.BlacklistReason, blacklist_time: int
+):
+    now = timezone.now()
+    blacklist_until = now + timedelta(seconds=blacklist_time)
+
+    msg = (
         f"Blacklisting miner {job.miner.hotkey} "
         f"until {blacklist_until.isoformat()} "
         f"for failed job {job.job_uuid} "
         f"({job.comment})"
     )
+    logger.info(msg)
 
     await MinerBlacklist.objects.acreate(
         miner=job.miner,
         expires_at=blacklist_until,
-        reason=MinerBlacklist.BlacklistReason.JOB_FAILED,
+        reason=reason,
         reason_details=job.comment,
+    )
+
+    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+        type=SystemEvent.EventType.MINER_ORGANIC_JOB_INFO,
+        subtype=SystemEvent.EventSubType.MINER_BLACKLISTED,
+        long_description=msg,
+        data={
+            "job_uuid": job.job_uuid,
+            "miner_hotkey": job.miner.hotkey,
+            "reason": reason,
+            "start_ts": now.isoformat(),
+            "end_ts": blacklist_until.isoformat(),
+        },
     )
