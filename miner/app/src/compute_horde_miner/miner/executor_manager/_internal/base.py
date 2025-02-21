@@ -13,6 +13,10 @@ from compute_horde.executor_class import (
 )
 from django.conf import settings
 
+from compute_horde_miner.miner.executor_manager._internal.selector import (
+    HistoricalRandomMinerSelector,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -145,6 +149,10 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
     def __init__(self):
         self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
 
+        self.selector = HistoricalRandomMinerSelector(
+            settings.CLUSTER_SECRET,
+        )
+
     @abc.abstractmethod
     async def start_new_executor(self, token, executor_class, timeout):
         """Start spinning up an executor with `token` for given executor_class or raise ExecutorUnavailable if at capacity
@@ -169,10 +177,6 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
 
         Keys are executor class ids and values are number of supported executors for given executor class.
         """
-
-    async def is_active(self) -> bool:
-        """Check if the Miner is an active one for configured Cluster"""
-        return True
 
     async def get_executor_public_address(self, executor: Any) -> str | None:
         """To be given to clients to connect to streaming jobs"""
@@ -213,6 +217,15 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         spec = EXECUTOR_CLASS.get(executor_class)
         spin_up_time = spec.spin_up_time if spec else 0
         return spin_up_time + job_timeout + self.EXECUTOR_TIMEOUT_LEEWAY
+
+    async def is_active(self) -> bool:
+        """Check if the Miner is an active one for configured Cluster"""
+        selected = await self.selector.active(
+            settings.CLUSTER_HOTKEYS,
+        )
+        my_address = settings.BITTENSOR_WALLET().hotkey.ss58_address  # type: str
+
+        return selected == my_address
 
     @sync_to_async(thread_sensitive=False)
     def is_peak(self) -> bool:
