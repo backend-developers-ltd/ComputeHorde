@@ -6,5 +6,5 @@ CMD cat /volume/payload.txt && \
     mkdir -p /artifacts && \
     touch /artifacts/empty.bin && \
     echo 'I am LLM, your AI assistant' > /artifacts/text.txt && \
-    printf '%b' $(seq 1 255 | awk '{printf "\\x%02X", $1}') > /artifacts/All-BYTES.bin && \
-    dd if=/dev/zero bs=1 count=100000 of='/artifacts/100k of a' 2>/dev/null
+    printf '%b' $(seq 0 255 | awk '{printf "\\x%02X", $1}') > /artifacts/All-BYTES.bin && \
+    dd if=/dev/zero bs=1 count=100000 of='/artifacts/100k zeros' 2>/dev/null
