@@ -178,7 +178,7 @@ def test_signed_fields__volumes_uploads():
         "random_field": "to_ignore",
         "executor_class": str(ExecutorClass.always_on__llm__a6000),
         "docker_image": "backenddevelopersltd/latest",
-        "args": "--device cuda --batch_size 1 --model_ids Deeptensorlab",
+        "args": ["--device", "cuda", "--batch_size", "1", "--model_ids", "Deeptensorlab"],
         "env": {"f": "test"},
         "use_gpu": True,
         "input_url": "",
