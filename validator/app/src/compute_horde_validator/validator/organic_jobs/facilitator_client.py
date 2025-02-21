@@ -13,6 +13,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     Error,
     JobRequest,
     Response,
+    V0JobCheated,
     V2JobRequest,
 )
 from compute_horde.fv_protocol.validator_requests import (
@@ -31,6 +32,7 @@ from compute_horde_validator.validator.metagraph_client import (
 )
 from compute_horde_validator.validator.models import (
     Miner,
+    MinerBlacklist,
     OrganicJob,
     SystemEvent,
     ValidatorWhitelist,
@@ -271,10 +273,41 @@ class FacilitatorClient:
             await self.miner_drivers.put(task)
             return
 
+        try:
+            cheated_job_report = pydantic.TypeAdapter(V0JobCheated).validate_json(raw_msg)
+        except pydantic.ValidationError as exc:
+            logger.debug("could not parse raw message as V0JobCheated: %s", exc)
+        else:
+            await self.report_miner_cheated_job(cheated_job_report.job_uuid)
+            return
+
         logger.error("unsupported message received from facilitator: %s", raw_msg)
 
     async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
         return await get_miner_axon_info(hotkey)
+
+    async def report_miner_cheated_job(self, job_uuid: str):
+        job = await OrganicJob.objects.aget(job_uuid=job_uuid)
+        if job is None:
+            logger.error(f"Job {job_uuid} reported for cheating does not exist")
+            return
+
+        job.cheated = True
+        await job.asave()
+
+        blacklist_time = await aget_config("DYNAMIC_JOB_CHEATED_BLACKLIST_TIME_SECONDS")
+        await routing.blacklist_miner(
+            job, MinerBlacklist.BlacklistReason.JOB_FAILED, blacklist_time
+        )
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
+            subtype=SystemEvent.EventSubType.JOB_CHEATED,
+            long_description="Job was reported as cheated",
+            data={
+                "job_uuid": job.job_uuid,
+                "miner_hotkey": job.miner.hotkey,
+            },
+        )
 
     async def process_job_request(self, job_request: JobRequest):
         # max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
