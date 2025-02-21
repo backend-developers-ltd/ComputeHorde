@@ -590,9 +590,9 @@ def test_set_scores__set_weight__commit(
         assert from_db.block == current_block
         assert from_db.revealed_at is None
 
-        assert (
-            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
-        ), SystemEvent.objects.all()
+        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2, (
+            SystemEvent.objects.all()
+        )
         check_system_events(
             SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
             SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,

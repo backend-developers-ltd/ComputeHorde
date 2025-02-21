@@ -1,5 +1,6 @@
 import pytest
 from compute_horde import mv_protocol
+from compute_horde.fv_protocol import facilitator_requests
 from compute_horde.mv_protocol import miner_requests
 
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
@@ -198,4 +199,50 @@ async def test_miner_is_blacklisted__after_failing_job(
 
     assert accepted_status_msg.status == "accepted"
     assert failed_status_msg.status == "failed"
+    assert rejected_status_msg.status == "rejected"
+
+
+async def test_miner_is_blacklisted__after_job_reported_cheated(
+    job_request,
+    another_job_request,
+    faci_transport,
+    miner_transport,
+    execute_scenario,
+):
+    await faci_transport.add_message(job_request, send_before=0)
+
+    accept_job_msg = miner_requests.V0AcceptJobRequest(job_uuid=job_request.uuid)
+    await miner_transport.add_message(accept_job_msg, send_before=1)
+
+    executor_ready_msg = miner_requests.V0ExecutorReadyRequest(job_uuid=job_request.uuid)
+    await miner_transport.add_message(executor_ready_msg, send_before=1)
+
+    completed_job_msg = mv_protocol.miner_requests.V0JobFinishedRequest(
+        job_uuid=job_request.uuid,
+        docker_process_stdout="stdout",
+        docker_process_stderr="stderr",
+    )
+    await miner_transport.add_message(completed_job_msg, send_before=2)
+
+    # report previous job as cheated
+    await faci_transport.add_message(
+        facilitator_requests.V0JobCheated(job_uuid=job_request.uuid),
+        send_before=2,  # job status=accepted, job status=failed
+        sleep_before=0.2,  # needed to ensure validator finishes the job flow
+    )
+
+    await faci_transport.add_message(
+        another_job_request,
+        send_before=3,  # job status=accepted, job status=failed
+        sleep_before=0.2,  # needed to ensure validator finishes the job flow
+    )
+
+    await execute_scenario(until=lambda: len(faci_transport.sent) >= 5, timeout_seconds=3)
+
+    accepted_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[1])
+    finished_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[2])
+    rejected_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[3])
+
+    assert accepted_status_msg.status == "accepted"
+    assert finished_status_msg.status == "completed"
     assert rejected_status_msg.status == "rejected"
