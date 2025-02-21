@@ -1227,7 +1227,7 @@ def test_artifacts():
         with open(self.artifacts_mount_dir / "space", "wb") as f:
             f.write(b" ")
 
-        with open(self.artifacts_mount_dir / "text.txt", "wb") as f:
+        with open(self.artifacts_mount_dir / "small.txt", "wb") as f:
             f.write(b"artifact 2\nsecond line\nx=1,y=2\n")
 
         with open(self.artifacts_mount_dir / "data.json", "wb") as f:
@@ -1276,6 +1276,8 @@ def test_artifacts():
         # Act
         command.handle()
 
+    all_bytes = b"".join(bytes([i]) for i in range(256))
+
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
@@ -1290,15 +1292,20 @@ def test_artifacts():
         {
             "message_type": "V0FinishedRequest",
             "docker_process_stdout": payload,
-            "docker_process_stderr": mock.ANY,
+            "docker_process_stderr": "",
             "artifacts": {
                 "/artifacts/empty": "",
                 "/artifacts/space": "IA==",
-                "/artifacts/text.txt": "YXJ0aWZhY3QgMgpzZWNvbmQgbGluZQp4PTEseT0yCg==",
+                "/artifacts/small.txt": "YXJ0aWZhY3QgMgpzZWNvbmQgbGluZQp4PTEseT0yCg==",
                 "/artifacts/data.json": "eyJhIjogMSwgYjogWzIsIDNdfQ==",
                 "/artifacts/large artifact.bin": base64.b64encode(b"x" * 999_000).decode(),
                 # very large artifact is not included
                 # "/artifacts/very-large.bin"
+                # the following are written by the compute-horde-job-echo image:
+                "/artifacts/empty.bin": "",
+                "/artifacts/All-BYTES.bin": base64.b64encode(all_bytes).decode(),
+                "/artifacts/text.txt": "SSBhbSBMTE0sIHlvdXIgQUkgYXNzaXN0YW50Cg==",
+                "/artifacts/100k zeros": base64.b64encode(b"\x00" * 100_000).decode(),
             },
             "job_uuid": job_uuid,
         },
