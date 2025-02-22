@@ -141,17 +141,17 @@ async def blacklist_miner(
 ):
     now = timezone.now()
     blacklist_until = now + timedelta(seconds=blacklist_time)
+    miner = await Miner.objects.aget(id=job.miner_id)
 
     msg = (
-        f"Blacklisting miner {job.miner.hotkey} "
+        f"Blacklisting miner {miner.hotkey} "
         f"until {blacklist_until.isoformat()} "
         f"for failed job {job.job_uuid} "
         f"({job.comment})"
     )
-    logger.info(msg)
 
     await MinerBlacklist.objects.acreate(
-        miner=job.miner,
+        miner=miner,
         expires_at=blacklist_until,
         reason=reason,
         reason_details=job.comment,
@@ -162,8 +162,8 @@ async def blacklist_miner(
         subtype=SystemEvent.EventSubType.MINER_BLACKLISTED,
         long_description=msg,
         data={
-            "job_uuid": job.job_uuid,
-            "miner_hotkey": job.miner.hotkey,
+            "job_uuid": str(job.job_uuid),
+            "miner_hotkey": miner.hotkey,
             "reason": reason,
             "start_ts": now.isoformat(),
             "end_ts": blacklist_until.isoformat(),

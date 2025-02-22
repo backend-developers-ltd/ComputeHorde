@@ -287,7 +287,7 @@ class FacilitatorClient:
         return await get_miner_axon_info(hotkey)
 
     async def report_miner_cheated_job(self, job_uuid: str):
-        job = await OrganicJob.objects.aget(job_uuid=job_uuid)
+        job = await OrganicJob.objects.prefetch_related("miner").aget(job_uuid=job_uuid)
         if job is None:
             logger.error(f"Job {job_uuid} reported for cheating does not exist")
             return
@@ -304,7 +304,7 @@ class FacilitatorClient:
             subtype=SystemEvent.EventSubType.JOB_CHEATED,
             long_description="Job was reported as cheated",
             data={
-                "job_uuid": job.job_uuid,
+                "job_uuid": str(job.job_uuid),
                 "miner_hotkey": job.miner.hotkey,
             },
         )
