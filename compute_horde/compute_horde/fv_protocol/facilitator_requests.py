@@ -1,5 +1,6 @@
 import base64
 import typing
+from enum import Enum
 from typing import Annotated, Literal, Self
 
 import pydantic
@@ -29,6 +30,11 @@ class Response(BaseModel, extra="forbid"):
     errors: list[Error] = []
 
 
+class SignatureScope(Enum):
+    SignedFields = "SignedFields"
+    FullRequest = "FullRequest"
+
+
 class Signature(BaseModel, extra="forbid"):
     # has defaults to allow easy instantiation
     signature_type: str = ""
@@ -37,6 +43,7 @@ class Signature(BaseModel, extra="forbid"):
     )
     timestamp_ns: int = 0  # UNIX timestamp in nanoseconds
     signature: bytes
+    signature_scope: SignatureScope = SignatureScope.SignedFields
 
     @field_validator("signature")
     @classmethod
