@@ -4,6 +4,7 @@ from compute_horde.fv_protocol import facilitator_requests
 from compute_horde.mv_protocol import miner_requests
 
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
+from compute_horde_validator.validator.tests.helpers import patch_constance
 
 # NOTE: In case this test is taking unreasonable amount of time before timing out:
 # Something during the job flow is causing the execute_scenario timeout to be ignored.
@@ -202,6 +203,7 @@ async def test_miner_is_blacklisted__after_failing_job(
     assert rejected_status_msg.status == "rejected"
 
 
+@patch_constance({"DYNAMIC_JOB_CHEATED_BLACKLIST_TIME_SECONDS": 5})
 async def test_miner_is_blacklisted__after_job_reported_cheated(
     job_request,
     another_job_request,
@@ -233,11 +235,10 @@ async def test_miner_is_blacklisted__after_job_reported_cheated(
 
     await faci_transport.add_message(
         another_job_request,
-        send_before=3,  # job status=accepted, job status=failed
-        sleep_before=0.2,  # needed to ensure validator finishes the job flow
+        send_before=0,
     )
 
-    await execute_scenario(until=lambda: len(faci_transport.sent) >= 5, timeout_seconds=3)
+    await execute_scenario(until=lambda: len(faci_transport.sent) >= 6, timeout_seconds=3)
 
     accepted_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[1])
     finished_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[2])
