@@ -364,10 +364,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         )
 
         try:
-            # First, wait for a second for the manager to confirm an executor will be available
-            # so that we can accept the job. This should not take longer than that, the validator
-            # is only waiting for a couple of seconds for this, and the asyncio loop may be busy
-            # with other things - so this must return very fast.
+            # First, wait for short time for the manager to confirm an executor will be available
+            # so that we can accept the job. This should not take long: the validator is only
+            # waiting for a couple of seconds for this, and the asyncio loop may be busy with other
+            # things - so this must return very fast.
             await current.executor_manager.wait_for_executor_reservation(
                 executor_token,
                 msg.executor_class,
