@@ -13,7 +13,7 @@ from typing import ClassVar, Protocol
 from class_registry import ClassRegistry, RegistryKeyError
 from pydantic import JsonValue
 
-from compute_horde.fv_protocol.facilitator_requests import Signature
+from compute_horde.fv_protocol.facilitator_requests import Signature, SignatureScope
 
 if typing.TYPE_CHECKING:
     import bittensor
@@ -63,6 +63,9 @@ def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Si
             signatory=headers[f"{prefix}Signatory"],
             timestamp_ns=int(headers[f"{prefix}Timestamp-NS"]),
             signature=headers[f"{prefix}Signature"].encode("utf-8"),
+            signature_scope=SignatureScope(
+                headers.get(f"{prefix}Signature-Scope", SignatureScope.SignedFields.name)
+            ),
         )
     except (
         KeyError,
@@ -108,7 +111,9 @@ def verify_request(
     return signature
 
 
-def signature_to_headers(signature: Signature, prefix: str = "X-CH-") -> dict[str, str]:
+def signature_to_headers(
+    signature: Signature, scope: SignatureScope, prefix: str = "X-CH-"
+) -> dict[str, str]:
     """
     Converts the signature to headers
 
@@ -120,6 +125,7 @@ def signature_to_headers(signature: Signature, prefix: str = "X-CH-") -> dict[st
         f"{prefix}Signatory": signature.signatory,
         f"{prefix}Timestamp-NS": str(signature.timestamp_ns),
         f"{prefix}Signature": base64.b64encode(signature.signature).decode("utf-8"),
+        f"{prefix}Signature-Scope": scope.name,
     }
 
 

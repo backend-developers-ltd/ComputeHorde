@@ -75,7 +75,8 @@ def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
     limit = config.DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT
 
     for job in jobs:
-        batch_scores[job.miner.hotkey] += score
+        if job.cheated is False:
+            batch_scores[job.miner.hotkey] += score
 
     if limit >= 0:
         for hotkey, score in batch_scores.items():
