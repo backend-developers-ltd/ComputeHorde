@@ -18,6 +18,7 @@ from django.conf import settings
 from django.db.models import DateTimeField, ExpressionWrapper, F
 from django.utils import timezone
 
+from compute_horde_miner.miner.dynamic_config import aget_config
 from compute_horde_miner.miner.executor_manager import current
 from compute_horde_miner.miner.executor_manager.base import (
     AllExecutorsBusy,
@@ -358,6 +359,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 executor_token, msg.executor_class, msg.timeout_seconds
             ),
         )
+        executor_reservation_timeout_seconds = await aget_config(
+            "DYNAMIC_EXECUTOR_RESERVATION_TIMEOUT_SECONDS"
+        )
 
         try:
             # First, wait for a second for the manager to confirm an executor will be available
@@ -365,7 +369,9 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             # is only waiting for a couple of seconds for this, and the asyncio loop may be busy
             # with other things - so this must return very fast.
             await current.executor_manager.wait_for_executor_reservation(
-                executor_token, msg.executor_class, timeout=1
+                executor_token,
+                msg.executor_class,
+                timeout=executor_reservation_timeout_seconds,
             )
 
             # If there is no executor, the above future throws an appropriate exception so we will
@@ -431,7 +437,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job.status = AcceptedJob.Status.FAILED
             await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
-            logger.info(f"Declining job {msg.job_uuid}: executor reservation timed out")
+            logger.info(
+                f"Declining job {msg.job_uuid}: executor reservation timed out after "
+                f"{executor_reservation_timeout_seconds} seconds"
+            )
             await self.send(
                 miner_requests.V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
