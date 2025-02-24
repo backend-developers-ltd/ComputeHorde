@@ -7,7 +7,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
-from compute_horde.em_protocol.executor_requests import ErrorType
+from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.mv_protocol import validator_requests
 from compute_horde.utils import MachineSpecs
 from pydantic import model_validator
@@ -72,7 +72,7 @@ class ExecutorFailed(pydantic.BaseModel):
     docker_process_exit_status: int | None = None
     docker_process_stdout: str
     docker_process_stderr: str
-    error_type: ErrorType | None = None
+    error_type: JobErrorType | None = None
     error_detail: str | None = None
 
 
@@ -286,7 +286,7 @@ class ExecutorInterfaceMixin(BaseMixin):
         stdout: str,
         stderr: str,
         exit_status: int | None,
-        error_type: ErrorType | None = None,
+        error_type: JobErrorType | None = None,
         error_detail: str | None = None,
     ):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)

@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import httpx
 from compute_horde.certificate import generate_certificate_at
-from compute_horde.em_protocol.executor_requests import ErrorType
+from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.transport import StubTransport
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
@@ -375,7 +375,7 @@ def test_huggingface_volume_failure():
             "docker_process_exit_status": None,
             "docker_process_stdout": "Failed to download model from Hugging Face: Download failed",
             "docker_process_stderr": "",
-            "error_type": ErrorType.HUGGINGFACE_DOWNLOAD.value,
+            "error_type": JobErrorType.HUGGINGFACE_DOWNLOAD.value,
             "error_detail": "Download failed",
             "timeout": False,
             "job_uuid": job_uuid,

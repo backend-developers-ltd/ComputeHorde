@@ -6,7 +6,7 @@ import pydantic
 from compute_horde.receipts import Receipt
 
 from ..base_requests import BaseRequest, JobMixin
-from ..em_protocol.executor_requests import ErrorType
+from ..em_protocol.executor_requests import JobErrorType
 from ..executor_class import ExecutorClass
 from ..utils import MachineSpecs
 
@@ -86,7 +86,7 @@ class V0JobFailedRequest(BaseMinerRequest, JobMixin):
     docker_process_exit_status: int | None = None
     docker_process_stdout: str  # TODO: add max_length
     docker_process_stderr: str  # TODO: add max_length
-    error_type: ErrorType | None = None
+    error_type: JobErrorType | None = None
     error_detail: str | None = None
 
 

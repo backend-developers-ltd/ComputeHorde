@@ -38,8 +38,8 @@ from compute_horde.certificate import (
 )
 from compute_horde.em_protocol import executor_requests, miner_requests
 from compute_horde.em_protocol.executor_requests import (
-    ErrorType,
     GenericError,
+    JobErrorType,
     V0FailedRequest,
     V0FailedToPrepare,
     V0FinishedRequest,
@@ -285,7 +285,7 @@ class JobResult(pydantic.BaseModel):
     stderr: str
     artifacts: dict[str, str]
     specs: MachineSpecs | None = None
-    error_type: ErrorType | None = None
+    error_type: JobErrorType | None = None
     error_detail: str | None = None
 
 
@@ -390,7 +390,10 @@ def get_machine_specs() -> MachineSpecs:
 
 class JobError(Exception):
     def __init__(
-        self, description: str, error_type: ErrorType | None = None, error_detail: str | None = None
+        self,
+        description: str,
+        error_type: JobErrorType | None = None,
+        error_detail: str | None = None,
     ):
         self.description = description
         self.error_type = error_type
@@ -423,7 +426,7 @@ class DownloadManager:
             logger.error(f"Failed to download model from Hugging Face: {e}")
             raise JobError(
                 f"Failed to download model from Hugging Face: {e}",
-                ErrorType.HUGGINGFACE_DOWNLOAD,
+                JobErrorType.HUGGINGFACE_DOWNLOAD,
                 str(e),
             ) from e
 

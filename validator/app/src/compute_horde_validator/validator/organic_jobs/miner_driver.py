@@ -3,7 +3,7 @@ from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Literal, assert_never
 
-from compute_horde.em_protocol.executor_requests import ErrorType
+from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.fv_protocol.facilitator_requests import JobRequest, V2JobRequest
 from compute_horde.miner_client.organic import (
@@ -300,7 +300,7 @@ async def execute_organic_job(
                 job.error_type = exc.received.error_type
                 job.error_detail = exc.received.error_detail
                 match exc.received.error_type:
-                    case ErrorType.HUGGINGFACE_DOWNLOAD:
+                    case JobErrorType.HUGGINGFACE_DOWNLOAD:
                         subtype = SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_HUGGINGFACE
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
