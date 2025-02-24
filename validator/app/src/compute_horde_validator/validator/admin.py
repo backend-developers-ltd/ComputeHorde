@@ -158,10 +158,23 @@ class ValidatorWhitelistAdmin(admin.ModelAdmin):
     ]
 
 
+class MinerBlacklistAdmin(admin.ModelAdmin):
+    list_display = ["miner_hotkey", "reason", "expires_at"]
+    list_filter = ["reason"]
+    ordering = ["-expires_at"]
+    search_fields = ["miner__hotkey", "reason_details"]
+
+    def miner_hotkey(self, obj):
+        return obj.miner.hotkey
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("miner")
+
+
 admin.site.register(Miner, admin_class=MinerReadOnlyAdmin)
 admin.site.register(SyntheticJob, admin_class=JobReadOnlyAdmin)
 admin.site.register(OrganicJob, admin_class=JobReadOnlyAdmin)
-admin.site.register(MinerBlacklist)
+admin.site.register(MinerBlacklist, admin_class=MinerBlacklistAdmin)
 admin.site.register(AdminJobRequest, admin_class=AdminJobRequestAddOnlyAdmin)
 admin.site.register(SystemEvent, admin_class=SystemEventAdmin)
 admin.site.register(Weights, admin_class=WeightsReadOnlyAdmin)
