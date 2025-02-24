@@ -96,6 +96,7 @@ def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
         block__gte=batch.cycle.start,
         block__lt=batch.cycle.stop,
         status=OrganicJob.Status.COMPLETED,
+        on_trusted_miner=False,
     )
     executor_class_organic_jobs = defaultdict(list)
     for organic_job in batch_organic_jobs:
