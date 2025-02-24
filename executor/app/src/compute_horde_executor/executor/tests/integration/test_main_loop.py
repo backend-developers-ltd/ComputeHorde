@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import httpx
 from compute_horde.certificate import generate_certificate_at
+from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.transport import StubTransport
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
@@ -30,6 +31,10 @@ payload = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in
 def mock_download(local_dir, **kwargs):
     with open(local_dir / "payload.txt", "w") as file:
         file.write(payload)
+
+
+def mock_download_failure(local_dir, **kwargs):
+    raise RuntimeError("Download failed")
 
 
 in_memory_output = io.BytesIO()
@@ -317,6 +322,67 @@ def test_huggingface_volume():
     ]
 
 
+def test_huggingface_volume_failure():
+    # Arrange
+    repo_id = "huggingface/model"
+    revision = "main"
+
+    with patch(
+        "compute_horde_executor.executor.management.commands.run_executor.snapshot_download",
+        mock_download_failure,
+    ):
+        command = CommandTested(
+            iter(
+                [
+                    json.dumps(
+                        {
+                            "message_type": "V0PrepareJobRequest",
+                            "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "timeout_seconds": None,
+                            "volume_type": "huggingface_volume",
+                            "job_uuid": job_uuid,
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "message_type": "V0RunJobRequest",
+                            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "docker_run_cmd": [],
+                            "docker_run_options_preset": "none",
+                            "volume": {
+                                "volume_type": "huggingface_volume",
+                                "repo_id": repo_id,
+                                "revision": revision,
+                            },
+                            "job_uuid": job_uuid,
+                        }
+                    ),
+                ]
+            )
+        )
+
+        # Act
+        command.handle()
+
+    # Assert
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+        {
+            "message_type": "V0ReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0FailedRequest",
+            "docker_process_exit_status": None,
+            "docker_process_stdout": "Failed to download model from Hugging Face: Download failed",
+            "docker_process_stderr": "",
+            "error_type": JobErrorType.HUGGINGFACE_DOWNLOAD.value,
+            "error_detail": "Download failed",
+            "timeout": False,
+            "job_uuid": job_uuid,
+        },
+    ]
+
+
 def test_huggingface_volume_dataset():
     # Arrange
     repo_id = "huggingface/dataset"
@@ -498,6 +564,8 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
             "timeout": False,
             "docker_process_stdout": "Input volume too large",
             "docker_process_stderr": "",
+            "error_type": None,
+            "error_detail": None,
             "job_uuid": job_uuid,
         },
     ]
@@ -622,6 +690,8 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
             "timeout": False,
             "docker_process_stdout": "Input volume too large",
             "docker_process_stderr": "",
+            "error_type": None,
+            "error_detail": None,
             "job_uuid": job_uuid,
         },
     ]
@@ -815,6 +885,8 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
             "timeout": mock.ANY,
             "docker_process_stdout": ContainsStr("Uploading output failed"),
             "docker_process_stderr": "",
+            "error_type": None,
+            "error_detail": None,
             "job_uuid": job_uuid,
         },
     ]
