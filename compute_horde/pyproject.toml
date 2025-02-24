@@ -1,6 +1,6 @@
 [project]
 name = "compute-horde"
-version = "0.0.22"
+version = "0.0.23"
 authors = [{name = "Backend Developers LTD"}]
 license = {text = "MIT License"}
 readme = "README.md"
