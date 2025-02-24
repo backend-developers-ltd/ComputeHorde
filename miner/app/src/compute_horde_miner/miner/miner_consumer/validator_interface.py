@@ -365,7 +365,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             # is only waiting for a couple of seconds for this, and the asyncio loop may be busy
             # with other things - so this must return very fast.
             await current.executor_manager.wait_for_executor_reservation(
-                executor_token, msg.executor_class, timeout=1
+                executor_token,
+                msg.executor_class,
+                # timeout=await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIMEOUT"),
+                timeout=7,
             )
 
             # If there is no executor, the above future throws an appropriate exception so we will
