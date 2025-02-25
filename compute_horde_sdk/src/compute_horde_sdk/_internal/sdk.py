@@ -13,7 +13,7 @@ import httpx
 import pydantic
 
 from _compute_horde_models.executor_class import ExecutorClass
-from _compute_horde_models.signature import BittensorWalletSigner, SignedFields, signature_to_headers
+from _compute_horde_models.signature import BittensorWalletSigner, SignatureScope, SignedFields, signature_to_headers
 
 from .exceptions import ComputeHordeError, ComputeHordeJobTimeoutError, ComputeHordeNotFoundError
 from .models import (
@@ -154,7 +154,12 @@ class ComputeHordeClient:
     def _get_signature_headers(self, data: dict) -> dict[str, str]:
         signed_fields = SignedFields.from_facilitator_sdk_json(data)
         signature = self._signer.sign(payload=signed_fields.model_dump_json())
-        return signature_to_headers(signature)
+        return signature_to_headers(signature, SignatureScope.SignedFields)
+
+    def _get_cheated_job_headers(self, data: dict) -> dict[str, str]:
+        payload = json.dumps(data, sort_keys=True)
+        signature = self._signer.sign(payload=payload)
+        return signature_to_headers(signature, SignatureScope.FullRequest)
 
     def _get_authentication_headers(
         self,
@@ -178,6 +183,19 @@ class ComputeHordeClient:
         headers["Signature"] = signature
 
         return headers
+
+    async def report_cheated_job(self, job_uuid: str) -> str:
+        """
+        Reports to validator that a miner has cheated on a job.
+
+        :param job_uuid: The UUID of the job that was cheated on.
+        :param miner_hotkey: The hotkey of the miner that cheated.
+        """
+        data = {"job_uuid": job_uuid}
+        signature_headers = self._get_cheated_job_headers(data)
+        response = await self._make_request("POST", "/api/v1/cheated-job/", json=data, headers=signature_headers)
+        logger.debug("Reported job %s", job_uuid)
+        return response
 
     async def create_job(
         self,
