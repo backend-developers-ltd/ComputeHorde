@@ -976,13 +976,13 @@ requires-dist = [
     { name = "gunicorn", specifier = "==20.1.0" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=0.26.1" },
-    { name = "ipython", specifier = "~=8.14.0" },
+    { name = "ipython", specifier = ">=8.14.0" },
     { name = "nox", specifier = "==2024.10.9" },
     { name = "packaging", specifier = ">=24.2" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
     { name = "psycopg2-binary", specifier = "~=2.9.7" },
     { name = "redis", specifier = "~=4.6.0" },
-    { name = "sentry-sdk", specifier = "==1.29.2" },
+    { name = "sentry-sdk", specifier = ">=1.29.2" },
     { name = "websockets", specifier = ">=14.0,<15.0" },
 ]
 

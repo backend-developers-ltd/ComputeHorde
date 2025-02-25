@@ -13,6 +13,7 @@ dev = [
     "compute-horde",
     "compute-horde-sdk",
     "compute-horde-facilitator-sdk",
+    "facilitator",
     "miner",
     "executor",
     "validator",
@@ -22,6 +23,7 @@ dev = [
 compute-horde = { path = "compute_horde", editable = true }
 compute-horde-sdk = { path = "compute_horde_sdk", editable = true }
 compute-horde-facilitator-sdk = { path = "facilitator_sdk", editable = true }
+facilitator = { path = "facilitator", editable = true }
 miner = { path = "miner", editable = true }
 executor = { path = "executor", editable = true }
 validator = { path = "validator", editable = true }
