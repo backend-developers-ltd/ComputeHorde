@@ -44,7 +44,7 @@ from compute_horde_validator.validator.organic_jobs.miner_driver import (
     JobStatusUpdate,
     execute_organic_job,
 )
-from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
+from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -396,7 +396,7 @@ class FacilitatorClient:
             miner_port = settings.DEBUG_MINER_PORT
             ip_type = 4
             on_trusted_miner = False
-        elif miner.hotkey == "TRUSTED_MINER":
+        elif miner.hotkey == TRUSTED_MINER_FAKE_KEY:
             miner_ip = settings.TRUSTED_MINER_ADDRESS
             miner_port = settings.TRUSTED_MINER_PORT
             ip_type = 4
