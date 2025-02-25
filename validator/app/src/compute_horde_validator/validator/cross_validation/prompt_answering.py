@@ -7,8 +7,10 @@ from asgiref.sync import sync_to_async
 from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
+    OrganicJobError,
     run_organic_job,
 )
+from compute_horde.mv_protocol.miner_requests import V0DeclineJobRequest
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
@@ -88,6 +90,14 @@ async def answer_prompts(
     try:
         await run_organic_job(miner_client, job_details, executor_ready_timeout=wait_timeout)
     except Exception as e:
+        if (
+            isinstance(e, OrganicJobError)
+            and isinstance(e.received, V0DeclineJobRequest)
+            and e.received.reason == V0DeclineJobRequest.Reason.BUSY
+        ):
+            logger.info("Failed to run answer_prompts: trusted miner is busy")
+            return False
+
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.FAILURE,

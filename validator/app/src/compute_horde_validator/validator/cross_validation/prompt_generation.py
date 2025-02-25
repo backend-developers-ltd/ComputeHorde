@@ -4,8 +4,10 @@ from collections.abc import Callable, Iterable
 
 import bittensor
 from compute_horde.miner_client.organic import (
+    OrganicJobError,
     run_organic_job,
 )
+from compute_horde.mv_protocol.miner_requests import V0DeclineJobRequest
 from django.conf import settings
 from django.utils.timezone import now
 
@@ -68,6 +70,14 @@ async def generate_prompts(
     try:
         await run_organic_job(miner_client, job_details, executor_ready_timeout=wait_timeout)
     except Exception as e:
+        if (
+            isinstance(e, OrganicJobError)
+            and isinstance(e.received, V0DeclineJobRequest)
+            and e.received.reason == V0DeclineJobRequest.Reason.BUSY
+        ):
+            logger.info("Failed to run generate_prompts: trusted miner is busy")
+            return
+
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
             subtype=SystemEvent.EventSubType.FAILURE,
