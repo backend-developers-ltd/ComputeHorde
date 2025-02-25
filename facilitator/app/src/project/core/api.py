@@ -70,6 +70,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "artifacts",
             "artifacts_dir",
             "target_validator_hotkey",
+            "on_trusted_miner",
         )
         read_only_fields = (
             "created_at",
@@ -136,6 +137,7 @@ class DockerJobSerializer(DynamicJobFields, JobSerializer):
                 "uploads",
                 "target_validator_hotkey",
                 "artifacts_dir",
+                "on_trusted_miner",
             }
         )
 
