@@ -778,7 +778,7 @@ class JobRunner:
             time_took = time.time() - t1
             logger.error(
                 f'"{" ".join(self.cmd)}" (job_uuid={self.initial_job_request.job_uuid})'
-                f' failed after {time_took:0.2f} seconds with status={self.process.returncode}'
+                f" failed after {time_took:0.2f} seconds with status={self.process.returncode}"
                 f' \nstdout="{stdout}"\nstderr="{stderr}'
             )
 

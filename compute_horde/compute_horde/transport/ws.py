@@ -96,8 +96,7 @@ class WSTransport(AbstractTransport):
 
         time_took = loop.time() - start_time
         raise TransportConnectionError(
-            f"Could not connect to {self.name} after {attempt} attempts"
-            f" in {time_took:0.2f} seconds"
+            f"Could not connect to {self.name} after {attempt} attempts in {time_took:0.2f} seconds"
         )
 
     async def send(self, data: str | bytes) -> None:

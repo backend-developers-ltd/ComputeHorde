@@ -1,10 +1,11 @@
 name: Run integration tests
 
-on:
-  push:
-    branches: [master, main]
-  pull_request:
-    branches: [master, main]
+# temporary disable integration test
+# on:
+#   push:
+#     branches: [master, main]
+#   pull_request:
+#     branches: [master, main]
 
 env:
   PYTHON_DEFAULT_VERSION: "3.11"

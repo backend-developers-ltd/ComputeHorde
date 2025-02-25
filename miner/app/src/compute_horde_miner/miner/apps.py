@@ -31,9 +31,9 @@ def create_local_miner_validator(sender, **kwargs):
     if not settings.IS_LOCAL_MINER:
         return
 
-    assert (
-        settings.LOCAL_MINER_VALIDATOR_PUBLIC_KEY
-    ), "LOCAL_MINER_VALIDATOR_PUBLIC_KEY needs to be set to run miner in local mode"
+    assert settings.LOCAL_MINER_VALIDATOR_PUBLIC_KEY, (
+        "LOCAL_MINER_VALIDATOR_PUBLIC_KEY needs to be set to run miner in local mode"
+    )
 
     from .models import Validator
 

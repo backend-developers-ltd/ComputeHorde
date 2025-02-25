@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% load crispy_forms_tags %}
+
+{% block title %}Submit a Job{% endblock %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col col-auto col-mx-auto">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Submit a Job</h2>
+                </div>
+                <div class="card-body">
+                    <p>
+                        The input URL must be a zip file. The zip file will be extracted
+                        within the Docker container to the <code>/volume</code> directory.
+                    </p>
+                    <p>
+                        During job execution, any files generated in the <code>/output</code>
+                        directory will be incorporated into the final job result.
+                    </p>
+                   {% crispy form %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

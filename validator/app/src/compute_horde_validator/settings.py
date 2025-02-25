@@ -424,7 +424,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "compute_horde_validator.wsgi.application"
 
 DATABASES = {}
-default_db = f'postgres://postgres:{env("POSTGRES_PASSWORD")}@db:5432/postgres'
+default_db = f"postgres://postgres:{env('POSTGRES_PASSWORD')}@db:5432/postgres"
 if env(
     "DATABASE_POOL_URL", default=""
 ):  # DB transaction-based connection pool, such as one provided PgBouncer

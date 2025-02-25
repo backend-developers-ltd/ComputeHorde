@@ -1,0 +1,13 @@
+{% load allauth %}
+{% if 'login' in attrs.tags %}
+<div class="w-25">
+{% endif %}
+<form method="{{ attrs.method }}" action="{{ attrs.action }}">
+    {% slot body %}
+    {% endslot %}
+    {% slot actions %}
+    {% endslot %}
+</form>
+{% if 'login' in attrs.tags %}
+</div>
+{% endif %}
