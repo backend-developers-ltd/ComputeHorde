@@ -3,7 +3,7 @@ name: Deploy Facilitator to AWS on push to certain branches
 on:
   push:
     branches:
-      - 'deploy-*'
+      - 'deploy-facilitator-*'
 
 jobs:
   deploy:
@@ -28,7 +28,7 @@ jobs:
       - name: deploy to aws
         run: |
           set -e
-          export ENVIRONMENT=${GITHUB_REF_NAME:7}
+          export ENVIRONMENT=${GITHUB_REF_NAME:19}
           export GITHUB_TOKEN="${{ steps.app_token.outputs.token }}"
           export ADDITIONAL_PACKAGES="${{ vars.ADDITIONAL_PACKAGES }}"
           export HTTP_ASGI_APPLICATION_PATH="${{ vars.HTTP_ASGI_APPLICATION_PATH }}"
