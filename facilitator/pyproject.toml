@@ -106,7 +106,7 @@ line-length = 120
 # TODO add D
 select = [
     "E", "F", "I", "UP",
-    "TCH005",
+    "TC005",
 ]
 # TODO: remove E501 once docstrings are formatted
 ignore = [

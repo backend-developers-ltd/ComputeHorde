@@ -41,27 +41,35 @@ distribution = true
 [tool.pdm.version]
 source = "scm"
 
-[tool.pdm.dev-dependencies]
-test = [
-    "freezegun",
-    "pytest",
-    "pytest-apiver",
-    "pytest-asyncio",
-    "pytest-xdist",
-    "pytest-httpx>=0.35.0",
-#    "compute-horde>=0.0.21",
-]
+[dependency-groups]
+format = ["ruff"]
 lint = [
-    "codespell[toml]",
-    "mypy>=1.8",
     "ruff",
+    "codespell[toml]",
+]
+release = [
+    "towncrier>=23.11.0,<24",
+]
+type_check = [
+    "django-stubs[compatible-mypy]",
+    "djangorestframework-stubs[compatible-mypy]>=3.15.1",
+    "mypy",
     "types-freezegun",
     "types-python-dateutil",
     "types-requests",
 ]
-release = [
-    "towncrier",
+test = [
+    "pytest>=8.2.1",
+    "pytest-asyncio>=0.24.0",
+    "responses>=0.25.0",
+    "freezegun>=1.5.1",
+    "faker>=33.1.0",
+    "pytest-django>=4.9.0",
+    "pytest-apiver",
+    "pytest-xdist",
+    "pytest-httpx>=0.35.0",
 ]
+
 
 [tool.pytest.ini_options]
 pythonpath = ["."]  # allow for `import tests` in test files
@@ -75,7 +83,7 @@ line-length = 120
 select = [
     "D",
     "E", "F", "I", "UP",
-    "TCH005",
+    "TC005",
 ]
 ignore = [
     "D100", "D105", "D107", "D200", "D202", "D203", "D205", "D212", "D400", "D401", "D415",

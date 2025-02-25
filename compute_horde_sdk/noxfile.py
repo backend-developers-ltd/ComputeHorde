@@ -21,7 +21,7 @@ PYTHON_VERSIONS = ["3.11", "3.12"]
 BITTENSOR_VERSION = os.environ.get("BITTENSOR_VERSION")
 PYTHON_DEFAULT_VERSION = PYTHON_VERSIONS[-1]
 
-nox.options.default_venv_backend = "venv"
+nox.options.default_venv_backend = "uv"
 nox.options.stop_on_first_error = True
 nox.options.reuse_existing_virtualenvs = not CI
 
@@ -31,21 +31,18 @@ if CI:
     PYTHON_VERSIONS = [sys.executable]
 
 
-def install(session: nox.Session, *groups, dev: bool = True, editable: bool = False, no_self=False, no_default=False):
-    other_args = []
-    if not dev:
-        other_args.append("--prod")
-    if not editable:
-        other_args.append("--no-editable")
-    if no_self:
-        other_args.append("--no-self")
-    if no_default:
-        other_args.append("--no-default")
-    for group in groups:
-        other_args.extend(["--group", group])
-    session.run("pdm", "install", "--check", *other_args, external=True)
-    if BITTENSOR_VERSION:
-        session.run("pip", "install", f"bittensor=={BITTENSOR_VERSION}")
+def install(session: nox.Session, *args):
+    groups = []
+    for group in args:
+        groups.extend(["--group", group])
+    uv_env = getattr(session.virtualenv, "location", os.getenv("VIRTUAL_ENV"))
+    session.run_install(
+        "uv",
+        "sync",
+        "--locked",
+        *groups,
+        env={"UV_PROJECT_ENVIRONMENT": uv_env},
+    )
 
 
 @functools.lru_cache
@@ -133,7 +130,7 @@ def run_shellcheck(session, mode="check"):
 @nox.session(name="format", python=PYTHON_DEFAULT_VERSION, tags=["format", "check"])
 def format_(session):
     """Lint the code and apply fixes in-place whenever possible."""
-    install(session, "lint", no_self=True, no_default=True)
+    install(session, "lint")
     session.run("ruff", "check", "--fix", ".")
     run_shellcheck(session, mode="fmt")
     run_readable(session, mode="fmt")
@@ -156,12 +153,12 @@ def lint(session):
 @nox.session(python=PYTHON_VERSIONS, tags=["test", "check"])
 def test(session):
     install(session, "test")
-    session.run("pytest", "-vv", "-n", "auto", *session.posargs)
+    session.run("pytest", "-s", "-vv", "tests", *session.posargs)
 
 
 @nox.session(python=PYTHON_DEFAULT_VERSION)
 def make_release(session):
-    install(session, "release", no_self=True, no_default=True)
+    install(session, "release")
     parser = argparse.ArgumentParser()
 
     def version(value):

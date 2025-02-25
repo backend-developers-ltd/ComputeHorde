@@ -72,7 +72,7 @@ line-length = 120
 select = [
     "D",
     "E", "F", "I", "UP",
-    "TCH005",
+    "TC005",
 ]
 ignore = [
     "E501",  # checked&fixed by ruff format
