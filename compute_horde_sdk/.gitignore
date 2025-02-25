@@ -1,0 +1,16 @@
+*.pyc
+*.sqlite3
+*~
+*.egg-info/
+/.idea/
+.env
+.venv
+venv
+media/
+.backups/
+.envrc
+.pdm-python
+.terraform.lock.hcl
+.terraform/
+.nox/
+__pycache__

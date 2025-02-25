@@ -1,0 +1,2 @@
+# disable errors related to cookiecutter templating:
+disable=SC1054,SC1056,SC1072,SC1073,SC1083,SC1009
