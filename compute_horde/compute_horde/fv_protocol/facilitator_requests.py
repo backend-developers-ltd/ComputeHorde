@@ -1,6 +1,6 @@
 import base64
 import typing
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Literal, Self
 
 import pydantic
@@ -30,7 +30,7 @@ class Response(BaseModel, extra="forbid"):
     errors: list[Error] = []
 
 
-class SignatureScope(Enum):
+class SignatureScope(StrEnum):
     SignedFields = "SignedFields"
     FullRequest = "FullRequest"
 
