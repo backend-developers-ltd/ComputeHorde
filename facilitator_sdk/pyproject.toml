@@ -1,0 +1,144 @@
+[project]
+name = "compute-horde-facilitator-sdk"
+requires-python = "==3.11.*"
+keywords = []
+license = {text = "MIT"}
+readme = "README.md"
+description = "SDK library to communicate with ComputeHorde Facilitator"
+authors = [{name = "Backend Developers LTD"}]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+]
+dynamic = [
+    "version",
+]
+dependencies = [
+    "annotated_types>=0.5.0",
+    "httpx>=0.27.0",
+    "phx-class-registry>=4.1.0",
+    "typing_extensions",
+    "compute-horde>=0.0.20",
+]
+
+[project.urls]
+"Source" = "https://github.com/backend-developers-ltd/compute-horde-facilitator-sdk"
+"Issue Tracker" = "https://github.com/backend-developers-ltd/compute-horde-facilitator-sdk/issues"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm]
+distribution = true
+
+[tool.pdm.version]
+source = "scm"
+
+[tool.pdm.dev-dependencies]
+test = [
+    "bittensor",
+    "freezegun",
+    "pytest",
+    "pytest-apiver",
+    "pytest-asyncio",
+    "pytest-httpx",
+    "pytest-xdist",
+]
+lint = [
+    "codespell[toml]",
+    "mypy>=1.8",
+    "ruff",
+    "types-freezegun",
+    "types-python-dateutil",
+    "types-requests",
+]
+release = [
+    "towncrier",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]  # allow for `import tests` in test files
+target_package_name = "compute_horde_facilitator_sdk"  # required by pytest-apiver
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "D",
+    "E", "F", "I", "UP",
+    "TCH005",
+]
+ignore = [
+    "E501",  # checked&fixed by ruff format
+    "D100", "D105", "D107", "D200", "D202", "D203", "D205", "D212", "D400", "D401", "D415",
+    "D101", "D102", "D103", "D104", # TODO remove once we have docstring for all public methods
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"test/**" = ["D", "F403", "F405"]
+
+[tool.codespell]
+skip = "*.min.js,pdm.lock"
+ignore-words-list = "datas"
+
+[tool.towncrier]
+directory = "changelog.d"
+filename = "CHANGELOG.md"
+start_string = "<!-- towncrier release notes start -->\n"
+underlines = ["", "", ""]
+title_format = "## [{version}](https://github.com/backend-developers-ltd/compute-horde-facilitator-sdk/releases/tag/v{version}) - {project_date}"
+issue_format = "[#{issue}](https://github.com/backend-developers-ltd/compute-horde-facilitator-sdk/issues/{issue})"
+
+[[tool.towncrier.type]]
+directory = "removed"
+name = "Removed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "changed"
+name = "Changed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "fixed"
+name = "Fixed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "deprecated"
+name = "Deprecated"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "added"
+name = "Added"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "doc"
+name = "Doc"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "infrastructure"
+name = "Infrastructure"
+showcontent = true
+
+[tool.mypy]
+
+[[tool.mypy.overrides]]
+module = [
+    "bittensor",
+    "nox",
+    "pytest",
+    "tests.*",
+    "class_registry",
+]
+ignore_missing_imports = true

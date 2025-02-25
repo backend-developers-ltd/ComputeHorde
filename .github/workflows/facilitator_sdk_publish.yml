@@ -1,0 +1,96 @@
+name: Facilitator SDK CD
+
+# This workflow requires https://docs.pypi.org/trusted-publishers/ to be enabled for the repository.
+# Follow instructions from this link to enable it.
+# Use this workflow (`publish.yml`) in the configuration.
+# Please note this process has to be repeated for Test PyPI and PyPI separately.
+
+on:
+  push:
+    tags:
+      - 'v*'  # push events to matching v*, i.e. v1.0, v20.15.10
+      - 'draft/v*'
+
+env:
+  PYTHON_DEFAULT_VERSION: "3.11"
+
+jobs:
+  publish:
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      id-token: write  # allows publishing to PyPI
+      contents: write  # allows uploading a GitHub release
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./facilitator_sdk
+    steps:
+      - name: Get version from tag
+        id: get-version
+        run: |
+          if [[ ${{ github.ref }} == refs/tags/v* ]]; then
+              echo "draft=false" >> "$GITHUB_OUTPUT"
+              echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+              echo "draft=true" >> "$GITHUB_OUTPUT"
+              echo "version=${GITHUB_REF#refs/tags/draft/v}" >> "$GITHUB_OUTPUT"
+          fi
+          export IS_PRERELEASE=$([[ ${{ github.ref }} =~ [^0-9]$ ]] && echo true || echo false)
+          echo "prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade nox 'pdm>=2.12,<3'
+
+      - name: Read the Changelog
+        id: read-changelog
+        uses: mindsers/changelog-reader-action@v2
+        with:
+          version: ${{ steps.get-version.outputs.version }}
+          path: ./CHANGELOG.md
+        continue-on-error: ${{ fromJSON(steps.get-version.outputs.draft) }}
+
+      - name: Build
+        run: pdm build
+
+      - name: Sign distribution
+        uses: sigstore/gh-action-sigstore-python@v3.0.0
+        with:
+          inputs: >-
+            dist/*.tar.gz
+            dist/*.whl
+
+      - name: Create GitHub release
+        id: create-release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.get-version.outputs.version }}
+          body: ${{ steps.read-changelog.outputs.changes }}
+          draft: ${{ fromJSON(steps.get-version.outputs.draft)}}
+          prerelease: ${{ fromJSON(steps.get-version.outputs.prerelease) }}
+          files: >-
+            dist/*.tar.gz
+            dist/*.whl
+            dist/*.sigstore.json
+
+      - name: Remove signature files as pypa/gh-action-pypi-publish does not support them
+        run: rm -f dist/*.sigstore.json
+
+      - name: Publish distribution 📦 to TestPyPI
+        if: ${{ steps.get-version.outputs.draft == 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+      - name: Publish distribution 📦 to PyPI
+        if: ${{ steps.get-version.outputs.draft == 'false' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
