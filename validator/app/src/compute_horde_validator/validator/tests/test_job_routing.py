@@ -124,3 +124,11 @@ async def test_pick_miner_for_job__all_executors_busy(validator_keypair, miner_k
 
     with pytest.raises(routing.AllMinersBusy):
         await routing.pick_miner_for_job_request(JOB_REQUEST)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__trusted_miner():
+    job_request = JOB_REQUEST.__replace__(on_trusted_miner=True)
+    miner = await routing.pick_miner_for_job_request(job_request)
+    assert miner.hotkey == "TRUSTED_MINER"
