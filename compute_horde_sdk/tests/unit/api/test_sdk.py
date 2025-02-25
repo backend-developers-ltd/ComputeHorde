@@ -14,7 +14,7 @@ from _compute_horde_models.signature import (
 if TYPE_CHECKING:
     from compute_horde_sdk._internal.sdk import ComputeHordeClient, ComputeHordeJob
 
-TEST_FACILITATOR_URL = "http://localhost:4321/api/v1"
+TEST_FACILITATOR_URL = "http://localhost:4321"
 TEST_JOB_UUID = "1c4904f0-b614-4e27-8e50-7bfc5ddab8fd"
 TEST_DOCKER_IMAGE = "example-com/test-image"
 
@@ -28,7 +28,7 @@ def get_job_response(uuid: str = TEST_JOB_UUID, status: str = "Accepted", **kwar
         "status": status,
         "docker_image": TEST_DOCKER_IMAGE,
         "raw_script": None,
-        "args": "--test yes",
+        "args": ["--test", "yes"],
         "env": {},
         "use_gpu": True,
         "hf_repo_id": None,
@@ -91,11 +91,10 @@ def job(apiver_module, compute_horde_client) -> "ComputeHordeJob":
     )
 
 
-@pytest.mark.skip(reason="temporary skip")
 @pytest.mark.asyncio
 async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
     httpx_mock.add_response(
-        url=TEST_FACILITATOR_URL + "/job-docker/",
+        url=TEST_FACILITATOR_URL + "/api/v1/job-docker/",
         json=get_job_response(
             info=TEST_JOB_UUID,
             status="Sent",
@@ -127,7 +126,6 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
     assert job.status is apiver_module.ComputeHordeJobStatus.COMPLETED
 
 
-@pytest.mark.skip(reason="temporary skip")
 @pytest.mark.asyncio
 async def test_get_jobs(apiver_module, compute_horde_client, httpx_mock):
     job1_uuid = "7b522daa-e807-4094-8d96-99b9a863f960"
@@ -179,7 +177,6 @@ async def test_get_jobs__malformed_response(apiver_module, compute_horde_client,
         await compute_horde_client.get_jobs()
 
 
-@pytest.mark.skip(reason="temporary skip")
 @pytest.mark.asyncio
 async def test_iter_jobs(apiver_module, compute_horde_client, httpx_mock):
     job1_uuid = "7b522daa-e807-4094-8d96-99b9a863f960"
@@ -190,14 +187,14 @@ async def test_iter_jobs(apiver_module, compute_horde_client, httpx_mock):
         json={
             "count": 11,
             "previous": None,
-            "next": f"{TEST_FACILITATOR_URL}/jobs/?page=2",
+            "next": f"{TEST_FACILITATOR_URL}/api/v1/jobs/?page=2",
             "results": [get_job_response(uuid=job1_uuid, status=job1_status) for _ in range(10)],
         }
     )
     httpx_mock.add_response(
         json={
             "count": 11,
-            "previous": f"{TEST_FACILITATOR_URL}/jobs/?page=1",
+            "previous": f"{TEST_FACILITATOR_URL}/api/v1/jobs/?page=1",
             "next": None,
             "results": [
                 get_job_response(uuid=job2_uuid, status=job2_status),
@@ -234,7 +231,6 @@ async def test_iter_jobs__malformed_response(apiver_module, compute_horde_client
             pass
 
 
-@pytest.mark.skip(reason="temporary skip")
 @pytest.mark.asyncio
 async def test_get_job(compute_horde_client, httpx_mock):
     job_uuid = TEST_JOB_UUID
@@ -271,7 +267,6 @@ async def test_get_job__malformed_response(apiver_module, compute_horde_client, 
         await compute_horde_client.get_job(TEST_JOB_UUID)
 
 
-@pytest.mark.skip(reason="temporary skip")
 @pytest.mark.asyncio
 async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
     httpx_mock.add_response(
@@ -279,7 +274,7 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
             uuid=TEST_JOB_UUID,
             status="Accepted",
             docker_image="my-image",
-            args="--arg1 value1",
+            args=["--arg1", "value1"],
             env={"ENV_VAR": "value"},
             use_gpu=True,
             input_url="https://example.com/input",
@@ -317,7 +312,7 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
     req_json = json.loads(request.content)
     assert req_json["executor_class"] == "spin_up-4min.gpu-24gb"
     assert req_json["docker_image"] == TEST_DOCKER_IMAGE
-    assert req_json["args"] == "--block 10000"
+    assert req_json["args"] == ["--block", "10000"]
     assert req_json["env"] == {"TEST_ENV": "1"}
     assert req_json["volumes"] == [
         {
@@ -380,7 +375,6 @@ async def test_create_job__malformed_response(apiver_module, compute_horde_clien
         )
 
 
-@pytest.mark.skip(reason="temporary skip")
 @pytest.mark.parametrize("final_status", ["Completed", "Failed", "Rejected"])
 @pytest.mark.asyncio
 async def test_job_wait__various_end_states(
@@ -408,7 +402,6 @@ async def test_wait_for_job__immediate_completion(apiver_module, compute_horde_c
     assert job.status is apiver_module.ComputeHordeJobStatus.COMPLETED
 
 
-@pytest.mark.skip(reason="temporary skip")
 @pytest.mark.asyncio
 async def test_wait_for_job__timeout(apiver_module, job, httpx_mock, async_sleep_mock):
     httpx_mock.add_response(json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"))
