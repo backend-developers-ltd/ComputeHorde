@@ -8,9 +8,8 @@ from enum import StrEnum
 from typing import Literal
 
 import pydantic
-
-from _compute_horde_models import output_upload as compute_horde_output_upload
-from _compute_horde_models import volume as compute_horde_volume
+from compute_horde.base.output_upload import OutputUpload, SingleFilePostUpload, SingleFilePutUpload
+from compute_horde.base.volume import HuggingfaceVolume, InlineVolume, SingleFileVolume, Volume
 
 VOLUME_MOUNT_PATH_PREFIX = "/volume/"
 OUTPUT_MOUNT_PATH_PREFIX = "/output/"
@@ -70,7 +69,7 @@ class AbstractInputVolume(ABC):
         return mount_path.removeprefix(VOLUME_MOUNT_PATH_PREFIX)
 
     @abstractmethod
-    def to_compute_horde_volume(self, mount_path: str) -> compute_horde_volume.Volume:
+    def to_compute_horde_volume(self, mount_path: str) -> Volume:
         pass
 
 
@@ -82,9 +81,9 @@ class InlineInputVolume(pydantic.BaseModel, AbstractInputVolume):
     contents: str
     """Base64 encoded contents of the file"""
 
-    def to_compute_horde_volume(self, mount_path: str) -> compute_horde_volume.InlineVolume:
+    def to_compute_horde_volume(self, mount_path: str) -> InlineVolume:
         relative_path = self.get_volume_relative_path(mount_path)
-        return compute_horde_volume.InlineVolume(
+        return InlineVolume(
             contents=self.contents,
             relative_path=relative_path,
         )
@@ -124,9 +123,9 @@ class HuggingfaceInputVolume(pydantic.BaseModel, AbstractInputVolume):
     allow_patterns: str | list[str] | None = None
     """If provided, only files matching at least one pattern are downloaded."""
 
-    def to_compute_horde_volume(self, mount_path: str) -> compute_horde_volume.HuggingfaceVolume:
+    def to_compute_horde_volume(self, mount_path: str) -> HuggingfaceVolume:
         relative_path = self.get_volume_relative_path(mount_path)
-        return compute_horde_volume.HuggingfaceVolume(
+        return HuggingfaceVolume(
             relative_path=relative_path,
             repo_id=self.repo_id,
             repo_type=self.repo_type,
@@ -141,9 +140,9 @@ class HTTPInputVolume(pydantic.BaseModel, AbstractInputVolume):
     url: str
     """The URL to download the file from."""
 
-    def to_compute_horde_volume(self, mount_path: str) -> compute_horde_volume.SingleFileVolume:
+    def to_compute_horde_volume(self, mount_path: str) -> SingleFileVolume:
         relative_path = self.get_volume_relative_path(mount_path)
-        return compute_horde_volume.SingleFileVolume(
+        return SingleFileVolume(
             relative_path=relative_path,
             url=self.url,
         )
@@ -168,11 +167,11 @@ class HTTPOutputVolume(pydantic.BaseModel):
             raise ValueError(f"Output volume paths must start with {OUTPUT_MOUNT_PATH_PREFIX!r}")
         return mount_path.removeprefix(OUTPUT_MOUNT_PATH_PREFIX)
 
-    def to_compute_horde_output_upload(self, mount_path: str) -> compute_horde_output_upload.OutputUpload:
+    def to_compute_horde_output_upload(self, mount_path: str) -> OutputUpload:
         relative_path = self.get_volume_relative_path(mount_path)
 
         if self.http_method == "POST":
-            return compute_horde_output_upload.SingleFilePostUpload(
+            return SingleFilePostUpload(
                 relative_path=relative_path,
                 url=self.url,
                 form_fields=self.form_fields,
@@ -181,7 +180,7 @@ class HTTPOutputVolume(pydantic.BaseModel):
         elif self.http_method == "PUT":
             if self.form_fields:
                 raise ValueError("Form fields are not supported with PUT uploads.")
-            return compute_horde_output_upload.SingleFilePutUpload(
+            return SingleFilePutUpload(
                 relative_path=relative_path,
                 url=self.url,
                 signed_headers=self.signed_headers,

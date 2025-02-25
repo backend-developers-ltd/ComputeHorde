@@ -22,6 +22,7 @@ dependencies = [
     "pydantic<3,>=2.10",
     "ipython==8.14.0",
     "httpx>=0.26.0",
+    "compute-horde==0.0.23",
     "bittensor>=9.0.0,<9.1",
 ]
 
