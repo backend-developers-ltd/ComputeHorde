@@ -1,4 +1,3 @@
-import shlex
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
@@ -28,6 +27,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V2JobRequest,
 )
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models import CheckConstraint, F, Max, OuterRef, Prefetch, Q, QuerySet, Subquery, UniqueConstraint
@@ -206,7 +206,13 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     )
     docker_image = models.CharField(max_length=255, blank=True, help_text="docker image for job execution")
     raw_script = models.TextField(blank=True, help_text="raw script to be executed")
-    args = models.TextField(blank=True, help_text="arguments passed to the script or docker image")
+    args = ArrayField(
+        models.TextField(),
+        default=list,
+        null=True,
+        blank=True,
+        help_text="arguments passed to the script or docker image",
+    )
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
     use_gpu = models.BooleanField(default=False, help_text="Whether to use GPU for the job")
     input_url = models.URLField(blank=True, help_text="URL to the input data source", max_length=1000)
@@ -438,7 +444,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 executor_class=self.executor_class,
                 docker_image=self.docker_image,
                 raw_script=self.raw_script,
-                args=shlex.split(self.args),
+                args=self.args,
                 env=self.env,
                 use_gpu=self.use_gpu,
                 input_url=self.input_url,
@@ -483,7 +489,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                     executor_class=self.executor_class,
                     docker_image=self.docker_image,
                     raw_script=self.raw_script,
-                    args=shlex.split(self.args),
+                    args=self.args,
                     env=self.env,
                     use_gpu=self.use_gpu,
                     volume=volume,
@@ -499,7 +505,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                     executor_class=self.executor_class,
                     docker_image=self.docker_image,
                     raw_script=self.raw_script,
-                    args=shlex.split(self.args),
+                    args=self.args,
                     env=self.env,
                     use_gpu=self.use_gpu,
                     volume=volume,
