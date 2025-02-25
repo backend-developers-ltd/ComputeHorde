@@ -18,6 +18,7 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
 )
 from compute_horde_validator.validator.organic_jobs import routing
+from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 JOB_REQUEST = V2JobRequest(
     uuid=str(uuid.uuid4()),
@@ -131,4 +132,4 @@ async def test_pick_miner_for_job__all_executors_busy(validator_keypair, miner_k
 async def test_pick_miner_for_job__trusted_miner():
     job_request = JOB_REQUEST.__replace__(on_trusted_miner=True)
     miner = await routing.pick_miner_for_job_request(job_request)
-    assert miner.hotkey == "TRUSTED_MINER"
+    assert miner.hotkey == TRUSTED_MINER_FAKE_KEY

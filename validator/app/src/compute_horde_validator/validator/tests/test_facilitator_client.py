@@ -31,7 +31,7 @@ from compute_horde_validator.validator.organic_jobs.facilitator_client import (
     FacilitatorClient,
 )
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
-from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
+from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
 
 from .helpers import (
     MockFaillingMinerClient,
@@ -197,7 +197,7 @@ class FacilitatorJobOnTrustedMiner(FacilitatorWs):
             )
             if organic_job.status != OrganicJob.Status.COMPLETED:
                 self.facilitator_error = Exception(f"job not completed: {organic_job.status}")
-            elif organic_job.miner.hotkey != "TRUSTED_MINER":
+            elif organic_job.miner.hotkey != TRUSTED_MINER_FAKE_KEY:
                 self.facilitator_error = Exception("Selected miner is not TRUSTED_MINER")
             elif organic_job.miner_address != "fakehost":
                 self.facilitator_error = Exception(

@@ -14,7 +14,6 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.cross_validation.utils import (
-    TRUSTED_MINER_FAKE_KEY,
     TrustedMinerClient,
     trusted_miner_not_configured_system_event,
 )
@@ -22,6 +21,7 @@ from compute_horde_validator.validator.models import Prompt, SolveWorkload, Syst
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
     LlmPromptsJobGenerator,
 )
+from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
