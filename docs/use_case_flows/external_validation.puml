@@ -1,0 +1,61 @@
+@startuml
+Actor "SNxy-validator"
+Entity "compute-horde-sdk"
+participant Facilitator
+participant Validator
+participant Miner
+participant Executor
+participant Job
+
+"SNxy-validator" -> "compute-horde-sdk": Create client (library call)
+"SNxy-validator" -> "compute-horde-sdk": Run Job (via client)
+Note over "SNxy-validator", "compute-horde-sdk": specify MAX_JOB_TIMEOUT
+
+loop until success or MAX_RUN_JOB_RETRIES times
+        group with a timeout of MAX_JOB_CREATE_TIMEOUT seconds
+            "compute-horde-sdk" -> Facilitator: <font color=blue>HTTP POST /api/v0/job-docker
+            Facilitator -> Validator: <font color=blue>V2JobRequest
+            Validator -> Validator: choose miner
+            Validator -> Miner: <font color=blue>V0AuthenticateRequest
+            Validator -> Miner: <font color=blue>V0InitialJobRequest
+            Miner -> Miner: reserve executor
+            Miner --> Executor: Start Executor
+            activate Executor #lightgreen
+            Miner -> Validator: <font color=blue>V0AcceptJobRequest
+            Validator -> Facilitator: <font color=blue>V0JobStatusUpdate
+            Facilitator -> "compute-horde-sdk": <font color=blue>response HTTP POST /api/v0/job-docker
+        end
+        Executor -> Miner: <font color=blue>V0ReadyRequest
+        Miner -> Validator: <font color=blue>V0ExecutorReadyRequest
+        group with a timeout of MAX_JOB_TIMEOUT + VALIDATOR_LEEWAY + MINER_LEEWAY seconds
+            Validator -> Miner: <font color=blue>V0JobRequest
+            group with a timeout of MAX_JOB_TIMEOUT + MINER_LEEWAY seconds
+                Miner -> Executor: <font color=blue>V0JobRequest
+                opt
+                Executor -> Executor: fetch volumes
+                end
+                group with a timeout of MAX_JOB_TIMEOUT
+                    Executor->Job: Start Job process
+                    activate Job #lightgreen
+                    note over Job: run
+                    Job->Executor: Report finish
+                    deactivate Job
+                end
+                opt
+                Executor -> Executor: upload outputs
+                end
+                Executor -> Miner: <font color=blue>V0FinishedRequest
+                deactivate Executor
+            end
+            Miner -> Validator: <font color=blue>V0JobFinishedRequest
+        end
+        Validator -> Facilitator: <font color=blue>V0JobStatusUpdate
+        Facilitator -> Facilitator: store updated job status
+        group asynchronously poll job status
+            "compute-horde-sdk" -> Facilitator: <font color=blue>HTTP GET /api/v0/job/<uuid>
+            "compute-horde-sdk" -> "compute-horde-sdk": finish querying when job_status in (Failed, Suceeded)
+        end
+
+end
+
+@enduml
