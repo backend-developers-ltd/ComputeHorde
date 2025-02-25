@@ -287,8 +287,9 @@ class FacilitatorClient:
         return await get_miner_axon_info(hotkey)
 
     async def report_miner_cheated_job(self, job_uuid: str):
-        job = await OrganicJob.objects.prefetch_related("miner").aget(job_uuid=job_uuid)
-        if job is None:
+        try:
+            job = await OrganicJob.objects.prefetch_related("miner").aget(job_uuid=job_uuid)
+        except OrganicJob.DoesNotExist:
             logger.error(f"Job {job_uuid} reported for cheating does not exist")
             return
 

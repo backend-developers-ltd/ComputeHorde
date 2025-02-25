@@ -570,8 +570,8 @@ wheels = [
 
 [[package]]
 name = "compute-horde"
-version = "0.0.23"
-source = { registry = "https://pypi.org/simple" }
+version = "0.0.24"
+source = { editable = "../compute_horde" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -584,9 +584,43 @@ dependencies = [
     { name = "requests", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/a8/480a0912248c0dac43bd383514bad266ab76807250bfe52bf86960a6d7c1/compute_horde-0.0.23.tar.gz", hash = "sha256:5e2fb150d88125d1fa27de21846599bd3a3f98591c6d5126a1ef41a23a8a382d", size = 48153 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/50/ffb2d51dbafde951656c3d2cdfec8c9a466a0bf44033cdbb13499e45dedb/compute_horde-0.0.23-py3-none-any.whl", hash = "sha256:44dd0fd43cd53f362336a0339a38cacb7f8398b3807ac386315fea27a6348128", size = 51349 },
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", specifier = ">=3.10.10" },
+    { name = "bittensor", specifier = ">=9.0.0,<9.1" },
+    { name = "celery", specifier = ">=5.3.0,<6" },
+    { name = "cryptography", specifier = ">=42.0.8" },
+    { name = "django", specifier = "~=4.2.4" },
+    { name = "more-itertools", specifier = ">=10.2.0" },
+    { name = "phx-class-registry", specifier = ">=4.1.0" },
+    { name = "pydantic", specifier = ">=2.3,<3" },
+    { name = "requests", specifier = ">=2.32.2" },
+    { name = "websockets", specifier = ">=14.0,<15.0" },
+]
+
+[package.metadata.requires-dev]
+format = [{ name = "ruff" }]
+lint = [
+    { name = "codespell", extras = ["toml"] },
+    { name = "ruff" },
+]
+release = [{ name = "towncrier", specifier = ">=23.11.0,<24" }]
+test = [
+    { name = "faker", specifier = ">=33.1.0" },
+    { name = "freezegun", specifier = ">=1.5.1" },
+    { name = "pytest", specifier = ">=8.2.1" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    { name = "pytest-django", specifier = ">=4.9.0" },
+    { name = "responses", specifier = ">=0.25.0" },
+]
+type-check = [
+    { name = "django-stubs", extras = ["compatible-mypy"] },
+    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = ">=3.15.1" },
+    { name = "mypy" },
+    { name = "types-freezegun" },
+    { name = "types-python-dateutil" },
+    { name = "types-requests" },
 ]
 
 [[package]]
@@ -1173,6 +1207,7 @@ requires-dist = [
     { name = "channels", extras = ["daphne"], specifier = ">=4.0.0" },
     { name = "channels-redis", specifier = ">=4.2.0" },
     { name = "compute-horde", specifier = ">=0.0.23" },
+    { name = "compute-horde", editable = "../compute_horde" },
     { name = "crispy-bootstrap5", specifier = ">=2024.2" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-allauth", specifier = ">=0.61.1" },
