@@ -33,6 +33,6 @@ jobs:
           export ADDITIONAL_PACKAGES="${{ vars.ADDITIONAL_PACKAGES }}"
           export HTTP_ASGI_APPLICATION_PATH="${{ vars.HTTP_ASGI_APPLICATION_PATH }}"
           ./deploy-to-aws.sh $ENVIRONMENT
-          export TAG=deployed-${ENVIRONMENT}-`date -u +"%Y-%m-%dT%H.%M.%S"`
+          export TAG=deployed-facilitator-${ENVIRONMENT}-`date -u +"%Y-%m-%dT%H.%M.%S"`
           git tag $TAG
           git push origin $TAG
