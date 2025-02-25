@@ -36,6 +36,9 @@ jobs:
   test:
     timeout-minutes: 10
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./facilitator
     steps:
       - id: app_token
         uses: actions/create-github-app-token@v1

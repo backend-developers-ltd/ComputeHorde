@@ -42,6 +42,9 @@ jobs:
         os: ["ubuntu-latest"]
         python-version: ["3.11", "3.12"]
         bittensor-version: ["8.0.0", "8.5.2"]
+    defaults:
+      run:
+        working-directory: ./compute_horde_sdk
     steps:
       - uses: actions/checkout@v4
         with:

@@ -101,6 +101,15 @@ wheels = [
 ]
 
 [[package]]
+name = "appnope"
+version = "0.1.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/5d/752690df9ef5b76e169e68d6a129fa6d08a7100ca7f754c89495db3c6019/appnope-0.1.4.tar.gz", hash = "sha256:1de3860566df9caf38f01f86f65e0e13e379af54f9e4bee1e66b48f2efffd1ee", size = 4170 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/29/5ecc3a15d5a33e31b26c11426c45c501e439cb865d0bff96315d86443b78/appnope-0.1.4-py2.py3-none-any.whl", hash = "sha256:502575ee11cd7a28c0205f379b525beefebab9d161b7c964670864014ed7213c", size = 4321 },
+]
+
+[[package]]
 name = "argcomplete"
 version = "3.5.3"
 source = { registry = "https://pypi.org/simple" }
@@ -194,6 +203,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/8d/2d/ede4ad7fc34ab4482389fa3369d304f2fa22e50770af706678f6a332fa82/automat-24.8.1.tar.gz", hash = "sha256:b34227cf63f6325b8ad2399ede780675083e439b20c323d376373d8ee6306d88", size = 128679 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/af/cc/55a32a2c98022d88812b5986d2a92c4ff3ee087e83b712ebc703bba452bf/Automat-24.8.1-py3-none-any.whl", hash = "sha256:bf029a7bc3da1e2c24da2343e7598affaa9f10bf0ab63ff808566ce90551e02a", size = 42585 },
+]
+
+[[package]]
+name = "backcall"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/40/764a663805d84deee23043e1426a9175567db89c8b3287b5c2ad9f71aa93/backcall-0.2.0.tar.gz", hash = "sha256:5cbdbf27be5e7cfadb448baf0aa95508f91f2bbc6c6437cd9cd06e2a4c215e1e", size = 18041 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/1c/ff6546b6c12603d8dd1070aa3c3d273ad4c07f5771689a7b69a550e8c951/backcall-0.2.0-py2.py3-none-any.whl", hash = "sha256:fbbce6a29f263178a1f7915c1940bde0ec2b2a967566fe1c65c1dfb7422bd255", size = 11157 },
 ]
 
 [[package]]
@@ -576,6 +594,7 @@ dependencies = [
     { name = "annotated-types", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "compute-horde", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "phx-class-registry", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
@@ -584,9 +603,35 @@ dependencies = [
 requires-dist = [
     { name = "annotated-types", specifier = ">=0.5.0" },
     { name = "compute-horde", specifier = ">=0.0.20" },
-    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "httpx", specifier = ">=0.26.0" },
+    { name = "ipython", specifier = "==8.14.0" },
     { name = "phx-class-registry", specifier = ">=4.1.0" },
     { name = "typing-extensions" },
+]
+
+[package.metadata.requires-dev]
+format = [{ name = "ruff" }]
+lint = [
+    { name = "codespell", extras = ["toml"] },
+    { name = "ruff" },
+]
+release = [{ name = "towncrier", specifier = ">=23.11.0,<24" }]
+test = [
+    { name = "bittensor" },
+    { name = "freezegun" },
+    { name = "pytest" },
+    { name = "pytest-apiver" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-httpx" },
+    { name = "pytest-xdist" },
+]
+type-check = [
+    { name = "django-stubs", extras = ["compatible-mypy"] },
+    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = ">=3.15.1" },
+    { name = "mypy" },
+    { name = "types-freezegun" },
+    { name = "types-python-dateutil" },
+    { name = "types-requests" },
 ]
 
 [[package]]
@@ -632,14 +677,43 @@ source = { editable = "compute_horde_sdk" }
 dependencies = [
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "bittensor", specifier = ">=9.0.0,<9.1" },
-    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "httpx", specifier = ">=0.26.0" },
+    { name = "ipython", specifier = "==8.14.0" },
     { name = "pydantic", specifier = ">=2.10,<3" },
+]
+
+[package.metadata.requires-dev]
+format = [{ name = "ruff" }]
+lint = [
+    { name = "codespell", extras = ["toml"] },
+    { name = "ruff" },
+]
+release = [{ name = "towncrier", specifier = ">=23.11.0,<24" }]
+test = [
+    { name = "faker", specifier = ">=33.1.0" },
+    { name = "freezegun", specifier = ">=1.5.1" },
+    { name = "pytest", specifier = ">=8.2.1" },
+    { name = "pytest-apiver" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    { name = "pytest-django", specifier = ">=4.9.0" },
+    { name = "pytest-httpx", specifier = ">=0.35.0" },
+    { name = "pytest-xdist" },
+    { name = "responses", specifier = ">=0.25.0" },
+]
+type-check = [
+    { name = "django-stubs", extras = ["compatible-mypy"] },
+    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = ">=3.15.1" },
+    { name = "mypy" },
+    { name = "types-freezegun" },
+    { name = "types-python-dateutil" },
+    { name = "types-requests" },
 ]
 
 [[package]]
@@ -1082,9 +1156,9 @@ requires-dist = [
     { name = "django-prometheus", specifier = "==2.3.1" },
     { name = "flower", specifier = "~=2.0.0" },
     { name = "gunicorn", specifier = "==20.1.0" },
-    { name = "httpx", specifier = ">=0.26.0" },
+    { name = "httpx", specifier = "==0.26.0" },
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=0.26.1" },
-    { name = "ipython", specifier = ">=8.14.0" },
+    { name = "ipython", specifier = "==8.14.0" },
     { name = "nox", specifier = "==2024.10.9" },
     { name = "packaging", specifier = ">=24.2" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
@@ -1197,9 +1271,9 @@ requires-dist = [
     { name = "djangorestframework", specifier = ">=3.15.1" },
     { name = "flower", specifier = "~=2.0.0" },
     { name = "gunicorn", specifier = "==20.1.0" },
-    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "httpx", specifier = ">=0.26.0" },
     { name = "inflection", specifier = ">=0.5.1" },
-    { name = "ipython", specifier = ">=8.22.1" },
+    { name = "ipython", specifier = "==8.14.0" },
     { name = "more-itertools", specifier = ">=10.2.0" },
     { name = "pdm-backend", specifier = ">=2.3.3" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
@@ -1407,17 +1481,18 @@ wheels = [
 
 [[package]]
 name = "httpx"
-version = "0.28.1"
+version = "0.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "certifi", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpcore", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "idna", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "sniffio", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b1/df/48c586a5fe32a0f01324ee087459e112ebb7224f646c0b5023f5e79e9956/httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc", size = 141406 }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/26/2dc654950920f499bd062a211071925533f821ccdca04fa0c2fd914d5d06/httpx-0.26.0.tar.gz", hash = "sha256:451b55c30d5185ea6b23c2c793abf9bb237d2a7dfb901ced6ff69ad37ec1dfaf", size = 125671 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad", size = 73517 },
+    { url = "https://files.pythonhosted.org/packages/39/9b/4937d841aee9c2c8102d9a4eeb800c7dad25386caabb4a1bf5010df81a57/httpx-0.26.0-py3-none-any.whl", hash = "sha256:8915f5a3627c4d47b73e8202457cb28f1266982d1159bd5779d86a80c0eab1cd", size = 75862 },
 ]
 
 [[package]]
@@ -1505,35 +1580,24 @@ wheels = [
 
 [[package]]
 name = "ipython"
-version = "9.0.0b1"
+version = "8.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "appnope", marker = "sys_platform == 'darwin'" },
+    { name = "backcall", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "decorator", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "ipython-pygments-lexers", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "jedi", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "matplotlib-inline", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pexpect", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pickleshare", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "prompt-toolkit", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pygments", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "stack-data", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "traitlets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/34/0e/e46f202350429943f8c74c9249a6ad5c3c588785e933be7d9782a5bfe210/ipython-9.0.0b1.tar.gz", hash = "sha256:1898781afa34daff44ab91897e4267650257a566a1dc20a79f35ad9beb984f4d", size = 4362863 }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/cb/2b777f625cca49b4a747b0dfe9986c21f5b46e5b548176903a914cdbec55/ipython-8.14.0.tar.gz", hash = "sha256:1d197b907b6ba441b692c48cf2a3a2de280dc0ac91a3405b39349a50272ca0a1", size = 5470735 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f2/49/97644f3d8a87d23b60ae79374d57b9d9634df8e7191bdcbad272bfe9eed0/ipython-9.0.0b1-py3-none-any.whl", hash = "sha256:2451697baf0e3d830a5bf44d22aef78f928e4a6aa8a51b48a3f5ec76f538dac9", size = 590911 },
-]
-
-[[package]]
-name = "ipython-pygments-lexers"
-version = "1.1.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pygments", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ef/4c/5dd1d8af08107f88c7f741ead7a40854b8ac24ddf9ae850afbcf698aa552/ipython_pygments_lexers-1.1.1.tar.gz", hash = "sha256:09c0138009e56b6854f9535736f4171d855c8c08a563a0dcd8022f78355c7e81", size = 8393 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/33/1f075bf72b0b747cb3288d011319aaf64083cf2efef8354174e3ed4540e2/ipython_pygments_lexers-1.1.1-py3-none-any.whl", hash = "sha256:a9462224a505ade19a605f71f8fa63c2048833ce50abc86768a0d81d876dc81c", size = 8074 },
+    { url = "https://files.pythonhosted.org/packages/52/d1/f70cdafba20030cbc1412d7a7d6a89c5035071835cc50e47fc5ed8da553c/ipython-8.14.0-py3-none-any.whl", hash = "sha256:248aca623f5c99a6635bc3857677b7320b9b8039f99f070ee0d20a5ca5a8e6bf", size = 798714 },
 ]
 
 [[package]]
@@ -1700,7 +1764,7 @@ requires-dist = [
     { name = "django-prometheus", specifier = "==2.3.1" },
     { name = "flower", specifier = "~=2.0.0" },
     { name = "gunicorn", specifier = "==20.1.0" },
-    { name = "ipython", specifier = ">=8.14.0" },
+    { name = "ipython", specifier = "==8.14.0" },
     { name = "nox", specifier = "==2024.10.9" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
     { name = "psycopg2-binary", specifier = "~=2.9.7" },
@@ -1933,6 +1997,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ad/e1/4038dc8b09e66b1f850913c05fe1c039f8d9c0ef61347af37c75bbe77e3f/phx_class_registry-5.1.1.tar.gz", hash = "sha256:06c9af198b846a7530406314f63f8d83441daf42d29ee25d8c0b19a9dbc37939", size = 32115 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7d/85/67eb86f25b1857a7669c4ad7a46b439e55c5301cbcb08b9ce8fa9125700d/phx_class_registry-5.1.1-py3-none-any.whl", hash = "sha256:b093ecc1dad34c5dc6eda2530046d956f2303a5cfaa543bf7fba35ce3c7b1672", size = 15732 },
+]
+
+[[package]]
+name = "pickleshare"
+version = "0.7.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/b6/df3c1c9b616e9c0edbc4fbab6ddd09df9535849c64ba51fcb6531c32d4d8/pickleshare-0.7.5.tar.gz", hash = "sha256:87683d47965c1da65cdacaf31c8441d12b8044cdec9aca500cd78fc2c683afca", size = 6161 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/41/220f49aaea88bc6fa6cba8d05ecf24676326156c23b991e80b3f2fc24c77/pickleshare-0.7.5-py2.py3-none-any.whl", hash = "sha256:9649af414d74d4df115d5d718f82acb59c9d418196b7b4290ed47a12ce62df56", size = 6877 },
 ]
 
 [[package]]
@@ -2895,8 +2968,8 @@ requires-dist = [
     { name = "django-prometheus", specifier = "==2.3.1" },
     { name = "flower", specifier = "~=2.0.0" },
     { name = "gunicorn", specifier = "==20.1.0" },
-    { name = "httpx", specifier = ">=0.26.0" },
-    { name = "ipython", specifier = ">=8.14.0" },
+    { name = "httpx", specifier = "==0.26.0" },
+    { name = "ipython", specifier = "==8.14.0" },
     { name = "kombu", specifier = "~=5.3" },
     { name = "nox", specifier = "==2024.10.9" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
