@@ -1172,7 +1172,7 @@ requires-dist = [
     { name = "celery", specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = ">=4.0.0" },
     { name = "channels-redis", specifier = ">=4.2.0" },
-    { name = "compute-horde", specifier = ">=0.0.22" },
+    { name = "compute-horde", specifier = ">=0.0.23" },
     { name = "crispy-bootstrap5", specifier = ">=2024.2" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-allauth", specifier = ">=0.61.1" },

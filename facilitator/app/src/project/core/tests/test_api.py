@@ -58,7 +58,7 @@ def job_docker(db, user, connected_validator, miner):
         validator=connected_validator,
         miner=miner,
         docker_image="hello-world",
-        args="my args",
+        args=["my", "args"],
         env={"MY_ENV": "my value"},
         use_gpu=True,
         input_url="http://example.com/input.zip",
@@ -96,7 +96,7 @@ def check_docker_job(job_result):
     }
     assert job_result["docker_image"] == "hello-world"
     assert job_result["raw_script"] == ""
-    assert job_result["args"] == "my args"
+    assert job_result["args"] == ["my", "args"]
     assert job_result["env"] == {"MY_ENV": "my value"}
     assert job_result["use_gpu"] is True
     assert job_result["input_url"] == "http://example.com/input.zip"
@@ -112,7 +112,7 @@ def check_raw_job(job_result):
     }
     assert job_result["raw_script"] == "print(1)"
     assert job_result["docker_image"] == ""
-    assert job_result["args"] == ""
+    assert job_result["args"] == []
     assert job_result["env"] == {}
     assert job_result["use_gpu"] is False
     assert job_result["input_url"] == "http://example.com/input.zip"
@@ -176,13 +176,13 @@ def test_raw_job_viewset_create(api_client, user, connected_validator, miner):
 @pytest.mark.django_db
 def test_docker_job_viewset_create(api_client, user, connected_validator, miner):
     api_client.force_authenticate(user=user)
-    data = {"docker_image": "hello-world", "args": "my args", "env": {"MY_ENV": "my value"}, "use_gpu": True}
+    data = {"docker_image": "hello-world", "args": ["my", "args"], "env": {"MY_ENV": "my value"}, "use_gpu": True}
     response = api_client.post("/api/v1/job-docker/", data)
     assert response.status_code == 201
     assert Job.objects.count() == 1
     job = Job.objects.first()
     assert job.docker_image == "hello-world"
-    assert job.args == "my args"
+    assert job.args == ["my", "args"]
     assert job.env == {"MY_ENV": "my value"}
     assert job.use_gpu is True
     assert job.user == user

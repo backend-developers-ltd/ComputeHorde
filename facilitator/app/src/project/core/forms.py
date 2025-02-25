@@ -18,7 +18,6 @@ class DockerImageJobForm(forms.ModelForm):
             "hf_revision",
         )
         widgets = {
-            "args": forms.Textarea(attrs={"rows": 2}),
             "env": forms.Textarea(attrs={"rows": 2}),
         }
 
