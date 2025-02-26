@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 import bittensor
 from pydantic import BaseModel, Field
 
-from compute_horde.executor_class import ExecutorClass
+from compute_horde_core.src.executor_class import ExecutorClass
 
 
 class ReceiptType(enum.StrEnum):

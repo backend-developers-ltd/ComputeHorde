@@ -19,3 +19,4 @@ dist/
 .pdm-python
 /wallets/
 test-report.xml
+.aider*

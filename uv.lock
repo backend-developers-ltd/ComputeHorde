@@ -676,6 +676,7 @@ name = "compute-horde-sdk"
 source = { editable = "compute_horde_sdk" }
 dependencies = [
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "compute-horde", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -684,6 +685,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "bittensor", specifier = ">=9.0.0,<9.1" },
+    { name = "compute-horde", specifier = "==0.0.23" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "ipython", specifier = "==8.14.0" },
     { name = "pydantic", specifier = ">=2.10,<3" },

@@ -18,4 +18,4 @@ from compute_horde_sdk._internal.models import (
     HTTPOutputVolume,
 )
 from compute_horde_sdk._internal.sdk import ComputeHordeClient, ComputeHordeJob
-from _compute_horde_models.executor_class import ExecutorClass
+from compute_horde.executor_class import ExecutorClass

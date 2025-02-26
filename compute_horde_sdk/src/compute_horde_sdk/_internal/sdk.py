@@ -11,9 +11,9 @@ from urllib.parse import urljoin
 import bittensor
 import httpx
 import pydantic
-
-from _compute_horde_models.executor_class import ExecutorClass
-from _compute_horde_models.signature import BittensorWalletSigner, SignatureScope, SignedFields, signature_to_headers
+from compute_horde.executor_class import ExecutorClass
+from compute_horde.fv_protocol.facilitator_requests import SignatureScope, SignedFields
+from compute_horde.signature import BittensorWalletSigner, signature_to_headers
 
 from .exceptions import ComputeHordeError, ComputeHordeJobTimeoutError, ComputeHordeNotFoundError
 from .models import (
