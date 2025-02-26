@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = "==3.11.*"
 resolution-markers = [
     "sys_platform == 'linux'",
@@ -1206,7 +1205,6 @@ requires-dist = [
     { name = "celery", specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = ">=4.0.0" },
     { name = "channels-redis", specifier = ">=4.2.0" },
-    { name = "compute-horde", specifier = ">=0.0.23" },
     { name = "compute-horde", editable = "../compute_horde" },
     { name = "crispy-bootstrap5", specifier = ">=2024.2" },
     { name = "django", specifier = "~=4.2.4" },
