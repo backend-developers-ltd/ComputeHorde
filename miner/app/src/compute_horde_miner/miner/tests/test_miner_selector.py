@@ -4,6 +4,7 @@ from unittest.mock import (
 )
 
 import pytest
+from compute_horde.subtensor import get_peak_cycle
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.selector import (
@@ -43,6 +44,50 @@ async def test_all_active_neurons(
     )
 
     assert res == "HotkeyC"
+
+    mock_subtensor.reset_mock()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+@patch("bittensor.Subtensor")
+async def test_all_active_neurons_multiple_cycles(
+    mock_subtensor,
+):
+    selector = HistoricalRandomMinerSelector(
+        seed="SECRET",
+    )
+
+    hotkeys = ["HotkeyA", "HotkeyB", "HotkeyC"]
+    mock_subtensor.return_value.neurons_lite.return_value = [
+        Mock(hotkey=hotkey) for hotkey in hotkeys
+    ]
+
+    peak_cycle = get_peak_cycle(block=3023723, netuid=settings.BITTENSOR_NETUID)
+    block = peak_cycle.start
+
+    mock_subtensor.return_value.get_current_block.return_value = block - 1
+    assert await selector.active(hotkeys) == "HotkeyA"
+
+    mock_subtensor.return_value.get_current_block.return_value = block
+    assert await selector.active(hotkeys) == "HotkeyC"
+    mock_subtensor.return_value.get_current_block.return_value = block + 1
+    assert await selector.active(hotkeys) == "HotkeyC"
+
+    # a hotkey should be active for 10 cycles (20 tempos of 360 blocks)
+    for i in range(10):
+        mock_subtensor.return_value.get_current_block.return_value = block + i * 2 * 360
+        assert await selector.active(hotkeys) == "HotkeyC"
+
+    # a hotkey should be active for 10 cycles
+    for i in range(11, 20):
+        mock_subtensor.return_value.get_current_block.return_value = block + i * 2 * 360
+        assert await selector.active(hotkeys) == "HotkeyA"
+
+    # a hotkey should be active for 10 cycles
+    for i in range(21, 30):
+        mock_subtensor.return_value.get_current_block.return_value = block + i * 2 * 360
+        assert await selector.active(hotkeys) == "HotkeyB"
 
     mock_subtensor.reset_mock()
 
