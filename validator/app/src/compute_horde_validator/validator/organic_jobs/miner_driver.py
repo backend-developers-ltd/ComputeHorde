@@ -22,6 +22,7 @@ from django.conf import settings
 from pydantic import BaseModel, JsonValue
 
 from compute_horde_validator.validator import job_excuses
+from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
     JobBase,
@@ -110,8 +111,12 @@ async def execute_organic_job(
     Returns True if the job was successfully executed, False otherwise.
     """
 
-    data: JsonValue = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
-    save_event = partial(save_job_execution_event, data=data)
+    if job.on_trusted_miner and aget_config("DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS"):
+
+        async def save_event(*args, **kwargs): ...
+    else:
+        data: JsonValue = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
+        save_event = partial(save_job_execution_event, data=data)
 
     async def notify_job_accepted(msg: V0AcceptJobRequest) -> None:
         await notify_callback(JobStatusUpdate.from_job(job, "accepted", msg.message_type.value))

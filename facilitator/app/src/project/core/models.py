@@ -233,6 +233,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     uploads = SchemaField(schema=list[SingleFileUpload], blank=True, default=list)
     artifacts_dir = models.CharField(max_length=255, blank=True, help_text="image mount directory for artifacts")
     artifacts = models.JSONField(blank=True, default=dict)
+    on_trusted_miner = models.BooleanField(default=False)
 
     tag = models.CharField(max_length=255, blank=True, default="", help_text="may be used to group jobs")
 
@@ -510,6 +511,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                     output_upload=output_upload,
                     signature=signature,
                     artifacts_dir=self.artifacts_dir or None,
+                    on_trusted_miner=self.on_trusted_miner,
                 )
             else:
                 assert self.miner is not None

@@ -44,6 +44,7 @@ class SignedFields(BaseModel):
     env: dict[str, str]
     use_gpu: bool
     artifacts_dir: str
+    on_trusted_miner: bool
 
     volumes: list[JsonValue]
     uploads: list[JsonValue]
@@ -62,6 +63,7 @@ class SignedFields(BaseModel):
             volumes=typing.cast(list[JsonValue], data.get("volumes", [])),
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
             artifacts_dir=typing.cast(str, data.get("artifacts_dir") or ""),
+            on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner")),
         )
         return signed_fields
 

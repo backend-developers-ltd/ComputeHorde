@@ -222,7 +222,7 @@ def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
     )
 
 
-def get_dummy_job_request_v2(uuid: str) -> V2JobRequest:
+def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2JobRequest:
     return V2JobRequest(
         type="job.new",
         uuid=uuid,
@@ -262,6 +262,7 @@ def get_dummy_job_request_v2(uuid: str) -> V2JobRequest:
             timestamp_ns=1729622861880448856,
             signature="lnX1rPC+Dnbc6fKPunR35T329IgjJBKHxvA1Y5hpWUl7N7GzlwEnjGHuWcdRfOjfamNNXYnT/gaIUWJxbmwChw==",
         ),
+        on_trusted_miner=on_trusted_miner,
     )
 
 

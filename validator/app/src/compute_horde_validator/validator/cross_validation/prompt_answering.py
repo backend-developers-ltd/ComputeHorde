@@ -7,14 +7,15 @@ from asgiref.sync import sync_to_async
 from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClass
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
+    OrganicJobError,
     run_organic_job,
 )
+from compute_horde.mv_protocol.miner_requests import V0DeclineJobRequest
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
 
 from compute_horde_validator.validator.cross_validation.utils import (
-    TRUSTED_MINER_FAKE_KEY,
     TrustedMinerClient,
     trusted_miner_not_configured_system_event,
 )
@@ -22,6 +23,7 @@ from compute_horde_validator.validator.models import Prompt, SolveWorkload, Syst
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
     LlmPromptsJobGenerator,
 )
+from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,14 @@ async def answer_prompts(
     try:
         await run_organic_job(miner_client, job_details, executor_ready_timeout=wait_timeout)
     except Exception as e:
+        if (
+            isinstance(e, OrganicJobError)
+            and isinstance(e.received, V0DeclineJobRequest)
+            and e.received.reason == V0DeclineJobRequest.Reason.BUSY
+        ):
+            logger.info("Failed to run answer_prompts: trusted miner is busy")
+            return False
+
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.FAILURE,

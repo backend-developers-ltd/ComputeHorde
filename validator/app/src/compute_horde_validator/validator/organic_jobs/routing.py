@@ -21,6 +21,7 @@ from compute_horde_validator.validator.models import (
     OrganicJob,
     SystemEvent,
 )
+from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,10 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     Goes through all miners with recent manifests and online executors of the given executor class.
     Returns a random miner that may have a non-busy executor based on known receipts.
     """
+    if request.on_trusted_miner:
+        miner, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
+        return miner
+
     executor_class = request.executor_class
 
     manifests_qs = (
@@ -130,6 +135,8 @@ async def report_miner_failed_job(job: OrganicJob):
         logger.info(
             f"Not blacklisting miner: job {job.job_uuid} is not failed (status={job.status})"
         )
+        return
+    if job.on_trusted_miner:
         return
 
     blacklist_time = await aget_config("DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS")

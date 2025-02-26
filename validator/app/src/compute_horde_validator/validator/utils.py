@@ -4,6 +4,7 @@ import zipfile
 from functools import cache
 
 MACHINE_SPEC_CHANNEL = "machine_spec_sending"
+TRUSTED_MINER_FAKE_KEY = "0" * 48
 
 
 def single_file_zip(filename: str, contents: str | bytes) -> str:
