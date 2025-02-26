@@ -7,6 +7,8 @@ import pytest
 
 from _compute_horde_models.signature import (
     BittensorWalletVerifier,
+    SignatureInvalidException,
+    SignatureScope,
     SignedFields,
     signature_from_headers,
 )
@@ -61,8 +63,14 @@ def assert_signature(request: httpx.Request):
     except ValueError:
         json_body = None
 
-    signed_fields = SignedFields.from_facilitator_sdk_json(json_body)
-    verifier.verify(signed_fields.model_dump_json(), signature)
+    if signature.signature_scope == SignatureScope.SignedFields:
+        signed_fields = SignedFields.from_facilitator_sdk_json(json_body)
+        verifier.verify(signed_fields.model_dump_json(), signature)
+    elif signature.signature_scope == SignatureScope.FullRequest:
+        signed_fields = json.dumps(json_body, sort_keys=True)
+        verifier.verify(signed_fields, signature)
+    else:
+        raise SignatureInvalidException(f"Invalid signature scope: {signature}")
 
 
 @pytest.fixture

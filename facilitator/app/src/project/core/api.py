@@ -226,7 +226,10 @@ class DockerJobViewset(BaseCreateJobViewSet):
 class CheatedJobViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
     def create(self, request, *args, **kwargs):
         job_uuid = json.loads(request.body).get("job_uuid")
-        job = Job.objects.get(uuid=job_uuid)
+        try:
+            job = Job.objects.get(uuid=job_uuid)
+        except Job.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
         job.report_cheated()
         return Response(status=status.HTTP_200_OK)
 
