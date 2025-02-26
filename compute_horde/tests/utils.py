@@ -4,7 +4,7 @@ from uuid import uuid4
 from bittensor import Keypair
 from django.utils import timezone
 
-from compute_horde.executor_class import ExecutorClass
+from compute_horde_core.src.executor_class import ExecutorClass
 from compute_horde.receipts.schemas import JobStartedReceiptPayload, Receipt, ReceiptType
 from compute_horde.utils import sign_blob
 
