@@ -111,7 +111,7 @@ async def execute_organic_job(
     Returns True if the job was successfully executed, False otherwise.
     """
 
-    if job.on_trusted_miner and aget_config("DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS"):
+    if job.on_trusted_miner and await aget_config("DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS"):
 
         async def save_event(*args, **kwargs): ...
     else:
