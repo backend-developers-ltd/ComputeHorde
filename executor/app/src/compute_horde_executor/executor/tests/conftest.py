@@ -14,3 +14,17 @@ def some() -> Generator[int, None, None]:
 @pytest.fixture(autouse=True)
 def unique_settings(settings):
     settings.EXECUTOR_TOKEN = str(uuid.uuid4())
+
+
+@pytest.fixture(autouse=True, scope="session")
+def print_all_child_subprocesses():
+    yield
+
+    import logging
+
+    import psutil
+
+    current_process = psutil.Process()
+    children = current_process.children(recursive=True)
+    for child in children:
+        logging.error(f"Subprocess still running: {child=} {child.cmdline()=}")
