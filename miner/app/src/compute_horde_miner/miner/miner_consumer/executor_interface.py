@@ -150,6 +150,8 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
             self.job.stderr = msg.docker_process_stderr
             self.job.stdout = msg.docker_process_stdout
             self.job.exit_status = msg.docker_process_exit_status
+            self.job.error_type = msg.error_type
+            self.job.error_detail = msg.error_detail
 
             await self.job.asave()
             await self.send_executor_failed(
@@ -158,6 +160,8 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
                 stdout=msg.docker_process_stdout,
                 stderr=msg.docker_process_stderr,
                 exit_status=msg.docker_process_exit_status,
+                error_type=msg.error_type,
+                error_detail=msg.error_detail,
             )
 
     async def _miner_job_request(self, msg: JobRequest):

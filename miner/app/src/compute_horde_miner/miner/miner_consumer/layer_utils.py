@@ -7,6 +7,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.output_upload import OutputUpload
 from compute_horde.base.volume import Volume
+from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.mv_protocol import validator_requests
 from compute_horde.utils import MachineSpecs
 from pydantic import model_validator
@@ -71,6 +72,8 @@ class ExecutorFailed(pydantic.BaseModel):
     docker_process_exit_status: int | None = None
     docker_process_stdout: str
     docker_process_stderr: str
+    error_type: JobErrorType | None = None
+    error_detail: str | None = None
 
 
 TModel = TypeVar("TModel", bound=pydantic.BaseModel)
@@ -277,7 +280,14 @@ class ExecutorInterfaceMixin(BaseMixin):
         )
 
     async def send_executor_failed(
-        self, job_uuid: str, executor_token: str, stdout: str, stderr: str, exit_status: int | None
+        self,
+        job_uuid: str,
+        executor_token: str,
+        stdout: str,
+        stderr: str,
+        exit_status: int | None,
+        error_type: JobErrorType | None = None,
+        error_detail: str | None = None,
     ):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
         await self.channel_layer.group_send(
@@ -289,6 +299,8 @@ class ExecutorInterfaceMixin(BaseMixin):
                     docker_process_stdout=stdout,
                     docker_process_stderr=stderr,
                     docker_process_exit_status=exit_status,
+                    error_type=error_type,
+                    error_detail=error_detail,
                 ).model_dump(),
             },
         )

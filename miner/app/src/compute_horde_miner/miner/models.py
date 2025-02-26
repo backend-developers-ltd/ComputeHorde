@@ -51,6 +51,8 @@ class AcceptedJob(models.Model):
     exit_status = models.PositiveSmallIntegerField(null=True)
     stdout = models.TextField(blank=True, default="")
     stderr = models.TextField(blank=True, default="")
+    error_type = models.TextField(null=True, default=None)
+    error_detail = models.TextField(null=True, default=None)
     result_reported_to_validator = models.DateTimeField(null=True)
     time_took = models.DurationField(null=True)
     score = models.FloatField(null=True)

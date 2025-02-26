@@ -92,6 +92,7 @@ class SystemEvent(models.Model):
         NEW_WORKLOADS_CREATED = "NEW_WORKLOADS_CREATED"
         ERROR_UPLOADING_TO_S3 = "ERROR_UPLOADING_TO_S3"
         ERROR_DOWNLOADING_FROM_S3 = "ERROR_DOWNLOADING_FROM_S3"
+        ERROR_DOWNLOADING_FROM_HUGGINGFACE = "ERROR_DOWNLOADING_FROM_HUGGINGFACE"
         LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED = "LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED"
         APPLIED_BURNING = "APPLIED_BURNING"
         NO_BURNING = "NO_BURNING"
@@ -275,6 +276,8 @@ class SyntheticJob(JobBase):
 class OrganicJob(JobBase):
     stdout = models.TextField(blank=True, default="")
     stderr = models.TextField(blank=True, default="")
+    error_type = models.TextField(null=True, default=None)
+    error_detail = models.TextField(null=True, default=None)
     artifacts = models.JSONField(blank=True, default=dict)
     cheated = models.BooleanField(default=False)
     block = models.BigIntegerField(

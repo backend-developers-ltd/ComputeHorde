@@ -39,6 +39,7 @@ from compute_horde.certificate import (
 from compute_horde.em_protocol import executor_requests, miner_requests
 from compute_horde.em_protocol.executor_requests import (
     GenericError,
+    JobErrorType,
     V0FailedRequest,
     V0FailedToPrepare,
     V0FinishedRequest,
@@ -249,6 +250,8 @@ class MinerClient(AbstractMinerClient):
                 timeout=job_result.timeout,
                 docker_process_stdout=job_result.stdout,
                 docker_process_stderr=job_result.stderr,
+                error_type=job_result.error_type,
+                error_detail=job_result.error_detail,
             )
         )
 
@@ -282,6 +285,8 @@ class JobResult(pydantic.BaseModel):
     stderr: str
     artifacts: dict[str, str]
     specs: MachineSpecs | None = None
+    error_type: JobErrorType | None = None
+    error_detail: str | None = None
 
 
 def truncate(v: str) -> str:
@@ -384,8 +389,15 @@ def get_machine_specs() -> MachineSpecs:
 
 
 class JobError(Exception):
-    def __init__(self, description: str):
+    def __init__(
+        self,
+        description: str,
+        error_type: JobErrorType | None = None,
+        error_detail: str | None = None,
+    ):
         self.description = description
+        self.error_type = error_type
+        self.error_detail = error_detail
 
 
 class DownloadManager:
@@ -412,6 +424,11 @@ class DownloadManager:
             )
         except Exception as e:
             logger.error(f"Failed to download model from Hugging Face: {e}")
+            raise JobError(
+                f"Failed to download model from Hugging Face: {e}",
+                JobErrorType.HUGGINGFACE_DOWNLOAD,
+                str(e),
+            ) from e
 
     async def download(self, fp, url):
         async with self.semaphore:
@@ -579,6 +596,8 @@ class JobRunner:
                 stdout=ex.description,
                 stderr="",
                 artifacts={},
+                error_type=ex.error_type,
+                error_detail=ex.error_detail,
             )
 
         docker_image = job_request.docker_image_name
