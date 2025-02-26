@@ -31,14 +31,11 @@ dependencies = [
 "Issue Tracker" = "https://github.com/backend-developers-ltd/compute-horde-facilitator-sdk/issues"
 
 [build-system]
-requires = ["pdm-backend"]
+requires = ["pdm-backend==2.4.3"]
 build-backend = "pdm.backend"
 
 [tool.pdm]
 distribution = true
-
-[tool.pdm.version]
-source = "scm"
 
 [dependency-groups]
 format = ["ruff"]

@@ -1227,7 +1227,6 @@ dependencies = [
     { name = "inflection", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "more-itertools", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "pdm-backend", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "prometheus-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "psycopg2-binary", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1251,7 +1250,7 @@ requires-dist = [
     { name = "celery", specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = ">=4.0.0" },
     { name = "channels-redis", specifier = ">=4.2.0" },
-    { name = "compute-horde", specifier = ">=0.0.22" },
+    { name = "compute-horde", editable = "compute_horde" },
     { name = "crispy-bootstrap5", specifier = ">=2024.2" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-allauth", specifier = ">=0.61.1" },
@@ -1275,7 +1274,6 @@ requires-dist = [
     { name = "inflection", specifier = ">=0.5.1" },
     { name = "ipython", specifier = "==8.14.0" },
     { name = "more-itertools", specifier = ">=10.2.0" },
-    { name = "pdm-backend", specifier = ">=2.3.3" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
     { name = "psycopg2-binary", specifier = "~=2.9.7" },
     { name = "pydantic", specifier = ">=2.3,<3" },
@@ -1967,15 +1965,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/db/f1/6165ebcca27fca3f1d63f8c3a45805c2ed8568be4d09219a2aa45e792c14/password_strength-0.0.3.post2.tar.gz", hash = "sha256:bf4df10a58fcd3abfa182367307b4fd7b1cec518121dd83bf80c1c42ba796762", size = 12857 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1c/d6/08fd888c980589e4e27c2a4177e972481e8881600138e63afb785fe52630/password_strength-0.0.3.post2-py2.py3-none-any.whl", hash = "sha256:6739357c2863d707b7c7f247ff7c6882a70904a18d12c9aaf98f8b95da176fb9", size = 12167 },
-]
-
-[[package]]
-name = "pdm-backend"
-version = "2.4.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d9/bf/d75d568521cef171ae9138d9ab55c169a98ee803853ca87b7096e4636d5b/pdm_backend-2.4.3.tar.gz", hash = "sha256:dbd9047a7ac10d11a5227e97163b617ad5d665050476ff63867d971758200728", size = 117684 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/78/85/60973a4f012d19b25b04276a1a48f80465df09b7243c789c4f1565bdfb87/pdm_backend-2.4.3-py3-none-any.whl", hash = "sha256:07c7e7ae9dc7bbaf9a470e8d2cc59e987bf2897c2f27a7efbde8f1534c0ea4ee", size = 114988 },
 ]
 
 [[package]]
