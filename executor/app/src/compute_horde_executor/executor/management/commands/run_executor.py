@@ -39,6 +39,7 @@ from compute_horde.certificate import (
 from compute_horde.em_protocol import executor_requests, miner_requests
 from compute_horde.em_protocol.executor_requests import (
     GenericError,
+    JobErrorType,
     V0FailedRequest,
     V0FailedToPrepare,
     V0FinishedRequest,
@@ -73,6 +74,7 @@ MAX_RESULT_SIZE_IN_RESPONSE = 1_000_000  # 1 MB
 TRUNCATED_RESPONSE_PREFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 TRUNCATED_RESPONSE_SUFFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 MAX_ARTIFACT_SIZE = 1_000_000
+DOCKER_STOP_TIMEOUT_SECONDS = 15
 INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 60 * 15
 CVE_2022_0492_IMAGE = (
     "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
@@ -248,6 +250,8 @@ class MinerClient(AbstractMinerClient):
                 timeout=job_result.timeout,
                 docker_process_stdout=job_result.stdout,
                 docker_process_stderr=job_result.stderr,
+                error_type=job_result.error_type,
+                error_detail=job_result.error_detail,
             )
         )
 
@@ -281,6 +285,8 @@ class JobResult(pydantic.BaseModel):
     stderr: str
     artifacts: dict[str, str]
     specs: MachineSpecs | None = None
+    error_type: JobErrorType | None = None
+    error_detail: str | None = None
 
 
 def truncate(v: str) -> str:
@@ -383,8 +389,15 @@ def get_machine_specs() -> MachineSpecs:
 
 
 class JobError(Exception):
-    def __init__(self, description: str):
+    def __init__(
+        self,
+        description: str,
+        error_type: JobErrorType | None = None,
+        error_detail: str | None = None,
+    ):
         self.description = description
+        self.error_type = error_type
+        self.error_detail = error_detail
 
 
 class DownloadManager:
@@ -411,6 +424,11 @@ class DownloadManager:
             )
         except Exception as e:
             logger.error(f"Failed to download model from Hugging Face: {e}")
+            raise JobError(
+                f"Failed to download model from Hugging Face: {e}",
+                JobErrorType.HUGGINGFACE_DOWNLOAD,
+                str(e),
+            ) from e
 
     async def download(self, fp, url):
         async with self.semaphore:
@@ -578,6 +596,8 @@ class JobRunner:
                 stdout=ex.description,
                 stderr="",
                 artifacts={},
+                error_type=ex.error_type,
+                error_detail=ex.error_detail,
             )
 
         docker_image = job_request.docker_image_name
@@ -720,13 +740,13 @@ class JobRunner:
             # stop the associated nginx server
             try:
                 await asyncio.sleep(1)
-                await asyncio.create_subprocess_exec(
+                process = await asyncio.create_subprocess_exec(
                     "docker",
                     "stop",
                     self.nginx_container_name,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
                 )
+                await asyncio.wait_for(process.wait(), DOCKER_STOP_TIMEOUT_SECONDS)
+
             except Exception as e:
                 logger.error(f"Failed to stop Nginx: {e}")
 

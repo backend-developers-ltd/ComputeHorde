@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Literal, assert_never
 
+from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.fv_protocol.facilitator_requests import JobRequest, V2JobRequest
 from compute_horde.miner_client.organic import (
@@ -292,14 +293,20 @@ async def execute_organic_job(
 
         elif exc.reason == FailureReason.JOB_FAILED:
             comment = f"Miner {miner_client.miner_name} failed: {exc.received_str()}"
+            subtype = SystemEvent.EventSubType.FAILURE
             if isinstance(exc.received, V0JobFailedRequest):
                 job.stdout = exc.received.docker_process_stdout
                 job.stderr = exc.received.docker_process_stderr
+                job.error_type = exc.received.error_type
+                job.error_detail = exc.received.error_detail
+                match exc.received.error_type:
+                    case JobErrorType.HUGGINGFACE_DOWNLOAD:
+                        subtype = SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_HUGGINGFACE
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
             logger.info(comment)
-            await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
+            await save_event(subtype=subtype, long_description=comment)
             await notify_callback(JobStatusUpdate.from_job(job, "failed", "V0JobFailedRequest"))
 
         else:
