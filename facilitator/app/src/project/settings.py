@@ -368,6 +368,12 @@ LOGGING = {
             "level": "INFO",
             "propagate": True,
         },
+        # Fix spamming DEBUG-level logs in manage.py shell and shell_plus.
+        "parso": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
+        },
     },
 }
 
