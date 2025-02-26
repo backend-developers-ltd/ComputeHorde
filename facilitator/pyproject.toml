@@ -45,7 +45,6 @@ dependencies = [
     "uritemplate>=4.1.1",
     "pyyaml>=6.0.1",
     "compute-horde",
-    "pdm-backend>=2.3.3",
 ]
 description = "Compute Horde app facilitating interaction between end users and Validators"
 authors = [{name = "Backend Developers LTD"}]
