@@ -3,6 +3,7 @@ from compute_horde.fv_protocol.facilitator_requests import Signature
 from compute_horde.signature import (
     VERIFIERS_REGISTRY,
     SignatureInvalidException,
+    SignatureScope,
     signature_to_headers,
 )
 from django.utils.datastructures import CaseInsensitiveMapping
@@ -52,7 +53,9 @@ def signature(keypair, payload_from_request):
 
 @pytest.fixture
 def mock_request_with_signature(mock_request, signature):
-    mock_request.headers = CaseInsensitiveMapping({**mock_request.headers, **signature_to_headers(signature)})
+    mock_request.headers = CaseInsensitiveMapping(
+        {**mock_request.headers, **signature_to_headers(signature, SignatureScope.SignedFields)}
+    )
     return mock_request
 
 

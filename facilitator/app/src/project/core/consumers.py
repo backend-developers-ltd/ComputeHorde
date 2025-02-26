@@ -234,8 +234,10 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
 
     async def job_new(self, payload: dict) -> None:
         """Receive V0JobRequest from backend and forward it to validator via WS"""
+        await self.send(text_data=json.dumps(payload))
 
-        log.debug("forwarding new job request to validator", payload=payload)
+    async def job_cheated(self, payload: dict) -> None:
+        """Receive V0JobCheated from backend and forward it to validator via WS"""
         await self.send(text_data=json.dumps(payload))
 
     async def validator_disconnect(self, payload: dict) -> None:

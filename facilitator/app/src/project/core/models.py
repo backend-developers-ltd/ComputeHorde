@@ -22,6 +22,7 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     JobRequest,
     Signature,
+    V0JobCheated,
     V0JobRequest,
     V1JobRequest,
     V2JobRequest,
@@ -200,6 +201,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     )
     signature = models.JSONField(blank=True, default=None, null=True)
     created_at = models.DateTimeField(default=now)
+    cheated = models.BooleanField(default=False)
 
     executor_class = models.CharField(
         max_length=255, default=DEFAULT_EXECUTOR_CLASS, help_text="executor hardware class"
@@ -277,7 +279,19 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 self.miner = None
             super().save(*args, **kwargs)
             if is_new:
-                self.send_to_validator()
+                job_request = self.as_job_request().dict()
+                self.send_to_validator(job_request)
+                JobStatus.objects.create(job=self, status=JobStatus.Status.SENT)
+
+    def report_cheated(self) -> None:
+        """
+        Mark the job as cheated and notify the validator.
+        """
+        self.cheated = True
+        self.save()
+        payload = V0JobCheated(job_uuid=str(self.uuid)).dict()
+        log.debug("sending cheated report", payload=payload)
+        self.send_to_validator(payload)
 
     def select_validator(self) -> Validator:
         """
@@ -512,17 +526,13 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                     output_upload=output_upload,
                 )
 
-    def send_to_validator(self) -> None:
+    def send_to_validator(self, payload: dict) -> None:
         channels_names = Channel.objects.filter(validator=self.validator).values_list("name", flat=True)
         log.debug("sending job to validator", job=self, validator=self.validator, channels_names=channels_names)
         channel_layer = get_channel_layer()
-
         send = async_to_sync(channel_layer.send)
-        job_request = self.as_job_request().dict()
         for channel_name in channels_names:
-            send(channel_name, job_request)
-
-        JobStatus.objects.create(job=self, status=JobStatus.Status.SENT)
+            send(channel_name, payload)
 
     @retry(
         stop=stop_after_delay(JOB_TIMEOUT),

@@ -471,6 +471,7 @@ def setup_batch_jobs(
     synthetic_failed: int = 0,
     organic_completed: int = 0,
     organic_failed: int = 0,
+    num_organic_jobs_cheated: int = 0,
 ):
     common_params = {
         "miner": miner,
@@ -501,9 +502,14 @@ def setup_batch_jobs(
             **common_params,
         )
     for _ in range(organic_completed):
+        cheated = False
+        if num_organic_jobs_cheated > 0:
+            cheated = True
+            num_organic_jobs_cheated -= 1
         OrganicJob.objects.create(
             status=OrganicJob.Status.COMPLETED,
             block=batch.cycle.start,
+            cheated=cheated,
             **common_params,
         )
     for _ in range(organic_failed):
@@ -526,6 +532,7 @@ def test_temporary_scoring_formula(override_weights_version_v1):
     )
     miner1 = Miner.objects.create(hotkey="miner1")
     miner2 = Miner.objects.create(hotkey="miner2")
+    miner3 = Miner.objects.create(hotkey="miner3")
 
     setup_batch_jobs(
         batch=batch,
@@ -545,20 +552,34 @@ def test_temporary_scoring_formula(override_weights_version_v1):
         organic_completed=23,
         organic_failed=29,
     )
+    setup_batch_jobs(
+        batch=batch,
+        miner=miner3,
+        synthetic_completed=10,
+        synthetic_excused=2,
+        synthetic_failed=0,
+        organic_completed=5,
+        organic_failed=2,
+        num_organic_jobs_cheated=5,
+    )
 
     scores = score_batches([batch])
 
     # expected scores
     miner1_correct = 2 + 3 + 7
     miner2_correct = 13 + 17 + 23
-    total = miner1_correct + miner2_correct
+    miner3_correct = 10 + 2 + 0  # do not count cheated organic jobs
+    total = miner1_correct + miner2_correct + miner3_correct
     miner1_score = 100 * miner1_correct / total
     miner2_score = 100 * miner2_correct / total
+    miner3_score = 100 * miner3_correct / total
 
     assert "miner1" in scores
     assert "miner2" in scores
+    assert "miner3" in scores
     assert scores["miner1"] == approx(miner1_score, abs=10**-4)
     assert scores["miner2"] == approx(miner2_score, abs=10**-4)
+    assert scores["miner3"] == approx(miner3_score, abs=10**-4)
 
 
 @pytest.mark.django_db

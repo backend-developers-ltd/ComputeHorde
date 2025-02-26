@@ -6,10 +6,16 @@ import json
 import re
 import time
 import typing
+from enum import Enum
 from typing import ClassVar
 
 import bittensor
 from pydantic import BaseModel, JsonValue, field_serializer, field_validator
+
+
+class SignatureScope(Enum):
+    SignedFields = "SignedFields"
+    FullRequest = "FullRequest"
 
 
 class Signature(BaseModel, extra="forbid"):
@@ -18,6 +24,7 @@ class Signature(BaseModel, extra="forbid"):
     signatory: str = ""  # identity of the signer (e.g. sa58 address if signature_type == "bittensor")
     timestamp_ns: int = 0  # UNIX timestamp in nanoseconds
     signature: bytes
+    signature_scope: SignatureScope = SignatureScope.SignedFields
 
     @field_validator("signature")
     @classmethod
@@ -72,6 +79,7 @@ def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Si
             signatory=headers[f"{prefix}Signatory"],
             timestamp_ns=int(headers[f"{prefix}Timestamp-NS"]),
             signature=headers[f"{prefix}Signature"].encode("utf-8"),
+            signature_scope=SignatureScope(headers.get(f"{prefix}Signature-Scope", SignatureScope.SignedFields.name)),
         )
     except (
         KeyError,
@@ -81,7 +89,7 @@ def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Si
         raise SignatureNotFound("Signature not found in headers") from e
 
 
-def signature_to_headers(signature: Signature, prefix: str = "X-CH-") -> dict[str, str]:
+def signature_to_headers(signature: Signature, scope: SignatureScope, prefix: str = "X-CH-") -> dict[str, str]:
     """
     Converts the signature to headers
 
@@ -93,6 +101,7 @@ def signature_to_headers(signature: Signature, prefix: str = "X-CH-") -> dict[st
         f"{prefix}Signatory": signature.signatory,
         f"{prefix}Timestamp-NS": str(signature.timestamp_ns),
         f"{prefix}Signature": base64.b64encode(signature.signature).decode("utf-8"),
+        f"{prefix}Signature-Scope": scope.name,
     }
 
 

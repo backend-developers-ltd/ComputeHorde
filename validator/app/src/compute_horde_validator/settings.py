@@ -360,6 +360,11 @@ CONSTANCE_CONFIG = {
         "Amount of time a miner will be temporarily blacklisted for after failing an organic job.",
         int,
     ),
+    "DYNAMIC_JOB_CHEATED_BLACKLIST_TIME_SECONDS": (
+        int(timedelta(hours=4).total_seconds()),
+        "Amount of time a miner will be temporarily blacklisted for after being reported cheating on an organic job.",
+        int,
+    ),
     "DYNAMIC_BURN_TARGET_SS58ADDRESSES": (
         "Comma-separated list of ss58 addresses that will receive 'DYNAMIC_BURN_RATE' fraction of all incentives",
         "",
