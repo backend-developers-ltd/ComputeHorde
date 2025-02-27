@@ -12,8 +12,8 @@ import bittensor
 import httpx
 import pydantic
 
-from _compute_horde_models.executor_class import ExecutorClass
-from _compute_horde_models.signature import BittensorWalletSigner, SignatureScope, SignedFields, signature_to_headers
+from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.signature import BittensorWalletSigner, SignatureScope, SignedFields, signature_to_headers
 
 from .exceptions import ComputeHordeError, ComputeHordeJobTimeoutError, ComputeHordeNotFoundError
 from .models import (
