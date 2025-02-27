@@ -113,7 +113,9 @@ async def execute_organic_job(
 
     if job.on_trusted_miner and await aget_config("DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS"):
 
-        async def save_event(*args, **kwargs): ...
+        # ignore trusted system events
+        async def save_event(*args, **kwargs):
+            pass
     else:
         data: JsonValue = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
         save_event = partial(save_job_execution_event, data=data)
