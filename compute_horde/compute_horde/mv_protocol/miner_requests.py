@@ -2,12 +2,12 @@ import enum
 from enum import Enum
 
 import pydantic
+from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde.receipts import Receipt
 
 from ..base_requests import BaseRequest, JobMixin
 from ..em_protocol.executor_requests import JobErrorType
-from ..executor_class import ExecutorClass
 from ..utils import MachineSpecs
 
 

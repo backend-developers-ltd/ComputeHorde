@@ -9,7 +9,6 @@ import requests
 import uvloop
 from asgiref.sync import async_to_sync
 from compute_horde.certificate import generate_certificate_at
-from compute_horde.executor_class import ExecutorClass
 from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,
@@ -29,6 +28,7 @@ from compute_horde.mv_protocol.validator_requests import (
 )
 from compute_horde.transport import TransportConnectionError
 from compute_horde.utils import Timer
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.core.management.base import BaseCommand
 

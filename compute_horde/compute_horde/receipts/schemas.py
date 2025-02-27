@@ -4,9 +4,8 @@ import json
 from typing import Annotated, Literal
 
 import bittensor
+from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel, Field
-
-from compute_horde.executor_class import ExecutorClass
 
 
 class ReceiptType(enum.StrEnum):

@@ -3,7 +3,7 @@ from contextlib import suppress
 from typing import Any, TypeAlias
 
 from asgiref.sync import sync_to_async
-from compute_horde.executor_class import ExecutorClass
+from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
 

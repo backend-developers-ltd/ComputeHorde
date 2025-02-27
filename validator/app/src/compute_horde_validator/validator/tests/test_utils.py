@@ -9,7 +9,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.base.volume import InlineVolume, Volume
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol.miner_requests import (
     ExecutorClassManifest,
     ExecutorManifest,
@@ -20,6 +20,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
     V0JobFinishedRequest,
 )
+from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.models import (
     Cycle,

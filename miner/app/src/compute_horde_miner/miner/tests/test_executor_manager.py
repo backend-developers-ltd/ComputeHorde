@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
-from compute_horde.executor_class import ExecutorClass
 from compute_horde.subtensor import REFERENCE_BLOCK_IN_PEAK_CYCLE
+from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
     AllExecutorsBusy,

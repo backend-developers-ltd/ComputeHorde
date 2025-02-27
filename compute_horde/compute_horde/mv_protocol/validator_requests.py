@@ -4,13 +4,13 @@ import re
 from typing import Self
 
 import pydantic
+from compute_horde_core.executor_class import ExecutorClass
 from pydantic import model_validator
 
 from ..base.docker import DockerRunOptionsPreset
 from ..base.output_upload import OutputUpload  # noqa
 from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
-from ..executor_class import ExecutorClass
 from ..receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,

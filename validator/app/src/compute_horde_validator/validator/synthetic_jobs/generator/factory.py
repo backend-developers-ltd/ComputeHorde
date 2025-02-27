@@ -1,4 +1,4 @@
-from compute_horde.executor_class import ExecutorClass
+from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,

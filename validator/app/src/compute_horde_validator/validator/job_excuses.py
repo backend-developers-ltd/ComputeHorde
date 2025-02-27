@@ -2,10 +2,10 @@ import logging
 from datetime import datetime, timedelta
 
 from asgiref.sync import sync_to_async
-from compute_horde.executor_class import ExecutorClass
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde.utils import get_validators
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
 from compute_horde_validator.validator.models import MinerManifest

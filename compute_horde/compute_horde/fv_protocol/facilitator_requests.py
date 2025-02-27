@@ -4,6 +4,7 @@ from enum import StrEnum
 from typing import Annotated, Literal, Self
 
 import pydantic
+from compute_horde_core.executor_class import ExecutorClass
 from pydantic import (
     BaseModel,
     JsonValue,
@@ -14,7 +15,6 @@ from pydantic import (
 
 from compute_horde.base.output_upload import MultiUpload, OutputUpload, ZipAndHttpPutUpload
 from compute_horde.base.volume import MultiVolume, Volume, ZipUrlVolume
-from compute_horde.executor_class import ExecutorClass
 
 
 class Error(BaseModel, extra="allow"):

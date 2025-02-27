@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 from compute_horde.base.volume import VolumeType
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol.miner_requests import RequestType, V0DeclineJobRequest
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
@@ -15,6 +15,7 @@ from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde.utils import sign_blob
+from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
 
 from compute_horde_miner.miner.executor_manager.current import executor_manager

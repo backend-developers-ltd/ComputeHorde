@@ -4,7 +4,7 @@ from compute_horde.base.output_upload import (
     SingleFilePutUpload,
     SingleFileUpload,
 )
-from compute_horde.executor_class import ExecutorClass
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
 from ..base import BasePromptJobGenerator

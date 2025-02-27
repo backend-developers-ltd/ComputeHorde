@@ -2,9 +2,10 @@ import datetime
 from datetime import timedelta
 from typing import ClassVar, Self, TypeAlias, assert_never
 
+from compute_horde_core.executor_class import ExecutorClass
 from django.db import models
 
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts import ReceiptType
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
