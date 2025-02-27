@@ -745,8 +745,11 @@ class JobRunner:
                     "stop",
                     self.nginx_container_name,
                 )
-                await asyncio.wait_for(process.wait(), DOCKER_STOP_TIMEOUT_SECONDS)
-
+                try:
+                    await asyncio.wait_for(process.wait(), DOCKER_STOP_TIMEOUT_SECONDS)
+                except TimeoutError:
+                    process.kill()
+                    raise
             except Exception as e:
                 logger.error(f"Failed to stop Nginx: {e}")
 
@@ -830,7 +833,10 @@ class JobRunner:
         await process.wait()
         self.temp_dir.rmdir()
         if self.is_streaming_job:
-            await asyncio.create_subprocess_exec("docker", "network", "rm", self.job_network_name)
+            process = await asyncio.create_subprocess_exec(
+                "docker", "network", "rm", self.job_network_name
+            )
+            await process.wait()
 
     async def _unpack_volume(self, volume: Volume | None):
         assert str(self.volume_mount_dir) not in {"~", "/"}
@@ -959,6 +965,7 @@ class Command(BaseCommand):
             )
         except TimeoutError:
             logger.error("CVE-2022-0492 check timed out")
+            process.kill()
             return False
 
         if process.returncode != 0:

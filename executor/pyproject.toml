@@ -49,6 +49,7 @@ test = [
     "ipdb",
     "freezegun",
     "requests-toolbelt>=1.0.0",
+    "psutil>=7.0.0",
 ]
 format = [
     "ruff",
