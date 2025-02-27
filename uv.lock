@@ -588,53 +588,6 @@ type-check = [
 ]
 
 [[package]]
-name = "compute-horde-facilitator-sdk"
-source = { editable = "facilitator_sdk" }
-dependencies = [
-    { name = "annotated-types", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "compute-horde", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "phx-class-registry", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "annotated-types", specifier = ">=0.5.0" },
-    { name = "compute-horde", specifier = ">=0.0.20" },
-    { name = "httpx", specifier = ">=0.26.0" },
-    { name = "ipython", specifier = "==8.14.0" },
-    { name = "phx-class-registry", specifier = ">=4.1.0" },
-    { name = "typing-extensions" },
-]
-
-[package.metadata.requires-dev]
-format = [{ name = "ruff" }]
-lint = [
-    { name = "codespell", extras = ["toml"] },
-    { name = "ruff" },
-]
-release = [{ name = "towncrier", specifier = ">=23.11.0,<24" }]
-test = [
-    { name = "bittensor" },
-    { name = "freezegun" },
-    { name = "pytest" },
-    { name = "pytest-apiver" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-httpx" },
-    { name = "pytest-xdist" },
-]
-type-check = [
-    { name = "django-stubs", extras = ["compatible-mypy"] },
-    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = ">=3.15.1" },
-    { name = "mypy" },
-    { name = "types-freezegun" },
-    { name = "types-python-dateutil" },
-    { name = "types-requests" },
-]
-
-[[package]]
 name = "compute-horde-root"
 version = "0.1.0"
 source = { virtual = "." }
@@ -642,7 +595,6 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "compute-horde", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "compute-horde-facilitator-sdk", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "compute-horde-sdk", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "executor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "facilitator", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -659,7 +611,6 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "compute-horde", editable = "compute_horde" },
-    { name = "compute-horde-facilitator-sdk", editable = "facilitator_sdk" },
     { name = "compute-horde-sdk", editable = "compute_horde_sdk" },
     { name = "executor", editable = "executor" },
     { name = "facilitator", editable = "facilitator" },
