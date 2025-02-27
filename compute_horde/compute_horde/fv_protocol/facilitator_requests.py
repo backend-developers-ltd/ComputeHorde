@@ -207,7 +207,7 @@ class V2JobRequest(BaseModel, extra="forbid"):
                 self.output_upload.uploads
                 if isinstance(self.output_upload, MultiUpload)
                 # TODO: fix consolidate faci output_upload types
-                else [self.output_upload]  # type: ignore
+                else [self.output_upload]
             )
             if self.output_upload
             else []

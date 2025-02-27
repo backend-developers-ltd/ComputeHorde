@@ -92,7 +92,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
         self.upload_output = upload_output
 
     @classmethod
-    def handles_output_type(cls) -> type[OutputUpload]:
+    def handles_output_type(cls):
         return ZipAndHttpPostUpload
 
     async def upload(self, directory: pathlib.Path):
@@ -114,7 +114,7 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
         self.upload_output = upload_output
 
     @classmethod
-    def handles_output_type(cls) -> type[OutputUpload]:
+    def handles_output_type(cls):
         return ZipAndHttpPutUpload
 
     async def upload(self, directory: pathlib.Path):
@@ -129,7 +129,7 @@ class MultiUploadOutputUploader(OutputUploader):
         self.upload_output = upload_output
 
     @classmethod
-    def handles_output_type(cls) -> type[OutputUpload]:
+    def handles_output_type(cls):
         return MultiUpload
 
     async def upload(self, directory: pathlib.Path):
