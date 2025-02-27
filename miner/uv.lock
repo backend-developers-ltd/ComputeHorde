@@ -535,6 +535,7 @@ dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "celery", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "compute-horde-sdk", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "cryptography", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "more-itertools", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -549,6 +550,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.10.10" },
     { name = "bittensor", specifier = ">=9.0.0,<9.1" },
     { name = "celery", specifier = ">=5.3.0,<6" },
+    { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },
     { name = "cryptography", specifier = ">=42.0.8" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "more-itertools", specifier = ">=10.2.0" },
@@ -571,6 +573,51 @@ test = [
     { name = "pytest", specifier = ">=8.2.1" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "pytest-django", specifier = ">=4.9.0" },
+    { name = "responses", specifier = ">=0.25.0" },
+]
+type-check = [
+    { name = "django-stubs", extras = ["compatible-mypy"] },
+    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = ">=3.15.1" },
+    { name = "mypy" },
+    { name = "types-freezegun" },
+    { name = "types-python-dateutil" },
+    { name = "types-requests" },
+]
+
+[[package]]
+name = "compute-horde-sdk"
+source = { editable = "../compute_horde_sdk" }
+dependencies = [
+    { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bittensor", specifier = ">=9.0.0,<9.1" },
+    { name = "httpx", specifier = ">=0.26.0" },
+    { name = "ipython", specifier = "==8.14.0" },
+    { name = "pydantic", specifier = ">=2.10,<3" },
+]
+
+[package.metadata.requires-dev]
+format = [{ name = "ruff" }]
+lint = [
+    { name = "codespell", extras = ["toml"] },
+    { name = "ruff" },
+]
+release = [{ name = "towncrier", specifier = ">=23.11.0,<24" }]
+test = [
+    { name = "faker", specifier = ">=33.1.0" },
+    { name = "freezegun", specifier = ">=1.5.1" },
+    { name = "pytest", specifier = ">=8.2.1" },
+    { name = "pytest-apiver" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    { name = "pytest-django", specifier = ">=4.9.0" },
+    { name = "pytest-httpx", specifier = ">=0.35.0" },
+    { name = "pytest-xdist" },
     { name = "responses", specifier = ">=0.25.0" },
 ]
 type-check = [
@@ -1001,6 +1048,34 @@ wheels = [
 ]
 
 [[package]]
+name = "httpcore"
+version = "1.0.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "h11", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6a/41/d7d0a89eb493922c37d343b607bc1b5da7f5be7e383740b4753ad8943e90/httpcore-1.0.7.tar.gz", hash = "sha256:8551cb62a169ec7162ac7be8d4817d561f60e08eaa485234898414bb5a8a0b4c", size = 85196 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/87/f5/72347bc88306acb359581ac4d52f23c0ef445b57157adedb9aee0cd689d2/httpcore-1.0.7-py3-none-any.whl", hash = "sha256:a3fff8f43dc260d5bd363d9f9cf1830fa3a458b332856f34282de498ed420edd", size = 78551 },
+]
+
+[[package]]
+name = "httpx"
+version = "0.28.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "certifi", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "httpcore", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "idna", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b1/df/48c586a5fe32a0f01324ee087459e112ebb7224f646c0b5023f5e79e9956/httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc", size = 141406 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad", size = 73517 },
+]
+
+[[package]]
 name = "humanize"
 version = "4.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1177,6 +1252,7 @@ dependencies = [
     { name = "channels", extra = ["daphne"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "channels-redis", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "compute-horde", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "compute-horde-sdk", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django-business-metrics", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django-constance", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1233,6 +1309,7 @@ requires-dist = [
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
     { name = "channels-redis", specifier = "==4.2.0" },
     { name = "compute-horde", editable = "../compute_horde" },
+    { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-business-metrics", git = "https://github.com/reef-technologies/django-business-metrics.git?rev=9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01" },
     { name = "django-constance", specifier = "==3.1.0" },
