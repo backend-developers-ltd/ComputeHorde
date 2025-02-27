@@ -283,6 +283,7 @@ class OrganicJob(JobBase):
     block = models.BigIntegerField(
         null=True, help_text="Block number on which this job is scheduled"
     )
+    on_trusted_miner = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
