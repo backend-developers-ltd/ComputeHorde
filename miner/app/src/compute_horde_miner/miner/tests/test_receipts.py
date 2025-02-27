@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import bittensor
 import pytest
-from compute_horde.base.volume import VolumeType
 from compute_horde.mv_protocol.validator_requests import (
     AuthenticationPayload,
     JobFinishedReceiptPayload,
@@ -18,6 +17,7 @@ from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt
 from compute_horde.receipts.schemas import JobAcceptedReceiptPayload
 from compute_horde.utils import sign_blob
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.volume import VolumeType
 from django.utils import timezone
 from pytest_mock import MockerFixture
 

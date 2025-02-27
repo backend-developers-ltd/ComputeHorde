@@ -1,7 +1,7 @@
 import json
 
 import django_filters
-from compute_horde.base.output_upload import SingleFileUpload
+from compute_horde_core.output_upload import SingleFileUpload
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import QuerySet
 from django_filters import fields

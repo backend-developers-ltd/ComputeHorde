@@ -2,11 +2,11 @@ import logging
 import uuid
 
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.base.volume import InlineVolume, Volume
 from compute_horde.mv_protocol.miner_requests import (
     V0JobFinishedRequest,
 )
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.volume import InlineVolume, Volume
 
 from compute_horde_validator.validator.models import (
     Prompt,

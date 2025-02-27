@@ -11,7 +11,7 @@ from collections.abc import Callable
 from functools import wraps
 
 import httpx
-from compute_horde.base.output_upload import (
+from compute_horde_core.output_upload import (
     MultiUpload,
     OutputUpload,
     OutputUploadType,

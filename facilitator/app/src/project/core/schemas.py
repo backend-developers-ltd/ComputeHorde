@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from compute_horde.base.volume import (
+from compute_horde_core.volume import (
     HuggingfaceVolume,
     InlineVolume,
     SingleFileVolume,

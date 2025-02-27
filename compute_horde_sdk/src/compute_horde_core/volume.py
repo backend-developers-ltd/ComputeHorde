@@ -1,4 +1,3 @@
-# Copied from compute_horde.base.volume.
 import enum
 import re
 from typing import Annotated, Literal
@@ -17,6 +16,7 @@ class VolumeType(str, enum.Enum):
     multi_volume = "multi_volume"
     huggingface_volume = "huggingface_volume"
 
+    # default __str__ method returns "VolumeType.inline", we want just "inline"
     def __str__(self):
         return str.__str__(self)
 

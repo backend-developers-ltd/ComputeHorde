@@ -9,10 +9,10 @@ from functools import cached_property
 
 import bittensor
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.output_upload import OutputUpload
+from compute_horde_core.volume import Volume
 
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.base.output_upload import OutputUpload
-from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.base import (

@@ -5,11 +5,11 @@ from typing import Any, Self, TypeVar
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.base.output_upload import OutputUpload
-from compute_horde.base.volume import Volume
 from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.mv_protocol import validator_requests
 from compute_horde.utils import MachineSpecs
+from compute_horde_core.output_upload import OutputUpload
+from compute_horde_core.volume import Volume
 from pydantic import model_validator
 
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (

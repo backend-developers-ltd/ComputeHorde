@@ -12,10 +12,10 @@ import zipfile
 import bittensor
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde.base.volume import InlineVolume, VolumeType
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol import validator_requests
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
+from compute_horde_core.volume import InlineVolume, VolumeType
 from django.conf import settings
 
 from compute_horde_miner.channel_layer.channel_layer import ECRedisChannelLayer

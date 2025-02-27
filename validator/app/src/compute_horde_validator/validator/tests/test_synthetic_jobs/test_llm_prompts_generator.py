@@ -1,7 +1,7 @@
 import pytest
-from compute_horde.base.output_upload import MultiUpload, SingleFilePutUpload
-from compute_horde.base.volume import MultiVolume, SingleFileVolume
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
+from compute_horde_core.output_upload import MultiUpload, SingleFilePutUpload
+from compute_horde_core.volume import MultiVolume, SingleFileVolume
 from pytest_httpx import HTTPXMock
 
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (

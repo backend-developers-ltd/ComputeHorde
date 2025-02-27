@@ -1,8 +1,7 @@
 import logging
 
 import pytest
-
-from ..base.volume import ZipUrlVolume
+from compute_horde_core.volume import ZipUrlVolume
 
 logger = logging.getLogger(__name__)
 
