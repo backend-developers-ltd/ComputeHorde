@@ -112,7 +112,6 @@ async def execute_organic_job(
     """
 
     if job.on_trusted_miner and await aget_config("DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS"):
-
         # ignore trusted system events
         async def save_event(*args, **kwargs):
             pass
