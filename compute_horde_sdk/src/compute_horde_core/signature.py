@@ -6,14 +6,14 @@ import json
 import re
 import time
 import typing
-from enum import Enum
+from enum import StrEnum
 from typing import ClassVar
 
 import bittensor
 from pydantic import BaseModel, JsonValue, field_serializer, field_validator
 
 
-class SignatureScope(Enum):
+class SignatureScope(StrEnum):
     SignedFields = "SignedFields"
     FullRequest = "FullRequest"
 
