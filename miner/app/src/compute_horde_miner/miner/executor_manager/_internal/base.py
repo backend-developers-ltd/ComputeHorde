@@ -2,7 +2,6 @@ import abc
 import asyncio
 import datetime as dt
 import logging
-from collections import defaultdict
 from typing import Any
 
 from asgiref.sync import sync_to_async
@@ -58,24 +57,32 @@ class ExecutorClassPool:
         self._executors: list[ReservedExecutor] = []
         self._reservation_lock = asyncio.Lock()
         self._pool_cleanup_task = asyncio.create_task(self._pool_cleanup_loop())
-        self._reservation_futures: defaultdict[str, asyncio.Future[None]] = defaultdict(
-            asyncio.Future
-        )
+        self._reservation_futures: dict[str, asyncio.Future[None]] = {}
+
+    def _reservation_future(self, token: str) -> asyncio.Future[None]:
+        if token not in self._reservation_futures:
+            self._reservation_futures[token] = asyncio.Future()
+
+            # Clean up eventually.
+            async def clear():
+                await asyncio.sleep(10)
+                del self._reservation_futures[token]
+
+            asyncio.create_task(clear())
+        return self._reservation_futures[token]
 
     async def reserve_executor(self, token: str, timeout: float) -> object:
         async with self._reservation_lock:
-            future = self._reservation_futures[token]
-
             if self.get_availability() == 0:
                 logger.debug(
                     "No executor available, current list is:\n %s",
                     "\n".join(str(r) for r in self._executors),
                 )
-                future.set_exception(AllExecutorsBusy())
+                self._reservation_future(token).set_exception(AllExecutorsBusy())
                 raise AllExecutorsBusy()
 
             # Reservation succeeded - resolve the future to let the listeners know.
-            future.set_result(None)
+            self._reservation_future(token).set_result(None)
 
             try:
                 executor = await self.manager.start_new_executor(
@@ -133,7 +140,7 @@ class ExecutorClassPool:
 
     async def wait_for_executor_reservation(self, token: str, timeout: float) -> None:
         try:
-            await asyncio.wait_for(self._reservation_futures[token], timeout)
+            await asyncio.wait_for(self._reservation_future(token), timeout)
         except TimeoutError:
             raise ExecutorReservationTimeout()
 
