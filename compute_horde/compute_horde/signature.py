@@ -14,29 +14,6 @@ from compute_horde_core.signature import Signature, SignatureScope
 from pydantic import JsonValue
 
 
-def verify_signature(
-    payload: JsonValue | bytes,
-    signature: Signature,
-    *,
-    newer_than: datetime.datetime | None = None,
-):
-    """
-    Verifies the signature of the payload
-
-    :param payload: payload to be verified
-    :param signature: signature object
-    :param newer_than: if provided, checks if the signature is newer than the provided timestamp
-    :return: None
-    :raises SignatureInvalidException: if the signature is invalid
-    """
-    verifier = BittensorWalletVerifier()
-    verifier.verify(payload, signature, newer_than)
-
-
-class SignatureExtractor(Protocol):
-    def __call__(self, headers: dict[str, str], prefix: str = "") -> Signature: ...
-
-
 def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Signature:
     """
     Extracts the signature from the headers
@@ -60,37 +37,6 @@ def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Si
         TypeError,
     ) as e:
         raise SignatureNotFound("Signature not found in headers") from e
-
-
-def verify_request(
-    method: str,
-    url: str,
-    headers: dict[str, str],
-    json: JsonValue | None = None,
-    *,
-    newer_than: datetime.datetime | None = None,
-    signature_extractor: SignatureExtractor = signature_from_headers,
-) -> Signature | None:
-    """
-    Verifies the signature of the request
-
-    :param method: HTTP method
-    :param url: request URL
-    :param headers: request headers
-    :param json: request JSON payload
-    :param newer_than: if provided, checks if the signature is newer than the provided timestamp
-    :param signature_extractor: function to extract the signature from the headers
-    :return: Signature object or None if no signature found
-    :raises SignatureInvalidException: if the signature is invalid
-    """
-    try:
-        signature = signature_extractor(headers)
-    except SignatureNotFound:
-        return None
-    verifier = BittensorWalletVerifier()
-    payload = verifier.payload_from_request(method, url, headers=headers, json=json)
-    verifier.verify(payload, signature, newer_than)
-    return signature
 
 
 def signature_to_headers(
@@ -252,3 +198,57 @@ class BittensorWalletVerifier(BittensorSignatureScheme, Verifier):
                 raise SignatureInvalidException("Signature is invalid")
         except (ValueError, TypeError) as e:
             raise SignatureInvalidException("Signature is malformed") from e
+
+
+class SignatureExtractor(Protocol):
+    def __call__(self, headers: dict[str, str], prefix: str = "") -> Signature: ...
+
+
+def verify_signature(
+    payload: JsonValue | bytes,
+    signature: Signature,
+    *,
+    newer_than: datetime.datetime | None = None,
+):
+    """
+    Verifies the signature of the payload
+
+    :param payload: payload to be verified
+    :param signature: signature object
+    :param newer_than: if provided, checks if the signature is newer than the provided timestamp
+    :return: None
+    :raises SignatureInvalidException: if the signature is invalid
+    """
+    verifier = BittensorWalletVerifier()
+    verifier.verify(payload, signature, newer_than)
+
+
+def verify_request(
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    json: JsonValue | None = None,
+    *,
+    newer_than: datetime.datetime | None = None,
+    signature_extractor: SignatureExtractor = signature_from_headers,
+) -> Signature | None:
+    """
+    Verifies the signature of the request
+
+    :param method: HTTP method
+    :param url: request URL
+    :param headers: request headers
+    :param json: request JSON payload
+    :param newer_than: if provided, checks if the signature is newer than the provided timestamp
+    :param signature_extractor: function to extract the signature from the headers
+    :return: Signature object or None if no signature found
+    :raises SignatureInvalidException: if the signature is invalid
+    """
+    try:
+        signature = signature_extractor(headers)
+    except SignatureNotFound:
+        return None
+    verifier = BittensorWalletVerifier()
+    payload = verifier.payload_from_request(method, url, headers=headers, json=json)
+    verifier.verify(payload, signature, newer_than)
+    return signature
