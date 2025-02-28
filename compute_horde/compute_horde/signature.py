@@ -7,15 +7,12 @@ import hashlib
 import json
 import re
 import time
-import typing
 from typing import ClassVar, Protocol
 
+import bittensor
 from class_registry import ClassRegistry, RegistryKeyError
 from compute_horde_core.signature import Signature, SignatureScope
 from pydantic import JsonValue
-
-if typing.TYPE_CHECKING:
-    import bittensor
 
 SIGNERS_REGISTRY: ClassRegistry[Signer] = ClassRegistry("signature_type")
 VERIFIERS_REGISTRY: ClassRegistry[Verifier] = ClassRegistry("signature_type")
@@ -237,14 +234,6 @@ class Verifier(SignatureScheme):
         raise NotImplementedError
 
 
-def _require_bittensor():
-    try:
-        import bittensor
-    except ImportError as e:
-        raise ImportError("bittensor package is required for BittensorWalletSigner") from e
-    return bittensor
-
-
 class BittensorSignatureScheme:
     signature_type = "bittensor"
 
@@ -252,8 +241,6 @@ class BittensorSignatureScheme:
 @SIGNERS_REGISTRY.register
 class BittensorWalletSigner(BittensorSignatureScheme, Signer):
     def __init__(self, wallet: bittensor.wallet | bittensor.Keypair | None = None):
-        bittensor = _require_bittensor()
-
         if isinstance(wallet, bittensor.Keypair):
             keypair = wallet
         else:
@@ -271,14 +258,9 @@ class BittensorWalletSigner(BittensorSignatureScheme, Signer):
 
 @VERIFIERS_REGISTRY.register
 class BittensorWalletVerifier(BittensorSignatureScheme, Verifier):
-    def __init__(self, *args, **kwargs):
-        self._bittensor = _require_bittensor()
-
-        super().__init__(*args, **kwargs)
-
     def _verify(self, payload: bytes, signature: Signature) -> None:
         try:
-            keypair = self._bittensor.Keypair(ss58_address=signature.signatory)
+            keypair = bittensor.Keypair(ss58_address=signature.signatory)
         except ValueError:
             raise SignatureInvalidException("Invalid signatory for BittensorWalletVerifier")
         try:
