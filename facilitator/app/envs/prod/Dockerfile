@@ -10,6 +10,8 @@ ARG GITHUB_TOKEN=
 RUN apt-get update && apt-get install -y git
 COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /uvx /bin/
 
+COPY --from=compute-horde . /root/compute_horde
+
 WORKDIR /root/src/
 
 COPY pyproject.toml uv.lock ./
