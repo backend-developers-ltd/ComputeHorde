@@ -7,10 +7,9 @@ from compute_horde.transport import AbstractTransport
 from django.core.cache import cache
 
 from compute_horde_validator.validator.models import SystemEvent
+from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
-
-TRUSTED_MINER_FAKE_KEY = "0" * 48
 
 
 class TrustedMinerClient(OrganicMinerClient):

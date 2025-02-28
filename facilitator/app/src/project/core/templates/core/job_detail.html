@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+
+{% block title %}Job {{ job.uuid }}{% endblock %}
+
+{% block content %}
+    <h2>Job details</h2>
+    <table class="table table-striped">
+        <tr>
+            <th>Job ID</th>
+            <td>{{ job.pk }}</td>
+        </tr>
+        <tr>
+            <th>Created at</th>
+            <td>{{ job.created_at }}</td>
+        </tr>
+        <tr>
+            <th>Docker image URL</th>
+            <td>{{ job.docker_image }}</td>
+        </tr>
+        <tr>
+            <th>Script</th>
+            <td><code>{{ job.raw_script }}</code></td>
+        </tr>
+        <tr>
+            <th>Args</th>
+            <td><code>{{ job.args }}</code></td>
+        </tr>
+        <tr>
+            <th>Env vars</th>
+            <td><code>{{ job.env_vars }}</code></td>
+        </tr>
+        <tr>
+            <th>Use GPU</th>
+            <td>{{ job.use_gpu|yesno:"Yes,No,?" }}</td>
+        </tr>
+        <tr>
+            <th>Input URL</th>
+            <td>
+                {% if job.input_url %}
+                    <a href="{{ job.input_url }}" target="_blank">{{ job.input_url }}</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% if job.artifacts_dir %}
+            <tr>
+                <th>Artifacts dir</th>
+                <td>{{ job.artifacts_dir }}</td>
+            </tr>
+        {% endif %}
+        <tr>
+            <td colspan="2" class="bg-secondary">
+            </td>
+        </tr>
+        <tr>
+            <th>Status</th>
+            <td><b>{{ job.status }}</b></td>
+        </tr>
+        <tr>
+            <th>Result</th>
+            <td>
+                {% if job.is_completed %}
+                    <a href="{{ job.output_download_url }}" target="_blank">output.zip</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% with meta=job.status.meta %}
+            {% if meta %}
+                <tr>
+                    <th>Comment</th>
+                    <td>{{ meta.comment }}</td>
+                </tr>
+                {% if meta.miner_response %}
+                    <tr>
+                        <th>Stdout</th>
+                        <td><pre style="white-space:pre-wrap;"><code>{{ meta.miner_response.docker_process_stdout }}</code></pre></td>
+                    </tr>
+                    <tr>
+                        <th>Stderr</th>
+                        <td><pre style="white-space:pre-wrap;"><code>{{ meta.miner_response.docker_process_stderr }}</code></pre></td>
+                    </tr>
+                {% endif %}
+            {% endif %}
+        {% endwith %}
+    </table>
+    {% if job.docker_image %}
+        <a href="{% url 'job-docker/submit' %}?ref={{ job.pk }}" class="btn btn-primary">Modify and re-run</a>
+    {% else %}
+        <a href="{% url 'job-raw/submit' %}?ref={{ job.pk }}" class="btn btn-primary">Modify and re-run</a>
+    {% endif %}
+    <br><br>
+{% endblock %}

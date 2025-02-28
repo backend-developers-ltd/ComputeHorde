@@ -13,6 +13,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     Error,
     JobRequest,
     Response,
+    V0JobCheated,
     V2JobRequest,
 )
 from compute_horde.fv_protocol.validator_requests import (
@@ -31,6 +32,7 @@ from compute_horde_validator.validator.metagraph_client import (
 )
 from compute_horde_validator.validator.models import (
     Miner,
+    MinerBlacklist,
     OrganicJob,
     SystemEvent,
     ValidatorWhitelist,
@@ -42,7 +44,7 @@ from compute_horde_validator.validator.organic_jobs.miner_driver import (
     JobStatusUpdate,
     execute_organic_job,
 )
-from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
+from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -271,10 +273,42 @@ class FacilitatorClient:
             await self.miner_drivers.put(task)
             return
 
+        try:
+            cheated_job_report = pydantic.TypeAdapter(V0JobCheated).validate_json(raw_msg)
+        except pydantic.ValidationError as exc:
+            logger.debug("could not parse raw message as V0JobCheated: %s", exc)
+        else:
+            await self.report_miner_cheated_job(cheated_job_report.job_uuid)
+            return
+
         logger.error("unsupported message received from facilitator: %s", raw_msg)
 
     async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
         return await get_miner_axon_info(hotkey)
+
+    async def report_miner_cheated_job(self, job_uuid: str):
+        try:
+            job = await OrganicJob.objects.prefetch_related("miner").aget(job_uuid=job_uuid)
+        except OrganicJob.DoesNotExist:
+            logger.error(f"Job {job_uuid} reported for cheating does not exist")
+            return
+
+        job.cheated = True
+        await job.asave()
+
+        blacklist_time = await aget_config("DYNAMIC_JOB_CHEATED_BLACKLIST_TIME_SECONDS")
+        await routing.blacklist_miner(
+            job, MinerBlacklist.BlacklistReason.JOB_FAILED, blacklist_time
+        )
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
+            subtype=SystemEvent.EventSubType.JOB_CHEATED,
+            long_description="Job was reported as cheated",
+            data={
+                "job_uuid": str(job.job_uuid),
+                "miner_hotkey": job.miner.hotkey,
+            },
+        )
 
     async def process_job_request(self, job_request: JobRequest):
         # max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
@@ -361,11 +395,18 @@ class FacilitatorClient:
             miner_ip = settings.DEBUG_MINER_ADDRESS
             miner_port = settings.DEBUG_MINER_PORT
             ip_type = 4
+            on_trusted_miner = False
+        elif miner.hotkey == TRUSTED_MINER_FAKE_KEY:
+            miner_ip = settings.TRUSTED_MINER_ADDRESS
+            miner_port = settings.TRUSTED_MINER_PORT
+            ip_type = 4
+            on_trusted_miner = True
         else:
             miner_axon_info = await self.get_miner_axon_info(miner.hotkey)
             miner_ip = miner_axon_info.ip
             miner_port = miner_axon_info.port
             ip_type = miner_axon_info.ip_type
+            on_trusted_miner = False
 
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
@@ -376,6 +417,7 @@ class FacilitatorClient:
             executor_class=job_request.executor_class,
             job_description="User job from facilitator",
             block=await self.get_current_block(),
+            on_trusted_miner=on_trusted_miner,
         )
 
         miner_client = self.MINER_CLIENT_CLASS(

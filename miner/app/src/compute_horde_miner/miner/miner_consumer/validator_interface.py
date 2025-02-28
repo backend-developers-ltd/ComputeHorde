@@ -8,6 +8,7 @@ from functools import cached_property
 from typing import Protocol
 
 import bittensor
+from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.mv_protocol import miner_requests, validator_requests
 from compute_horde.mv_protocol.validator_requests import (
     BaseValidatorRequest,
@@ -244,6 +245,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                         docker_process_stdout=job.stdout,
                         docker_process_stderr=job.stderr,
                         docker_process_exit_status=job.exit_status,
+                        error_type=JobErrorType(job.error_type) if job.error_type else None,
+                        error_detail=job.error_detail,
                     ).model_dump_json()
                 )
                 logger.debug(
@@ -651,6 +654,8 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
                 docker_process_stdout=msg.docker_process_stdout,
                 docker_process_stderr=msg.docker_process_stderr,
                 docker_process_exit_status=msg.docker_process_exit_status,
+                error_type=msg.error_type,
+                error_detail=msg.error_detail,
             ).model_dump_json()
         )
         logger.debug(f"Failed job {msg.job_uuid} reported to validator {self.validator_key}")

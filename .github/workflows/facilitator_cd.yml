@@ -1,0 +1,38 @@
+name: Deploy Facilitator to AWS on push to certain branches
+
+on:
+  push:
+    branches:
+      - 'deploy-facilitator-*'
+
+jobs:
+  deploy:
+    env:
+      AWS_ACCESS_KEY_ID:  ${{ secrets.DEPLOYMENT_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY:  ${{ secrets.DEPLOYMENT_AWS_SECRET_ACCESS_KEY }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./facilitator
+    steps:
+      - id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PEM }}
+          owner: ${{ github.repository_owner }}
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: deploy to aws
+        run: |
+          set -e
+          export ENVIRONMENT=${GITHUB_REF_NAME:19}
+          export GITHUB_TOKEN="${{ steps.app_token.outputs.token }}"
+          export ADDITIONAL_PACKAGES="${{ vars.ADDITIONAL_PACKAGES }}"
+          export HTTP_ASGI_APPLICATION_PATH="${{ vars.HTTP_ASGI_APPLICATION_PATH }}"
+          ./deploy-to-aws.sh $ENVIRONMENT
+          export TAG=deployed-facilitator-${ENVIRONMENT}-`date -u +"%Y-%m-%dT%H.%M.%S"`
+          git tag $TAG
+          git push origin $TAG

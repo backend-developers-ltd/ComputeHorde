@@ -1,0 +1,27 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: "${LOKI_URL}/api/prom/push"
+    basic_auth:
+      username: "${LOKI_USER}"
+      password: "${LOKI_PASSWORD}"
+    external_labels:
+      client: "${LOKI_CLIENT}"
+      client_server_group: "${LOKI_CLIENT_SERVER_GROUP}"
+
+scrape_configs:
+  - job_name: containerlogs
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: ${LOKI_REFRESH_INTERVAL}
+    relabel_configs:
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: "container"
+      - source_labels: ["__meta_docker_container_log_stream"]
+        target_label: "logstream"

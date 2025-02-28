@@ -325,6 +325,11 @@ CONSTANCE_CONFIG = {
         "Maximum retries for organic jobs (Currently ignored)",
         int,
     ),
+    "DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS": (
+        True,
+        "Disable system events for organic jobs run on trusted miner",
+        bool,
+    ),
     "DYNAMIC_SYSTEM_EVENT_LIMITS": (
         "MINER_SYNTHETIC_JOB_FAILURE,LLM_PROMPT_ANSWERS_MISSING,10",
         "Limits of system events produced for each type-subtype pairs in a synthetic job run. Format: TYPE1,SUBTYPE1,100;TYPE2,SUBTYPE2,200",
@@ -358,6 +363,11 @@ CONSTANCE_CONFIG = {
     "DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS": (
         int(timedelta(hours=4).total_seconds()),
         "Amount of time a miner will be temporarily blacklisted for after failing an organic job.",
+        int,
+    ),
+    "DYNAMIC_JOB_CHEATED_BLACKLIST_TIME_SECONDS": (
+        int(timedelta(hours=4).total_seconds()),
+        "Amount of time a miner will be temporarily blacklisted for after being reported cheating on an organic job.",
         int,
     ),
     "DYNAMIC_BURN_TARGET_SS58ADDRESSES": (
@@ -424,7 +434,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "compute_horde_validator.wsgi.application"
 
 DATABASES = {}
-default_db = f'postgres://postgres:{env("POSTGRES_PASSWORD")}@db:5432/postgres'
+default_db = f"postgres://postgres:{env('POSTGRES_PASSWORD')}@db:5432/postgres"
 if env(
     "DATABASE_POOL_URL", default=""
 ):  # DB transaction-based connection pool, such as one provided PgBouncer

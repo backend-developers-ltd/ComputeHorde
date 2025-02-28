@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block title %}Previous jobs{% endblock %}
+
+{% block content %}
+    <h2>Previous jobs</h2>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Job ID</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Result</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>
+                    <a href="{% url 'job-docker/submit' %}" class="btn btn-primary"><i class="bi bi-plus"></i> Docker image job</a>
+                    <a href="{% url 'job-raw/submit' %}" class="btn btn-primary"><i class="bi bi-plus"></i> Raw script job</a>
+                </td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            {% for job in jobs %}
+                <tr>
+                    <td>
+                        <a href="{% url 'job/detail' pk=job.pk %}">{{ job.pk }}</a>
+                    </td>
+                    <td>{{ job.created_at }}</td>
+                    <td>{{ job.status }}</td>
+                    <td><a href="{{ job.output_download_url }}" target="_blank">Download</a></td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if is_paginated %}
+        <div class="pagination">
+            <span class="page-links">
+                {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}">← previous</a>
+                {% endif %}
+                <span class="page-current">
+                    Page {{ page_obj.number }}/{{ page_obj.paginator.num_pages }}
+                </span>
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}">next →</a>
+                {% endif %}
+            </span>
+        </div>
+    {% endif %}
+{% endblock %}

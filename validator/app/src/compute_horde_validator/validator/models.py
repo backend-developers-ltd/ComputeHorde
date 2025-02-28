@@ -26,6 +26,7 @@ class SystemEvent(models.Model):
         WEIGHT_SETTING_SUCCESS = "WEIGHT_SETTING_SUCCESS"
         WEIGHT_SETTING_FAILURE = "WEIGHT_SETTING_FAILURE"
         # the two above are blankets for setting, committing and revealing
+        MINER_ORGANIC_JOB_INFO = "MINER_ORGANIC_JOB_INFO"
         MINER_ORGANIC_JOB_FAILURE = "MINER_ORGANIC_JOB_FAILURE"
         MINER_ORGANIC_JOB_SUCCESS = "MINER_ORGANIC_JOB_SUCCESS"
         MINER_SYNTHETIC_JOB_SUCCESS = "MINER_SYNTHETIC_JOB_SUCCESS"
@@ -67,6 +68,8 @@ class SystemEvent(models.Model):
         JOB_NOT_STARTED = "JOB_NOT_STARTED"
         JOB_REJECTED = "JOB_REJECTED"
         JOB_EXCUSED = "JOB_EXCUSED"
+        JOB_CHEATED = "JOB_CHEATED"
+        MINER_BLACKLISTED = "MINER_BLACKLISTED"
         JOB_EXECUTION_TIMEOUT = "JOB_EXECUTION_TIMEOUT"
         RECEIPT_FETCH_ERROR = "RECEIPT_FETCH_ERROR"
         RECEIPT_SEND_ERROR = "RECEIPT_SEND_ERROR"
@@ -89,6 +92,7 @@ class SystemEvent(models.Model):
         NEW_WORKLOADS_CREATED = "NEW_WORKLOADS_CREATED"
         ERROR_UPLOADING_TO_S3 = "ERROR_UPLOADING_TO_S3"
         ERROR_DOWNLOADING_FROM_S3 = "ERROR_DOWNLOADING_FROM_S3"
+        ERROR_DOWNLOADING_FROM_HUGGINGFACE = "ERROR_DOWNLOADING_FROM_HUGGINGFACE"
         LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED = "LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED"
         APPLIED_BURNING = "APPLIED_BURNING"
         NO_BURNING = "NO_BURNING"
@@ -153,6 +157,7 @@ class MinerBlacklist(models.Model):
     class BlacklistReason(models.TextChoices):
         MANUAL = "MANUAL", "Manual"
         JOB_FAILED = "JOB_FAILED", "Job Failed"
+        JOB_CHEATED = "JOB_CHEATED", "Job Cheated"
 
     miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
     blacklisted_at = models.DateTimeField(auto_now_add=True)
@@ -271,10 +276,14 @@ class SyntheticJob(JobBase):
 class OrganicJob(JobBase):
     stdout = models.TextField(blank=True, default="")
     stderr = models.TextField(blank=True, default="")
+    error_type = models.TextField(null=True, default=None)
+    error_detail = models.TextField(null=True, default=None)
     artifacts = models.JSONField(blank=True, default=dict)
+    cheated = models.BooleanField(default=False)
     block = models.BigIntegerField(
         null=True, help_text="Block number on which this job is scheduled"
     )
+    on_trusted_miner = models.BooleanField(default=False)
 
     class Meta:
         indexes = [

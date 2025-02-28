@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Literal, assert_never
 
+from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.executor_class import ExecutorClass
 from compute_horde.fv_protocol.facilitator_requests import JobRequest, V2JobRequest
 from compute_horde.miner_client.organic import (
@@ -21,6 +22,7 @@ from django.conf import settings
 from pydantic import BaseModel, JsonValue
 
 from compute_horde_validator.validator import job_excuses
+from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
     JobBase,
@@ -109,8 +111,13 @@ async def execute_organic_job(
     Returns True if the job was successfully executed, False otherwise.
     """
 
-    data: JsonValue = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
-    save_event = partial(save_job_execution_event, data=data)
+    if job.on_trusted_miner and await aget_config("DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS"):
+        # ignore trusted system events
+        async def save_event(*args, **kwargs):
+            pass
+    else:
+        data: JsonValue = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
+        save_event = partial(save_job_execution_event, data=data)
 
     async def notify_job_accepted(msg: V0AcceptJobRequest) -> None:
         await notify_callback(JobStatusUpdate.from_job(job, "accepted", msg.message_type.value))
@@ -292,14 +299,20 @@ async def execute_organic_job(
 
         elif exc.reason == FailureReason.JOB_FAILED:
             comment = f"Miner {miner_client.miner_name} failed: {exc.received_str()}"
+            subtype = SystemEvent.EventSubType.FAILURE
             if isinstance(exc.received, V0JobFailedRequest):
                 job.stdout = exc.received.docker_process_stdout
                 job.stderr = exc.received.docker_process_stderr
+                job.error_type = exc.received.error_type
+                job.error_detail = exc.received.error_detail
+                match exc.received.error_type:
+                    case JobErrorType.HUGGINGFACE_DOWNLOAD:
+                        subtype = SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_HUGGINGFACE
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
             logger.info(comment)
-            await save_event(subtype=SystemEvent.EventSubType.FAILURE, long_description=comment)
+            await save_event(subtype=subtype, long_description=comment)
             await notify_callback(JobStatusUpdate.from_job(job, "failed", "V0JobFailedRequest"))
 
         else:

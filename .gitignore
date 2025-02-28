@@ -18,5 +18,4 @@ build/
 dist/
 .pdm-python
 /wallets/
-/facilitator/
 test-report.xml

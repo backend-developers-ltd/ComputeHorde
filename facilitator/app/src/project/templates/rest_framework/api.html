@@ -1,0 +1,30 @@
+{% extends "rest_framework/base.html" %}
+
+{% block description %}
+  {% if "api-root" in description %}
+    <h2>OpenAPI docs</h2>
+    <p>Please follow <a href="{% url 'openapi-schema' %}">{% url 'openapi-schema' %}</a> for api documentation.</p>
+
+    <h2>API token</h2>
+    <p>To use api you need to acquire api token</p>
+    <pre><code>curl -X POST -H "Content-Type: application/json" -d '{"username": "your_username", "password": "your_password"}' http://localhost:8000/api-token-auth/</code></pre>
+
+    <p>Replace <code>your_username</code> and <code>your_password</code> with your actual credentials.</p>
+    <p>You can also generate api token on <a href="{% url 'api-token-generate' %}">API Token Management</a> page</p>
+
+    <h2>Response</h2>
+    <pre><code>{
+    "token": "abc123..."
+}</code></pre>
+
+    <h2>Using the Token</h2>
+    <p>Once you have obtained the token, you can include it in the <code>Authorization</code> header of your subsequent API requests to authenticate the user.</p>
+
+    <pre><code>curl -H "Authorization: Token abc123..." http://localhost:8000/api/endpoint/</code></pre>
+
+    <p>Replace <code>abc123...</code> with the actual token you received from the <code>api-token-auth</code> endpoint.</p>
+    <hr>
+  {% else %}
+    <span>{{ description }}</span>
+  {% endif %}
+{% endblock %}

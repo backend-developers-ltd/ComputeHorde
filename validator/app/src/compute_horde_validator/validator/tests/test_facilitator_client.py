@@ -31,7 +31,7 @@ from compute_horde_validator.validator.organic_jobs.facilitator_client import (
     FacilitatorClient,
 )
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
-from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
+from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
 
 from .helpers import (
     MockFaillingMinerClient,
@@ -173,6 +173,47 @@ class FacilitatorJobStatusUpdatesWsV1(FacilitatorWs):
 class FacilitatorJobStatusUpdatesWsV2(FacilitatorWs):
     def get_dummy_job(self, job_uuid):
         return get_dummy_job_request_v2(job_uuid)
+
+
+class FacilitatorJobOnTrustedMiner(FacilitatorWs):
+    def get_dummy_job(self, job_uuid):
+        return get_dummy_job_request_v2(job_uuid, on_trusted_miner=True)
+
+    async def serve(self, ws):
+        try:
+            await self.verify_auth(ws)
+
+            # send job request
+            job_uuid = str(uuid.uuid4())
+            await asyncio.wait_for(
+                ws.send(self.get_dummy_job(job_uuid).model_dump_json()), timeout=5
+            )
+
+            await self.verify_job_status_update(ws)
+
+            organic_job = await asyncio.wait_for(
+                OrganicJob.objects.select_related("miner").aget(job_uuid=job_uuid),
+                timeout=5,
+            )
+            if organic_job.status != OrganicJob.Status.COMPLETED:
+                self.facilitator_error = Exception(f"job not completed: {organic_job.status}")
+            elif organic_job.miner.hotkey != TRUSTED_MINER_FAKE_KEY:
+                self.facilitator_error = Exception("Selected miner is not TRUSTED_MINER")
+            elif organic_job.miner_address != "fakehost":
+                self.facilitator_error = Exception(
+                    "Selected miner address is not of the trusted miner"
+                )
+            elif organic_job.miner_port != 1234:
+                self.facilitator_error = Exception(
+                    "Selected miner port is not of the trusted miner"
+                )
+        except TimeoutError:
+            self.facilitator_error = Exception("timed out")
+        except Exception as e:
+            self.facilitator_error = e
+        finally:
+            async with self.condition:
+                self.condition.notify()
 
 
 class FacilitatorBadMessageWs(FacilitatorWs):
@@ -335,3 +376,26 @@ async def test_wait_for_specs(specs_msg: dict):
                 await asyncio.wait_for(ws_server.condition.wait(), timeout=5)
 
             await cancel_facilitator_tasks(facilitator_client, task)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+async def test_routing_to_trusted_miner():
+    await setup_db()
+    ws_server = FacilitatorJobOnTrustedMiner()
+    async with async_patch_all():
+        async with websockets.serve(ws_server.serve, "127.0.0.1", 0) as server:
+            host, port = server.sockets[0].getsockname()
+            facilitator_uri = f"ws://{host}:{port}/"
+            facilitator_client = FacilitatorClient(get_keypair(), facilitator_uri)
+
+            facilitator_client.MINER_CLIENT_CLASS = MockSuccessfulMinerClient
+
+            async with ws_server.condition:
+                task = asyncio.create_task(facilitator_client.run_forever())
+                await ws_server.condition.wait()
+
+            await cancel_facilitator_tasks(facilitator_client, task)
+
+            if ws_server.facilitator_error:
+                pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")

@@ -2,6 +2,18 @@
 
 <!-- towncrier release notes start -->
 
+## [0.0.24](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.24) - 2025-02-24
+
+
+Support for cheated jobs.
+
+
+## [0.0.23](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.23) - 2025-02-21
+
+
+Change args to list of strings.
+
+
 ## [0.0.22](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.22) - 2025-02-07
 
 

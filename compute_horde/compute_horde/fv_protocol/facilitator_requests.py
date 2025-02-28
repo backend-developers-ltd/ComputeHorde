@@ -1,5 +1,6 @@
 import base64
 import typing
+from enum import StrEnum
 from typing import Annotated, Literal, Self
 
 import pydantic
@@ -29,6 +30,11 @@ class Response(BaseModel, extra="forbid"):
     errors: list[Error] = []
 
 
+class SignatureScope(StrEnum):
+    SignedFields = "SignedFields"
+    FullRequest = "FullRequest"
+
+
 class Signature(BaseModel, extra="forbid"):
     # has defaults to allow easy instantiation
     signature_type: str = ""
@@ -37,6 +43,7 @@ class Signature(BaseModel, extra="forbid"):
     )
     timestamp_ns: int = 0  # UNIX timestamp in nanoseconds
     signature: bytes
+    signature_scope: SignatureScope = SignatureScope.SignedFields
 
     @field_validator("signature")
     @classmethod
@@ -46,6 +53,16 @@ class Signature(BaseModel, extra="forbid"):
     @field_serializer("signature")
     def serialize_signature(self, signature: bytes) -> str:
         return base64.b64encode(signature).decode("utf-8")
+
+
+class V0JobCheated(BaseModel, extra="forbid"):
+    """Message sent from facilitator to report cheated job"""
+
+    # this points to a `ValidatorConsumer.job_cheated` handler (fuck you django-channels!)
+    type: Literal["job.cheated"] = "job.cheated"
+    message_type: Literal["V0JobCheated"] = "V0JobCheated"
+
+    job_uuid: str
 
 
 class V0JobRequest(BaseModel, extra="forbid"):
@@ -119,10 +136,11 @@ class SignedFields(BaseModel):
     executor_class: str
     docker_image: str
     raw_script: str
-    args: str
+    args: list[str]
     env: dict[str, str]
     use_gpu: bool
     artifacts_dir: str
+    on_trusted_miner: bool
 
     volumes: list[JsonValue]
     uploads: list[JsonValue]
@@ -135,10 +153,11 @@ class SignedFields(BaseModel):
             executor_class=str(data.get("executor_class")),
             docker_image=str(data.get("docker_image", "")),
             raw_script=str(data.get("raw_script", "")),
-            args=str(data.get("args", "")),
+            args=typing.cast(list[str], data.get("args", [])),
             env=typing.cast(dict[str, str], data.get("env", None)),
             use_gpu=typing.cast(bool, data.get("use_gpu")),
             artifacts_dir=str(data.get("artifacts_dir", "")),
+            on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
             volumes=typing.cast(list[JsonValue], data.get("volumes", [])),
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
         )
@@ -169,6 +188,7 @@ class V2JobRequest(BaseModel, extra="forbid"):
     volume: Volume | None = None
     output_upload: OutputUpload | None = None
     artifacts_dir: str | None = None
+    on_trusted_miner: bool = False
     # !!! all fields above are included in the signed json payload
 
     def get_args(self):
@@ -198,10 +218,11 @@ class V2JobRequest(BaseModel, extra="forbid"):
             executor_class=self.executor_class,
             docker_image=self.docker_image,
             raw_script=self.raw_script,
-            args=" ".join(self.args),
+            args=self.args,
             env=self.env,
             use_gpu=self.use_gpu,
             artifacts_dir=self.artifacts_dir or "",
+            on_trusted_miner=self.on_trusted_miner,
             volumes=volumes,
             uploads=uploads,
         )

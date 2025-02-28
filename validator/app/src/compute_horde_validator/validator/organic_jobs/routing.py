@@ -19,7 +19,9 @@ from compute_horde_validator.validator.models import (
     MinerBlacklist,
     MinerManifest,
     OrganicJob,
+    SystemEvent,
 )
+from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,10 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     Goes through all miners with recent manifests and online executors of the given executor class.
     Returns a random miner that may have a non-busy executor based on known receipts.
     """
+    if request.on_trusted_miner:
+        miner, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
+        return miner
+
     executor_class = request.executor_class
 
     manifests_qs = (
@@ -130,20 +136,43 @@ async def report_miner_failed_job(job: OrganicJob):
             f"Not blacklisting miner: job {job.job_uuid} is not failed (status={job.status})"
         )
         return
+    if job.on_trusted_miner:
+        return
 
     blacklist_time = await aget_config("DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS")
-    blacklist_until = timezone.now() + timedelta(seconds=blacklist_time)
+    await blacklist_miner(job, MinerBlacklist.BlacklistReason.JOB_FAILED, blacklist_time)
 
-    logger.info(
-        f"Blacklisting miner {job.miner.hotkey} "
+
+async def blacklist_miner(
+    job: OrganicJob, reason: MinerBlacklist.BlacklistReason, blacklist_time: int
+):
+    now = timezone.now()
+    blacklist_until = now + timedelta(seconds=blacklist_time)
+    miner = await Miner.objects.aget(id=job.miner_id)
+
+    msg = (
+        f"Blacklisting miner {miner.hotkey} "
         f"until {blacklist_until.isoformat()} "
         f"for failed job {job.job_uuid} "
         f"({job.comment})"
     )
 
     await MinerBlacklist.objects.acreate(
-        miner=job.miner,
+        miner=miner,
         expires_at=blacklist_until,
-        reason=MinerBlacklist.BlacklistReason.JOB_FAILED,
+        reason=reason,
         reason_details=job.comment,
+    )
+
+    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+        type=SystemEvent.EventType.MINER_ORGANIC_JOB_INFO,
+        subtype=SystemEvent.EventSubType.MINER_BLACKLISTED,
+        long_description=msg,
+        data={
+            "job_uuid": str(job.job_uuid),
+            "miner_hotkey": miner.hotkey,
+            "reason": reason,
+            "start_ts": now.isoformat(),
+            "end_ts": blacklist_until.isoformat(),
+        },
     )

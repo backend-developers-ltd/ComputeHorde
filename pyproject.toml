@@ -11,6 +11,8 @@ dev = [
     "pytest-xdist",
     "requests",
     "compute-horde",
+    "compute-horde-sdk",
+    "facilitator",
     "miner",
     "executor",
     "validator",
@@ -18,6 +20,8 @@ dev = [
 
 [tool.uv.sources]
 compute-horde = { path = "compute_horde", editable = true }
+compute-horde-sdk = { path = "compute_horde_sdk", editable = true }
+facilitator = { path = "facilitator", editable = true }
 miner = { path = "miner", editable = true }
 executor = { path = "executor", editable = true }
 validator = { path = "validator", editable = true }

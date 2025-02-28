@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% load crispy_forms_tags %}
+
+{% block title %}API token{% endblock %}
+
+
+{% block content %}
+    <h2>API Token Management</h2>
+    {% if token %}
+        <p>API Token generated at: {{ token.created }}</p>
+        {% if is_new_token %}
+            <p>Your new API Token is: <strong>{{ safe_token_key }}</strong></p>
+            {% if not always_show_token %}
+                <p>Please copy this token now. You won't be able to see it again!</p>
+            {% endif %}
+        {% else %}
+            <p>API Token: <strong>{{ safe_token_key }}</strong></p>
+        {% endif %}
+    {% else %}
+        <p>No API Token has been generated yet.</p>
+    {% endif %}
+    {% crispy form %}
+{% endblock %}
