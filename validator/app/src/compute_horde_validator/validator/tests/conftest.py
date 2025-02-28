@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 import bittensor
 import pytest
-from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClass
+from compute_horde.executor_class import EXECUTOR_CLASS
+from compute_horde_core.executor_class import ExecutorClass
 from pytest_mock import MockerFixture
 
 from .helpers import MockNeuron, MockSyntheticMinerClient

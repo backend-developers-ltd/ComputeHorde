@@ -17,7 +17,6 @@ from compute_horde.certificate import generate_certificate_at
 from compute_horde.executor_class import (
     DEFAULT_EXECUTOR_CLASS,
     DEFAULT_LLM_EXECUTOR_CLASS,
-    ExecutorClass,
 )
 from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.mv_protocol import miner_requests
@@ -28,6 +27,7 @@ from compute_horde.receipts.schemas import (
     JobStartedReceiptPayload,
 )
 from compute_horde.utils import sign_blob
+from compute_horde_core.executor_class import ExecutorClass
 from constance.test import override_config
 from django.utils import timezone
 from pytest_httpx import HTTPXMock

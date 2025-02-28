@@ -2,7 +2,7 @@
 
 import typing
 
-import compute_horde.base.volume
+import compute_horde_core.volume
 import django.core.serializers.json
 import django_pydantic_field.compat.django
 import django_pydantic_field.fields
@@ -44,9 +44,9 @@ class Migration(migrations.Migration):
                         django_pydantic_field.compat.django.GenericContainer(
                             typing.Annotated,
                             (
-                                compute_horde.base.volume.ZipUrlVolume
-                                | compute_horde.base.volume.SingleFileVolume
-                                | compute_horde.base.volume.HuggingfaceVolume,
+                                compute_horde_core.volume.ZipUrlVolume
+                                | compute_horde_core.volume.SingleFileVolume
+                                | compute_horde_core.volume.HuggingfaceVolume,
                                 django_pydantic_field.compat.django.FieldInfoContainer(
                                     None, (), {"discriminator": "volume_type"}
                                 ),

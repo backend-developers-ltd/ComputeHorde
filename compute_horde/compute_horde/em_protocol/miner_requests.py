@@ -1,11 +1,11 @@
 import enum
 from typing import Self
 
+from compute_horde_core.output_upload import OutputUpload, OutputUploadType  # noqa
+from compute_horde_core.volume import Volume, VolumeType
 from pydantic import model_validator
 
 from ..base.docker import DockerRunOptionsPreset
-from ..base.output_upload import OutputUpload, OutputUploadType  # noqa
-from ..base.volume import Volume, VolumeType
 from ..base_requests import BaseRequest, JobMixin
 
 

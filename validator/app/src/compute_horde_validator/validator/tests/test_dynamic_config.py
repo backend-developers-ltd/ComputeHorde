@@ -1,4 +1,4 @@
-from compute_horde.executor_class import ExecutorClass
+from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.dynamic_config import (
     executor_class_array_parser,

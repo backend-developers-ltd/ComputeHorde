@@ -1,11 +1,12 @@
 import base64
 import uuid
 
-from compute_horde.base.volume import VolumeType, ZipUrlVolume
+from compute_horde_core.signature import BittensorWalletSigner, BittensorWalletVerifier
+from compute_horde_core.signature import Signature as RawSignature
+from compute_horde_core.volume import VolumeType, ZipUrlVolume
+
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import Signature, V2JobRequest
-from compute_horde.signature import BittensorWalletSigner, BittensorWalletVerifier
-from compute_horde.signature import Signature as RawSignature
 
 
 def test_signed_job_roundtrip(signature_wallet):

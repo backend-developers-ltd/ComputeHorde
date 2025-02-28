@@ -3,36 +3,26 @@ import datetime
 
 import freezegun
 import pytest
-
-from compute_horde.base.output_upload import SingleFilePutUpload
-from compute_horde.base.volume import HuggingfaceVolume, MultiVolume, SingleFileVolume
-from compute_horde.executor_class import ExecutorClass
-from compute_horde.fv_protocol.facilitator_requests import (
-    Signature,
-    SignedFields,
-    V2JobRequest,
-    to_json_array,
-)
-from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest
-from compute_horde.signature import (
-    SIGNERS_REGISTRY,
-    VERIFIERS_REGISTRY,
+from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.output_upload import SingleFilePutUpload
+from compute_horde_core.signature import (
     BittensorWalletSigner,
     BittensorWalletVerifier,
+    Signature,
     SignatureInvalidException,
     SignatureNotFound,
+    SignedFields,
     hash_message_signature,
     signature_from_headers,
     signature_payload,
 )
+from compute_horde_core.volume import HuggingfaceVolume, MultiVolume, SingleFileVolume
 
-
-def test_available_signers():
-    assert list(SIGNERS_REGISTRY) == ["bittensor"]
-
-
-def test_available_verifiers():
-    assert list(VERIFIERS_REGISTRY) == ["bittensor"]
+from compute_horde.fv_protocol.facilitator_requests import (
+    V2JobRequest,
+    to_json_array,
+)
+from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest
 
 
 @pytest.fixture

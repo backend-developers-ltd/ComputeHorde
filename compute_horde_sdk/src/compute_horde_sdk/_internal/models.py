@@ -9,8 +9,8 @@ from typing import Literal
 
 import pydantic
 
-from _compute_horde_models import output_upload as compute_horde_output_upload
-from _compute_horde_models import volume as compute_horde_volume
+from compute_horde_core import output_upload as compute_horde_output_upload
+from compute_horde_core import volume as compute_horde_volume
 
 VOLUME_MOUNT_PATH_PREFIX = "/volume/"
 OUTPUT_MOUNT_PATH_PREFIX = "/output/"

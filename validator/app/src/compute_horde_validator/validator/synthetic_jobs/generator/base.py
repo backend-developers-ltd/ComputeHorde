@@ -3,10 +3,10 @@ import asyncio
 import uuid
 
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.base.output_upload import OutputUpload
-from compute_horde.base.volume import Volume
-from compute_horde.executor_class import ExecutorClass
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
+from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.output_upload import OutputUpload
+from compute_horde_core.volume import Volume
 
 
 class BaseSyntheticJobGenerator(abc.ABC):

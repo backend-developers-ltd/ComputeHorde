@@ -576,10 +576,10 @@ dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "celery", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "compute-horde-sdk", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "cryptography", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "more-itertools", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "phx-class-registry", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "requests", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -590,10 +590,10 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.10.10" },
     { name = "bittensor", specifier = ">=9.0.0,<9.1" },
     { name = "celery", specifier = ">=5.3.0,<6" },
+    { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },
     { name = "cryptography", specifier = ">=42.0.8" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "more-itertools", specifier = ">=10.2.0" },
-    { name = "phx-class-registry", specifier = ">=4.1.0" },
     { name = "pydantic", specifier = ">=2.3,<3" },
     { name = "requests", specifier = ">=2.32.2" },
     { name = "websockets", specifier = ">=14.0,<15.0" },
@@ -612,6 +612,51 @@ test = [
     { name = "pytest", specifier = ">=8.2.1" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "pytest-django", specifier = ">=4.9.0" },
+    { name = "responses", specifier = ">=0.25.0" },
+]
+type-check = [
+    { name = "django-stubs", extras = ["compatible-mypy"] },
+    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = ">=3.15.1" },
+    { name = "mypy" },
+    { name = "types-freezegun" },
+    { name = "types-python-dateutil" },
+    { name = "types-requests" },
+]
+
+[[package]]
+name = "compute-horde-sdk"
+source = { editable = "../compute_horde_sdk" }
+dependencies = [
+    { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bittensor", specifier = ">=9.0.0,<9.1" },
+    { name = "httpx", specifier = ">=0.26.0" },
+    { name = "ipython", specifier = "==8.14.0" },
+    { name = "pydantic", specifier = ">=2.10,<3" },
+]
+
+[package.metadata.requires-dev]
+format = [{ name = "ruff" }]
+lint = [
+    { name = "codespell", extras = ["toml"] },
+    { name = "ruff" },
+]
+release = [{ name = "towncrier", specifier = ">=23.11.0,<24" }]
+test = [
+    { name = "faker", specifier = ">=33.1.0" },
+    { name = "freezegun", specifier = ">=1.5.1" },
+    { name = "pytest", specifier = ">=8.2.1" },
+    { name = "pytest-apiver" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    { name = "pytest-django", specifier = ">=4.9.0" },
+    { name = "pytest-httpx", specifier = ">=0.35.0" },
+    { name = "pytest-xdist" },
     { name = "responses", specifier = ">=0.25.0" },
 ]
 type-check = [
@@ -1126,6 +1171,7 @@ dependencies = [
     { name = "channels", extra = ["daphne"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "channels-redis", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "compute-horde", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "compute-horde-sdk", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "crispy-bootstrap5", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django-allauth", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1206,6 +1252,7 @@ requires-dist = [
     { name = "channels", extras = ["daphne"], specifier = ">=4.0.0" },
     { name = "channels-redis", specifier = ">=4.2.0" },
     { name = "compute-horde", editable = "../compute_horde" },
+    { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },
     { name = "crispy-bootstrap5", specifier = ">=2024.2" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-allauth", specifier = ">=0.61.1" },
@@ -1893,15 +1940,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9e/c3/059298687310d527a58bb01f3b1965787ee3b40dce76752eda8b44e9a2c5/pexpect-4.9.0-py2.py3-none-any.whl", hash = "sha256:7236d1e080e4936be2dc3e326cec0af72acf9212a7e1d060210e70a47e253523", size = 63772 },
-]
-
-[[package]]
-name = "phx-class-registry"
-version = "5.1.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ad/e1/4038dc8b09e66b1f850913c05fe1c039f8d9c0ef61347af37c75bbe77e3f/phx_class_registry-5.1.1.tar.gz", hash = "sha256:06c9af198b846a7530406314f63f8d83441daf42d29ee25d8c0b19a9dbc37939", size = 32115 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/85/67eb86f25b1857a7669c4ad7a46b439e55c5301cbcb08b9ce8fa9125700d/phx_class_registry-5.1.1-py3-none-any.whl", hash = "sha256:b093ecc1dad34c5dc6eda2530046d956f2303a5cfaa543bf7fba35ce3c7b1672", size = 15732 },
 ]
 
 [[package]]

@@ -4,13 +4,14 @@ from datetime import datetime
 
 import bittensor
 from asgiref.sync import sync_to_async
-from compute_horde.executor_class import EXECUTOR_CLASS, ExecutorClass
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
     OrganicJobError,
     run_organic_job,
 )
 from compute_horde.mv_protocol.miner_requests import V0DeclineJobRequest
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now

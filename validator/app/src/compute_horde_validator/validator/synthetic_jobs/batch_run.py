@@ -16,11 +16,9 @@ import bittensor
 import httpx
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
-from compute_horde.base.output_upload import OutputUpload
-from compute_horde.base.volume import Volume
 from compute_horde.base_requests import BaseRequest
 from compute_horde.certificate import generate_certificate_at
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, EXECUTOR_CLASS, ExecutorClass
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     UnsupportedMessageReceived,
@@ -61,6 +59,9 @@ from compute_horde.receipts.schemas import (
 from compute_horde.subtensor import get_peak_cycle
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
+from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.output_upload import OutputUpload
+from compute_horde_core.volume import Volume
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction

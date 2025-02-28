@@ -1,6 +1,6 @@
 import logging
 
-from compute_horde.signature import SignatureNotFound
+from compute_horde_core.signature import SignatureNotFound
 from django.utils.deprecation import MiddlewareMixin
 
 from ..services.signatures import signature_from_request

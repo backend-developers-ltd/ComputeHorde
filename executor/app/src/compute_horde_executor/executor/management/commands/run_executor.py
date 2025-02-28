@@ -20,14 +20,6 @@ import packaging.version
 import pydantic
 from asgiref.sync import sync_to_async
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.base.volume import (
-    HuggingfaceVolume,
-    InlineVolume,
-    MultiVolume,
-    SingleFileVolume,
-    Volume,
-    ZipUrlVolume,
-)
 from compute_horde.base_requests import BaseRequest
 from compute_horde.certificate import (
     check_endpoint,
@@ -60,6 +52,14 @@ from compute_horde.miner_client.base import (
 )
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
+from compute_horde_core.volume import (
+    HuggingfaceVolume,
+    InlineVolume,
+    MultiVolume,
+    SingleFileVolume,
+    Volume,
+    ZipUrlVolume,
+)
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from huggingface_hub import snapshot_download

@@ -4,7 +4,6 @@ from functools import partial
 from typing import Literal, assert_never
 
 from compute_horde.em_protocol.executor_requests import JobErrorType
-from compute_horde.executor_class import ExecutorClass
 from compute_horde.fv_protocol.facilitator_requests import JobRequest, V2JobRequest
 from compute_horde.miner_client.organic import (
     FailureReason,
@@ -18,6 +17,7 @@ from compute_horde.mv_protocol.miner_requests import (
     V0JobFailedRequest,
 )
 from compute_horde.receipts.models import JobStartedReceipt
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from pydantic import BaseModel, JsonValue
 

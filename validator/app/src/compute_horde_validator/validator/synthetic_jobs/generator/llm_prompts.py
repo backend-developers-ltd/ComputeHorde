@@ -8,9 +8,9 @@ import uuid
 import httpx
 import pydantic
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.base.output_upload import MultiUpload, OutputUpload, SingleFilePutUpload
-from compute_horde.base.volume import MultiVolume, SingleFileVolume, Volume
 from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
+from compute_horde_core.output_upload import MultiUpload, OutputUpload, SingleFilePutUpload
+from compute_horde_core.volume import MultiVolume, SingleFileVolume, Volume
 from django.conf import settings
 
 from compute_horde_validator.validator.models import Prompt, PromptSample

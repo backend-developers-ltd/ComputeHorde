@@ -1,20 +1,16 @@
-import base64
 import typing
-from enum import StrEnum
 from typing import Annotated, Literal, Self
 
 import pydantic
+from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.output_upload import MultiUpload, OutputUpload, ZipAndHttpPutUpload
+from compute_horde_core.signature import Signature, SignedFields
+from compute_horde_core.volume import MultiVolume, Volume, ZipUrlVolume
 from pydantic import (
     BaseModel,
     JsonValue,
-    field_serializer,
-    field_validator,
     model_validator,
 )
-
-from compute_horde.base.output_upload import MultiUpload, OutputUpload, ZipAndHttpPutUpload
-from compute_horde.base.volume import MultiVolume, Volume, ZipUrlVolume
-from compute_horde.executor_class import ExecutorClass
 
 
 class Error(BaseModel, extra="allow"):
@@ -28,31 +24,6 @@ class Response(BaseModel, extra="forbid"):
 
     status: Literal["error", "success"]
     errors: list[Error] = []
-
-
-class SignatureScope(StrEnum):
-    SignedFields = "SignedFields"
-    FullRequest = "FullRequest"
-
-
-class Signature(BaseModel, extra="forbid"):
-    # has defaults to allow easy instantiation
-    signature_type: str = ""
-    signatory: str = (
-        ""  # identity of the signer (e.g. sa58 address if signature_type == "bittensor")
-    )
-    timestamp_ns: int = 0  # UNIX timestamp in nanoseconds
-    signature: bytes
-    signature_scope: SignatureScope = SignatureScope.SignedFields
-
-    @field_validator("signature")
-    @classmethod
-    def validate_signature(cls, signature: str) -> bytes:
-        return base64.b64decode(signature)
-
-    @field_serializer("signature")
-    def serialize_signature(self, signature: bytes) -> str:
-        return base64.b64encode(signature).decode("utf-8")
 
 
 class V0JobCheated(BaseModel, extra="forbid"):
@@ -132,38 +103,6 @@ class V1JobRequest(BaseModel, extra="forbid"):
         return self
 
 
-class SignedFields(BaseModel):
-    executor_class: str
-    docker_image: str
-    raw_script: str
-    args: list[str]
-    env: dict[str, str]
-    use_gpu: bool
-    artifacts_dir: str
-    on_trusted_miner: bool
-
-    volumes: list[JsonValue]
-    uploads: list[JsonValue]
-
-    @staticmethod
-    def from_facilitator_sdk_json(data: JsonValue):
-        data = typing.cast(dict[str, JsonValue], data)
-
-        signed_fields = SignedFields(
-            executor_class=str(data.get("executor_class")),
-            docker_image=str(data.get("docker_image", "")),
-            raw_script=str(data.get("raw_script", "")),
-            args=typing.cast(list[str], data.get("args", [])),
-            env=typing.cast(dict[str, str], data.get("env", None)),
-            use_gpu=typing.cast(bool, data.get("use_gpu")),
-            artifacts_dir=str(data.get("artifacts_dir", "")),
-            on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
-            volumes=typing.cast(list[JsonValue], data.get("volumes", [])),
-            uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
-        )
-        return signed_fields
-
-
 def to_json_array(data) -> list[JsonValue]:
     return typing.cast(list[JsonValue], [x.model_dump() for x in data])
 
@@ -208,7 +147,7 @@ class V2JobRequest(BaseModel, extra="forbid"):
                 self.output_upload.uploads
                 if isinstance(self.output_upload, MultiUpload)
                 # TODO: fix consolidate faci output_upload types
-                else [self.output_upload]  # type: ignore
+                else [self.output_upload]
             )
             if self.output_upload
             else []

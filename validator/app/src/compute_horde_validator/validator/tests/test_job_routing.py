@@ -2,12 +2,13 @@ import uuid
 from datetime import timedelta
 
 import pytest
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, ExecutorClass
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde.utils import sign_blob
+from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
 
 from compute_horde_validator.validator.models import (

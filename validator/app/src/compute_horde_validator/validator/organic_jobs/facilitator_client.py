@@ -21,7 +21,7 @@ from compute_horde.fv_protocol.validator_requests import (
     V0Heartbeat,
     V0MachineSpecsUpdate,
 )
-from compute_horde.signature import verify_signature
+from compute_horde_core.signature import verify_signature
 from django.conf import settings
 from pydantic import BaseModel
 

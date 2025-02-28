@@ -1,10 +1,11 @@
 import json
 
-from compute_horde.fv_protocol.facilitator_requests import SignatureScope, SignedFields
-from compute_horde.signature import (
-    VERIFIERS_REGISTRY,
+from compute_horde_core.signature import (
+    BittensorWalletVerifier,
     Signature,
     SignatureInvalidException,
+    SignatureScope,
+    SignedFields,
     signature_from_headers,
 )
 from django.http import HttpRequest
@@ -20,10 +21,7 @@ def signature_from_request(request: HttpRequest) -> Signature:
     :raises SignatureInvalidException: if the signature is invalid
     """
     signature = signature_from_headers(request.headers)
-    try:
-        verifier = VERIFIERS_REGISTRY.get(signature.signature_type)
-    except KeyError:
-        raise SignatureInvalidException(f"Invalid signature type: {signature.signature_type}")
+    verifier = BittensorWalletVerifier()
     try:
         json_body = json.loads(request.body)
     except ValueError:

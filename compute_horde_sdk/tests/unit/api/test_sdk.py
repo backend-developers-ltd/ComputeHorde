@@ -5,7 +5,7 @@ import bittensor
 import httpx
 import pytest
 
-from _compute_horde_models.signature import (
+from compute_horde_core.signature import (
     BittensorWalletVerifier,
     SignatureInvalidException,
     SignatureScope,

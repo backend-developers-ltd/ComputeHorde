@@ -2,6 +2,7 @@ from datetime import timedelta
 
 import pytest
 from compute_horde.subtensor import get_cycle_containing_block, get_peak_cycle
+from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
 from django.utils.timezone import now
 from pytest import approx
@@ -15,7 +16,6 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
 )
 from compute_horde_validator.validator.scoring import (
-    ExecutorClass,
     get_penalty_multiplier,
     score_batches,
 )

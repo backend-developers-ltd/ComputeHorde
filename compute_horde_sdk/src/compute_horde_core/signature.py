@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import abc
 import base64
 import datetime
@@ -8,46 +6,66 @@ import json
 import re
 import time
 import typing
+from enum import StrEnum
 from typing import ClassVar, Protocol
 
-from class_registry import ClassRegistry, RegistryKeyError
-from pydantic import JsonValue
-
-from compute_horde.fv_protocol.facilitator_requests import Signature, SignatureScope
-
-if typing.TYPE_CHECKING:
-    import bittensor
-
-SIGNERS_REGISTRY: ClassRegistry[Signer] = ClassRegistry("signature_type")
-VERIFIERS_REGISTRY: ClassRegistry[Verifier] = ClassRegistry("signature_type")
+import bittensor
+from pydantic import BaseModel, JsonValue, field_serializer, field_validator
 
 
-def verify_signature(
-    payload: JsonValue | bytes,
-    signature: Signature,
-    *,
-    newer_than: datetime.datetime | None = None,
-):
-    """
-    Verifies the signature of the payload
-
-    :param payload: payload to be verified
-    :param signature: signature object
-    :param newer_than: if provided, checks if the signature is newer than the provided timestamp
-    :return: None
-    :raises SignatureInvalidException: if the signature is invalid
-    """
-    try:
-        verifier = VERIFIERS_REGISTRY.get(signature.signature_type)
-    except RegistryKeyError as e:
-        raise SignatureInvalidException(
-            f"Invalid signature type: {signature.signature_type!r}"
-        ) from e
-    verifier.verify(payload, signature, newer_than)
+class SignatureScope(StrEnum):
+    SignedFields = "SignedFields"
+    FullRequest = "FullRequest"
 
 
-class SignatureExtractor(Protocol):
-    def __call__(self, headers: dict[str, str], prefix: str = "") -> Signature: ...
+class Signature(BaseModel, extra="forbid"):
+    # has defaults to allow easy instantiation
+    signature_type: str = ""
+    signatory: str = ""  # identity of the signer (e.g. sa58 address if signature_type == "bittensor")
+    timestamp_ns: int = 0  # UNIX timestamp in nanoseconds
+    signature: bytes
+    signature_scope: SignatureScope = SignatureScope.SignedFields
+
+    @field_validator("signature")
+    @classmethod
+    def validate_signature(cls, signature: str) -> bytes:
+        return base64.b64decode(signature)
+
+    @field_serializer("signature")
+    def serialize_signature(self, signature: bytes) -> str:
+        return base64.b64encode(signature).decode("utf-8")
+
+
+class SignedFields(BaseModel):
+    executor_class: str
+    docker_image: str
+    raw_script: str
+    args: list[str]
+    env: dict[str, str]
+    use_gpu: bool
+    artifacts_dir: str
+    on_trusted_miner: bool
+
+    volumes: list[JsonValue]
+    uploads: list[JsonValue]
+
+    @staticmethod
+    def from_facilitator_sdk_json(data: JsonValue):
+        data = typing.cast(dict[str, JsonValue], data)
+
+        signed_fields = SignedFields(
+            executor_class=str(data.get("executor_class")),
+            docker_image=str(data.get("docker_image", "")),
+            raw_script=str(data.get("raw_script", "")),
+            args=typing.cast(list[str], data.get("args", [])),
+            env=typing.cast(dict[str, str], data.get("env", {})),
+            use_gpu=typing.cast(bool, data.get("use_gpu", False)),
+            volumes=typing.cast(list[JsonValue], data.get("volumes", [])),
+            uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
+            artifacts_dir=typing.cast(str, data.get("artifacts_dir") or ""),
+            on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
+        )
+        return signed_fields
 
 
 def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Signature:
@@ -63,9 +81,7 @@ def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Si
             signatory=headers[f"{prefix}Signatory"],
             timestamp_ns=int(headers[f"{prefix}Timestamp-NS"]),
             signature=headers[f"{prefix}Signature"].encode("utf-8"),
-            signature_scope=SignatureScope(
-                headers.get(f"{prefix}Signature-Scope", SignatureScope.SignedFields.name)
-            ),
+            signature_scope=SignatureScope(headers.get(f"{prefix}Signature-Scope", SignatureScope.SignedFields.name)),
         )
     except (
         KeyError,
@@ -75,45 +91,7 @@ def signature_from_headers(headers: dict[str, str], prefix: str = "X-CH-") -> Si
         raise SignatureNotFound("Signature not found in headers") from e
 
 
-def verify_request(
-    method: str,
-    url: str,
-    headers: dict[str, str],
-    json: JsonValue | None = None,
-    *,
-    newer_than: datetime.datetime | None = None,
-    signature_extractor: SignatureExtractor = signature_from_headers,
-) -> Signature | None:
-    """
-    Verifies the signature of the request
-
-    :param method: HTTP method
-    :param url: request URL
-    :param headers: request headers
-    :param json: request JSON payload
-    :param newer_than: if provided, checks if the signature is newer than the provided timestamp
-    :param signature_extractor: function to extract the signature from the headers
-    :return: Signature object or None if no signature found
-    :raises SignatureInvalidException: if the signature is invalid
-    """
-    try:
-        signature = signature_extractor(headers)
-    except SignatureNotFound:
-        return None
-    try:
-        verifier = VERIFIERS_REGISTRY.get(signature.signature_type)
-    except RegistryKeyError as e:
-        raise SignatureInvalidException(
-            f"Invalid signature type: {signature.signature_type!r}"
-        ) from e
-    payload = verifier.payload_from_request(method, url, headers=headers, json=json)
-    verifier.verify(payload, signature, newer_than)
-    return signature
-
-
-def signature_to_headers(
-    signature: Signature, scope: SignatureScope, prefix: str = "X-CH-"
-) -> dict[str, str]:
+def signature_to_headers(signature: Signature, scope: SignatureScope, prefix: str = "X-CH-") -> dict[str, str]:
     """
     Converts the signature to headers
 
@@ -165,9 +143,7 @@ def hash_message_signature(payload: bytes | JsonValue, signature: Signature) -> 
 _REMOVE_URL_SCHEME_N_HOST_RE = re.compile(r"^\w+://[^/]+")
 
 
-def signature_payload(
-    method: str, url: str, headers: dict[str, str], json: JsonValue | None = None
-) -> JsonValue:
+def signature_payload(method: str, url: str, headers: dict[str, str], json: JsonValue | None = None) -> JsonValue:
     reduced_url = _REMOVE_URL_SCHEME_N_HOST_RE.sub("", url)
     return {
         "action": f"{method.upper()} {reduced_url}",
@@ -238,23 +214,12 @@ class Verifier(SignatureScheme):
         raise NotImplementedError
 
 
-def _require_bittensor():
-    try:
-        import bittensor
-    except ImportError as e:
-        raise ImportError("bittensor package is required for BittensorWalletSigner") from e
-    return bittensor
-
-
 class BittensorSignatureScheme:
     signature_type = "bittensor"
 
 
-@SIGNERS_REGISTRY.register
 class BittensorWalletSigner(BittensorSignatureScheme, Signer):
     def __init__(self, wallet: bittensor.wallet | bittensor.Keypair | None = None):
-        bittensor = _require_bittensor()
-
         if isinstance(wallet, bittensor.Keypair):
             keypair = wallet
         else:
@@ -270,16 +235,10 @@ class BittensorWalletSigner(BittensorSignatureScheme, Signer):
         return signatory
 
 
-@VERIFIERS_REGISTRY.register
 class BittensorWalletVerifier(BittensorSignatureScheme, Verifier):
-    def __init__(self, *args, **kwargs):
-        self._bittensor = _require_bittensor()
-
-        super().__init__(*args, **kwargs)
-
     def _verify(self, payload: bytes, signature: Signature) -> None:
         try:
-            keypair = self._bittensor.Keypair(ss58_address=signature.signatory)
+            keypair = bittensor.Keypair(ss58_address=signature.signatory)
         except ValueError:
             raise SignatureInvalidException("Invalid signatory for BittensorWalletVerifier")
         try:
@@ -287,3 +246,57 @@ class BittensorWalletVerifier(BittensorSignatureScheme, Verifier):
                 raise SignatureInvalidException("Signature is invalid")
         except (ValueError, TypeError) as e:
             raise SignatureInvalidException("Signature is malformed") from e
+
+
+class SignatureExtractor(Protocol):
+    def __call__(self, headers: dict[str, str], prefix: str = "") -> Signature: ...
+
+
+def verify_signature(
+    payload: JsonValue | bytes,
+    signature: Signature,
+    *,
+    newer_than: datetime.datetime | None = None,
+):
+    """
+    Verifies the signature of the payload
+
+    :param payload: payload to be verified
+    :param signature: signature object
+    :param newer_than: if provided, checks if the signature is newer than the provided timestamp
+    :return: None
+    :raises SignatureInvalidException: if the signature is invalid
+    """
+    verifier = BittensorWalletVerifier()
+    verifier.verify(payload, signature, newer_than)
+
+
+def verify_request(
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    json: JsonValue | None = None,
+    *,
+    newer_than: datetime.datetime | None = None,
+    signature_extractor: SignatureExtractor = signature_from_headers,
+) -> Signature | None:
+    """
+    Verifies the signature of the request
+
+    :param method: HTTP method
+    :param url: request URL
+    :param headers: request headers
+    :param json: request JSON payload
+    :param newer_than: if provided, checks if the signature is newer than the provided timestamp
+    :param signature_extractor: function to extract the signature from the headers
+    :return: Signature object or None if no signature found
+    :raises SignatureInvalidException: if the signature is invalid
+    """
+    try:
+        signature = signature_extractor(headers)
+    except SignatureNotFound:
+        return None
+    verifier = BittensorWalletVerifier()
+    payload = verifier.payload_from_request(method, url, headers=headers, json=json)
+    verifier.verify(payload, signature, newer_than)
+    return signature

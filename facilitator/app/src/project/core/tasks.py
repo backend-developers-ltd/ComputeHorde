@@ -13,7 +13,6 @@ import structlog
 from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
 from channels.layers import get_channel_layer
-from compute_horde.executor_class import ExecutorClass
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
@@ -22,6 +21,7 @@ from compute_horde.receipts.schemas import (
     Receipt,
     ReceiptType,
 )
+from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
 from django.db import connection

@@ -4,8 +4,8 @@ from collections.abc import Callable, Sequence
 from functools import partial
 
 import numpy as np
-from compute_horde.executor_class import ExecutorClass
 from compute_horde.subtensor import get_peak_cycle
+from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
 

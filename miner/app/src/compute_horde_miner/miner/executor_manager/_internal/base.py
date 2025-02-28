@@ -9,8 +9,8 @@ from asgiref.sync import sync_to_async
 from compute_horde.executor_class import (
     EXECUTOR_CLASS,
     MAX_EXECUTOR_TIMEOUT,
-    ExecutorClass,
 )
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.selector import (

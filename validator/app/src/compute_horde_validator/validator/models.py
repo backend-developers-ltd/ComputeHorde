@@ -4,10 +4,10 @@ import uuid
 from os import urandom
 from typing import Self
 
-from compute_horde.base.output_upload import OutputUpload, ZipAndHttpPutUpload
-from compute_horde.base.volume import Volume, ZipUrlVolume
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.subtensor import get_cycle_containing_block
+from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
+from compute_horde_core.volume import Volume, ZipUrlVolume
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Exists, OuterRef, UniqueConstraint
