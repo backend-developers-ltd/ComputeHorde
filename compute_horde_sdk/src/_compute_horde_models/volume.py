@@ -38,7 +38,7 @@ class HuggingfaceVolume(pydantic.BaseModel):
 
 class InlineVolume(pydantic.BaseModel):
     volume_type: Literal[VolumeType.inline] = VolumeType.inline
-    contents: str
+    contents: str = pydantic.Field(repr=False)
     relative_path: str | None = None
 
     def is_safe(self) -> bool:
