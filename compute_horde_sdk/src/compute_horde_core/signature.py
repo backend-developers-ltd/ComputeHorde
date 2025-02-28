@@ -58,12 +58,12 @@ class SignedFields(BaseModel):
             docker_image=str(data.get("docker_image", "")),
             raw_script=str(data.get("raw_script", "")),
             args=typing.cast(list[str], data.get("args", [])),
-            env=typing.cast(dict[str, str], data.get("env", None)),
-            use_gpu=typing.cast(bool, data.get("use_gpu")),
+            env=typing.cast(dict[str, str], data.get("env", {})),
+            use_gpu=typing.cast(bool, data.get("use_gpu", False)),
             volumes=typing.cast(list[JsonValue], data.get("volumes", [])),
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
             artifacts_dir=typing.cast(str, data.get("artifacts_dir") or ""),
-            on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner")),
+            on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
         )
         return signed_fields
 
