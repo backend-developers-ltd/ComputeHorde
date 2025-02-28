@@ -10,9 +10,6 @@ from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
     ExecutorUnavailable,
 )
-from compute_horde_miner.miner.executor_manager._internal.selector import (
-    HistoricalRandomMinerSelector,
-)
 from compute_horde_miner.miner.executor_manager.executor_port_dispenser import (
     executor_port_dispenser,
 )
@@ -30,13 +27,6 @@ class DockerExecutor:
 
 
 class DockerExecutorManager(BaseExecutorManager):
-    def __init__(self):
-        super().__init__()
-
-        self.selector = HistoricalRandomMinerSelector(
-            settings.CLUSTER_SECRET,
-        )
-
     async def start_new_executor(self, token, executor_class, timeout):
         if settings.ADDRESS_FOR_EXECUTORS:
             address = settings.ADDRESS_FOR_EXECUTORS
@@ -128,14 +118,6 @@ class DockerExecutorManager(BaseExecutorManager):
 
     async def get_manifest(self):
         return {settings.DEFAULT_EXECUTOR_CLASS: 1}
-
-    async def is_active(self) -> bool:
-        selected = await self.selector.active(
-            settings.CLUSTER_HOTKEYS,
-        )
-        my_address = settings.BITTENSOR_WALLET().hotkey.ss58_address  # type: str
-
-        return selected == my_address
 
     async def get_executor_public_address(self, executor: DockerExecutor) -> str | None:
         return await get_docker_container_ip(executor.token)

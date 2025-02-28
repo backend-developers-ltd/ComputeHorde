@@ -6,7 +6,7 @@ from collections.abc import Sequence
 import asgiref.sync
 import bittensor
 from bittensor.core.errors import SubstrateRequestException
-from compute_horde.subtensor import get_cycle_containing_block
+from compute_horde.subtensor import get_cycle_containing_block, get_peak_cycle
 from django.conf import settings
 
 from compute_horde_miner.miner.models import ClusterMiner
@@ -99,7 +99,7 @@ class HistoricalRandomMinerSelector(BaseSelector):
 
         return active_hotkeys
 
-    async def active(self, hotkeys: Sequence[str], block: int = None) -> str | None:
+    async def active(self, hotkeys: Sequence[str], block: int | None = None) -> str | None:
         if not block:
             block = await self.fetch_current_block()
 
@@ -114,18 +114,19 @@ class HistoricalRandomMinerSelector(BaseSelector):
         if len(active_hotkeys) == 1:
             return active_hotkeys[0]
 
-        cycles = [
-            cycle,
+        peak_cycle = get_peak_cycle(block=block, netuid=settings.BITTENSOR_NETUID)
+        peak_cycles = [
+            peak_cycle,
         ]
 
         for i in range(self._lookback):
-            cycles.append(
-                get_cycle_containing_block(
-                    block=cycles[i].start - 1, netuid=settings.BITTENSOR_NETUID
-                )
+            peak_cycles.append(
+                get_peak_cycle(block=peak_cycles[i].start - 1, netuid=settings.BITTENSOR_NETUID)
             )
 
-        generators = [random.Random(f"{self._seed}+{cycle.start}") for cycle in cycles]
+        generators = [
+            random.Random(f"{self._seed}+{peak_cycle.start}") for peak_cycle in peak_cycles
+        ]
 
         selected = None
 
