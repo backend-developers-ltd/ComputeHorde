@@ -1,7 +1,7 @@
 import json
 
 from compute_horde.signature import (
-    VERIFIERS_REGISTRY,
+    BittensorWalletVerifier,
     SignatureInvalidException,
     signature_from_headers,
 )
@@ -19,10 +19,7 @@ def signature_from_request(request: HttpRequest) -> Signature:
     :raises SignatureInvalidException: if the signature is invalid
     """
     signature = signature_from_headers(request.headers)
-    try:
-        verifier = VERIFIERS_REGISTRY.get(signature.signature_type)
-    except KeyError:
-        raise SignatureInvalidException(f"Invalid signature type: {signature.signature_type}")
+    verifier = BittensorWalletVerifier()
     try:
         json_body = json.loads(request.body)
     except ValueError:

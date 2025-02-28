@@ -10,12 +10,8 @@ import time
 from typing import ClassVar, Protocol
 
 import bittensor
-from class_registry import ClassRegistry, RegistryKeyError
 from compute_horde_core.signature import Signature, SignatureScope
 from pydantic import JsonValue
-
-SIGNERS_REGISTRY: ClassRegistry[Signer] = ClassRegistry("signature_type")
-VERIFIERS_REGISTRY: ClassRegistry[Verifier] = ClassRegistry("signature_type")
 
 
 def verify_signature(
@@ -33,12 +29,7 @@ def verify_signature(
     :return: None
     :raises SignatureInvalidException: if the signature is invalid
     """
-    try:
-        verifier = VERIFIERS_REGISTRY.get(signature.signature_type)
-    except RegistryKeyError as e:
-        raise SignatureInvalidException(
-            f"Invalid signature type: {signature.signature_type!r}"
-        ) from e
+    verifier = BittensorWalletVerifier()
     verifier.verify(payload, signature, newer_than)
 
 
@@ -96,12 +87,7 @@ def verify_request(
         signature = signature_extractor(headers)
     except SignatureNotFound:
         return None
-    try:
-        verifier = VERIFIERS_REGISTRY.get(signature.signature_type)
-    except RegistryKeyError as e:
-        raise SignatureInvalidException(
-            f"Invalid signature type: {signature.signature_type!r}"
-        ) from e
+    verifier = BittensorWalletVerifier()
     payload = verifier.payload_from_request(method, url, headers=headers, json=json)
     verifier.verify(payload, signature, newer_than)
     return signature
@@ -238,7 +224,6 @@ class BittensorSignatureScheme:
     signature_type = "bittensor"
 
 
-@SIGNERS_REGISTRY.register
 class BittensorWalletSigner(BittensorSignatureScheme, Signer):
     def __init__(self, wallet: bittensor.wallet | bittensor.Keypair | None = None):
         if isinstance(wallet, bittensor.Keypair):
@@ -256,7 +241,6 @@ class BittensorWalletSigner(BittensorSignatureScheme, Signer):
         return signatory
 
 
-@VERIFIERS_REGISTRY.register
 class BittensorWalletVerifier(BittensorSignatureScheme, Verifier):
     def _verify(self, payload: bytes, signature: Signature) -> None:
         try:

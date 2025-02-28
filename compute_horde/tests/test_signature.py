@@ -17,8 +17,6 @@ from compute_horde.fv_protocol.facilitator_requests import (
 )
 from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest
 from compute_horde.signature import (
-    SIGNERS_REGISTRY,
-    VERIFIERS_REGISTRY,
     BittensorWalletSigner,
     BittensorWalletVerifier,
     SignatureInvalidException,
@@ -27,14 +25,6 @@ from compute_horde.signature import (
     signature_from_headers,
     signature_payload,
 )
-
-
-def test_available_signers():
-    assert list(SIGNERS_REGISTRY) == ["bittensor"]
-
-
-def test_available_verifiers():
-    assert list(VERIFIERS_REGISTRY) == ["bittensor"]
 
 
 @pytest.fixture

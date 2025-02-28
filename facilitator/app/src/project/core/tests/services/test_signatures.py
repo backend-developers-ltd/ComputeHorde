@@ -1,7 +1,7 @@
 import pytest
 from compute_horde.fv_protocol.facilitator_requests import Signature
 from compute_horde.signature import (
-    VERIFIERS_REGISTRY,
+    BittensorWalletVerifier,
     SignatureInvalidException,
     signature_to_headers,
 )
@@ -30,7 +30,7 @@ def mock_request(rf, request_json):
 
 @pytest.fixture
 def verifier():
-    return VERIFIERS_REGISTRY.get("bittensor")
+    return BittensorWalletVerifier()
 
 
 @pytest.fixture
