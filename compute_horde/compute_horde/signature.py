@@ -11,9 +11,8 @@ import typing
 from typing import ClassVar, Protocol
 
 from class_registry import ClassRegistry, RegistryKeyError
+from compute_horde_core.signature import Signature, SignatureScope
 from pydantic import JsonValue
-
-from compute_horde.fv_protocol.facilitator_requests import Signature, SignatureScope
 
 if typing.TYPE_CHECKING:
     import bittensor

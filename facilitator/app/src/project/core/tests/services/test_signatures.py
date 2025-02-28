@@ -3,8 +3,10 @@ from compute_horde.fv_protocol.facilitator_requests import Signature
 from compute_horde.signature import (
     VERIFIERS_REGISTRY,
     SignatureInvalidException,
-    SignatureScope,
     signature_to_headers,
+)
+from compute_horde_core.signature import (
+    SignatureScope,
 )
 from django.utils.datastructures import CaseInsensitiveMapping
 

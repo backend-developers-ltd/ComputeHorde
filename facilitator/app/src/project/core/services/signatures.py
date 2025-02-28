@@ -1,12 +1,11 @@
 import json
 
-from compute_horde.fv_protocol.facilitator_requests import SignatureScope, SignedFields
 from compute_horde.signature import (
     VERIFIERS_REGISTRY,
-    Signature,
     SignatureInvalidException,
     signature_from_headers,
 )
+from compute_horde_core.signature import Signature, SignatureScope, SignedFields
 from django.http import HttpRequest
 
 
