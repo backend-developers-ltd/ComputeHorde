@@ -65,7 +65,6 @@ class ExecutorClassPool:
     async def reserve_executor(self, token: str, timeout: float) -> object:
         async with self._reservation_lock:
             future = self._reservation_futures[token]
-            del self._reservation_futures[token]
 
             if self.get_availability() == 0:
                 logger.debug(
