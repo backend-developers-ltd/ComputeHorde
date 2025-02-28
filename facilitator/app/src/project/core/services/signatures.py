@@ -1,11 +1,13 @@
 import json
 
-from compute_horde.signature import (
+from compute_horde_core.signature import (
     BittensorWalletVerifier,
+    Signature,
     SignatureInvalidException,
+    SignatureScope,
+    SignedFields,
     signature_from_headers,
 )
-from compute_horde_core.signature import Signature, SignatureScope, SignedFields
 from django.http import HttpRequest
 
 

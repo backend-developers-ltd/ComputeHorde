@@ -1,12 +1,10 @@
 import pytest
 from compute_horde.fv_protocol.facilitator_requests import Signature
-from compute_horde.signature import (
+from compute_horde_core.signature import (
     BittensorWalletVerifier,
     SignatureInvalidException,
-    signature_to_headers,
-)
-from compute_horde_core.signature import (
     SignatureScope,
+    signature_to_headers,
 )
 from django.utils.datastructures import CaseInsensitiveMapping
 

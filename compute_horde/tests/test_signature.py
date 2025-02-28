@@ -6,8 +6,15 @@ import pytest
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import SingleFilePutUpload
 from compute_horde_core.signature import (
+    BittensorWalletSigner,
+    BittensorWalletVerifier,
     Signature,
+    SignatureInvalidException,
+    SignatureNotFound,
     SignedFields,
+    hash_message_signature,
+    signature_from_headers,
+    signature_payload,
 )
 from compute_horde_core.volume import HuggingfaceVolume, MultiVolume, SingleFileVolume
 
@@ -16,15 +23,6 @@ from compute_horde.fv_protocol.facilitator_requests import (
     to_json_array,
 )
 from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest
-from compute_horde.signature import (
-    BittensorWalletSigner,
-    BittensorWalletVerifier,
-    SignatureInvalidException,
-    SignatureNotFound,
-    hash_message_signature,
-    signature_from_headers,
-    signature_payload,
-)
 
 
 @pytest.fixture
