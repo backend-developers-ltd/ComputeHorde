@@ -687,6 +687,12 @@ LOGGING = {
             "level": "INFO",
             "propagate": True,
         },
+        # This also spams DEBUG messages
+        "btdecode": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": True,
+        },
     },
 }
 
