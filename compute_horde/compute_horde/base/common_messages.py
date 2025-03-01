@@ -1,9 +1,11 @@
 from typing import Literal, Annotated, Self
 
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.volume import Volume, VolumeType
 from pydantic import BaseModel, Field, model_validator
 
+from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde.utils import MachineSpecs
@@ -76,6 +78,26 @@ class StreamingJobReady(BaseModel):
     public_key: str
     ip: str  # NOT on executor -> miner.ec
     port: int
+
+
+# validator -> miner.vc -> miner.ec -> executor
+class JobRequest(BaseModel):
+    message_type: Literal["JobRequest"] = "JobRequest"
+    job_uuid: str
+    executor_class: ExecutorClass | None = None  # ONLY on validator -> miner.vc
+    docker_image_name: str | None = None
+    raw_script: str | None = None
+    docker_run_options_preset: DockerRunOptionsPreset
+    docker_run_cmd: list[str]
+    volume: Volume | None = None
+    output_upload: OutputUpload | None = None
+    artifacts_dir: str | None = None
+
+    @model_validator(mode="after")
+    def validate_at_least_docker_image_or_raw_script(self) -> Self:
+        if not (bool(self.docker_image_name) or bool(self.raw_script)):
+            raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
+        return self
 
 
 # executor -> miner.ec -> miner.vc -> validator
