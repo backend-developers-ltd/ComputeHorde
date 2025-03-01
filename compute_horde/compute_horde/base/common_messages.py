@@ -1,8 +1,11 @@
-from typing import Literal, Annotated
+from typing import Literal, Annotated, Self
 
-from pydantic import BaseModel, Field
+from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.volume import Volume, VolumeType
+from pydantic import BaseModel, Field, model_validator
 
 from compute_horde.em_protocol.executor_requests import JobErrorType
+from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde.utils import MachineSpecs
 
 
@@ -14,6 +17,33 @@ from compute_horde.utils import MachineSpecs
 class GenericError(BaseModel):
     message_type: Literal["GenericError"] = "GenericError"
     details: str | None = None
+
+
+# validator -> miner.vc -> miner.ec -> executor
+class V0InitialJobRequest(BaseModel):
+    message_type: Literal["V0InitialJobRequest"] = "V0InitialJobRequest"
+    job_uuid: str
+    executor_class: ExecutorClass  # NOT on miner.ec -> executor
+    base_docker_image_name: str | None = None
+    timeout_seconds: int
+    volume: Volume | None = None
+    volume_type: VolumeType | None = None
+    job_started_receipt_payload: JobStartedReceiptPayload  # NOT on miner.ec -> executor
+    job_started_receipt_signature: str  # NOT on miner.ec -> executor
+
+    @model_validator(mode="after")
+    def validate_volume_or_volume_type(self) -> Self:
+        if bool(self.volume) and bool(self.volume_type):
+            raise ValueError("Expected either `volume` or `volume_type`, got both")
+        return self
+
+
+# executor -> miner.ec -> miner.vc -> validator
+class V1InitialJobRequest(V0InitialJobRequest):
+    message_type: Literal["V1InitialJobRequest"] = "V1InitialJobRequest"
+    public_key: str
+    executor_ip: str # ONLY on miner.vc -> validator
+
 
 
 # executor -> miner.ec -> miner.vc -> validator
