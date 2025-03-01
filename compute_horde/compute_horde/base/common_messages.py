@@ -1,4 +1,4 @@
-from typing import Literal, Annotated, Self
+from typing import Annotated, Literal, Self
 
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
@@ -9,7 +9,6 @@ from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde.utils import MachineSpecs
-
 
 # NOTE:
 # miner.ec - The executor consumer of a Miner.
@@ -40,11 +39,11 @@ class V0InitialJobRequest(BaseModel):
         return self
 
 
-# executor -> miner.ec -> miner.vc -> validator
+# validator -> miner.vc -> miner.ec -> executor
 class V1InitialJobRequest(V0InitialJobRequest):
     message_type: Literal["V1InitialJobRequest"] = "V1InitialJobRequest"
     public_key: str
-    executor_ip: str  # ONLY on miner.vc -> validator
+    executor_ip: str  # ONLY on miner.ec -> executor
 
 
 # executor -> miner.ec -> miner.vc -> validator
@@ -128,12 +127,18 @@ class MachineSpecsRequest(BaseModel):
 
 
 ExecutorToMinerMessage = Annotated[
-    ExecutorFailedToPrepare
+    GenericError
+    | ExecutorFailedToPrepare
     | StreamingJobFailedToPrepare
     | ExecutorReady
     | StreamingJobReady
     | JobFailed
     | JobFinished
     | MachineSpecsRequest,
+    Field(discriminator="message_type"),
+]
+
+MinerToExecutorMessage = Annotated[
+    GenericError | V0InitialJobRequest | V1InitialJobRequest | JobRequest,
     Field(discriminator="message_type"),
 ]
