@@ -44,8 +44,7 @@ class V0InitialJobRequest(BaseModel):
 class V1InitialJobRequest(V0InitialJobRequest):
     message_type: Literal["V1InitialJobRequest"] = "V1InitialJobRequest"
     public_key: str
-    executor_ip: str # ONLY on miner.vc -> validator
-
+    executor_ip: str  # ONLY on miner.vc -> validator
 
 
 # executor -> miner.ec -> miner.vc -> validator
