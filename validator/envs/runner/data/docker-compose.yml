@@ -152,6 +152,8 @@ services:
     env_file: ./.env
     volumes:
       - ${HOST_WALLET_DIR}:/wallets
+    # the "bittensor_network" label below is extremely important, it allows us to separate various environments in
+    # a single prometheus instance. Make sure it has the right value when doing changes to the env_file conventions etc.
     entrypoint: |
       /bin/sh -c 'cat <<EOF > /etc/prometheus/prometheus.yml.template 
       global:
@@ -162,6 +164,7 @@ services:
             - targets: ['cadvisor:8080', 'host.docker.internal:9100', 'app:8000', 'celery-flower:5555']
               labels:
                 hotkey: '{hotkey}'
+                bittensor_network: $${BITTENSOR_NETWORK:-finney}
       remote_write:
         - url: "http://prometheus-proxy:8000/prometheus_outbound_proxy/"
       EOF
