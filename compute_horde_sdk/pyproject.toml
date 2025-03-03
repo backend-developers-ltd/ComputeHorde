@@ -20,7 +20,6 @@ dynamic = [
 ]
 dependencies = [
     "pydantic<3,>=2.10",
-    "ipython==8.14.0",
     "httpx>=0.26.0",
     "bittensor>=9.0.0,<9.1",
 ]
