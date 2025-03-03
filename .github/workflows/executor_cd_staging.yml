@@ -23,7 +23,12 @@ jobs:
           IMAGE_NAME="${DOCKER_REPO_NAME}:${TAG_VERSION}"
           SHA_IMAGE_NAME="${DOCKER_REPO_NAME}:git-${GITHUB_SHA}"
 
-          cd "${BUILD_DIRECTORY}" && docker build --build-context compute-horde=../compute_horde -t "${IMAGE_NAME}" -f app/envs/prod/Dockerfile .
+          cd "${BUILD_DIRECTORY}" && docker build \
+            --build-context compute-horde-sdk=../compute_horde_sdk \
+            --build-context compute-horde=../compute_horde \
+            -t "${IMAGE_NAME}" \
+            -f app/envs/prod/Dockerfile \
+            .
 
           docker image tag "${IMAGE_NAME}" "${SHA_IMAGE_NAME}"
 
