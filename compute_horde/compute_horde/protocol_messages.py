@@ -9,10 +9,10 @@ from pydantic import BaseModel, Field, model_validator
 
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.receipts.schemas import (
-    JobStartedReceiptPayload,
-    Receipt,
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
+    JobStartedReceiptPayload,
+    Receipt,
 )
 from compute_horde.utils import MachineSpecs
 
