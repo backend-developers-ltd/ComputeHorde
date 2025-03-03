@@ -1,6 +1,7 @@
 import logging
 import shlex
 import uuid
+from datetime import datetime
 from os import urandom
 from typing import Self
 
@@ -421,3 +422,19 @@ class Prompt(models.Model):
     sample = models.ForeignKey(PromptSample, on_delete=models.CASCADE, related_name="prompts")
     content = models.TextField()
     answer = models.TextField(null=True)
+
+
+class MinerPreliminaryReservationQueryset(models.QuerySet["MinerPreliminaryReservation"]):
+    def active(self, at: datetime | None = None) -> Self:
+        at = at or now()
+        return self.filter(expires_at__gt=at)
+
+
+class MinerPreliminaryReservation(models.Model):
+    miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
+    executor_class = models.CharField(max_length=255)
+    job_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    objects = MinerPreliminaryReservationQueryset.as_manager()

@@ -1,5 +1,8 @@
+import asyncio
 import datetime
-from typing import Any
+from collections.abc import Awaitable, Callable
+from functools import wraps
+from typing import Any, ParamSpec, TypeVar
 
 import bittensor
 import pydantic
@@ -91,3 +94,21 @@ def sign_blob(kp: bittensor.Keypair, blob: str):
     Signs a string blob with a bittensor keypair and returns the signature
     """
     return f"0x{kp.sign(blob).hex()}"
+
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def async_synchronized(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+    """
+    Wraps the function in an async lock.
+    """
+    lock = asyncio.Lock()
+
+    @wraps(func)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        async with lock:
+            return await func(*args, **kwargs)
+
+    return wrapper
