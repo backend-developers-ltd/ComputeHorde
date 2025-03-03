@@ -64,8 +64,10 @@ compute-horde = { path = "../compute_horde", editable = true }
 compute-horde-sdk = { path = "../compute_horde_sdk", editable = true }
 
 [tool.uv]
-prerelease = "allow"
 environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+# Instead of allowing prerelease for all packages,
+# we add overrides here so only the specified packages can resolve to prerelease.
+override-dependencies = ["bt-decode>=0.5.0a2"]
 
 [dependency-groups]
 test = [
