@@ -1,16 +1,12 @@
 import typing
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal
 
 import pydantic
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import MultiUpload, OutputUpload, ZipAndHttpPutUpload
 from compute_horde_core.signature import Signature, SignedFields
 from compute_horde_core.volume import MultiVolume, Volume, ZipUrlVolume
-from pydantic import (
-    BaseModel,
-    JsonValue,
-    model_validator,
-)
+from pydantic import BaseModel, JsonValue
 
 
 class Error(BaseModel, extra="allow"):
@@ -47,7 +43,6 @@ class V0JobRequest(BaseModel, extra="forbid"):
     miner_hotkey: str
     executor_class: ExecutorClass
     docker_image: str
-    raw_script: str
     args: list[str]
     env: dict[str, str]
     use_gpu: bool
@@ -56,12 +51,6 @@ class V0JobRequest(BaseModel, extra="forbid"):
 
     def get_args(self):
         return self.args
-
-    @model_validator(mode="after")
-    def validate_at_least_docker_image_or_raw_script(self) -> Self:
-        if not (bool(self.docker_image) or bool(self.raw_script)):
-            raise ValueError("Expected at least one of `docker_image` or `raw_script`")
-        return self
 
     @property
     def volume(self) -> Volume | None:
@@ -86,7 +75,6 @@ class V1JobRequest(BaseModel, extra="forbid"):
     miner_hotkey: str
     executor_class: ExecutorClass
     docker_image: str
-    raw_script: str
     args: list[str]
     env: dict[str, str]
     use_gpu: bool
@@ -95,12 +83,6 @@ class V1JobRequest(BaseModel, extra="forbid"):
 
     def get_args(self):
         return self.args
-
-    @model_validator(mode="after")
-    def validate_at_least_docker_image_or_raw_script(self) -> Self:
-        if not (bool(self.docker_image) or bool(self.raw_script)):
-            raise ValueError("Expected at least one of `docker_image` or `raw_script`")
-        return self
 
 
 def to_json_array(data) -> list[JsonValue]:
@@ -120,7 +102,6 @@ class V2JobRequest(BaseModel, extra="forbid"):
     # !!! all fields below are included in the signed json payload
     executor_class: ExecutorClass
     docker_image: str
-    raw_script: str
     args: list[str]
     env: dict[str, str]
     use_gpu: bool
@@ -156,7 +137,6 @@ class V2JobRequest(BaseModel, extra="forbid"):
         signed_fields = SignedFields(
             executor_class=self.executor_class,
             docker_image=self.docker_image,
-            raw_script=self.raw_script,
             args=self.args,
             env=self.env,
             use_gpu=self.use_gpu,
@@ -173,12 +153,6 @@ class V2JobRequest(BaseModel, extra="forbid"):
         del payload["message_type"]
         del payload["signature"]
         return payload
-
-    @model_validator(mode="after")
-    def validate_at_least_docker_image_or_raw_script(self) -> Self:
-        if not (bool(self.docker_image) or bool(self.raw_script)):
-            raise ValueError("Expected at least one of `docker_image` or `raw_script`")
-        return self
 
 
 JobRequest = Annotated[

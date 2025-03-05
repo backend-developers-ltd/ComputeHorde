@@ -19,7 +19,6 @@ def test_signed_job_roundtrip(signature_wallet):
         uuid=str(uuid.uuid4()),
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="hello-world",
-        raw_script="bash",
         args=["--verbose", "--dry-run"],
         env={"CUDA": "1"},
         use_gpu=False,

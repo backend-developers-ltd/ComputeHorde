@@ -39,7 +39,6 @@ class Signature(BaseModel, extra="forbid"):
 class SignedFields(BaseModel):
     executor_class: str
     docker_image: str
-    raw_script: str
     args: list[str]
     env: dict[str, str]
     use_gpu: bool
@@ -56,7 +55,6 @@ class SignedFields(BaseModel):
         signed_fields = SignedFields(
             executor_class=str(data.get("executor_class")),
             docker_image=str(data.get("docker_image", "")),
-            raw_script=str(data.get("raw_script", "")),
             args=typing.cast(list[str], data.get("args", [])),
             env=typing.cast(dict[str, str], data.get("env", {})),
             use_gpu=typing.cast(bool, data.get("use_gpu", False)),

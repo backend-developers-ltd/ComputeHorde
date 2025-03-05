@@ -29,7 +29,6 @@ def get_job_response(uuid: str = TEST_JOB_UUID, status: str = "Accepted", **kwar
         "last_update": "2025-01-29T14:32:46Z",
         "status": status,
         "docker_image": TEST_DOCKER_IMAGE,
-        "raw_script": None,
         "args": ["--test", "yes"],
         "env": {},
         "use_gpu": True,

@@ -142,6 +142,7 @@ class V0JobRequest(BaseModel):
     job_uuid: str
     executor_class: ExecutorClass  # ONLY on validator -> miner.vc
     docker_image: str
+    raw_script: str | None = None
     docker_run_options_preset: DockerRunOptionsPreset
     docker_run_cmd: list[str]
     volume: Volume | None = None
