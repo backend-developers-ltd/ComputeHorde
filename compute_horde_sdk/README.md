@@ -50,16 +50,17 @@ To get started, install the ComputeHorde SDK with:
 pip install compute-horde-sdk
 ```
 
-## Running Jobs on ComputeHorde
-
-The **ComputeHorde SDK** allows validators to request ComputeHorde execution effortlessly. 
-Below are examples demonstrating **basic job execution**, **advanced job configuration**, and **job management**.
-
 For detailed API documentation, visit the **[ComputeHorde SDK Reference](TODO_API_REFERENCE_LINK)**.
 
 
 > [!IMPORTANT]
 > This package uses [ApiVer](#versioning), make sure to import `compute_horde_sdk.v1`.
+
+
+## Running Jobs on ComputeHorde
+
+The **ComputeHorde SDK** allows validators to request ComputeHorde execution effortlessly. 
+Below are examples demonstrating **basic job execution**, **advanced job configuration**, and **job management**.
 
 ### **1. Requesting ComputeHorde Execution (Simplest Example)**
 This minimal example shows how to submit a job to ComputeHorde with **basic parameters**:
@@ -73,7 +74,7 @@ wallet = bittensor.wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
     hotkey=wallet.hotkey,  # ss58 address
-    compute_horde_validator_hotkey="...",  # usually the same as the hotkey above.
+    compute_horde_validator_hotkey="...",  # usually the same as the hotkey above
 )
 
 async def main():
@@ -96,7 +97,6 @@ This example demonstrates how to submit a job with **additional parameters**, in
 - arguments & environment variables
 - input & output volume configuration
 - artifact (results) storage
-- cross-validation on trusted miners
 
 ```python
 import asyncio
@@ -107,7 +107,7 @@ wallet = bittensor.wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
     hotkey=wallet.hotkey,  # ss58 address
-    compute_horde_validator_hotkey="...",  # usually the same as the hotkey above.
+    compute_horde_validator_hotkey="...",  # usually the same as the hotkey above
 )
 
 async def main():
@@ -145,16 +145,6 @@ async def main():
 
 asyncio.run(main())
 ```
-
-Below is a breakdown of key parameters:
-
-- **`artifacts_dir`** – path where the job writes its results.
-- **`input_volumes`** – defines **data sources** available inside the container.
-- **`output_volumes`** – defines **where to send job output data** after completion (used for large or unstable outputs that shouldn’t be treated as `artifacts`).
-- **`run_cross_validation`** – If `True`, the job will **run cross-validation** on a **trusted miner** before accepting results.
-- **`on_trusted_miner`** – If `True`, the job will be **executed directly on the ComputeHorde validator’s trusted miner** instead of regular ComputeHorde executors.
-
-For a full list of available parameters and their detailed descriptions, see the **[ComputeHorde SDK Reference](TODO_API_REFERENCE_LINK)**.
 
 ### **3. Managing ComputeHorde Jobs**
 
