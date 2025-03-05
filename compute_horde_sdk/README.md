@@ -1,13 +1,17 @@
 # ComputeHorde SDK – Scalable GPU Power for Subnet Owners & Validators 
 &nbsp;[![Continuous Integration](https://github.com/backend-developers-ltd/compute-horde-sdk/workflows/Continuous%20Integration/badge.svg)](https://github.com/backend-developers-ltd/compute-horde-sdk/actions?query=workflow%3A%22Continuous+Integration%22)&nbsp;[![License](https://img.shields.io/pypi/l/compute_horde_sdk.svg?label=License)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![python versions](https://img.shields.io/pypi/pyversions/compute_horde_sdk.svg?label=python%20versions)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![PyPI version](https://img.shields.io/pypi/v/compute_horde_sdk.svg?label=PyPI%20version)](https://pypi.python.org/pypi/compute_horde_sdk)
 
-The **ComputeHorde SDK** enables **Bittensor subnet owners** to improve the quality of their subnets by making **cost-effective, scalable GPU power available to validators**. 
-Instead of requiring validators to maintain their own physical GPUs, ComputeHorde provides an **on-demand decentralized GPU pool**, reducing costs and increasing validation power. 
+The **ComputeHorde SDK** enables **Bittensor subnet owners** to improve the quality of their subnets by providing **validators with cost-effective, scalable compute resources**.
+Instead of requiring validators to maintain their own physical GPUs, ComputeHorde offers **on-demand decentralized access to trust-worthy hardware**, 
+reducing costs and increasing validation power.
 
 ## Why Use ComputeHorde? 
 :heavy_check_mark: **Lower Costs** – Validators don’t need to buy, manage, or maintain GPUs.
+
 :heavy_check_mark: **Massive Scalability** – Instantly access as many trustworthy GPUs as needed. 
+
 :heavy_check_mark: **Faster Validation** – Increased compute power leads to better validation. 
+
 :heavy_check_mark: **Secure by Design** – Only computation tasks are offloaded; private keys & weight setting remain on validator machines. 
 
 ## How It Works for Subnet Owners
@@ -17,13 +21,16 @@ This ensures validators can seamlessly opt in to use ComputeHorde’s computing 
 By enabling ComputeHorde support in their subnet, **subnet owners** benefit by: 
 
 :heavy_check_mark: **Attracting More Validators** – Lower costs and easier maintenance make validators more likely to participate. 
+
 :heavy_check_mark: **Increasing Available Compute Power** – More GPU resources mean faster, higher-quality validation. 
+
 :heavy_check_mark: **Improving Subnet Quality** – Stronger validation enhances the reliability and competitiveness of the subnet’s commodity. 
 
 ## How It Works for Validators
 Each validator **chooses whether to use ComputeHorde**. To gain access to ComputeHorde’s stake-based compute power, a validator must: 
 
 :heavy_check_mark: Be or become a ComputeHorde validator. 
+
 :heavy_check_mark: Partner with an existing ComputeHorde validator. 
 
 ## We’re Here to Help 
