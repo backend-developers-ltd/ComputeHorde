@@ -32,7 +32,7 @@ paving the way for Bittensor to scale beyond its current limitations to support 
   Currently, **A6000** is the supported class, with **A100** coming next.
   The end goal is to eventually support all GPU types/configurations required by validators across Bittensor subnets.
 
-## Bittensor context 
+## Bittensor Context
 
 Bittensor is a decentralized network designed to ensure that AI, the most critical technology of our era, remains accessible to everyone and free from the control of centralized entities.
 Each Bittensor subnet specializes in a _digital commodity_, ranging from storage and large language models to general computing. 
@@ -45,7 +45,7 @@ This is achieved by distributing $TAO tokens to incentivize:
 Bittensor's end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
 ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnets operate effectively without relying on centralized cloud services.
 
-## Scoring mechanism
+## Scoring Mechanism
 
 The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** while 
 maintaining accountability and fairness in the network. 
@@ -55,7 +55,7 @@ encouraging them to **scale up executors when demand is high** while **minimizin
 
 The core mechanism ensures that miners can **reject synthetic jobs without penalty if they provide proof that they are actively engaged in an organic job**.
 
-### Peak and non-peak cycles
+### Peak and Non-Peak Cycles
 
 ComputeHorde operates in **10-cycle testing days** (each cycle is **2 Bittensor tempos**, i.e., **720 blocks**).
 Within each testing day, **one cycle is designated as the peak cycle**.
