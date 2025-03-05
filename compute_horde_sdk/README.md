@@ -1,5 +1,29 @@
-# compute_horde_sdk
+# ComputeHorde SDK – Scalable GPU Power for Validators  
 &nbsp;[![Continuous Integration](https://github.com/backend-developers-ltd/compute-horde-sdk/workflows/Continuous%20Integration/badge.svg)](https://github.com/backend-developers-ltd/compute-horde-sdk/actions?query=workflow%3A%22Continuous+Integration%22)&nbsp;[![License](https://img.shields.io/pypi/l/compute_horde_sdk.svg?label=License)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![python versions](https://img.shields.io/pypi/pyversions/compute_horde_sdk.svg?label=python%20versions)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![PyPI version](https://img.shields.io/pypi/v/compute_horde_sdk.svg?label=PyPI%20version)](https://pypi.python.org/pypi/compute_horde_sdk)
+
+The **ComputeHorde SDK** enables validators of **other Bittensor subnets** 
+to offload compute-intensive validation tasks to ComputeHorde’s **trustworthy, scalable GPU network**. 
+Instead of maintaining physical GPUs, validators can leverage ComputeHorde’s **on-demand GPU power**, reducing costs while increasing validation speed.  
+
+## Why Use ComputeHorde?  
+:heavy_check_mark: **Lower Costs** – No need to buy, manage, or maintain GPUs.  
+:heavy_check_mark: **Massive Scalability** – Instantly access as many GPUs as needed.  
+:heavy_check_mark: **Faster Validation** – Gain a competitive edge by processing tasks quicker.  
+:heavy_check_mark: **Secure by Design** – Only computation tasks are offloaded, private keys & weight setting remain safely on your validator host.  
+
+## Who Can Use It?  
+:heavy_check_mark: **Be a ComputeHorde Validator**  
+:heavy_check_mark: **Become a Validator**  
+:heavy_check_mark: **Partner with an Existing Validator**  
+
+## We’re Here to Help  
+We actively support **subnet owners and validators** in integrating the SDK—both technically and business-wise. 
+If you need guidance, **reach out to us** (eg on [ComputeHorde discord channel](https://discordapp.com/channels/799672011265015819/1201941624243109888)), 
+and we’ll ensure your validator is ComputeHorde-ready.  
+
+For more details on ComputeHorde, see the 
+**[ComputeHorde README](https://github.com/backend-developers-ltd/ComputeHorde/tree/master?tab=readme-ov-file#computehorde-subnet-12-of-bittensor)**
+
 
 ## Installation
 
