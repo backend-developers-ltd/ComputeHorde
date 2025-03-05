@@ -20,6 +20,7 @@ DOCKER_BUILDKIT=1 docker build \
   --progress plain \
   --platform linux/amd64 \
   -t "${APP_NAME}" \
+  --build-context compute-horde-sdk=../compute_horde_sdk \
   --build-context compute-horde=../compute_horde \
   --build-arg ADDITIONAL_PACKAGES \
   --build-arg GITHUB_TOKEN \
