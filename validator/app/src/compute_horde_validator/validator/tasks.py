@@ -1153,10 +1153,20 @@ def send_events_to_facilitator():
 
 
 async def async_metagraph():
+    start_ts = time.time()
     try:
         subtensor = await AsyncSubtensor(network=settings.BITTENSOR_NETWORK).initialize()
         metagraph = await subtensor.metagraph(netuid=settings.BITTENSOR_NETUID, lite=True)
-        logger.info(f"Metagraph fetched: {metagraph}")
+        duration = time.time() - start_ts
+        msg = f"Metagraph fetched: {metagraph} in {duration:.2f} seconds"
+        logger.info(msg)
+        start_ts = time.time()
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.METAGRAPH_SYNCING,
+            subtype=SystemEvent.EventSubType.SUCCESS,
+            long_description=msg,
+            data={"duration": duration},
+        )
     except Exception as e:
         msg = f"Failed to fetch metagraph: {e}"
         logger.warning(msg)
@@ -1264,6 +1274,8 @@ async def async_metagraph():
         subtype=SystemEvent.EventSubType.SUCCESS,
         data=data,
     )
+    duration = time.time() - start_ts
+    logger.info(f"Finished refresing neurons in {duration:.2f} seconds")
 
 
 @app.task
