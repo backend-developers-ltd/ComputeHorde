@@ -11,36 +11,34 @@ import bittensor
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.volume import Volume
+from pydantic import BaseModel, TypeAdapter
 
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.base_requests import BaseRequest
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     ErrorCallback,
     UnsupportedMessageReceived,
 )
-from compute_horde.mv_protocol import miner_requests, validator_requests
-from compute_horde.mv_protocol.miner_requests import (
-    BaseMinerRequest,
+from compute_horde.protocol_messages import (
+    GenericError,
+    MinerToValidatorMessage,
     UnauthorizedError,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
-    V0JobFailedRequest,
-    V0JobFinishedRequest,
-    V0MachineSpecsRequest,
-    V0StreamingJobReadyRequest,
-)
-from compute_horde.mv_protocol.validator_requests import (
-    AuthenticationPayload,
-    V0AuthenticateRequest,
     V0InitialJobRequest,
     V0JobAcceptedReceiptRequest,
+    V0JobFailedRequest,
     V0JobFinishedReceiptRequest,
+    V0JobFinishedRequest,
     V0JobRequest,
+    V0MachineSpecsRequest,
+    V0StreamingJobNotReadyRequest,
+    V0StreamingJobReadyRequest,
+    ValidatorAuthForMiner,
 )
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import (
@@ -110,7 +108,7 @@ class OrganicMinerClient(AbstractMinerClient):
         self.executor_ready_or_failed_timestamp: int = 0
 
         self.streaming_job_ready_or_not_future: asyncio.Future[
-            V0StreamingJobReadyRequest | miner_requests.V0StreamingJobNotReadyRequest
+            V0StreamingJobReadyRequest | V0StreamingJobNotReadyRequest
         ] = loop.create_future()
         self.streaming_job_ready_or_not_timestamp: int = 0
 
@@ -134,19 +132,10 @@ class OrganicMinerClient(AbstractMinerClient):
             f"ws://{self.miner_address}:{self.miner_port}/v0.1/validator_interface/{self.my_hotkey}"
         )
 
-    def accepted_request_type(self) -> type[BaseRequest]:
-        return BaseMinerRequest
+    def parse_message(self, raw_msg: str | bytes) -> BaseModel:
+        return TypeAdapter(MinerToValidatorMessage).validate_json(raw_msg)
 
-    def incoming_generic_error_class(self) -> type[BaseRequest]:
-        return miner_requests.GenericError
-
-    def outgoing_generic_error_class(self) -> type[BaseRequest]:
-        return validator_requests.GenericError
-
-    def build_outgoing_generic_error(self, msg: str):
-        return validator_requests.GenericError(details=msg)
-
-    async def notify_generic_error(self, msg: BaseRequest) -> None:
+    async def notify_generic_error(self, msg: GenericError) -> None:
         """This method is called when miner sends a generic error message"""
 
     async def notify_unauthorized_error(self, msg: UnauthorizedError) -> None:
@@ -173,8 +162,8 @@ class OrganicMinerClient(AbstractMinerClient):
     async def handle_machine_specs_request(self, msg: V0MachineSpecsRequest) -> None:
         self.miner_machine_specs = msg.specs
 
-    async def handle_message(self, msg: BaseRequest) -> None:
-        if isinstance(msg, self.incoming_generic_error_class()):
+    async def handle_message(self, msg: BaseModel) -> None:
+        if isinstance(msg, GenericError):
             logger.warning(
                 f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
             )
@@ -206,9 +195,7 @@ class OrganicMinerClient(AbstractMinerClient):
                 self.executor_ready_or_failed_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
-        elif isinstance(
-            msg, V0StreamingJobReadyRequest | miner_requests.V0StreamingJobNotReadyRequest
-        ):
+        elif isinstance(msg, V0StreamingJobReadyRequest | V0StreamingJobNotReadyRequest):
             try:
                 self.streaming_job_ready_or_not_future.set_result(msg)
                 self.streaming_job_ready_or_not_timestamp = int(time.time())
@@ -225,15 +212,15 @@ class OrganicMinerClient(AbstractMinerClient):
         else:
             raise UnsupportedMessageReceived(msg)
 
-    def generate_authentication_message(self) -> V0AuthenticateRequest:
-        payload = AuthenticationPayload(
+    def generate_authentication_message(self) -> ValidatorAuthForMiner:
+        msg = ValidatorAuthForMiner(
             validator_hotkey=self.my_hotkey,
             miner_hotkey=self.miner_hotkey,
             timestamp=int(time.time()),
+            signature="",
         )
-        return V0AuthenticateRequest(
-            payload=payload, signature=sign_blob(self.my_keypair, payload.blob_for_signing())
-        )
+        msg.signature = sign_blob(self.my_keypair, msg.blob_for_signing())
+        return msg
 
     def generate_job_started_receipt_message(
         self,
@@ -337,7 +324,7 @@ class OrganicMinerClient(AbstractMinerClient):
             await self.notify_receipt_failure(comment)
 
     async def send_model(
-        self, model: BaseRequest, error_event_callback: ErrorCallback | None = None
+        self, model: BaseModel, error_event_callback: ErrorCallback | None = None
     ) -> None:
         if error_event_callback is None:
             error_event_callback = self.notify_send_failure
@@ -361,7 +348,7 @@ class FailureReason(enum.Enum):
 
 
 class OrganicJobError(Exception):
-    def __init__(self, reason: FailureReason, received: BaseRequest | None = None):
+    def __init__(self, reason: FailureReason, received: BaseModel | None = None):
         self.reason = reason
         self.received = received
 
@@ -383,19 +370,14 @@ class OrganicJobError(Exception):
 @dataclass
 class OrganicJobDetails:
     job_uuid: str
-    executor_class: ExecutorClass = ExecutorClass.spin_up_4min__gpu_24gb
-    docker_image: str | None = None
-    raw_script: str | None = None
+    executor_class: ExecutorClass
+    docker_image: str
     docker_run_options_preset: DockerRunOptionsPreset = "nvidia_all"
     docker_run_cmd: list[str] = field(default_factory=list)
     total_job_timeout: int = 300
     volume: Volume | None = None
     output: OutputUpload | None = None
     artifacts_dir: str | None = None
-
-    def __post_init__(self):
-        if (self.docker_image, self.raw_script) == (None, None):
-            raise ValueError("At least of of `docker_image` or `raw_script` must be not None")
 
 
 async def run_organic_job(
@@ -435,9 +417,9 @@ async def run_organic_job(
             V0InitialJobRequest(
                 job_uuid=job_details.job_uuid,
                 executor_class=job_details.executor_class,
-                base_docker_image_name=job_details.docker_image,
+                docker_image=job_details.docker_image,
                 timeout_seconds=job_details.total_job_timeout,
-                volume_type=job_details.volume.volume_type if job_details.volume else None,
+                volume=job_details.volume,
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
             ),
@@ -482,8 +464,7 @@ async def run_organic_job(
                 V0JobRequest(
                     job_uuid=job_details.job_uuid,
                     executor_class=job_details.executor_class,
-                    docker_image_name=job_details.docker_image,
-                    raw_script=job_details.raw_script,
+                    docker_image=job_details.docker_image,
                     docker_run_options_preset=job_details.docker_run_options_preset,
                     docker_run_cmd=job_details.docker_run_cmd,
                     volume=job_details.volume,

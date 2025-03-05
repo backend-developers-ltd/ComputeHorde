@@ -41,7 +41,7 @@ class ValidatorAuthForMiner(BaseModel):
 
 
 # miner.vc -> validator
-class ValidatorUnauthorizedError(BaseModel):
+class UnauthorizedError(BaseModel):
     class Code(enum.Enum):
         TOKEN_TOO_OLD = "TOKEN_TOO_OLD"
         UNKNOWN_VALIDATOR = "UNKNOWN_VALIDATOR"
@@ -66,7 +66,7 @@ class V0ExecutorManifestRequest(BaseModel):
 class V0InitialJobRequest(BaseModel):
     class StreamingDetails(BaseModel):
         public_key: str
-        executor_ip: str  # ONLY on miner.ec -> executor
+        executor_ip: str | None = None  # ONLY on miner.ec -> executor
 
     message_type: Literal["V0InitialJobRequest"] = "V0InitialJobRequest"
     job_uuid: str
@@ -106,7 +106,7 @@ class V0AcceptJobRequest(BaseModel):
 class V0ExecutorFailedRequest(BaseModel):
     message_type: Literal["V0ExecutorFailedRequest"] = "V0ExecutorFailedRequest"
     job_uuid: str  # NOT on miner.ec -> miner.vc
-    executor_token: str  # ONLY on miner.ec -> miner.vc
+    executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
 
 
 # TODO: can this be merged into V0ExecutorFailedRequest?
@@ -114,14 +114,14 @@ class V0ExecutorFailedRequest(BaseModel):
 class V0StreamingJobNotReadyRequest(BaseModel):
     message_type: Literal["V0StreamingJobNotReadyRequest"] = "V0StreamingJobNotReadyRequest"
     job_uuid: str  # NOT on miner.ec -> miner.vc
-    executor_token: str  # ONLY on miner.ec -> miner.vc
+    executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
 
 
 # executor -> miner.ec -> miner.vc -> validator
 class V0ExecutorReadyRequest(BaseModel):
     message_type: Literal["V0ExecutorReadyRequest"] = "V0ExecutorReadyRequest"
     job_uuid: str  # NOT on miner.ec -> miner.vc
-    executor_token: str  # ONLY on miner.ec -> miner.vc
+    executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
 
 
 # TODO: can this be merged into V0ExecutorReadyRequest?
@@ -130,7 +130,7 @@ class V0ExecutorReadyRequest(BaseModel):
 class V0StreamingJobReadyRequest(BaseModel):
     message_type: Literal["V0StreamingJobReadyRequest"] = "V0StreamingJobReadyRequest"
     job_uuid: str  # NOT on miner.ec -> miner.vc
-    executor_token: str  # ONLY on miner.ec -> miner.vc
+    executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
     public_key: str
     ip: str  # NOT on executor -> miner.ec
     port: int
@@ -229,7 +229,7 @@ ExecutorToMinerMessage = Annotated[
 
 MinerToValidatorMessage = Annotated[
     GenericError
-    | ValidatorUnauthorizedError
+    | UnauthorizedError
     | V0ExecutorManifestRequest
     | V0DeclineJobRequest
     | V0AcceptJobRequest
