@@ -38,6 +38,7 @@ from compute_horde_validator.validator.locks import Locked, LockType, get_adviso
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
     Cycle,
+    Miner,
     OrganicJob,
     Prompt,
     PromptSample,
@@ -64,7 +65,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
-from .models import AdminJobRequest
+from .models import AdminJobRequest, MetagraphSnapshot
 from .scoring import score_batches
 
 if False:
@@ -1148,6 +1149,151 @@ def send_events_to_facilitator():
             ).update(sent=True)
         else:
             logger.error(f"Failed to send system events to facilitator: {response}")
+
+
+def fetch_metagraph(block=None):
+    try:
+        start_ts = time.time()
+        metagraph = bittensor.metagraph(
+            netuid=settings.BITTENSOR_NETUID,
+            network=settings.BITTENSOR_NETWORK,
+            block=block,
+            lite=True,
+        )
+        duration = time.time() - start_ts
+        msg = f"Metagraph fetched: {metagraph} in {duration:.2f} seconds"
+        logger.info(msg)
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.METAGRAPH_SYNCING,
+            subtype=SystemEvent.EventSubType.SUCCESS,
+            long_description=msg,
+            data={"duration": duration},
+        )
+        return metagraph
+    except Exception as e:
+        msg = f"Failed to fetch metagraph: {e}"
+        logger.warning(msg)
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.METAGRAPH_SYNCING,
+            subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+            long_description=msg,
+            data={},
+        )
+    return None
+
+
+def save_metagraph_snapshot(metagraph, metagraph_type=0):
+    MetagraphSnapshot.objects.update_or_create(
+        id=metagraph_type,  # current metagraph snapshot
+        defaults={
+            "block": metagraph.block.item(),
+            "updated_at": now(),
+            "alpha_stake": metagraph.alpha_stake.tolist(),
+            "tao_stake": metagraph.tao_stake.tolist(),
+            "stake": metagraph.stake.tolist(),
+            "uids": [n.uid for n in metagraph.neurons],
+            "hotkeys": [n.hotkey for n in metagraph.neurons],
+            "serving_hotkeys": [
+                n.hotkey for n in metagraph.neurons if n.axon_info and n.axon_info.is_serving
+            ],
+        },
+    )
+
+
+@app.task
+def sync_metagraph() -> None:
+    metagraph = fetch_metagraph()
+    if metagraph is None:
+        return
+
+    block = metagraph.block.item()
+
+    # save current cycle start metagraph snapshot
+    current_cycle = get_cycle_containing_block(block=block, netuid=settings.BITTENSOR_NETUID)
+
+    # check metagraph sync lag
+    previous_block = None
+    try:
+        previous_metagraph = MetagraphSnapshot.get_latest()
+        if previous_metagraph:
+            previous_block = previous_metagraph.block
+    except Exception as e:
+        logger.warning(f"Failed to fetch previous metagraph snapshot block: {e}")
+    blocks_diff = block - previous_block if previous_block else None
+    if blocks_diff is not None and blocks_diff != 1:
+        if blocks_diff == 0:
+            return
+        else:
+            msg = f"Metagraph is {blocks_diff} blocks lagging - previous: {previous_block}, current: {block}"
+            logger.warning(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.METAGRAPH_SYNCING,
+                subtype=SystemEvent.EventSubType.WARNING,
+                long_description=msg,
+                data={
+                    "blocks_diff": blocks_diff,
+                    "previous_block": previous_block,
+                    "block": block,
+                },
+            )
+
+    save_metagraph_snapshot(metagraph)
+
+    # sync neurons
+    current_hotkeys = [n.hotkey for n in metagraph.neurons]
+    miners = list(Miner.objects.filter(hotkey__in=current_hotkeys).all())
+    existing_hotkeys = {m.hotkey for m in miners}
+    new_hotkeys = set(current_hotkeys) - existing_hotkeys
+    if len(new_hotkeys) > 0:
+        new_miners = Miner.objects.bulk_create([Miner(hotkey=hotkey) for hotkey in new_hotkeys])
+        miners.extend(new_miners)
+        logger.info(f"Created new neurons: {new_hotkeys}")
+
+    # update axon info of neurons
+    miners_to_update = []
+    hotkey_to_neuron = {
+        n.hotkey: n for n in metagraph.neurons if n.axon_info and n.axon_info.is_serving
+    }
+    for miner in miners:
+        neuron = hotkey_to_neuron.get(miner.hotkey)
+        if (
+            neuron
+            and neuron.axon_info
+            and (
+                miner.uid != neuron.uid
+                or miner.address != neuron.axon_info.ip
+                or miner.port != neuron.axon_info.port
+                or miner.ip_version != neuron.axon_info.ip_type
+            )
+        ):
+            miner.uid = neuron.uid
+            miner.address = neuron.axon_info.ip
+            miner.port = neuron.axon_info.port
+            miner.ip_version = neuron.axon_info.ip_type
+            miners_to_update.append(miner)
+    Miner.objects.bulk_update(miners_to_update, fields=["uid", "address", "port", "ip_version"])
+    logger.info(f"Updated axon infos for {len(miners_to_update)} miners")
+
+    data = {
+        "block": block,
+        "new_neurons": len(new_hotkeys),
+        "updated_axon_infos": len(miners_to_update),
+    }
+    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        type=SystemEvent.EventType.VALIDATOR_MINERS_REFRESH,
+        subtype=SystemEvent.EventSubType.SUCCESS,
+        data=data,
+    )
+
+    # update cycle start metagraph snapshot if cycle has changed
+    cycle_start_metagraph = None
+    try:
+        cycle_start_metagraph = MetagraphSnapshot.get_cycle_start()
+    except Exception as e:
+        logger.warning(f"Failed to fetch cycle start metagraph snapshot: {e}")
+    if cycle_start_metagraph and cycle_start_metagraph.block != current_cycle.start:
+        new_cycle_start_metagraph = fetch_metagraph(current_cycle.start)
+        save_metagraph_snapshot(new_cycle_start_metagraph, metagraph_type=1)
 
 
 @app.task

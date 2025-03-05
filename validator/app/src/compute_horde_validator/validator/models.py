@@ -1,7 +1,7 @@
 import logging
 import shlex
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from os import urandom
 from typing import Self
 
@@ -9,6 +9,7 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde_core.volume import Volume, ZipUrlVolume
+from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Exists, OuterRef, UniqueConstraint
@@ -45,6 +46,7 @@ class SystemEvent(models.Model):
         LLM_PROMPT_ANSWERING = "LLM_PROMPT_ANSWERING"
         LLM_PROMPT_SAMPLING = "LLM_PROMPT_SAMPLING"
         BURNING_INCENTIVE = "BURNING_INCENTIVE"
+        METAGRAPH_SYNCING = "METAGRAPH_SYNCING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -132,11 +134,54 @@ class MinerQueryset(models.QuerySet["Miner"]):
         ).filter(is_blacklisted=False)
 
 
+class MetagraphSnapshot(models.Model):
+    """
+    Snapshot of the metagraph at a specific block.
+    """
+
+    block = models.BigIntegerField()
+    updated_at = models.DateTimeField(auto_now_add=True)
+
+    alpha_stake = ArrayField(models.FloatField())
+    tao_stake = ArrayField(models.FloatField())
+    stake = ArrayField(models.FloatField())
+
+    uids = ArrayField(models.IntegerField())
+    hotkeys = ArrayField(models.CharField(max_length=255))
+
+    # current active miners
+    serving_hotkeys = ArrayField(models.CharField(max_length=255))
+
+    @classmethod
+    def get_latest(cls):
+        metagraph = MetagraphSnapshot.objects.get(id=0)
+        if metagraph.updated_at < now() - timedelta(seconds=12):
+            msg = f"Tried to fetch stale metagraph last updated at: {metagraph.updated_at}"
+            logger.error(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.METAGRAPH_SYNCING,
+                subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+                long_description=msg,
+                data={"block": metagraph.block},
+            )
+        return metagraph
+
+    @classmethod
+    def get_cycle_start(cls):
+        return MetagraphSnapshot.objects.get(id=0)
+
+
+# contains all neurons not only miners
 class Miner(models.Model):
     objects = MinerQueryset.as_manager()
 
     hotkey = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    uid = models.IntegerField(null=True)
+    address = models.CharField(max_length=255, null=True)
+    ip_version = models.IntegerField(null=True)
+    port = models.IntegerField(null=True)
 
     def __str__(self):
         return f"hotkey: {self.hotkey}"
