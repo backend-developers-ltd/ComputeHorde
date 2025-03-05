@@ -16,6 +16,7 @@ import celery.exceptions
 import numpy as np
 import requests
 from asgiref.sync import async_to_sync
+from bittensor.core.async_subtensor import AsyncSubtensor
 from bittensor.core.errors import SubstrateRequestException
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
@@ -38,6 +39,7 @@ from compute_horde_validator.validator.locks import Locked, LockType, get_adviso
 from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
     Cycle,
+    Miner,
     OrganicJob,
     Prompt,
     PromptSample,
@@ -64,7 +66,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
-from .models import AdminJobRequest
+from .models import AdminJobRequest, MetagraphSnapshot
 from .scoring import score_batches
 
 if False:
@@ -1148,6 +1150,125 @@ def send_events_to_facilitator():
             ).update(sent=True)
         else:
             logger.error(f"Failed to send system events to facilitator: {response}")
+
+
+async def async_metagraph():
+    try:
+        subtensor = await AsyncSubtensor(network=settings.BITTENSOR_NETWORK).initialize()
+        metagraph = await subtensor.metagraph(netuid=settings.BITTENSOR_NETUID, lite=True)
+        logger.info(f"Metagraph fetched: {metagraph}")
+    except Exception as e:
+        msg = f"Failed to fetch metagraph: {e}"
+        logger.warning(msg)
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.METAGRAPH_SYNCING,
+            subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+            long_description=msg,
+            data={},
+        )
+        return
+
+    current_block = metagraph.block.item()
+
+    neurons = metagraph.neurons
+    current_hotkeys = [n.hotkey for n in neurons]
+
+    # check metagraph sync lag
+    previous_block = None
+    try:
+        previous_metagraph = await MetagraphSnapshot.objects.aget(id=0)
+        if previous_metagraph:
+            previous_block = previous_metagraph.block
+    except Exception as e:
+        logger.warning(f"Failed to fetch previous metagraph snapshot block: {e}")
+    blocks_diff = current_block - previous_block if previous_block else None
+    if blocks_diff is not None and blocks_diff != 1:
+        if blocks_diff == 0:
+            logger.info("Metagraph is already up to date")
+            return
+        elif blocks_diff > 1:
+            msg = f"Metagraph sync is lagging: previous block: {previous_block}, current block: {current_block}"
+        else:  # blocks_diff < 0:
+            msg = f"Metagraph sync is ahead: previous block: {previous_block}, current block: {current_block}"
+        logger.warning(msg)
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+            type=SystemEvent.EventType.METAGRAPH_SYNCING,
+            subtype=SystemEvent.EventSubType.WARNING,
+            long_description=msg,
+            data={
+                "blocks_diff": blocks_diff,
+                "previous_block": previous_block,
+                "current_block": current_block,
+            },
+        )
+
+    await MetagraphSnapshot.objects.aupdate_or_create(
+        id=0,  # current metagraph snapshot
+        defaults={
+            "block": current_block,
+            "updated_at": now(),
+            "alpha_stake": metagraph.alpha_stake.tolist(),
+            "tao_stake": metagraph.tao_stake.tolist(),
+            "stake": metagraph.stake.tolist(),
+            "uids": [n.uid for n in neurons],
+            "hotkeys": [n.hotkey for n in neurons],
+            "serving_hotkeys": [
+                n.hotkey for n in neurons if n.axon_info and n.axon_info.is_serving
+            ],
+        },
+    )
+
+    # sync neurons
+    miners = [m async for m in Miner.objects.filter(hotkey__in=current_hotkeys).aiterator()]
+    existing_hotkeys = {m.hotkey for m in miners}
+    new_hotkeys = set(current_hotkeys) - existing_hotkeys
+    if len(new_hotkeys) > 0:
+        new_miners = await Miner.objects.abulk_create(
+            [Miner(hotkey=hotkey) for hotkey in new_hotkeys]
+        )
+        miners.extend(new_miners)
+        logger.info(f"Created new neurons: {new_hotkeys}")
+
+    # update axon info of neurons
+    miners_to_update = []
+    hotkey_to_neuron = {n.hotkey: n for n in neurons if n.axon_info and n.axon_info.is_serving}
+    for miner in miners:
+        neuron = hotkey_to_neuron.get(miner.hotkey, None)
+        if (
+            neuron
+            and neuron.axon_info
+            and (
+                miner.uid != neuron.uid
+                or miner.address != neuron.axon_info.ip
+                or miner.port != neuron.axon_info.port
+                or miner.ip_version != neuron.axon_info.ip_type
+            )
+        ):
+            miner.uid = neuron.uid
+            miner.address = neuron.axon_info.ip
+            miner.port = neuron.axon_info.port
+            miner.ip_version = neuron.axon_info.ip_type
+            miners_to_update.append(miner)
+    await Miner.objects.abulk_update(
+        miners_to_update, fields=["uid", "address", "port", "ip_version"]
+    )
+    logger.info(f"Updated axon infos for {len(miners_to_update)} miners")
+
+    data = {
+        "block": current_block,
+        "new_neurons": len(new_hotkeys),
+        "updated_axon_infos": len(miners_to_update),
+    }
+    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+        type=SystemEvent.EventType.VALIDATOR_MINERS_REFRESH,
+        subtype=SystemEvent.EventSubType.SUCCESS,
+        data=data,
+    )
+
+
+@app.task
+def sync_metagraph() -> None:
+    async_to_sync(async_metagraph)()
 
 
 @app.task

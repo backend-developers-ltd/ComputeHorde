@@ -12,7 +12,6 @@ from unittest import mock
 import bittensor
 import constance
 import numpy as np
-from asgiref.sync import async_to_sync
 from bittensor.core.errors import SubstrateRequestException
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
@@ -67,6 +66,17 @@ async def mock_get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
         hotkey=hotkey,
         coldkey="ignore",
     )
+
+
+class MockAxonInfo:
+    def __init__(self, ip="0.0.0.0", port=8000, ip_type=0, hotkey="hotkey"):
+        self.ip = ip
+        self.port = port
+        self.ip_type = ip_type
+        hotkey = (hotkey,)
+
+    def is_serving(self):
+        return self.ip == "0.0.0.0"
 
 
 class MockSyntheticMinerClient(batch_run.MinerClient):
@@ -272,6 +282,21 @@ class MockHyperparameters:
             setattr(self, key, value)
 
 
+class MockAsyncSubtensor:
+    def __init__(self, raise_on_metagraph=False, num_neurons=10, block_num=500):
+        self.num_neurons = num_neurons
+        self.block_num = block_num
+        self.raise_on_metagraph = raise_on_metagraph
+
+    async def initialize(self):
+        return self
+
+    async def metagraph(self, netuid, lite):
+        if self.raise_on_metagraph:
+            raise Exception("Simulated metagraph failure")
+        return MockMetagraph(num_neurons=self.num_neurons, block_num=self.block_num)
+
+
 class MockSubtensor:
     def __init__(
         self,
@@ -371,16 +396,19 @@ class MockSubtensor:
 
 
 class MockNeuron:
-    def __init__(self, hotkey, uid):
+    def __init__(self, hotkey, uid, axon_info=None):
         self.hotkey = hotkey
         self.uid = uid
         self.stake = bittensor.Balance((uid + 1) * 1001.0)
-        self.axon_info = async_to_sync(mock_get_miner_axon_info)("hotkey")
+        self.axon_info = axon_info
 
 
 class MockBlock:
+    def __init__(self, value=1000):
+        self.value = value
+
     def item(self) -> int:
-        return 1000
+        return self.value
 
 
 class MockMetagraph:
@@ -389,6 +417,7 @@ class MockMetagraph:
         netuid=1,
         num_neurons: int | None = NUM_NEURONS,
         neurons: list[MockNeuron] | None = None,
+        block_num: int = 1000,
     ):
         if (neurons is None) == (num_neurons is None):
             raise ValueError("Specify either num_neurons or neurons, exactly one of them")
@@ -396,14 +425,20 @@ class MockMetagraph:
             num_neurons = len(neurons)
             self.neurons = neurons
         else:
-            self.neurons = [MockNeuron(f"hotkey_{i}", i) for i in range(NUM_NEURONS)]
+            self.neurons = [
+                MockNeuron(uid=i, hotkey=f"hotkey_{i}", axon_info=MockAxonInfo())
+                for i in range(num_neurons)
+            ]
         self.n = num_neurons
         self.netuid = netuid
         self.num_neurons = num_neurons
         self.W = np.ones((num_neurons, num_neurons))
         self.hotkeys = [f"hotkey_{i}" for i in range(num_neurons)]
+        self.alpha_stake = np.array([0.1 for _ in range(num_neurons)])
+        self.tao_stake = np.array([0.1 for _ in range(num_neurons)])
+        self.stake = np.array([0.1 for _ in range(num_neurons)])
         self.uids = np.array(list(range(num_neurons)))
-        self.block = MockBlock()
+        self.block = MockBlock(block_num)
 
 
 def check_system_events(

@@ -44,6 +44,7 @@ class SystemEvent(models.Model):
         LLM_PROMPT_ANSWERING = "LLM_PROMPT_ANSWERING"
         LLM_PROMPT_SAMPLING = "LLM_PROMPT_SAMPLING"
         BURNING_INCENTIVE = "BURNING_INCENTIVE"
+        METAGRAPH_SYNCING = "METAGRAPH_SYNCING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -131,11 +132,36 @@ class MinerQueryset(models.QuerySet["Miner"]):
         ).filter(is_blacklisted=False)
 
 
+class MetagraphSnapshot(models.Model):
+    """
+    Snapshot of the metagraph at a specific block.
+    """
+
+    block = models.BigIntegerField(unique=True)
+    updated_at = models.DateTimeField(auto_now_add=True)
+
+    alpha_stake = ArrayField(models.FloatField())
+    tao_stake = ArrayField(models.FloatField())
+    stake = ArrayField(models.FloatField())
+
+    uids = ArrayField(models.IntegerField())
+    hotkeys = ArrayField(models.CharField(max_length=255))
+
+    # current active miners
+    serving_hotkeys = ArrayField(models.CharField(max_length=255))
+
+
+# contains all neurons not only miners
 class Miner(models.Model):
     objects = MinerQueryset.as_manager()
 
     hotkey = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    uid = models.IntegerField(null=True)
+    address = models.CharField(max_length=255, null=True)
+    ip_version = models.IntegerField(null=True)
+    port = models.IntegerField(null=True)
 
     def __str__(self):
         return f"hotkey: {self.hotkey}"
