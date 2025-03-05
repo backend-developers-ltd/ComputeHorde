@@ -11,6 +11,7 @@ env:
 
 jobs:
   linter:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,6 +37,7 @@ jobs:
       - name: Run linters check
         run: nox -vs lint
   type_check:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,6 +63,7 @@ jobs:
       - name: Run mypy
         run: nox -vs type_check
   test:
+    if: github.event.pull_request.draft == false
     timeout-minutes: 10
     runs-on: ubuntu-latest
     defaults:
