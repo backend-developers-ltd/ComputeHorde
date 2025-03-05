@@ -64,9 +64,9 @@ Within each testing day, **one cycle is designated as the peak cycle**.
   - Miners should **declare their full executor capacity** during peak cycles to maximize their score.
 
 - During **non-peak cycles**, miners should:
-  1. **Maintain at least 10% of their peak executors** to avoid a **20% penalty on their score**.
+  - **Maintain at least 10% of their peak executors** to avoid a **20% penalty on their score**.
      - Miners who declare **more than 10% of their peak executors** will not receive additional synthetic jobs, meaning excess executors will remain idle, leading to unnecessary costs.
-  2. **Remain available for organic jobs**, which provide points **regardless of peak or non-peak status**.
+  - **Remain available for organic jobs**, which provide points **regardless of peak or non-peak status**.
 
 ### Formula (calculated per validator, in peak cycles)
 
