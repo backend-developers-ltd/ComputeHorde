@@ -45,37 +45,51 @@ This is achieved by distributing $TAO tokens to incentivize:
 Bittensor's end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
 ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnets operate effectively without relying on centralized cloud services.
 
-## Scoring Mechanism (being reworked currently) 
+## Scoring mechanism
 
 The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** while 
 maintaining accountability and fairness in the network. 
 
-The goal is to eliminate the current disincentive where miners avoid organic jobs to prevent penalties for rejecting synthetic jobs.
+Miners are scored based on their **performance during peak cycles**,
+encouraging them to **scale up executors when demand is high** while **minimizing active resources during non-peak periods** to reduce costs.
 
-### Formula (calculated per validator):
+The core mechanism ensures that miners can **reject synthetic jobs without penalty if they provide proof that they are actively engaged in an organic job**.
 
-- **1 point** for each successfully completed synthetic job.  
-- (in development) **1 point** for each successfully completed organic job.
-- (in development) **1 point** for each **properly rejected** synthetic job.
+### Peak and non-peak cycles
 
-A **successfully completed job** is one that finishes within a specified timeout.  
+ComputeHorde operates in **10-cycle testing days** (each cycle is **2 Bittensor tempos**, i.e., **720 blocks**).
+Within each testing day, **one cycle is designated as the peak cycle**.
 
-A synthetic job is considered **properly rejected** when the miner provides a receipt proving they are currently 
-occupied with an **organic job** from another validator (with a minimum of 50k stake).
+- **Scoring is performed primarily during peak cycles.**
+  - Miners should **declare their full executor capacity** during peak cycles to maximize their score.
 
-### Dancing Bonus
+- During **non-peak cycles**, miners should:
+  1. **Maintain at least 10% of their peak executors** to avoid a **20% penalty on their score**.
+     - Miners who declare **more than 10% of their peak executors** will not receive additional synthetic jobs, meaning excess executors will remain idle, leading to unnecessary costs.
+  2. **Remain available for organic jobs**, which provide points **regardless of peak or non-peak status**.
 
-Miners who implement **dancing**—moving their executors between different UIDs—receive a **30% bonus** (as of December 2024) to their scores.
+### Formula (calculated per validator, in peak cycles)
 
-This encourages variance, which is essential for preventing [weight-copying](#discouraging-weight-copying).
+- **1 point** for each successfully completed **synthetic job**.
+- **1 point** for each successfully completed **organic job** (**awarded in all cycles**).
+- **1 point** for each **properly rejected synthetic job** (when a miner provides a receipt proving they are occupied with an organic job from another validator with at least μ30k stake).
+- A **successfully completed job** is one that finishes within a specified timeout.
+
+### Dancing Bonus (validated in peak cycles only)
+
+Miners who implement **dancing**—moving their executors between different UIDs—receive a **30% bonus** to their scores.
+
+- **Dancing is verified only during peak cycles.**
+- If a miner **changes UIDs between two consecutive peak cycles (Peak-1 → Peak-2)**, they receive the **dancing bonus** in **Peak-2 and all non-peak cycles leading up to Peak-3**.
+- If a miner missed Peak-1 but performed dancing before Peak-2, the bonus is still awarded for Peak-2 and the following non-peak cycles.
+
+This encourages **variance**, which is essential for preventing [weight-copying](#discouraging-weight-copying).
 
 ### Hardware Classes and Configurable Weights
 
-Each hardware class supported by ComputeHorde has a configurable weight parameter.
-These weights determine the relative contribution of a miner's work to their ultimate score.
+- Each **hardware class** in ComputeHorde has a **configurable weight**.  
+- These weights influence the miner’s final score, prioritizing certain hardware types based on network demand.
 
-This system allows the network to prioritize specific hardware classes based on utility and demand, 
-creating a flexible and fair reward structure.
 
 ## Components
 
