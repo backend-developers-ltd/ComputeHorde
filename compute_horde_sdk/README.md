@@ -44,16 +44,22 @@ For more details, see the [ComputeHorde README](https://github.com/backend-devel
 
 ## Installation
 
+To get started, install the ComputeHorde SDK with:  
+
 ```
 pip install compute-horde-sdk
 ```
 
-## Usage
+## Running Jobs on ComputeHorde
+
+The **ComputeHorde SDK** allows validators to request ComputeHorde execution effortlessly. 
+Below are examples demonstrating **basic job execution**, **advanced job configuration**, and **job management**.
 
 > [!IMPORTANT]
 > This package uses [ApiVer](#versioning), make sure to import `compute_horde_sdk.v1`.
 
-Simple example:
+### **1. Requesting ComputeHorde Execution (Simplest Example)**
+This minimal example shows how to submit a job to ComputeHorde with **basic parameters**:
 
 ```python
 import asyncio
@@ -82,7 +88,11 @@ async def main():
 asyncio.run(main())
 ```
 
-Advanced example:
+### **2. Advanced Job Configuration**
+This example demonstrates how to submit a job with **additional parameters**, including:
+- **Arguments & Environment Variables**
+- **Input & Output Volume Configuration**
+- **Artifact Storage**
 
 ```python
 import asyncio
@@ -132,19 +142,24 @@ async def main():
 asyncio.run(main())
 ```
 
-Get job by UUID:
+### **3. Managing ComputeHorde Jobs**
 
+#### **Retrieve a Job by UUID**
+If you need to fetch a specific job, use:
 
 ```python
 job = await client.get_job("7b522daa-e807-4094-8d96-99b9a863f960")
 ```
 
-Iterate over all of your jobs:
+#### **Iterate Over All Jobs**  
+To process all of your submitted jobs:  
 
 ```python
 async for job in client.iter_jobs():
     process(job)
 ```
+
+If `job.status` is `"Completed"`, the `job.result` should be available.
 
 ## Versioning
 
