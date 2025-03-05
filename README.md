@@ -77,7 +77,7 @@ Within each testing day, **one cycle is designated as the peak cycle**.
 
 ### Dancing Bonus (validated in peak cycles only)
 
-Miners who implement **dancing**—moving their executors between different UIDs—receive a **30% bonus** to their scores.
+Miners who implement **dancing**—moving their executors between different UIDs—receive a **30% bonus** on their score.
 
 - **Dancing is verified only during peak cycles.**
 - If a miner **changes UIDs between two consecutive peak cycles (Peak-1 → Peak-2)**, they receive the **dancing bonus** in **Peak-2 and all non-peak cycles leading up to Peak-3**.
