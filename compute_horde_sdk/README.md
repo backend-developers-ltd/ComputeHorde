@@ -1,14 +1,14 @@
 # ComputeHorde SDK – Scalable GPU Power for Subnet Owners & Validators 
 &nbsp;[![Continuous Integration](https://github.com/backend-developers-ltd/compute-horde-sdk/workflows/Continuous%20Integration/badge.svg)](https://github.com/backend-developers-ltd/compute-horde-sdk/actions?query=workflow%3A%22Continuous+Integration%22)&nbsp;[![License](https://img.shields.io/pypi/l/compute_horde_sdk.svg?label=License)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![python versions](https://img.shields.io/pypi/pyversions/compute_horde_sdk.svg?label=python%20versions)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![PyPI version](https://img.shields.io/pypi/v/compute_horde_sdk.svg?label=PyPI%20version)](https://pypi.python.org/pypi/compute_horde_sdk)
 
-The **ComputeHorde SDK** enables **Bittensor subnet owners** to improve the quality of their subnets by providing **validators with cost-effective, scalable compute resources**.
-Instead of requiring validators to maintain their own physical GPUs, ComputeHorde offers **on-demand decentralized access to trust-worthy hardware**, 
-reducing costs and increasing validation power.
+The **ComputeHorde SDK** enables **Bittensor subnet owners to improve the quality** of their subnets by providing **validators with cost-effective, scalable compute resources**.
+Instead of requiring validators to maintain their own physical GPUs, ComputeHorde offers on-demand decentralized access to trustworthy hardware, 
+**reducing costs and increasing validation power**.
 
 ## Why Use ComputeHorde? 
 :heavy_check_mark: **Lower Costs** – Validators don’t need to buy, manage, or maintain GPUs.
 
-:heavy_check_mark: **Massive Scalability** – Instantly access as many trustworthy GPUs as needed. 
+:heavy_check_mark: **Massive Scalability** – Instant access to as many trustworthy GPUs as needed. 
 
 :heavy_check_mark: **Faster Validation** – Increased compute power leads to better validation. 
 
@@ -38,7 +38,7 @@ We actively support **subnet owners and validators** in integrating the SDK—bo
 If you need guidance, **reach out to us** on the [ComputeHorde Discord channel](https://discordapp.com/channels/799672011265015819/1201941624243109888), 
 and we’ll ensure your validator is ComputeHorde-ready. 
 
-For more details, see the **[ComputeHorde README](https://github.com/backend-developers-ltd/ComputeHorde#readme)**. 
+For more details, see the [ComputeHorde README](https://github.com/backend-developers-ltd/ComputeHorde#readme). 
 
 ---
 
