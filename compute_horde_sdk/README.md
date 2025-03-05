@@ -1,29 +1,39 @@
-# ComputeHorde SDK – Scalable GPU Power for Validators  
+# ComputeHorde SDK – Scalable GPU Power for Subnet Owners & Validators
 &nbsp;[![Continuous Integration](https://github.com/backend-developers-ltd/compute-horde-sdk/workflows/Continuous%20Integration/badge.svg)](https://github.com/backend-developers-ltd/compute-horde-sdk/actions?query=workflow%3A%22Continuous+Integration%22)&nbsp;[![License](https://img.shields.io/pypi/l/compute_horde_sdk.svg?label=License)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![python versions](https://img.shields.io/pypi/pyversions/compute_horde_sdk.svg?label=python%20versions)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![PyPI version](https://img.shields.io/pypi/v/compute_horde_sdk.svg?label=PyPI%20version)](https://pypi.python.org/pypi/compute_horde_sdk)
 
-The **ComputeHorde SDK** enables validators of **other Bittensor subnets** 
-to offload compute-intensive validation tasks to ComputeHorde’s **trustworthy, scalable GPU network**. 
-Instead of maintaining physical GPUs, validators can leverage ComputeHorde’s **on-demand GPU power**, reducing costs while increasing validation speed.  
+The **ComputeHorde SDK** enables **other Bittensor subnet owners** to improve the quality of their subnets by making **cost-effective, scalable GPU power available to validators**.
+Instead of requiring validators to maintain their own physical GPUs, ComputeHorde provides an **on-demand decentralized GPU pool**, reducing costs and increasing validation power.
 
-## Why Use ComputeHorde?  
-:heavy_check_mark: **Lower Costs** – No need to buy, manage, or maintain GPUs.  
-:heavy_check_mark: **Massive Scalability** – Instantly access as many GPUs as needed.  
-:heavy_check_mark: **Faster Validation** – Gain a competitive edge by processing tasks quicker.  
-:heavy_check_mark: **Secure by Design** – Only computation tasks are offloaded, private keys & weight setting remain safely on your validator host.  
+## Why Use ComputeHorde?
+:heavy_check_mark: **Lower Costs** – Validators don’t need to buy, manage, or maintain GPUs.
+:heavy_check_mark: **Massive Scalability** – Instantly access as many trustworthy GPUs as needed.
+:heavy_check_mark: **Faster Validation** – Increased compute power leads to better validation.
+:heavy_check_mark: **Secure by Design** – Only computation tasks are offloaded; private keys & weight setting remain on validator machines.
 
-## Who Can Use It?  
-:heavy_check_mark: **Be a ComputeHorde Validator**  
-:heavy_check_mark: **Become a Validator**  
-:heavy_check_mark: **Partner with an Existing Validator**  
+## How It Works for Subnet Owners
+Subnet owners **prepare validation code** that can run **both on ComputeHorde and on physical GPUs**.
+This ensures validators can seamlessly opt in to use ComputeHorde’s computing power.
 
-## We’re Here to Help  
-We actively support **subnet owners and validators** in integrating the SDK—both technically and business-wise. 
-If you need guidance, **reach out to us** (eg on [ComputeHorde discord channel](https://discordapp.com/channels/799672011265015819/1201941624243109888)), 
-and we’ll ensure your validator is ComputeHorde-ready.  
+By enabling ComputeHorde support in their subnet, **subnet owners** benefit by:
 
-For more details on ComputeHorde, see the 
-**[ComputeHorde README](https://github.com/backend-developers-ltd/ComputeHorde/tree/master?tab=readme-ov-file#computehorde-subnet-12-of-bittensor)**
+:heavy_check_mark: **Attracting More Validators** – Lower costs and easier maintenance make validators more likely to participate.
+:heavy_check_mark: **Increasing Available Compute Power** – More GPU resources mean faster, higher-quality validation.
+:heavy_check_mark: **Improving Subnet Quality** – Stronger validation enhances the reliability and competitiveness of the subnet’s commodity.
 
+## How It Works for Validators
+Each validator **chooses whether to use ComputeHorde**. To gain access to ComputeHorde’s stake-based compute power, a validator must:
+
+:heavy_check_mark: Be or become a ComputeHorde validator.
+:heavy_check_mark: Partner with an existing ComputeHorde validator.
+
+## We’re Here to Help
+We actively support **subnet owners and validators** in integrating the SDK—both technically and business-wise.
+If you need guidance, **reach out to us** on the [ComputeHorde Discord channel](https://discordapp.com/channels/799672011265015819/1201941624243109888),
+and we’ll ensure your validator is ComputeHorde-ready.
+
+For more details, see the **[ComputeHorde README](https://github.com/backend-developers-ltd/ComputeHorde#readme)**.
+
+---
 
 ## Installation
 
