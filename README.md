@@ -81,10 +81,10 @@ Within each testing day, **one cycle is designated as the peak cycle**.
 
 ### Dancing Bonus (validated in peak cycles only)
 
-Miners who implement **dancing**—moving their executors between different UIDs—receive a **30% bonus** on their score.
+Miners who implement **dancing**—moving their executors between registered UIDs—receive a **30% bonus** on their score.
 
 - **Dancing is verified only during peak cycles.**
-- If a miner **changes UIDs between two consecutive peak cycles (Peak-1 → Peak-2)**, they receive the **dancing bonus** in **Peak-2 and all non-peak cycles leading up to Peak-3**.
+- If a miner **dances between two consecutive peak cycles (Peak-1 → Peak-2)**, they receive the **dancing bonus** in **Peak-2 and all non-peak cycles leading up to Peak-3**.
 - If a miner missed Peak-1 but performed dancing before Peak-2, the bonus is still awarded for Peak-2 and the following non-peak cycles.
 
 This encourages **variance**, which is essential for preventing [weight-copying](#discouraging-weight-copying).
@@ -93,7 +93,6 @@ This encourages **variance**, which is essential for preventing [weight-copying]
 
 - Each **hardware class** in ComputeHorde has a **configurable weight**.  
 - These weights influence the miner’s final score, prioritizing certain hardware types based on network demand.
-
 
 ## Components
 
