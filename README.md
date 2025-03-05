@@ -74,6 +74,10 @@ Within each testing day, **one cycle is designated as the peak cycle**.
 - **1 point** for each successfully completed **organic job** (**awarded in all cycles**).
 - **1 point** for each **properly rejected synthetic job** (when a miner provides a receipt proving they are occupied with an organic job from another validator with at least μ30k stake).
 - A **successfully completed job** is one that finishes within a specified timeout.
+- **Penalties for incorrect organic job results**:
+  - If a validator detects that the result of an organic job is incorrect:
+    - The miner **does not receive points** for that job.
+    - The miner is **blacklisted for 4 hours**, meaning they are not assigned any tasks during that period and effectively lose all earning opportunities.
 
 ### Dancing Bonus (validated in peak cycles only)
 
