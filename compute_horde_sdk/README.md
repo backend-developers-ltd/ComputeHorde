@@ -55,6 +55,9 @@ pip install compute-horde-sdk
 The **ComputeHorde SDK** allows validators to request ComputeHorde execution effortlessly. 
 Below are examples demonstrating **basic job execution**, **advanced job configuration**, and **job management**.
 
+For detailed API documentation, visit the **[ComputeHorde SDK Reference](TODO_API_REFERENCE_LINK)**.
+
+
 > [!IMPORTANT]
 > This package uses [ApiVer](#versioning), make sure to import `compute_horde_sdk.v1`.
 
@@ -90,9 +93,10 @@ asyncio.run(main())
 
 ### **2. Advanced Job Configuration**
 This example demonstrates how to submit a job with **additional parameters**, including:
-- **Arguments & Environment Variables**
-- **Input & Output Volume Configuration**
-- **Artifact Storage**
+- arguments & environment variables
+- input & output volume configuration
+- artifact (results) storage
+- cross-validation on trusted miners
 
 ```python
 import asyncio
@@ -141,6 +145,16 @@ async def main():
 
 asyncio.run(main())
 ```
+
+Below is a breakdown of key parameters:
+
+- **`artifacts_dir`** – path where the job writes its results.
+- **`input_volumes`** – defines **data sources** available inside the container.
+- **`output_volumes`** – defines **where to send job output data** after completion (used for large or unstable outputs that shouldn’t be treated as `artifacts`).
+- **`run_cross_validation`** – If `True`, the job will **run cross-validation** on a **trusted miner** before accepting results.
+- **`on_trusted_miner`** – If `True`, the job will be **executed directly on the ComputeHorde validator’s trusted miner** instead of regular ComputeHorde executors.
+
+For a full list of available parameters and their detailed descriptions, see the **[ComputeHorde SDK Reference](TODO_API_REFERENCE_LINK)**.
 
 ### **3. Managing ComputeHorde Jobs**
 
