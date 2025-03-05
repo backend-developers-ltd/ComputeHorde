@@ -63,8 +63,8 @@ from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass
 wallet = bittensor.wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
-    hotkey=wallet.hotkey,
-    compute_horde_validator_hotkey="...",  # In the common case it's going to be the same as the ss58 address of the hotkey above.
+    hotkey=wallet.hotkey,  # ss58 address
+    compute_horde_validator_hotkey="...",  # usually the same as the hotkey above.
 )
 
 async def main():
@@ -77,7 +77,7 @@ async def main():
 
     await job.wait(timeout=10 * 60)
 
-    print(job.status)  # Should be "Completed".
+    print(job.status)  # should be "Completed".
 
 asyncio.run(main())
 ```
@@ -92,8 +92,8 @@ from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass, InlineInputV
 wallet = bittensor.wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
-    hotkey=wallet.hotkey,
-    compute_horde_validator_hotkey="...",  # In the common case it's going to be the same as the ss58 address of the hotkey above.
+    hotkey=wallet.hotkey,  # ss58 address
+    compute_horde_validator_hotkey="...",  # usually the same as the hotkey above.
 )
 
 async def main():
@@ -126,7 +126,7 @@ async def main():
 
     await job.wait(timeout=10 * 60)
 
-    print(job.status)  # Should be "Completed".
+    print(job.status)  # should be "Completed".
     print(job.result)
 
 asyncio.run(main())
