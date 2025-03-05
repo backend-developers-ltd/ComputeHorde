@@ -2,10 +2,10 @@ import uuid
 
 import bittensor
 import pytest
+from pydantic import BaseModel
 
-from compute_horde.base_requests import BaseRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
-from compute_horde.mv_protocol.miner_requests import (
+from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
@@ -20,7 +20,7 @@ JOB_UUID = "b4793a02-33a2-4a49-b4e2-4a7b903847e7"
 
 def get_miner_client(
     keypair: bittensor.Keypair,
-    messages: list[BaseRequest] | None = None,
+    messages: list[BaseModel] | None = None,
 ) -> OrganicMinerClient:
     transport = StubTransport("stub", messages or [])
     client = OrganicMinerClient(
@@ -48,6 +48,7 @@ def get_miner_client(
                 docker_process_exit_status=1,
                 docker_process_stdout="stdout",
                 docker_process_stderr="stderr",
+                timeout=False,
             ),
         ),
         (
@@ -145,6 +146,7 @@ async def test_organic_miner_client__skip_different_job__initial_future(initial_
             docker_process_exit_status=1,
             docker_process_stdout="stdout",
             docker_process_stderr="stderr",
+            timeout=False,
         ),
         V0JobFinishedRequest(
             job_uuid=str(uuid.uuid4()),
