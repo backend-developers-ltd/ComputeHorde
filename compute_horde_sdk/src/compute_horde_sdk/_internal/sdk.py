@@ -13,7 +13,12 @@ import httpx
 import pydantic
 
 from compute_horde_core.executor_class import ExecutorClass
-from compute_horde_core.signature import BittensorWalletSigner, SignatureScope, SignedFields, signature_to_headers
+from compute_horde_core.signature import (
+    BittensorWalletSigner,
+    SignatureScope,
+    SignedFields,
+    signature_to_headers,
+)
 
 from .exceptions import ComputeHordeError, ComputeHordeJobTimeoutError, ComputeHordeNotFoundError
 from .models import (
@@ -35,6 +40,11 @@ DEFAULT_FACILITATOR_URL = "https://facilitator.computehorde.io/"
 class ComputeHordeJob:
     """
     The class representing a job running on the Compute Horde.
+    Do not construct it directly, always use :class:`ComputeHordeClient`.
+
+    :ivar str uuid: The UUID of the job.
+    :ivar ComputeHordeJobStatus status: The status of the job.
+    :ivar ComputeHordeJobResult | None result: The result of the job, if it has completed.
     """
 
     def __init__(
@@ -189,7 +199,6 @@ class ComputeHordeClient:
         Reports to validator that a miner has cheated on a job.
 
         :param job_uuid: The UUID of the job that was cheated on.
-        :param miner_hotkey: The hotkey of the miner that cheated.
         """
         data = {"job_uuid": job_uuid}
         signature_headers = self._get_cheated_job_headers(data)
@@ -225,19 +234,19 @@ class ComputeHordeClient:
             as a part of the job result. It should be an absolute path (starting with ``/``).
         :param input_volumes: The data to be made available to the job in Docker volumes.
             The keys should be absolute file/directory paths under which you want your data to be available.
-            The values should be ``InputVolume`` instances representing how to obtain the input data.
+            The values should be :class:`InputVolume` instances representing how to obtain the input data.
             For now, input volume paths must start with ``/volume/``.
         :param output_volumes: The data to be read from the Docker volumes after job completion
             and uploaded to the described destinations. Use this for outputs that are too big
             or too unstable to be treated as ``artifacts``.
             The keys should be absolute file paths under which job output data will be available.
-            The values should be ``OutputVolume`` instances representing how to handle the output data.
+            The values should be :class:`OutputVolume` instances representing how to handle the output data.
             For now, output volume paths must start with ``/output/``.
         :param run_cross_validation: Whether to run cross validation on a trusted miner.
         :param trusted_output_volumes: Output volumes for cross validation on a trusted miner.
             If these are omitted then cross validating on a trusted miner will not result in any uploads.
         :param on_trusted_miner: If true, the job will be run on the sn12 validator's trusted miner.
-        :return: A ``ComputeHordeJob`` class instance representing the created job.
+        :return: A :class:`ComputeHordeJob` class instance representing the created job.
         """
 
         if run_cross_validation:
@@ -289,7 +298,7 @@ class ComputeHordeClient:
         Retrieve information about a job from the Compute Horde.
 
         :param job_uuid: The UUID of the job to retrieve.
-        :return: A ``ComputeHordeJob`` instance representing this job.
+        :return: A :class:`ComputeHordeJob` instance representing this job.
         :raises ComputeHordeNotFoundError: If the job with this UUID does not exist.
         """
         logger.debug("Fetching job with UUID=%s", job_uuid)
@@ -321,7 +330,7 @@ class ComputeHordeClient:
 
         :param page: The page number.
         :param page_size: The page size.
-        :return: A list of ``ComputeHordeJob`` instances representing your jobs.
+        :return: A list of :class:`ComputeHordeJob` instances representing your jobs.
         :raises ComputeHordeNotFoundError: If the requested page does not exist.
         """
         logger.debug("Fetching jobs page=%d, page_size%d", page, page_size)
@@ -333,7 +342,7 @@ class ComputeHordeClient:
         """
         Retrieve information about your jobs from the Compute Horde.
 
-        :return: An async iterator of ``ComputeHordeJob`` instances representing your jobs.
+        :return: An async iterator of :class:`ComputeHordeJob` instances representing your jobs.
 
         Usage::
 

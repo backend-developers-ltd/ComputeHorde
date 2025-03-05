@@ -68,6 +68,10 @@ test = [
     "pytest-xdist",
     "pytest-httpx>=0.35.0",
 ]
+docs = [
+    "sphinx>=8.2.3",
+    "sphinx-rtd-theme>=3.0.2",
+]
 
 
 [tool.pytest.ini_options]
@@ -94,7 +98,7 @@ ignore = [
 "test/**" = ["D", "F403", "F405"]
 
 [tool.codespell]
-skip = "*.min.js,pdm.lock"
+skip = "*.min.js,pdm.lock,build"
 ignore-words-list = "datas"
 
 [tool.towncrier]
