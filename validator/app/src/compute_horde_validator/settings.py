@@ -387,6 +387,12 @@ CONSTANCE_CONFIG = {
         "across all validators) and will receive 'DYNAMIC_BURN_PARTITION' fraction of all the burn.",
         float,
     ),
+    "DYNAMIC_ROUTING_PRELIMINARY_RESERVATION_TIME_SECONDS": (
+        10,
+        "How long to initially reserve an executor for during job routing request. This should last only long enough "
+        "for the job flow to create and store a job started receipt.",
+        float,
+    ),
 }
 
 # Content Security Policy

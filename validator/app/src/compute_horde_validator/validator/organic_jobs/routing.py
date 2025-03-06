@@ -128,11 +128,14 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         ) - known_finished_jobs
 
         if len(maybe_ongoing_jobs) < manifest.online_executor_count:
+            reservation_time = await aget_config(
+                "DYNAMIC_ROUTING_PRELIMINARY_RESERVATION_TIME_SECONDS"
+            )
             await MinerPreliminaryReservation.objects.acreate(
                 miner=miner,
                 executor_class=executor_class,
                 job_uuid=request.uuid,
-                expires_at=timezone.now() + timedelta(seconds=15),
+                expires_at=timezone.now() + timedelta(seconds=reservation_time),
             )
             return miner
 
