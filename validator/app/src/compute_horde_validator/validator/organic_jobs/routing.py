@@ -123,7 +123,9 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
             ).values_list("job_uuid", flat=True)
         }
 
-        maybe_ongoing_jobs = preliminary_reservation_jobs | known_started_jobs - known_finished_jobs
+        maybe_ongoing_jobs = (
+            preliminary_reservation_jobs | known_started_jobs
+        ) - known_finished_jobs
 
         if len(maybe_ongoing_jobs) < manifest.online_executor_count:
             await MinerPreliminaryReservation.objects.acreate(
