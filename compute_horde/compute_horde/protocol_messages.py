@@ -22,7 +22,7 @@ from compute_horde.utils import MachineSpecs
 # TODO: remove `Request` suffix from all the models.
 
 
-# executor -> miner.ec -> miner.vc -> validator
+# executor <-> miner.ec <-> miner.vc <-> validator
 class GenericError(BaseModel):
     message_type: Literal["GenericError"] = "GenericError"
     details: str | None = None
@@ -132,7 +132,7 @@ class V0StreamingJobReadyRequest(BaseModel):
     job_uuid: str  # NOT on miner.ec -> miner.vc
     executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
     public_key: str
-    ip: str  # NOT on executor -> miner.ec
+    ip: str | None = None  # NOT on executor -> miner.ec
     port: int
 
 
@@ -203,7 +203,8 @@ class V0MachineSpecsRequest(BaseModel):
 
 
 ValidatorToMinerMessage = Annotated[
-    ValidatorAuthForMiner
+    GenericError
+    | ValidatorAuthForMiner
     | V0InitialJobRequest
     | V0JobRequest
     | V0JobAcceptedReceiptRequest
@@ -212,7 +213,7 @@ ValidatorToMinerMessage = Annotated[
 ]
 
 MinerToExecutorMessage = Annotated[
-    V0InitialJobRequest | V0JobRequest,
+    GenericError | V0InitialJobRequest | V0JobRequest,
     Field(discriminator="message_type"),
 ]
 

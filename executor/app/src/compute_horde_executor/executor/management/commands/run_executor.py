@@ -20,7 +20,6 @@ import packaging.version
 import pydantic
 from asgiref.sync import sync_to_async
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.base_requests import BaseRequest
 from compute_horde.certificate import (
     check_endpoint,
     generate_certificate_at,
@@ -28,27 +27,22 @@ from compute_horde.certificate import (
     save_public_key,
     start_nginx,
 )
-from compute_horde.em_protocol import executor_requests, miner_requests
-from compute_horde.em_protocol.executor_requests import (
-    GenericError,
-    JobErrorType,
-    V0FailedRequest,
-    V0FailedToPrepare,
-    V0FinishedRequest,
-    V0MachineSpecsRequest,
-    V0ReadyRequest,
-    V0StreamingJobFailedToPrepareRequest,
-    V0StreamingJobReadyRequest,
-)
-from compute_horde.em_protocol.miner_requests import (
-    BaseMinerRequest,
-    V0InitialJobRequest,
-    V0JobRequest,
-    V1InitialJobRequest,
-)
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     UnsupportedMessageReceived,
+)
+from compute_horde.protocol_messages import (
+    GenericError,
+    MinerToExecutorMessage,
+    V0ExecutorFailedRequest,
+    V0ExecutorReadyRequest,
+    V0InitialJobRequest,
+    V0JobFailedRequest,
+    V0JobFinishedRequest,
+    V0JobRequest,
+    V0MachineSpecsRequest,
+    V0StreamingJobNotReadyRequest,
+    V0StreamingJobReadyRequest,
 )
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
@@ -63,6 +57,7 @@ from compute_horde_core.volume import (
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from huggingface_hub import snapshot_download
+from pydantic import BaseModel, TypeAdapter
 
 from compute_horde_executor.executor.output_uploader import OutputUploader, OutputUploadFailed
 
@@ -166,19 +161,10 @@ class MinerClient(AbstractMinerClient):
     def miner_url(self) -> str:
         return f"{self.miner_address}/v0.1/executor_interface/{self.token}"
 
-    def accepted_request_type(self) -> type[BaseRequest]:
-        return BaseMinerRequest
+    def parse_message(self, raw_msg: str | bytes) -> BaseModel:
+        return TypeAdapter(MinerToExecutorMessage).validate_json(raw_msg)
 
-    def incoming_generic_error_class(self):
-        return miner_requests.GenericError
-
-    def outgoing_generic_error_class(self):
-        return executor_requests.GenericError
-
-    def build_outgoing_generic_error(self, msg: str):
-        return executor_requests.GenericError(details=msg)
-
-    async def handle_message(self, msg: BaseRequest):
+    async def handle_message(self, msg: BaseModel) -> None:
         if isinstance(msg, V0InitialJobRequest):
             await self.handle_initial_job_request(msg)
         elif isinstance(msg, V0JobRequest):
@@ -202,7 +188,7 @@ class MinerClient(AbstractMinerClient):
             if not self.initial_msg.done():
                 details = f"Received job request before an initial job request {msg.job_uuid=}"
                 logger.error(details)
-                await self.deferred_send_model(GenericError(details=details))
+                self.deferred_send_model(GenericError(details=details))
                 return
             if self.full_payload.done():
                 details = (
@@ -210,7 +196,7 @@ class MinerClient(AbstractMinerClient):
                     f"{self.job_uuid=} and then {msg.job_uuid=}"
                 )
                 logger.error(details)
-                await self.deferred_send_model(GenericError(details=details))
+                self.deferred_send_model(GenericError(details=details))
                 return
             logger.debug(f"Received full job payload request: {msg.job_uuid=}")
             self.full_payload.set_result(msg)
@@ -223,7 +209,7 @@ class MinerClient(AbstractMinerClient):
         )
 
     async def send_ready(self):
-        await self.send_model(V0ReadyRequest(job_uuid=self.job_uuid))
+        await self.send_model(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
 
     async def send_finished(self, job_result: "JobResult"):
         if job_result.specs:
@@ -234,7 +220,7 @@ class MinerClient(AbstractMinerClient):
                 )
             )
         await self.send_model(
-            V0FinishedRequest(
+            V0JobFinishedRequest(
                 job_uuid=self.job_uuid,
                 docker_process_stdout=job_result.stdout,
                 docker_process_stderr=job_result.stderr,
@@ -244,7 +230,7 @@ class MinerClient(AbstractMinerClient):
 
     async def send_failed(self, job_result: "JobResult"):
         await self.send_model(
-            V0FailedRequest(
+            V0JobFailedRequest(
                 job_uuid=self.job_uuid,
                 docker_process_exit_status=job_result.exit_status,
                 timeout=job_result.timeout,
@@ -264,14 +250,14 @@ class MinerClient(AbstractMinerClient):
 
     async def send_failed_to_prepare(self):
         await self.send_model(
-            V0FailedToPrepare(
+            V0ExecutorFailedRequest(
                 job_uuid=self.job_uuid,
             )
         )
 
     async def send_streaming_job_failed_to_prepare(self):
         await self.send_model(
-            V0StreamingJobFailedToPrepareRequest(
+            V0StreamingJobNotReadyRequest(
                 job_uuid=self.job_uuid,
             )
         )
@@ -285,7 +271,7 @@ class JobResult(pydantic.BaseModel):
     stderr: str
     artifacts: dict[str, str]
     specs: MachineSpecs | None = None
-    error_type: JobErrorType | None = None
+    error_type: V0JobFailedRequest.ErrorType | None = None
     error_detail: str | None = None
 
 
@@ -392,7 +378,7 @@ class JobError(Exception):
     def __init__(
         self,
         description: str,
-        error_type: JobErrorType | None = None,
+        error_type: V0JobFailedRequest.ErrorType | None = None,
         error_detail: str | None = None,
     ):
         self.description = description
@@ -426,7 +412,7 @@ class DownloadManager:
             logger.error(f"Failed to download model from Hugging Face: {e}")
             raise JobError(
                 f"Failed to download model from Hugging Face: {e}",
-                JobErrorType.HUGGINGFACE_DOWNLOAD,
+                V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD,
                 str(e),
             ) from e
 
@@ -501,7 +487,7 @@ def network_name(docker_objects_infix: str) -> str:
 
 
 class JobRunner:
-    def __init__(self, initial_job_request: V0InitialJobRequest | V1InitialJobRequest):
+    def __init__(self, initial_job_request: V0InitialJobRequest):
         self.initial_job_request = initial_job_request
         self.full_job_request: None | V0JobRequest = None
         self.temp_dir = pathlib.Path(tempfile.mkdtemp())
@@ -520,11 +506,14 @@ class JobRunner:
         # for streaming job
         self.is_streaming_job: bool = False
         self.executor_certificate: str | None = None
-        if isinstance(self.initial_job_request, V1InitialJobRequest):
+        if self.initial_job_request.streaming_details is not None:
+            assert self.initial_job_request.streaming_details.executor_ip is not None
             self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(
-                alternative_name=self.initial_job_request.executor_ip
+                alternative_name=self.initial_job_request.streaming_details.executor_ip
             )
-            save_public_key(self.initial_job_request.public_key, self.nginx_dir_path)
+            save_public_key(
+                self.initial_job_request.streaming_details.public_key, self.nginx_dir_path
+            )
             self.is_streaming_job = True
 
     async def cleanup_potential_old_jobs(self):
@@ -553,12 +542,12 @@ class JobRunner:
 
         await self.cleanup_potential_old_jobs()
 
-        if self.initial_job_request.base_docker_image_name is not None:
-            logger.info("docker pull %s", self.initial_job_request.base_docker_image_name)
+        if self.initial_job_request.docker_image is not None:
+            logger.info("docker pull %s", self.initial_job_request.docker_image)
             process = await asyncio.create_subprocess_exec(
                 "docker",
                 "pull",
-                self.initial_job_request.base_docker_image_name,
+                self.initial_job_request.docker_image,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -569,7 +558,7 @@ class JobRunner:
 
             if process.returncode != 0:
                 msg = (
-                    f'"docker pull {self.initial_job_request.base_docker_image_name}" '
+                    f'"docker pull {self.initial_job_request.docker_image}" '
                     f"(job_uuid={self.initial_job_request.job_uuid})"
                     f" failed with status={process.returncode}"
                     f' stdout="{stdout.decode()}"\nstderr="{stderr.decode()}'
@@ -600,7 +589,7 @@ class JobRunner:
                 error_detail=ex.error_detail,
             )
 
-        docker_image = job_request.docker_image_name
+        docker_image = job_request.docker_image
         extra_volume_flags = []
         docker_run_cmd = job_request.docker_run_cmd
 
