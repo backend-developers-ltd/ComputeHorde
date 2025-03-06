@@ -207,7 +207,6 @@ class ComputeHordeClient:
         artifacts_dir: str | None = None,
         input_volumes: Mapping[str, InputVolume] | None = None,
         output_volumes: Mapping[str, OutputVolume] | None = None,
-        run_cross_validation: bool = False,
         trusted_output_volumes: Mapping[str, OutputVolume] | None = None,
         on_trusted_miner: bool = False,
     ) -> ComputeHordeJob:
@@ -233,18 +232,11 @@ class ComputeHordeClient:
             The keys should be absolute file paths under which job output data will be available.
             The values should be ``OutputVolume`` instances representing how to handle the output data.
             For now, output volume paths must start with ``/output/``.
-        :param run_cross_validation: Whether to run cross validation on a trusted miner.
         :param trusted_output_volumes: Output volumes for cross validation on a trusted miner.
             If these are omitted then cross validating on a trusted miner will not result in any uploads.
         :param on_trusted_miner: If true, the job will be run on the sn12 validator's trusted miner.
         :return: A ``ComputeHordeJob`` class instance representing the created job.
         """
-
-        if run_cross_validation:
-            # Or should we remove this argument for now?
-            raise NotImplementedError(
-                "Cross validation is not supported yet, please call create_job with run_cross_validation=False"
-            )
 
         # TODO: make this a pydantic model?
         data: dict[str, pydantic.JsonValue] = {
