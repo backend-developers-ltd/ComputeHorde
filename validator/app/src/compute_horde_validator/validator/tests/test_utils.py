@@ -9,9 +9,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.mv_protocol.miner_requests import (
-    ExecutorClassManifest,
-    ExecutorManifest,
+from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorManifestRequest,
@@ -323,10 +321,7 @@ async def test_execute_synthetic_job(
     mocked_synthetic_miner_client,
     small_spin_up_times,
 ):
-    manifest = ExecutorManifest(
-        executor_classes=[ExecutorClassManifest(executor_class=DEFAULT_EXECUTOR_CLASS, count=1)]
-    )
-    manifest_request = V0ExecutorManifestRequest(manifest=manifest)
+    manifest_request = V0ExecutorManifestRequest(manifest={DEFAULT_EXECUTOR_CLASS: 1})
     job_uuid = None
 
     async def manifest_callback(miner_client):
@@ -384,15 +379,9 @@ def test_create_and_run_synthetic_job_batch(
     override_weights_version_v2,
 ):
     current_online_executors = 2
-    manifest = ExecutorManifest(
-        executor_classes=[
-            ExecutorClassManifest(
-                executor_class=DEFAULT_EXECUTOR_CLASS,
-                count=current_online_executors,
-            )
-        ]
+    manifest_request = V0ExecutorManifestRequest(
+        manifest={DEFAULT_EXECUTOR_CLASS: current_online_executors}
     )
-    manifest_request = V0ExecutorManifestRequest(manifest=manifest)
 
     job_uuids = []
 

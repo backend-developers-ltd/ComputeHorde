@@ -2,8 +2,9 @@ import uuid
 from collections.abc import Callable
 
 import pytest
-from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
+from compute_horde.protocol_messages import ValidatorToMinerMessage
 from compute_horde_core.output_upload import MultiUpload
+from pydantic import TypeAdapter
 
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.models import PromptSeries
@@ -50,7 +51,7 @@ async def test_generate_prompts(
 
     assert len(series_uuids) == 3
 
-    job_request = BaseValidatorRequest.parse(transport.sent[-2])
+    job_request = TypeAdapter(ValidatorToMinerMessage).validate_json(transport.sent[-2])
     assert job_request.job_uuid == str(job_uuid)
     assert isinstance(job_request.output_upload, MultiUpload)
 

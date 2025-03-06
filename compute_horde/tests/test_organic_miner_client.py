@@ -48,7 +48,6 @@ def get_miner_client(
                 docker_process_exit_status=1,
                 docker_process_stdout="stdout",
                 docker_process_stderr="stderr",
-                timeout=False,
             ),
         ),
         (
@@ -146,7 +145,6 @@ async def test_organic_miner_client__skip_different_job__initial_future(initial_
             docker_process_exit_status=1,
             docker_process_stdout="stdout",
             docker_process_stderr="stderr",
-            timeout=False,
         ),
         V0JobFinishedRequest(
             job_uuid=str(uuid.uuid4()),

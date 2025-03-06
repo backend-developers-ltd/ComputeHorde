@@ -355,7 +355,6 @@ class AdminJobRequest(models.Model):
     timeout = models.PositiveIntegerField(default=300, help_text="timeout in seconds")
 
     docker_image = models.CharField(max_length=255, help_text="docker image for job execution")
-    raw_script = models.TextField(blank=True, help_text="raw script to be executed")
 
     args = models.TextField(blank=True, help_text="arguments passed to the script or docker image")
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")

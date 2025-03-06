@@ -2,9 +2,7 @@ import logging
 import uuid
 
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.mv_protocol.miner_requests import (
-    V0JobFinishedRequest,
-)
+from compute_horde.protocol_messages import V0JobFinishedRequest
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.volume import InlineVolume, Volume
 

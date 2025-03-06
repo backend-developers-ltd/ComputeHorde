@@ -1,8 +1,7 @@
 import logging
 
-from compute_horde.base_requests import BaseRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
-from compute_horde.mv_protocol.miner_requests import UnauthorizedError
+from compute_horde.protocol_messages import GenericError, UnauthorizedError
 from django.conf import settings
 
 from compute_horde_validator.validator.models import SystemEvent
@@ -11,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class MinerClient(OrganicMinerClient):
-    async def notify_generic_error(self, msg: BaseRequest) -> None:
+    async def notify_generic_error(self, msg: GenericError) -> None:
         desc = f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
         await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
             type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,

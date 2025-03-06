@@ -2,17 +2,15 @@ import uuid
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.mv_protocol.miner_requests import (
+from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
-    V0JobFailedRequest,
-    V0JobFinishedRequest,
-)
-from compute_horde.mv_protocol.validator_requests import (
     V0JobAcceptedReceiptRequest,
+    V0JobFailedRequest,
     V0JobFinishedReceiptRequest,
+    V0JobFinishedRequest,
 )
 
 from compute_horde_validator.validator.models import Miner
