@@ -6,6 +6,7 @@ def test_apiver_exports(apiver_module):
         "ComputeHordeJobTimeoutError",
         "ComputeHordeJob",
         "ComputeHordeJobStatus",
+        "ComputeHordeJobResult",
         "ExecutorClass",
         "HTTPInputVolume",
         "HTTPOutputVolume",
