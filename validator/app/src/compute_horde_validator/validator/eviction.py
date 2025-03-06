@@ -5,13 +5,22 @@ from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt
 from django.conf import settings
 from django.utils.timezone import now
 
-from .models import MinerBlacklist, OrganicJob, SolveWorkload, SyntheticJobBatch, SystemEvent
+from .models import (
+    MinerBlacklist,
+    MinerPreliminaryReservation,
+    OrganicJob,
+    SolveWorkload,
+    SyntheticJobBatch,
+    SystemEvent,
+)
 
 RECEIPTS_RETENTION_PERIOD = timedelta(days=2)
 SYNTHETIC_JOBS_RETENTION_PERIOD = timedelta(days=2)
 ORGANIC_JOBS_RETENTION_PERIOD = timedelta(days=2)
 SYSTEM_EVENTS_RETENTION_PERIOD = timedelta(days=2)
 PROMPTS_RETENTION_PERIOD = timedelta(days=2)
+MINER_BLACKLIST_RETENTION_PERIOD = timedelta(days=2)
+MINER_PRELIMINARY_RESERVATION_RETENTION_PERIOD = timedelta(days=2)
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +32,7 @@ def evict_all() -> None:
     evict_dangling_prompts()
     evict_system_events()
     evict_miner_blacklist()
+    evict_miner_preliminary_reservations()
 
 
 def evict_system_events() -> None:
@@ -60,4 +70,12 @@ def evict_receipts() -> None:
 
 
 def evict_miner_blacklist() -> None:
-    MinerBlacklist.objects.expired().delete()
+    logger.info("Evicting expired miner blacklists")
+    cutoff = now() - MINER_BLACKLIST_RETENTION_PERIOD
+    MinerBlacklist.objects.filter(expires_at__lt=cutoff).delete()
+
+
+def evict_miner_preliminary_reservations():
+    logger.info("Evicting old expired miner preliminary reservations")
+    cutoff = now() - MINER_PRELIMINARY_RESERVATION_RETENTION_PERIOD
+    MinerPreliminaryReservation.objects.filter(expires_at__lt=cutoff).delete()

@@ -5,12 +5,14 @@ import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.receipts import Receipt
-from compute_horde.receipts.models import JobStartedReceipt
+from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde.utils import sign_blob
 from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
+from freezegun import freeze_time
 
+from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
@@ -134,3 +136,79 @@ async def test_pick_miner_for_job__trusted_miner():
     job_request = JOB_REQUEST.__replace__(on_trusted_miner=True)
     miner = await routing.pick_miner_for_job_request(job_request)
     assert miner.hotkey == TRUSTED_MINER_FAKE_KEY
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_preliminary_reservation__prevents_double_select():
+    await MinerManifest.objects.aupdate(executor_count=1, online_executor_count=1)
+
+    picked_miners: set[str] = set()
+
+    # We have 5 miners
+    for _ in range(5):
+        job_request = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
+        miner = await routing.pick_miner_for_job_request(job_request)
+        picked_miners.add(miner.hotkey)
+
+    # No miner is double-selected
+    assert len(picked_miners) == 5
+
+    # Last request has nothing to choose from
+    with pytest.raises(routing.AllMinersBusy):
+        await routing.pick_miner_for_job_request(JOB_REQUEST.__replace__(uuid=str(uuid.uuid4())))
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_preliminary_reservation__lifted_by_receipt():
+    miner = await Miner.objects.afirst()
+    await Miner.objects.exclude(id=miner.id).adelete()
+    await MinerManifest.objects.aupdate(executor_count=1, online_executor_count=1)
+    job_request_1 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
+    job_request_2 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
+
+    # Pick miner for job
+    picked_miner = await routing.pick_miner_for_job_request(job_request_1)
+    assert picked_miner == miner
+
+    # Create receipt noting that the job was finished
+    await JobFinishedReceipt.objects.acreate(
+        job_uuid=job_request_1.uuid,
+        miner_hotkey=miner.hotkey,
+        validator_hotkey="doesntmatter",
+        validator_signature="doesntmatter",
+        miner_signature="doesntmatter",
+        timestamp=timezone.now(),
+        time_started=timezone.now(),
+        time_took_us=123,
+        score_str="1",
+    )
+
+    # The same miner should be immediately pickable
+    picked_miner = await routing.pick_miner_for_job_request(job_request_2)
+    assert picked_miner == miner
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_preliminary_reservation__lifted_after_timeout():
+    miner = await Miner.objects.afirst()
+    await Miner.objects.exclude(id=miner.id).adelete()
+    await MinerManifest.objects.aupdate(executor_count=1, online_executor_count=1)
+    job_request_1 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
+    job_request_2 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
+
+    with freeze_time() as now:
+        # Pick miner for job
+        picked_miner = await routing.pick_miner_for_job_request(job_request_1)
+        assert picked_miner == miner
+
+        # Wait for timeout
+        now.tick(
+            delta=await aget_config("DYNAMIC_ROUTING_PRELIMINARY_RESERVATION_TIME_SECONDS") + 1
+        )
+
+        # The same miner should be immediately pickable
+        picked_miner = await routing.pick_miner_for_job_request(job_request_2)
+        assert picked_miner == miner
