@@ -73,8 +73,8 @@ from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass
 wallet = bittensor.wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
-    hotkey=wallet.hotkey,  # ss58 address
-    compute_horde_validator_hotkey="...",  # usually the same as the hotkey above
+    hotkey=wallet.hotkey,  
+    compute_horde_validator_hotkey="...",  # usually the same as the ss58 address of hotkey above
 )
 
 async def main():
@@ -106,8 +106,8 @@ from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass, InlineInputV
 wallet = bittensor.wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
-    hotkey=wallet.hotkey,  # ss58 address
-    compute_horde_validator_hotkey="...",  # usually the same as the hotkey above
+    hotkey=wallet.hotkey,  
+    compute_horde_validator_hotkey="...",  # usually the same as the ss58 address of hotkey above
 )
 
 async def main():
