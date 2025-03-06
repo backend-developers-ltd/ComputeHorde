@@ -134,3 +134,22 @@ async def test_pick_miner_for_job__trusted_miner():
     job_request = JOB_REQUEST.__replace__(on_trusted_miner=True)
     miner = await routing.pick_miner_for_job_request(job_request)
     assert miner.hotkey == TRUSTED_MINER_FAKE_KEY
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__preliminary_reservation_kicks_in():
+    picked_miners: set[str] = set()
+
+    # We have 5 miners with 5 executors each
+    for _ in range(5 * 5):
+        job_request = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
+        miner = await routing.pick_miner_for_job_request(job_request)
+        picked_miners.add(miner.hotkey)
+
+    # No miner is double-selected
+    assert len(picked_miners) == 5
+
+    # Last request has nothing to choose from
+    with pytest.raises(routing.AllMinersBusy):
+        await routing.pick_miner_for_job_request(JOB_REQUEST.__replace__(uuid=str(uuid.uuid4())))
