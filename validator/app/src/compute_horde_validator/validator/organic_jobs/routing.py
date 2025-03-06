@@ -118,7 +118,7 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         known_finished_jobs: set[str] = {
             str(job_uuid)
             async for job_uuid in JobFinishedReceipt.objects.filter(
-                job_uuid__in=known_started_jobs,
+                job_uuid__in=known_started_jobs | preliminary_reservation_jobs,
                 miner_hotkey=miner.hotkey,
             ).values_list("job_uuid", flat=True)
         }
