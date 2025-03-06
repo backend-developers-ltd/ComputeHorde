@@ -57,7 +57,7 @@ The core mechanism ensures that miners can **reject synthetic jobs without penal
 
 ### Peak and Non-Peak Cycles
 
-ComputeHorde operates in **10-cycle testing days** (each cycle is **2 Bittensor tempos**, i.e., **720 blocks**).
+ComputeHorde operates in **10-cycle testing days** (each cycle is **2 Bittensor tempos**, i.e., **722 blocks**).
 Within each testing day, **one cycle is designated as the peak cycle**.
 
 - **Scoring is performed primarily during peak cycles.**
