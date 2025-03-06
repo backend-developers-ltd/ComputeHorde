@@ -60,7 +60,7 @@ For detailed API documentation, visit the [ComputeHorde SDK Reference](TODO_API_
 ## Running Jobs on ComputeHorde
 
 The **ComputeHorde SDK** allows validators to request ComputeHorde execution effortlessly. 
-Below are examples demonstrating **basic job execution**, **advanced job configuration**, and **job management**.
+Below are examples demonstrating **basic job execution**, **advanced job configuration**, **cross-validation**, and **job management**.
 
 ### **1. Requesting ComputeHorde Execution (Simplest Example)**
 This minimal example shows how to submit a job to ComputeHorde with **basic parameters**:
@@ -146,7 +146,23 @@ async def main():
 asyncio.run(main())
 ```
 
-### **3. Managing ComputeHorde Jobs**
+### 3. **Cross-Validation**
+
+To ensure fairness and detect potential cheating, **cross-validation** should be performed on **1-2% of submitted jobs**. 
+This is done by **executing a copy** of a job on a **trusted miner** and comparing the results.
+
+Flag `on_trusted_miner=True` tells `create_job` to run the duplicate job on the **ComputeHorde validator’s trusted miner** 
+instead of regular ComputeHorde miners.
+
+**If results differ, report the cheating miner** using `report_cheated_job()` method. 
+The details of the punishment are described in [ComputeHorde's README](https://github.com/backend-developers-ltd/ComputeHorde#formula-calculated-per-validator-in-peak-cycles). 
+
+Cross-validation is a crucial mechanism to **ensure honest mining and maintain ComputeHorde’s reliability**.
+
+For a full list of available parameters and detailed descriptions, see the **[ComputeHorde SDK Reference](TODO_API_REFERENCE_LINK)**.
+
+
+### **4. Managing ComputeHorde Jobs**
 
 #### **Retrieve a Job by UUID**
 If you need to fetch a specific job, use:
