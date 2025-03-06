@@ -98,6 +98,9 @@ This example demonstrates how to submit a job with **additional parameters**, in
 - input & output volume configuration
 - artifact (results) storage
 
+For a full list of available parameters and detailed descriptions, see the [ComputeHorde SDK Reference](TODO_API_REFERENCE_LINK).
+
+
 ```python
 import asyncio
 import bittensor
@@ -158,9 +161,6 @@ instead of regular ComputeHorde miners.
 The details of the punishment are described in [ComputeHorde's README](https://github.com/backend-developers-ltd/ComputeHorde#formula-calculated-per-validator-in-peak-cycles). 
 
 Cross-validation is a crucial mechanism to **ensure honest mining and maintain ComputeHorde’s reliability**.
-
-For a full list of available parameters and detailed descriptions, see the **[ComputeHorde SDK Reference](TODO_API_REFERENCE_LINK)**.
-
 
 ### **4. Managing ComputeHorde Jobs**
 
