@@ -271,7 +271,9 @@ def test_main_loop_streaming_job():
         {
             "message_type": "V0StreamingJobReadyRequest",
             "job_uuid": job_uuid,
+            "executor_token": None,
             "public_key": mock.ANY,
+            "ip": None,
             "port": mock.ANY,
         },
         {
