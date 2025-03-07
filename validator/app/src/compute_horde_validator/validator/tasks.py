@@ -16,7 +16,7 @@ import numpy as np
 import requests
 from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.core.errors import SubstrateRequestException
-from bittensor.core.metagraph import Metagraph, NonTorchMetagraph
+from bittensor.core.metagraph import Metagraph
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
@@ -687,19 +687,15 @@ def get_subtensor(network):
         return bittensor.subtensor(network=network)
 
 
-def get_metagraph(subtensor, netuid):
-    with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
-        return subtensor.metagraph(netuid=netuid)
-
-
 def normalize_batch_scores(
     hotkey_scores: dict[str, float],
     subtensor,
-    metagraph,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
-    neurons = metagraph.neurons
-    hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
+    metagraph = MetagraphSnapshot.get_latest()
+    hotkey_to_uid = {hotkey: uid for (hotkey, uid) in zip(metagraph.hotkeys, metagraph.uids)}
     score_per_uid = {}
+
+    num_neurons = len(metagraph.hotkeys)
 
     for hotkey, score in hotkey_scores.items():
         uid = hotkey_to_uid.get(hotkey)
@@ -707,23 +703,22 @@ def normalize_batch_scores(
             continue
         score_per_uid[uid] = score
 
-    uids = np.zeros(len(neurons), dtype=np.int64)
-    weights = np.zeros(len(neurons), dtype=np.float32)
+    uids = np.zeros(num_neurons, dtype=np.int64)
+    weights = np.zeros(num_neurons, dtype=np.float32)
 
     if not score_per_uid:
         logger.warning("Batch produced no scores")
         return uids, weights
 
-    for ind, n in enumerate(neurons):
-        uids[ind] = n.uid
-        weights[ind] = score_per_uid.get(n.uid, 0)
+    for ind, uid in enumerate(uids):
+        uids[ind] = uid
+        weights[ind] = score_per_uid.get(uid, 0)
 
     uids, weights = process_weights_for_netuid(
         uids,
         weights,
         settings.BITTENSOR_NETUID,
         subtensor,
-        metagraph,
     )
 
     return uids, weights
@@ -733,13 +728,13 @@ def apply_dancing_burners(
     uids: Union["torch.Tensor", NDArray[np.int64]],
     weights: Union["torch.FloatTensor", NDArray[np.float32]],
     subtensor,
-    metagraph: NonTorchMetagraph,
     cycle_block_start: int,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
     burner_hotkeys = config.DYNAMIC_BURN_TARGET_SS58ADDRESSES.split(",")
     burn_rate = config.DYNAMIC_BURN_RATE
     burn_partition = config.DYNAMIC_BURN_PARTITION
 
+    metagraph = MetagraphSnapshot.get_latest()
     registered_burner_hotkeys = sorted([h for h in burner_hotkeys if h in metagraph.hotkeys])
     se_data = {
         "registered_burner_hotkeys": registered_burner_hotkeys,
@@ -791,7 +786,7 @@ def apply_dancing_burners(
 
     weights = weights * (1 - burn_rate)
 
-    hotkey_to_uid = {n.hotkey: n.uid for n in metagraph.neurons}
+    hotkey_to_uid = {hotkey: uid for (hotkey, uid) in zip(metagraph.hotkeys, metagraph.uids)}
     for hotkey, weight in weight_adjustment.items():
         uid = hotkey_to_uid[hotkey]
         if uid not in uids:
@@ -806,7 +801,6 @@ def apply_dancing_burners(
         weights,
         settings.BITTENSOR_NETUID,
         subtensor,
-        metagraph,
     )
 
     return uids, weights
@@ -842,7 +836,6 @@ def set_scores():
                 logger.debug("Another thread already setting weights")
                 return
 
-            metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
             batches = list(
                 SyntheticJobBatch.objects.select_related("cycle")
                 .filter(
@@ -870,11 +863,9 @@ def set_scores():
 
             hotkey_scores = score_batches(batches)
 
-            uids, weights = normalize_batch_scores(hotkey_scores, subtensor, metagraph)
+            uids, weights = normalize_batch_scores(hotkey_scores, subtensor)
 
-            uids, weights = apply_dancing_burners(
-                uids, weights, subtensor, metagraph, batches[-1].cycle.start
-            )
+            uids, weights = apply_dancing_burners(uids, weights, subtensor, batches[-1].cycle.start)
 
             for batch in batches:
                 batch.scored = True
