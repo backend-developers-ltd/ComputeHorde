@@ -2,6 +2,7 @@ import logging
 import shlex
 import uuid
 from datetime import datetime, timedelta
+from enum import IntEnum
 from os import urandom
 from typing import Self
 
@@ -152,9 +153,13 @@ class MetagraphSnapshot(models.Model):
     # current active miners
     serving_hotkeys = ArrayField(models.CharField(max_length=255))
 
+    class SnapshotType(IntEnum):
+        LATEST = 0
+        CYCLE_START = 1
+
     @classmethod
     def get_latest(cls):
-        metagraph = MetagraphSnapshot.objects.get(id=0)
+        metagraph = MetagraphSnapshot.objects.get(id=cls.SnapshotType.LATEST)
         if metagraph.updated_at < now() - timedelta(seconds=12):
             msg = f"Tried to fetch stale metagraph last updated at: {metagraph.updated_at}"
             logger.error(msg)
@@ -164,11 +169,12 @@ class MetagraphSnapshot(models.Model):
                 long_description=msg,
                 data={"block": metagraph.block},
             )
+            raise Exception(msg)
         return metagraph
 
     @classmethod
     def get_cycle_start(cls):
-        return MetagraphSnapshot.objects.get(id=0)
+        return MetagraphSnapshot.objects.get(id=cls.SnapshotType.CYCLE_START)
 
 
 # contains all neurons not only miners
@@ -179,9 +185,9 @@ class Miner(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     uid = models.IntegerField(null=True)
-    address = models.CharField(max_length=255, null=True)
-    ip_version = models.IntegerField(null=True)
-    port = models.IntegerField(null=True)
+    address = models.CharField(max_length=255, default="0.0.0.0")
+    ip_version = models.IntegerField(default=4)
+    port = models.IntegerField(default=0)
 
     def __str__(self):
         return f"hotkey: {self.hotkey}"

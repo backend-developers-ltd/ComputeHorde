@@ -11,12 +11,12 @@ from typing import Union
 
 import billiard.exceptions
 import bittensor
-import bittensor.core.metagraph
 import celery.exceptions
 import numpy as np
 import requests
 from asgiref.sync import async_to_sync
 from bittensor.core.errors import SubstrateRequestException
+from bittensor.core.metagraph import Metagraph, NonTorchMetagraph
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import allow_join_result
@@ -733,7 +733,7 @@ def apply_dancing_burners(
     uids: Union["torch.Tensor", NDArray[np.int64]],
     weights: Union["torch.FloatTensor", NDArray[np.float32]],
     subtensor,
-    metagraph: bittensor.core.metagraph.NonTorchMetagraph,
+    metagraph: NonTorchMetagraph,
     cycle_block_start: int,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
     burner_hotkeys = config.DYNAMIC_BURN_TARGET_SS58ADDRESSES.split(",")
@@ -1182,7 +1182,9 @@ def fetch_metagraph(block=None):
     return None
 
 
-def save_metagraph_snapshot(metagraph, metagraph_type=0):
+def save_metagraph_snapshot(
+    metagraph: Metagraph, metagraph_type=MetagraphSnapshot.SnapshotType.LATEST
+) -> None:
     MetagraphSnapshot.objects.update_or_create(
         id=metagraph_type,  # current metagraph snapshot
         defaults={
@@ -1291,9 +1293,11 @@ def sync_metagraph() -> None:
         cycle_start_metagraph = MetagraphSnapshot.get_cycle_start()
     except Exception as e:
         logger.warning(f"Failed to fetch cycle start metagraph snapshot: {e}")
-    if cycle_start_metagraph and cycle_start_metagraph.block != current_cycle.start:
-        new_cycle_start_metagraph = fetch_metagraph(current_cycle.start)
-        save_metagraph_snapshot(new_cycle_start_metagraph, metagraph_type=1)
+    if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
+        new_cycle_start_metagraph = fetch_metagraph(block=current_cycle.start)
+        save_metagraph_snapshot(
+            new_cycle_start_metagraph, metagraph_type=MetagraphSnapshot.SnapshotType.CYCLE_START
+        )
 
 
 @app.task

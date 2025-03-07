@@ -289,7 +289,7 @@ class MockSubtensor:
         mocked_set_weights=lambda: (True, ""),
         mocked_commit_weights=lambda: (True, ""),
         mocked_reveal_weights=lambda: (True, ""),
-        mocked_metagraph=lambda: MockMetagraph(),
+        mocked_metagraph=lambda block: MockMetagraph(block_num=block),
         hyperparameters=None,
         block_duration=timedelta(seconds=1),
         override_block_number=None,
@@ -335,7 +335,7 @@ class MockSubtensor:
                     "message": "Client error: UnknownBlock: State already discarded for 0xabc",
                 }
             )
-        return self.mocked_metagraph()
+        return self.mocked_metagraph(block)
 
     def set_weights(
         self,

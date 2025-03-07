@@ -18,17 +18,22 @@ def test_metagraph_sync__success():
     assert Miner.objects.count() == 0
 
     n = 5
-    block_num = 100
+    override_block = 1099
     with patch(
         "bittensor.metagraph",
-        lambda *args, **kwargs: MockMetagraph(num_neurons=n, block_num=block_num),
+        lambda *args, block=None, **kwargs: MockMetagraph(
+            num_neurons=n, block_num=(override_block if block is None else block)
+        ),
     ):
         sync_metagraph()
 
     snapshot = MetagraphSnapshot.get_latest()
-    assert snapshot.block == block_num
+    assert snapshot.block == override_block
     assert len(snapshot.hotkeys) == n
     assert len(snapshot.stake) > 0
+
+    snapshot = MetagraphSnapshot.get_cycle_start()
+    assert snapshot.block == 708  # 1099 cycle start
 
     # check metagraph sync success
     event = (
@@ -41,7 +46,7 @@ def test_metagraph_sync__success():
     )
     assert event.data["new_neurons"] == n
     assert event.data["updated_axon_infos"] == 5
-    assert event.data["block"] == block_num
+    assert event.data["block"] == override_block
 
     # check new miners creation
     assert Miner.objects.count() == n
@@ -50,10 +55,12 @@ def test_metagraph_sync__success():
 
     # check extra miner gets created
     n = 6
-    block_num = 101
+    override_block = 1100
     with patch(
         "bittensor.metagraph",
-        lambda *args, **kwargs: MockMetagraph(num_neurons=n, block_num=block_num),
+        lambda *args, block=None, **kwargs: MockMetagraph(
+            num_neurons=n, block_num=(override_block if block is None else block)
+        ),
     ):
         sync_metagraph()
 
@@ -70,13 +77,18 @@ def test_metagraph_sync__success():
     )
     assert event.data["new_neurons"] == 1  # 6th miner
     assert event.data["updated_axon_infos"] == 1
-    assert event.data["block"] == block_num
+    assert event.data["block"] == override_block
+
+    snapshot = MetagraphSnapshot.get_cycle_start()
+    assert snapshot.block == 708  # 708 cycle start
 
     # check metagraph syncing lagging warns
-    block_num = 104
+    override_block = 1431
     with patch(
         "bittensor.metagraph",
-        lambda *args, **kwargs: MockMetagraph(num_neurons=n, block_num=block_num),
+        lambda *args, block=None, **kwargs: MockMetagraph(
+            num_neurons=n, block_num=(override_block if block is None else block)
+        ),
     ):
         sync_metagraph()
 
@@ -84,7 +96,7 @@ def test_metagraph_sync__success():
         type=SystemEvent.EventType.METAGRAPH_SYNCING,
         subtype=SystemEvent.EventSubType.WARNING,
     )
-    assert event.data["blocks_diff"] == 3
+    assert event.data["blocks_diff"] == 331
 
     event = (
         SystemEvent.objects.order_by("-timestamp")
@@ -95,7 +107,10 @@ def test_metagraph_sync__success():
         .first()
     )
     assert event.data["updated_axon_infos"] == 0
-    assert event.data["block"] == block_num
+    assert event.data["block"] == override_block
+
+    snapshot = MetagraphSnapshot.get_cycle_start()
+    assert snapshot.block == 1430  # 708 cycle start
 
 
 def raise_exception(*args, **kwargs):
