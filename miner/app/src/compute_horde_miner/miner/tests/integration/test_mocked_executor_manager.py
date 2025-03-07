@@ -68,36 +68,32 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
     async with make_communicator(validator_key) as communicator:
         await communicator.send_json_to(
             {
-                "message_type": "V0AuthenticateRequest",
-                "payload": {
-                    "validator_hotkey": validator_key,
-                    "miner_hotkey": "some key",
-                    "timestamp": int(time.time()),
-                },
+                "message_type": "ValidatorAuthForMiner",
+                "validator_hotkey": validator_key,
+                "miner_hotkey": "some key",
+                "timestamp": int(time.time()),
                 "signature": "gibberish",
             }
         )
         response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
         assert response == {
             "message_type": "V0ExecutorManifestRequest",
-            "manifest": {
-                "executor_classes": [{"count": 1, "executor_class": DEFAULT_EXECUTOR_CLASS}]
-            },
+            "manifest": {DEFAULT_EXECUTOR_CLASS: 1},
         }
         await communicator.send_json_to(
             {
                 "message_type": "V0InitialJobRequest",
                 "job_uuid": job_uuid,
                 "executor_class": DEFAULT_EXECUTOR_CLASS,
-                "base_docker_image_name": "it's teeeeests",
+                "docker_image": "it's teeeeests",
                 "timeout_seconds": 60,
-                "volume_type": "inline",
+                "volume": None,
                 "job_started_receipt_payload": {
                     "receipt_type": "JobStartedReceipt",
                     "job_uuid": job_uuid,
                     "miner_hotkey": "miner_hotkey",
                     "validator_hotkey": validator_key,
-                    "timestamp": "2020-01-01T00:00Z",
+                    "timestamp": "2020-01-01T00:00:00Z",
                     "executor_class": DEFAULT_EXECUTOR_CLASS,
                     "max_timeout": 60,
                     "is_organic": True,
@@ -115,6 +111,7 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
         assert response == {
             "message_type": "V0ExecutorReadyRequest",
             "job_uuid": job_uuid,
+            "executor_token": None,
         }
 
         await communicator.send_json_to(
@@ -122,7 +119,7 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
                 "message_type": "V0JobRequest",
                 "job_uuid": job_uuid,
                 "executor_class": DEFAULT_EXECUTOR_CLASS,
-                "docker_image_name": "it's teeeeests again",
+                "docker_image": "it's teeeeests again",
                 "docker_run_cmd": [],
                 "docker_run_options_preset": "none",
                 "volume": {"volume_type": "inline", "contents": "nonsense"},
@@ -161,12 +158,10 @@ async def test_local_miner_unknown_validator(mock_keypair: MagicMock, settings):
     async with make_communicator(validator_key) as communicator:
         await communicator.send_json_to(
             {
-                "message_type": "V0AuthenticateRequest",
-                "payload": {
-                    "validator_hotkey": validator_key,
-                    "miner_hotkey": "some key",
-                    "timestamp": int(time.time()),
-                },
+                "message_type": "ValidatorAuthForMiner",
+                "validator_hotkey": validator_key,
+                "miner_hotkey": "some key",
+                "timestamp": int(time.time()),
                 "signature": "gibberish",
             }
         )

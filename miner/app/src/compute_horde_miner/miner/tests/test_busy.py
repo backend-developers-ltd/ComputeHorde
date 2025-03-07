@@ -4,18 +4,16 @@ from uuid import uuid4
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.mv_protocol.miner_requests import RequestType, V0DeclineJobRequest
-from compute_horde.mv_protocol.validator_requests import (
-    AuthenticationPayload,
-    V0AuthenticateRequest,
+from compute_horde.protocol_messages import (
+    V0DeclineJobRequest,
     V0InitialJobRequest,
+    ValidatorAuthForMiner,
 )
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from compute_horde.utils import sign_blob
 from compute_horde_core.executor_class import ExecutorClass
-from compute_horde_core.volume import VolumeType
 from django.utils import timezone
 
 from compute_horde_miner.miner.executor_manager.current import executor_manager
@@ -36,17 +34,14 @@ def job_uuid():
 
 
 async def _authenticate(channel, validator, miner_hotkey):
-    auth_payload = AuthenticationPayload(
+    auth_payload = ValidatorAuthForMiner(
         validator_hotkey=validator.hotkey.ss58_address,
         miner_hotkey=miner_hotkey,
         timestamp=int(datetime.now().timestamp()),
+        signature="",
     )
-    await channel.send_to(
-        V0AuthenticateRequest(
-            payload=auth_payload,
-            signature=sign_blob(validator.hotkey, auth_payload.blob_for_signing()),
-        ).model_dump_json()
-    )
+    auth_payload.signature = sign_blob(validator.hotkey, auth_payload.blob_for_signing())
+    await channel.send_to(auth_payload.model_dump_json())
 
 
 async def _send_initial_job_request(validator_channel, validator_wallet, miner_wallet, job_uuid):
@@ -68,9 +63,8 @@ async def _send_initial_job_request(validator_channel, validator_wallet, miner_w
         V0InitialJobRequest(
             job_uuid=job_uuid,
             executor_class=DEFAULT_EXECUTOR_CLASS,
-            base_docker_image_name="it's teeeeests",
+            docker_image="it's teeeeests",
             timeout_seconds=60,
-            volume_type=VolumeType.inline,
             job_started_receipt_payload=job_started_receipt_payload,
             job_started_receipt_signature=job_started_receipt_signature,
         ).model_dump_json()
@@ -158,7 +152,7 @@ async def test_reject_as_busy_when_busy(job_uuid, validator_wallet, miner_wallet
             )
             response = await validator_channel.receive_json_from()
 
-            assert response["message_type"] == RequestType.V0DeclineJobRequest.value
+            assert response["message_type"] == "V0DeclineJobRequest"
             assert response["reason"] == V0DeclineJobRequest.Reason.BUSY.value
             assert len(response["receipts"]) == 1
             assert response["receipts"][0]["payload"]["job_uuid"] == base_good_receipt.job_uuid
