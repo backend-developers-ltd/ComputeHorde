@@ -26,10 +26,6 @@ from django.conf import settings
 from pydantic import BaseModel
 
 from compute_horde_validator.validator.dynamic_config import aget_config
-from compute_horde_validator.validator.metagraph_client import (
-    create_metagraph_refresh_task,
-    get_miner_axon_info,
-)
 from compute_horde_validator.validator.models import (
     Miner,
     MinerBlacklist,
@@ -96,7 +92,6 @@ class FacilitatorClient:
         self.miner_drivers: asyncio.Queue[asyncio.Task[None] | None] = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
-        self.refresh_metagraph_task = self.create_metagraph_refresh_task()
         self.specs_task: asyncio.Task[None] | None = None
 
     def connect(self) -> websockets.connect:
@@ -237,9 +232,6 @@ class FacilitatorClient:
                     )
             await asyncio.sleep(self.HEARTBEAT_PERIOD)
 
-    def create_metagraph_refresh_task(self, period=None):
-        return create_metagraph_refresh_task(period=period)
-
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(7),
         wait=tenacity.wait_exponential(multiplier=1, exp_base=2, min=1, max=10),
@@ -283,8 +275,8 @@ class FacilitatorClient:
 
         logger.error("unsupported message received from facilitator: %s", raw_msg)
 
-    async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
-        return await get_miner_axon_info(hotkey)
+    async def get_miner_axon_info(self, miner: Miner) -> tuple[str, int, int]:
+        return (miner.address, miner.port, miner.ip_version)
 
     async def report_miner_cheated_job(self, job_uuid: str):
         try:
@@ -402,10 +394,10 @@ class FacilitatorClient:
             ip_type = 4
             on_trusted_miner = True
         else:
-            miner_axon_info = await self.get_miner_axon_info(miner.hotkey)
-            miner_ip = miner_axon_info.ip
-            miner_port = miner_axon_info.port
-            ip_type = miner_axon_info.ip_type
+            (address, port, ip_version) = await self.get_miner_axon_info(miner)
+            miner_ip = address
+            miner_port = port
+            ip_type = ip_version
             on_trusted_miner = False
 
         job = await OrganicJob.objects.acreate(

@@ -4,7 +4,6 @@ import sys
 import bittensor
 import uvloop
 from asgiref.sync import async_to_sync
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -17,33 +16,25 @@ logger = logging.getLogger(__name__)
 class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--miner_hotkey", type=str, help="Miner hotkey", required=True)
-        parser.add_argument(
-            "--miner_address", type=str, help="Miner IPv4 address", default="127.0.0.1"
-        )
-        parser.add_argument("--miner_port", type=int, help="Miner port", default=8000)
-        parser.add_argument(
-            "--executor_class", type=str, help="Executor class", default=DEFAULT_EXECUTOR_CLASS
-        )
+        # TODO: mock miner with address, port, ip_type; use executor_class
+        # parser.add_argument(
+        #     "--miner_address", type=str, help="Miner IPv4 address", default="127.0.0.1"
+        # )
+        # parser.add_argument("--miner_port", type=int, help="Miner port", default=8000)
+        # parser.add_argument(
+        #     "--executor_class", type=str, help="Executor class", default=DEFAULT_EXECUTOR_CLASS
+        # )
 
     def handle(self, *args, **options):
         uvloop.install()
+        hotkey = options["miner_hotkey"]
 
-        miner_hotkey = options["miner_hotkey"]
-        miner_address = options["miner_address"]
-        miner_port = options["miner_port"]
-        # TODO
-        # executor_class = options["executor_class"]
-        miners = [Miner.objects.get_or_create(hotkey=miner_hotkey)[0]]
-        axons_by_key = {
-            miner_hotkey: bittensor.AxonInfo(
-                version=4,
-                ip=miner_address,
-                ip_type=4,
-                port=miner_port,
-                hotkey=miner_hotkey,
-                coldkey=miner_hotkey,
-            )
-        }
+        try:
+            miner = Miner.objects.get(hotkey=hotkey)
+        except Miner.DoesNotExist:
+            print(f"Miner with hotkey {hotkey} not found")
+            sys.exit(1)
+
         try:
             subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
             current_block = subtensor.get_current_block()
@@ -53,7 +44,7 @@ class Command(BaseCommand):
                 cycle=cycle,
                 should_be_scored=False,
             )
-            async_to_sync(execute_synthetic_batch_run)(axons_by_key, miners, [], batch.id)
+            async_to_sync(execute_synthetic_batch_run)([miner], [], batch.id)
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)

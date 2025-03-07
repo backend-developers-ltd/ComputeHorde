@@ -18,7 +18,7 @@ async def test_not_enough_prompts_system_event_is_not_repeated():
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    ctx = await _init_context(axons={}, serving_miners=[], active_validators=[], batch_id=batch.id)
+    ctx = await _init_context(serving_miners=[], active_validators=[], batch_id=batch.id)
 
     with freeze_time(initial_date) as frozen_datetime:
         await _not_enough_prompts_system_event(ctx)
@@ -52,7 +52,7 @@ async def test_system_event_limits():
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    ctx = await _init_context(axons={}, serving_miners=[], active_validators=[], batch_id=batch.id)
+    ctx = await _init_context(serving_miners=[], active_validators=[], batch_id=batch.id)
 
     for _ in range(20):
         # limited type

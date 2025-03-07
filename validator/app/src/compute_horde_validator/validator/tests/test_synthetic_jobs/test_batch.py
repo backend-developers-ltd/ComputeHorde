@@ -4,7 +4,6 @@ import math
 import uuid
 from collections.abc import Callable
 
-import bittensor
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.mv_protocol import miner_requests
@@ -41,7 +40,6 @@ def job_generator_factory():
 async def test_synthetic_job_batch(
     job_generator_factory: TimeTookScoreMockSyntheticJobGeneratorFactory,
     miner: Miner,
-    axon_dict: dict[str, bittensor.AxonInfo],
     create_simulation_miner_client: Callable,
     transport: SimulationTransport,
     small_spin_up_times,
@@ -87,7 +85,6 @@ async def test_synthetic_job_batch(
     )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
-            axon_dict,
             [miner],
             [],
             batch.id,
@@ -119,7 +116,6 @@ async def check_scores(
 async def test_synthetic_job_batch_non_peak_limits(
     job_generator_factory: TimeTookScoreMockSyntheticJobGeneratorFactory,
     miner: Miner,
-    axon_dict: dict[str, bittensor.AxonInfo],
     create_simulation_miner_client: Callable,
     transport: SimulationTransport,
     small_spin_up_times,
@@ -190,7 +186,6 @@ async def test_synthetic_job_batch_non_peak_limits(
     )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
-            axon_dict,
             [miner],
             [],
             batch.id,
@@ -222,7 +217,6 @@ async def test_synthetic_job_batch_non_peak_limits(
 async def test_synthetic_job_batch_non_peak_limits__validator_missed_peak(
     job_generator_factory: TimeTookScoreMockSyntheticJobGeneratorFactory,
     miner: Miner,
-    axon_dict: dict[str, bittensor.AxonInfo],
     create_simulation_miner_client: Callable,
     transport: SimulationTransport,
     small_spin_up_times,
@@ -271,7 +265,6 @@ async def test_synthetic_job_batch_non_peak_limits__validator_missed_peak(
     )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
-            axon_dict,
             [miner],
             [],
             batch.id,
@@ -303,7 +296,6 @@ async def test_synthetic_job_batch_non_peak_limits__validator_missed_peak(
 async def test_synthetic_job_batch_non_peak_limits__miner_missed_peak(
     job_generator_factory: TimeTookScoreMockSyntheticJobGeneratorFactory,
     miner: Miner,
-    axon_dict: dict[str, bittensor.AxonInfo],
     create_simulation_miner_client: Callable,
     transport: SimulationTransport,
     small_spin_up_times,
@@ -366,7 +358,6 @@ async def test_synthetic_job_batch_non_peak_limits__miner_missed_peak(
     )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
-            axon_dict,
             [miner],
             [],
             batch.id,
