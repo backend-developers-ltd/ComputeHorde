@@ -160,19 +160,21 @@ async def test_synthetic_job_batch_non_peak_limits(
     await transport.add_message(manifest_message, send_before=1)
 
     async def add_job_messages(request_class, send_before=1, sleep_before=0, **kwargs):
-        for job_uuid in job_uuids:
+        for i, job_uuid in enumerate(job_uuids):
             msg = request_class(
                 job_uuid=str(job_uuid),
                 **kwargs,
             ).model_dump_json()
-            await transport.add_message(msg, send_before=send_before, sleep_before=sleep_before)
+            await transport.add_message(
+                msg, send_before=send_before, sleep_before=sleep_before if i == 0 else 0
+            )
 
-    await add_job_messages(V0AcceptJobRequest, send_before=0, sleep_before=0.05)
+    await add_job_messages(V0AcceptJobRequest, send_before=0, sleep_before=0.5)
     await add_job_messages(V0ExecutorReadyRequest, send_before=0)
     await add_job_messages(
         V0JobFinishedRequest,
         send_before=2,
-        sleep_before=0.05,
+        sleep_before=0.5,
         docker_process_stdout="",
         docker_process_stderr="",
     )
@@ -235,19 +237,21 @@ async def test_synthetic_job_batch_non_peak_limits__validator_missed_peak(
     await transport.add_message(manifest_message, send_before=1)
 
     async def add_job_messages(request_class, send_before=1, sleep_before=0, **kwargs):
-        for job_uuid in job_uuids:
+        for i, job_uuid in enumerate(job_uuids):
             msg = request_class(
                 job_uuid=str(job_uuid),
                 **kwargs,
             ).model_dump_json()
-            await transport.add_message(msg, send_before=send_before, sleep_before=sleep_before)
+            await transport.add_message(
+                msg, send_before=send_before, sleep_before=sleep_before if i == 0 else 0
+            )
 
-    await add_job_messages(V0AcceptJobRequest, send_before=0, sleep_before=0.05)
+    await add_job_messages(V0AcceptJobRequest, send_before=0, sleep_before=0.5)
     await add_job_messages(V0ExecutorReadyRequest, send_before=0)
     await add_job_messages(
         V0JobFinishedRequest,
         send_before=2,
-        sleep_before=0.05,
+        sleep_before=0.5,
         docker_process_stdout="",
         docker_process_stderr="",
     )
@@ -324,19 +328,21 @@ async def test_synthetic_job_batch_non_peak_limits__miner_missed_peak(
     await transport.add_message(manifest_message, send_before=1)
 
     async def add_job_messages(request_class, send_before=1, sleep_before=0, **kwargs):
-        for job_uuid in job_uuids:
+        for i, job_uuid in enumerate(job_uuids):
             msg = request_class(
                 job_uuid=str(job_uuid),
                 **kwargs,
             ).model_dump_json()
-            await transport.add_message(msg, send_before=send_before, sleep_before=sleep_before)
+            await transport.add_message(
+                msg, send_before=send_before, sleep_before=sleep_before if i == 0 else 0
+            )
 
-    await add_job_messages(V0AcceptJobRequest, send_before=0, sleep_before=0.05)
+    await add_job_messages(V0AcceptJobRequest, send_before=0, sleep_before=0.5)
     await add_job_messages(V0ExecutorReadyRequest, send_before=0)
     await add_job_messages(
         V0JobFinishedRequest,
         send_before=2,
-        sleep_before=0.05,
+        sleep_before=0.5,
         docker_process_stdout="",
         docker_process_stderr="",
     )
