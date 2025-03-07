@@ -535,7 +535,7 @@ CELERY_BEAT_SCHEDULE = {
         "task": "compute_horde_validator.validator.tasks.sync_metagraph",
         "schedule": timedelta(seconds=10),
         "options": {
-            "expires": timedelta(minutes=10).total_seconds(),
+            "expires": timedelta(seconds=10).total_seconds(),
         },
     },
     "schedule_synthetic_jobs": {
