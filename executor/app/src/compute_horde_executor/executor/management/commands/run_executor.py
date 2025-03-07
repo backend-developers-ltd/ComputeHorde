@@ -129,11 +129,6 @@ class RunConfigManager:
         else:
             raise JobError(f"Invalid preset: {preset}")
 
-    @classmethod
-    def preset_to_image_for_raw_script(cls, preset: str) -> str:
-        # TODO: return pre-built base image for preset, i.e. with numpy, pandas, tensorflow, torch etc.
-        return "python:3.11-slim"
-
 
 class MinerClient(AbstractMinerClient):
     class NotInitialized(Exception):
@@ -594,10 +589,6 @@ class JobRunner:
         docker_run_cmd = job_request.docker_run_cmd
 
         if job_request.raw_script:
-            if docker_image is None:
-                docker_image = RunConfigManager.preset_to_image_for_raw_script(
-                    job_request.docker_run_options_preset
-                )
             raw_script_path = self.temp_dir / "script.py"
             raw_script_path.write_text(job_request.raw_script)
             extra_volume_flags = ["-v", f"{raw_script_path.absolute().as_posix()}:/script.py"]
