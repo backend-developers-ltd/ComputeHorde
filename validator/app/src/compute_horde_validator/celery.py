@@ -35,6 +35,8 @@ TASK_QUEUE_MAP = {
     # Misc
     "compute_horde_validator.validator.tasks.send_events_to_facilitator": DEFAULT_QUEUE,
     "compute_horde_validator.validator.tasks.fetch_dynamic_config": DEFAULT_QUEUE,
+    # Metagraph Sync
+    "compute_horde_validator.validator.tasks.sync_metagraph": "metagraph",
 }
 
 CELERY_TASK_QUEUES = list(set(TASK_QUEUE_MAP.values()))

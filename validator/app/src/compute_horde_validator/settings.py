@@ -531,6 +531,13 @@ CELERY_COMPRESSION = "gzip"  # task compression
 CELERY_MESSAGE_COMPRESSION = "gzip"  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {
+    "sync_metagraph": {
+        "task": "compute_horde_validator.validator.tasks.sync_metagraph",
+        "schedule": timedelta(seconds=10),
+        "options": {
+            "expires": timedelta(seconds=10).total_seconds(),
+        },
+    },
     "schedule_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
         "schedule": timedelta(minutes=1),
