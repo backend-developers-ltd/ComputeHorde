@@ -20,14 +20,15 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V1JobRequest,
     V2JobRequest,
 )
-from compute_horde.mv_protocol.miner_requests import (
+from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
+    ValidatorToMinerMessage,
 )
-from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 from django.conf import settings
+from pydantic import TypeAdapter
 
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
@@ -88,7 +89,7 @@ class MockSyntheticMinerClient(batch_run.MinerClient):
         pass
 
     async def send(self, data: str | bytes, error_event_callback=None):
-        msg = BaseValidatorRequest.parse(data)
+        msg = TypeAdapter(ValidatorToMinerMessage).validate_json(data)
         self._sent_models.append(msg)
 
     def _query_sent_models(self, condition=None, model_class=None):
@@ -175,7 +176,6 @@ def get_dummy_job_request_v0(uuid: str) -> V0JobRequest:
         miner_hotkey="miner_hotkey",
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="nvidia",
-        raw_script="print('hello world')",
         args=[],
         env={},
         use_gpu=False,
@@ -191,7 +191,6 @@ def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
         miner_hotkey="miner_hotkey",
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="nvidia",
-        raw_script="print('hello world')",
         args=[],
         env={},
         use_gpu=False,
@@ -215,12 +214,12 @@ def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
             "uploads": [
                 {
                     "output_upload_type": "single_file_post",
-                    "url": "http://s3.bucket.com/output1.txt",
+                    "url": "https://s3.bucket.com/output1.txt",
                     "relative_path": "output1.txt",
                 },
                 {
                     "output_upload_type": "single_file_put",
-                    "url": "http://s3.bucket.com/output2.zip",
+                    "url": "https://s3.bucket.com/output2.zip",
                     "relative_path": "zip/output2.zip",
                 },
             ],
@@ -238,7 +237,6 @@ def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2Job
         uuid=uuid,
         docker_image="nvidia",
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        raw_script="print('hello world')",
         args=[],
         env={},
         use_gpu=False,
@@ -257,7 +255,7 @@ def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2Job
             "uploads": [
                 {
                     "output_upload_type": "single_file_post",
-                    "url": "http://s3.bucket.com/output1.txt",
+                    "url": "https://s3.bucket.com/output1.txt",
                     "relative_path": "output1.txt",
                 }
             ],

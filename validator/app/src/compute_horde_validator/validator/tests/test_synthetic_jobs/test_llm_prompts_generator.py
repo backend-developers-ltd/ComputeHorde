@@ -1,5 +1,5 @@
 import pytest
-from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
+from compute_horde.protocol_messages import V0JobFinishedRequest
 from compute_horde_core.output_upload import MultiUpload, SingleFilePutUpload
 from compute_horde_core.volume import MultiVolume, SingleFileVolume
 from pytest_httpx import HTTPXMock

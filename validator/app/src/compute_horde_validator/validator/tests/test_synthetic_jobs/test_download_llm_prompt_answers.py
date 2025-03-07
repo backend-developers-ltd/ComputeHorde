@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
+from compute_horde.protocol_messages import V0JobFinishedRequest
 from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (

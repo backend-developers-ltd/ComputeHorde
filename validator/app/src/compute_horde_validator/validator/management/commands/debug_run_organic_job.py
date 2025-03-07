@@ -47,7 +47,6 @@ class Command(BaseCommand):
         parser.add_argument(
             "--docker_image", type=str, help="docker image for job execution", required=True
         )
-        parser.add_argument("--raw_script", type=str, default="", help="raw script to be executed")
         parser.add_argument(
             "--cmd_args",
             type=str,
@@ -111,7 +110,6 @@ class Command(BaseCommand):
             timeout=options["timeout"],
             executor_class=options["executor_class"],
             docker_image=options["docker_image"],
-            raw_script=options["raw_script"],
             args=options["cmd_args"],
             use_gpu=options["use_gpu"],
             input_url=options["input_url"],

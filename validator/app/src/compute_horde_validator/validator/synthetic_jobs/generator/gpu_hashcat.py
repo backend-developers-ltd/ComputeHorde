@@ -1,6 +1,6 @@
 from asgiref.sync import sync_to_async
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.mv_protocol.miner_requests import V0JobFinishedRequest
+from compute_horde.protocol_messages import V0JobFinishedRequest
 from compute_horde_core.volume import InlineVolume, Volume
 
 from compute_horde_validator.validator.dynamic_config import aget_weights_version
