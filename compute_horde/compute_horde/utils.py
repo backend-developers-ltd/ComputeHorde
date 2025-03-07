@@ -9,6 +9,13 @@ import pydantic
 from bittensor.core.errors import SubstrateRequestException
 
 BAC_VALIDATOR_SS58_ADDRESS = "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
+REQUIERED_VALIDATORS = (
+    BAC_VALIDATOR_SS58_ADDRESS,
+    "5FFApaS75bv5pJHfAp2FVLBj9ZaXuFDjEypsaBNc1wCfe52v",
+    "5F4tQyWrhfGVcNhoqeiNsR6KjD4wMZ2kfhLj4oHYuyHbZAc3",
+    "5F2CsUDVbRbVMXTh9fAzF9GacjVX7UapvRxidrxe7z8BYckQ",
+    "5HEo565WAy4Dbq3Sv271SAi7syBSofyfhhwRNjFNSM2gP9M2",
+)
 MIN_STAKE = 1000
 VALIDATORS_LIMIT = 24
 
@@ -48,19 +55,7 @@ def get_validators(
             raise ValidatorListError(ex) from ex
 
     neurons = [
-        n
-        for n in metagraph.neurons
-        if (
-            n.hotkey
-            in (
-                BAC_VALIDATOR_SS58_ADDRESS,
-                "5FFApaS75bv5pJHfAp2FVLBj9ZaXuFDjEypsaBNc1wCfe52v",
-                "5F4tQyWrhfGVcNhoqeiNsR6KjD4wMZ2kfhLj4oHYuyHbZAc3",
-                "5F2CsUDVbRbVMXTh9fAzF9GacjVX7UapvRxidrxe7z8BYckQ",
-                "5HEo565WAy4Dbq3Sv271SAi7syBSofyfhhwRNjFNSM2gP9M2",
-            )
-            or n.stake.tao >= MIN_STAKE
-        )
+        n for n in metagraph.neurons if n.hotkey in REQUIERED_VALIDATORS or n.stake >= MIN_STAKE
     ]
     neurons = sorted(
         neurons, key=lambda n: (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS, n.stake), reverse=True

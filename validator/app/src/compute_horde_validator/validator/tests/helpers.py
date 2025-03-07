@@ -29,7 +29,7 @@ from compute_horde.mv_protocol.miner_requests import (
 from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 from django.conf import settings
 
-from compute_horde_validator.validator.models import SystemEvent
+from compute_horde_validator.validator.models import Miner, SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.synthetic_jobs import batch_run
 
@@ -57,15 +57,8 @@ def get_miner_client(MINER_CLIENT, job_uuid: str):
     )
 
 
-async def mock_get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
-    return bittensor.AxonInfo(
-        version=4,
-        ip="ignore",
-        ip_type=4,
-        port=8000,
-        hotkey=hotkey,
-        coldkey="ignore",
-    )
+async def mock_get_miner_axon_info(miner: Miner) -> tuple[str, int, int]:
+    return ("0.0.0.0", 8000, 4)
 
 
 class MockAxonInfo:

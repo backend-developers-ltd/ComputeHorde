@@ -3,6 +3,7 @@ from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 
 
@@ -20,20 +21,10 @@ class DebugFacilitatorClient(FacilitatorClient):
         self.miner_address = miner_address
         self.miner_port = miner_port
 
-    async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
-        if hotkey != self.miner_hotkey:
+    async def get_miner_axon_info(self, miner: Miner) -> tuple[str, int, int]:
+        if miner.hotkey != self.miner_hotkey:
             raise ValueError("unsupported hotkey")
-        return bittensor.AxonInfo(
-            version=4,
-            ip=self.miner_address,
-            ip_type=4,
-            port=self.miner_port,
-            hotkey=self.miner_hotkey,
-            coldkey=self.miner_hotkey,  # I hope it does not matter
-        )
-
-    def create_metagraph_refresh_task(self, period=None):
-        return None
+        return (self.miner_address, self.miner_port, 4)
 
 
 class Command(BaseCommand):

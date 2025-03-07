@@ -149,10 +149,9 @@ class MinerClient(AbstractMinerClient):
         self.own_hotkey = ctx.own_keypair.ss58_address
         self.own_keypair = ctx.own_keypair
 
-        axon = ctx.axons[miner_hotkey]
         self.miner_hotkey = miner_hotkey
-        self.miner_address = axon.ip
-        self.miner_port = axon.port
+        self.miner_address = ctx.miners[miner_hotkey].address
+        self.miner_port = ctx.miners[miner_hotkey].port
 
         name = ctx.names[miner_hotkey]
         transport = transport or WSTransport(
@@ -493,8 +492,6 @@ class BatchContext:
     # used to go from indices returned by asyncio.gather() back to miner.hotkey
     hotkeys: list[str]
 
-    # all dictionaries have miner.hotkey as key
-    axons: dict[str, bittensor.AxonInfo]
     # full name for easier debugging: "{miner_hotkey}({ip}:{port})"
     names: dict[str, str]
     miners: dict[str, Miner]  # hotkey -> Miner
@@ -853,7 +850,6 @@ class BatchConfig:
 
 
 async def _init_context(
-    axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     active_validators: list[str],
     batch_id: int,
@@ -883,7 +879,6 @@ async def _init_context(
         own_public_key=public_key,
         own_certs=certs,
         hotkeys=[],
-        axons={},
         names={},
         miners={},
         clients={},
@@ -905,10 +900,8 @@ async def _init_context(
 
     for miner in serving_miners:
         hotkey = miner.hotkey
-        axon = axons[hotkey]
         ctx.hotkeys.append(hotkey)
-        ctx.axons[hotkey] = axon
-        ctx.names[hotkey] = f"{hotkey}({axon.ip}:{axon.port})"
+        ctx.names[hotkey] = f"{hotkey}({miner.address}:{miner.port})"
         ctx.miners[hotkey] = miner
         ctx.clients[hotkey] = create_miner_client(ctx=ctx, miner_hotkey=hotkey)
         ctx.executors[hotkey] = defaultdict(int)
@@ -2126,7 +2119,6 @@ def _db_persist_critical(ctx: BatchContext) -> None:
 
         synthetic_jobs: list[SyntheticJob] = []
         for job in ctx.jobs.values():
-            axon = ctx.axons[job.miner_hotkey]
             miner = ctx.miners[job.miner_hotkey]
             if job.success:
                 status = SyntheticJob.Status.COMPLETED
@@ -2138,9 +2130,9 @@ def _db_persist_critical(ctx: BatchContext) -> None:
                 job_uuid=job.uuid,
                 batch=ctx.batch,
                 miner=miner,
-                miner_address=axon.ip,
-                miner_address_ip_version=axon.ip_type,
-                miner_port=axon.port,
+                miner_address=miner.address,
+                miner_address_ip_version=miner.ip_version,
+                miner_port=miner.port,
                 executor_class=job.executor_class,
                 status=status,
                 comment=job.comment,
@@ -2258,13 +2250,12 @@ def shuffled(list_: list[Any]) -> list[Any]:
 
 
 async def execute_synthetic_batch_run(
-    axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     active_validators: list[str],
     batch_id: int,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> None:
-    if not axons or not serving_miners:
+    if not serving_miners:
         logger.warning("No miners provided")
         return
 
@@ -2274,9 +2265,7 @@ async def execute_synthetic_batch_run(
     # randomize the order of miners each batch to avoid systemic bias
     shuffled(serving_miners)
 
-    ctx = await _init_context(
-        axons, serving_miners, active_validators, batch_id, create_miner_client
-    )
+    ctx = await _init_context(serving_miners, active_validators, batch_id, create_miner_client)
     await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
     try:

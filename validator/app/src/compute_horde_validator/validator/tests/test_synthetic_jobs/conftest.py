@@ -51,7 +51,12 @@ def axon_dict(miner_hotkey: str, miner_axon_info: bittensor.AxonInfo):
 
 @pytest_asyncio.fixture
 async def miner(miner_hotkey: str):
-    return await Miner.objects.acreate(hotkey=miner_hotkey)
+    return await Miner.objects.acreate(
+        hotkey=miner_hotkey,
+        address="ignore",
+        ip_version=4,
+        port=9999,
+    )
 
 
 @pytest_asyncio.fixture
