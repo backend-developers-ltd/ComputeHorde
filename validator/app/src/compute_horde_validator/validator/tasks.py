@@ -1154,9 +1154,9 @@ def send_events_to_facilitator():
 def fetch_metagraph(block=None):
     try:
         start_ts = time.time()
-        metagraph = bittensor.metagraph(
+        subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+        metagraph = subtensor.metagraph(
             netuid=settings.BITTENSOR_NETUID,
-            network=settings.BITTENSOR_NETWORK,
             block=block,
             lite=True,
         )
