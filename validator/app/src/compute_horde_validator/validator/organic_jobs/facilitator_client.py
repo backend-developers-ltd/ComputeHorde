@@ -402,10 +402,9 @@ class FacilitatorClient:
             ip_type = 4
             on_trusted_miner = True
         else:
-            miner_axon_info = await self.get_miner_axon_info(miner.hotkey)
-            miner_ip = miner_axon_info.ip
-            miner_port = miner_axon_info.port
-            ip_type = miner_axon_info.ip_type
+            miner_ip = miner.address
+            miner_port = miner.port
+            ip_type = miner.ip_version
             on_trusted_miner = False
 
         job = await OrganicJob.objects.acreate(
