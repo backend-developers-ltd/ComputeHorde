@@ -160,7 +160,7 @@ class MetagraphSnapshot(models.Model):
     @classmethod
     def get_latest(cls):
         metagraph = MetagraphSnapshot.objects.get(id=cls.SnapshotType.LATEST)
-        if metagraph.updated_at < now() - timedelta(seconds=12):
+        if metagraph.updated_at < now() - timedelta(minutes=1):
             msg = f"Tried to fetch stale metagraph last updated at: {metagraph.updated_at}"
             logger.error(msg)
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
