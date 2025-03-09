@@ -1151,10 +1151,9 @@ def send_events_to_facilitator():
             logger.error(f"Failed to send system events to facilitator: {response}")
 
 
-def fetch_metagraph(block=None):
+def fetch_metagraph(subtensor: bittensor.subtensor, block=None):
     try:
         start_ts = time.time()
-        subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
         metagraph = subtensor.metagraph(
             netuid=settings.BITTENSOR_NETUID,
             block=block,
@@ -1204,7 +1203,8 @@ def save_metagraph_snapshot(
 
 @app.task
 def sync_metagraph() -> None:
-    metagraph = fetch_metagraph()
+    subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+    metagraph = fetch_metagraph(subtensor)
     if metagraph is None:
         return
 
@@ -1294,7 +1294,7 @@ def sync_metagraph() -> None:
     except Exception as e:
         logger.warning(f"Failed to fetch cycle start metagraph snapshot: {e}")
     if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
-        new_cycle_start_metagraph = fetch_metagraph(block=current_cycle.start)
+        new_cycle_start_metagraph = fetch_metagraph(subtensor, block=current_cycle.start)
         save_metagraph_snapshot(
             new_cycle_start_metagraph, metagraph_type=MetagraphSnapshot.SnapshotType.CYCLE_START
         )
