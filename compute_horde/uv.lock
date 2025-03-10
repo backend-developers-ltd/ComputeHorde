@@ -493,6 +493,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+docs = [
+    { name = "sphinx", specifier = ">=8.2.3" },
+    { name = "sphinx-rtd-theme", specifier = ">=3.0.2" },
+]
 format = [{ name = "ruff" }]
 lint = [
     { name = "codespell", extras = ["toml"] },

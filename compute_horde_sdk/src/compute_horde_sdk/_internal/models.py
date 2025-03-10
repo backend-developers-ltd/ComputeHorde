@@ -17,6 +17,10 @@ OUTPUT_MOUNT_PATH_PREFIX = "/output/"
 
 
 class ComputeHordeJobStatus(StrEnum):
+    """
+    Status of a Compute Horde job.
+    """
+
     SENT = "Sent"
     ACCEPTED = "Accepted"
     REJECTED = "Rejected"
@@ -24,13 +28,23 @@ class ComputeHordeJobStatus(StrEnum):
     FAILED = "Failed"
 
     def is_in_progress(self) -> bool:
+        """
+        Check if the job is in progress (has not completed or failed yet).
+        """
         return self in (self.SENT, self.ACCEPTED)
 
 
 @dataclass
 class ComputeHordeJobResult:
+    """
+    Result of a Compute Horde job.
+    """
+
     stdout: str
+    """Job standard output."""
+
     artifacts: dict[str, bytes]
+    """Artifact file contents, keyed by file path, as :class:`bytes`."""
 
 
 class FacilitatorJobResponse(pydantic.BaseModel):
@@ -107,7 +121,7 @@ class HuggingfaceInputVolume(pydantic.BaseModel, AbstractInputVolume):
     """
     Volume for downloading resources from Huggingface.
 
-    By default, it downloads the entire repository and copier its structure.
+    By default, it downloads the entire repository and copies its structure.
     To narrow it down, use the ``allow_patterns`` field.
     If a file is inside a subfolder, it will be placed under the same path in the volume.
     """
@@ -153,6 +167,8 @@ InputVolume = InlineInputVolume | HuggingfaceInputVolume | HTTPInputVolume
 
 
 class HTTPOutputVolume(pydantic.BaseModel):
+    """Volume for uploading files to the Internet via HTTP."""
+
     http_method: Literal["POST", "PUT"]
     """HTTP method to use, can be POST or PUT."""
 
