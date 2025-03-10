@@ -35,7 +35,6 @@ from compute_horde_validator.celery import app
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
-from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
@@ -576,16 +575,12 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-async def run_admin_job_request(
-    job_request_id: int, callback=None, *, miner_axon_info: bittensor.AxonInfo | None = None
-):
+async def run_admin_job_request(job_request_id: int, callback=None):
     job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
         id=job_request_id
     )
     try:
         miner = job_request.miner
-        if miner_axon_info is None:
-            miner_axon_info = await get_miner_axon_info(miner.hotkey)
 
         # FIXME: The following code blocks the event loop.
         #        This function is run from either a management command (a new process),
@@ -601,9 +596,9 @@ async def run_admin_job_request(
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
             miner=miner,
-            miner_address=miner_axon_info.ip,
-            miner_address_ip_version=miner_axon_info.ip_type,
-            miner_port=miner_axon_info.port,
+            miner_address=miner.address,
+            miner_address_ip_version=miner.ip_version,
+            miner_port=miner.port,
             executor_class=job_request.executor_class,
             job_description="Validator Job from Admin Panel",
             block=current_block,
@@ -612,8 +607,8 @@ async def run_admin_job_request(
         my_keypair = get_keypair()
         miner_client = MinerClient(
             miner_hotkey=miner.hotkey,
-            miner_address=miner_axon_info.ip,
-            miner_port=miner_axon_info.port,
+            miner_address=miner.address,
+            miner_port=miner.port,
             job_uuid=str(job.job_uuid),
             my_keypair=my_keypair,
         )
@@ -1183,10 +1178,11 @@ def fetch_metagraph(block=None):
 
 
 def save_metagraph_snapshot(
-    metagraph: Metagraph, metagraph_type=MetagraphSnapshot.SnapshotType.LATEST
+    metagraph: Metagraph,
+    snapshot_type: MetagraphSnapshot.SnapshotType = MetagraphSnapshot.SnapshotType.LATEST,
 ) -> None:
     MetagraphSnapshot.objects.update_or_create(
-        id=metagraph_type,  # current metagraph snapshot
+        id=snapshot_type,  # current metagraph snapshot
         defaults={
             "block": metagraph.block.item(),
             "updated_at": now(),
@@ -1296,7 +1292,7 @@ def sync_metagraph() -> None:
     if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
         new_cycle_start_metagraph = fetch_metagraph(block=current_cycle.start)
         save_metagraph_snapshot(
-            new_cycle_start_metagraph, metagraph_type=MetagraphSnapshot.SnapshotType.CYCLE_START
+            new_cycle_start_metagraph, snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START
         )
 
 
