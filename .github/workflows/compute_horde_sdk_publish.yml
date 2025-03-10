@@ -25,8 +25,11 @@ jobs:
       is_latest_version: ${{ steps.highest-version.outputs.is_latest_version }}
     defaults:
       run:
-        working-directory: compute_horde_sdk
+        working-directory: ./compute_horde_sdk
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Get version from tag
         id: get-version
         run: |
@@ -39,10 +42,6 @@ jobs:
           fi
           export IS_PRERELEASE=$([[ ${{ github.ref }} =~ [^0-9]$ ]] && echo true || echo false)
           echo "prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
-
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Get the highest version in the repository
         id: highest-version
