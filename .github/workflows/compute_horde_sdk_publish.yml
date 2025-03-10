@@ -58,6 +58,9 @@ jobs:
   # Job for Python package publishing
   publish-python:
     needs: get-version
+    defaults:
+      run:
+        working-directory: ./compute_horde_sdk
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
