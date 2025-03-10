@@ -3,7 +3,6 @@ from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Literal, assert_never
 
-from compute_horde.em_protocol.executor_requests import JobErrorType
 from compute_horde.fv_protocol.facilitator_requests import JobRequest, V2JobRequest
 from compute_horde.miner_client.organic import (
     FailureReason,
@@ -11,7 +10,7 @@ from compute_horde.miner_client.organic import (
     OrganicJobError,
     run_organic_job,
 )
-from compute_horde.mv_protocol.miner_requests import (
+from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0JobFailedRequest,
@@ -120,7 +119,7 @@ async def execute_organic_job(
         save_event = partial(save_job_execution_event, data=data)
 
     async def notify_job_accepted(msg: V0AcceptJobRequest) -> None:
-        await notify_callback(JobStatusUpdate.from_job(job, "accepted", msg.message_type.value))
+        await notify_callback(JobStatusUpdate.from_job(job, "accepted", msg.message_type))
 
     miner_client.notify_job_accepted = notify_job_accepted  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
@@ -129,8 +128,7 @@ async def execute_organic_job(
     job_details = OrganicJobDetails(
         job_uuid=str(job.job_uuid),  # TODO: fix uuid field in AdminJobRequest
         executor_class=ExecutorClass(job_request.executor_class),
-        docker_image=job_request.docker_image or None,
-        raw_script=job_request.raw_script or None,
+        docker_image=job_request.docker_image,
         docker_run_options_preset="nvidia_all" if job_request.use_gpu else "none",
         docker_run_cmd=job_request.get_args(),
         total_job_timeout=total_job_timeout,
@@ -306,8 +304,12 @@ async def execute_organic_job(
                 job.error_type = exc.received.error_type
                 job.error_detail = exc.received.error_detail
                 match exc.received.error_type:
-                    case JobErrorType.HUGGINGFACE_DOWNLOAD:
+                    case None:
+                        pass
+                    case V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD:
                         subtype = SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_HUGGINGFACE
+                    case _:
+                        assert_never(exc.received.error_type)
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()

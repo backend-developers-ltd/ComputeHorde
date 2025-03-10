@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import httpx
 from compute_horde.certificate import generate_certificate_at
-from compute_horde.em_protocol.executor_requests import JobErrorType
+from compute_horde.protocol_messages import V0JobFailedRequest
 from compute_horde.transport import StubTransport
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
@@ -152,17 +152,30 @@ def test_main_loop_basic():
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "inline",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -178,7 +191,8 @@ def test_main_loop_basic():
     command.handle()
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -187,7 +201,7 @@ def test_main_loop_basic():
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -212,18 +226,33 @@ def test_main_loop_streaming_job():
             [
                 json.dumps(
                     {
-                        "message_type": "V1PrepareJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
                         "timeout_seconds": 10,
                         "job_uuid": job_uuid,
-                        "public_key": public_key,
-                        "executor_ip": "127.0.0.1",
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
+                        "streaming_details": {
+                            "public_key": public_key,
+                            "executor_ip": "127.0.0.1",
+                        },
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
                         "docker_run_cmd": ["python", "./mock_streaming_job.py", "autostart"],
                         "docker_run_options_preset": "none",
                         "job_uuid": job_uuid,
@@ -235,13 +264,16 @@ def test_main_loop_streaming_job():
     command.handle()
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
             "message_type": "V0StreamingJobReadyRequest",
             "job_uuid": job_uuid,
+            "executor_token": None,
             "public_key": mock.ANY,
+            "ip": None,
             "port": mock.ANY,
         },
         {
@@ -250,7 +282,7 @@ def test_main_loop_streaming_job():
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": mock.ANY,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -273,17 +305,30 @@ def test_huggingface_volume():
                 [
                     json.dumps(
                         {
-                            "message_type": "V0PrepareJobRequest",
-                            "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                            "timeout_seconds": None,
+                            "message_type": "V0InitialJobRequest",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "timeout_seconds": 10,
                             "volume_type": "huggingface_volume",
                             "job_uuid": job_uuid,
+                            "job_started_receipt_payload": {
+                                "job_uuid": job_uuid,
+                                "miner_hotkey": "miner_hotkey",
+                                "validator_hotkey": "validator_hotkey",
+                                "timestamp": "2025-01-01T00:00:00+00:00",
+                                "executor_class": "spin_up-4min.gpu-24gb",
+                                "max_timeout": 10,
+                                "is_organic": True,
+                                "ttl": 5,
+                            },
+                            "job_started_receipt_signature": "blah",
                         }
                     ),
                     json.dumps(
                         {
-                            "message_type": "V0RunJobRequest",
-                            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "message_type": "V0JobRequest",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                             "docker_run_cmd": [],
                             "docker_run_options_preset": "none",
                             "volume": {
@@ -304,7 +349,8 @@ def test_huggingface_volume():
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -313,7 +359,7 @@ def test_huggingface_volume():
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -336,17 +382,30 @@ def test_huggingface_volume_failure():
                 [
                     json.dumps(
                         {
-                            "message_type": "V0PrepareJobRequest",
-                            "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                            "timeout_seconds": None,
+                            "message_type": "V0InitialJobRequest",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "timeout_seconds": 10,
                             "volume_type": "huggingface_volume",
                             "job_uuid": job_uuid,
+                            "job_started_receipt_payload": {
+                                "job_uuid": job_uuid,
+                                "miner_hotkey": "miner_hotkey",
+                                "validator_hotkey": "validator_hotkey",
+                                "timestamp": "2025-01-01T00:00:00+00:00",
+                                "executor_class": "spin_up-4min.gpu-24gb",
+                                "max_timeout": 10,
+                                "is_organic": True,
+                                "ttl": 5,
+                            },
+                            "job_started_receipt_signature": "blah",
                         }
                     ),
                     json.dumps(
                         {
-                            "message_type": "V0RunJobRequest",
-                            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "message_type": "V0JobRequest",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                             "docker_run_cmd": [],
                             "docker_run_options_preset": "none",
                             "volume": {
@@ -367,15 +426,16 @@ def test_huggingface_volume_failure():
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FailedRequest",
+            "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
             "docker_process_stdout": "Failed to download model from Hugging Face: Download failed",
             "docker_process_stderr": "",
-            "error_type": JobErrorType.HUGGINGFACE_DOWNLOAD.value,
+            "error_type": V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD.value,
             "error_detail": "Download failed",
             "timeout": False,
             "job_uuid": job_uuid,
@@ -408,17 +468,30 @@ def test_huggingface_volume_dataset():
                 [
                     json.dumps(
                         {
-                            "message_type": "V0PrepareJobRequest",
-                            "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                            "timeout_seconds": None,
+                            "message_type": "V0InitialJobRequest",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "timeout_seconds": 10,
                             "volume_type": "huggingface_volume",
                             "job_uuid": job_uuid,
+                            "job_started_receipt_payload": {
+                                "job_uuid": job_uuid,
+                                "miner_hotkey": "miner_hotkey",
+                                "validator_hotkey": "validator_hotkey",
+                                "timestamp": "2025-01-01T00:00:00+00:00",
+                                "executor_class": "spin_up-4min.gpu-24gb",
+                                "max_timeout": 10,
+                                "is_organic": True,
+                                "ttl": 5,
+                            },
+                            "job_started_receipt_signature": "blah",
                         }
                     ),
                     json.dumps(
                         {
-                            "message_type": "V0RunJobRequest",
-                            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "message_type": "V0JobRequest",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                             "docker_run_cmd": [],
                             "docker_run_options_preset": "none",
                             "volume": {
@@ -441,7 +514,8 @@ def test_huggingface_volume_dataset():
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -450,7 +524,7 @@ def test_huggingface_volume_dataset():
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -474,17 +548,30 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "zip_url",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -500,7 +587,8 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
     command.handle()
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -509,7 +597,7 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -529,17 +617,30 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "zip_url",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -555,11 +656,12 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
     command.handle()
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FailedRequest",
+            "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
             "timeout": False,
             "docker_process_stdout": "Input volume too large",
@@ -590,17 +692,30 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "zip_url",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -616,7 +731,8 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
     command.handle()
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -625,7 +741,7 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -655,17 +771,30 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "zip_url",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -681,11 +810,12 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
     command.handle()
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FailedRequest",
+            "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
             "timeout": False,
             "docker_process_stdout": "Input volume too large",
@@ -708,17 +838,30 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "inline",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -743,7 +886,8 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -752,7 +896,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -776,17 +920,30 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "inline",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -810,7 +967,8 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -819,7 +977,7 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -841,17 +999,30 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "inline",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -876,11 +1047,12 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FailedRequest",
+            "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": mock.ANY,
             "timeout": mock.ANY,
             "docker_process_stdout": ContainsStr("Uploading output failed"),
@@ -902,17 +1074,30 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "inline",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -937,7 +1122,8 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -946,7 +1132,7 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -968,17 +1154,30 @@ def test_raw_script_job():
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": None,
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "python:3.11-slim",
+                        "timeout_seconds": 10,
                         "volume_type": "inline",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": None,
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "python:3.11-slim",
                         "raw_script": f"print('{payload}')",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
@@ -995,7 +1194,8 @@ def test_raw_script_job():
     command.handle()
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -1004,7 +1204,7 @@ def test_raw_script_job():
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": f"{payload}\n",
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -1031,17 +1231,30 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "inline",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "volume": {
@@ -1080,7 +1293,8 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -1089,7 +1303,7 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -1138,17 +1352,30 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "single_file",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "job_uuid": job_uuid,
@@ -1169,7 +1396,8 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -1178,7 +1406,7 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -1207,17 +1435,30 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
             [
                 json.dumps(
                     {
-                        "message_type": "V0PrepareJobRequest",
-                        "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                        "timeout_seconds": None,
+                        "message_type": "V0InitialJobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "timeout_seconds": 10,
                         "volume_type": "multi_volume",
                         "job_uuid": job_uuid,
+                        "job_started_receipt_payload": {
+                            "job_uuid": job_uuid,
+                            "miner_hotkey": "miner_hotkey",
+                            "validator_hotkey": "validator_hotkey",
+                            "timestamp": "2025-01-01T00:00:00+00:00",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "max_timeout": 10,
+                            "is_organic": True,
+                            "ttl": 5,
+                        },
+                        "job_started_receipt_signature": "blah",
                     }
                 ),
                 json.dumps(
                     {
-                        "message_type": "V0RunJobRequest",
-                        "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                        "message_type": "V0JobRequest",
+                        "executor_class": "spin_up-4min.gpu-24gb",
+                        "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                         "docker_run_cmd": [],
                         "docker_run_options_preset": "none",
                         "job_uuid": job_uuid,
@@ -1253,7 +1494,8 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -1262,7 +1504,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
@@ -1320,17 +1562,30 @@ def test_artifacts():
                 [
                     json.dumps(
                         {
-                            "message_type": "V0PrepareJobRequest",
-                            "base_docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                            "timeout_seconds": None,
+                            "message_type": "V0InitialJobRequest",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "timeout_seconds": 10,
                             "volume_type": "inline",
                             "job_uuid": job_uuid,
+                            "job_started_receipt_payload": {
+                                "job_uuid": job_uuid,
+                                "miner_hotkey": "miner_hotkey",
+                                "validator_hotkey": "validator_hotkey",
+                                "timestamp": "2025-01-01T00:00:00+00:00",
+                                "executor_class": "spin_up-4min.gpu-24gb",
+                                "max_timeout": 10,
+                                "is_organic": True,
+                                "ttl": 5,
+                            },
+                            "job_started_receipt_signature": "blah",
                         }
                     ),
                     json.dumps(
                         {
-                            "message_type": "V0RunJobRequest",
-                            "docker_image_name": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "message_type": "V0JobRequest",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
                             "docker_run_cmd": [],
                             "docker_run_options_preset": "none",
                             "job_uuid": job_uuid,
@@ -1353,7 +1608,8 @@ def test_artifacts():
     # Assert
     assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
         {
-            "message_type": "V0ReadyRequest",
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
@@ -1362,7 +1618,7 @@ def test_artifacts():
             "job_uuid": job_uuid,
         },
         {
-            "message_type": "V0FinishedRequest",
+            "message_type": "V0JobFinishedRequest",
             "docker_process_stdout": payload,
             "docker_process_stderr": "",
             "artifacts": {

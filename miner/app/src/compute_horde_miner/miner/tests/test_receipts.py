@@ -4,20 +4,18 @@ from uuid import uuid4
 
 import bittensor
 import pytest
-from compute_horde.mv_protocol.validator_requests import (
-    AuthenticationPayload,
+from compute_horde.protocol_messages import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
-    V0AuthenticateRequest,
     V0InitialJobRequest,
     V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
+    ValidatorAuthForMiner,
 )
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobAcceptedReceiptPayload
 from compute_horde.utils import sign_blob
 from compute_horde_core.executor_class import ExecutorClass
-from compute_horde_core.volume import VolumeType
 from django.utils import timezone
 from pytest_mock import MockerFixture
 
@@ -72,21 +70,18 @@ async def test_receipt_is_saved(
     # 2. Send JobStarted and JobFinished receipts
     async with fake_validator(validator_wallet) as fake_validator_channel:
         # Authenticate, otherwise the consumer will refuse to talk to us
-        auth_payload = AuthenticationPayload(
+        auth_payload = ValidatorAuthForMiner(
             validator_hotkey=validator_wallet.hotkey.ss58_address,
             miner_hotkey=miner_wallet.hotkey.ss58_address,
             timestamp=int(datetime.now().timestamp()),
+            signature="",
         )
-        await fake_validator_channel.send_to(
-            V0AuthenticateRequest(
-                payload=auth_payload,
-                signature=sign_blob(validator_wallet.hotkey, auth_payload.blob_for_signing()),
-            ).model_dump_json()
-        )
+        auth_payload.signature = sign_blob(validator_wallet.hotkey, auth_payload.blob_for_signing())
+        await fake_validator_channel.send_to(auth_payload.model_dump_json())
         response = await fake_validator_channel.receive_json_from()
         assert response == {
             "message_type": "V0ExecutorManifestRequest",
-            "manifest": {"executor_classes": []},
+            "manifest": {},
         }
 
         # Send the receipts
@@ -107,9 +102,8 @@ async def test_receipt_is_saved(
             V0InitialJobRequest(
                 job_uuid=job_uuid,
                 executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-                base_docker_image_name="it's teeeeests",
+                docker_image="it's teeeeests",
                 timeout_seconds=60,
-                volume_type=VolumeType.inline,
                 job_started_receipt_payload=job_started_receipt_payload,
                 job_started_receipt_signature=job_started_receipt_signature,
             ).model_dump_json()
