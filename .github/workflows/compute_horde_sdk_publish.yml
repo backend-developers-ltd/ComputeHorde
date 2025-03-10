@@ -83,7 +83,7 @@ jobs:
       - name: Build
         env:
           VERSION: ${{ steps.get-version.outputs.version }}
-        run: uv build --ignore uv.lock
+        run: uv build
 
 #      - name: Read the Changelog
 #        id: read-changelog
