@@ -30,9 +30,9 @@ from compute_horde.subtensor import (
     ],
 )
 def test__get_epoch_containing_block(netuid, block, expected_epoch):
-    assert (
-        get_epoch_containing_block(block=block, netuid=netuid) == expected_epoch
-    ), f"block: {block}, netuid: {netuid}, expected: {expected_epoch}"
+    assert get_epoch_containing_block(block=block, netuid=netuid) == expected_epoch, (
+        f"block: {block}, netuid: {netuid}, expected: {expected_epoch}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -56,9 +56,9 @@ def test__get_epoch_containing_block(netuid, block, expected_epoch):
     ],
 )
 def test__get_cycle_containing_block(netuid, block, expected_cycle):
-    assert (
-        get_cycle_containing_block(block=block, netuid=netuid) == expected_cycle
-    ), f"block: {block}, netuid: {netuid}, expected: {expected_cycle}"
+    assert get_cycle_containing_block(block=block, netuid=netuid) == expected_cycle, (
+        f"block: {block}, netuid: {netuid}, expected: {expected_cycle}"
+    )
 
 
 @pytest.mark.parametrize(
