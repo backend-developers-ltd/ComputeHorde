@@ -25,7 +25,7 @@ jobs:
       is_latest_version: ${{ steps.highest-version.outputs.is_latest_version }}
     defaults:
       run:
-        working-directory: ./compute_horde_sdk
+        working-directory: compute_horde_sdk
     steps:
       - name: Get version from tag
         id: get-version
