@@ -2,7 +2,7 @@ import abc
 import functools
 import logging
 from collections.abc import Awaitable, Callable
-from typing import ParamSpec, TypeAlias, TypeVar
+from typing import Generic, ParamSpec, TypeAlias, TypeVar
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.protocol_messages import GenericError
@@ -27,19 +27,22 @@ def log_errors_explicitly(f: AsyncCallable[Params, TResult]) -> AsyncCallable[Pa
     return wrapper
 
 
-class BaseConsumer(AsyncWebsocketConsumer, abc.ABC):
+TReceived = TypeVar("TReceived", bound=BaseModel)
+
+
+class BaseConsumer(AsyncWebsocketConsumer, Generic[TReceived], metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def parse_message(self, raw_msg: str | bytes) -> BaseModel:
+    def parse_message(self, raw_msg: str | bytes) -> TReceived:
         """Parse raw message into a pydantic model"""
 
     @abc.abstractmethod
-    async def handle(self, msg): ...
+    async def handle(self, msg: TReceived) -> None: ...
 
     async def connect(self):
         await self.accept()
 
     @log_errors_explicitly
-    async def receive(self, text_data=None, bytes_data=None):
+    async def receive(self, text_data=None, bytes_data=None) -> None:
         try:
             msg = self.parse_message(text_data)
         except ValidationError as ex:

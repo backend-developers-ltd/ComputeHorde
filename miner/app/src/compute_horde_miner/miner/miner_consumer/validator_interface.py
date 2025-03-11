@@ -32,7 +32,7 @@ from compute_horde.receipts.schemas import JobStartedReceiptPayload, ReceiptPayl
 from django.conf import settings
 from django.db.models import DateTimeField, ExpressionWrapper, F
 from django.utils import timezone
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 
 from compute_horde_miner.miner.dynamic_config import aget_config
 from compute_horde_miner.miner.executor_manager import current
@@ -69,7 +69,7 @@ def get_miner_signature(msg: _RequestWithBlobForSigning) -> str:
     return f"0x{keypair.sign(msg.blob_for_signing()).hex()}"
 
 
-class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
+class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInterfaceMixin):
     class NotInitialized(Exception):
         pass
 
@@ -256,10 +256,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
             job = self.defer_saving_jobs.pop()
             await job.asave()
 
-    def parse_message(self, raw_msg: str | bytes) -> BaseModel:
+    def parse_message(self, raw_msg: str | bytes) -> ValidatorToMinerMessage:
         return TypeAdapter(ValidatorToMinerMessage).validate_json(raw_msg)
 
-    async def handle(self, msg: ValidatorToMinerMessage):
+    async def handle(self, msg: ValidatorToMinerMessage) -> None:
         if self._maybe_validator is None:
             # An unknown validator should have received an error response from connect() by now.
             # All further incoming messages can be ignored.

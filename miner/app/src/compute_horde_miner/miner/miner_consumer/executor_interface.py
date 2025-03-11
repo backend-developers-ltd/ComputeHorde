@@ -14,7 +14,7 @@ from compute_horde.protocol_messages import (
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
 )
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
     BaseConsumer,
@@ -26,7 +26,7 @@ from compute_horde_miner.miner.models import AcceptedJob
 logger = logging.getLogger(__name__)
 
 
-class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
+class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterfaceMixin):
     # Job is populated only after the connection initialization succeeds
     _maybe_job: AcceptedJob | None = None
 
@@ -85,7 +85,7 @@ class MinerExecutorConsumer(BaseConsumer, ExecutorInterfaceMixin):
         # Fallback to client's IP if header is not present
         return str(self.scope["client"][0])
 
-    def parse_message(self, raw_msg: str | bytes) -> BaseModel:
+    def parse_message(self, raw_msg: str | bytes) -> ExecutorToMinerMessage:
         return TypeAdapter(ExecutorToMinerMessage).validate_json(raw_msg)
 
     async def handle(self, msg: ExecutorToMinerMessage) -> None:
