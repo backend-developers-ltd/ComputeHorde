@@ -2361,7 +2361,6 @@ name = "validator"
 version = "0"
 source = { editable = "." }
 dependencies = [
-    { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "boto3", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "celery", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "channels", extra = ["daphne"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2428,7 +2427,6 @@ type-check = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bittensor", specifier = ">=9.0.4" },
     { name = "boto3", specifier = ">=1.35.11" },
     { name = "celery", specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
