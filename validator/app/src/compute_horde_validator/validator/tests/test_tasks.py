@@ -49,7 +49,6 @@ def test_trigger_run_admin_job__should_trigger_job():
         timeout=0,  # should timeout
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="python:3.11-slim",
-        raw_script="print('hello world')",
         args="",
     )
 
@@ -75,7 +74,6 @@ def test_trigger_run_admin_job__should_not_trigger_job():
         timeout=0,  # should timeout
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="python:3.11-slim",
-        raw_script="print('hello world')",
         args="",
     )
 

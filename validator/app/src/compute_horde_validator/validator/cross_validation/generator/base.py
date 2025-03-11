@@ -40,9 +40,6 @@ class BasePromptJobGenerator(abc.ABC):
     def docker_run_cmd(self) -> list[str]:
         return []
 
-    def raw_script(self) -> str | None:
-        return None
-
     def volume(self) -> Volume | None:
         return None
 
@@ -54,7 +51,6 @@ class BasePromptJobGenerator(abc.ABC):
             job_uuid=str(self._uuid),
             executor_class=self.executor_class(),
             docker_image=self.docker_image_name(),
-            raw_script=self.raw_script(),
             docker_run_options_preset=self.docker_run_options_preset(),
             docker_run_cmd=self.docker_run_cmd(),
             total_job_timeout=self.timeout_seconds(),

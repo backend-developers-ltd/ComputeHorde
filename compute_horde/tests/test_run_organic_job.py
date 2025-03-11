@@ -1,22 +1,22 @@
 import pytest
+from compute_horde_core.executor_class import ExecutorClass
+from pydantic import TypeAdapter
 
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
     OrganicMinerClient,
     run_organic_job,
 )
-from compute_horde.mv_protocol.miner_requests import (
+from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0ExecutorReadyRequest,
-    V0JobFinishedRequest,
-)
-from compute_horde.mv_protocol.validator_requests import (
-    BaseValidatorRequest,
-    V0AuthenticateRequest,
     V0InitialJobRequest,
     V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
+    V0JobFinishedRequest,
     V0JobRequest,
+    ValidatorAuthForMiner,
+    ValidatorToMinerMessage,
 )
 from compute_horde.transport import StubTransport
 
@@ -30,7 +30,7 @@ class MinerStubTransport(StubTransport):
 
     async def send(self, message):
         await super().send(message)
-        self.sent_models.append(BaseValidatorRequest.parse(message))
+        self.sent_models.append(TypeAdapter(ValidatorToMinerMessage).validate_json(message))
 
 
 @pytest.mark.asyncio
@@ -57,7 +57,11 @@ async def test_run_organic_job__success(keypair):
         my_keypair=keypair,
         transport=mock_transport,
     )
-    job_details = OrganicJobDetails(job_uuid=JOB_UUID, docker_image="mock")
+    job_details = OrganicJobDetails(
+        job_uuid=JOB_UUID,
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        docker_image="mock",
+    )
     stdout, stderr, artifacts = await run_organic_job(
         client, job_details, executor_ready_timeout=2, initial_response_timeout=2
     )
@@ -67,7 +71,7 @@ async def test_run_organic_job__success(keypair):
 
     sent_models_types = [type(model) for model in mock_transport.sent_models]
     assert sent_models_types == [
-        V0AuthenticateRequest,
+        ValidatorAuthForMiner,
         V0InitialJobRequest,
         V0JobAcceptedReceiptRequest,
         V0JobRequest,

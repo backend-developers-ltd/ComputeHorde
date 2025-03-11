@@ -146,7 +146,6 @@ def job_request():
         uuid=str(uuid.uuid4()),
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="doesntmatter",
-        raw_script="doesntmatter",
         args=[],
         env={},
         use_gpu=False,

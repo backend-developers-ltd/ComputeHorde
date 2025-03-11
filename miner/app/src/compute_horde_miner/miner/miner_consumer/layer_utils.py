@@ -1,81 +1,25 @@
 import abc
 import logging
-from typing import Any, Self, TypeVar
+from typing import Any, TypeVar
 
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
-from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.em_protocol.executor_requests import JobErrorType
-from compute_horde.mv_protocol import validator_requests
-from compute_horde.utils import MachineSpecs
-from compute_horde_core.output_upload import OutputUpload
-from compute_horde_core.volume import Volume
-from pydantic import model_validator
+from compute_horde.protocol_messages import (
+    V0ExecutorFailedRequest,
+    V0ExecutorReadyRequest,
+    V0JobFailedRequest,
+    V0JobFinishedRequest,
+    V0JobRequest,
+    V0MachineSpecsRequest,
+    V0StreamingJobNotReadyRequest,
+    V0StreamingJobReadyRequest,
+)
 
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
     log_errors_explicitly,
 )
 
 logger = logging.getLogger(__name__)
-
-
-class ExecutorReady(pydantic.BaseModel):
-    executor_token: str
-
-
-class ExecutorFailedToPrepare(pydantic.BaseModel):
-    executor_token: str
-
-
-class StreamingJobReady(pydantic.BaseModel):
-    executor_token: str
-    public_key: str
-    ip: str
-    port: int
-
-
-class StreamingJobFailedToPrepare(pydantic.BaseModel):
-    executor_token: str
-
-
-class JobRequest(pydantic.BaseModel):
-    job_uuid: str
-    docker_image_name: str | None = None
-    raw_script: str | None = None
-    docker_run_options_preset: DockerRunOptionsPreset
-    docker_run_cmd: list[str]
-    volume: Volume | None = None
-    output_upload: OutputUpload | None = None
-    artifacts_dir: str | None = None
-
-    @model_validator(mode="after")
-    def validate_at_least_docker_image_or_raw_script(self) -> Self:
-        if not (bool(self.docker_image_name) or bool(self.raw_script)):
-            raise ValueError("Expected at least one of `docker_image_name` or `raw_script`")
-        return self
-
-
-class ExecutorSpecs(pydantic.BaseModel):
-    job_uuid: str
-    specs: MachineSpecs
-
-
-class ExecutorFinished(pydantic.BaseModel):
-    job_uuid: str
-    docker_process_stdout: str
-    docker_process_stderr: str
-    artifacts: dict[str, str] | None
-
-
-class ExecutorFailed(pydantic.BaseModel):
-    job_uuid: str
-    docker_process_exit_status: int | None = None
-    docker_process_stdout: str
-    docker_process_stderr: str
-    error_type: JobErrorType | None = None
-    error_detail: str | None = None
-
-
 TModel = TypeVar("TModel", bound=pydantic.BaseModel)
 
 
@@ -109,85 +53,73 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
 
     @log_errors_explicitly
     async def executor_ready(self, event: dict[str, Any]):
-        payload = self.validate_event("executor_ready", ExecutorReady, event)
+        payload = self.validate_event("executor_ready", V0ExecutorReadyRequest, event)
         if payload:
             await self._executor_ready(payload)
 
     @abc.abstractmethod
-    async def _executor_ready(self, msg: ExecutorReady): ...
+    async def _executor_ready(self, msg: V0ExecutorReadyRequest): ...
 
     @log_errors_explicitly
     async def executor_failed_to_prepare(self, event: dict[str, Any]):
-        payload = self.validate_event("executor_failed_to_prepare", ExecutorFailedToPrepare, event)
+        payload = self.validate_event("executor_failed_to_prepare", V0ExecutorFailedRequest, event)
         if payload:
             await self._executor_failed_to_prepare(payload)
 
     @abc.abstractmethod
-    async def _executor_failed_to_prepare(self, msg: ExecutorFailedToPrepare): ...
+    async def _executor_failed_to_prepare(self, msg: V0ExecutorFailedRequest): ...
 
     @log_errors_explicitly
     async def streaming_job_ready(self, event: dict[str, Any]):
-        payload = self.validate_event("streaming_job_ready", StreamingJobReady, event)
+        payload = self.validate_event("streaming_job_ready", V0StreamingJobReadyRequest, event)
         if payload:
             await self._streaming_job_ready(payload)
 
     @abc.abstractmethod
-    async def _streaming_job_ready(self, msg: StreamingJobReady): ...
+    async def _streaming_job_ready(self, msg: V0StreamingJobReadyRequest): ...
 
     @log_errors_explicitly
     async def streaming_job_failed_to_prepare(self, event: dict[str, Any]):
         payload = self.validate_event(
-            "streaming_job_failed_to_prepare", StreamingJobFailedToPrepare, event
+            "streaming_job_failed_to_prepare", V0StreamingJobNotReadyRequest, event
         )
         if payload:
             await self._streaming_job_failed_to_prepare(payload)
 
     @abc.abstractmethod
-    async def _streaming_job_failed_to_prepare(self, msg: StreamingJobFailedToPrepare): ...
+    async def _streaming_job_failed_to_prepare(self, msg: V0StreamingJobNotReadyRequest): ...
 
     @log_errors_explicitly
     async def executor_finished(self, event: dict[str, Any]):
-        payload = self.validate_event("executor_finished", ExecutorFinished, event)
+        payload = self.validate_event("executor_finished", V0JobFinishedRequest, event)
         if payload:
             await self._executor_finished(payload)
 
     @abc.abstractmethod
-    async def _executor_specs(self, event: ExecutorSpecs): ...
+    async def _executor_specs(self, event: V0MachineSpecsRequest): ...
 
     @log_errors_explicitly
     async def executor_specs(self, event: dict[str, Any]):
-        payload = self.validate_event("executor_specs", ExecutorSpecs, event)
+        payload = self.validate_event("executor_specs", V0MachineSpecsRequest, event)
         if payload:
             await self._executor_specs(payload)
 
     @abc.abstractmethod
-    async def _executor_finished(self, msg: ExecutorFinished): ...
+    async def _executor_finished(self, msg: V0JobFinishedRequest): ...
 
     @log_errors_explicitly
     async def executor_failed(self, event: dict[str, Any]):
-        payload = self.validate_event("executor_failed", ExecutorFailed, event)
+        payload = self.validate_event("executor_failed", V0JobFailedRequest, event)
         if payload:
             await self._executor_failed(payload)
 
     @abc.abstractmethod
-    async def _executor_failed(self, msg: ExecutorFailed): ...
+    async def _executor_failed(self, msg: V0JobFailedRequest): ...
 
-    async def send_job_request(self, executor_token, job_request: validator_requests.V0JobRequest):
+    async def send_job_request(self, executor_token, job_request: V0JobRequest):
         await self.channel_layer.group_send(
             ExecutorInterfaceMixin.group_name(executor_token),
-            {
-                "type": "miner.job_request",
-                **JobRequest(
-                    job_uuid=job_request.job_uuid,
-                    docker_image_name=job_request.docker_image_name,
-                    raw_script=job_request.raw_script,
-                    docker_run_options_preset=job_request.docker_run_options_preset,
-                    docker_run_cmd=job_request.docker_run_cmd,
-                    volume=job_request.volume,
-                    output_upload=job_request.output_upload,
-                    artifacts_dir=job_request.artifacts_dir,
-                ).model_dump(),
-            },
+            {"type": "miner.job_request", **job_request.model_dump()},
         )
 
 
@@ -196,120 +128,67 @@ class ExecutorInterfaceMixin(BaseMixin):
     def group_name(cls, executor_token: str):
         return f"executor_interface_{executor_token}"
 
-    async def send_executor_ready(self, executor_token: str):
+    async def send_executor_ready(self, executor_token: str, msg: V0ExecutorReadyRequest):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        msg.executor_token = executor_token
         await self.channel_layer.group_send(
             group_name,
-            {
-                "type": "executor.ready",
-                **ExecutorReady(executor_token=executor_token).model_dump(),
-            },
+            {"type": "executor.ready", **msg.model_dump()},
         )
 
-    async def send_executor_failed_to_prepare(self, executor_token: str):
-        group_name = ValidatorInterfaceMixin.group_name(executor_token)
-        await self.channel_layer.group_send(
-            group_name,
-            {
-                "type": "executor.failed_to_prepare",
-                **ExecutorFailedToPrepare(executor_token=executor_token).model_dump(),
-            },
-        )
-
-    async def send_streaming_job_ready(
-        self,
-        executor_token: str,
-        public_key: str,
-        ip: str,
-        port: int,
+    async def send_executor_failed_to_prepare(
+        self, executor_token: str, msg: V0ExecutorFailedRequest
     ):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        msg.executor_token = executor_token
         await self.channel_layer.group_send(
             group_name,
-            {
-                "type": "streaming_job.ready",
-                **StreamingJobReady(
-                    executor_token=executor_token, public_key=public_key, ip=ip, port=port
-                ).model_dump(),
-            },
+            {"type": "executor.failed_to_prepare", **msg.model_dump()},
         )
 
-    async def send_streaming_job_failed_to_prepare(self, executor_token: str):
+    async def send_streaming_job_ready(self, executor_token: str, msg: V0StreamingJobReadyRequest):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
         await self.channel_layer.group_send(
             group_name,
-            {
-                "type": "streaming_job.failed_to_prepare",
-                **StreamingJobFailedToPrepare(executor_token=executor_token).model_dump(),
-            },
+            {"type": "streaming_job.ready", **msg.model_dump()},
         )
 
-    async def send_executor_specs(self, job_uuid: str, executor_token: str, specs: MachineSpecs):
-        group_name = ValidatorInterfaceMixin.group_name(executor_token)
-        await self.channel_layer.group_send(
-            group_name,
-            {
-                "type": "executor.specs",
-                **ExecutorSpecs(
-                    job_uuid=job_uuid,
-                    specs=specs,
-                ).model_dump(),
-            },
-        )
-
-    async def send_executor_finished(
-        self,
-        job_uuid: str,
-        executor_token: str,
-        stdout: str,
-        stderr: str,
-        artifacts: dict[str, str] | None,
+    async def send_streaming_job_failed_to_prepare(
+        self, executor_token: str, msg: V0StreamingJobNotReadyRequest
     ):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        msg.executor_token = executor_token
         await self.channel_layer.group_send(
             group_name,
-            {
-                "type": "executor.finished",
-                **ExecutorFinished(
-                    job_uuid=job_uuid,
-                    docker_process_stdout=stdout,
-                    docker_process_stderr=stderr,
-                    artifacts=artifacts,
-                ).model_dump(),
-            },
+            {"type": "streaming_job.failed_to_prepare", **msg.model_dump()},
         )
 
-    async def send_executor_failed(
-        self,
-        job_uuid: str,
-        executor_token: str,
-        stdout: str,
-        stderr: str,
-        exit_status: int | None,
-        error_type: JobErrorType | None = None,
-        error_detail: str | None = None,
-    ):
+    async def send_executor_specs(self, executor_token: str, msg: V0MachineSpecsRequest):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
         await self.channel_layer.group_send(
             group_name,
-            {
-                "type": "executor.failed",
-                **ExecutorFailed(
-                    job_uuid=job_uuid,
-                    docker_process_stdout=stdout,
-                    docker_process_stderr=stderr,
-                    docker_process_exit_status=exit_status,
-                    error_type=error_type,
-                    error_detail=error_detail,
-                ).model_dump(),
-            },
+            {"type": "executor.specs", **msg.model_dump()},
+        )
+
+    async def send_executor_finished(self, executor_token: str, msg: V0JobFinishedRequest):
+        group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        await self.channel_layer.group_send(
+            group_name,
+            {"type": "executor.finished", **msg.model_dump()},
+        )
+
+    async def send_executor_failed(self, executor_token: str, msg: V0JobFailedRequest):
+        group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        await self.channel_layer.group_send(
+            group_name,
+            {"type": "executor.failed", **msg.model_dump()},
         )
 
     @abc.abstractmethod
-    async def _miner_job_request(self, msg: JobRequest): ...
+    async def _miner_job_request(self, msg: V0JobRequest): ...
 
     @log_errors_explicitly
     async def miner_job_request(self, event: dict[str, Any]):
-        payload = self.validate_event("miner_job_request", JobRequest, event)
+        payload = self.validate_event("miner_job_request", V0JobRequest, event)
         if payload:
             await self._miner_job_request(payload)
