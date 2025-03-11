@@ -35,7 +35,6 @@ from compute_horde_validator.celery import app
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
-from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
@@ -584,8 +583,6 @@ async def run_admin_job_request(
     )
     try:
         miner = job_request.miner
-        if miner_axon_info is None:
-            miner_axon_info = await get_miner_axon_info(miner.hotkey)
 
         # FIXME: The following code blocks the event loop.
         #        This function is run from either a management command (a new process),
@@ -598,12 +595,17 @@ async def run_admin_job_request(
         except Exception:
             raise
 
+        # Explicit miner axon info overrides miner address
+        miner_ip = miner_axon_info.ip if miner_axon_info else miner.address
+        miner_ip_type = miner_axon_info.ip_type if miner_axon_info else miner.ip_version
+        miner_port = miner_axon_info.port if miner_axon_info else miner.port
+
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
             miner=miner,
-            miner_address=miner_axon_info.ip,
-            miner_address_ip_version=miner_axon_info.ip_type,
-            miner_port=miner_axon_info.port,
+            miner_address=miner_ip,
+            miner_address_ip_version=miner_ip_type,
+            miner_port=miner_port,
             executor_class=job_request.executor_class,
             job_description="Validator Job from Admin Panel",
             block=current_block,
@@ -612,8 +614,8 @@ async def run_admin_job_request(
         my_keypair = get_keypair()
         miner_client = MinerClient(
             miner_hotkey=miner.hotkey,
-            miner_address=miner_axon_info.ip,
-            miner_port=miner_axon_info.port,
+            miner_address=miner_ip,
+            miner_port=miner_port,
             job_uuid=str(job.job_uuid),
             my_keypair=my_keypair,
         )
@@ -1151,12 +1153,11 @@ def send_events_to_facilitator():
             logger.error(f"Failed to send system events to facilitator: {response}")
 
 
-def fetch_metagraph(block=None):
+def fetch_metagraph(subtensor: bittensor.subtensor, block=None):
     try:
         start_ts = time.time()
-        metagraph = bittensor.metagraph(
+        metagraph = subtensor.metagraph(
             netuid=settings.BITTENSOR_NETUID,
-            network=settings.BITTENSOR_NETWORK,
             block=block,
             lite=True,
         )
@@ -1204,7 +1205,8 @@ def save_metagraph_snapshot(
 
 @app.task
 def sync_metagraph() -> None:
-    metagraph = fetch_metagraph()
+    subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+    metagraph = fetch_metagraph(subtensor)
     if metagraph is None:
         return
 
@@ -1294,7 +1296,7 @@ def sync_metagraph() -> None:
     except Exception as e:
         logger.warning(f"Failed to fetch cycle start metagraph snapshot: {e}")
     if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
-        new_cycle_start_metagraph = fetch_metagraph(block=current_cycle.start)
+        new_cycle_start_metagraph = fetch_metagraph(subtensor, block=current_cycle.start)
         save_metagraph_snapshot(
             new_cycle_start_metagraph, metagraph_type=MetagraphSnapshot.SnapshotType.CYCLE_START
         )

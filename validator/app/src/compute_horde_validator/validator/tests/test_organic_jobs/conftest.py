@@ -1,8 +1,7 @@
 import asyncio
 import uuid
-from collections import namedtuple
 from collections.abc import Callable
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -132,17 +131,7 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
 
     with (
         patch.object(FacilitatorClient, "heartbeat", AsyncMock()),
-        patch.object(FacilitatorClient, "create_metagraph_refresh_task", Mock()),
         patch.object(FacilitatorClient, "get_current_block", AsyncMock(return_value=1)),
-        patch.object(
-            FacilitatorClient,
-            "get_miner_axon_info",
-            AsyncMock(
-                return_value=namedtuple("MockAxonInfo", "ip,port,ip_type")(
-                    ip="500.500.500.500", port=1, ip_type=4
-                )
-            ),
-        ),
         patch(
             "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_job_request",
             AsyncMock(),
