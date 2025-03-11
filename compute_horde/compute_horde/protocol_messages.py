@@ -19,8 +19,6 @@ from compute_horde.utils import MachineSpecs
 # miner.ec = Miner's executor consumer
 # miner.vc = Miner's validator consumer
 
-# TODO: remove `Request` suffix from all the models.
-
 
 # executor <-> miner.ec <-> miner.vc <-> validator
 class GenericError(BaseModel):
@@ -66,18 +64,18 @@ class V0ExecutorManifestRequest(BaseModel):
 class V0InitialJobRequest(BaseModel):
     class StreamingDetails(BaseModel):
         public_key: str
-        executor_ip: str | None = None  # ONLY on miner.ec -> executor
+        executor_ip: str | None = None  # set by miner before sending to executor
 
     message_type: Literal["V0InitialJobRequest"] = "V0InitialJobRequest"
     job_uuid: str
-    executor_class: ExecutorClass  # NOT on miner.ec -> executor
+    executor_class: ExecutorClass
     docker_image: str | None = None
     timeout_seconds: int
     volume: Volume | None = None
-    job_started_receipt_payload: JobStartedReceiptPayload  # NOT on miner.ec -> executor
-    job_started_receipt_signature: str  # NOT on miner.ec -> executor
+    job_started_receipt_payload: JobStartedReceiptPayload
+    job_started_receipt_signature: str
 
-    # this field should be non-None if the job is a streaming job
+    # this field should be set if the job is a streaming job
     streaming_details: StreamingDetails | None = None
 
 
@@ -105,7 +103,7 @@ class V0AcceptJobRequest(BaseModel):
 # executor -> miner.ec -> miner.vc -> validator
 class V0ExecutorFailedRequest(BaseModel):
     message_type: Literal["V0ExecutorFailedRequest"] = "V0ExecutorFailedRequest"
-    job_uuid: str  # NOT on miner.ec -> miner.vc
+    job_uuid: str
     executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
 
 
@@ -113,14 +111,14 @@ class V0ExecutorFailedRequest(BaseModel):
 # executor -> miner.ec -> miner.vc -> validator
 class V0StreamingJobNotReadyRequest(BaseModel):
     message_type: Literal["V0StreamingJobNotReadyRequest"] = "V0StreamingJobNotReadyRequest"
-    job_uuid: str  # NOT on miner.ec -> miner.vc
+    job_uuid: str
     executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
 
 
 # executor -> miner.ec -> miner.vc -> validator
 class V0ExecutorReadyRequest(BaseModel):
     message_type: Literal["V0ExecutorReadyRequest"] = "V0ExecutorReadyRequest"
-    job_uuid: str  # NOT on miner.ec -> miner.vc
+    job_uuid: str
     executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
 
 
@@ -129,10 +127,10 @@ class V0ExecutorReadyRequest(BaseModel):
 # executor -> miner.ec -> miner.vc -> validator
 class V0StreamingJobReadyRequest(BaseModel):
     message_type: Literal["V0StreamingJobReadyRequest"] = "V0StreamingJobReadyRequest"
-    job_uuid: str  # NOT on miner.ec -> miner.vc
+    job_uuid: str
     executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
     public_key: str
-    ip: str | None = None  # NOT on executor -> miner.ec
+    ip: str | None = None  # set by miner after it receives the message from executor
     port: int
 
 
@@ -140,7 +138,7 @@ class V0StreamingJobReadyRequest(BaseModel):
 class V0JobRequest(BaseModel):
     message_type: Literal["V0JobRequest"] = "V0JobRequest"
     job_uuid: str
-    executor_class: ExecutorClass  # ONLY on validator -> miner.vc
+    executor_class: ExecutorClass
     docker_image: str
     raw_script: str | None = None
     docker_run_options_preset: DockerRunOptionsPreset
@@ -163,7 +161,7 @@ class V0JobFailedRequest(BaseModel):
     docker_process_stderr: str
     error_type: ErrorType | None = None
     error_detail: str | None = None
-    timeout: bool = False  # ONLY on executor -> miner.ec
+    timeout: bool = False
 
 
 # executor -> miner.ec -> miner.vc -> validator
