@@ -11,7 +11,6 @@ env:
 
 jobs:
   linter:
-    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -35,7 +34,6 @@ jobs:
       - name: Run linters
         run: nox -vs lint
   test:
-    if: github.event.pull_request.draft == false
     timeout-minutes: 10
     runs-on: ubuntu-latest
     defaults:

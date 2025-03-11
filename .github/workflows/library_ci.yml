@@ -11,7 +11,6 @@ env:
 
 jobs:
   linter:
-    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -37,7 +36,6 @@ jobs:
       - name: Check for missing migrations
         run: nox -vs check_missing_migrations
   type_check:
-    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,7 +59,6 @@ jobs:
       - name: Run mypy
         run: nox -vs type_check
   test:
-    if: github.event.pull_request.draft == false
     timeout-minutes: 10
     runs-on: ubuntu-latest
     defaults:
