@@ -11,7 +11,7 @@ import bittensor
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.volume import Volume
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.executor_class import EXECUTOR_CLASS
@@ -39,6 +39,7 @@ from compute_horde.protocol_messages import (
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
     ValidatorAuthForMiner,
+    ValidatorToMinerMessage,
 )
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import (
@@ -54,7 +55,7 @@ logger = logging.getLogger(__name__)
 JOB_STARTED_RECEIPT_MIN_TTL = 30
 
 
-class OrganicMinerClient(AbstractMinerClient):
+class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorToMinerMessage]):
     """
     Miner client to run organic job on a miner.
     This client is used by validators to connect to prod miners.
@@ -132,7 +133,7 @@ class OrganicMinerClient(AbstractMinerClient):
             f"ws://{self.miner_address}:{self.miner_port}/v0.1/validator_interface/{self.my_hotkey}"
         )
 
-    def parse_message(self, raw_msg: str | bytes) -> BaseModel:
+    def parse_message(self, raw_msg: str | bytes) -> MinerToValidatorMessage:
         return TypeAdapter(MinerToValidatorMessage).validate_json(raw_msg)
 
     async def notify_generic_error(self, msg: GenericError) -> None:
@@ -162,7 +163,7 @@ class OrganicMinerClient(AbstractMinerClient):
     async def handle_machine_specs_request(self, msg: V0MachineSpecsRequest) -> None:
         self.miner_machine_specs = msg.specs
 
-    async def handle_message(self, msg: BaseModel) -> None:
+    async def handle_message(self, msg: MinerToValidatorMessage) -> None:
         if isinstance(msg, GenericError):
             logger.warning(
                 f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
@@ -324,7 +325,7 @@ class OrganicMinerClient(AbstractMinerClient):
             await self.notify_receipt_failure(comment)
 
     async def send_model(
-        self, model: BaseModel, error_event_callback: ErrorCallback | None = None
+        self, model: ValidatorToMinerMessage, error_event_callback: ErrorCallback | None = None
     ) -> None:
         if error_event_callback is None:
             error_event_callback = self.notify_send_failure
@@ -348,7 +349,7 @@ class FailureReason(enum.Enum):
 
 
 class OrganicJobError(Exception):
-    def __init__(self, reason: FailureReason, received: BaseModel | None = None):
+    def __init__(self, reason: FailureReason, received: MinerToValidatorMessage | None = None):
         self.reason = reason
         self.received = received
 

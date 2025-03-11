@@ -3,7 +3,7 @@ import asyncio
 import logging
 import random
 from collections.abc import Awaitable, Callable
-from typing import TypeAlias
+from typing import Generic, TypeAlias, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -13,8 +13,11 @@ from compute_horde.transport import AbstractTransport, TransportConnectionError
 logger = logging.getLogger(__name__)
 ErrorCallback: TypeAlias = Callable[[str], Awaitable[None]]
 
+FromMinerType = TypeVar("FromMinerType", bound=BaseModel)
+ToMinerType = TypeVar("ToMinerType", bound=BaseModel)
 
-class AbstractMinerClient(metaclass=abc.ABCMeta):
+
+class AbstractMinerClient(Generic[FromMinerType, ToMinerType], metaclass=abc.ABCMeta):
     def __init__(self, miner_name: str, transport: AbstractTransport):
         self.miner_name = miner_name
         self.read_messages_task: asyncio.Task[None] | None = None
@@ -25,11 +28,11 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
     def miner_url(self) -> str: ...
 
     @abc.abstractmethod
-    def parse_message(self, raw_msg: str | bytes) -> BaseModel:
+    def parse_message(self, raw_msg: str | bytes) -> FromMinerType:
         """Parse raw message into a pydantic model"""
 
     @abc.abstractmethod
-    async def handle_message(self, msg: BaseModel) -> None:
+    async def handle_message(self, msg: FromMinerType) -> None:
         """
         Handle the message based on its type or raise UnsupportedMessageReceived
         """
@@ -70,7 +73,7 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
         await self.transport.stop()
 
     async def send_model(
-        self, model: BaseModel, error_event_callback: ErrorCallback | None = None
+        self, model: ToMinerType, error_event_callback: ErrorCallback | None = None
     ) -> None:
         await self.send(model.model_dump_json(), error_event_callback)
 
@@ -92,7 +95,7 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
                 continue
             return
 
-    def deferred_send_model(self, model: BaseModel) -> None:
+    def deferred_send_model(self, model: ToMinerType) -> None:
         task = asyncio.create_task(self.send_model(model))
         self.deferred_send_tasks.append(task)
 
@@ -105,7 +108,7 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
                     continue
                 error_msg = f"Malformed message {raw_msg} from miner {self.miner_name}: {ex.json()}"
                 logger.info(error_msg)
-                self.deferred_send_model(GenericError(details=error_msg))
+                self.deferred_send_model(GenericError(details=error_msg))  # type: ignore[arg-type]
                 continue
 
             try:
@@ -113,7 +116,7 @@ class AbstractMinerClient(metaclass=abc.ABCMeta):
             except UnsupportedMessageReceived:
                 error_msg = f"Unsupported message from miner {self.miner_name}: {type(msg)}"
                 logger.error(error_msg)
-                self.deferred_send_model(GenericError(details=error_msg))
+                self.deferred_send_model(GenericError(details=error_msg))  # type: ignore[arg-type]
 
 
 class UnsupportedMessageReceived(Exception):

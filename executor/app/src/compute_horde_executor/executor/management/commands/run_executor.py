@@ -32,6 +32,7 @@ from compute_horde.miner_client.base import (
     UnsupportedMessageReceived,
 )
 from compute_horde.protocol_messages import (
+    ExecutorToMinerMessage,
     GenericError,
     MinerToExecutorMessage,
     V0ExecutorFailedRequest,
@@ -57,7 +58,7 @@ from compute_horde_core.volume import (
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from huggingface_hub import snapshot_download
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 
 from compute_horde_executor.executor.output_uploader import OutputUploader, OutputUploadFailed
 
@@ -130,7 +131,7 @@ class RunConfigManager:
             raise JobError(f"Invalid preset: {preset}")
 
 
-class MinerClient(AbstractMinerClient):
+class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMessage]):
     class NotInitialized(Exception):
         pass
 
@@ -156,10 +157,10 @@ class MinerClient(AbstractMinerClient):
     def miner_url(self) -> str:
         return f"{self.miner_address}/v0.1/executor_interface/{self.token}"
 
-    def parse_message(self, raw_msg: str | bytes) -> BaseModel:
+    def parse_message(self, raw_msg: str | bytes) -> MinerToExecutorMessage:
         return TypeAdapter(MinerToExecutorMessage).validate_json(raw_msg)
 
-    async def handle_message(self, msg: BaseModel) -> None:
+    async def handle_message(self, msg: MinerToExecutorMessage) -> None:
         if isinstance(msg, V0InitialJobRequest):
             await self.handle_initial_job_request(msg)
         elif isinstance(msg, V0JobRequest):

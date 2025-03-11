@@ -10,7 +10,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Protocol, assert_never, cast
+from typing import Any, Protocol, assert_never
 
 import bittensor
 import httpx
@@ -41,6 +41,7 @@ from compute_horde.protocol_messages import (
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
     ValidatorAuthForMiner,
+    ValidatorToMinerMessage,
 )
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
@@ -132,7 +133,7 @@ SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
 LLM_EXECUTOR_CLASS = ExecutorClass.always_on__llm__a6000
 
 
-class MinerClient(AbstractMinerClient):
+class MinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorToMinerMessage]):
     def __init__(
         self,
         ctx: "BatchContext",
@@ -157,12 +158,10 @@ class MinerClient(AbstractMinerClient):
     def miner_url(self) -> str:
         return f"ws://{self.miner_address}:{self.miner_port}/v0.1/validator_interface/{self.own_hotkey}"
 
-    def parse_message(self, raw_msg: str | bytes) -> BaseModel:
+    def parse_message(self, raw_msg: str | bytes) -> MinerToValidatorMessage:
         return TypeAdapter(MinerToValidatorMessage).validate_json(raw_msg)
 
-    async def handle_message(self, msg: BaseModel) -> None:
-        msg = cast(MinerToValidatorMessage, msg)
-
+    async def handle_message(self, msg: MinerToValidatorMessage) -> None:
         if isinstance(msg, GenericError):
             logger.warning("%s error: %s", self.miner_name, msg.model_dump_json())
             is_unauthorized = msg.details is not None and msg.details.lower().startswith(
