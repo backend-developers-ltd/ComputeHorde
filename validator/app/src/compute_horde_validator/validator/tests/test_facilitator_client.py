@@ -42,7 +42,6 @@ from .helpers import (
     get_dummy_job_request_v1,
     get_dummy_job_request_v2,
     get_keypair,
-    mock_get_miner_axon_info,
 )
 
 DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
@@ -54,10 +53,6 @@ async def async_patch_all():
         patch(
             "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_job_request",
             return_value=True,
-        ),
-        patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.get_miner_axon_info",
-            mock_get_miner_axon_info,
         ),
         patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor()),
         patch("bittensor.metagraph", lambda *args, **kwargs: MockMetagraph()),

@@ -57,17 +57,6 @@ def get_miner_client(MINER_CLIENT, job_uuid: str):
     )
 
 
-async def mock_get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
-    return bittensor.AxonInfo(
-        version=4,
-        ip="ignore",
-        ip_type=4,
-        port=8000,
-        hotkey=hotkey,
-        coldkey="ignore",
-    )
-
-
 class MockAxonInfo:
     def __init__(self, ip="0.0.0.0", port=8000, ip_type=0, hotkey="hotkey"):
         self.ip = ip

@@ -20,18 +20,6 @@ class DebugFacilitatorClient(FacilitatorClient):
         self.miner_address = miner_address
         self.miner_port = miner_port
 
-    async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
-        if hotkey != self.miner_hotkey:
-            raise ValueError("unsupported hotkey")
-        return bittensor.AxonInfo(
-            version=4,
-            ip=self.miner_address,
-            ip_type=4,
-            port=self.miner_port,
-            hotkey=self.miner_hotkey,
-            coldkey=self.miner_hotkey,  # I hope it does not matter
-        )
-
 
 class Command(BaseCommand):
     FACILITATOR_CLIENT_CLASS = DebugFacilitatorClient
