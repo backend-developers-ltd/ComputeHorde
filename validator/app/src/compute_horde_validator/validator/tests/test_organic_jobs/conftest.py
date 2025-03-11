@@ -2,7 +2,7 @@ import asyncio
 import uuid
 from collections import namedtuple
 from collections.abc import Callable
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio

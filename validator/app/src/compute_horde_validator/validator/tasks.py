@@ -41,7 +41,6 @@ from compute_horde_validator.validator.models import (
     OrganicJob,
     Prompt,
     PromptSample,
-
     PromptSeries,
     SolveWorkload,
     SyntheticJobBatch,
