@@ -96,7 +96,6 @@ class FacilitatorClient:
         self.miner_drivers: asyncio.Queue[asyncio.Task[None] | None] = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
         self.heartbeat_task = asyncio.create_task(self.heartbeat())
-        self.refresh_metagraph_task = self.create_metagraph_refresh_task()
         self.specs_task: asyncio.Task[None] | None = None
 
     def connect(self) -> websockets.connect:

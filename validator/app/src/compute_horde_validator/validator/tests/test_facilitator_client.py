@@ -61,10 +61,6 @@ async def async_patch_all():
         ),
         patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor()),
         patch("bittensor.metagraph", lambda *args, **kwargs: MockMetagraph()),
-        patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.create_metagraph_refresh_task",
-            lambda *args, **kwargs: asyncio.create_task(asyncio.sleep(0)),
-        ),
     ):
         yield
 
@@ -92,7 +88,6 @@ async def cancel_facilitator_tasks(
 ):
     tasks = [
         facilitator_client.miner_driver_awaiter_task,
-        facilitator_client.refresh_metagraph_task,
         facilitator_client.heartbeat_task,
     ]
     if run_forever_task:

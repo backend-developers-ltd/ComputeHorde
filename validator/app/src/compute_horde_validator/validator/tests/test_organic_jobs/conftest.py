@@ -132,7 +132,6 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
 
     with (
         patch.object(FacilitatorClient, "heartbeat", AsyncMock()),
-        patch.object(FacilitatorClient, "create_metagraph_refresh_task", Mock()),
         patch.object(FacilitatorClient, "get_current_block", AsyncMock(return_value=1)),
         patch.object(
             FacilitatorClient,
