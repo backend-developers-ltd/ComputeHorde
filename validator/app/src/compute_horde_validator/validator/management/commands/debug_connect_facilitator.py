@@ -32,9 +32,6 @@ class DebugFacilitatorClient(FacilitatorClient):
             coldkey=self.miner_hotkey,  # I hope it does not matter
         )
 
-    def create_metagraph_refresh_task(self, period=None):
-        return None
-
 
 class Command(BaseCommand):
     FACILITATOR_CLIENT_CLASS = DebugFacilitatorClient

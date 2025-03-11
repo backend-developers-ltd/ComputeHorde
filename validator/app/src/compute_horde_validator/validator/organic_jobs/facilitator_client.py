@@ -26,10 +26,6 @@ from django.conf import settings
 from pydantic import BaseModel
 
 from compute_horde_validator.validator.dynamic_config import aget_config
-from compute_horde_validator.validator.metagraph_client import (
-    create_metagraph_refresh_task,
-    get_miner_axon_info,
-)
 from compute_horde_validator.validator.models import (
     Miner,
     MinerBlacklist,
@@ -236,9 +232,6 @@ class FacilitatorClient:
                     )
             await asyncio.sleep(self.HEARTBEAT_PERIOD)
 
-    def create_metagraph_refresh_task(self, period=None):
-        return create_metagraph_refresh_task(period=period)
-
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(7),
         wait=tenacity.wait_exponential(multiplier=1, exp_base=2, min=1, max=10),
@@ -281,9 +274,6 @@ class FacilitatorClient:
             return
 
         logger.error("unsupported message received from facilitator: %s", raw_msg)
-
-    async def get_miner_axon_info(self, hotkey: str) -> bittensor.AxonInfo:
-        return await get_miner_axon_info(hotkey)
 
     async def report_miner_cheated_job(self, job_uuid: str):
         try:
@@ -376,8 +366,8 @@ class FacilitatorClient:
 
         try:
             job_attempt = await self.miner_driver(miner, job_request)
-            if job_attempt.status != OrganicJob.Status.COMPLETED:
-                logger.warning(f"Job finished with status: {job_attempt.status}")
+            logger.warning(f"Job {job_request.uuid} finished with status: {job_attempt.status}")
+
             if job_attempt.status == OrganicJob.Status.FAILED:
                 await routing.report_miner_failed_job(job_attempt)
         except Exception as e:

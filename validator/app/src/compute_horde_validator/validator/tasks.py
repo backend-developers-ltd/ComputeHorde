@@ -35,13 +35,13 @@ from compute_horde_validator.celery import app
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
-from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
     OrganicJob,
     Prompt,
     PromptSample,
+
     PromptSeries,
     SolveWorkload,
     SyntheticJobBatch,
@@ -584,8 +584,6 @@ async def run_admin_job_request(
     )
     try:
         miner = job_request.miner
-        if miner_axon_info is None:
-            miner_axon_info = await get_miner_axon_info(miner.hotkey)
 
         # FIXME: The following code blocks the event loop.
         #        This function is run from either a management command (a new process),
@@ -598,12 +596,17 @@ async def run_admin_job_request(
         except Exception:
             raise
 
+        # Explicit miner axon info overrides miner address
+        miner_ip = miner_axon_info.ip if miner_axon_info else miner.address
+        miner_ip_type = miner_axon_info.ip_type if miner_axon_info else miner.ip_version
+        miner_port = miner_axon_info.port if miner_axon_info else miner.port
+
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
             miner=miner,
-            miner_address=miner_axon_info.ip,
-            miner_address_ip_version=miner_axon_info.ip_type,
-            miner_port=miner_axon_info.port,
+            miner_address=miner_ip,
+            miner_address_ip_version=miner_ip_type,
+            miner_port=miner_port,
             executor_class=job_request.executor_class,
             job_description="Validator Job from Admin Panel",
             block=current_block,
@@ -612,8 +615,8 @@ async def run_admin_job_request(
         my_keypair = get_keypair()
         miner_client = MinerClient(
             miner_hotkey=miner.hotkey,
-            miner_address=miner_axon_info.ip,
-            miner_port=miner_axon_info.port,
+            miner_address=miner_ip,
+            miner_port=miner_port,
             job_uuid=str(job.job_uuid),
             my_keypair=my_keypair,
         )
