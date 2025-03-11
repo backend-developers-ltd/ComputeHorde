@@ -538,11 +538,10 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
 
     async def _executor_ready(self, msg: V0ExecutorReadyRequest):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
-        msg.executor_token = None
         job_uuid = str(job.job_uuid)
         assert job_uuid == msg.job_uuid
         self.pending_jobs[job_uuid] = job
-        await self.send(msg.model_dump_json())
+        await self.send(msg.model_copy(update={"executor_token": None}).model_dump_json())
         logger.debug(f"Readiness for job {job_uuid} reported to validator {self.validator_key}")
 
     async def _executor_failed_to_prepare(self, msg: V0ExecutorFailedRequest):
@@ -556,28 +555,25 @@ class MinerValidatorConsumer(BaseConsumer, ValidatorInterfaceMixin):
         self.pending_jobs = {
             k: v for k, v in self.pending_jobs.items() if v.executor_token != msg.executor_token
         }
-        msg.executor_token = None
-        await self.send(msg.model_dump_json())
+        await self.send(msg.model_copy(update={"executor_token": None}).model_dump_json())
         logger.debug(
             f"Failure in preparation for job {str(job.job_uuid)} reported to validator {self.validator_key}"
         )
 
     async def _streaming_job_ready(self, msg: V0StreamingJobReadyRequest):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
-        msg.executor_token = None
         job_uuid = str(job.job_uuid)
         assert job_uuid == msg.job_uuid
-        await self.send(msg.model_dump_json())
+        await self.send(msg.model_copy(update={"executor_token": None}).model_dump_json())
         logger.debug(
             f"Streaming readiness for job {job_uuid} reported to validator {self.validator_key}"
         )
 
     async def _streaming_job_failed_to_prepare(self, msg: V0StreamingJobNotReadyRequest):
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
-        msg.executor_token = None
         job_uuid = str(job.job_uuid)
         assert job_uuid == msg.job_uuid
-        await self.send(msg.model_dump_json())
+        await self.send(msg.model_copy(update={"executor_token": None}).model_dump_json())
         logger.debug(
             f"Failure in streaming preparation for job {job_uuid} reported to validator {self.validator_key}"
         )
