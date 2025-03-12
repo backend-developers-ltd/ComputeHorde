@@ -148,6 +148,7 @@ class ExecutorInterfaceMixin(BaseMixin):
 
     async def send_streaming_job_ready(self, executor_token: str, msg: V0StreamingJobReadyRequest):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        msg.executor_token = executor_token
         await self.channel_layer.group_send(
             group_name,
             {"type": "streaming_job.ready", **msg.model_dump()},
