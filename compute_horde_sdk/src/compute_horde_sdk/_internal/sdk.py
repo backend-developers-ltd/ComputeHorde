@@ -11,6 +11,7 @@ from urllib.parse import urljoin
 import bittensor
 import httpx
 import pydantic
+import tenacity
 
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.signature import (
@@ -37,6 +38,19 @@ JOB_REFRESH_INTERVAL = timedelta(seconds=3)
 DEFAULT_FACILITATOR_URL = "https://facilitator.computehorde.io/"
 
 
+def _retryable_status_code(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500
+
+
+def _retryable_exception(exc: BaseException) -> bool:
+    """Retry requests, if request failed for with a retryable status code"""
+    return (
+        isinstance(exc, ComputeHordeError)
+        and isinstance(exc.__cause__, httpx.HTTPStatusError)
+        and _retryable_status_code(exc.__cause__.response.status_code)
+    )
+
+
 class ComputeHordeJob:
     """
     The class representing a job running on the Compute Horde.
@@ -53,28 +67,54 @@ class ComputeHordeJob:
         uuid: str,
         status: ComputeHordeJobStatus,
         result: ComputeHordeJobResult | None = None,
+        request_data: dict[str, pydantic.JsonValue] | None = None,
     ):
         self._client = client
         self.uuid = uuid
         self.status = status
         self.result = result
+        self._request_data = request_data
+        self.history: list[ComputeHordeJob] = []  # TODO: document it!
 
-    async def wait(self, timeout: float | None = None) -> None:
+    async def wait(self, timeout: float | None = None, max_failed_reruns: int | None = 3) -> None:
         """
         Wait for this job to complete or fail.
 
         :param timeout: Maximum number of seconds to wait for.
+        :param max_failed_reruns: Maximum number times the job will be rerun within ``timeout`` seconds,
+            if previous attempts fail. Passing ``None`` disables reruns.
         :raises ComputeHordeJobTimeoutError: If the job does not complete within ``timeout`` seconds.
         """
-        start_time = time.monotonic()
+        if max_failed_reruns is not None and max_failed_reruns <= 0:
+            raise ValueError("`max_failed_reruns` must be positive integer or `None`")
 
-        while self.status.is_in_progress():
+        start_time = time.monotonic()
+        rerun_counter = 0
+
+        while True:
+            if self.status.is_successful():
+                return
+
+            if max_failed_reruns is not None and rerun_counter >= max_failed_reruns:
+                # TODO: Do we want to raise here? Currently it does not raise when job concludes with status REJECTED/FAILED.
+                return
+
             if timeout is not None and time.monotonic() - start_time > timeout:
                 raise ComputeHordeJobTimeoutError(
                     f"Job {self.uuid} did not complete within {timeout} seconds, last status: {self.status}"
                 )
             await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
-            await self.refresh_from_facilitator()
+
+            if self.status.is_in_progress():
+                await self.refresh_from_facilitator()
+            elif self.status.is_unsuccessful() and max_failed_reruns is not None:
+                assert self._request_data is not None, "cannot rerun job without request data"
+                rerun_counter += 1
+                new_job = await self._client._do_create_job(self._request_data)
+                self.history.append(self.copy())
+                self.uuid = new_job.uuid
+                self.status = new_job.status
+                self.result = new_job.result
 
     async def refresh_from_facilitator(self) -> None:
         new_job = await self._client.get_job(self.uuid)
@@ -85,7 +125,12 @@ class ComputeHordeJob:
         return f"<{self.__class__.__qualname__}: {self.uuid!r}>"
 
     @classmethod
-    def _from_response(cls, client: "ComputeHordeClient", response: FacilitatorJobResponse) -> Self:
+    def _from_response(
+        cls,
+        client: "ComputeHordeClient",
+        response: FacilitatorJobResponse,
+        request_data: dict[str, pydantic.JsonValue] | None = None,
+    ) -> Self:
         result = None
         if not response.status.is_in_progress():
             # TODO: Handle base64 decode errors
@@ -98,6 +143,16 @@ class ComputeHordeJob:
             uuid=response.uuid,
             status=response.status,
             result=result,
+            request_data=request_data,
+        )
+
+    def copy(self) -> "ComputeHordeJob":
+        return ComputeHordeJob(
+            client=self._client,
+            uuid=self.uuid,
+            status=self.status,
+            result=self.result,
+            request_data=self._request_data,
         )
 
 
@@ -187,9 +242,7 @@ class ComputeHordeClient:
 
         data_to_sign = f"{method}{url}{headers_str}".encode()
 
-        signature = self.hotkey.sign(
-            data_to_sign,
-        ).hex()
+        signature = self.hotkey.sign(data_to_sign).hex()
         headers["Signature"] = signature
 
         return headers
@@ -271,6 +324,15 @@ class ComputeHordeClient:
             ]
 
         logger.debug("Creating job from image %s", docker_image)
+        return await self._do_create_job(data)
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception(_retryable_exception),
+        stop=tenacity.stop_after_attempt(5),
+        wait=tenacity.wait_exponential_jitter(initial=0.2),
+        reraise=True,
+    )
+    async def _do_create_job(self, data: dict[str, pydantic.JsonValue]) -> ComputeHordeJob:
         signature_headers = self._get_signature_headers(data)
 
         response = await self._make_request("POST", "/api/v1/job-docker/", json=data, headers=signature_headers)
@@ -280,7 +342,7 @@ class ComputeHordeClient:
         except pydantic.ValidationError as e:
             raise ComputeHordeError("Compute Horde returned malformed response") from e
 
-        job = ComputeHordeJob._from_response(self, job_response)
+        job = ComputeHordeJob._from_response(self, job_response, data)
         logger.debug("Created job with UUID=%s", job.uuid)
 
         return job
