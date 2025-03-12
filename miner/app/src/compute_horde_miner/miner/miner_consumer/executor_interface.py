@@ -73,6 +73,8 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
         await self.group_add(self.executor_token)
 
         initial_job_request = V0InitialJobRequest.model_validate(job.initial_job_details)
+        if initial_job_request.streaming_details:
+            initial_job_request.streaming_details.executor_ip = self.get_executor_ip()
         await self.send(initial_job_request.model_dump_json())
 
     def get_executor_ip(self) -> str:
