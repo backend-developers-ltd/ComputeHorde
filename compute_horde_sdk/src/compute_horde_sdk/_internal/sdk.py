@@ -1,10 +1,11 @@
 import asyncio
 import base64
+import dataclasses
 import json
 import logging
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Self
 from urllib.parse import urljoin
 
@@ -51,30 +52,51 @@ def _retryable_exception(exc: BaseException) -> bool:
     )
 
 
+@dataclasses.dataclass
+class ComputeHordeJobState:
+    """
+    The state of a job at a particular time.
+
+    :ivar uuid: The UUID of the job.
+    :ivar status: The status of the job.
+    :ivar result: The result of the job, if it has completed.
+    :ivar checked_at: When this state was checked.
+    """
+
+    uuid: str
+    status: ComputeHordeJobStatus
+    result: ComputeHordeJobResult | None = None
+    checked_at: datetime = dataclasses.field(default_factory=lambda: datetime.now(UTC))
+
+    @classmethod
+    def _from_response(cls, response: FacilitatorJobResponse) -> Self:
+        result = None
+        if not response.status.is_in_progress():
+            # TODO: Handle base64 decode errors
+            result = ComputeHordeJobResult(
+                stdout=response.stdout,
+                artifacts={path: base64.b64decode(base64_data) for path, base64_data in response.artifacts.items()},
+            )
+        return cls(uuid=response.uuid, status=response.status, result=result)
+
+
 class ComputeHordeJob:
     """
     The class representing a job running on the Compute Horde.
     Do not construct it directly, always use :class:`ComputeHordeClient`.
 
-    :ivar str uuid: The UUID of the job.
-    :ivar ComputeHordeJobStatus status: The status of the job.
-    :ivar ComputeHordeJobResult | None result: The result of the job, if it has completed.
+    :ivar states: List of job states checked at interval :const:`JOB_REFRESH_INTERVAL`.
     """
 
     def __init__(
         self,
         client: "ComputeHordeClient",
-        uuid: str,
-        status: ComputeHordeJobStatus,
-        result: ComputeHordeJobResult | None = None,
+        state: ComputeHordeJobState,
         request_data: dict[str, pydantic.JsonValue] | None = None,
     ):
         self._client = client
-        self.uuid = uuid
-        self.status = status
-        self.result = result
+        self.states = [state]
         self._request_data = request_data
-        self.history: list[ComputeHordeJob] = []  # TODO: document it!
 
     async def wait(self, timeout: float | None = None, max_failed_reruns: int | None = 3) -> None:
         """
@@ -95,10 +117,6 @@ class ComputeHordeJob:
             if self.status.is_successful():
                 return
 
-            if max_failed_reruns is not None and rerun_counter >= max_failed_reruns:
-                # TODO: Do we want to raise here? Currently it does not raise when job concludes with status REJECTED/FAILED.
-                return
-
             if timeout is not None and time.monotonic() - start_time > timeout:
                 raise ComputeHordeJobTimeoutError(
                     f"Job {self.uuid} did not complete within {timeout} seconds, last status: {self.status}"
@@ -108,52 +126,41 @@ class ComputeHordeJob:
             if self.status.is_in_progress():
                 await self.refresh_from_facilitator()
             elif self.status.is_unsuccessful() and max_failed_reruns is not None:
+                if rerun_counter >= max_failed_reruns:
+                    return
+
+                logger.info(f"Rerunning failed job [{rerun_counter + 1}/{max_failed_reruns}]")
                 assert self._request_data is not None, "cannot rerun job without request data"
                 rerun_counter += 1
-                new_job = await self._client._do_create_job(self._request_data)
-                self.history.append(self.copy())
-                self.uuid = new_job.uuid
-                self.status = new_job.status
-                self.result = new_job.result
+                new_state = await self._client._do_create_job(self._request_data)
+                self.states.append(new_state)
 
     async def refresh_from_facilitator(self) -> None:
-        new_job = await self._client.get_job(self.uuid)
-        self.status = new_job.status
-        self.result = new_job.result
+        state = await self._client._get_job_state(self.uuid)
+        self.states.append(state)
 
     def __repr__(self):
         return f"<{self.__class__.__qualname__}: {self.uuid!r}>"
 
-    @classmethod
-    def _from_response(
-        cls,
-        client: "ComputeHordeClient",
-        response: FacilitatorJobResponse,
-        request_data: dict[str, pydantic.JsonValue] | None = None,
-    ) -> Self:
-        result = None
-        if not response.status.is_in_progress():
-            # TODO: Handle base64 decode errors
-            result = ComputeHordeJobResult(
-                stdout=response.stdout,
-                artifacts={path: base64.b64decode(base64_data) for path, base64_data in response.artifacts.items()},
-            )
-        return cls(
-            client,
-            uuid=response.uuid,
-            status=response.status,
-            result=result,
-            request_data=request_data,
-        )
+    @property
+    def state(self) -> ComputeHordeJobState:
+        """The last checked state of the job"""
+        return self.states[-1]
 
-    def copy(self) -> "ComputeHordeJob":
-        return ComputeHordeJob(
-            client=self._client,
-            uuid=self.uuid,
-            status=self.status,
-            result=self.result,
-            request_data=self._request_data,
-        )
+    @property
+    def uuid(self) -> str:
+        """The UUID of the job."""
+        return self.state.uuid
+
+    @property
+    def status(self) -> ComputeHordeJobStatus:
+        """The status of the job."""
+        return self.state.status
+
+    @property
+    def result(self) -> ComputeHordeJobResult | None:
+        """The result of the job, if it has completed."""
+        return self.state.result
 
 
 class ComputeHordeClient:
@@ -324,15 +331,19 @@ class ComputeHordeClient:
             ]
 
         logger.debug("Creating job from image %s", docker_image)
-        return await self._do_create_job(data)
+        state = await self._do_create_job(data)
+        job = ComputeHordeJob(client=self, state=state, request_data=data)
+        logger.debug("Created job with UUID=%s", job.uuid)
+        return job
 
     @tenacity.retry(
-        retry=tenacity.retry_if_exception(_retryable_exception),
         stop=tenacity.stop_after_attempt(5),
         wait=tenacity.wait_exponential_jitter(initial=0.2),
+        retry=tenacity.retry_if_exception(_retryable_exception),
+        before_sleep=tenacity.before_sleep_log(logger, logging.INFO),
         reraise=True,
     )
-    async def _do_create_job(self, data: dict[str, pydantic.JsonValue]) -> ComputeHordeJob:
+    async def _do_create_job(self, data: dict[str, pydantic.JsonValue]) -> ComputeHordeJobState:
         signature_headers = self._get_signature_headers(data)
 
         response = await self._make_request("POST", "/api/v1/job-docker/", json=data, headers=signature_headers)
@@ -342,10 +353,17 @@ class ComputeHordeClient:
         except pydantic.ValidationError as e:
             raise ComputeHordeError("Compute Horde returned malformed response") from e
 
-        job = ComputeHordeJob._from_response(self, job_response, data)
-        logger.debug("Created job with UUID=%s", job.uuid)
+        return ComputeHordeJobState._from_response(job_response)
 
-        return job
+    async def _get_job_state(self, job_uuid: str) -> ComputeHordeJobState:
+        response = await self._make_request("GET", f"/api/v1/jobs/{job_uuid}/")
+
+        try:
+            job_response = FacilitatorJobResponse.model_validate_json(response)
+        except pydantic.ValidationError as e:
+            raise ComputeHordeError("Compute Horde returned malformed response") from e
+
+        return ComputeHordeJobState._from_response(job_response)
 
     async def get_job(self, job_uuid: str) -> ComputeHordeJob:
         """
@@ -356,15 +374,8 @@ class ComputeHordeClient:
         :raises ComputeHordeNotFoundError: If the job with this UUID does not exist.
         """
         logger.debug("Fetching job with UUID=%s", job_uuid)
-
-        response = await self._make_request("GET", f"/api/v1/jobs/{job_uuid}/")
-
-        try:
-            job_response = FacilitatorJobResponse.model_validate_json(response)
-        except pydantic.ValidationError as e:
-            raise ComputeHordeError("Compute Horde returned malformed response") from e
-
-        return ComputeHordeJob._from_response(self, job_response)
+        state = await self._get_job_state(job_uuid)
+        return ComputeHordeJob(client=self, state=state)
 
     async def _get_jobs_page(self, page: int = 1, page_size: int = 10) -> FacilitatorJobsResponse:
         params = {"page": page, "page_size": page_size}
@@ -389,8 +400,8 @@ class ComputeHordeClient:
         """
         logger.debug("Fetching jobs page=%d, page_size%d", page, page_size)
         jobs_response = await self._get_jobs_page(page=page, page_size=page_size)
-
-        return [ComputeHordeJob._from_response(self, job) for job in jobs_response.results]
+        states = [ComputeHordeJobState._from_response(job) for job in jobs_response.results]
+        return [ComputeHordeJob(self, state) for state in states]
 
     async def iter_jobs(self) -> AsyncIterator[ComputeHordeJob]:
         """
@@ -410,7 +421,8 @@ class ComputeHordeClient:
         while has_next_page:
             jobs_response = await self._get_jobs_page(page=page, page_size=page_size)
             for job_response in jobs_response.results:
-                yield ComputeHordeJob._from_response(self, job_response)
+                state = ComputeHordeJobState._from_response(job_response)
+                yield ComputeHordeJob(self, state)
 
             has_next_page = jobs_response.next is not None
             page += 1
