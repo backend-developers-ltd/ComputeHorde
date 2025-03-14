@@ -15,7 +15,7 @@ from compute_horde.protocol_messages import (
 
 from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.organic_jobs.facilitator_client import OrganicJob
-from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
+from compute_horde_validator.validator.organic_jobs.miner_driver import drive_organic_job
 
 from .helpers import (
     MockMinerClient,
@@ -140,7 +140,7 @@ async def test_miner_driver(
     async def track_job_status_updates(x):
         job_status_updates.append(x)
 
-    await execute_organic_job(
+    await drive_organic_job(
         miner_client,
         job,
         job_request,

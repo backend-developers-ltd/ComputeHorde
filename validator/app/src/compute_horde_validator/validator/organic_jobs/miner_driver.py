@@ -3,7 +3,8 @@ from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Literal, assert_never
 
-from compute_horde.fv_protocol.facilitator_requests import JobRequest, V2JobRequest
+from channels.layers import get_channel_layer
+from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
 from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,
@@ -25,10 +26,13 @@ from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
     JobBase,
+    MetagraphSnapshot,
+    Miner,
     OrganicJob,
     SystemEvent,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
+from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -96,10 +100,73 @@ async def _dummy_notify_callback(_: JobStatusUpdate) -> None:
     pass
 
 
-async def execute_organic_job(
+async def execute_organic_job_request(miner: Miner, job_request: OrganicJobRequest) -> OrganicJob:
+    if (
+        miner.hotkey == settings.DEBUG_MINER_KEY
+        and settings.DEBUG_MINER_ADDRESS
+        and settings.DEBUG_MINER_PORT
+    ):
+        miner_ip = settings.DEBUG_MINER_ADDRESS
+        miner_port = settings.DEBUG_MINER_PORT
+        ip_type = 4
+        on_trusted_miner = False
+    elif miner.hotkey == TRUSTED_MINER_FAKE_KEY:
+        miner_ip = settings.TRUSTED_MINER_ADDRESS
+        miner_port = settings.TRUSTED_MINER_PORT
+        ip_type = 4
+        on_trusted_miner = True
+    else:
+        miner_ip = miner.address
+        miner_port = miner.port
+        ip_type = miner.ip_version
+        on_trusted_miner = False
+
+    job = await OrganicJob.objects.acreate(
+        job_uuid=str(job_request.uuid),
+        miner=miner,
+        miner_address=miner_ip,
+        miner_address_ip_version=ip_type,
+        miner_port=miner_port,
+        executor_class=job_request.executor_class,
+        job_description="User job from facilitator",
+        block=(await MetagraphSnapshot.aget_latest()).block,
+        on_trusted_miner=on_trusted_miner,
+    )
+
+    miner_client = MinerClient(
+        miner_hotkey=miner.hotkey,
+        miner_address=job.miner_address,
+        miner_port=job.miner_port,
+        job_uuid=str(job.job_uuid),
+        my_keypair=settings.BITTENSOR_WALLET().hotkey,
+    )
+
+    async def job_status_callback(status_update: JobStatusUpdate):
+        await get_channel_layer().send(
+            "job_status_updates",
+            {"type": "job_status_update", "payload": status_update.model_dump()},
+        )
+
+    total_job_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_TIMEOUT")
+    initial_response_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT")
+    executor_ready_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT")
+    await drive_organic_job(
+        miner_client,
+        job,
+        job_request,
+        total_job_timeout=total_job_timeout,
+        initial_response_timeout=initial_response_timeout,
+        executor_ready_timeout=executor_ready_timeout,
+        notify_callback=job_status_callback,
+    )
+
+    return job
+
+
+async def drive_organic_job(
     miner_client: MinerClient,
     job: OrganicJob,
-    job_request: JobRequest | AdminJobRequest,
+    job_request: OrganicJobRequest | AdminJobRequest,
     total_job_timeout: int = 300,
     initial_response_timeout: int = 3,
     executor_ready_timeout: int = 300,

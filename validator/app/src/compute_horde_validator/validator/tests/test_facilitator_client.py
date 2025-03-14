@@ -11,7 +11,7 @@ import websockets
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
-    JobRequest,
+    OrganicJobRequest,
     Response,
 )
 from compute_horde.fv_protocol.validator_requests import (
@@ -108,7 +108,7 @@ class FacilitatorWs:
         async with self.condition:
             await self.condition.wait()
 
-    def get_dummy_job(self, job_uuid) -> JobRequest:
+    def get_dummy_job(self, job_uuid) -> OrganicJobRequest:
         return get_dummy_job_request_v0(job_uuid)
 
     async def verify_auth(self, ws):
@@ -151,7 +151,7 @@ class FacilitatorWs:
 
 
 class FacilitatorJobStatusUpdatesWsV0(FacilitatorWs):
-    def get_dummy_job(self, job_uuid) -> JobRequest:
+    def get_dummy_job(self, job_uuid) -> OrganicJobRequest:
         return get_dummy_job_request_v0(job_uuid)
 
 

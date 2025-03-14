@@ -4,7 +4,7 @@ from datetime import timedelta
 from typing import assert_never
 
 from compute_horde.fv_protocol.facilitator_requests import (
-    JobRequest,
+    OrganicJobRequest,
     V0JobRequest,
     V1JobRequest,
     V2JobRequest,
@@ -44,7 +44,7 @@ class MinerIsBlacklisted(JobRoutingException):
     pass
 
 
-async def pick_miner_for_job_request(request: JobRequest) -> Miner:
+async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
     if settings.DEBUG_MINER_KEY:
         miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
         return miner

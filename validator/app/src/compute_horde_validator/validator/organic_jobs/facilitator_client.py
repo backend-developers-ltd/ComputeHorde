@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from collections import deque
-from typing import cast
+from typing import Literal
 
 import bittensor
 import pydantic
@@ -11,7 +11,7 @@ import websockets
 from channels.layers import get_channel_layer
 from compute_horde.fv_protocol.facilitator_requests import (
     Error,
-    JobRequest,
+    OrganicJobRequest,
     Response,
     V0JobCheated,
     V2JobRequest,
@@ -27,7 +27,6 @@ from pydantic import BaseModel
 
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
-    Miner,
     MinerBlacklist,
     OrganicJob,
     SystemEvent,
@@ -38,14 +37,14 @@ from compute_horde_validator.validator.organic_jobs.miner_client import MinerCli
 from compute_horde_validator.validator.organic_jobs.miner_driver import (
     JobStatusMetadata,
     JobStatusUpdate,
-    execute_organic_job,
 )
-from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
+from compute_horde_validator.validator.tasks import execute_organic_job_request_on_worker
+from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
 
 
-async def verify_job_request(job_request: V2JobRequest):
+async def verify_job_request(job_request: V2JobRequest) -> None:
     # check if signer is in validator whitelist
     if job_request.signature is None:
         raise ValueError("Signature is None")
@@ -65,14 +64,14 @@ async def verify_job_request(job_request: V2JobRequest):
 
 
 class AuthenticationError(Exception):
-    def __init__(self, reason: str, errors: list[Error]):
+    def __init__(self, reason: str, errors: list[Error]) -> None:
         self.reason = reason
         self.errors = errors
 
 
 async def save_facilitator_event(
     subtype: str, long_description: str, data: dict[str, str] | None = None
-):
+) -> None:
     await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
         type=SystemEvent.EventType.FACILITATOR_CLIENT_ERROR,
         subtype=subtype,
@@ -85,14 +84,15 @@ class FacilitatorClient:
     MINER_CLIENT_CLASS = MinerClient
     HEARTBEAT_PERIOD = 60
 
-    def __init__(self, keypair: bittensor.Keypair, facilitator_uri: str):
+    def __init__(self, keypair: bittensor.Keypair, facilitator_uri: str) -> None:
         self.keypair = keypair
         self.ws: websockets.ClientConnection | None = None
         self.facilitator_uri = facilitator_uri
         self.miner_drivers: asyncio.Queue[asyncio.Task[None] | None] = asyncio.Queue()
         self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
-        self.heartbeat_task = asyncio.create_task(self.heartbeat())
+        self.heartbeat_task: asyncio.Task[None] | None = None
         self.specs_task: asyncio.Task[None] | None = None
+        self.job_status_update_task: asyncio.Task[None] | None = None
 
     def connect(self) -> websockets.connect:
         """Create an awaitable/async-iterable websockets.connect() object"""
@@ -102,7 +102,7 @@ class FacilitatorClient:
         }
         return websockets.connect(self.facilitator_uri, additional_headers=additional_headers)
 
-    async def miner_driver_awaiter(self):
+    async def miner_driver_awaiter(self) -> None:
         """avoid memory leak by awaiting miner driver tasks"""
         while True:
             task = await self.miner_drivers.get()
@@ -124,8 +124,10 @@ class FacilitatorClient:
     def my_hotkey(self) -> str:
         return str(self.keypair.ss58_address)
 
-    async def run_forever(self):
+    async def run_forever(self) -> None:
         """connect (and re-connect) to facilitator and keep reading messages ... forever"""
+        self.heartbeat_task = asyncio.create_task(self.heartbeat())
+        self.job_status_update_task = asyncio.create_task(self.handle_job_status_updates())
 
         # send machine specs to facilitator
         self.specs_task = asyncio.create_task(self.wait_for_specs())
@@ -158,7 +160,7 @@ class FacilitatorClient:
             self.ws = None
             logger.error("Facilitator client received cancel, stopping")
 
-    async def handle_connection(self, ws: websockets.ClientConnection):
+    async def handle_connection(self, ws: websockets.ClientConnection) -> None:
         """handle a single websocket connection"""
         await ws.send(V0AuthenticationRequest.from_keypair(self.keypair).model_dump_json())
 
@@ -177,7 +179,7 @@ class FacilitatorClient:
         async for raw_msg in ws:
             await self.handle_message(raw_msg)
 
-    async def wait_for_specs(self):
+    async def wait_for_specs(self) -> None:
         specs_queue: deque[V0MachineSpecsUpdate] = deque()
         channel_layer = get_channel_layer()
 
@@ -218,7 +220,7 @@ class FacilitatorClient:
             except TimeoutError:
                 logger.debug("wait_for_specs still running")
 
-    async def heartbeat(self):
+    async def heartbeat(self) -> None:
         while True:
             if self.ws is not None:
                 try:
@@ -232,12 +234,25 @@ class FacilitatorClient:
                     )
             await asyncio.sleep(self.HEARTBEAT_PERIOD)
 
+    async def handle_job_status_updates(self):
+        class JobStatusChannelEnvelope(BaseModel):
+            type: Literal["job_status_update"] = "job_status_update"
+            payload: JobStatusUpdate
+
+        while True:
+            msg = await get_channel_layer().receive("job_status_updates")
+            try:
+                envelope = JobStatusChannelEnvelope.model_validate(msg)
+                await self.send_model(envelope.payload)
+            except pydantic.ValidationError as exc:
+                logger.warning("Received malformed job status update: %s", exc)
+
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(7),
         wait=tenacity.wait_exponential(multiplier=1, exp_base=2, min=1, max=10),
         retry=tenacity.retry_if_exception_type(websockets.ConnectionClosed),
     )
-    async def send_model(self, msg: BaseModel):
+    async def send_model(self, msg: BaseModel) -> None:
         if self.ws is None:
             raise websockets.ConnectionClosed(rcvd=None, sent=None)
         await self.ws.send(msg.model_dump_json())
@@ -245,19 +260,21 @@ class FacilitatorClient:
         # Longer discussion: https://github.com/python-websockets/websockets/issues/865
         await asyncio.sleep(0)
 
-    async def handle_message(self, raw_msg: str | bytes):
+    async def handle_message(self, raw_msg: str | bytes) -> None:
         """handle message received from facilitator"""
         try:
             response = Response.model_validate_json(raw_msg)
         except pydantic.ValidationError:
-            logger.debug("could not parse raw message as Response")
+            pass
         else:
             if response.status != "success":
                 logger.error("received error response from facilitator: %r", response)
             return
 
         try:
-            job_request: JobRequest = pydantic.TypeAdapter(JobRequest).validate_json(raw_msg)
+            job_request: OrganicJobRequest = pydantic.TypeAdapter(OrganicJobRequest).validate_json(
+                raw_msg
+            )
         except pydantic.ValidationError as exc:
             logger.debug("could not parse raw message as JobRequest: %s", exc)
         else:
@@ -275,7 +292,7 @@ class FacilitatorClient:
 
         logger.error("unsupported message received from facilitator: %s", raw_msg)
 
-    async def report_miner_cheated_job(self, job_uuid: str):
+    async def report_miner_cheated_job(self, job_uuid: str) -> None:
         try:
             job = await OrganicJob.objects.prefetch_related("miner").aget(job_uuid=job_uuid)
         except OrganicJob.DoesNotExist:
@@ -299,18 +316,7 @@ class FacilitatorClient:
             },
         )
 
-    async def process_job_request(self, job_request: JobRequest):
-        # max_retries = await aget_config("DYNAMIC_ORGANIC_JOB_MAX_RETRIES")
-        """
-        NOTE: Retrying jobs is iffy at this point:
-        - Facilitator complains during job status updates, doesn't like the same job getting the same status twice
-        - Miner complains about... everything if it gets selected for a rerun of a job it already failed
-        - Validator will complain about duplicate receipts (multiple job started receipts for the same job uuid)
-        - Maybe more?
-
-        For now, we'll bail and report job failure as soon as anything goes wrong.
-        """
-
+    async def process_job_request(self, job_request: OrganicJobRequest) -> None:
         if isinstance(job_request, V2JobRequest):
             logger.debug(f"Received signed job request: {job_request}")
             try:
@@ -365,74 +371,19 @@ class FacilitatorClient:
             return
 
         try:
-            job_attempt = await self.miner_driver(miner, job_request)
-            logger.warning(f"Job {job_request.uuid} finished with status: {job_attempt.status}")
+            logger.info(f"Submitting job {job_request.uuid} to worker")
+            job = await execute_organic_job_request_on_worker(job_request, miner)
+            logger.info(f"Job {job_request.uuid} finished with status: {job.status}")
 
-            if job_attempt.status == OrganicJob.Status.FAILED:
-                await routing.report_miner_failed_job(job_attempt)
+            if job.status == OrganicJob.Status.FAILED:
+                await routing.report_miner_failed_job(job)
         except Exception as e:
-            logger.warning(f"Error running organic job {job_request.uuid}: {e}", exc_info=True)
-
-    async def miner_driver(self, miner: Miner, job_request: JobRequest) -> OrganicJob:
-        """drive a miner client from job start to completion, then close miner connection"""
-
-        if (
-            miner.hotkey == settings.DEBUG_MINER_KEY
-            and settings.DEBUG_MINER_ADDRESS
-            and settings.DEBUG_MINER_PORT
-        ):
-            miner_ip = settings.DEBUG_MINER_ADDRESS
-            miner_port = settings.DEBUG_MINER_PORT
-            ip_type = 4
-            on_trusted_miner = False
-        elif miner.hotkey == TRUSTED_MINER_FAKE_KEY:
-            miner_ip = settings.TRUSTED_MINER_ADDRESS
-            miner_port = settings.TRUSTED_MINER_PORT
-            ip_type = 4
-            on_trusted_miner = True
-        else:
-            miner_ip = miner.address
-            miner_port = miner.port
-            ip_type = miner.ip_version
-            on_trusted_miner = False
-
-        job = await OrganicJob.objects.acreate(
-            job_uuid=str(job_request.uuid),
-            miner=miner,
-            miner_address=miner_ip,
-            miner_address_ip_version=ip_type,
-            miner_port=miner_port,
-            executor_class=job_request.executor_class,
-            job_description="User job from facilitator",
-            block=await self.get_current_block(),
-            on_trusted_miner=on_trusted_miner,
-        )
-
-        miner_client = self.MINER_CLIENT_CLASS(
-            miner_hotkey=miner.hotkey,
-            miner_address=job.miner_address,
-            miner_port=job.miner_port,
-            job_uuid=str(job.job_uuid),
-            my_keypair=self.keypair,
-        )
-
-        total_job_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_TIMEOUT")
-        initial_response_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT")
-        executor_ready_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT")
-        await execute_organic_job(
-            miner_client,
-            job,
-            job_request,
-            total_job_timeout=total_job_timeout,
-            initial_response_timeout=initial_response_timeout,
-            executor_ready_timeout=executor_ready_timeout,
-            notify_callback=self.send_model,
-        )
-
-        return job
-
-    async def get_current_block(self) -> int:
-        # TODO: Use the new block timer
-        subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-        current_block = subtensor_.get_current_block()
-        return cast(int, current_block)
+            msg = f"Error running organic job {job_request.uuid}: {e}"
+            logger.warning(msg, exc_info=True)
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status="failed",
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )

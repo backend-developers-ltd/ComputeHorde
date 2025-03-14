@@ -19,11 +19,13 @@ app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 DEFAULT_QUEUE = "default"
 
 TASK_QUEUE_MAP = {
-    # Jobs
+    # Synthetic jobs
     "compute_horde_validator.validator.tasks.check_missed_synthetic_jobs": "jobs",
     "compute_horde_validator.validator.tasks._run_synthetic_jobs": "jobs",
     "compute_horde_validator.validator.tasks.run_synthetic_jobs": "jobs",
     "compute_horde_validator.validator.tasks.schedule_synthetic_jobs": "jobs",
+    # Organic jobs
+    "compute_horde_validator.validator.tasks._execute_organic_job_on_worker": "organic_jobs",
     # LLM job tasks
     "compute_horde_validator.validator.tasks.llm_prompt_generation": "llm",
     "compute_horde_validator.validator.tasks.llm_prompt_sampling": "llm",
