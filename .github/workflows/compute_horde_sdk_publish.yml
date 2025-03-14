@@ -96,16 +96,6 @@ jobs:
 #          path: ./CHANGELOG.md
 #        continue-on-error: ${{ fromJSON(needs.get-version.outputs.draft) }}
 
-      - name: ls
-        run: ls -R -lah dist
-      - name: Sign distribution
-        uses: sigstore/gh-action-sigstore-python@v3.0.0
-        working-directory: ./compute_horde_sdk
-        with:
-          inputs: >-
-            dist/*.tar.gz
-            dist/*.whl
-
       - name: Create GitHub release
         id: create-release
         uses: softprops/action-gh-release@v2
