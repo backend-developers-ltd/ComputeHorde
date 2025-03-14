@@ -100,6 +100,7 @@ jobs:
         run: ls -R -lah dist
       - name: Sign distribution
         uses: sigstore/gh-action-sigstore-python@v3.0.0
+        working-directory: ./compute_horde_sdk
         with:
           inputs: >-
             dist/*.tar.gz
