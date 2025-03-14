@@ -406,9 +406,10 @@ class MockMetagraph:
         self.num_neurons = num_neurons
         self.W = np.ones((num_neurons, num_neurons))
         self.hotkeys = [f"hotkey_{i}" for i in range(num_neurons)]
-        self.alpha_stake = np.array([0.1 for _ in range(num_neurons)])
-        self.tao_stake = np.array([0.1 for _ in range(num_neurons)])
-        self.stake = np.array([0.1 for _ in range(num_neurons)])
+        self.alpha_stake = np.array([1000.0 * (i + 1) for i in range(num_neurons)])
+        self.tao_stake = np.array([1.0 * (i + 1) for i in range(num_neurons)])
+        self.stake = np.array([1001.0 * (i + 1) for i in range(num_neurons)])
+        self.total_stake = np.array([1001.0 * (i + 1) for i in range(num_neurons)])
         self.uids = np.array(list(range(num_neurons)))
         self.block = MockBlock(block_num)
 
