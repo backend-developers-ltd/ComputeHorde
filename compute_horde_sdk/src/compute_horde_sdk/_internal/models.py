@@ -35,7 +35,7 @@ class ComputeHordeJobStatus(StrEnum):
 
     def is_successful(self) -> bool:
         """Check if the job has finished unsuccessfully"""
-        return self is self.COMPLETED
+        return self == self.COMPLETED
 
     def is_unsuccessful(self) -> bool:
         """Check if the job has finished unsuccessfully"""
