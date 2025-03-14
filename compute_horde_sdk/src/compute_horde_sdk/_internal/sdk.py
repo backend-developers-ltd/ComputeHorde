@@ -1,11 +1,12 @@
 import asyncio
 import base64
+import dataclasses
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping, Sequence
 from datetime import timedelta
-from typing import Self
+from typing import Any, Self, TypeAlias
 from urllib.parse import urljoin
 
 import bittensor
@@ -35,6 +36,51 @@ logger = logging.getLogger(__name__)
 JOB_REFRESH_INTERVAL = timedelta(seconds=3)
 
 DEFAULT_FACILITATOR_URL = "https://facilitator.computehorde.io/"
+
+JobAttemptCallbackType: TypeAlias = (
+    Callable[["ComputeHordeJob"], None]
+    | Callable[["ComputeHordeJob"], Awaitable[None]]
+    | Callable[["ComputeHordeJob"], Coroutine[Any, Any, None]]
+)
+
+
+@dataclasses.dataclass
+class ComputeHordeJobSpec:
+    """
+    Specification of a Job to run in the Compute Horde.
+
+    :ivar executor_class: Class of the executor machine to run the job on.
+    :ivar job_namespace: Specifies where the job comes from.
+        The recommended format is the subnet number and version, like e.g. ``"SN123.0"``.
+    :ivar docker_image: Docker image of the job, in the form of ``user/image:tag``.
+    :ivar args: Positional arguments and flags to run the job with.
+    :ivar env: Environment variables to run the job with.
+    :ivar artifacts_dir: Path of the directory that the job will write its results to.
+        Contents of files found in this directory will be returned after the job completes
+        as a part of the job result. It should be an absolute path (starting with ``/``).
+    :ivar input_volumes: The data to be made available to the job in Docker volumes.
+        The keys should be absolute file/directory paths under which you want your data to be available.
+        The values should be :class:`InputVolume` instances representing how to obtain the input data.
+        For now, input volume paths must start with ``/volume/``.
+    :ivar output_volumes: The data to be read from the Docker volumes after job completion
+        and uploaded to the described destinations. Use this for outputs that are too big
+        or too unstable to be treated as ``artifacts``.
+        The keys should be absolute file paths under which job output data will be available.
+        The values should be :class:`OutputVolume` instances representing how to handle the output data.
+        For now, output volume paths must start with ``/output/``.
+    :ivar trusted_output_volumes: Output volumes for cross validation on a trusted miner.
+        If these are omitted then cross validating on a trusted miner will not result in any uploads.
+    """
+
+    executor_class: ExecutorClass
+    job_namespace: str
+    docker_image: str
+    args: Sequence[str] = dataclasses.field(default_factory=list)
+    env: Mapping[str, str] = dataclasses.field(default_factory=dict)
+    artifacts_dir: str | None = None
+    input_volumes: Mapping[str, InputVolume] | None = None
+    output_volumes: Mapping[str, OutputVolume] | None = None
+    trusted_output_volumes: Mapping[str, OutputVolume] | None = None
 
 
 class ComputeHordeJob:
@@ -206,43 +252,12 @@ class ComputeHordeClient:
         logger.debug("Reported job %s", job_uuid)
         return response
 
-    async def create_job(
-        self,
-        executor_class: ExecutorClass,
-        job_namespace: str,
-        docker_image: str,
-        args: Sequence[str] | None = None,
-        env: Mapping[str, str] | None = None,
-        artifacts_dir: str | None = None,
-        input_volumes: Mapping[str, InputVolume] | None = None,
-        output_volumes: Mapping[str, OutputVolume] | None = None,
-        trusted_output_volumes: Mapping[str, OutputVolume] | None = None,
-        on_trusted_miner: bool = False,
-    ) -> ComputeHordeJob:
+    async def create_job(self, job_spec: ComputeHordeJobSpec, on_trusted_miner: bool = False) -> ComputeHordeJob:
         """
-        Create a new job to run in the Compute Horde.
+        Run a job in the Compute Horde. This method does not retry a failed job.
+        Use :meth:`run_until_complete` if you want failed jobs to be automatically retried.
 
-        :param executor_class: Class of the executor machine to run the job on.
-        :param job_namespace: Specifies where the job comes from.
-            The recommended format is the subnet number and version, like e.g. ``"SN123.0"``.
-        :param docker_image: Docker image of the job, in the form of ``user/image:tag``.
-        :param args: Positional arguments and flags to run the job with.
-        :param env: Environment variables to run the job with.
-        :param artifacts_dir: Path of the directory that the job will write its results to.
-            Contents of files found in this directory will be returned after the job completes
-            as a part of the job result. It should be an absolute path (starting with ``/``).
-        :param input_volumes: The data to be made available to the job in Docker volumes.
-            The keys should be absolute file/directory paths under which you want your data to be available.
-            The values should be :class:`InputVolume` instances representing how to obtain the input data.
-            For now, input volume paths must start with ``/volume/``.
-        :param output_volumes: The data to be read from the Docker volumes after job completion
-            and uploaded to the described destinations. Use this for outputs that are too big
-            or too unstable to be treated as ``artifacts``.
-            The keys should be absolute file paths under which job output data will be available.
-            The values should be :class:`OutputVolume` instances representing how to handle the output data.
-            For now, output volume paths must start with ``/output/``.
-        :param trusted_output_volumes: Output volumes for cross validation on a trusted miner.
-            If these are omitted then cross validating on a trusted miner will not result in any uploads.
+        :param job_spec: Job specification to run.
         :param on_trusted_miner: If true, the job will be run on the sn12 validator's trusted miner.
         :return: A :class:`ComputeHordeJob` class instance representing the created job.
         """
@@ -250,27 +265,27 @@ class ComputeHordeClient:
         # TODO: make this a pydantic model?
         data: dict[str, pydantic.JsonValue] = {
             "target_validator_hotkey": self.compute_horde_validator_hotkey,
-            "executor_class": executor_class,
-            "docker_image": docker_image,
-            "args": args or [],  # type: ignore
-            "env": env or {},  # type: ignore
+            "executor_class": job_spec.executor_class,
+            "docker_image": job_spec.docker_image,
+            "args": job_spec.args or [],  # type: ignore
+            "env": job_spec.env or {},  # type: ignore
             "use_gpu": True,
-            "artifacts_dir": artifacts_dir,
+            "artifacts_dir": job_spec.artifacts_dir,
             "on_trusted_miner": on_trusted_miner,
         }
-        if input_volumes is not None:
+        if job_spec.input_volumes is not None:
             data["volumes"] = [
                 input_volume.to_compute_horde_volume(mount_path).model_dump()
-                for mount_path, input_volume in input_volumes.items()
+                for mount_path, input_volume in job_spec.input_volumes.items()
             ]
 
-        if output_volumes is not None:
+        if job_spec.output_volumes is not None:
             data["uploads"] = [
                 output_volume.to_compute_horde_output_upload(mount_path).model_dump()
-                for mount_path, output_volume in output_volumes.items()
+                for mount_path, output_volume in job_spec.output_volumes.items()
             ]
 
-        logger.debug("Creating job from image %s", docker_image)
+        logger.debug("Creating job from image %s", job_spec.docker_image)
         signature_headers = self._get_signature_headers(data)
 
         response = await self._make_request("POST", "/api/v1/job-docker/", json=data, headers=signature_headers)
@@ -284,6 +299,61 @@ class ComputeHordeClient:
         logger.debug("Created job with UUID=%s", job.uuid)
 
         return job
+
+    async def run_until_complete(
+        self,
+        job_spec: ComputeHordeJobSpec,
+        on_trusted_miner: bool = False,
+        job_attempt_callback: JobAttemptCallbackType | None = None,
+        timeout: float | None = None,
+        max_attempts: int = 3,
+    ) -> ComputeHordeJob:
+        """
+        Run a job in the Compute Horde until it is successful.
+        It will call :meth:`create_job` repeatedly until the job is successful.
+
+        :param job_spec: Job specification to run.
+        :param on_trusted_miner: If true, the job will be run on the sn12 validator's trusted miner.
+        :param job_attempt_callback: A callback function that will be called after every attempt of running the job.
+            The function must take one argument of type ComputeHordeJob.
+            It can be a regular or an async function.
+        :param timeout: Maximum number of seconds to wait for.
+        :param max_attempts: Maximum number times the job will be attempted to run within ``timeout`` seconds.
+            Negative or ``0`` means unlimited attempts.
+        :return: A :class:`ComputeHordeJob` class instance representing the created job.
+            If the job was rerun, it will represent the last attempt.
+        """
+        start_time = time.monotonic()
+
+        if not max_attempts:
+            raise ValueError("`max_attempts` cannot be 0")
+
+        def remaining_timeout() -> float | None:
+            if timeout is None:
+                return None
+            new_timeout = timeout - (time.monotonic() - start_time)
+            return max(new_timeout, 0)
+
+        attempt = 0
+        while True:
+            attempt += 1
+            attempt_msg = f"{attempt}/{max_attempts}" if max_attempts > 0 else f"{attempt}"
+            logger.info(f"Attempting to run job [{attempt_msg}]")
+
+            job = await self.create_job(job_spec, on_trusted_miner)
+
+            if job_attempt_callback:
+                maybe_coro = job_attempt_callback(job)
+                if asyncio.iscoroutine(maybe_coro):
+                    await maybe_coro
+
+            await job.wait(timeout=remaining_timeout())
+
+            if job.status.is_successful():
+                return job
+
+            if max_attempts > 0 and attempt >= max_attempts:
+                return job
 
     async def get_job(self, job_uuid: str) -> ComputeHordeJob:
         """
