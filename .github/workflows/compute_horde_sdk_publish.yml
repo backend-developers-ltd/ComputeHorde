@@ -96,6 +96,8 @@ jobs:
 #          path: ./CHANGELOG.md
 #        continue-on-error: ${{ fromJSON(needs.get-version.outputs.draft) }}
 
+      - name: ls
+        run: ls -R -lah dist
       - name: Sign distribution
         uses: sigstore/gh-action-sigstore-python@v3.0.0
         with:
