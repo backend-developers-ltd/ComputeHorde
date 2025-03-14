@@ -114,9 +114,12 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          packages-dir: compute_horde_sdk/dist/
 
       - name: Publish distribution 📦 to PyPI
         if: ${{ needs.get-version.outputs.draft == 'false' }}
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: compute_horde_sdk/dist/
 
 
