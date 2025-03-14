@@ -1,5 +1,5 @@
 import typing
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypeAlias
 
 import pydantic
 from compute_horde_core.executor_class import ExecutorClass
@@ -155,7 +155,7 @@ class V2JobRequest(BaseModel, extra="forbid"):
         return payload
 
 
-JobRequest = Annotated[
+OrganicJobRequest: TypeAlias = Annotated[
     V0JobRequest | V1JobRequest | V2JobRequest,
     pydantic.Field(discriminator="message_type"),
 ]

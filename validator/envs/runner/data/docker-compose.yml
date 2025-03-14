@@ -117,6 +117,17 @@ services:
       - WORKER_HEALTHCHECK_TIMEOUT=30
     command: ./celery-entrypoint.sh -Q metagraph
 
+  celery-worker-organic-jobs:
+    <<: *celery-worker
+    environment:
+      - DEBUG=off
+      - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-organic-jobs
+      - WORKER_HEALTHCHECK_FILE_PATH=/tmp/worker-healthcheck
+      - WORKER_HEALTHCHECK_TIMEOUT=30
+      - CELERY_CONCURRENCY_MAX=30
+      - CELERY_MAX_TASKS_PER_CHILD=5
+    command: ./celery-entrypoint.sh -Q organic_jobs
+
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.40.0
     devices:
