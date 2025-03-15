@@ -33,6 +33,10 @@ class ComputeHordeJobStatus(StrEnum):
         """
         return self in (self.SENT, self.ACCEPTED)
 
+    def is_successful(self) -> bool:
+        """Check if the job has finished unsuccessfully"""
+        return self == self.COMPLETED
+
 
 @dataclass
 class ComputeHordeJobResult:
