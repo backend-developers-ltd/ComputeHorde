@@ -20,12 +20,25 @@ update_env_var() {
 
   # Update the value if the variable is found, or append it if not
   if grep -q "^${env_name}=" "$file_name"; then
-    sed -i '' "s|^${env_name}=.*|${env_name}=${desired_value}|" "$file_name"
+    # make sed work in-place both on gnu and bsd
+    sed  "s|^${env_name}=.*|${env_name}=${desired_value}|" "$file_name" > "$file_name".tmp && mv "$file_name".tmp "$file_name"
   else
     echo "${env_name}=${desired_value}" >> "$file_name"
   fi
   set -x
 }
+
+# Check if 'docker-compose' is available
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE_COMMAND="docker-compose"
+# Otherwise, check for 'docker compose'
+elif docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_COMMAND="docker compose"
+else
+    echo "Error: Neither 'docker-compose' nor 'docker compose' is available on this system."
+    exit 1
+fi
+
 
 PROJECT_ROOT=$(git rev-parse --show-toplevel)
 
@@ -47,7 +60,7 @@ update_env_var "BITTENSOR_WALLET_DIRECTORY" "$PROJECT_ROOT/local_stack/wallets" 
 update_env_var "EXECUTOR_MANAGER_CLASS_PATH" "compute_horde_miner.miner.executor_manager.v1:DevExecutorManager" ".env"
 update_env_var "DEFAULT_EXECUTOR_CLASS" "always_on.llm.a6000" ".env"
 
-docker-compose up -d
+$DOCKER_COMPOSE_COMMAND up -d
 
 timeout 30s uv run python app/src/manage.py wait_for_database
 uv run python app/src/manage.py migrate
@@ -71,7 +84,7 @@ update_env_var "DEBUG_MINER_PORT" "8000" ".env"
 update_env_var "DEBUG_USE_MOCK_BLOCK_NUMBER" "true" ".env"
 update_env_var "FACILITATOR_URI" "ws://localhost:9000/ws/v0/" ".env"
 
-docker-compose up -d
+$DOCKER_COMPOSE_COMMAND up -d
 
 timeout 30s uv run python app/src/manage.py wait_for_database
 uv run python app/src/manage.py migrate
@@ -87,7 +100,7 @@ cd $PROJECT_ROOT/facilitator
 update_env_var "BITTENSOR_NETWORK" "non-existent" ".env"
 update_env_var "R2_BUCKET_NAME" "''" ".env"
 
-docker-compose up -d
+$DOCKER_COMPOSE_COMMAND up -d
 
 timeout 30s uv run python app/src/manage.py wait_for_database
 uv run python app/src/manage.py migrate

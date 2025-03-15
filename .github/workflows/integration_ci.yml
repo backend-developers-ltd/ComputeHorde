@@ -3,9 +3,9 @@ name: Run integration tests
 # temporary disable integration test
 on:
  push:
-   branches: [master-not, main-not]
+   branches: [master, main]
  pull_request:
-   branches: [master-not, main-not]
+   branches: [master, main]
 
 env:
   PYTHON_DEFAULT_VERSION: "3.11"
@@ -28,58 +28,17 @@ jobs:
         with:
           version: "latest"
           enable-cache: true
-      - name: Install dependencies
-        run: python -m pip install --upgrade nox
-      - name: Setup common virtualenv
-        # In order not to exhaust disk on GitHub runner, we use one single
-        # virtualenv for all pdm projects: miner, executor, validator.
-        run: |
-          python -m venv .venv
-          echo "$.venv/bin" >> $GITHUB_PATH
-          echo "VIRTUAL_ENV=${{ github.workspace }}/.venv" >> $GITHUB_ENV
-      - name: Install test dependencies
-        run: uv sync --locked
-      - name: Prepare miner environment
-        run: ./setup-dev.sh
-        working-directory: ./miner
-      - name: Prepare executor environment
-        run: ./setup-dev.sh
-        working-directory: ./executor
-      - name: Prepare validator environment
-        run: ./setup-dev.sh
-        working-directory: ./validator
-      - name: Run miner dockerized services
-        run: docker compose up -d --wait
-        working-directory: ./miner
-      - name: Run validator dockerized services
-        run: docker compose up -d --wait
-        working-directory: ./validator
-      - name: Run miner migrations
-        run: cd app/src && uv run --no-sync python manage.py wait_for_database --timeout 120 && uv run --no-sync python manage.py migrate
-        working-directory: ./miner
-      - name: Run validator migrations
-        run: cd app/src && uv run --no-sync python manage.py wait_for_database --timeout 120 && uv run --no-sync python manage.py migrate
-        working-directory: ./validator
-      - name: Build backenddevelopersltd/compute-horde-job-echo:v0-latest image
-        run: docker build . -t backenddevelopersltd/compute-horde-job-echo:v0-latest
-        working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_tests/
-      - name: Run unit tests
-        run: nox -vs test
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2
+      - name: Start all services
+        run: local_stack/run_and_await_readiness.sh /tmp/integration_test_logs/
+      
+      - name: test
+        working-directory: ./compute_horde_sdk
+        run: uv run ../local_stack/send_hello_world_job.py
+
+      - name: Upload integration test logs
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          check_name: "Integration test report"
-          files: "test-report.xml"
-          fail_on: "nothing"
-          comment_mode: "failures"
-          check_run: true
-      - name: Stop miner dockerized services
-        if: success() || failure()
-        run: docker compose down -v
-        working-directory: ./miner
+          name: integration-test-logs
+          path: /tmp/integration_test_logs/*.log
 
-      - name: Stop validator dockerized services
-        if: success() || failure()
-        run: docker compose down -v
-        working-directory: ./validator
