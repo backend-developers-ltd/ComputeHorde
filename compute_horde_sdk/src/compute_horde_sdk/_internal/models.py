@@ -37,10 +37,6 @@ class ComputeHordeJobStatus(StrEnum):
         """Check if the job has finished unsuccessfully"""
         return self == self.COMPLETED
 
-    def is_unsuccessful(self) -> bool:
-        """Check if the job has finished unsuccessfully"""
-        return self in (self.REJECTED, self.FAILED)
-
 
 @dataclass
 class ComputeHordeJobResult:
