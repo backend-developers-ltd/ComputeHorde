@@ -12,6 +12,7 @@ from urllib.parse import urljoin
 import bittensor
 import httpx
 import pydantic
+import tenacity
 
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.signature import (
@@ -42,6 +43,33 @@ JobAttemptCallbackType: TypeAlias = (
     | Callable[["ComputeHordeJob"], Awaitable[None]]
     | Callable[["ComputeHordeJob"], Coroutine[Any, Any, None]]
 )
+
+
+def _retryable_status_code(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500
+
+
+def _retryable_exception(exc: BaseException) -> bool:
+    """Retry requests, if request failed for with a retryable exception"""
+    if not isinstance(exc, ComputeHordeError):
+        return False
+
+    if isinstance(exc.__cause__, httpx.HTTPStatusError):
+        return _retryable_status_code(exc.__cause__.response.status_code)
+
+    return isinstance(
+        exc.__cause__,
+        (
+            httpx.ConnectTimeout,
+            httpx.PoolTimeout,
+            # httpx.ReadTimeout,
+            httpx.WriteTimeout,
+            # httpx.ReadError,
+            httpx.WriteError,
+            httpx.ConnectError,
+            # httpx.DecodingError,
+        ),
+    )
 
 
 @dataclasses.dataclass
@@ -175,6 +203,12 @@ class ComputeHordeClient:
         self._client = httpx.AsyncClient(base_url=self.facilitator_url, follow_redirects=True)
         self._signer = BittensorWalletSigner(hotkey)
 
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception(_retryable_exception),
+        stop=tenacity.stop_after_attempt(5),
+        wait=tenacity.wait_exponential_jitter(initial=0.2),
+        reraise=True,
+    )
     async def _make_request(
         self,
         method: str,
@@ -233,9 +267,7 @@ class ComputeHordeClient:
 
         data_to_sign = f"{method}{url}{headers_str}".encode()
 
-        signature = self.hotkey.sign(
-            data_to_sign,
-        ).hex()
+        signature = self.hotkey.sign(data_to_sign).hex()
         headers["Signature"] = signature
 
         return headers
