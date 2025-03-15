@@ -1,10 +1,12 @@
 import asyncio
 import logging
 import os
+import time
 from collections import deque
 from typing import cast
 
 import bittensor
+import httpx
 import pydantic
 import tenacity
 import websockets
@@ -171,6 +173,13 @@ class FacilitatorClient:
             ) from exc
         if response.status != "success":
             raise AuthenticationError("auth request received failed response", response.errors)
+
+        if settings.DEBUG_CONNECT_FACILITATOR_WEBHOOK:
+            try:
+                async with httpx.AsyncClient() as client:
+                    await client.get(settings.DEBUG_CONNECT_FACILITATOR_WEBHOOK)
+            except Exception:
+                logger.info("when calling connect webhook:", exc_info=True)
 
         self.ws = ws
 
@@ -432,6 +441,8 @@ class FacilitatorClient:
         return job
 
     async def get_current_block(self) -> int:
+        if settings.DEBUG_USE_MOCK_BLOCK_NUMBER:
+            return 5136476 + int((time.time() - 1742076533) / 12)
         # TODO: Use the new block timer
         subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
         current_block = subtensor_.get_current_block()

@@ -2,7 +2,6 @@ import logging
 import os
 import pathlib
 import subprocess
-import sys
 
 from django.conf import settings
 
@@ -22,8 +21,9 @@ executor_dir = this_dir / ".." / ".." / ".." / ".." / ".." / ".." / ".." / "exec
 class DevExecutorManager(BaseExecutorManager):
     async def start_new_executor(self, token, executor_class, timeout):
         nginx_port = executor_port_dispenser.get_port()
+
         return subprocess.Popen(
-            [sys.executable, "app/src/manage.py", "run_executor"],
+            ["uv", "run", "python", "app/src/manage.py", "run_executor"],
             env={
                 "MINER_ADDRESS": f"ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
                 "EXECUTOR_TOKEN": token,
