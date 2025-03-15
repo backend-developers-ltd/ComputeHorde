@@ -2,7 +2,7 @@
 
 set -e
 
-for projectdir in compute_horde executor miner validator; do
+for projectdir in compute_horde compute_horde_sdk executor miner validator; do
   cd "${projectdir}"
   uv sync --all-groups
   uv run ruff check --fix

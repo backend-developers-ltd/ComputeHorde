@@ -725,6 +725,8 @@ SYNTHETIC_JOB_GENERATOR_FACTORY = env.str(
 FACILITATOR_URI = env.str(
     "FACILITATOR_URI", default="wss://facilitator.computehorde.io/ws/v0/"
 ).strip()
+DEBUG_CONNECT_FACILITATOR_WEBHOOK = env.str("DEBUG_CONNECT_FACILITATOR_WEBHOOK", default=None)
+DEBUG_USE_MOCK_BLOCK_NUMBER = env.bool("DEBUG_USE_MOCK_BLOCK_NUMBER", default=False)
 STATS_COLLECTOR_URL = env.str(
     "STATS_COLLECTOR_URL", default="https://facilitator.computehorde.io/stats_collector/v0/"
 )

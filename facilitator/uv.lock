@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = "==3.11.*"
 resolution-markers = [
     "sys_platform == 'linux'",
@@ -600,7 +599,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-format = [{ name = "ruff" }]
+format = [
+    { name = "nox", specifier = "==2024.10.9" },
+    { name = "ruff" },
+]
 lint = [
     { name = "codespell", extras = ["toml"] },
     { name = "ruff" },
@@ -644,7 +646,10 @@ docs = [
     { name = "sphinx", specifier = ">=8.2.3" },
     { name = "sphinx-rtd-theme", specifier = ">=3.0.2" },
 ]
-format = [{ name = "ruff" }]
+format = [
+    { name = "nox", specifier = "==2024.10.9" },
+    { name = "ruff" },
+]
 lint = [
     { name = "codespell", extras = ["toml"] },
     { name = "ruff" },

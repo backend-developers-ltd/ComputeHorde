@@ -1,4 +1,5 @@
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Literal, assert_never
@@ -121,6 +122,11 @@ async def execute_organic_job_request(miner: Miner, job_request: OrganicJobReque
         ip_type = miner.ip_version
         on_trusted_miner = False
 
+    if settings.DEBUG_USE_MOCK_BLOCK_NUMBER:
+        block = 5136476 + int((time.time() - 1742076533) / 12)
+    else:
+        block = (await MetagraphSnapshot.aget_latest()).block
+
     job = await OrganicJob.objects.acreate(
         job_uuid=str(job_request.uuid),
         miner=miner,
@@ -129,7 +135,7 @@ async def execute_organic_job_request(miner: Miner, job_request: OrganicJobReque
         miner_port=miner_port,
         executor_class=job_request.executor_class,
         job_description="User job from facilitator",
-        block=(await MetagraphSnapshot.aget_latest()).block,
+        block=block,
         on_trusted_miner=on_trusted_miner,
     )
 
