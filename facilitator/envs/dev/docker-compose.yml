@@ -7,7 +7,7 @@ services:
     healthcheck:
       test: redis-cli ping
     volumes:
-      - ./redis/data:/data
+      - redis:/data
     ports:
       - ${REDIS_PORT}:6379
 
@@ -20,6 +20,9 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
-      - ./db/data:/var/lib/postgresql/data
+      - db:/var/lib/postgresql/data
     ports:
       - ${POSTGRES_PORT}:5432
+volumes:
+  db:
+  redis:
