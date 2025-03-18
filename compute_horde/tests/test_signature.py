@@ -125,6 +125,7 @@ def test_signed_fields__missing_fields():
         "input_url": "",
         "uploads": [],
         "volumes": [],
+        "streaming_details": None,
     }
     facilitator_signed_fields = SignedFields.from_facilitator_sdk_json(facilitator_request_json)
 
@@ -172,6 +173,7 @@ def test_signed_fields__volumes_uploads():
         "input_url": "",
         "uploads": to_json_array(uploads),
         "volumes": to_json_array(volumes),
+        "streaming_details": None,
     }
     facilitator_signed_fields = SignedFields.from_facilitator_sdk_json(facilitator_request_json)
 

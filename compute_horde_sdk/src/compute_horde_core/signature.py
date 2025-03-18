@@ -36,6 +36,11 @@ class Signature(BaseModel, extra="forbid"):
         return base64.b64encode(signature).decode("utf-8")
 
 
+# FIXME: this might be duplicated with the messages in protocol_messages.py
+class StreamingDetails(BaseModel):
+    public_key: str
+
+
 class SignedFields(BaseModel):
     executor_class: str
     docker_image: str
@@ -47,6 +52,8 @@ class SignedFields(BaseModel):
 
     volumes: list[JsonValue]
     uploads: list[JsonValue]
+
+    streaming_details: StreamingDetails | None
 
     @staticmethod
     def from_facilitator_sdk_json(data: JsonValue) -> "SignedFields":
@@ -62,6 +69,8 @@ class SignedFields(BaseModel):
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
             artifacts_dir=typing.cast(str, data.get("artifacts_dir") or ""),
             on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
+            streaming_details=StreamingDetails.model_validate(data["streaming_details"])
+                              if "streaming_details" in data else None,
         )
         return signed_fields
 

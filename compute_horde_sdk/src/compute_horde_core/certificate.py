@@ -70,13 +70,15 @@ async def start_nginx(
         "docker",
         "run",
         "--detach",
-        "--rm",
+        # "--rm",
         "--name",
         container_name,
         "--network",
         "bridge",  # primary external network
         "-p",
         f"{port}:443",  # expose nginx port
+        "-p",
+        "127.0.0.1:80:80",
         "-v",
         f"{dir_path}:/etc/nginx/",
         "nginx:1.26-alpine",
@@ -95,7 +97,8 @@ async def start_nginx(
     await process.wait()
 
     # wait for nginx to start
-    url = f"http://{ip}/ok"
+    # url = f"http://{ip}/ok"
+    url = f"http://127.0.0.1/ok"
     nginx_started = await check_endpoint(url, timeout)
     if not nginx_started:
         stdout = _stdout.decode() if _stdout else ""

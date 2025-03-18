@@ -61,6 +61,7 @@ PROJECT_ROOT=$(git rev-parse --show-toplevel)
 cd $PROJECT_ROOT/executor
 ./setup-dev.sh
 update_env_var "DEBUG_NO_GPU_MODE" "true" ".env"
+update_env_var "CERTIFICATE_DIR" "/tmp/tmp/" ".env"
 
 # setup miner
 cd $PROJECT_ROOT/miner

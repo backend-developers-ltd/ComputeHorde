@@ -10,7 +10,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
-from compute_horde.certificate import (
+from compute_horde_core.certificate import (
     generate_certificate,
     generate_certificate_at,
     save_public_key,

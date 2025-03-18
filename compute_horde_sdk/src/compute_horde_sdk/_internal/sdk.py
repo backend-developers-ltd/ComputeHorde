@@ -12,8 +12,11 @@ from urllib.parse import urljoin
 import bittensor
 import httpx
 import pydantic
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.x509 import Certificate
 import tenacity
 
+from compute_horde_core.certificate import generate_certificate_at, generate_certificate, serialize_certificate
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.signature import (
     BittensorWalletSigner,
@@ -215,6 +218,8 @@ class ComputeHordeClient:
         self._signer = BittensorWalletSigner(hotkey)
         self._token_lock = asyncio.Lock()
         self._token: str | None = None
+        self.streaming_public_cert: Certificate | None = None
+        self.streaming_private_key: RSAPrivateKey | None = None
 
     async def authenticate(self) -> None:
         nonce_url = urljoin(self.facilitator_url, "auth/nonce")
@@ -350,9 +355,15 @@ class ComputeHordeClient:
 
         :param job_spec: Job specification to run.
         :param on_trusted_miner: If true, the job will be run on the sn12 validator's trusted miner.
+        :param streaming: If true, a cert will be generated and the job will be run in streaming mode.
         :return: A :class:`ComputeHordeJob` class instance representing the created job.
         """
 
+        if job_spec.streaming:
+            self.streaming_public_cert, self.streaming_private_key = generate_certificate("127.0.0.1")
+            streaming_details = {"public_key": serialize_certificate(self.streaming_public_cert).decode("utf-8")}
+        else:
+            streaming_details = None
         # TODO: make this a pydantic model?
         data: dict[str, pydantic.JsonValue] = {
             "target_validator_hotkey": self.compute_horde_validator_hotkey,
@@ -363,6 +374,7 @@ class ComputeHordeClient:
             "use_gpu": True,
             "artifacts_dir": job_spec.artifacts_dir,
             "on_trusted_miner": on_trusted_miner,
+            "streaming_details": streaming_details
         }
         if job_spec.input_volumes is not None:
             data["volumes"] = [

@@ -15,7 +15,7 @@ import typing
 import packaging.version
 import pydantic
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.certificate import (
+from compute_horde_core.certificate import (
     check_endpoint,
     generate_certificate_at,
     get_docker_container_ip,
@@ -399,6 +399,8 @@ class JobRunner:
         self.output_volume_mount_dir = self.temp_dir / "output"
         self.specs_volume_mount_dir = self.temp_dir / "specs"
         self.artifacts_mount_dir = self.temp_dir / "artifacts"
+        self.nginx_mount_dir = self.temp_dir / "nginx"
+        self.nginx_mount_dir.mkdir(exist_ok=True)
 
         self.job_container_name = job_container_name(settings.EXECUTOR_TOKEN)
         self.nginx_container_name = nginx_container_name(settings.EXECUTOR_TOKEN)
@@ -412,6 +414,7 @@ class JobRunner:
         if self.initial_job_request.streaming_details is not None:
             assert self.initial_job_request.streaming_details.executor_ip is not None
             self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(
+                dir_path=self.nginx_mount_dir,
                 alternative_name=self.initial_job_request.streaming_details.executor_ip
             )
             save_public_key(
@@ -440,6 +443,7 @@ class JobRunner:
         self.volume_mount_dir.mkdir(exist_ok=True)
         self.output_volume_mount_dir.mkdir(exist_ok=True)
         self.artifacts_mount_dir.mkdir(exist_ok=True)
+        # self.nginx_mount_dir.mkdir(exist_ok=True)
 
         logger.info("preparing in progress")
 
@@ -572,7 +576,7 @@ class JobRunner:
                 await start_nginx(
                     nginx_conf,
                     port=settings.NGINX_PORT,
-                    dir_path=self.nginx_dir_path,
+                    dir_path=self.nginx_mount_dir,
                     job_network=self.job_network_name,
                     container_name=self.nginx_container_name,
                     timeout=WAIT_FOR_NGINX_TIMEOUT,
@@ -938,6 +942,7 @@ class Command(BaseCommand):
                         ip = await get_docker_container_ip(
                             job_runner.nginx_container_name, bridge_network=True
                         )
+                        ip = "127.0.0.1"
                         logger.debug(f"Checking if streaming job is ready at http://{ip}/health")
                         job_ready = await check_endpoint(
                             f"http://{ip}/health", WAIT_FOR_STREAMING_JOB_TIMEOUT

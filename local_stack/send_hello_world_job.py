@@ -23,8 +23,11 @@ async def main():
             executor_class=ExecutorClass.always_on__llm__a6000,
             job_namespace="SN123.0",
             docker_image="alpine",
-            args=["sh", "-c", "echo 'Hello, World!' > /artifacts/stuff"],
+            #args=["sh", "-c", "echo 'Hello, World!' > /artifacts/stuff"],
+            args=["sh", "-c",
+                  "while true; do echo -e 'HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\nHello, World!' | nc -l -p 8000; done & sleep 150"],
             artifacts_dir="/artifacts",
+            streaming=True,
         )
     )
 

@@ -10,6 +10,7 @@ from functools import cached_property
 import bittensor
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
+from compute_horde_core.signature import StreamingDetails
 from compute_horde_core.volume import Volume
 from pydantic import TypeAdapter
 
@@ -379,6 +380,7 @@ class OrganicJobDetails:
     volume: Volume | None = None
     output: OutputUpload | None = None
     artifacts_dir: str | None = None
+    streaming_details: StreamingDetails | None = None
 
 
 async def run_organic_job(
@@ -423,6 +425,7 @@ async def run_organic_job(
                 volume=job_details.volume,
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
+                streaming_details={"public_key": job_details.streaming_details.public_key},
             ),
         )
         logger.debug(f"Sent initial job request for {job_details.job_uuid}")
