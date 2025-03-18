@@ -92,7 +92,7 @@ class ComputeHordeJobSpec:
         For now, input volume paths must start with ``/volume/``.
     :ivar output_volumes: The data to be read from the Docker volumes after job completion
         and uploaded to the described destinations. Use this for outputs that are too big
-        or too unstable to be treated as ``artifacts``.
+        to be treated as ``artifacts``.
         The keys should be absolute file paths under which job output data will be available.
         The values should be :class:`OutputVolume` instances representing how to handle the output data.
         For now, output volume paths must start with ``/output/``.
