@@ -71,11 +71,24 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "artifacts_dir",
             "target_validator_hotkey",
             "on_trusted_miner",
+            "streaming_client_cert",
+            "streaming_server_cert",
+            "streaming_server_address",
+            "streaming_server_port",
         )
         read_only_fields = (
             "created_at",
             "output_download_url",
         )
+
+    def to_internal_value(self, data: dict):
+        obj = super().to_internal_value(data)
+        try:
+            obj["streaming_client_cert"] = data["streaming_details"]["public_key"]
+            assert isinstance(obj["streaming_client_cert"], str)
+        except (KeyError, TypeError, AssertionError):
+            obj["streaming_client_cert"] = None
+        return obj
 
     uploads = SmartSchemaField(schema=list[SingleFileUpload], required=False)
     volumes = SmartSchemaField(schema=list[MuliVolumeAllowedVolume], required=False)
@@ -138,6 +151,7 @@ class DockerJobSerializer(DynamicJobFields, JobSerializer):
                 "target_validator_hotkey",
                 "artifacts_dir",
                 "on_trusted_miner",
+                "streaming_client_cert",
             }
         )
 

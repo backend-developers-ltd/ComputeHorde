@@ -11,7 +11,10 @@ from urllib.parse import urljoin
 import bittensor
 import httpx
 import pydantic
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.x509 import Certificate
 
+from compute_horde_core.certificate import generate_certificate_at, generate_certificate, serialize_certificate
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.signature import (
     BittensorWalletSigner,
@@ -128,6 +131,8 @@ class ComputeHordeClient:
         self.facilitator_url = facilitator_url
         self._client = httpx.AsyncClient(base_url=self.facilitator_url, follow_redirects=True)
         self._signer = BittensorWalletSigner(hotkey)
+        self.streaming_public_cert: Certificate | None = None
+        self.streaming_private_key: RSAPrivateKey | None = None
 
     async def _make_request(
         self,
@@ -220,6 +225,7 @@ class ComputeHordeClient:
         output_volumes: Mapping[str, OutputVolume] | None = None,
         trusted_output_volumes: Mapping[str, OutputVolume] | None = None,
         on_trusted_miner: bool = False,
+        streaming: bool = False,
     ) -> ComputeHordeJob:
         """
         Create a new job to run in the Compute Horde.
@@ -246,9 +252,15 @@ class ComputeHordeClient:
         :param trusted_output_volumes: Output volumes for cross validation on a trusted miner.
             If these are omitted then cross validating on a trusted miner will not result in any uploads.
         :param on_trusted_miner: If true, the job will be run on the sn12 validator's trusted miner.
+        :param streaming: If true, a cert will be generated and the job will be run in streaming mode.
         :return: A :class:`ComputeHordeJob` class instance representing the created job.
         """
 
+        if streaming:
+            self.streaming_public_cert, self.streaming_private_key = generate_certificate("127.0.0.1")
+            streaming_details = {"public_key": serialize_certificate(self.streaming_public_cert).decode("utf-8")}
+        else:
+            streaming_details = None
         # TODO: make this a pydantic model?
         data: dict[str, pydantic.JsonValue] = {
             "target_validator_hotkey": self.compute_horde_validator_hotkey,
@@ -259,6 +271,7 @@ class ComputeHordeClient:
             "use_gpu": True,
             "artifacts_dir": artifacts_dir,
             "on_trusted_miner": on_trusted_miner,
+            "streaming_details": streaming_details
         }
         if input_volumes is not None:
             data["volumes"] = [

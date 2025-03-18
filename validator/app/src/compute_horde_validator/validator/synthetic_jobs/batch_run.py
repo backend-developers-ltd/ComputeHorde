@@ -16,7 +16,7 @@ import bittensor
 import httpx
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
-from compute_horde.certificate import generate_certificate_at
+from compute_horde_core.certificate import generate_certificate_at
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
     AbstractMinerClient,

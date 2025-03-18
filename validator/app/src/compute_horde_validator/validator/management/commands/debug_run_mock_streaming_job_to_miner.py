@@ -8,7 +8,7 @@ from typing import cast
 import requests
 import uvloop
 from asgiref.sync import async_to_sync
-from compute_horde.certificate import generate_certificate_at
+from compute_horde_core.certificate import generate_certificate_at
 from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,

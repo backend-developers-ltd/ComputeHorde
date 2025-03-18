@@ -135,6 +135,8 @@ async def execute_organic_job(
         volume=job_request.volume,
         output=job_request.output_upload,
         artifacts_dir=artifacts_dir,
+        streaming_details=getattr(job_request, "streaming_details", None),  # FIXME: remove old JobRequests
+                                                                            # that don't have that
     )
 
     try:

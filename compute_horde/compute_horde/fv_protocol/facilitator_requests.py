@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 import pydantic
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import MultiUpload, OutputUpload, ZipAndHttpPutUpload
-from compute_horde_core.signature import Signature, SignedFields
+from compute_horde_core.signature import Signature, SignedFields, StreamingDetails
 from compute_horde_core.volume import MultiVolume, Volume, ZipUrlVolume
 from pydantic import BaseModel, JsonValue
 
@@ -109,6 +109,7 @@ class V2JobRequest(BaseModel, extra="forbid"):
     output_upload: OutputUpload | None = None
     artifacts_dir: str | None = None
     on_trusted_miner: bool = False
+    streaming_details: StreamingDetails | None = None
     # !!! all fields above are included in the signed json payload
 
     def get_args(self):
@@ -144,6 +145,7 @@ class V2JobRequest(BaseModel, extra="forbid"):
             on_trusted_miner=self.on_trusted_miner,
             volumes=volumes,
             uploads=uploads,
+            streaming_details=self.streaming_details,
         )
         return signed_fields
 

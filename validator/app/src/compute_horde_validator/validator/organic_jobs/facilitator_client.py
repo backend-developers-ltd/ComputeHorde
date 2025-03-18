@@ -319,7 +319,6 @@ class FacilitatorClient:
 
         For now, we'll bail and report job failure as soon as anything goes wrong.
         """
-
         if isinstance(job_request, V2JobRequest):
             logger.debug(f"Received signed job request: {job_request}")
             try:

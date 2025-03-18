@@ -22,6 +22,7 @@ from compute_horde_core.output_upload import (
     SingleFileUpload,
     ZipAndHttpPutUpload,
 )
+from compute_horde_core.signature import StreamingDetails
 from compute_horde_core.volume import (
     HuggingfaceVolume,
     MultiVolume,
@@ -238,6 +239,11 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     on_trusted_miner = models.BooleanField(default=False)
 
     tag = models.CharField(max_length=255, blank=True, default="", help_text="may be used to group jobs")
+
+    streaming_client_cert = models.TextField(blank=True, default="")
+    streaming_server_cert = models.TextField(blank=True, default="")
+    streaming_server_address = models.TextField(blank=True, default="")
+    streaming_server_port = models.IntegerField(blank=True, default=0)
 
     objects = JobQuerySet.as_manager()
 
@@ -512,6 +518,8 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                     signature=signature,
                     artifacts_dir=self.artifacts_dir or None,
                     on_trusted_miner=self.on_trusted_miner,
+                    streaming_details=StreamingDetails(public_key=self.streaming_client_cert)
+                                      if self.streaming_client_cert else None,
                 )
             else:
                 assert self.miner is not None
