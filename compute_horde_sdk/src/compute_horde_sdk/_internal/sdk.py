@@ -37,6 +37,18 @@ logger = logging.getLogger(__name__)
 JOB_REFRESH_INTERVAL = timedelta(seconds=3)
 
 DEFAULT_FACILITATOR_URL = "https://facilitator.computehorde.io/"
+DEFAULT_MAX_JOB_RUN_ATTEMPTS = 3
+HTTP_RETRY_MAX_ATTEMPTS = 5
+RETRYABLE_HTTP_EXCEPTIONS = (
+    httpx.ConnectTimeout,
+    httpx.PoolTimeout,
+    # httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    # httpx.ReadError,
+    httpx.WriteError,
+    httpx.ConnectError,
+    # httpx.DecodingError,
+)
 
 JobAttemptCallbackType: TypeAlias = (
     Callable[["ComputeHordeJob"], None]
@@ -57,19 +69,7 @@ def _retryable_exception(exc: BaseException) -> bool:
     if isinstance(exc.__cause__, httpx.HTTPStatusError):
         return _retryable_status_code(exc.__cause__.response.status_code)
 
-    return isinstance(
-        exc.__cause__,
-        (
-            httpx.ConnectTimeout,
-            httpx.PoolTimeout,
-            # httpx.ReadTimeout,
-            httpx.WriteTimeout,
-            # httpx.ReadError,
-            httpx.WriteError,
-            httpx.ConnectError,
-            # httpx.DecodingError,
-        ),
-    )
+    return isinstance(exc.__cause__, RETRYABLE_HTTP_EXCEPTIONS)
 
 
 @dataclasses.dataclass
@@ -205,7 +205,7 @@ class ComputeHordeClient:
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception(_retryable_exception),
-        stop=tenacity.stop_after_attempt(5),
+        stop=tenacity.stop_after_attempt(HTTP_RETRY_MAX_ATTEMPTS),
         wait=tenacity.wait_exponential_jitter(initial=0.2),
         reraise=True,
     )
@@ -230,7 +230,11 @@ class ComputeHordeClient:
             headers={**headers, **auth_headers} if headers else auth_headers,
         )
         logger.debug("%s %s", method, request.url)
-        response = await self._client.send(request)
+        try:
+            response = await self._client.send(request)
+        except httpx.HTTPError as e:
+            raise ComputeHordeError(f"Compute Horde request failed: {e}") from e
+
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -338,7 +342,7 @@ class ComputeHordeClient:
         on_trusted_miner: bool = False,
         job_attempt_callback: JobAttemptCallbackType | None = None,
         timeout: float | None = None,
-        max_attempts: int = 3,
+        max_attempts: int = DEFAULT_MAX_JOB_RUN_ATTEMPTS,
     ) -> ComputeHordeJob:
         """
         Run a job in the Compute Horde until it is successful.
@@ -347,6 +351,8 @@ class ComputeHordeClient:
         :param job_spec: Job specification to run.
         :param on_trusted_miner: If true, the job will be run on the sn12 validator's trusted miner.
         :param job_attempt_callback: A callback function that will be called after every attempt of running the job.
+            The callback will be called immediately after an attempt is made run the job,
+            before waiting for the job to complete.
             The function must take one argument of type ComputeHordeJob.
             It can be a regular or an async function.
         :param timeout: Maximum number of seconds to wait for.
@@ -356,9 +362,6 @@ class ComputeHordeClient:
             If the job was rerun, it will represent the last attempt.
         """
         start_time = time.monotonic()
-
-        if not max_attempts:
-            raise ValueError("`max_attempts` cannot be 0")
 
         def remaining_timeout() -> float | None:
             if timeout is None:
