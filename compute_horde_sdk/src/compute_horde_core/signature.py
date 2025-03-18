@@ -49,7 +49,7 @@ class SignedFields(BaseModel):
     uploads: list[JsonValue]
 
     @staticmethod
-    def from_facilitator_sdk_json(data: JsonValue):
+    def from_facilitator_sdk_json(data: JsonValue) -> "SignedFields":
         data = typing.cast(dict[str, JsonValue], data)
 
         signed_fields = SignedFields(
@@ -158,7 +158,7 @@ class SignatureScheme(abc.ABC):
         url: str,
         headers: dict[str, str],
         json: JsonValue | None = None,
-    ):
+    ) -> JsonValue:
         return signature_payload(
             method=method,
             url=url,
@@ -199,7 +199,7 @@ class Verifier(SignatureScheme):
         payload: JsonValue | bytes,
         signature: Signature,
         newer_than: datetime.datetime | None = None,
-    ):
+    ) -> None:
         payload_hash = hash_message_signature(payload, signature)
         self._verify(payload_hash, signature)
 
@@ -255,7 +255,7 @@ def verify_signature(
     signature: Signature,
     *,
     newer_than: datetime.datetime | None = None,
-):
+) -> None:
     """
     Verifies the signature of the payload
 

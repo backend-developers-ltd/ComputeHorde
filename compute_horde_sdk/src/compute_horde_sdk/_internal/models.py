@@ -59,7 +59,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     status: ComputeHordeJobStatus
     docker_image: str
     args: list[str]
-    env: dict
+    env: dict[str, str]
     # use_gpu: bool
     # hf_repo_id: str
     # hf_revision: str
@@ -67,10 +67,10 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # output_download_url: str
     # tag: str
     stdout: str
-    volumes: list = []
-    uploads: list = []
+    # volumes: list = []
+    # uploads: list = []
     # target_validator_hotkey: str
-    artifacts: dict = {}
+    artifacts: dict[str, str] = {}
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):
