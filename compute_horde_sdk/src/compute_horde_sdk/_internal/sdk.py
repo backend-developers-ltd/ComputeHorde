@@ -96,8 +96,6 @@ class ComputeHordeJobSpec:
         The keys should be absolute file paths under which job output data will be available.
         The values should be :class:`OutputVolume` instances representing how to handle the output data.
         For now, output volume paths must start with ``/output/``.
-    :ivar trusted_output_volumes: Output volumes for cross validation on a trusted miner.
-        If these are omitted then cross validating on a trusted miner will not result in any uploads.
     """
 
     executor_class: ExecutorClass
@@ -108,7 +106,6 @@ class ComputeHordeJobSpec:
     artifacts_dir: str | None = None
     input_volumes: Mapping[str, InputVolume] | None = None
     output_volumes: Mapping[str, OutputVolume] | None = None
-    trusted_output_volumes: Mapping[str, OutputVolume] | None = None
 
 
 class ComputeHordeJob:
