@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import bittensor
@@ -12,12 +13,19 @@ from compute_horde_core.signature import (
     SignedFields,
     signature_from_headers,
 )
+from compute_horde_sdk._internal.sdk import (
+    DEFAULT_MAX_JOB_RUN_ATTEMPTS,
+    HTTP_RETRY_MAX_ATTEMPTS,
+    RETRYABLE_HTTP_EXCEPTIONS,
+)
+from tests.utils import INITIAL_FROZEN_TIME
 
 if TYPE_CHECKING:
-    from compute_horde_sdk._internal.sdk import ComputeHordeClient, ComputeHordeJob
+    from compute_horde_sdk._internal.sdk import ComputeHordeClient, ComputeHordeJob, ComputeHordeJobSpec
 
 TEST_FACILITATOR_URL = "http://localhost:4321"
 TEST_JOB_UUID = "1c4904f0-b614-4e27-8e50-7bfc5ddab8fd"
+TEST_JOB_UUID2 = "a9c0ccd4-0900-46b1-b8ff-9a958157c2f5"
 TEST_DOCKER_IMAGE = "example-com/test-image"
 
 
@@ -90,6 +98,15 @@ def compute_horde_client(keypair, apiver_module) -> "ComputeHordeClient":
 
 
 @pytest.fixture
+def job_spec(apiver_module, compute_horde_client) -> "ComputeHordeJobSpec":
+    return apiver_module.ComputeHordeJobSpec(
+        executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
+        job_namespace="SN123.0",
+        docker_image=TEST_DOCKER_IMAGE,
+    )
+
+
+@pytest.fixture
 def job(apiver_module, compute_horde_client) -> "ComputeHordeJob":
     return apiver_module.ComputeHordeJob(
         compute_horde_client,
@@ -116,9 +133,11 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
     )
 
     job = await client.create_job(
-        executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
-        job_namespace="SN123.0",
-        docker_image=TEST_DOCKER_IMAGE,
+        apiver_module.ComputeHordeJobSpec(
+            executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
+            job_namespace="SN123.0",
+            docker_image=TEST_DOCKER_IMAGE,
+        )
     )
 
     assert job.uuid == TEST_JOB_UUID
@@ -289,27 +308,29 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
     )
 
     job = await compute_horde_client.create_job(
-        executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
-        job_namespace="SN123.0",
-        docker_image=TEST_DOCKER_IMAGE,
-        args=["--block", "10000"],
-        env={"TEST_ENV": "1"},
-        artifacts_dir="/artifacts",
-        input_volumes={
-            "/volume/models/model01": apiver_module.HuggingfaceInputVolume(repo_id="myrepo/mymodel"),
-            "/volume/version.txt": apiver_module.InlineInputVolume(contents="dmVyc2lvbj0y"),
-            "/volume/dataset.json": apiver_module.HTTPInputVolume(
-                url="https://s3.aws.something.com/mybucket/myfile.json"
-            ),
-        },
-        output_volumes={
-            "/output/results.json": apiver_module.HTTPOutputVolume(
-                http_method="PUT", url="https://s3.aws.something.com/mybucket/myfile.json"
-            ),
-            "/output/image.png": apiver_module.HTTPOutputVolume(
-                http_method="POST", url="https://s3.aws.something.com/mybucket/images"
-            ),
-        },
+        apiver_module.ComputeHordeJobSpec(
+            executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
+            job_namespace="SN123.0",
+            docker_image=TEST_DOCKER_IMAGE,
+            args=["--block", "10000"],
+            env={"TEST_ENV": "1"},
+            artifacts_dir="/artifacts",
+            input_volumes={
+                "/volume/models/model01": apiver_module.HuggingfaceInputVolume(repo_id="myrepo/mymodel"),
+                "/volume/version.txt": apiver_module.InlineInputVolume(contents="dmVyc2lvbj0y"),
+                "/volume/dataset.json": apiver_module.HTTPInputVolume(
+                    url="https://s3.aws.something.com/mybucket/myfile.json"
+                ),
+            },
+            output_volumes={
+                "/output/results.json": apiver_module.HTTPOutputVolume(
+                    http_method="PUT", url="https://s3.aws.something.com/mybucket/myfile.json"
+                ),
+                "/output/image.png": apiver_module.HTTPOutputVolume(
+                    http_method="POST", url="https://s3.aws.something.com/mybucket/images"
+                ),
+            },
+        )
     )
 
     assert job.uuid == TEST_JOB_UUID
@@ -364,9 +385,11 @@ async def test_create_job__http_error(apiver_module, compute_horde_client, httpx
 
     with pytest.raises(apiver_module.ComputeHordeError):
         await compute_horde_client.create_job(
-            executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
-            job_namespace="SN123.0",
-            docker_image=TEST_DOCKER_IMAGE,
+            apiver_module.ComputeHordeJobSpec(
+                executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
+                job_namespace="SN123.0",
+                docker_image=TEST_DOCKER_IMAGE,
+            )
         )
 
 
@@ -376,9 +399,11 @@ async def test_create_job__malformed_response(apiver_module, compute_horde_clien
 
     with pytest.raises(apiver_module.ComputeHordeError):
         await compute_horde_client.create_job(
-            executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
-            job_namespace="SN123.0",
-            docker_image=TEST_DOCKER_IMAGE,
+            apiver_module.ComputeHordeJobSpec(
+                executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
+                job_namespace="SN123.0",
+                docker_image=TEST_DOCKER_IMAGE,
+            )
         )
 
 
@@ -433,3 +458,208 @@ async def test_wait_for_job__malformed_response(apiver_module, job, httpx_mock, 
 
     with pytest.raises(apiver_module.ComputeHordeError):
         await job.wait()
+
+
+@pytest.mark.parametrize("exc_class", RETRYABLE_HTTP_EXCEPTIONS)
+@pytest.mark.asyncio
+async def test_http_connection_error_is_retried__fail(
+    apiver_module, compute_horde_client, httpx_mock, exc_class, async_sleep_mock
+):
+    for _ in range(HTTP_RETRY_MAX_ATTEMPTS):
+        httpx_mock.add_exception(exc_class("some error message"))
+
+    with pytest.raises(apiver_module.ComputeHordeError, match="Compute Horde request failed: some error message"):
+        await compute_horde_client.get_job(TEST_JOB_UUID)
+
+
+@pytest.mark.parametrize("exc_class", RETRYABLE_HTTP_EXCEPTIONS)
+@pytest.mark.asyncio
+async def test_http_connection_error_is_retried__success(compute_horde_client, httpx_mock, exc_class, async_sleep_mock):
+    for _ in range(HTTP_RETRY_MAX_ATTEMPTS - 1):
+        httpx_mock.add_exception(exc_class("some error message"))
+    httpx_mock.add_response(json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"))
+
+    await compute_horde_client.get_job(TEST_JOB_UUID)
+
+
+@pytest.mark.asyncio
+async def test_http_too_many_requests_is_retried__fail(
+    apiver_module, compute_horde_client, httpx_mock, async_sleep_mock
+):
+    for _ in range(HTTP_RETRY_MAX_ATTEMPTS):
+        httpx_mock.add_response(status_code=429)
+
+    with pytest.raises(apiver_module.ComputeHordeError, match="Compute Horde responded with status code 429"):
+        await compute_horde_client.get_job(TEST_JOB_UUID)
+
+
+@pytest.mark.asyncio
+async def test_http_too_many_requests_is_retried__success(compute_horde_client, httpx_mock, async_sleep_mock):
+    for _ in range(HTTP_RETRY_MAX_ATTEMPTS - 1):
+        httpx_mock.add_response(status_code=429)
+    httpx_mock.add_response(json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"))
+    await compute_horde_client.get_job(TEST_JOB_UUID)
+
+
+@pytest.mark.asyncio
+async def test_run_until_complete__happy_path(
+    apiver_module, compute_horde_client, job_spec, httpx_mock, async_sleep_mock
+):
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
+        json=get_job_response(info=TEST_JOB_UUID, status="Sent"),
+    )
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(status="Completed"),
+    )
+
+    job = await compute_horde_client.run_until_complete(job_spec)
+
+    assert job.status == apiver_module.ComputeHordeJobStatus.COMPLETED
+
+
+async def helper_run_until_complete__job_attempt_callback(
+    apiver_module, compute_horde_client, job_spec, httpx_mock, job_attempt_callback, jobs_store: list["ComputeHordeJob"]
+):
+    assert len(jobs_store) == 0  # `job_attempt_callback` should populate this empty list
+
+    # 1st attempt
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
+        json=get_job_response(uuid=TEST_JOB_UUID, status="Sent", info=TEST_JOB_UUID),
+    )
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(uuid=TEST_JOB_UUID, status="Failed"),
+    )
+    # 2nd attempt
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
+        json=get_job_response(uuid=TEST_JOB_UUID2, status="Sent", info=TEST_JOB_UUID2),
+    )
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID2}/",
+        json=get_job_response(uuid=TEST_JOB_UUID2, status="Completed"),
+    )
+
+    await compute_horde_client.run_until_complete(job_spec, job_attempt_callback=job_attempt_callback)
+
+    assert len(jobs_store) == 2
+    assert jobs_store[0].uuid == TEST_JOB_UUID
+    assert jobs_store[1].uuid == TEST_JOB_UUID2
+    assert jobs_store[0].status == apiver_module.ComputeHordeJobStatus.FAILED
+    assert jobs_store[1].status == apiver_module.ComputeHordeJobStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_run_until_complete__job_attempt_callback__sync(
+    apiver_module, compute_horde_client, job_spec, httpx_mock, async_sleep_mock
+):
+    jobs_store = []
+    job_attempt_callback = jobs_store.append
+    await helper_run_until_complete__job_attempt_callback(
+        apiver_module,
+        compute_horde_client,
+        job_spec,
+        httpx_mock,
+        job_attempt_callback,
+        jobs_store,
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_until_complete__job_attempt_callback__async(
+    apiver_module, compute_horde_client, job_spec, httpx_mock, async_sleep_mock
+):
+    jobs_store = []
+
+    async def job_attempt_callback(job):
+        jobs_store.append(job)
+
+    await helper_run_until_complete__job_attempt_callback(
+        apiver_module,
+        compute_horde_client,
+        job_spec,
+        httpx_mock,
+        job_attempt_callback,
+        jobs_store,
+    )
+
+
+@pytest.mark.parametrize("max_attempts", [1, DEFAULT_MAX_JOB_RUN_ATTEMPTS])
+@pytest.mark.asyncio
+async def test_run_until_complete__attempts__finite(
+    compute_horde_client, job_spec, httpx_mock, max_attempts, async_sleep_mock
+):
+    for _ in range(max_attempts):
+        httpx_mock.add_response(
+            url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
+            json=get_job_response(info=TEST_JOB_UUID, status="Sent"),
+        )
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(status="Failed"),
+        is_reusable=True,
+    )
+    jobs = []
+
+    await compute_horde_client.run_until_complete(job_spec, job_attempt_callback=jobs.append, max_attempts=max_attempts)
+
+    assert len(jobs) == max_attempts
+
+
+@pytest.mark.asyncio
+async def test_run_until_complete__attempts__infinite(compute_horde_client, job_spec, httpx_mock, async_sleep_mock):
+    # this test also verifies the behaviour of None timeout
+    # i.e. should not stop on its own, should not raise ComputeHordeJobTimeoutError
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
+        json=get_job_response(info=TEST_JOB_UUID, status="Sent"),
+        is_reusable=True,
+    )
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(status="Failed"),
+        is_reusable=True,
+    )
+    jobs = []
+
+    class Stop(Exception): ...
+
+    def stop_callback(job):
+        jobs.append(jobs)
+        # stop after running for a while
+        if datetime.now(UTC) - INITIAL_FROZEN_TIME > timedelta(minutes=10):
+            raise Stop
+
+    with pytest.raises(Stop):
+        await compute_horde_client.run_until_complete(job_spec, job_attempt_callback=stop_callback, max_attempts=-1)
+
+    # Make sure we did actually attempt to run jobs multiple times before we stopped it
+    # Because of the `async_sleep_mock` fixture the count is stable at 202 and not flaky.
+    # Still using a lower number as the count can change based on changes of the fixture.
+    assert len(jobs) > 100
+
+
+@pytest.mark.parametrize("timeout", list(range(5)))
+@pytest.mark.asyncio
+async def test_run_until_complete__timeout(
+    apiver_module, compute_horde_client, job_spec, httpx_mock, async_sleep_mock, timeout
+):
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
+        json=get_job_response(info=TEST_JOB_UUID, status="Sent"),
+    )
+    # Each refresh_from_facilitator() call is preceded by a 3s sleep,
+    # so the number of http calls mocked is adjusted here.
+    # If the number of http calls does not match, httpx_mock should scream at us.
+    # Don't use `is_reusable=True` here, we want httpx_mock to scream. :)
+    for _ in range(1 + timeout // 3):
+        httpx_mock.add_response(
+            url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+            json=get_job_response(status="Sent"),
+        )
+
+    with pytest.raises(apiver_module.ComputeHordeJobTimeoutError):
+        await compute_horde_client.run_until_complete(job_spec, timeout=timeout)
