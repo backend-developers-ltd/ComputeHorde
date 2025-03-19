@@ -159,7 +159,7 @@ class MetagraphSnapshot(models.Model):
         CYCLE_START = 1
 
     @classmethod
-    def get_latest(cls):
+    def get_latest(cls) -> "MetagraphSnapshot":
         metagraph = MetagraphSnapshot.objects.get(id=cls.SnapshotType.LATEST)
         if metagraph.updated_at < now() - timedelta(minutes=1):
             msg = f"Tried to fetch stale metagraph last updated at: {metagraph.updated_at}"
@@ -174,15 +174,15 @@ class MetagraphSnapshot(models.Model):
         return metagraph
 
     @classmethod
-    async def aget_latest(cls):
+    async def aget_latest(cls) -> "MetagraphSnapshot":
         return await sync_to_async(cls.get_latest)()
 
     @classmethod
-    def get_cycle_start(cls):
+    def get_cycle_start(cls) -> "MetagraphSnapshot":
         return MetagraphSnapshot.objects.get(id=cls.SnapshotType.CYCLE_START)
 
     @classmethod
-    async def aget_cycle_start(cls):
+    async def aget_cycle_start(cls) -> "MetagraphSnapshot":
         return await sync_to_async(cls.get_cycle_start)()
 
 
