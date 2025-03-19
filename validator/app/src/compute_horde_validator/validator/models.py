@@ -6,6 +6,7 @@ from enum import IntEnum
 from os import urandom
 from typing import Self
 
+from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
@@ -158,7 +159,7 @@ class MetagraphSnapshot(models.Model):
         CYCLE_START = 1
 
     @classmethod
-    def get_latest(cls):
+    def get_latest(cls) -> "MetagraphSnapshot":
         metagraph = MetagraphSnapshot.objects.get(id=cls.SnapshotType.LATEST)
         if metagraph.updated_at < now() - timedelta(minutes=1):
             msg = f"Tried to fetch stale metagraph last updated at: {metagraph.updated_at}"
@@ -173,8 +174,16 @@ class MetagraphSnapshot(models.Model):
         return metagraph
 
     @classmethod
-    def get_cycle_start(cls):
+    async def aget_latest(cls) -> "MetagraphSnapshot":
+        return await sync_to_async(cls.get_latest)()
+
+    @classmethod
+    def get_cycle_start(cls) -> "MetagraphSnapshot":
         return MetagraphSnapshot.objects.get(id=cls.SnapshotType.CYCLE_START)
+
+    @classmethod
+    async def aget_cycle_start(cls) -> "MetagraphSnapshot":
+        return await sync_to_async(cls.get_cycle_start)()
 
 
 # contains all neurons not only miners
