@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Self
 
 import pydantic
 
@@ -107,9 +107,11 @@ class InlineInputVolume(pydantic.BaseModel, AbstractInputVolume):
         )
 
     @classmethod
-    def from_file_contents(cls, filename: str, contents: bytes):
+    def from_file_contents(cls, filename: str, contents: bytes, compress: bool = False) -> Self:
         in_memory_output = io.BytesIO()
-        zipf = zipfile.ZipFile(in_memory_output, "w")
+        zipf = zipfile.ZipFile(
+            in_memory_output, "w", compression=zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
+        )
         zipf.writestr(filename, contents)
         zipf.close()
         in_memory_output.seek(0)
