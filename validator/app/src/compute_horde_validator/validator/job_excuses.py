@@ -11,6 +11,7 @@ from django.conf import settings
 from compute_horde_validator.validator.models import MinerManifest
 
 logger = logging.getLogger(__name__)
+MIN_STAKE_FOR_EXCUSE = 30_000  # total stake (root + alpha stake) denominated in alpha
 
 
 async def filter_valid_excuse_receipts(
@@ -25,15 +26,29 @@ async def filter_valid_excuse_receipts(
     if not receipts_to_check:
         return []
 
+    # TODO: Move the get_validators call one step above:
+    #       pass list[ValidatorInfo] into this function instead of set[str] of hotkeys.
+    #       Now we are connecting to subtensor every time we need to check validity of excuses,
+    #       so, in a batch run, we could be connecting to the subtensor hundreds of times.
+    #       Subtensor will not be happy :)
+    validator_infos = {
+        validator_info.hotkey: validator_info
+        for validator_info in await sync_to_async(get_validators)(
+            netuid=settings.BITTENSOR_NETUID,
+            network=settings.BITTENSOR_NETWORK,
+        )
+    }
+
     if allowed_validators is None:
-        allowed_validators = {
-            neuron.hotkey
-            for neuron in await sync_to_async(get_validators)(
-                netuid=settings.BITTENSOR_NETUID,
-                network=settings.BITTENSOR_NETWORK,
-            )
-        }
+        allowed_validators = set(validator_infos.keys())
         allowed_validators.add(settings.BITTENSOR_WALLET().get_hotkey().ss58_address)
+
+    # limit by stake
+    allowed_validators_with_stake = {
+        hotkey
+        for hotkey, validator_info in validator_infos.items()
+        if hotkey in allowed_validators and validator_info.stake >= MIN_STAKE_FOR_EXCUSE
+    }
 
     # We need time leeway so that if the miner receives multiple jobs in a short time, a slight
     # time difference caused by clock desync and network latencies doesn't cause the miner to lose
@@ -51,7 +66,7 @@ async def filter_valid_excuse_receipts(
             and (receipt.payload.is_organic if declined_job_is_synthetic else True)
             and receipt.payload.miner_hotkey == miner_hotkey
             and receipt.payload.job_uuid != declined_job_uuid
-            and receipt.payload.validator_hotkey in allowed_validators
+            and receipt.payload.validator_hotkey in allowed_validators_with_stake
             and receipt.payload.job_uuid not in seen_receipts
             and receipt.payload.executor_class == declined_job_executor_class
             and receipt.payload.timestamp < check_time
