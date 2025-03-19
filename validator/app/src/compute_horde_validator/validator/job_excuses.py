@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from asgiref.sync import sync_to_async
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
-from compute_horde.utils import ValidatorInfo, get_validators
+from compute_horde.utils import BAC_VALIDATOR_SS58_ADDRESS, ValidatorInfo, get_validators
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
@@ -35,8 +35,12 @@ async def filter_valid_excuse_receipts(
     allowed_validators = {
         validator_info.hotkey
         for validator_info in active_validators
-        if validator_info.stake >= MIN_STAKE_FOR_EXCUSE
+        if (
+            validator_info.stake >= MIN_STAKE_FOR_EXCUSE
+            or validator_info.hotkey == BAC_VALIDATOR_SS58_ADDRESS
+        )
     }
+    # Note: valid jobs by BAC validator are always excused (for easier testing subnet of development)
 
     # Vali should probably trust itself in any case.
     allowed_validators.add(settings.BITTENSOR_WALLET().get_hotkey().ss58_address)
