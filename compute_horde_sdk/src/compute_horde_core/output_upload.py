@@ -18,7 +18,7 @@ class OutputUploadType(str, enum.Enum):
     single_file_put = "single_file_put"
 
     # default __str__ method returns "OutputUploadType.inline", we want just "inline"
-    def __str__(self):
+    def __str__(self) -> str:
         return str.__str__(self)
 
 

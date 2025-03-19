@@ -152,7 +152,7 @@ class ComputeHordeJob:
         self.status = new_job.status
         self.result = new_job.result
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self.__class__.__qualname__}: {self.uuid!r}>"
 
     @classmethod
@@ -211,7 +211,7 @@ class ComputeHordeClient:
         method: str,
         url: str,
         *,
-        json: dict | None = None,
+        json: dict[str, Any] | None = None,
         params: Mapping[str, str | int] | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> str:
@@ -242,12 +242,12 @@ class ComputeHordeClient:
 
         return response.text
 
-    def _get_signature_headers(self, data: dict) -> dict[str, str]:
+    def _get_signature_headers(self, data: dict[str, pydantic.JsonValue]) -> dict[str, str]:
         signed_fields = SignedFields.from_facilitator_sdk_json(data)
         signature = self._signer.sign(payload=signed_fields.model_dump_json())
         return signature_to_headers(signature, SignatureScope.SignedFields)
 
-    def _get_cheated_job_headers(self, data: dict) -> dict[str, str]:
+    def _get_cheated_job_headers(self, data: dict[str, str]) -> dict[str, str]:
         payload = json.dumps(data, sort_keys=True)
         signature = self._signer.sign(payload=payload)
         return signature_to_headers(signature, SignatureScope.FullRequest)
@@ -256,7 +256,7 @@ class ComputeHordeClient:
         self,
         method: str,
         url: str,
-    ):
+    ) -> dict[str, str]:
         headers = {
             "Realm": "mainnet",
             "SubnetID": "12",

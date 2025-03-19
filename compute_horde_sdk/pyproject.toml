@@ -143,6 +143,7 @@ name = "Infrastructure"
 showcontent = true
 
 [tool.mypy]
+strict = true
 
 [[tool.mypy.overrides]]
 module = [
