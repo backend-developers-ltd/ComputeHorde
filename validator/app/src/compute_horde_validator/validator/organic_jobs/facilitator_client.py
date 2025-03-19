@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from collections import deque
-from typing import Literal
+from typing import Any, Literal
 
 import bittensor
 import pydantic
@@ -33,7 +33,6 @@ from compute_horde_validator.validator.models import (
     ValidatorWhitelist,
 )
 from compute_horde_validator.validator.organic_jobs import routing
-from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.organic_jobs.miner_driver import (
     JobStatusMetadata,
     JobStatusUpdate,
@@ -80,19 +79,25 @@ async def save_facilitator_event(
     )
 
 
+class _JobStatusChannelEnvelope(BaseModel):
+    type: Literal["job_status_update"] = "job_status_update"
+    payload: JobStatusUpdate
+
+
 class FacilitatorClient:
-    MINER_CLIENT_CLASS = MinerClient
     HEARTBEAT_PERIOD = 60
 
     def __init__(self, keypair: bittensor.Keypair, facilitator_uri: str) -> None:
         self.keypair = keypair
         self.ws: websockets.ClientConnection | None = None
         self.facilitator_uri = facilitator_uri
-        self.miner_drivers: asyncio.Queue[asyncio.Task[None] | None] = asyncio.Queue()
-        self.miner_driver_awaiter_task = asyncio.create_task(self.miner_driver_awaiter())
+        self.tasks_to_reap: asyncio.Queue[asyncio.Task[None] | None] = asyncio.Queue()
+        # Sends periodic heartbeats
         self.heartbeat_task: asyncio.Task[None] | None = None
+        # Sends machine specs to facilitator
         self.specs_task: asyncio.Task[None] | None = None
-        self.job_status_update_task: asyncio.Task[None] | None = None
+        # Disposes of tasks, brings up any exceptions
+        self.reaper_task: asyncio.Task[None] | None = None
 
     def connect(self) -> websockets.connect:
         """Create an awaitable/async-iterable websockets.connect() object"""
@@ -102,35 +107,45 @@ class FacilitatorClient:
         }
         return websockets.connect(self.facilitator_uri, additional_headers=additional_headers)
 
-    async def miner_driver_awaiter(self) -> None:
-        """avoid memory leak by awaiting miner driver tasks"""
+    async def reap_tasks(self) -> None:
+        """
+        Avoid memory leak by awaiting job tasks
+        Notify of job exceptions
+        """
         while True:
-            task = await self.miner_drivers.get()
+            task = await self.tasks_to_reap.get()
             if task is None:
                 return
-
             try:
                 await task
             except Exception:
-                logger.error("Error occurred during driving a miner client", exc_info=True)
+                logger.error("Error in job task", exc_info=True)
 
     async def __aenter__(self):
-        pass
+        self.heartbeat_task = asyncio.create_task(self.heartbeat())
+        self.reaper_task = asyncio.create_task(self.reap_tasks())
+        self.specs_task = asyncio.create_task(self.wait_for_specs())
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.miner_drivers.put(None)
-        await self.miner_driver_awaiter_task
+        tasks: list[asyncio.Task[Any]] = []
+
+        for task in [
+            self.reaper_task,
+            self.heartbeat_task,
+            self.specs_task,
+        ]:
+            if task is not None:
+                task.cancel()
+                tasks.append(task)
+
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     def my_hotkey(self) -> str:
         return str(self.keypair.ss58_address)
 
     async def run_forever(self) -> None:
         """connect (and re-connect) to facilitator and keep reading messages ... forever"""
-        self.heartbeat_task = asyncio.create_task(self.heartbeat())
-        self.job_status_update_task = asyncio.create_task(self.handle_job_status_updates())
 
-        # send machine specs to facilitator
-        self.specs_task = asyncio.create_task(self.wait_for_specs())
         reconnects = 0
         try:
             async for ws in self.connect():
@@ -234,16 +249,21 @@ class FacilitatorClient:
                     )
             await asyncio.sleep(self.HEARTBEAT_PERIOD)
 
-    async def handle_job_status_updates(self):
-        class JobStatusChannelEnvelope(BaseModel):
-            type: Literal["job_status_update"] = "job_status_update"
-            payload: JobStatusUpdate
+    async def handle_job_status_updates(self, job_uuid: str):
+        """
+        Route job status updates for given job back to the Facilitator.
+        Loop until a terminal status is received.
+        """
+        # see compute_horde_validator.validator.organic_jobs.miner_driver.JobStatusUpdate status field
+        terminal_states = {"failed", "rejected", "completed"}
 
         while True:
-            msg = await get_channel_layer().receive("job_status_updates")
+            msg = await get_channel_layer().receive(f"job_status_updates__{job_uuid}")
             try:
-                envelope = JobStatusChannelEnvelope.model_validate(msg)
+                envelope = _JobStatusChannelEnvelope.model_validate(msg)
                 await self.send_model(envelope.payload)
+                if envelope.payload.status in terminal_states:
+                    return
             except pydantic.ValidationError as exc:
                 logger.warning("Received malformed job status update: %s", exc)
 
@@ -279,7 +299,7 @@ class FacilitatorClient:
             logger.debug("could not parse raw message as JobRequest: %s", exc)
         else:
             task = asyncio.create_task(self.process_job_request(job_request))
-            await self.miner_drivers.put(task)
+            await self.tasks_to_reap.put(task)
             return
 
         try:
@@ -372,6 +392,8 @@ class FacilitatorClient:
 
         try:
             logger.info(f"Submitting job {job_request.uuid} to worker")
+            job_status_task = asyncio.create_task(self.handle_job_status_updates(job_request.uuid))
+            await self.tasks_to_reap.put(job_status_task)
             job = await execute_organic_job_request_on_worker(job_request, miner)
             logger.info(f"Job {job_request.uuid} finished with status: {job.status}")
 

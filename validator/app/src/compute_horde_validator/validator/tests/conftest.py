@@ -9,6 +9,7 @@ from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
 from pytest_mock import MockerFixture
 
+from ..organic_jobs.miner_driver import execute_organic_job_request
 from .helpers import MockNeuron, MockSyntheticMinerClient
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,24 @@ def _patch_get_streaming_job_executor_classes(mocker: MockerFixture):
         "compute_horde_validator.validator.synthetic_jobs.batch_run.get_streaming_job_executor_classes",
         return_value={},
     )
+
+
+@pytest.fixture(autouse=True)
+def _patch_current_block():
+    with patch(
+        "compute_horde_validator.validator.organic_jobs.miner_driver._get_current_block",
+        return_value=1337,
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _patch_celery_job_execution():
+    with patch(
+        "compute_horde_validator.validator.organic_jobs.facilitator_client.execute_organic_job_request_on_worker",
+        execute_organic_job_request,
+    ):
+        yield
 
 
 @pytest.fixture(scope="session", autouse=True)

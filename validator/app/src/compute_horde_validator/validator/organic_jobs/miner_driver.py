@@ -36,6 +36,8 @@ from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
+MINER_CLIENT_CLASS = MinerClient
+
 
 class MinerResponse(BaseModel, extra="allow"):
     job_uuid: str
@@ -100,7 +102,11 @@ async def _dummy_notify_callback(_: JobStatusUpdate) -> None:
     pass
 
 
-async def execute_organic_job_request(miner: Miner, job_request: OrganicJobRequest) -> OrganicJob:
+async def _get_current_block() -> int:
+    return (await MetagraphSnapshot.aget_latest()).block
+
+
+async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Miner) -> OrganicJob:
     if (
         miner.hotkey == settings.DEBUG_MINER_KEY
         and settings.DEBUG_MINER_ADDRESS
@@ -129,11 +135,11 @@ async def execute_organic_job_request(miner: Miner, job_request: OrganicJobReque
         miner_port=miner_port,
         executor_class=job_request.executor_class,
         job_description="User job from facilitator",
-        block=(await MetagraphSnapshot.aget_latest()).block,
+        block=await _get_current_block(),
         on_trusted_miner=on_trusted_miner,
     )
 
-    miner_client = MinerClient(
+    miner_client = MINER_CLIENT_CLASS(
         miner_hotkey=miner.hotkey,
         miner_address=job.miner_address,
         miner_port=job.miner_port,
@@ -142,8 +148,9 @@ async def execute_organic_job_request(miner: Miner, job_request: OrganicJobReque
     )
 
     async def job_status_callback(status_update: JobStatusUpdate):
+        logger.debug("Job status update: %s", status_update)
         await get_channel_layer().send(
-            "job_status_updates",
+            f"job_status_updates__{status_update.uuid}",
             {"type": "job_status_update", "payload": status_update.model_dump()},
         )
 

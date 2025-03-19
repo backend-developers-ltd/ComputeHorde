@@ -1642,4 +1642,4 @@ async def execute_organic_job_request_on_worker(
 def _execute_organic_job_on_worker(job_request: JsonValue, miner_hotkey: str) -> None:
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
     miner = Miner.objects.get(hotkey=miner_hotkey)
-    async_to_sync(execute_organic_job_request)(miner, request)
+    async_to_sync(execute_organic_job_request)(request, miner)
