@@ -50,7 +50,7 @@ def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id:
                 hotkey=hotkey,
                 coldkey=hotkey,  # I hope it does not matter
             )
-        validator_hotkeys = []
+        active_validators = []
     else:
         try:
             metagraph = try_to_get_metagraph(netuid, network=network)
@@ -71,10 +71,10 @@ def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id:
             for miner in miners
             if miner.hotkey in axons_by_key and axons_by_key[miner.hotkey].is_serving
         ]
-        validator_hotkeys = [n.hotkey for n in get_validators(metagraph=metagraph)]
+        active_validators = get_validators(metagraph=metagraph)
 
     async_to_sync(execute_synthetic_batch_run)(
-        axons_by_key, miners, validator_hotkeys, synthetic_jobs_batch_id
+        axons_by_key, miners, active_validators, synthetic_jobs_batch_id
     )
 
 

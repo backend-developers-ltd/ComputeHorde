@@ -94,7 +94,7 @@ def miner_hotkeys(miner_wallets: list[bittensor.Keypair]):
 
 
 @pytest.fixture
-def active_valis() -> list[bittensor.Keypair]:
+def active_validator_keypairs() -> list[bittensor.Keypair]:
     return [
         bittensor.Keypair.create_from_seed(b"a" * 32),
         bittensor.Keypair.create_from_seed(b"b" * 32),
@@ -103,11 +103,19 @@ def active_valis() -> list[bittensor.Keypair]:
 
 
 @pytest.fixture
-def inactive_valis() -> list[bittensor.Keypair]:
+def inactive_validator_keypairs() -> list[bittensor.Keypair]:
     return [
         bittensor.Keypair.create_from_seed(b"d" * 32),
         bittensor.Keypair.create_from_seed(b"e" * 32),
         bittensor.Keypair.create_from_seed(b"f" * 32),
+    ]
+
+
+@pytest.fixture
+def active_validator_infos(active_validator_keypairs) -> list[ValidatorInfo]:
+    return [
+        ValidatorInfo(uid=i, hotkey=keypair.ss58_address, stake=20_000 * i)
+        for i, keypair in enumerate(active_validator_keypairs)
     ]
 
 
@@ -666,8 +674,8 @@ async def flow_5(
     transports: list[SimulationTransport],
     manifest_message: str,
     job_uuids: list[uuid.UUID],
-    active_valis: list[bittensor.Keypair],
-    inactive_valis: list[bittensor.Keypair],
+    active_validator_keypairs: list[bittensor.Keypair],
+    inactive_validator_keypairs: list[bittensor.Keypair],
     miner_wallets: list[bittensor.Keypair],
 ):
     """
@@ -685,7 +693,7 @@ async def flow_5(
         job_uuid=str(job_uuid),
         reason=V0DeclineJobRequest.Reason.BUSY,
         receipts=_build_invalid_excuse_receipts(
-            active_valis[0], miner_wallet, inactive_valis[0], job_uuid
+            active_validator_keypairs[0], miner_wallet, inactive_validator_keypairs[0], job_uuid
         ),
     ).model_dump_json()
     await transport.add_message(decline_message, send_before=1)
@@ -696,8 +704,8 @@ async def flow_6(
     transports: list[SimulationTransport],
     manifest_message: str,
     job_uuids: list[uuid.UUID],
-    active_valis: list[bittensor.Keypair],
-    inactive_valis: list[bittensor.Keypair],
+    active_validator_keypairs: list[bittensor.Keypair],
+    inactive_validator_keypairs: list[bittensor.Keypair],
     miner_wallets: list[bittensor.Keypair],
 ):
     """
@@ -714,7 +722,7 @@ async def flow_6(
     excuse = JobStartedReceiptPayload(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=miner_wallet.ss58_address,
-        validator_hotkey=active_valis[2].ss58_address,  # active_valis[2] has enough stake
+        validator_hotkey=active_validator_keypairs[2].ss58_address,  # 2 has enough stake
         timestamp=timezone.now() - timedelta(seconds=10),
         executor_class=DEFAULT_EXECUTOR_CLASS,
         max_timeout=123,
@@ -729,7 +737,7 @@ async def flow_6(
         receipts=[
             Receipt(
                 payload=excuse,
-                validator_signature=sign_blob(active_valis[2], excuse_blob),
+                validator_signature=sign_blob(active_validator_keypairs[2], excuse_blob),
                 miner_signature=sign_blob(miner_wallet, excuse_blob),
             )
         ],
@@ -742,8 +750,8 @@ async def flow_7(
     transports: list[SimulationTransport],
     manifest_message: str,
     job_uuids: list[uuid.UUID],
-    active_valis: list[bittensor.Keypair],
-    inactive_valis: list[bittensor.Keypair],
+    active_validator_keypairs: list[bittensor.Keypair],
+    inactive_validator_keypairs: list[bittensor.Keypair],
     miner_wallets: list[bittensor.Keypair],
 ):
     """
@@ -760,7 +768,7 @@ async def flow_7(
     excuse = JobStartedReceiptPayload(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=miner_wallet.ss58_address,
-        validator_hotkey=active_valis[0].ss58_address,  # active_valis[0] doesn't have enough stake
+        validator_hotkey=active_validator_keypairs[0].ss58_address,  # 0 doesn't have enough stake
         timestamp=timezone.now() - timedelta(seconds=10),
         executor_class=DEFAULT_EXECUTOR_CLASS,
         max_timeout=123,
@@ -775,7 +783,7 @@ async def flow_7(
         receipts=[
             Receipt(
                 payload=excuse,
-                validator_signature=sign_blob(active_valis[0], excuse_blob),
+                validator_signature=sign_blob(active_validator_keypairs[0], excuse_blob),
                 miner_signature=sign_blob(miner_wallet, excuse_blob),
             )
         ],
@@ -794,20 +802,6 @@ async def flow_8():
 def mock_excuse_score():
     with override_config(DYNAMIC_EXCUSED_SYNTHETIC_JOB_SCORE=MOCK_EXCUSED_SCORE):
         yield
-
-
-@pytest.fixture(autouse=True)
-def mock_validator_list(active_valis: list[bittensor.Keypair], mocker: MockerFixture):
-    # TODO: remove this fixture after TODO from job_excuses.py has been resolved
-    # only 3rd vali has stake >30k
-    validator_infos = [
-        ValidatorInfo(uid=i, hotkey=v.ss58_address, stake=20_000.0 * i)
-        for i, v in enumerate(active_valis)
-    ]
-    mocker.patch(
-        "compute_horde_validator.validator.job_excuses.get_validators",
-        return_value=validator_infos,
-    )
 
 
 @patch("compute_horde_validator.validator.synthetic_jobs.batch_run._GET_MANIFEST_TIMEOUT", 0.2)
@@ -830,7 +824,7 @@ async def test_complex(
     flow_6,
     flow_7,
     flow_8,
-    active_valis: list[bittensor.Keypair],
+    active_validator_infos: list[ValidatorInfo],
 ):
     for transport, miner in zip(transports, miners):
         assert transport.name == miner.hotkey
@@ -843,7 +837,7 @@ async def test_complex(
         execute_synthetic_batch_run(
             axon_dict,
             miners,
-            [v.ss58_address for v in active_valis],
+            active_validator_infos,
             batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
@@ -975,7 +969,7 @@ async def test_complex(
         data__miner_hotkey=miners[6].hotkey,
         data__job_uuid=str(job_uuids[6]),
     )
-    assert excused_event.data["excused_by"] == [active_valis[2].ss58_address]
+    assert excused_event.data["excused_by"] == [active_validator_infos[2].hotkey]
 
     await check_synthetic_job(job_uuids[7], miners[7].pk, SyntheticJob.Status.FAILED, NOT_SCORED)
     await check_miner_job_system_events(
