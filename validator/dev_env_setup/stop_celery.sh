@@ -16,4 +16,4 @@ CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-INFO}
 WORKERS="default weights jobs llm receipts organic_jobs"
 OPTIONS="-E -l $CELERY_LOGLEVEL --pidfile=/tmp/celery-validator-%n.pid --logfile=/tmp/celery-validator-%n.log"
 
-celery multi stop $WORKERS $OPTIONS
+celery multi stop $WORKERS $OPTIONS  # noqa
