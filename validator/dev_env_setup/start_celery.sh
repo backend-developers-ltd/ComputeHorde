@@ -14,7 +14,7 @@ CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-INFO}
 
 # below we define two workers types (each may have any concurrency);
 # each worker may have its own settings
-WORKERS="default weights jobs llm receipts"
+WORKERS="default weights jobs llm receipts organic_jobs"
 OPTIONS="-E -l $CELERY_LOGLEVEL --pidfile=/tmp/celery-validator-%n.pid --logfile=/tmp/celery-validator-%n.log"
 
 # shellcheck disable=SC2086
@@ -23,7 +23,8 @@ celery -A compute_horde_validator multi start $WORKERS $OPTIONS \
     -Q:weights weights --autoscale:weights=$CELERY_CONCURRENCY \
     -Q:jobs jobs --autoscale:jobs=$CELERY_CONCURRENCY \
     -Q:scores scores --autoscale:scores=$CELERY_CONCURRENCY \
-    -Q:receipts receipts --autoscale:receipts=$CELERY_CONCURRENCY
+    -Q:receipts receipts --autoscale:receipts=$CELERY_CONCURRENCY \
+    -Q:organic_jobs organic_jobs --autoscale:receipts=$CELERY_CONCURRENCY
 
 # shellcheck disable=2064
 trap "celery multi stop $WORKERS $OPTIONS; exit 0" INT TERM
