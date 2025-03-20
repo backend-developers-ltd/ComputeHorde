@@ -18,12 +18,26 @@ update_env_var() {
     file_name="$(readlink "$file_name")"
   fi
 
-  # Update the value if the variable is found, or append it if not
   if grep -q "^${env_name}=" "$file_name"; then
-    # make sed work in-place both on gnu and bsd
-    sed  "s|^${env_name}=.*|${env_name}=${desired_value}|" "$file_name" > "$file_name".tmp && mv "$file_name".tmp "$file_name"
+      # Check if the desired value already exists
+      if ! grep -q "^${env_name}=${desired_value}$" "$file_name"; then
+          # Use temporary files to comment out the old line and append the desired one
+          local tmp_file="${file_name}.tmp"
+          awk -v env_name="${env_name}" -v desired_value="${desired_value}" '
+              $0 ~ "^"env_name"=" {
+                  if ($0 != env_name"="desired_value) {
+                      print "#" $0;  # Comment out the old line
+                      print env_name"="desired_value;  # Append the desired value right after
+                  } else {
+                      print $0  # Keep as is if already correct
+                  }
+              }
+              $0 !~ "^"env_name"=" { print $0 }  # Print other lines as is
+          ' "$file_name" > "$tmp_file" && mv "$tmp_file" "$file_name"
+      fi
   else
-    echo "${env_name}=${desired_value}" >> "$file_name"
+      # Append the correct value if it doesn't exist
+      echo "${env_name}=${desired_value}" >> "$file_name"
   fi
   set -x
 }
