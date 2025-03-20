@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2086
 set -eu
 
 THIS_DIR=$(dirname "$(readlink -f "$0")")
@@ -16,4 +17,4 @@ CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-INFO}
 WORKERS="default weights jobs llm receipts organic_jobs"
 OPTIONS="-E -l $CELERY_LOGLEVEL --pidfile=/tmp/celery-validator-%n.pid --logfile=/tmp/celery-validator-%n.log"
 
-celery multi stop $WORKERS $OPTIONS  # noqa
+celery multi stop $WORKERS $OPTIONS
