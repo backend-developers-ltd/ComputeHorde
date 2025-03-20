@@ -1973,7 +1973,7 @@ async def _download_llm_prompts_answers_worker(
                 queue.put_nowait(task)
             else:
                 msg = "llm prompt answer download task exceeded max attempts"
-                logging.warning(msg)
+                logger.warning(msg)
                 failures.append(
                     LlmAnswerDownloadTaskFailed(msg, task, last_exception_tb=traceback.format_exc())
                 )

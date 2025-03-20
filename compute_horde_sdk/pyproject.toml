@@ -20,6 +20,7 @@ dependencies = [
     "pydantic<3,>=2.10",
     "httpx>=0.26.0",
     "bittensor>=9.0.0,<9.1",
+    "tenacity>=9.0.0,<10.0.0",
 ]
 
 [project.urls]
@@ -79,6 +80,7 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 120
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [
@@ -89,6 +91,7 @@ select = [
 ignore = [
     "D100", "D105", "D107", "D200", "D202", "D203", "D205", "D212", "D400", "D401", "D415",
     "D101", "D102", "D103", "D104", # TODO remove once we have docstring for all public methods
+    "UP038",  # this is plain stupid!
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -143,6 +146,7 @@ name = "Infrastructure"
 showcontent = true
 
 [tool.mypy]
+strict = true
 
 [[tool.mypy.overrides]]
 module = [

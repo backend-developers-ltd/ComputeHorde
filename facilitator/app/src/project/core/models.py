@@ -10,7 +10,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
-    JobRequest,
+    OrganicJobRequest,
     Signature,
     V0JobCheated,
     V0JobRequest,
@@ -451,7 +451,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         statuses = self.statuses_ordered
         return statuses[-1].created_at - statuses[0].created_at
 
-    def as_job_request(self) -> JobRequest:
+    def as_job_request(self) -> OrganicJobRequest:
         if safe_config.JOB_REQUEST_VERSION == 0:
             if self.uploads or self.volumes:
                 raise ValueError("upload and volumes are not supported in version 0 of job protocol")

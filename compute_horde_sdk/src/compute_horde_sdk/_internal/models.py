@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Self
 
 import pydantic
 
@@ -33,6 +33,10 @@ class ComputeHordeJobStatus(StrEnum):
         """
         return self in (self.SENT, self.ACCEPTED)
 
+    def is_successful(self) -> bool:
+        """Check if the job has finished unsuccessfully"""
+        return self == self.COMPLETED
+
 
 @dataclass
 class ComputeHordeJobResult:
@@ -55,7 +59,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     status: ComputeHordeJobStatus
     docker_image: str
     args: list[str]
-    env: dict
+    env: dict[str, str]
     # use_gpu: bool
     # hf_repo_id: str
     # hf_revision: str
@@ -63,10 +67,10 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # output_download_url: str
     # tag: str
     stdout: str
-    volumes: list = []
-    uploads: list = []
+    # volumes: list = []
+    # uploads: list = []
     # target_validator_hotkey: str
-    artifacts: dict = {}
+    artifacts: dict[str, str] = {}
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):
@@ -103,9 +107,11 @@ class InlineInputVolume(pydantic.BaseModel, AbstractInputVolume):
         )
 
     @classmethod
-    def from_file_contents(cls, filename: str, contents: bytes):
+    def from_file_contents(cls, filename: str, contents: bytes, compress: bool = False) -> Self:
         in_memory_output = io.BytesIO()
-        zipf = zipfile.ZipFile(in_memory_output, "w")
+        zipf = zipfile.ZipFile(
+            in_memory_output, "w", compression=zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
+        )
         zipf.writestr(filename, contents)
         zipf.close()
         in_memory_output.seek(0)
