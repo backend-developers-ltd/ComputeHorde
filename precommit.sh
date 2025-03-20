@@ -10,5 +10,3 @@ for projectdir in compute_horde compute_horde_sdk executor miner validator; do
   uv run nox -s type_check lint
   cd ".."
 done
-
-uv sync --all-groups
