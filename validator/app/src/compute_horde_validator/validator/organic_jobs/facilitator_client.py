@@ -138,11 +138,7 @@ class FacilitatorClient:
                     await self.handle_connection(ws)
                 except websockets.ConnectionClosed as exc:
                     self.ws = None
-                    logger.warning(
-                        "validator connection closed with code %r and reason %r, reconnecting...",
-                        exc.code,
-                        exc.reason,
-                    )
+                    logger.warning("validator connection closed: %s, reconnecting...", exc)
                 except asyncio.exceptions.CancelledError:
                     self.ws = None
                     logger.warning("Facilitator client received cancel, stopping")

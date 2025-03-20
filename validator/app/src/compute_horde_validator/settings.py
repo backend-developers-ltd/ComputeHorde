@@ -388,7 +388,7 @@ CONSTANCE_CONFIG = {
         float,
     ),
     "DYNAMIC_ROUTING_PRELIMINARY_RESERVATION_TIME_SECONDS": (
-        10,
+        10.0,
         "How long to initially reserve an executor for during job routing request. This should last only long enough "
         "for the job flow to create and store a job started receipt.",
         float,

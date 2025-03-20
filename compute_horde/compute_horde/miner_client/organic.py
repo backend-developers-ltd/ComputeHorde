@@ -468,7 +468,7 @@ async def run_organic_job(
                     docker_image=job_details.docker_image,
                     docker_run_options_preset=job_details.docker_run_options_preset,
                     docker_run_cmd=job_details.docker_run_cmd,
-                    volume=job_details.volume,
+                    volume=None,  # Was sent in the initial request
                     output_upload=job_details.output,
                     artifacts_dir=job_details.artifacts_dir,
                 )

@@ -502,6 +502,7 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
+version = "0.0.2"
 source = { editable = "../compute_horde_sdk" }
 dependencies = [
     { name = "bittensor" },
