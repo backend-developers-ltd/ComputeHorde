@@ -37,7 +37,10 @@ build-backend = "setuptools.build_meta"
 override-dependencies = ["bt-decode>=0.5.0a2"]
 
 [dependency-groups]
-format = ["ruff"]
+format = [
+    "ruff",
+    "nox==2024.10.09",
+]
 lint = [
     "ruff",
     "codespell[toml]",

@@ -3,7 +3,6 @@ from __future__ import annotations
 import functools
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 import nox
@@ -54,64 +53,6 @@ def list_files(suffix: str | None = None) -> list[Path]:
     if suffix is not None:
         file_paths = [p for p in file_paths if p.suffix == suffix]
     return file_paths
-
-
-def run_readable(session, mode="check"):
-    session.run(
-        "docker",
-        "run",
-        "--platform",
-        "linux/amd64",
-        "--rm",
-        "-v",
-        f"{ROOT.absolute()}:/data",
-        "-w",
-        "/data",
-        "ghcr.io/bobheadxi/readable:v0.5.0@sha256:423c133e7e9ca0ac20b0ab298bd5dbfa3df09b515b34cbfbbe8944310cc8d9c9",
-        mode,
-        "![.]**/*.md",
-        external=True,
-    )
-
-
-def run_shellcheck(session, mode="check"):
-    shellcheck_cmd = [
-        "docker",
-        "run",
-        "--platform",
-        "linux/amd64",  # while this image is multi-arch, we cannot use digest with multi-arch images
-        "--rm",
-        "-v",
-        f"{ROOT.absolute()}:/mnt",
-        "-w",
-        "/mnt",
-        "-q",
-        "koalaman/shellcheck:0.9.0@sha256:a527e2077f11f28c1c1ad1dc784b5bc966baeb3e34ef304a0ffa72699b01ad9c",
-    ]
-
-    shellcheck_cmd.extend(list_files(suffix=".sh"))
-
-    if mode == "fmt":
-        with tempfile.NamedTemporaryFile(mode="w+") as diff_file:
-            session.run(
-                *shellcheck_cmd,
-                "--format=diff",
-                external=True,
-                stdout=diff_file,
-                success_codes=[0, 1],
-            )
-            diff_file.seek(0)
-            diff = diff_file.read()
-            if len(diff.splitlines()) > 1:  # ignore single-line message
-                session.log("Applying shellcheck patch:\n%s", diff)
-                subprocess.run(
-                    ["patch", "-p1"],
-                    input=diff,
-                    text=True,
-                    check=True,
-                )
-
-    session.run(*shellcheck_cmd, external=True)
 
 
 @nox.session(name="format", python=PYTHON_DEFAULT_VERSION)

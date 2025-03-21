@@ -5,6 +5,7 @@ from collections import deque
 from typing import Any, Literal
 
 import bittensor
+import httpx
 import pydantic
 import tenacity
 import websockets
@@ -184,6 +185,13 @@ class FacilitatorClient:
             ) from exc
         if response.status != "success":
             raise AuthenticationError("auth request received failed response", response.errors)
+
+        if settings.DEBUG_CONNECT_FACILITATOR_WEBHOOK:
+            try:
+                async with httpx.AsyncClient() as client:
+                    await client.get(settings.DEBUG_CONNECT_FACILITATOR_WEBHOOK)
+            except Exception:
+                logger.info("when calling connect webhook:", exc_info=True)
 
         self.ws = ws
 

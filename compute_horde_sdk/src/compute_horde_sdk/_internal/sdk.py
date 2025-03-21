@@ -238,7 +238,9 @@ class ComputeHordeClient:
             logger.error("Response status=%d: %s", e.response.status_code, e.response.text)
             if e.response.status_code == 404:
                 raise ComputeHordeNotFoundError(f"Resource under {request.url} not found") from e
-            raise ComputeHordeError(f"Compute Horde responded with status code {e.response.status_code}") from e
+            raise ComputeHordeError(
+                f"Compute Horde responded with status code {e.response.status_code} and text {response.text}"
+            ) from e
 
         return response.text
 
