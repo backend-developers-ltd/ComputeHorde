@@ -68,6 +68,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
+from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot
 from .scoring import score_batches
 
@@ -1632,9 +1633,10 @@ async def execute_organic_job_request_on_worker(
     future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
         args=(job_request.model_dump(), miner.hotkey)
     )
+    timeout = await aget_config("DYNAMIC_ORGANIC_JOB_TIMEOUT")
     # Note - thread sensitive is essential otherwise the wait will block the sync thread.
     # If this poses to be a problem, another approach is to  asyncio.sleep then poll for result (in a loop)
-    await sync_to_async(future_result.get, thread_sensitive=False)(timeout=600)
+    await sync_to_async(future_result.get, thread_sensitive=False)(timeout=timeout)
     return await OrganicJob.objects.aget(job_uuid=job_request.uuid)
 
 
