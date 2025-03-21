@@ -275,6 +275,7 @@ def test_main_loop_streaming_job():
             "public_key": mock.ANY,
             "ip": None,
             "port": mock.ANY,
+            "miner_signature": None,
         },
         {
             "message_type": "V0MachineSpecsRequest",
