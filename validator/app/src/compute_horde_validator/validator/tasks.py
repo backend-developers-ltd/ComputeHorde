@@ -711,6 +711,7 @@ def normalize_batch_scores(
         return uids, weights
 
     for ind, uid in enumerate(uids):
+        assert uid is not None  # mypy+numpy
         uids[ind] = uid
         weights[ind] = score_per_uid.get(uid, 0)
 
