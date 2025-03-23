@@ -133,11 +133,6 @@ def miner_axon_infos(miner_hotkeys: str):
     ]
 
 
-@pytest.fixture
-def axon_dict(miner_axon_infos: list[bittensor.AxonInfo]):
-    return {axon.hotkey: axon for axon in miner_axon_infos}
-
-
 @pytest_asyncio.fixture
 async def transports(miner_hotkeys: str):
     return [SimulationTransport(hotkey) for hotkey in miner_hotkeys]
@@ -161,7 +156,6 @@ def ssl_public_key():
 
 
 async def test_all_succeed(
-    axon_dict: dict[str, bittensor.AxonInfo],
     transports: list[SimulationTransport],
     miners: list[Miner],
     create_simulation_miner_client: Callable,
@@ -192,7 +186,6 @@ async def test_all_succeed(
     )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
-            axon_dict,
             miners,
             [],
             batch.id,
@@ -251,7 +244,6 @@ def shuffled(list_: list[Any]) -> list[Any]:
     DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT=0.5,
 )
 async def test_some_streaming_succeed(
-    axon_dict: dict[str, bittensor.AxonInfo],
     transports: list[SimulationTransport],
     miners: list[Miner],
     create_simulation_miner_client: Callable,
@@ -498,7 +490,6 @@ async def test_some_streaming_succeed(
     )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
-            axon_dict,
             miners,
             [],
             batch.id,
@@ -745,7 +736,6 @@ def mock_excuse_score():
 )
 @patch("compute_horde_validator.validator.synthetic_jobs.batch_run.random.shuffle", lambda x: x)
 async def test_complex(
-    axon_dict: dict[str, bittensor.AxonInfo],
     miners: list[Miner],
     transports,
     create_simulation_miner_client: Callable,
@@ -769,7 +759,6 @@ async def test_complex(
     )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
-            axon_dict,
             miners,
             [v.ss58_address for v in active_valis],
             batch.id,
