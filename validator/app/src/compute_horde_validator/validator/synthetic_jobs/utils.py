@@ -5,7 +5,6 @@ from asgiref.sync import async_to_sync
 from compute_horde.utils import (
     BAC_VALIDATOR_SS58_ADDRESS,
     MIN_STAKE,
-    REQUIERED_VALIDATORS,
     VALIDATORS_LIMIT,
 )
 from django.conf import settings
@@ -69,7 +68,7 @@ def get_validator_hotkeys(
     validators = [
         (hotkey, stake)
         for (hotkey, stake) in zip(metagraph.hotkeys, metagraph.tao_stake)
-        if hotkey in REQUIERED_VALIDATORS or stake >= MIN_STAKE
+        if stake >= MIN_STAKE
     ]
     top_validators = sorted(
         validators, key=lambda data: (data[0] == BAC_VALIDATOR_SS58_ADDRESS, data[1]), reverse=True
