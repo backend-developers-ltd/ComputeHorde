@@ -29,13 +29,13 @@ def create_and_run_synthetic_job_batch(netuid, network, synthetic_jobs_batch_id:
             if miner_index > 0:
                 # fake hotkey based on miner index if there are more than one miners
                 hotkey = f"5u{miner_index:03}u{hotkey[6:]}"
-                miner = Miner.objects.get_or_create(
-                    hotkey=hotkey,
-                    address=settings.DEBUG_MINER_ADDRESS,
-                    ip_type=4,
-                    port=settings.DEBUG_MINER_PORT + miner_index,
-                )[0]
-                miners.append(miner)
+            miner = Miner.objects.get_or_create(
+                hotkey=hotkey,
+                address=settings.DEBUG_MINER_ADDRESS,
+                ip_version=4,
+                port=settings.DEBUG_MINER_PORT + miner_index,
+            )[0]
+            miners.append(miner)
         validator_hotkeys = []
     else:
         try:

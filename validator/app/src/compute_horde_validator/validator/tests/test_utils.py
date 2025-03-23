@@ -179,6 +179,7 @@ def syntethic_batch_scheme_single_miner(
     settings.DEBUG_MINER_KEY = miner_hotkey
     settings.DEBUG_MINER_ADDRESS = "ignore"
     settings.DEBUG_MINER_PORT = 9999
+    settings.DEBUG_MINER_COUNT = 1
 
     batch = SyntheticJobBatch.objects.create(
         block=1000,
