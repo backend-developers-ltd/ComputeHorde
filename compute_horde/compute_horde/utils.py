@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import datetime
 from collections.abc import Awaitable, Callable
 from functools import wraps
@@ -32,12 +33,19 @@ class ValidatorListError(Exception):
         self.reason = reason
 
 
+@dataclasses.dataclass
+class ValidatorInfo:
+    uid: int
+    hotkey: str
+    stake: float  # total effective stake denominated in alpha tokens
+
+
 def get_validators(
     metagraph: bittensor.Metagraph | None = None,
     netuid=12,
     network="finney",
     block: int | None = None,
-) -> list[bittensor.NeuronInfo]:
+) -> list[ValidatorInfo]:
     """
     Validators are top 24 neurons in terms of stake, only taking into account those that have at least 1000
     and forcibly including BAC_VALIDATOR_SS58_ADDRESS.
@@ -55,12 +63,19 @@ def get_validators(
             raise ValidatorListError(ex) from ex
 
     neurons = [
-        n for n in metagraph.neurons if n.hotkey in REQUIERED_VALIDATORS or n.stake >= MIN_STAKE
+        n
+        for n in metagraph.neurons
+        if (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS or metagraph.total_stake[n.uid] >= MIN_STAKE)
     ]
     neurons = sorted(
-        neurons, key=lambda n: (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS, n.stake), reverse=True
+        neurons,
+        key=lambda n: (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS, metagraph.total_stake[n.uid]),
+        reverse=True,
     )
-    return neurons[:VALIDATORS_LIMIT]
+    return [
+        ValidatorInfo(uid=n.uid, hotkey=n.hotkey, stake=float(metagraph.total_stake[n.uid]))
+        for n in neurons[:VALIDATORS_LIMIT]
+    ]
 
 
 def json_dumps_default(obj):

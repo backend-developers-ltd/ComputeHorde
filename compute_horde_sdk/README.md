@@ -32,6 +32,7 @@ async def main():
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
         docker_image="my-username/my-image:latest",
+        artifact_dir="/artifacts",
     )
 
     await job.wait(timeout=10 * 60)

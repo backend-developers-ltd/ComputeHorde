@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 
 import bittensor
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.mv_protocol.validator_requests import JobFinishedReceiptPayload, JobStartedReceiptPayload
 from compute_horde.receipts import Receipt
+from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStartedReceiptPayload
 
 miner_wallet = bittensor.wallet(name="test_wallet_miner")
 miner_wallet.create_if_non_existent(coldkey_use_password=False, hotkey_use_password=False)
@@ -20,10 +20,11 @@ started_payload = JobStartedReceiptPayload(
     job_uuid=str(uuid.uuid4()),
     miner_hotkey=miner_hotkey.ss58_address,
     validator_hotkey=validator_hotkey.ss58_address,
+    timestamp=datetime.now(tz=UTC),
     executor_class=DEFAULT_EXECUTOR_CLASS,
-    time_accepted=datetime.now(tz=UTC),
     max_timeout=30,
     is_organic=True,
+    ttl=10,
 )
 
 started_payload_blob = started_payload.blob_for_signing()
@@ -45,6 +46,7 @@ finished_payload = JobFinishedReceiptPayload(
     job_uuid=str(uuid.uuid4()),
     miner_hotkey=miner_hotkey.ss58_address,
     validator_hotkey=validator_hotkey.ss58_address,
+    timestamp=datetime.now(tz=UTC),
     time_started=datetime.now(tz=UTC),
     time_took_us=30_000_000,
     score_str="0.1234",

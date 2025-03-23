@@ -21,11 +21,6 @@ class DebugFacilitatorClient(FacilitatorClient):
         self.miner_address = miner_address
         self.miner_port = miner_port
 
-    async def get_miner_axon_info(self, miner: Miner) -> tuple[str, int, int]:
-        if miner.hotkey != self.miner_hotkey:
-            raise ValueError("unsupported hotkey")
-        return (self.miner_address, self.miner_port, 4)
-
 
 class Command(BaseCommand):
     FACILITATOR_CLIENT_CLASS = DebugFacilitatorClient

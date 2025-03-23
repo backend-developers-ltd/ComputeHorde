@@ -10,7 +10,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
-    JobRequest,
+    OrganicJobRequest,
     Signature,
     V0JobCheated,
     V0JobRequest,
@@ -207,6 +207,8 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         max_length=255, default=DEFAULT_EXECUTOR_CLASS, help_text="executor hardware class"
     )
     docker_image = models.CharField(max_length=255, blank=True, help_text="docker image for job execution")
+
+    # TODO: remove raw_script field. Support for running raw_script jobs has been removed.
     raw_script = models.TextField(blank=True, help_text="raw script to be executed")
     args = ArrayField(
         models.TextField(),
@@ -449,7 +451,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         statuses = self.statuses_ordered
         return statuses[-1].created_at - statuses[0].created_at
 
-    def as_job_request(self) -> JobRequest:
+    def as_job_request(self) -> OrganicJobRequest:
         if safe_config.JOB_REQUEST_VERSION == 0:
             if self.uploads or self.volumes:
                 raise ValueError("upload and volumes are not supported in version 0 of job protocol")
@@ -458,7 +460,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 miner_hotkey=self.miner.ss58_address,
                 executor_class=self.executor_class,
                 docker_image=self.docker_image,
-                raw_script=self.raw_script,
                 args=self.args,
                 env=self.env,
                 use_gpu=self.use_gpu,
@@ -503,7 +504,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                     uuid=str(self.uuid),
                     executor_class=self.executor_class,
                     docker_image=self.docker_image,
-                    raw_script=self.raw_script,
                     args=self.args,
                     env=self.env,
                     use_gpu=self.use_gpu,
@@ -520,7 +520,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                     miner_hotkey=self.miner.ss58_address,
                     executor_class=self.executor_class,
                     docker_image=self.docker_image,
-                    raw_script=self.raw_script,
                     args=self.args,
                     env=self.env,
                     use_gpu=self.use_gpu,

@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = "==3.11.*"
 resolution-markers = [
     "sys_platform == 'linux'",
@@ -559,7 +558,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-format = [{ name = "ruff" }]
+format = [
+    { name = "nox", specifier = "==2024.10.9" },
+    { name = "ruff" },
+]
 lint = [
     { name = "codespell", extras = ["toml"] },
     { name = "ruff" },
@@ -584,11 +586,13 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
+version = "0.0.2"
 source = { editable = "../compute_horde_sdk" }
 dependencies = [
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "tenacity", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 
 [package.metadata]
@@ -596,10 +600,18 @@ requires-dist = [
     { name = "bittensor", specifier = ">=9.0.0,<9.1" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "pydantic", specifier = ">=2.10,<3" },
+    { name = "tenacity", specifier = ">=9.0.0,<10.0.0" },
 ]
 
 [package.metadata.requires-dev]
-format = [{ name = "ruff" }]
+docs = [
+    { name = "sphinx", specifier = ">=8.2.3" },
+    { name = "sphinx-rtd-theme", specifier = ">=3.0.2" },
+]
+format = [
+    { name = "nox", specifier = "==2024.10.9" },
+    { name = "ruff" },
+]
 lint = [
     { name = "codespell", extras = ["toml"] },
     { name = "ruff" },
@@ -1266,7 +1278,6 @@ dependencies = [
     { name = "flower", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "gunicorn", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "nox", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "prometheus-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "psycopg2-binary", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "redis", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1275,6 +1286,7 @@ dependencies = [
 
 [package.dev-dependencies]
 format = [
+    { name = "nox", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "ruff", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 lint = [
@@ -1323,7 +1335,6 @@ requires-dist = [
     { name = "flower", specifier = "~=2.0.0" },
     { name = "gunicorn", specifier = "==20.1.0" },
     { name = "ipython", specifier = "==8.14.0" },
-    { name = "nox", specifier = "==2024.10.9" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
     { name = "psycopg2-binary", specifier = "~=2.9.7" },
     { name = "redis", specifier = "~=4.6.0" },
@@ -1331,7 +1342,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-format = [{ name = "ruff" }]
+format = [
+    { name = "nox", specifier = "==2024.10.9" },
+    { name = "ruff" },
+]
 lint = [
     { name = "codespell", extras = ["toml"] },
     { name = "ruff" },
@@ -2130,6 +2144,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/28/3f/13cacea96900bbd31bb05c6b74135f85d15564fc583802be56976c940470/stevedore-5.4.1.tar.gz", hash = "sha256:3135b5ae50fe12816ef291baff420acb727fcd356106e3e9cbfa9e5985cd6f4b", size = 513858 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/45/8c4ebc0c460e6ec38e62ab245ad3c7fc10b210116cea7c16d61602aa9558/stevedore-5.4.1-py3-none-any.whl", hash = "sha256:d10a31c7b86cba16c1f6e8d15416955fc797052351a56af15e608ad20811fcfe", size = 49533 },
+]
+
+[[package]]
+name = "tenacity"
+version = "9.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/cd/94/91fccdb4b8110642462e653d5dcb27e7b674742ad68efd146367da7bdb10/tenacity-9.0.0.tar.gz", hash = "sha256:807f37ca97d62aa361264d497b0e31e92b8027044942bfa756160d908320d73b", size = 47421 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b6/cb/b86984bed139586d01532a587464b5805f12e397594f19f931c4c2fbfa61/tenacity-9.0.0-py3-none-any.whl", hash = "sha256:93de0c98785b27fcf659856aa9f54bfbd399e29969b0621bc7f762bd441b4539", size = 28169 },
 ]
 
 [[package]]

@@ -7,7 +7,7 @@ from compute_horde.miner_client.organic import (
     OrganicJobError,
     run_organic_job,
 )
-from compute_horde.mv_protocol.miner_requests import V0DeclineJobRequest
+from compute_horde.protocol_messages import V0DeclineJobRequest
 from django.conf import settings
 from django.utils.timezone import now
 

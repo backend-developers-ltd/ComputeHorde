@@ -38,7 +38,10 @@ includes = ["compute_horde"]
 excludes = ["compute_horde/settings.py"]
 
 [dependency-groups]
-format = ["ruff"]
+format = [
+    "ruff",
+    "nox==2024.10.09",
+]
 lint = [
     "ruff",
     "codespell[toml]",

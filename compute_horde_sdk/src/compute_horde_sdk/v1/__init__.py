@@ -10,6 +10,7 @@ from compute_horde_sdk._internal.exceptions import (
 )
 from compute_horde_sdk._internal.models import (
     ComputeHordeJobStatus,
+    ComputeHordeJobResult,
     InputVolume,
     HTTPInputVolume,
     HuggingfaceInputVolume,
@@ -17,5 +18,5 @@ from compute_horde_sdk._internal.models import (
     OutputVolume,
     HTTPOutputVolume,
 )
-from compute_horde_sdk._internal.sdk import ComputeHordeClient, ComputeHordeJob
+from compute_horde_sdk._internal.sdk import ComputeHordeClient, ComputeHordeJob, ComputeHordeJobSpec
 from compute_horde_core.executor_class import ExecutorClass

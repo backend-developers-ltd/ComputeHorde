@@ -2,22 +2,20 @@ import uuid
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.mv_protocol.miner_requests import (
+from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
-    V0JobFailedRequest,
-    V0JobFinishedRequest,
-)
-from compute_horde.mv_protocol.validator_requests import (
     V0JobAcceptedReceiptRequest,
+    V0JobFailedRequest,
     V0JobFinishedReceiptRequest,
+    V0JobFinishedRequest,
 )
 
 from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.organic_jobs.facilitator_client import OrganicJob
-from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
+from compute_horde_validator.validator.organic_jobs.miner_driver import drive_organic_job
 
 from .helpers import (
     MockMinerClient,
@@ -142,7 +140,7 @@ async def test_miner_driver(
     async def track_job_status_updates(x):
         job_status_updates.append(x)
 
-    await execute_organic_job(
+    await drive_organic_job(
         miner_client,
         job,
         job_request,

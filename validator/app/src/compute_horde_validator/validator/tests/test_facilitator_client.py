@@ -11,7 +11,7 @@ import websockets
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
-    JobRequest,
+    OrganicJobRequest,
     Response,
 )
 from compute_horde.fv_protocol.validator_requests import (
@@ -54,9 +54,6 @@ async def async_patch_all():
             "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_job_request",
             return_value=True,
         ),
-        patch.object(
-            FacilitatorClient, "get_miner_axon_info", AsyncMock(return_value=("0.0.0.0", 8000, 4))
-        ),
         patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor()),
         patch("bittensor.metagraph", lambda *args, **kwargs: MockMetagraph()),
     ):
@@ -81,18 +78,7 @@ async def setup_db(n: int = 1):
         )
 
 
-async def cancel_facilitator_tasks(
-    facilitator_client, run_forever_task: asyncio.Task | None = None
-):
-    tasks = [
-        facilitator_client.miner_driver_awaiter_task,
-        facilitator_client.heartbeat_task,
-    ]
-    if run_forever_task:
-        tasks.append(run_forever_task)
-    if facilitator_client.specs_task:
-        tasks.append(facilitator_client.specs_task)
-
+async def reap_tasks(*tasks: asyncio.Task):
     for task in tasks:
         task.cancel()
 
@@ -111,7 +97,7 @@ class FacilitatorWs:
         async with self.condition:
             await self.condition.wait()
 
-    def get_dummy_job(self, job_uuid) -> JobRequest:
+    def get_dummy_job(self, job_uuid) -> OrganicJobRequest:
         return get_dummy_job_request_v0(job_uuid)
 
     async def verify_auth(self, ws):
@@ -154,7 +140,7 @@ class FacilitatorWs:
 
 
 class FacilitatorJobStatusUpdatesWsV0(FacilitatorWs):
-    def get_dummy_job(self, job_uuid) -> JobRequest:
+    def get_dummy_job(self, job_uuid) -> OrganicJobRequest:
         return get_dummy_job_request_v0(job_uuid)
 
 
@@ -267,6 +253,10 @@ class FacilitatorJobStatusUpdatesWsV2Retries(FacilitatorJobStatusUpdatesWsV2):
         FacilitatorBadMessageWs,
     ],
 )
+@patch(
+    "compute_horde_validator.validator.organic_jobs.miner_driver.MINER_CLIENT_CLASS",
+    MockSuccessfulMinerClient,
+)
 async def test_facilitator_client__job_completed(ws_server_cls):
     await setup_db()
     ws_server = ws_server_cls()
@@ -276,13 +266,11 @@ async def test_facilitator_client__job_completed(ws_server_cls):
             facilitator_uri = f"ws://{host}:{port}/"
             facilitator_client = FacilitatorClient(get_keypair(), facilitator_uri)
 
-            facilitator_client.MINER_CLIENT_CLASS = MockSuccessfulMinerClient
-
             async with ws_server.condition:
                 task = asyncio.create_task(facilitator_client.run_forever())
                 await ws_server.condition.wait()
 
-            await cancel_facilitator_tasks(facilitator_client, task)
+            await reap_tasks(task)
 
             if ws_server.facilitator_error:
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")
@@ -294,6 +282,10 @@ async def test_facilitator_client__job_completed(ws_server_cls):
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.skip(reason="Validator-side job retry is disabled for now")
+@patch(
+    "compute_horde_validator.validator.organic_jobs.miner_driver.MINER_CLIENT_CLASS",
+    MockFaillingMinerClient,
+)
 async def test_facilitator_client__failed_job_retries():
     await setup_db()
     ws_server = FacilitatorJobStatusUpdatesWsV2Retries()
@@ -303,13 +295,12 @@ async def test_facilitator_client__failed_job_retries():
             facilitator_uri = f"ws://{host}:{port}/"
 
             facilitator_client = FacilitatorClient(get_keypair(), facilitator_uri)
-            facilitator_client.MINER_CLIENT_CLASS = MockFaillingMinerClient
 
             async with ws_server.condition:
                 task = asyncio.create_task(facilitator_client.run_forever())
                 await ws_server.condition.wait()
 
-            await cancel_facilitator_tasks(facilitator_client, task)
+            await reap_tasks(task)
             if ws_server.facilitator_error:
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")
 
@@ -351,6 +342,10 @@ class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
 @pytest.mark.skip
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@patch(
+    "compute_horde_validator.validator.organic_jobs.miner_driver.MINER_CLIENT_CLASS",
+    MockSuccessfulMinerClient,
+)
 async def test_wait_for_specs(specs_msg: dict):
     layer = get_channel_layer()
     await layer.send(MACHINE_SPEC_CHANNEL, specs_msg)
@@ -362,17 +357,19 @@ async def test_wait_for_specs(specs_msg: dict):
             facilitator_uri = f"ws://{host}:{port}/"
             facilitator_client = FacilitatorClient(get_keypair(), facilitator_uri)
 
-            facilitator_client.MINER_CLIENT_CLASS = MockSuccessfulMinerClient
-
             async with ws_server.condition:
                 task = asyncio.create_task(facilitator_client.run_forever())
                 await asyncio.wait_for(ws_server.condition.wait(), timeout=5)
 
-            await cancel_facilitator_tasks(facilitator_client, task)
+            await reap_tasks(task)
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@patch(
+    "compute_horde_validator.validator.organic_jobs.miner_driver.MINER_CLIENT_CLASS",
+    MockSuccessfulMinerClient,
+)
 async def test_routing_to_trusted_miner():
     await setup_db()
     ws_server = FacilitatorJobOnTrustedMiner()
@@ -382,13 +379,11 @@ async def test_routing_to_trusted_miner():
             facilitator_uri = f"ws://{host}:{port}/"
             facilitator_client = FacilitatorClient(get_keypair(), facilitator_uri)
 
-            facilitator_client.MINER_CLIENT_CLASS = MockSuccessfulMinerClient
-
             async with ws_server.condition:
                 task = asyncio.create_task(facilitator_client.run_forever())
                 await ws_server.condition.wait()
 
-            await cancel_facilitator_tasks(facilitator_client, task)
+            await reap_tasks(task)
 
             if ws_server.facilitator_error:
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")

@@ -10,8 +10,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        Validator.objects.create(
+        Validator.objects.get_or_create(
             public_key=options["validator_public_key"],
-            active=True,
-            debug=True,
+            defaults=dict(
+                active=True,
+                debug=True,
+            ),
         )

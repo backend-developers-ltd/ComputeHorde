@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Self
 
 import pydantic
 
@@ -17,6 +17,10 @@ OUTPUT_MOUNT_PATH_PREFIX = "/output/"
 
 
 class ComputeHordeJobStatus(StrEnum):
+    """
+    Status of a Compute Horde job.
+    """
+
     SENT = "Sent"
     ACCEPTED = "Accepted"
     REJECTED = "Rejected"
@@ -24,13 +28,27 @@ class ComputeHordeJobStatus(StrEnum):
     FAILED = "Failed"
 
     def is_in_progress(self) -> bool:
+        """
+        Check if the job is in progress (has not completed or failed yet).
+        """
         return self in (self.SENT, self.ACCEPTED)
+
+    def is_successful(self) -> bool:
+        """Check if the job has finished unsuccessfully"""
+        return self == self.COMPLETED
 
 
 @dataclass
 class ComputeHordeJobResult:
+    """
+    Result of a Compute Horde job.
+    """
+
     stdout: str
+    """Job standard output."""
+
     artifacts: dict[str, bytes]
+    """Artifact file contents, keyed by file path, as :class:`bytes`."""
 
 
 class FacilitatorJobResponse(pydantic.BaseModel):
@@ -40,9 +58,8 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # last_update: str
     status: ComputeHordeJobStatus
     docker_image: str
-    # raw_script: str
     args: list[str]
-    env: dict
+    env: dict[str, str]
     # use_gpu: bool
     # hf_repo_id: str
     # hf_revision: str
@@ -50,10 +67,10 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # output_download_url: str
     # tag: str
     stdout: str
-    volumes: list = []
-    uploads: list = []
+    # volumes: list = []
+    # uploads: list = []
     # target_validator_hotkey: str
-    artifacts: dict = {}
+    artifacts: dict[str, str] = {}
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):
@@ -90,9 +107,11 @@ class InlineInputVolume(pydantic.BaseModel, AbstractInputVolume):
         )
 
     @classmethod
-    def from_file_contents(cls, filename: str, contents: bytes):
+    def from_file_contents(cls, filename: str, contents: bytes, compress: bool = False) -> Self:
         in_memory_output = io.BytesIO()
-        zipf = zipfile.ZipFile(in_memory_output, "w")
+        zipf = zipfile.ZipFile(
+            in_memory_output, "w", compression=zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
+        )
         zipf.writestr(filename, contents)
         zipf.close()
         in_memory_output.seek(0)
@@ -107,7 +126,7 @@ class HuggingfaceInputVolume(pydantic.BaseModel, AbstractInputVolume):
     """
     Volume for downloading resources from Huggingface.
 
-    By default, it downloads the entire repository and copier its structure.
+    By default, it downloads the entire repository and copies its structure.
     To narrow it down, use the ``allow_patterns`` field.
     If a file is inside a subfolder, it will be placed under the same path in the volume.
     """
@@ -153,6 +172,8 @@ InputVolume = InlineInputVolume | HuggingfaceInputVolume | HTTPInputVolume
 
 
 class HTTPOutputVolume(pydantic.BaseModel):
+    """Volume for uploading files to the Internet via HTTP."""
+
     http_method: Literal["POST", "PUT"]
     """HTTP method to use, can be POST or PUT."""
 
