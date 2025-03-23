@@ -4,7 +4,6 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
-import bittensor
 import pytest
 from asgiref.sync import sync_to_async
 from compute_horde.base.docker import DockerRunOptionsPreset
@@ -39,8 +38,6 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from .helpers import (
-    MockMetagraph,
-    MockSubtensor,
     check_system_events,
 )
 
@@ -135,14 +132,8 @@ async def miner_synthetic_jobs_scheme(
     interaction_callback,
     miner_hotkey="miner_hotkey",
 ):
-    miner, _ = await Miner.objects.aget_or_create(hotkey=miner_hotkey)
-    miner_axon_info = bittensor.AxonInfo(
-        version=4,
-        ip="ignore",
-        ip_type=4,
-        port=9999,
-        hotkey=miner_hotkey,
-        coldkey=miner_hotkey,
+    miner, _ = await Miner.objects.aget_or_create(
+        hotkey=miner_hotkey, address="ignore", port=9999, ip_version=4
     )
 
     # create synthetic jobs task for miner
@@ -150,9 +141,7 @@ async def miner_synthetic_jobs_scheme(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    task = asyncio.create_task(
-        execute_synthetic_batch_run({miner_hotkey: miner_axon_info}, [miner], [], batch.id)
-    )
+    task = asyncio.create_task(execute_synthetic_batch_run([miner], [], batch.id))
     try:
         # wait for creation of mocked MinerClient to get instance
         miner_client = await await_for_not_none(lambda: mocked_synthetic_miner_client.instance)
@@ -190,6 +179,7 @@ def syntethic_batch_scheme_single_miner(
     settings.DEBUG_MINER_KEY = miner_hotkey
     settings.DEBUG_MINER_ADDRESS = "ignore"
     settings.DEBUG_MINER_PORT = 9999
+    settings.DEBUG_MINER_COUNT = 1
 
     batch = SyntheticJobBatch.objects.create(
         block=1000,
@@ -415,49 +405,3 @@ def test_create_and_run_synthetic_job_batch(
 
     for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
         assert abs(job.score - 1) < 0.0001
-
-
-mocked_metagraph_1 = MagicMock(side_effect=[ValueError, TypeError, MockMetagraph()])
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@patch(
-    "bittensor.subtensor",
-    lambda *args, **kwargs: MockSubtensor(mocked_metagraph=mocked_metagraph_1),
-)
-def test_create_and_run_synthetic_job_batch_metagraph_retries():
-    with (
-        patch(
-            "compute_horde_validator.validator.synthetic_jobs.utils.execute_synthetic_batch_run"
-        ) as execute,
-        patch("time.sleep") as sleep,
-    ):
-        create_and_run_synthetic_job_batch(12, "none", 100)
-
-    assert execute.call_count == 1
-    assert sleep.call_count == 2
-
-
-mocked_metagraph_2 = MagicMock(side_effect=[ValueError, TypeError, AttributeError])
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@patch(
-    "bittensor.subtensor",
-    lambda *args, **kwargs: MockSubtensor(mocked_metagraph=mocked_metagraph_2),
-)
-def test_create_and_run_synthetic_job_batch_metagraph_retries_fail():
-    with (
-        patch(
-            "compute_horde_validator.validator.synthetic_jobs.utils.execute_synthetic_batch_run"
-        ) as execute,
-        patch("time.sleep") as sleep,
-    ):
-        create_and_run_synthetic_job_batch(12, "none", 100)
-
-    assert execute.call_count == 0
-    assert sleep.call_count == 2
-    check_system_events(
-        SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
-        SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
-    )
