@@ -42,8 +42,8 @@ def install(session: nox.Session, *args):
 def format_(session: nox.Session):
     """Lint the code and apply fixes in-place whenever possible."""
     install(session, "format")
-    session.run("ruff", "check", "--fix", ".")
     session.run("ruff", "format", ".")
+    session.run("ruff", "check", "--fix", ".")
 
 
 @nox.session(python=PYTHON_VERSION)
@@ -126,4 +126,16 @@ def make_release(session):
         f"    git push origin {current_branch}\n"
         f"    git tag {tag}\n"
         f"    git push origin {tag}\n"
+    )
+
+
+@nox.session(python=PYTHON_VERSION)
+def docs(session):
+    install(session, "docs")
+    source_dir = "docs/source"
+    output_dir = "docs/build/html"
+    session.run("rm", "-rf", output_dir, external=True)
+    session.run("sphinx-multiversion", source_dir, output_dir, *session.posargs)
+    session.run(
+        "cp", "-f", f"{source_dir}/_templates/gh-pages-redirect.html", f"{output_dir}/index.html", external=True
     )
