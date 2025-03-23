@@ -119,8 +119,9 @@ def format_(session):
     """Lint the code and apply fixes in-place whenever possible."""
     install(session, "format")
     session.run("ruff", "check", "--fix", ".")
-    run_shellcheck(session, mode="fmt")
-    run_readable(session, mode="fmt")
+    if os.environ.get("SKIP_SHELLCHECK_AND_READABLE") != "1":
+        run_shellcheck(session, mode="fmt")
+        run_readable(session, mode="fmt")
     session.run("ruff", "format", ".")
 
 
@@ -130,8 +131,9 @@ def lint(session):
     install(session, "lint")
     session.run("ruff", "check", "--diff", "--unsafe-fixes", ".")
     session.run("codespell", ".")
-    run_shellcheck(session, mode="check")
-    run_readable(session, mode="check")
+    if os.environ.get("SKIP_SHELLCHECK_AND_READABLE") != "1":
+        run_shellcheck(session, mode="check")
+        run_readable(session, mode="check")
     session.run("ruff", "format", "--diff", ".")
 
 

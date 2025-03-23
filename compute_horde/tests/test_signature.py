@@ -121,7 +121,6 @@ def test_signed_fields__missing_fields():
     facilitator_request_json = {
         "executor_class": str(ExecutorClass.always_on__llm__a6000),
         "env": {},
-        "raw_script": "test",
         "use_gpu": False,
         "input_url": "",
         "uploads": [],
@@ -133,7 +132,6 @@ def test_signed_fields__missing_fields():
         uuid="uuid",
         executor_class=ExecutorClass.always_on__llm__a6000,
         docker_image="",
-        raw_script="test",
         args=[],
         env={},
         use_gpu=False,
@@ -181,7 +179,6 @@ def test_signed_fields__volumes_uploads():
         uuid="uuid",
         executor_class=ExecutorClass.always_on__llm__a6000,
         docker_image="backenddevelopersltd/latest",
-        raw_script="",
         args=["--device", "cuda", "--batch_size", "1", "--model_ids", "Deeptensorlab"],
         env={"f": "test"},
         use_gpu=True,

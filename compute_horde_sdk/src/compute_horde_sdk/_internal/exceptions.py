@@ -1,5 +1,5 @@
 class ComputeHordeError(Exception):
-    """Something went wrong on the Compute Horde side."""
+    """The base class for all errors thrown by the Compute Horde."""
 
 
 class ComputeHordeNotFoundError(ComputeHordeError):

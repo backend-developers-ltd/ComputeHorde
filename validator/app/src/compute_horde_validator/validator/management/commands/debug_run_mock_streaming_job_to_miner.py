@@ -15,16 +15,13 @@ from compute_horde.miner_client.organic import (
     OrganicJobError,
     OrganicMinerClient,
 )
-from compute_horde.mv_protocol.miner_requests import (
-    RequestType,
+from compute_horde.protocol_messages import (
     V0DeclineJobRequest,
     V0ExecutorReadyRequest,
+    V0InitialJobRequest,
     V0JobFailedRequest,
-    V0StreamingJobReadyRequest,
-)
-from compute_horde.mv_protocol.validator_requests import (
     V0JobRequest,
-    V1InitialJobRequest,
+    V0StreamingJobReadyRequest,
 )
 from compute_horde.transport import TransportConnectionError
 from compute_horde.utils import Timer
@@ -81,15 +78,15 @@ async def run_streaming_job(options, wait_timeout: int = 300):
 
         # Send streaming job initial request with validator public key
         await client.send_model(
-            V1InitialJobRequest(
+            V0InitialJobRequest(
                 job_uuid=job_details.job_uuid,
                 executor_class=job_details.executor_class,
-                base_docker_image_name=job_details.docker_image,
+                docker_image=job_details.docker_image,
                 timeout_seconds=job_details.total_job_timeout,
-                volume_type=job_details.volume.volume_type if job_details.volume else None,
+                volume=job_details.volume,
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
-                public_key=public_key,
+                streaming_details=V0InitialJobRequest.StreamingDetails(public_key=public_key),
             ),
         )
 
@@ -121,8 +118,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                 V0JobRequest(
                     job_uuid=job_details.job_uuid,
                     executor_class=job_details.executor_class,
-                    docker_image_name=job_details.docker_image,
-                    raw_script=job_details.raw_script,
+                    docker_image=job_details.docker_image,
                     docker_run_options_preset=job_details.docker_run_options_preset,
                     docker_run_cmd=job_details.docker_run_cmd,
                     volume=job_details.volume,
@@ -140,12 +136,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                 raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
 
             # Check received streaming job executor ready response
-            assert (
-                streaming_job_ready_response.message_type == RequestType.V0StreamingJobReadyRequest
-            )
-            streaming_job_ready_response = cast(
-                V0StreamingJobReadyRequest, streaming_job_ready_response
-            )
+            assert isinstance(streaming_job_ready_response, V0StreamingJobReadyRequest)
 
             # Save job certificate received from executor
             executor_cert_path = dir_path / "ssl" / "executor_certificate.pem"

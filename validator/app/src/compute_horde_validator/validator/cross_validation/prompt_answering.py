@@ -10,7 +10,7 @@ from compute_horde.miner_client.organic import (
     OrganicJobError,
     run_organic_job,
 )
-from compute_horde.mv_protocol.miner_requests import V0DeclineJobRequest
+from compute_horde.protocol_messages import V0DeclineJobRequest
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.db import transaction
@@ -65,7 +65,6 @@ async def answer_prompts(
         job_uuid=str(job_uuid),
         executor_class=ExecutorClass.always_on__llm__a6000,
         docker_image=job_generator.docker_image_name(),
-        raw_script=job_generator.raw_script(),
         docker_run_options_preset=job_generator.docker_run_options_preset(),
         docker_run_cmd=job_generator.docker_run_cmd(),
         total_job_timeout=(

@@ -31,8 +31,6 @@ from .helpers import (
     MockMinerClient,
     MockSubtensor,
     check_system_events,
-    mock_get_miner_axon_info,
-    throw_error,
 )
 
 
@@ -40,7 +38,6 @@ def _get_cycle(block: int) -> Cycle:
     return Cycle.from_block(block, settings.BITTENSOR_NETUID)
 
 
-@patch("compute_horde_validator.validator.tasks.get_miner_axon_info", mock_get_miner_axon_info)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -52,7 +49,6 @@ def test_trigger_run_admin_job__should_trigger_job():
         timeout=0,  # should timeout
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="python:3.11-slim",
-        raw_script="print('hello world')",
         args="",
     )
 
@@ -68,7 +64,6 @@ def test_trigger_run_admin_job__should_trigger_job():
     assert job.status == OrganicJob.Status.FAILED
 
 
-@patch("compute_horde_validator.validator.tasks.get_miner_axon_info", throw_error)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_trigger_run_admin_job__should_not_trigger_job():
@@ -79,7 +74,6 @@ def test_trigger_run_admin_job__should_not_trigger_job():
         timeout=0,  # should timeout
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="python:3.11-slim",
-        raw_script="print('hello world')",
         args="",
     )
 

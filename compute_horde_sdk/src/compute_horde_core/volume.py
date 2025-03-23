@@ -17,7 +17,7 @@ class VolumeType(str, enum.Enum):
     huggingface_volume = "huggingface_volume"
 
     # default __str__ method returns "VolumeType.inline", we want just "inline"
-    def __str__(self):
+    def __str__(self) -> str:
         return str.__str__(self)
 
 

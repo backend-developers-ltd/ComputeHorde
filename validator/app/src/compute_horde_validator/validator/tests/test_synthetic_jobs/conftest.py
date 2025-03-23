@@ -5,7 +5,14 @@ import pytest
 import pytest_asyncio
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, DEFAULT_LLM_EXECUTOR_CLASS
 from compute_horde.miner_client.base import AbstractTransport
-from compute_horde.mv_protocol import miner_requests
+from compute_horde.protocol_messages import (
+    V0AcceptJobRequest,
+    V0DeclineJobRequest,
+    V0ExecutorManifestRequest,
+    V0ExecutorReadyRequest,
+    V0JobFailedRequest,
+    V0JobFinishedRequest,
+)
 from django.utils.timezone import now
 from pytest_mock import MockerFixture
 
@@ -102,41 +109,27 @@ def _patch_generator_factory(
 
 @pytest.fixture
 def manifest_message():
-    return miner_requests.V0ExecutorManifestRequest(
-        manifest=miner_requests.ExecutorManifest(
-            executor_classes=[
-                miner_requests.ExecutorClassManifest(executor_class=DEFAULT_EXECUTOR_CLASS, count=1)
-            ]
-        )
-    ).model_dump_json()
+    return V0ExecutorManifestRequest(manifest={DEFAULT_EXECUTOR_CLASS: 1}).model_dump_json()
 
 
 @pytest.fixture
 def streaming_manifest_message():
-    return miner_requests.V0ExecutorManifestRequest(
-        manifest=miner_requests.ExecutorManifest(
-            executor_classes=[
-                miner_requests.ExecutorClassManifest(
-                    executor_class=DEFAULT_LLM_EXECUTOR_CLASS, count=1
-                )
-            ]
-        )
-    ).model_dump_json()
+    return V0ExecutorManifestRequest(manifest={DEFAULT_LLM_EXECUTOR_CLASS: 1}).model_dump_json()
 
 
 @pytest.fixture
 def executor_ready_message(job_uuid: uuid.UUID):
-    return miner_requests.V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
+    return V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
 
 
 @pytest.fixture
 def accept_job_message(job_uuid: uuid.UUID):
-    return miner_requests.V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+    return V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
 
 
 @pytest.fixture
 def decline_job_message(job_uuid: uuid.UUID):
-    return miner_requests.V0DeclineJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+    return V0DeclineJobRequest(job_uuid=str(job_uuid)).model_dump_json()
 
 
 @pytest.fixture
@@ -151,7 +144,7 @@ def docker_process_stderr():
 
 @pytest.fixture
 def job_finish_message(job_uuid: uuid.UUID, docker_process_stdout: str, docker_process_stderr: str):
-    return miner_requests.V0JobFinishedRequest(
+    return V0JobFinishedRequest(
         job_uuid=str(job_uuid),
         docker_process_stdout=docker_process_stdout,
         docker_process_stderr=docker_process_stderr,
@@ -161,7 +154,7 @@ def job_finish_message(job_uuid: uuid.UUID, docker_process_stdout: str, docker_p
 
 @pytest.fixture
 def job_failed_message(job_uuid: uuid.UUID, docker_process_stdout: str, docker_process_stderr: str):
-    return miner_requests.V0JobFailedRequest(
+    return V0JobFailedRequest(
         job_uuid=str(job_uuid),
         docker_process_exit_status=1,
         docker_process_stdout=docker_process_stdout,

@@ -1,17 +1,18 @@
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Literal, assert_never
 
-from compute_horde.em_protocol.executor_requests import JobErrorType
-from compute_horde.fv_protocol.facilitator_requests import JobRequest, V2JobRequest
+from channels.layers import get_channel_layer
+from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
 from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,
     OrganicJobError,
     run_organic_job,
 )
-from compute_horde.mv_protocol.miner_requests import (
+from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0JobFailedRequest,
@@ -26,12 +27,17 @@ from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
     JobBase,
+    MetagraphSnapshot,
+    Miner,
     OrganicJob,
     SystemEvent,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
+from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
+
+MINER_CLIENT_CLASS = MinerClient
 
 
 class MinerResponse(BaseModel, extra="allow"):
@@ -97,10 +103,83 @@ async def _dummy_notify_callback(_: JobStatusUpdate) -> None:
     pass
 
 
-async def execute_organic_job(
+async def _get_current_block() -> int:
+    return (await MetagraphSnapshot.aget_latest()).block
+
+
+async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Miner) -> OrganicJob:
+    if (
+        miner.hotkey == settings.DEBUG_MINER_KEY
+        and settings.DEBUG_MINER_ADDRESS
+        and settings.DEBUG_MINER_PORT
+    ):
+        miner_ip = settings.DEBUG_MINER_ADDRESS
+        miner_port = settings.DEBUG_MINER_PORT
+        ip_type = 4
+        on_trusted_miner = False
+    elif miner.hotkey == TRUSTED_MINER_FAKE_KEY:
+        miner_ip = settings.TRUSTED_MINER_ADDRESS
+        miner_port = settings.TRUSTED_MINER_PORT
+        ip_type = 4
+        on_trusted_miner = True
+    else:
+        miner_ip = miner.address
+        miner_port = miner.port
+        ip_type = miner.ip_version
+        on_trusted_miner = False
+
+    if settings.DEBUG_USE_MOCK_BLOCK_NUMBER:
+        block = 5136476 + int((time.time() - 1742076533) / 12)
+    else:
+        block = await _get_current_block()
+
+    job = await OrganicJob.objects.acreate(
+        job_uuid=str(job_request.uuid),
+        miner=miner,
+        miner_address=miner_ip,
+        miner_address_ip_version=ip_type,
+        miner_port=miner_port,
+        executor_class=job_request.executor_class,
+        job_description="User job from facilitator",
+        block=block,
+        on_trusted_miner=on_trusted_miner,
+    )
+
+    miner_client = MINER_CLIENT_CLASS(
+        miner_hotkey=miner.hotkey,
+        miner_address=job.miner_address,
+        miner_port=job.miner_port,
+        job_uuid=str(job.job_uuid),
+        my_keypair=settings.BITTENSOR_WALLET().hotkey,
+    )
+
+    async def job_status_callback(status_update: JobStatusUpdate):
+        logger.debug("Job status update: %s", status_update)
+        await get_channel_layer().send(
+            f"job_status_updates__{status_update.uuid}",
+            {"type": "job_status_update", "payload": status_update.model_dump()},
+        )
+
+    total_job_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_TIMEOUT")
+    initial_response_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT")
+    executor_ready_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT")
+    await drive_organic_job(
+        miner_client,
+        job,
+        job_request,
+        total_job_timeout=total_job_timeout,
+        initial_response_timeout=initial_response_timeout,
+        executor_ready_timeout=executor_ready_timeout,
+        notify_callback=job_status_callback,
+    )
+
+    return job
+
+
+async def drive_organic_job(
     miner_client: MinerClient,
     job: OrganicJob,
-    job_request: JobRequest | AdminJobRequest,
+    job_request: OrganicJobRequest | AdminJobRequest,
     total_job_timeout: int = 300,
     initial_response_timeout: int = 3,
     executor_ready_timeout: int = 300,
@@ -120,7 +199,7 @@ async def execute_organic_job(
         save_event = partial(save_job_execution_event, data=data)
 
     async def notify_job_accepted(msg: V0AcceptJobRequest) -> None:
-        await notify_callback(JobStatusUpdate.from_job(job, "accepted", msg.message_type.value))
+        await notify_callback(JobStatusUpdate.from_job(job, "accepted", msg.message_type))
 
     miner_client.notify_job_accepted = notify_job_accepted  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
@@ -129,8 +208,7 @@ async def execute_organic_job(
     job_details = OrganicJobDetails(
         job_uuid=str(job.job_uuid),  # TODO: fix uuid field in AdminJobRequest
         executor_class=ExecutorClass(job_request.executor_class),
-        docker_image=job_request.docker_image or None,
-        raw_script=job_request.raw_script or None,
+        docker_image=job_request.docker_image,
         docker_run_options_preset="nvidia_all" if job_request.use_gpu else "none",
         docker_run_cmd=job_request.get_args(),
         total_job_timeout=total_job_timeout,
@@ -306,8 +384,12 @@ async def execute_organic_job(
                 job.error_type = exc.received.error_type
                 job.error_detail = exc.received.error_detail
                 match exc.received.error_type:
-                    case JobErrorType.HUGGINGFACE_DOWNLOAD:
+                    case None:
+                        pass
+                    case V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD:
                         subtype = SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_HUGGINGFACE
+                    case _:
+                        assert_never(exc.received.error_type)
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()

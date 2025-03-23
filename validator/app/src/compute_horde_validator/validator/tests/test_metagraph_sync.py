@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -19,12 +19,11 @@ def test_metagraph_sync__success():
 
     n = 5
     override_block = 1099
-    with patch(
-        "bittensor.metagraph",
-        lambda *args, block=None, **kwargs: MockMetagraph(
+    with patch("bittensor.subtensor") as patched_get_subtensor:
+        patched_subtensor = patched_get_subtensor.return_value = Mock()
+        patched_subtensor.metagraph = lambda *args, block=None, **kwargs: MockMetagraph(
             num_neurons=n, block_num=(override_block if block is None else block)
-        ),
-    ):
+        )
         sync_metagraph()
 
     snapshot = MetagraphSnapshot.get_latest()
@@ -56,12 +55,11 @@ def test_metagraph_sync__success():
     # check extra miner gets created
     n = 6
     override_block = 1100
-    with patch(
-        "bittensor.metagraph",
-        lambda *args, block=None, **kwargs: MockMetagraph(
+    with patch("bittensor.subtensor") as patched_get_subtensor:
+        patched_subtensor = patched_get_subtensor.return_value = Mock()
+        patched_subtensor.metagraph = lambda *args, block=None, **kwargs: MockMetagraph(
             num_neurons=n, block_num=(override_block if block is None else block)
-        ),
-    ):
+        )
         sync_metagraph()
 
     assert Miner.objects.count() == n
@@ -84,12 +82,11 @@ def test_metagraph_sync__success():
 
     # check metagraph syncing lagging warns
     override_block = 1431
-    with patch(
-        "bittensor.metagraph",
-        lambda *args, block=None, **kwargs: MockMetagraph(
+    with patch("bittensor.subtensor") as patched_get_subtensor:
+        patched_subtensor = patched_get_subtensor.return_value = Mock()
+        patched_subtensor.metagraph = lambda *args, block=None, **kwargs: MockMetagraph(
             num_neurons=n, block_num=(override_block if block is None else block)
-        ),
-    ):
+        )
         sync_metagraph()
 
     event = SystemEvent.objects.get(
@@ -113,19 +110,17 @@ def test_metagraph_sync__success():
     assert snapshot.block == 1430  # 708 cycle start
 
 
-def raise_exception(*args, **kwargs):
-    raise Exception("Simulated metagraph failure")
-
-
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-@patch("bittensor.metagraph", raise_exception)
 def test_metagraph_sync__fetch_error():
     assert SystemEvent.objects.count() == 0, "No system events should be created before task"
 
-    sync_metagraph()
+    with patch("bittensor.subtensor") as patched_get_subtensor:
+        patched_get_subtensor.return_value = patched_subtensor = Mock()
+        patched_subtensor.metagraph.side_effect = Exception("Nope")
+        sync_metagraph()
 
     event = SystemEvent.objects.get(
         type=SystemEvent.EventType.METAGRAPH_SYNCING,
         subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
     )
-    assert "failure" in event.long_description
+    assert "Nope" in event.long_description

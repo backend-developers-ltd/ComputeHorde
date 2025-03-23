@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = "==3.11.*"
 resolution-markers = [
     "sys_platform == 'linux'",
@@ -600,7 +599,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-format = [{ name = "ruff" }]
+format = [
+    { name = "nox", specifier = "==2024.10.9" },
+    { name = "ruff" },
+]
 lint = [
     { name = "codespell", extras = ["toml"] },
     { name = "ruff" },
@@ -625,11 +627,13 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
+version = "0.0.2"
 source = { editable = "../compute_horde_sdk" }
 dependencies = [
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "tenacity", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 
 [package.metadata]
@@ -637,10 +641,18 @@ requires-dist = [
     { name = "bittensor", specifier = ">=9.0.0,<9.1" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "pydantic", specifier = ">=2.10,<3" },
+    { name = "tenacity", specifier = ">=9.0.0,<10.0.0" },
 ]
 
 [package.metadata.requires-dev]
-format = [{ name = "ruff" }]
+docs = [
+    { name = "sphinx", specifier = ">=8.2.3" },
+    { name = "sphinx-rtd-theme", specifier = ">=3.0.2" },
+]
+format = [
+    { name = "nox", specifier = "==2024.10.9" },
+    { name = "ruff" },
+]
 lint = [
     { name = "codespell", extras = ["toml"] },
     { name = "ruff" },
