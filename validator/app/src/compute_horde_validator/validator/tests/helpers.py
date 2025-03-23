@@ -30,7 +30,7 @@ from compute_horde.protocol_messages import (
 from django.conf import settings
 from pydantic import TypeAdapter
 
-from compute_horde_validator.validator.models import Miner, SystemEvent
+from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.synthetic_jobs import batch_run
 

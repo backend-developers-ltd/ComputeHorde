@@ -4,7 +4,7 @@ import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 import websockets
