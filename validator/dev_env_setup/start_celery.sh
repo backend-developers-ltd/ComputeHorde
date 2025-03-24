@@ -10,7 +10,7 @@ cd ../app/src
 # Default concurrency = 2
 CELERY_CONCURRENCY=${CELERY_CONCURRENCY:-2}
 # Default loglevel = INFO
-CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-INFO}
+CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-DEBUG}
 
 # below we define two workers types (each may have any concurrency);
 # each worker may have its own settings

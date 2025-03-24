@@ -21,7 +21,7 @@ from compute_horde.miner_client.organic import (
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
-    V0JobFailedRequest,
+    V0JobFailedRequest, V0StreamingJobReadyRequest,
 )
 from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde_core.executor_class import ExecutorClass
@@ -185,6 +185,20 @@ async def drive_organic_job(
 
     miner_client.notify_job_accepted = notify_job_accepted  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
+
+    async def notify_streaming_ready(msg: V0StreamingJobReadyRequest) -> None:
+        await notify_callback(JobStatusUpdate.from_job(
+            job,
+            "streaming_ready",
+            msg.message_type,
+            streaming_details={
+                "streaming_server_cert": msg.public_key,
+                "streaming_server_address": msg.ip,
+                "streaming_server_port": msg.port,
+            },
+        ))
+
+    miner_client.notify_streaming_readiness = notify_streaming_ready  # type: ignore[method-assign]
 
     artifacts_dir = job_request.artifacts_dir if isinstance(job_request, V2JobRequest) else None
     job_details = OrganicJobDetails(

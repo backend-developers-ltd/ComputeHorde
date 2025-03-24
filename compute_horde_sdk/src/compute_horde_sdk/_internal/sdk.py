@@ -124,6 +124,8 @@ class ComputeHordeJobSpec:
     For now, output volume paths must start with ``/output/``.
     """
 
+    streaming: bool | None = None
+
 
 class ComputeHordeJob:
     """
@@ -141,11 +143,22 @@ class ComputeHordeJob:
         uuid: str,
         status: ComputeHordeJobStatus,
         result: ComputeHordeJobResult | None = None,
+        streaming_public_cert: Certificate | None = None,
+        streaming_private_key: RSAPrivateKey | None = None,
+        streaming_server_cert: str | None = None,
+        streaming_server_address: str | None = None,
+        streaming_server_port: int | None = None,
+
     ):
         self._client = client
         self.uuid = uuid
         self.status = status
         self.result = result
+        self.streaming_public_cert = streaming_public_cert
+        self.streaming_private_key = streaming_private_key
+        self.streaming_server_cert = streaming_server_cert
+        self.streaming_server_address = streaming_server_address
+        self.streaming_server_port = streaming_server_port
 
     async def wait(self, timeout: float | None = None) -> None:
         """
@@ -164,16 +177,41 @@ class ComputeHordeJob:
             await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
             await self.refresh_from_facilitator()
 
+    async def wait_for_streaming(self, timeout: float | None = None) -> None:
+        start_time = time.monotonic()
+
+        while True:
+            if timeout is not None and time.monotonic() - start_time > timeout:
+                raise ComputeHordeJobTimeoutError(
+                    f"Job {self.uuid} did not prepare for streaming within {timeout} seconds,"
+                    f" last status: {self.status}"
+                )
+            if self.status.is_streaming_ready():
+                return
+            if not self.status.is_in_progress():
+                return
+            await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
+            await self.refresh_from_facilitator()
+
     async def refresh_from_facilitator(self) -> None:
         new_job = await self._client.get_job(self.uuid)
         self.status = new_job.status
         self.result = new_job.result
+        self.streaming_server_cert = new_job.streaming_server_cert
+        self.streaming_server_address = new_job.streaming_server_address
+        self.streaming_server_port = new_job.streaming_server_port
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__qualname__}: {self.uuid!r}>"
 
     @classmethod
-    def _from_response(cls, client: "ComputeHordeClient", response: FacilitatorJobResponse) -> Self:
+    def _from_response(
+        cls,
+        client: "ComputeHordeClient",
+        response: FacilitatorJobResponse,
+        streaming_public_cert: Certificate | None = None,
+        streaming_private_key: RSAPrivateKey | None = None,
+    ) -> Self:
         result = None
         if not response.status.is_in_progress():
             # TODO: Handle base64 decode errors
@@ -186,6 +224,11 @@ class ComputeHordeJob:
             uuid=response.uuid,
             status=response.status,
             result=result,
+            streaming_public_cert=streaming_public_cert,
+            streaming_private_key=streaming_private_key,
+            streaming_server_cert=response.streaming_server_cert,
+            streaming_server_address=response.streaming_server_address,
+            streaming_server_port=response.streaming_server_port,
         )
 
 
@@ -360,10 +403,10 @@ class ComputeHordeClient:
         """
 
         if job_spec.streaming:
-            self.streaming_public_cert, self.streaming_private_key = generate_certificate("127.0.0.1")
-            streaming_details = {"public_key": serialize_certificate(self.streaming_public_cert).decode("utf-8")}
+            streaming_public_cert, streaming_private_key = generate_certificate("127.0.0.1")
+            streaming_details = {"public_key": serialize_certificate(streaming_public_cert).decode("utf-8")}
         else:
-            streaming_details = None
+            streaming_public_cert, streaming_private_key, streaming_details = None, None, None
         # TODO: make this a pydantic model?
         data: dict[str, pydantic.JsonValue] = {
             "target_validator_hotkey": self.compute_horde_validator_hotkey,
@@ -398,7 +441,12 @@ class ComputeHordeClient:
         except pydantic.ValidationError as e:
             raise ComputeHordeError("ComputeHorde returned malformed response") from e
 
-        job = ComputeHordeJob._from_response(self, job_response)
+        job = ComputeHordeJob._from_response(
+            self,
+            job_response,
+            streaming_public_cert=streaming_public_cert,
+            streaming_private_key=streaming_private_key,
+        )
         logger.debug("Created job with UUID=%s", job.uuid)
 
         return job

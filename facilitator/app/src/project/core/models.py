@@ -293,6 +293,7 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
         SENT = 0
         ACCEPTED = 1
         COMPLETED = 2
+        STREAMING_READY = 3
 
     FINAL_STATUS_VALUES = (
         Status.COMPLETED,

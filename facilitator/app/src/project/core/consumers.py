@@ -206,6 +206,12 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                 ):
                     job.artifacts = artifacts
                     await job.asave()
+                if status == JobStatus.Status.STREAMING_READY:
+                    job.streaming_server_cert = message.metadata.streaming_details["streaming_server_cert"]
+                    job.streaming_server_address = message.metadata.streaming_details["streaming_server_address"]
+                    job.streaming_server_port = message.metadata.streaming_details["streaming_server_port"]
+                    await job.asave()
+
 
             except IntegrityError as exc:
                 log.debug("job status update failed", exc=exc)

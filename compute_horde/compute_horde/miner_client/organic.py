@@ -155,6 +155,9 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
     async def notify_executor_ready(self, msg: V0ExecutorReadyRequest) -> None:
         """This method is called when miner sends executor ready message"""
 
+    async def notify_streaming_readiness(self, msg: V0StreamingJobReadyRequest) -> None:
+        """This method is called when miner sends executor ready message"""
+
     async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
         try:
             self.miner_manifest.set_result(msg.manifest)
@@ -476,6 +479,23 @@ async def run_organic_job(
                     artifacts_dir=job_details.artifacts_dir,
                 )
             )
+
+            if job_details.streaming_details:
+                print("Waiting for streaming readiness")
+                try:
+                    streaming_readiness_response = await asyncio.wait_for(
+                        client.streaming_job_ready_or_not_future,
+                        timeout=min(job_timer.time_left(), executor_ready_timeout),
+                    )
+                    print("Streaming readiness: ", streaming_readiness_response)
+
+                except TimeoutError as exc:
+                    print("Streaming readiness timeout")
+                    raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
+                if isinstance(streaming_readiness_response, V0StreamingJobNotReadyRequest):
+                    raise OrganicJobError(FailureReason.EXECUTOR_FAILED, streaming_readiness_response)
+
+                await client.notify_streaming_readiness(streaming_readiness_response)
 
             try:
                 final_response = await asyncio.wait_for(
