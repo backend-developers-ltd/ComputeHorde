@@ -393,6 +393,11 @@ CONSTANCE_CONFIG = {
         "for the job flow to create and store a job started receipt.",
         float,
     ),
+    "ORGANIC_JOB_CELERY_WAIT_TIMEOUT": (
+        600,
+        "How long to wait for Celery to execute the organic job",
+        int,
+    ),
 }
 
 # Content Security Policy
