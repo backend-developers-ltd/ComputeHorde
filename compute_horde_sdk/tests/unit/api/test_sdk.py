@@ -468,7 +468,7 @@ async def test_http_connection_error_is_retried__fail(
     for _ in range(HTTP_RETRY_MAX_ATTEMPTS):
         httpx_mock.add_exception(exc_class("some error message"))
 
-    with pytest.raises(apiver_module.ComputeHordeError, match="Compute Horde request failed: some error message"):
+    with pytest.raises(apiver_module.ComputeHordeError, match="ComputeHorde request failed: some error message"):
         await compute_horde_client.get_job(TEST_JOB_UUID)
 
 
@@ -489,7 +489,7 @@ async def test_http_too_many_requests_is_retried__fail(
     for _ in range(HTTP_RETRY_MAX_ATTEMPTS):
         httpx_mock.add_response(status_code=429)
 
-    with pytest.raises(apiver_module.ComputeHordeError, match="Compute Horde responded with status code 429"):
+    with pytest.raises(apiver_module.ComputeHordeError, match="ComputeHorde responded with status code 429"):
         await compute_horde_client.get_job(TEST_JOB_UUID)
 
 

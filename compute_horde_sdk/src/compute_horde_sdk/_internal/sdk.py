@@ -75,42 +75,56 @@ def _retryable_exception(exc: BaseException) -> bool:
 @dataclasses.dataclass
 class ComputeHordeJobSpec:
     """
-    Specification of a Job to run in the Compute Horde.
-
-    :ivar executor_class: Class of the executor machine to run the job on.
-    :ivar job_namespace: Specifies where the job comes from.
-        The recommended format is the subnet number and version, like e.g. ``"SN123.0"``.
-    :ivar docker_image: Docker image of the job, in the form of ``user/image:tag``.
-    :ivar args: Positional arguments and flags to run the job with.
-    :ivar env: Environment variables to run the job with.
-    :ivar artifacts_dir: Path of the directory that the job will write its results to.
-        Contents of files found in this directory will be returned after the job completes
-        as a part of the job result. It should be an absolute path (starting with ``/``).
-    :ivar input_volumes: The data to be made available to the job in Docker volumes.
-        The keys should be absolute file/directory paths under which you want your data to be available.
-        The values should be :class:`InputVolume` instances representing how to obtain the input data.
-        For now, input volume paths must start with ``/volume/``.
-    :ivar output_volumes: The data to be read from the Docker volumes after job completion
-        and uploaded to the described destinations. Use this for outputs that are too big
-        to be treated as ``artifacts``.
-        The keys should be absolute file paths under which job output data will be available.
-        The values should be :class:`OutputVolume` instances representing how to handle the output data.
-        For now, output volume paths must start with ``/output/``.
+    Specification of a job to run on the ComputeHorde.
     """
 
     executor_class: ExecutorClass
+    """Class of the executor machine to run the job on."""
+
     job_namespace: str
+    """
+    Specifies where the job comes from.
+    The recommended format is the subnet number and version, like e.g. ``"SN123.0"``.
+    """
+
     docker_image: str
+    """Docker image of the job, in the form of ``user/image:tag``."""
+
     args: Sequence[str] = dataclasses.field(default_factory=list)
+    """Positional arguments and flags to run the job with."""
+
     env: Mapping[str, str] = dataclasses.field(default_factory=dict)
+    """Environment variables to run the job with."""
+
     artifacts_dir: str | None = None
+    """
+    Path of the directory that the job will write its results to.
+    Contents of files found in this directory will be returned after the job completes
+    as a part of the job result. It should be an absolute path (starting with ``/``).
+    """
+
     input_volumes: Mapping[str, InputVolume] | None = None
+    """
+    The data to be made available to the job in Docker volumes.
+    The keys should be absolute file/directory paths under which you want your data to be available.
+    The values should be :class:`InputVolume` instances representing how to obtain the input data.
+    For now, input volume paths must start with ``/volume/``.
+    """
+
     output_volumes: Mapping[str, OutputVolume] | None = None
+    """
+    The data to be read from the Docker volumes after job completion
+    and uploaded to the described destinations. Use this for outputs that are too big
+    to be treated as ``artifacts``.
+    The keys should be absolute file paths under which job output data will be available.
+    The values should be :class:`OutputVolume` instances representing how to handle the output data.
+    For now, output volume paths must start with ``/output/``.
+    """
 
 
 class ComputeHordeJob:
     """
-    The class representing a job running on the Compute Horde.
+    The class representing a job running on the ComputeHorde.
     Do not construct it directly, always use :class:`ComputeHordeClient`.
 
     :ivar str uuid: The UUID of the job.
@@ -174,7 +188,7 @@ class ComputeHordeJob:
 
 class ComputeHordeClient:
     """
-    The class used to communicate with the Compute Horde.
+    The class used to communicate with the ComputeHorde.
     """
 
     def __init__(
@@ -185,13 +199,13 @@ class ComputeHordeClient:
         facilitator_url: str = DEFAULT_FACILITATOR_URL,
     ):
         """
-        Create a new Compute Horde client.
+        Create a new ComputeHorde client.
 
         :param hotkey: Your wallet hotkey, used for signing requests.
         :param compute_horde_validator_hotkey: The hotkey for the validator that your jobs should go to.
         :param job_queue: A user-defined string value that will allow for retrieving all pending jobs,
             for example after process restart, relevant to this process.
-        :param facilitator_url: The URL to use for the Compute Horde Facilitator API.
+        :param facilitator_url: The URL to use for the ComputeHorde Facilitator API.
         """
         self.hotkey = hotkey
         self.compute_horde_validator_hotkey = compute_horde_validator_hotkey
@@ -230,7 +244,7 @@ class ComputeHordeClient:
         try:
             response = await self._client.send(request)
         except httpx.HTTPError as e:
-            raise ComputeHordeError(f"Compute Horde request failed: {e}") from e
+            raise ComputeHordeError(f"ComputeHorde request failed: {e}") from e
 
         try:
             response.raise_for_status()
@@ -239,7 +253,7 @@ class ComputeHordeClient:
             if e.response.status_code == 404:
                 raise ComputeHordeNotFoundError(f"Resource under {request.url} not found") from e
             raise ComputeHordeError(
-                f"Compute Horde responded with status code {e.response.status_code} and text {response.text}"
+                f"ComputeHorde responded with status code {e.response.status_code} and text {response.text}"
             ) from e
 
         return response.text
@@ -289,7 +303,7 @@ class ComputeHordeClient:
 
     async def create_job(self, job_spec: ComputeHordeJobSpec, on_trusted_miner: bool = False) -> ComputeHordeJob:
         """
-        Run a job in the Compute Horde. This method does not retry a failed job.
+        Run a job in the ComputeHorde. This method does not retry a failed job.
         Use :meth:`run_until_complete` if you want failed jobs to be automatically retried.
 
         :param job_spec: Job specification to run.
@@ -328,7 +342,7 @@ class ComputeHordeClient:
         try:
             job_response = FacilitatorJobResponse.model_validate_json(response)
         except pydantic.ValidationError as e:
-            raise ComputeHordeError("Compute Horde returned malformed response") from e
+            raise ComputeHordeError("ComputeHorde returned malformed response") from e
 
         job = ComputeHordeJob._from_response(self, job_response)
         logger.debug("Created job with UUID=%s", job.uuid)
@@ -344,7 +358,7 @@ class ComputeHordeClient:
         max_attempts: int = DEFAULT_MAX_JOB_RUN_ATTEMPTS,
     ) -> ComputeHordeJob:
         """
-        Run a job in the Compute Horde until it is successful.
+        Run a job in the ComputeHorde until it is successful.
         It will call :meth:`create_job` repeatedly until the job is successful.
 
         :param job_spec: Job specification to run.
@@ -391,7 +405,7 @@ class ComputeHordeClient:
 
     async def get_job(self, job_uuid: str) -> ComputeHordeJob:
         """
-        Retrieve information about a job from the Compute Horde.
+        Retrieve information about a job from the ComputeHorde.
 
         :param job_uuid: The UUID of the job to retrieve.
         :return: A :class:`ComputeHordeJob` instance representing this job.
@@ -404,7 +418,7 @@ class ComputeHordeClient:
         try:
             job_response = FacilitatorJobResponse.model_validate_json(response)
         except pydantic.ValidationError as e:
-            raise ComputeHordeError("Compute Horde returned malformed response") from e
+            raise ComputeHordeError("ComputeHorde returned malformed response") from e
 
         return ComputeHordeJob._from_response(self, job_response)
 
@@ -416,13 +430,13 @@ class ComputeHordeClient:
         try:
             jobs_response = FacilitatorJobsResponse.model_validate_json(response)
         except pydantic.ValidationError as e:
-            raise ComputeHordeError("Compute Horde returned malformed response") from e
+            raise ComputeHordeError("ComputeHorde returned malformed response") from e
 
         return jobs_response
 
     async def get_jobs(self, page: int = 1, page_size: int = 10) -> list[ComputeHordeJob]:
         """
-        Retrieve information about your jobs from the Compute Horde.
+        Retrieve information about your jobs from the ComputeHorde.
 
         :param page: The page number.
         :param page_size: The page size.
@@ -436,7 +450,7 @@ class ComputeHordeClient:
 
     async def iter_jobs(self) -> AsyncIterator[ComputeHordeJob]:
         """
-        Retrieve information about your jobs from the Compute Horde.
+        Retrieve information about your jobs from the ComputeHorde.
 
         :return: An async iterator of :class:`ComputeHordeJob` instances representing your jobs.
 
