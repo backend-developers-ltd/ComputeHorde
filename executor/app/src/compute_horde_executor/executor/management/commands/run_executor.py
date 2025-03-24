@@ -123,7 +123,9 @@ WAIT_FOR_NGINX_TIMEOUT = 10
 class RunConfigManager:
     @classmethod
     def preset_to_docker_run_args(cls, preset: DockerRunOptionsPreset) -> list[str]:
-        if preset == "none":
+        if settings.DEBUG_NO_GPU_MODE:
+            return []
+        elif preset == "none":
             return []
         elif preset == "nvidia_all":
             return ["--runtime=nvidia", "--gpus", "all"]
@@ -1031,10 +1033,11 @@ class Command(BaseCommand):
                 await miner_client.send_failed_to_prepare()
                 return
 
-            logger.debug("Checking for CVE-2024-0132 vulnerability")
-            if not await self.is_nvidia_toolkit_version_safe_cve_2024_0132():
-                await miner_client.send_failed_to_prepare()
-                return
+            if not settings.DEBUG_NO_GPU_MODE:
+                logger.debug("Checking for CVE-2024-0132 vulnerability")
+                if not await self.is_nvidia_toolkit_version_safe_cve_2024_0132():
+                    await miner_client.send_failed_to_prepare()
+                    return
 
             job_runner = self.JOB_RUNNER_CLASS(initial_message)
             try:

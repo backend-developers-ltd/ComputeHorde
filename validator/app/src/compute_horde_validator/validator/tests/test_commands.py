@@ -78,29 +78,6 @@ def test_debug_run_organic_job_command__job_timeout():
     )
 
 
-@patch("bittensor.subtensor", throw_error)
-@patch("compute_horde_validator.validator.tasks.MinerClient", MockSuccessfulMinerClient)
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_debug_run_organic_job_command__job_not_created():
-    Miner.objects.create(hotkey="miner_client")
-
-    with redirect_stdout(io.StringIO()) as buf:
-        with pytest.raises(SystemExit):
-            management.call_command(
-                "debug_run_organic_job", docker_image="noop", timeout=4, cmd_args=""
-            )
-
-    assert AdminJobRequest.objects.count() == 1
-    assert "Job failed to trigger due to" in AdminJobRequest.objects.first().status_message
-
-    assert OrganicJob.objects.count() == 0
-
-    output = buf.getvalue()
-    assert "not found" in output
-    assert SystemEvent.objects.count() == 0
-
-
 @patch("compute_horde_validator.validator.tasks.get_keypair", throw_error)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockSuccessfulMinerClient)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())

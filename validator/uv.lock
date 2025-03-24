@@ -598,7 +598,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-format = [{ name = "ruff" }]
+format = [
+    { name = "nox", specifier = "==2024.10.9" },
+    { name = "ruff" },
+]
 lint = [
     { name = "codespell", extras = ["toml"] },
     { name = "ruff" },
@@ -645,7 +648,10 @@ docs = [
     { name = "sphinx", specifier = ">=8.2.3" },
     { name = "sphinx-rtd-theme", specifier = ">=3.0.2" },
 ]
-format = [{ name = "ruff" }]
+format = [
+    { name = "nox", specifier = "==2024.10.9" },
+    { name = "ruff" },
+]
 lint = [
     { name = "codespell", extras = ["toml"] },
     { name = "ruff" },
@@ -2389,7 +2395,6 @@ dependencies = [
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "kombu", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "nox", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "prometheus-client", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "psycopg2-binary", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "redis", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2401,6 +2406,7 @@ dependencies = [
 
 [package.dev-dependencies]
 format = [
+    { name = "nox", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "ruff", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 lint = [
@@ -2455,7 +2461,6 @@ requires-dist = [
     { name = "httpx", specifier = "==0.26.0" },
     { name = "ipython", specifier = "==8.14.0" },
     { name = "kombu", specifier = "~=5.3" },
-    { name = "nox", specifier = "==2024.10.9" },
     { name = "prometheus-client", specifier = "~=0.17.0" },
     { name = "psycopg2-binary", specifier = "~=2.9.7" },
     { name = "redis", specifier = "~=4.6.0" },
@@ -2466,7 +2471,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-format = [{ name = "ruff" }]
+format = [
+    { name = "nox", specifier = "==2024.10.9" },
+    { name = "ruff" },
+]
 lint = [
     { name = "codespell", extras = ["toml"] },
     { name = "ruff" },

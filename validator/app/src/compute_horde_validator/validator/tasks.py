@@ -14,14 +14,15 @@ import bittensor
 import celery.exceptions
 import numpy as np
 import requests
-from asgiref.sync import async_to_sync
+from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.core.errors import SubstrateRequestException
 from bittensor.core.metagraph import Metagraph, NonTorchMetagraph
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
-from celery.result import allow_join_result
+from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
+from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
@@ -29,7 +30,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
 from numpy.typing import NDArray
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
@@ -48,7 +49,10 @@ from compute_horde_validator.validator.models import (
     Weights,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
-from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
+from compute_horde_validator.validator.organic_jobs.miner_driver import (
+    drive_organic_job,
+    execute_organic_job_request,
+)
 from compute_horde_validator.validator.s3 import (
     download_prompts_from_s3_url,
     generate_upload_url,
@@ -64,6 +68,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
+from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot
 from .scoring import score_batches
 
@@ -575,9 +580,7 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-async def run_admin_job_request(
-    job_request_id: int, callback=None, *, miner_axon_info: bittensor.AxonInfo | None = None
-):
+async def run_admin_job_request(job_request_id: int, callback=None):
     job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
         id=job_request_id
     )
@@ -595,17 +598,12 @@ async def run_admin_job_request(
         except Exception:
             raise
 
-        # Explicit miner axon info overrides miner address
-        miner_ip = miner_axon_info.ip if miner_axon_info else miner.address
-        miner_ip_type = miner_axon_info.ip_type if miner_axon_info else miner.ip_version
-        miner_port = miner_axon_info.port if miner_axon_info else miner.port
-
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
             miner=miner,
-            miner_address=miner_ip,
-            miner_address_ip_version=miner_ip_type,
-            miner_port=miner_port,
+            miner_address=miner.address,
+            miner_address_ip_version=miner.ip_version,
+            miner_port=miner.port,
             executor_class=job_request.executor_class,
             job_description="Validator Job from Admin Panel",
             block=current_block,
@@ -614,8 +612,8 @@ async def run_admin_job_request(
         my_keypair = get_keypair()
         miner_client = MinerClient(
             miner_hotkey=miner.hotkey,
-            miner_address=miner_ip,
-            miner_port=miner_port,
+            miner_address=miner.address,
+            miner_port=miner.port,
             job_uuid=str(job.job_uuid),
             my_keypair=my_keypair,
         )
@@ -630,7 +628,7 @@ async def run_admin_job_request(
         return
 
     print(f"\nProcessing job request: {job_request}")
-    await execute_organic_job(
+    await drive_organic_job(
         miner_client,
         job,
         job_request,
@@ -1184,10 +1182,11 @@ def fetch_metagraph(subtensor: bittensor.subtensor, block=None):
 
 
 def save_metagraph_snapshot(
-    metagraph: Metagraph, metagraph_type=MetagraphSnapshot.SnapshotType.LATEST
+    metagraph: Metagraph,
+    snapshot_type: MetagraphSnapshot.SnapshotType = MetagraphSnapshot.SnapshotType.LATEST,
 ) -> None:
     MetagraphSnapshot.objects.update_or_create(
-        id=metagraph_type,  # current metagraph snapshot
+        id=snapshot_type,  # current metagraph snapshot
         defaults={
             "block": metagraph.block.item(),
             "updated_at": now(),
@@ -1298,7 +1297,7 @@ def sync_metagraph() -> None:
     if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
         new_cycle_start_metagraph = fetch_metagraph(subtensor, block=current_cycle.start)
         save_metagraph_snapshot(
-            new_cycle_start_metagraph, metagraph_type=MetagraphSnapshot.SnapshotType.CYCLE_START
+            new_cycle_start_metagraph, snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START
         )
 
 
@@ -1620,3 +1619,23 @@ def create_sample_workloads(num_needed_prompt_samples: int) -> int:
 @app.task
 def evict_old_data():
     eviction.evict_all()
+
+
+async def execute_organic_job_request_on_worker(
+    job_request: OrganicJobRequest, miner: Miner
+) -> OrganicJob:
+    future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
+        args=(job_request.model_dump(), miner.hotkey)
+    )
+    timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
+    # Note - thread sensitive is essential otherwise the wait will block the sync thread.
+    # If this poses to be a problem, another approach is to  asyncio.sleep then poll for result (in a loop)
+    await sync_to_async(future_result.get, thread_sensitive=False)(timeout=timeout)
+    return await OrganicJob.objects.aget(job_uuid=job_request.uuid)
+
+
+@app.task
+def _execute_organic_job_on_worker(job_request: JsonValue, miner_hotkey: str) -> None:
+    request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
+    miner = Miner.objects.get(hotkey=miner_hotkey)
+    async_to_sync(execute_organic_job_request)(request, miner)
