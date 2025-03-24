@@ -1,11 +1,11 @@
 variable "cloudflare_zone_id" {
-  type        = string
+  type = string
 }
 
 variable "subdomain" {
-  type    = string
+  type = string
 }
 
 variable "destination_domain" {
-  type    = string
+  type = string
 }
