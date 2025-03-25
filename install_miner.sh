@@ -128,7 +128,7 @@ ENDSSH
 # start a new ssh connection so that usermod changes are effective
 ssh "$SSH_DESTINATION" <<'ENDSSH'
 set -euxo pipefail
-mkdir ~/compute_horde_miner
+mkdir -p ~/compute_horde_miner
 cd ~/compute_horde_miner
 
 cat > docker-compose.yml <<'ENDDOCKERCOMPOSE'
@@ -199,7 +199,7 @@ set -euxo pipefail
 
 cd ~/compute_horde_miner
 
-docker pull backenddevelopersltd/compute-horde-executor:v0-latest
+docker pull backenddevelopersltd/compute-horde-executor:v1-latest
 docker pull backenddevelopersltd/compute-horde-miner:v0-latest
 docker pull backenddevelopersltd/compute-horde-job:v0-latest
 docker compose up -d
