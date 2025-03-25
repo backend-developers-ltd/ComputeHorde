@@ -11,7 +11,6 @@ from django.conf import settings
 from compute_horde_validator.validator.models import MinerManifest
 
 logger = logging.getLogger(__name__)
-MIN_STAKE_FOR_EXCUSE = 30_000  # total stake (root + alpha stake) denominated in alpha
 
 
 async def filter_valid_excuse_receipts(
@@ -21,6 +20,7 @@ async def filter_valid_excuse_receipts(
     declined_job_executor_class: ExecutorClass,
     declined_job_is_synthetic: bool,
     miner_hotkey: str,
+    minimum_validator_stake_for_excuse: float,
     active_validators: list[ValidatorInfo] | None = None,
 ) -> list[Receipt]:
     if not receipts_to_check:
@@ -36,7 +36,7 @@ async def filter_valid_excuse_receipts(
         validator_info.hotkey
         for validator_info in active_validators
         if (
-            validator_info.stake >= MIN_STAKE_FOR_EXCUSE
+            validator_info.stake >= minimum_validator_stake_for_excuse
             or validator_info.hotkey == BAC_VALIDATOR_SS58_ADDRESS
         )
     }

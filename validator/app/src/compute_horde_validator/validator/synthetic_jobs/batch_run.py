@@ -457,6 +457,7 @@ class Job:
             declined_job_executor_class=self.executor_class,
             declined_job_is_synthetic=True,
             miner_hotkey=self.miner_hotkey,
+            minimum_validator_stake_for_excuse=self.ctx.batch_config.minimum_validator_stake_for_excuse,
             active_validators=self.ctx.active_validators,
         )
 
@@ -809,6 +810,7 @@ class BatchConfig:
         self.excused_synthetic_job_score: float | None = None
         self.non_peak_cycle_executor_min_ratio: float = 1.0
         self.default_executor_limits_for_missed_peak: dict[ExecutorClass, int] = {}
+        self.minimum_validator_stake_for_excuse: float = 0.0
 
     async def populate(self):
         self.event_limits = await get_system_event_limits()
@@ -821,6 +823,9 @@ class BatchConfig:
         )
         self.default_executor_limits_for_missed_peak = (
             await get_default_executor_limits_for_missed_peak()
+        )
+        self.minimum_validator_stake_for_excuse = await aget_config(
+            "DYNAMIC_MINIMUM_VALIDATOR_STAKE_FOR_EXCUSE"
         )
 
 
