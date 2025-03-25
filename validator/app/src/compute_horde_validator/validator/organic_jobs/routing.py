@@ -4,12 +4,13 @@ from datetime import timedelta
 from typing import assert_never
 
 from compute_horde.fv_protocol.facilitator_requests import (
-    JobRequest,
+    OrganicJobRequest,
     V0JobRequest,
     V1JobRequest,
     V2JobRequest,
 )
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.utils import async_synchronized
 from django.conf import settings
 from django.utils import timezone
 
@@ -18,6 +19,7 @@ from compute_horde_validator.validator.models import (
     Miner,
     MinerBlacklist,
     MinerManifest,
+    MinerPreliminaryReservation,
     OrganicJob,
     SystemEvent,
 )
@@ -42,7 +44,7 @@ class MinerIsBlacklisted(JobRoutingException):
     pass
 
 
-async def pick_miner_for_job_request(request: JobRequest) -> Miner:
+async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
     if settings.DEBUG_MINER_KEY:
         miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
         return miner
@@ -56,6 +58,7 @@ async def pick_miner_for_job_request(request: JobRequest) -> Miner:
     assert_never(request)
 
 
+@async_synchronized
 async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     """
     Goes through all miners with recent manifests and online executors of the given executor class.
@@ -95,6 +98,16 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     for manifest in manifests:
         miner = manifest.miner
 
+        preliminary_reservation_jobs: set[str] = {
+            str(job_uuid)
+            async for job_uuid in MinerPreliminaryReservation.objects.active()
+            .filter(
+                miner=miner,
+                executor_class=str(executor_class),
+            )
+            .values_list("job_uuid", flat=True)
+        }
+
         known_started_jobs: set[str] = {
             str(job_uuid)
             async for job_uuid in JobStartedReceipt.objects.valid_at(timezone.now())
@@ -105,14 +118,25 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         known_finished_jobs: set[str] = {
             str(job_uuid)
             async for job_uuid in JobFinishedReceipt.objects.filter(
-                job_uuid__in=known_started_jobs,
+                job_uuid__in=known_started_jobs | preliminary_reservation_jobs,
                 miner_hotkey=miner.hotkey,
             ).values_list("job_uuid", flat=True)
         }
 
-        maybe_ongoing_jobs = known_started_jobs - known_finished_jobs
+        maybe_ongoing_jobs = (
+            preliminary_reservation_jobs | known_started_jobs
+        ) - known_finished_jobs
 
         if len(maybe_ongoing_jobs) < manifest.online_executor_count:
+            reservation_time = await aget_config(
+                "DYNAMIC_ROUTING_PRELIMINARY_RESERVATION_TIME_SECONDS"
+            )
+            await MinerPreliminaryReservation.objects.acreate(
+                miner=miner,
+                executor_class=executor_class,
+                job_uuid=request.uuid,
+                expires_at=timezone.now() + timedelta(seconds=reservation_time),
+            )
             return miner
 
     raise AllMinersBusy()
@@ -130,7 +154,7 @@ async def pick_miner_for_job_v0_v1(request: V0JobRequest | V1JobRequest) -> Mine
     return miner
 
 
-async def report_miner_failed_job(job: OrganicJob):
+async def report_miner_failed_job(job: OrganicJob) -> None:
     if job.status != OrganicJob.Status.FAILED:
         logger.info(
             f"Not blacklisting miner: job {job.job_uuid} is not failed (status={job.status})"
@@ -145,7 +169,7 @@ async def report_miner_failed_job(job: OrganicJob):
 
 async def blacklist_miner(
     job: OrganicJob, reason: MinerBlacklist.BlacklistReason, blacklist_time: int
-):
+) -> None:
     now = timezone.now()
     blacklist_until = now + timedelta(seconds=blacklist_time)
     miner = await Miner.objects.aget(id=job.miner_id)

@@ -387,6 +387,17 @@ CONSTANCE_CONFIG = {
         "across all validators) and will receive 'DYNAMIC_BURN_PARTITION' fraction of all the burn.",
         float,
     ),
+    "DYNAMIC_ROUTING_PRELIMINARY_RESERVATION_TIME_SECONDS": (
+        10.0,
+        "How long to initially reserve an executor for during job routing request. This should last only long enough "
+        "for the job flow to create and store a job started receipt.",
+        float,
+    ),
+    "ORGANIC_JOB_CELERY_WAIT_TIMEOUT": (
+        600,
+        "How long to wait for Celery to execute the organic job",
+        int,
+    ),
 }
 
 # Content Security Policy
@@ -525,6 +536,13 @@ CELERY_COMPRESSION = "gzip"  # task compression
 CELERY_MESSAGE_COMPRESSION = "gzip"  # result compression
 CELERY_SEND_EVENTS = True  # needed for worker monitoring
 CELERY_BEAT_SCHEDULE = {
+    "sync_metagraph": {
+        "task": "compute_horde_validator.validator.tasks.sync_metagraph",
+        "schedule": timedelta(seconds=10),
+        "options": {
+            "expires": timedelta(seconds=10).total_seconds(),
+        },
+    },
     "schedule_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
         "schedule": timedelta(minutes=1),
@@ -712,6 +730,8 @@ SYNTHETIC_JOB_GENERATOR_FACTORY = env.str(
 FACILITATOR_URI = env.str(
     "FACILITATOR_URI", default="wss://facilitator.computehorde.io/ws/v0/"
 ).strip()
+DEBUG_CONNECT_FACILITATOR_WEBHOOK = env.str("DEBUG_CONNECT_FACILITATOR_WEBHOOK", default=None)
+DEBUG_USE_MOCK_BLOCK_NUMBER = env.bool("DEBUG_USE_MOCK_BLOCK_NUMBER", default=False)
 STATS_COLLECTOR_URL = env.str(
     "STATS_COLLECTOR_URL", default="https://facilitator.computehorde.io/stats_collector/v0/"
 )

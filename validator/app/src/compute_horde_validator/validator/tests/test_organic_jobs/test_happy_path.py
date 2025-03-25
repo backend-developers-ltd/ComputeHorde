@@ -1,5 +1,9 @@
 import pytest
-from compute_horde.mv_protocol import miner_requests
+from compute_horde.protocol_messages import (
+    V0AcceptJobRequest,
+    V0ExecutorReadyRequest,
+    V0JobFinishedRequest,
+)
 
 from compute_horde_validator.validator.models import Miner, OrganicJob
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
@@ -20,18 +24,18 @@ async def test_basic_flow_works(job_request, faci_transport, miner_transport, ex
 
     # vali -> miner: initial job request
 
-    accept_job_msg = miner_requests.V0AcceptJobRequest(job_uuid=job_request.uuid)
+    accept_job_msg = V0AcceptJobRequest(job_uuid=job_request.uuid)
     await miner_transport.add_message(accept_job_msg, send_before=1)
 
     # vali -> miner: receipt for accepting the job
     # vali -> faci: job status update
 
-    executor_ready_msg = miner_requests.V0ExecutorReadyRequest(job_uuid=job_request.uuid)
+    executor_ready_msg = V0ExecutorReadyRequest(job_uuid=job_request.uuid)
     await miner_transport.add_message(executor_ready_msg, send_before=1)
 
     # vali -> miner: actual job request
 
-    job_finished_msg = miner_requests.V0JobFinishedRequest(
+    job_finished_msg = V0JobFinishedRequest(
         job_uuid=job_request.uuid, docker_process_stdout="", docker_process_stderr=""
     )
     await miner_transport.add_message(job_finished_msg, send_before=2)
@@ -62,13 +66,13 @@ async def test_miner_can_be_selected_after_finishing_job(
     # Job 1
     await faci_transport.add_message(job_request, send_before=0)
 
-    accept_job_msg = miner_requests.V0AcceptJobRequest(job_uuid=job_request.uuid)
+    accept_job_msg = V0AcceptJobRequest(job_uuid=job_request.uuid)
     await miner_transport.add_message(accept_job_msg, send_before=2)
 
-    executor_ready_msg = miner_requests.V0ExecutorReadyRequest(job_uuid=job_request.uuid)
+    executor_ready_msg = V0ExecutorReadyRequest(job_uuid=job_request.uuid)
     await miner_transport.add_message(executor_ready_msg, send_before=1)
 
-    job_finished_msg = miner_requests.V0JobFinishedRequest(
+    job_finished_msg = V0JobFinishedRequest(
         job_uuid=job_request.uuid, docker_process_stdout="", docker_process_stderr=""
     )
     await miner_transport.add_message(job_finished_msg, send_before=1)
@@ -79,17 +83,17 @@ async def test_miner_can_be_selected_after_finishing_job(
     await faci_transport.add_message(another_job_request, send_before=2)
 
     await miner_transport_2.add_message(
-        miner_requests.V0AcceptJobRequest(job_uuid=another_job_request.uuid),
+        V0AcceptJobRequest(job_uuid=another_job_request.uuid),
         send_before=2,
     )
 
     await miner_transport_2.add_message(
-        miner_requests.V0ExecutorReadyRequest(job_uuid=another_job_request.uuid),
+        V0ExecutorReadyRequest(job_uuid=another_job_request.uuid),
         send_before=1,
     )
 
     await miner_transport_2.add_message(
-        miner_requests.V0JobFinishedRequest(
+        V0JobFinishedRequest(
             job_uuid=another_job_request.uuid, docker_process_stdout="", docker_process_stderr=""
         ),
         send_before=1,

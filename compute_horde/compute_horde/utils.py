@@ -1,5 +1,9 @@
+import asyncio
+import dataclasses
 import datetime
-from typing import Any
+from collections.abc import Awaitable, Callable
+from functools import wraps
+from typing import Any, ParamSpec, TypeVar
 
 import bittensor
 import pydantic
@@ -22,12 +26,19 @@ class ValidatorListError(Exception):
         self.reason = reason
 
 
+@dataclasses.dataclass
+class ValidatorInfo:
+    uid: int
+    hotkey: str
+    stake: float  # total effective stake denominated in alpha tokens
+
+
 def get_validators(
     metagraph: bittensor.Metagraph | None = None,
     netuid=12,
     network="finney",
     block: int | None = None,
-) -> list[bittensor.NeuronInfo]:
+) -> list[ValidatorInfo]:
     """
     Validators are top 24 neurons in terms of stake, only taking into account those that have at least 1000
     and forcibly including BAC_VALIDATOR_SS58_ADDRESS.
@@ -47,22 +58,17 @@ def get_validators(
     neurons = [
         n
         for n in metagraph.neurons
-        if (
-            n.hotkey
-            in (
-                BAC_VALIDATOR_SS58_ADDRESS,
-                "5FFApaS75bv5pJHfAp2FVLBj9ZaXuFDjEypsaBNc1wCfe52v",
-                "5F4tQyWrhfGVcNhoqeiNsR6KjD4wMZ2kfhLj4oHYuyHbZAc3",
-                "5F2CsUDVbRbVMXTh9fAzF9GacjVX7UapvRxidrxe7z8BYckQ",
-                "5HEo565WAy4Dbq3Sv271SAi7syBSofyfhhwRNjFNSM2gP9M2",
-            )
-            or n.stake.tao >= MIN_STAKE
-        )
+        if (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS or metagraph.total_stake[n.uid] >= MIN_STAKE)
     ]
     neurons = sorted(
-        neurons, key=lambda n: (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS, n.stake), reverse=True
+        neurons,
+        key=lambda n: (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS, metagraph.total_stake[n.uid]),
+        reverse=True,
     )
-    return neurons[:VALIDATORS_LIMIT]
+    return [
+        ValidatorInfo(uid=n.uid, hotkey=n.hotkey, stake=float(metagraph.total_stake[n.uid]))
+        for n in neurons[:VALIDATORS_LIMIT]
+    ]
 
 
 def json_dumps_default(obj):
@@ -91,3 +97,21 @@ def sign_blob(kp: bittensor.Keypair, blob: str):
     Signs a string blob with a bittensor keypair and returns the signature
     """
     return f"0x{kp.sign(blob).hex()}"
+
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def async_synchronized(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+    """
+    Wraps the function in an async lock.
+    """
+    lock = asyncio.Lock()
+
+    @wraps(func)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        async with lock:
+            return await func(*args, **kwargs)
+
+    return wrapper

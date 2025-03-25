@@ -1,6 +1,5 @@
 import sys
 
-import bittensor
 from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from django.core.management.base import BaseCommand
@@ -38,8 +37,9 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--miner_hotkey", default=None, type=str, help="Miner Hotkey")
-        parser.add_argument("--miner_address", default=None, type=str, help="Miner IPv4 address")
-        parser.add_argument("--miner_port", default=None, type=int, help="Miner port")
+        # TODO: mock miner with address, port, ip_type
+        # parser.add_argument("--miner_address", default=None, type=str, help="Miner IPv4 address")
+        # parser.add_argument("--miner_port", default=None, type=int, help="Miner port")
         parser.add_argument(
             "--executor_class", type=str, help="Executor class", default=DEFAULT_EXECUTOR_CLASS
         )
@@ -47,7 +47,6 @@ class Command(BaseCommand):
         parser.add_argument(
             "--docker_image", type=str, help="docker image for job execution", required=True
         )
-        parser.add_argument("--raw_script", type=str, default="", help="raw script to be executed")
         parser.add_argument(
             "--cmd_args",
             type=str,
@@ -79,30 +78,23 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         hotkey = options["miner_hotkey"]
-        address = options["miner_address"]
-        port = options["miner_port"]
 
         miner = None
-        miner_axon_info = None
         if hotkey:
-            miner = Miner.objects.get_or_create(hotkey=hotkey)[0]
+            try:
+                miner = Miner.objects.get(hotkey=hotkey)
+            except Miner.DoesNotExist:
+                print(f"Miner with hotkey {hotkey} not found")
+                sys.exit(1)
             miner_blacklisted = MinerBlacklist.objects.filter(miner=miner).exists()
             if miner_blacklisted:
                 raise ValueError(f"miner with hotkey {hotkey} is blacklisted")
-            if address and port:
-                miner_axon_info = bittensor.AxonInfo(
-                    version=4,
-                    ip=address,
-                    ip_type=4,
-                    port=port,
-                    hotkey=hotkey,
-                    coldkey=hotkey,
-                )
         else:
             miner = Miner.objects.exclude(minerblacklist__isnull=False).first()
 
         if miner is None:
-            raise ValueError("No miners found")
+            print("No miners found")
+            sys.exit(1)
 
         print(f"\nPicked miner: {miner} to run the job")
 
@@ -111,7 +103,6 @@ class Command(BaseCommand):
             timeout=options["timeout"],
             executor_class=options["executor_class"],
             docker_image=options["docker_image"],
-            raw_script=options["raw_script"],
             args=options["cmd_args"],
             use_gpu=options["use_gpu"],
             input_url=options["input_url"],
@@ -120,9 +111,7 @@ class Command(BaseCommand):
         )
 
         try:
-            async_to_sync(run_admin_job_request)(
-                job_request.pk, callback=notify_job_status_update, miner_axon_info=miner_axon_info
-            )
+            async_to_sync(run_admin_job_request)(job_request.pk, callback=notify_job_status_update)
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)

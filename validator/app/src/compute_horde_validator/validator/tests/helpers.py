@@ -12,7 +12,6 @@ from unittest import mock
 import bittensor
 import constance
 import numpy as np
-from asgiref.sync import async_to_sync
 from bittensor.core.errors import SubstrateRequestException
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
@@ -21,14 +20,15 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V1JobRequest,
     V2JobRequest,
 )
-from compute_horde.mv_protocol.miner_requests import (
+from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
+    ValidatorToMinerMessage,
 )
-from compute_horde.mv_protocol.validator_requests import BaseValidatorRequest
 from django.conf import settings
+from pydantic import TypeAdapter
 
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
@@ -58,15 +58,15 @@ def get_miner_client(MINER_CLIENT, job_uuid: str):
     )
 
 
-async def mock_get_miner_axon_info(hotkey: str) -> bittensor.AxonInfo:
-    return bittensor.AxonInfo(
-        version=4,
-        ip="ignore",
-        ip_type=4,
-        port=8000,
-        hotkey=hotkey,
-        coldkey="ignore",
-    )
+class MockAxonInfo:
+    def __init__(self, ip="0.0.0.0", port=8000, ip_type=0, hotkey="hotkey"):
+        self.ip = ip
+        self.port = port
+        self.ip_type = ip_type
+        hotkey = (hotkey,)
+
+    def is_serving(self):
+        return self.ip == "0.0.0.0"
 
 
 class MockSyntheticMinerClient(batch_run.MinerClient):
@@ -78,7 +78,7 @@ class MockSyntheticMinerClient(batch_run.MinerClient):
         pass
 
     async def send(self, data: str | bytes, error_event_callback=None):
-        msg = BaseValidatorRequest.parse(data)
+        msg = TypeAdapter(ValidatorToMinerMessage).validate_json(data)
         self._sent_models.append(msg)
 
     def _query_sent_models(self, condition=None, model_class=None):
@@ -165,7 +165,6 @@ def get_dummy_job_request_v0(uuid: str) -> V0JobRequest:
         miner_hotkey="miner_hotkey",
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="nvidia",
-        raw_script="print('hello world')",
         args=[],
         env={},
         use_gpu=False,
@@ -181,7 +180,6 @@ def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
         miner_hotkey="miner_hotkey",
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="nvidia",
-        raw_script="print('hello world')",
         args=[],
         env={},
         use_gpu=False,
@@ -205,12 +203,12 @@ def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
             "uploads": [
                 {
                     "output_upload_type": "single_file_post",
-                    "url": "http://s3.bucket.com/output1.txt",
+                    "url": "https://s3.bucket.com/output1.txt",
                     "relative_path": "output1.txt",
                 },
                 {
                     "output_upload_type": "single_file_put",
-                    "url": "http://s3.bucket.com/output2.zip",
+                    "url": "https://s3.bucket.com/output2.zip",
                     "relative_path": "zip/output2.zip",
                 },
             ],
@@ -228,7 +226,6 @@ def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2Job
         uuid=uuid,
         docker_image="nvidia",
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        raw_script="print('hello world')",
         args=[],
         env={},
         use_gpu=False,
@@ -247,7 +244,7 @@ def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2Job
             "uploads": [
                 {
                     "output_upload_type": "single_file_post",
-                    "url": "http://s3.bucket.com/output1.txt",
+                    "url": "https://s3.bucket.com/output1.txt",
                     "relative_path": "output1.txt",
                 }
             ],
@@ -279,7 +276,7 @@ class MockSubtensor:
         mocked_set_weights=lambda: (True, ""),
         mocked_commit_weights=lambda: (True, ""),
         mocked_reveal_weights=lambda: (True, ""),
-        mocked_metagraph=lambda: MockMetagraph(),
+        mocked_metagraph=lambda block: MockMetagraph(block_num=block),
         hyperparameters=None,
         block_duration=timedelta(seconds=1),
         override_block_number=None,
@@ -317,7 +314,7 @@ class MockSubtensor:
     def get_subnet_hyperparameters(self, netuid: int) -> MockHyperparameters:
         return self.hyperparameters
 
-    def metagraph(self, netuid, block: int | None = None):
+    def metagraph(self, netuid, block: int | None = None, lite=None):
         if block is not None and block < self.get_current_block() - 300:
             raise SubstrateRequestException(
                 {
@@ -325,7 +322,7 @@ class MockSubtensor:
                     "message": "Client error: UnknownBlock: State already discarded for 0xabc",
                 }
             )
-        return self.mocked_metagraph()
+        return self.mocked_metagraph(block)
 
     def set_weights(
         self,
@@ -371,16 +368,19 @@ class MockSubtensor:
 
 
 class MockNeuron:
-    def __init__(self, hotkey, uid):
+    def __init__(self, hotkey, uid, axon_info=None):
         self.hotkey = hotkey
         self.uid = uid
         self.stake = bittensor.Balance((uid + 1) * 1001.0)
-        self.axon_info = async_to_sync(mock_get_miner_axon_info)("hotkey")
+        self.axon_info = axon_info
 
 
 class MockBlock:
+    def __init__(self, value=1000):
+        self.value = value
+
     def item(self) -> int:
-        return 1000
+        return self.value
 
 
 class MockMetagraph:
@@ -389,6 +389,7 @@ class MockMetagraph:
         netuid=1,
         num_neurons: int | None = NUM_NEURONS,
         neurons: list[MockNeuron] | None = None,
+        block_num: int = 1000,
     ):
         if (neurons is None) == (num_neurons is None):
             raise ValueError("Specify either num_neurons or neurons, exactly one of them")
@@ -396,14 +397,21 @@ class MockMetagraph:
             num_neurons = len(neurons)
             self.neurons = neurons
         else:
-            self.neurons = [MockNeuron(f"hotkey_{i}", i) for i in range(NUM_NEURONS)]
+            self.neurons = [
+                MockNeuron(uid=i, hotkey=f"hotkey_{i}", axon_info=MockAxonInfo())
+                for i in range(num_neurons)
+            ]
         self.n = num_neurons
         self.netuid = netuid
         self.num_neurons = num_neurons
         self.W = np.ones((num_neurons, num_neurons))
         self.hotkeys = [f"hotkey_{i}" for i in range(num_neurons)]
+        self.alpha_stake = np.array([1000.0 * (i + 1) for i in range(num_neurons)])
+        self.tao_stake = np.array([1.0 * (i + 1) for i in range(num_neurons)])
+        self.stake = np.array([1001.0 * (i + 1) for i in range(num_neurons)])
+        self.total_stake = np.array([1001.0 * (i + 1) for i in range(num_neurons)])
         self.uids = np.array(list(range(num_neurons)))
-        self.block = MockBlock()
+        self.block = MockBlock(block_num)
 
 
 def check_system_events(

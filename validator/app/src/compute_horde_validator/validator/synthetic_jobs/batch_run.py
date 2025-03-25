@@ -16,38 +16,32 @@ import bittensor
 import httpx
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
-from compute_horde.base_requests import BaseRequest
 from compute_horde.certificate import generate_certificate_at
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, EXECUTOR_CLASS
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     UnsupportedMessageReceived,
 )
-from compute_horde.mv_protocol import miner_requests, validator_requests
-from compute_horde.mv_protocol.miner_requests import (
-    BaseMinerRequest,
-    ExecutorManifest,
+from compute_horde.protocol_messages import (
     GenericError,
+    MinerToValidatorMessage,
     UnauthorizedError,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
+    V0InitialJobRequest,
+    V0JobAcceptedReceiptRequest,
     V0JobFailedRequest,
+    V0JobFinishedReceiptRequest,
     V0JobFinishedRequest,
+    V0JobRequest,
     V0MachineSpecsRequest,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
-)
-from compute_horde.mv_protocol.validator_requests import (
-    AuthenticationPayload,
-    V0AuthenticateRequest,
-    V0InitialJobRequest,
-    V0JobAcceptedReceiptRequest,
-    V0JobFinishedReceiptRequest,
-    V0JobRequest,
-    V1InitialJobRequest,
+    ValidatorAuthForMiner,
+    ValidatorToMinerMessage,
 )
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
@@ -59,6 +53,7 @@ from compute_horde.receipts.schemas import (
 from compute_horde.subtensor import get_peak_cycle
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
+from compute_horde.utils import sign_blob
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.volume import Volume
@@ -66,7 +61,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import BooleanField, Count, ExpressionWrapper, Q
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from compute_horde_validator.validator import job_excuses
 from compute_horde_validator.validator.dynamic_config import (
@@ -138,7 +133,7 @@ SYNTHETIC_JOBS_HARD_LIMIT = SYNTHETIC_JOBS_SOFT_LIMIT + 10
 LLM_EXECUTOR_CLASS = ExecutorClass.always_on__llm__a6000
 
 
-class MinerClient(AbstractMinerClient):
+class MinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorToMinerMessage]):
     def __init__(
         self,
         ctx: "BatchContext",
@@ -149,10 +144,9 @@ class MinerClient(AbstractMinerClient):
         self.own_hotkey = ctx.own_keypair.ss58_address
         self.own_keypair = ctx.own_keypair
 
-        axon = ctx.axons[miner_hotkey]
         self.miner_hotkey = miner_hotkey
-        self.miner_address = axon.ip
-        self.miner_port = axon.port
+        self.miner_address = ctx.miners[miner_hotkey].address
+        self.miner_port = ctx.miners[miner_hotkey].port
 
         name = ctx.names[miner_hotkey]
         transport = transport or WSTransport(
@@ -163,19 +157,10 @@ class MinerClient(AbstractMinerClient):
     def miner_url(self) -> str:
         return f"ws://{self.miner_address}:{self.miner_port}/v0.1/validator_interface/{self.own_hotkey}"
 
-    def accepted_request_type(self) -> type[BaseRequest]:
-        return BaseMinerRequest
+    def parse_message(self, raw_msg: str | bytes) -> MinerToValidatorMessage:
+        return TypeAdapter(MinerToValidatorMessage).validate_json(raw_msg)
 
-    def incoming_generic_error_class(self) -> type[BaseRequest]:
-        return miner_requests.GenericError
-
-    def outgoing_generic_error_class(self) -> type[BaseRequest]:
-        return validator_requests.GenericError
-
-    def build_outgoing_generic_error(self, msg: str):
-        return validator_requests.GenericError(details=msg)
-
-    async def handle_message(self, msg: BaseRequest) -> None:
+    async def handle_message(self, msg: MinerToValidatorMessage) -> None:
         if isinstance(msg, GenericError):
             logger.warning("%s error: %s", self.miner_name, msg.model_dump_json())
             is_unauthorized = msg.details is not None and msg.details.lower().startswith(
@@ -227,16 +212,15 @@ class MinerClient(AbstractMinerClient):
 
         raise UnsupportedMessageReceived(msg)
 
-    def generate_authentication_message(self) -> V0AuthenticateRequest:
-        payload = AuthenticationPayload(
+    def generate_authentication_message(self) -> ValidatorAuthForMiner:
+        msg = ValidatorAuthForMiner(
             validator_hotkey=self.own_hotkey,
             miner_hotkey=self.miner_hotkey,
             timestamp=int(time.time()),
+            signature="",
         )
-        return V0AuthenticateRequest(
-            payload=payload,
-            signature=f"0x{self.own_keypair.sign(payload.blob_for_signing()).hex()}",
-        )
+        msg.signature = sign_blob(self.own_keypair, msg.blob_for_signing())
+        return msg
 
     async def connect(self) -> None:
         await super().connect()
@@ -334,7 +318,7 @@ class Job:
     score: float = 0
     average_job_send_time_bonus: timedelta | None = None
 
-    def handle_message(self, msg: BaseRequest) -> None:
+    def handle_message(self, msg: MinerToValidatorMessage) -> None:
         # !!! it is very important to not allow a newer message of a
         #     certain kind to override a previously received message
         #     of the same kind. miners could play games with that.
@@ -493,8 +477,6 @@ class BatchContext:
     # used to go from indices returned by asyncio.gather() back to miner.hotkey
     hotkeys: list[str]
 
-    # all dictionaries have miner.hotkey as key
-    axons: dict[str, bittensor.AxonInfo]
     # full name for easier debugging: "{miner_hotkey}({ip}:{port})"
     names: dict[str, str]
     miners: dict[str, Miner]  # hotkey -> Miner
@@ -503,7 +485,8 @@ class BatchContext:
     job_generators: dict[str, dict[ExecutorClass, list[BaseSyntheticJobGenerator]]]
     online_executor_count: dict[str, defaultdict[ExecutorClass, int]]
 
-    manifests: dict[str, ExecutorManifest | None]
+    # TODO: now `manifests` and `executors` have similar shape due to the protocol change. Do we still need both?
+    manifests: dict[str, dict[ExecutorClass, int] | None]
     manifest_events: dict[str, asyncio.Event]
 
     # randomized, but order preserving list of job.uuid
@@ -636,7 +619,7 @@ class BatchContext:
                 job.machine_specs,
             ):
                 if msg is not None:
-                    messages_count[msg.message_type.value] += 1
+                    messages_count[msg.message_type] += 1
         # convert to regular dict for nice logging
         messages_count = dict(messages_count)
 
@@ -651,17 +634,6 @@ class BatchContext:
         for executor_class in ExecutorClass:
             counts[f"jobs:{executor_class.value}"] = self._get_job_count(executor_class)
 
-        manifests = {}
-        for miner_hotkey, manifest in self.manifests.items():
-            if manifest is not None:
-                executors = {
-                    executor_class_manifest.executor_class: executor_class_manifest.count
-                    for executor_class_manifest in manifest.executor_classes
-                }
-            else:
-                executors = None
-            manifests[miner_hotkey] = executors
-
         data = dict(
             validator_hotkey=self.own_keypair.ss58_address,
             stage_start_time={
@@ -673,7 +645,7 @@ class BatchContext:
                 "llm_executor_count": self.get_executor_count(LLM_EXECUTOR_CLASS),
                 **calculate_llm_prompt_sample_counts(),
             },
-            manifests=manifests,
+            manifests=self.manifests,
             loop_profiling=self.loop_profiler.get() if self.loop_profiler is not None else None,
         )
         return self.system_event(
@@ -853,7 +825,6 @@ class BatchConfig:
 
 
 async def _init_context(
-    axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     active_validators: list[str],
     batch_id: int,
@@ -883,7 +854,6 @@ async def _init_context(
         own_public_key=public_key,
         own_certs=certs,
         hotkeys=[],
-        axons={},
         names={},
         miners={},
         clients={},
@@ -905,10 +875,8 @@ async def _init_context(
 
     for miner in serving_miners:
         hotkey = miner.hotkey
-        axon = axons[hotkey]
         ctx.hotkeys.append(hotkey)
-        ctx.axons[hotkey] = axon
-        ctx.names[hotkey] = f"{hotkey}({axon.ip}:{axon.port})"
+        ctx.names[hotkey] = f"{hotkey}({miner.address}:{miner.port})"
         ctx.miners[hotkey] = miner
         ctx.clients[hotkey] = create_miner_client(ctx=ctx, miner_hotkey=hotkey)
         ctx.executors[hotkey] = defaultdict(int)
@@ -1042,14 +1010,9 @@ async def _get_miner_manifest(
     assert manifest is not None
 
     executors = ctx.executors[miner_hotkey]
-    for executor_class_manifest in manifest.executor_classes:
-        executor_class = executor_class_manifest.executor_class
-        # convert deprecated executor class 0 to default executor class
-        if isinstance(executor_class, int):
-            assert executor_class == 0
-            executor_class = DEFAULT_EXECUTOR_CLASS
-        if executor_class_manifest.count > 0:
-            executors[executor_class] += executor_class_manifest.count
+    for executor_class, count in manifest.items():
+        if count > 0:
+            executors[executor_class] += count
 
 
 async def _close_client(ctx: BatchContext, miner_hotkey: str) -> None:
@@ -1230,28 +1193,19 @@ async def _send_initial_job_request(
         stagger_wait_interval = max_spin_up_time - job.get_spin_up_time()
         assert stagger_wait_interval >= 0
 
-        request = (
-            V1InitialJobRequest(
-                job_uuid=job.uuid,
-                executor_class=job.executor_class,
-                base_docker_image_name=job.job_generator.base_docker_image_name(),
-                timeout_seconds=job.job_generator.timeout_seconds(),
-                volume=job.volume if job.job_generator.volume_in_initial_req() else None,
-                job_started_receipt_payload=job.job_started_receipt_payload,
-                job_started_receipt_signature=job.job_started_receipt_signature,
-                public_key=ctx.own_public_key,
-            )
-            if job.executor_class in streaming_classes
-            else V0InitialJobRequest(
-                job_uuid=job.uuid,
-                executor_class=job.executor_class,
-                base_docker_image_name=job.job_generator.base_docker_image_name(),
-                timeout_seconds=job.job_generator.timeout_seconds(),
-                volume=job.volume if job.job_generator.volume_in_initial_req() else None,
-                job_started_receipt_payload=job.job_started_receipt_payload,
-                job_started_receipt_signature=job.job_started_receipt_signature,
-            )
+        request = V0InitialJobRequest(
+            job_uuid=job.uuid,
+            executor_class=job.executor_class,
+            docker_image=job.job_generator.base_docker_image_name(),
+            timeout_seconds=job.job_generator.timeout_seconds(),
+            volume=job.volume if job.job_generator.volume_in_initial_req() else None,
+            job_started_receipt_payload=job.job_started_receipt_payload,
+            job_started_receipt_signature=job.job_started_receipt_signature,
         )
+        if job.executor_class in streaming_classes:
+            request.streaming_details = V0InitialJobRequest.StreamingDetails(
+                public_key=ctx.own_public_key
+            )
         request_json = request.model_dump_json()
 
     finally:
@@ -1324,7 +1278,7 @@ async def _send_job_request(
     request = V0JobRequest(
         job_uuid=job.uuid,
         executor_class=job.executor_class,
-        docker_image_name=job.job_generator.docker_image_name(),
+        docker_image=job.job_generator.docker_image_name(),
         docker_run_options_preset=job.job_generator.docker_run_options_preset(),
         docker_run_cmd=job.job_generator.docker_run_cmd(),
         raw_script=job.job_generator.raw_script(),
@@ -1355,7 +1309,7 @@ async def _send_job_request_for_streaming(
     request = V0JobRequest(
         job_uuid=job.uuid,
         executor_class=job.executor_class,
-        docker_image_name=job.job_generator.docker_image_name(),
+        docker_image=job.job_generator.docker_image_name(),
         docker_run_options_preset=job.job_generator.docker_run_options_preset(),
         docker_run_cmd=job.job_generator.docker_run_cmd(),
         raw_script=job.job_generator.raw_script(),
@@ -2012,7 +1966,7 @@ async def _download_llm_prompts_answers_worker(
                 queue.put_nowait(task)
             else:
                 msg = "llm prompt answer download task exceeded max attempts"
-                logging.warning(msg)
+                logger.warning(msg)
                 failures.append(
                     LlmAnswerDownloadTaskFailed(msg, task, last_exception_tb=traceback.format_exc())
                 )
@@ -2126,7 +2080,6 @@ def _db_persist_critical(ctx: BatchContext) -> None:
 
         synthetic_jobs: list[SyntheticJob] = []
         for job in ctx.jobs.values():
-            axon = ctx.axons[job.miner_hotkey]
             miner = ctx.miners[job.miner_hotkey]
             if job.success:
                 status = SyntheticJob.Status.COMPLETED
@@ -2138,9 +2091,9 @@ def _db_persist_critical(ctx: BatchContext) -> None:
                 job_uuid=job.uuid,
                 batch=ctx.batch,
                 miner=miner,
-                miner_address=axon.ip,
-                miner_address_ip_version=axon.ip_type,
-                miner_port=axon.port,
+                miner_address=miner.address,
+                miner_address_ip_version=miner.ip_version,
+                miner_port=miner.port,
                 executor_class=job.executor_class,
                 status=status,
                 comment=job.comment,
@@ -2258,13 +2211,12 @@ def shuffled(list_: list[Any]) -> list[Any]:
 
 
 async def execute_synthetic_batch_run(
-    axons: dict[str, bittensor.AxonInfo],
     serving_miners: list[Miner],
     active_validators: list[str],
     batch_id: int,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> None:
-    if not axons or not serving_miners:
+    if not serving_miners:
         logger.warning("No miners provided")
         return
 
@@ -2274,9 +2226,7 @@ async def execute_synthetic_batch_run(
     # randomize the order of miners each batch to avoid systemic bias
     shuffled(serving_miners)
 
-    ctx = await _init_context(
-        axons, serving_miners, active_validators, batch_id, create_miner_client
-    )
+    ctx = await _init_context(serving_miners, active_validators, batch_id, create_miner_client)
     await ctx.checkpoint_system_event("BATCH_BEGIN", dt=start_time)
 
     try:

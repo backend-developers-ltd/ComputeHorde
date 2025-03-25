@@ -4,6 +4,7 @@ requires-python = ">=3.11,<3.13"  # bittensor doesn't work on 3.13+
 keywords = []
 license = {text = "MIT"}
 readme = "README.md"
+version = "0.0.2"
 authors = [
     {name = "Reef Technologies", email = "opensource@reef.pl"},
 ]
@@ -15,13 +16,11 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dynamic = [
-    "version",
-]
 dependencies = [
     "pydantic<3,>=2.10",
     "httpx>=0.26.0",
     "bittensor>=9.0.0,<9.1",
+    "tenacity>=9.0.0,<10.0.0",
 ]
 
 [project.urls]
@@ -29,19 +28,19 @@ dependencies = [
 "Issue Tracker" = "https://github.com/backend-developers-ltd/compute-horde-sdk/issues"
 
 [build-system]
-requires = ["pdm-backend==2.4.3"]
-build-backend = "pdm.backend"
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
 
 [tool.uv]
 # Instead of allowing prerelease for all packages,
 # we add overrides here so only the specified packages can resolve to prerelease.
 override-dependencies = ["bt-decode>=0.5.0a2"]
 
-[tool.pdm]
-distribution = true
-
 [dependency-groups]
-format = ["ruff"]
+format = [
+    "ruff",
+    "nox==2024.10.09",
+]
 lint = [
     "ruff",
     "codespell[toml]",
@@ -68,6 +67,10 @@ test = [
     "pytest-xdist",
     "pytest-httpx>=0.35.0",
 ]
+docs = [
+    "sphinx>=8.2.3",
+    "sphinx-rtd-theme>=3.0.2",
+]
 
 
 [tool.pytest.ini_options]
@@ -77,6 +80,7 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 120
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [
@@ -87,6 +91,7 @@ select = [
 ignore = [
     "D100", "D105", "D107", "D200", "D202", "D203", "D205", "D212", "D400", "D401", "D415",
     "D101", "D102", "D103", "D104", # TODO remove once we have docstring for all public methods
+    "UP038",  # this is plain stupid!
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -94,7 +99,7 @@ ignore = [
 "test/**" = ["D", "F403", "F405"]
 
 [tool.codespell]
-skip = "*.min.js,pdm.lock"
+skip = "*.min.js,pdm.lock,build"
 ignore-words-list = "datas"
 
 [tool.towncrier]
@@ -141,6 +146,7 @@ name = "Infrastructure"
 showcontent = true
 
 [tool.mypy]
+strict = true
 
 [[tool.mypy.overrides]]
 module = [

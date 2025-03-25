@@ -1,7 +1,13 @@
 import pytest
-from compute_horde import mv_protocol
 from compute_horde.fv_protocol import facilitator_requests
-from compute_horde.mv_protocol import miner_requests
+from compute_horde.protocol_messages import (
+    V0AcceptJobRequest,
+    V0DeclineJobRequest,
+    V0ExecutorFailedRequest,
+    V0ExecutorReadyRequest,
+    V0JobFailedRequest,
+    V0JobFinishedRequest,
+)
 
 from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.tests.helpers import patch_constance
@@ -21,7 +27,7 @@ pytestmark = [
 ]
 
 
-@pytest.mark.parametrize("reason", [*miner_requests.V0DeclineJobRequest.Reason])
+@pytest.mark.parametrize("reason", [*V0DeclineJobRequest.Reason])
 async def test_miner_is_blacklisted__after_rejecting_job(
     job_request, another_job_request, faci_transport, miner_transport, execute_scenario, reason
 ):
@@ -31,7 +37,7 @@ async def test_miner_is_blacklisted__after_rejecting_job(
     # Vali -> miner: initial job request
 
     # Miner -> vali: rejects job
-    accept_job_msg = miner_requests.V0DeclineJobRequest(job_uuid=job_request.uuid, reason=reason)
+    accept_job_msg = V0DeclineJobRequest(job_uuid=job_request.uuid, reason=reason)
     await miner_transport.add_message(accept_job_msg, send_before=1)
 
     # Vali -> faci: job failed
@@ -50,7 +56,7 @@ async def test_miner_is_blacklisted__after_rejecting_job(
     assert miner_rejected.status == "rejected"
     assert miner_rejected.metadata.comment.startswith(
         "Miner failed to excuse"
-        if reason == miner_requests.V0DeclineJobRequest.Reason.BUSY
+        if reason == V0DeclineJobRequest.Reason.BUSY
         else "Miner declined job"
     )
     assert miner_rejected.metadata.miner_response is not None
@@ -101,12 +107,12 @@ async def test_miner_is_blacklisted__after_timing_out(
     # Miner: timeout here (stage==0)
 
     if timeout_stage > 0:
-        accept_job_msg = miner_requests.V0AcceptJobRequest(job_uuid=job_request.uuid)
+        accept_job_msg = V0AcceptJobRequest(job_uuid=job_request.uuid)
         await miner_transport.add_message(accept_job_msg, send_before=1)
         # Miner: timeout here (stage==1)
 
     if timeout_stage > 1:
-        executor_ready_msg = miner_requests.V0ExecutorReadyRequest(job_uuid=job_request.uuid)
+        executor_ready_msg = V0ExecutorReadyRequest(job_uuid=job_request.uuid)
         await miner_transport.add_message(executor_ready_msg, send_before=1)
         # Miner: timeout here (stage==2)
 
@@ -136,11 +142,11 @@ async def test_miner_is_blacklisted__after_failing_to_start_executor(
 ):
     await faci_transport.add_message(job_request, send_before=0)
 
-    accept_job_msg = miner_requests.V0AcceptJobRequest(job_uuid=job_request.uuid)
+    accept_job_msg = V0AcceptJobRequest(job_uuid=job_request.uuid)
     await miner_transport.add_message(accept_job_msg, send_before=1)
 
     await miner_transport.add_message(
-        mv_protocol.miner_requests.V0ExecutorFailedRequest(job_uuid=job_request.uuid),
+        V0ExecutorFailedRequest(job_uuid=job_request.uuid),
         send_before=1,
     )
 
@@ -170,14 +176,14 @@ async def test_miner_is_blacklisted__after_failing_job(
 ):
     await faci_transport.add_message(job_request, send_before=0)
 
-    accept_job_msg = miner_requests.V0AcceptJobRequest(job_uuid=job_request.uuid)
+    accept_job_msg = V0AcceptJobRequest(job_uuid=job_request.uuid)
     await miner_transport.add_message(accept_job_msg, send_before=1)
 
-    executor_ready_msg = miner_requests.V0ExecutorReadyRequest(job_uuid=job_request.uuid)
+    executor_ready_msg = V0ExecutorReadyRequest(job_uuid=job_request.uuid)
     await miner_transport.add_message(executor_ready_msg, send_before=1)
 
     await miner_transport.add_message(
-        mv_protocol.miner_requests.V0JobFailedRequest(
+        V0JobFailedRequest(
             job_uuid=job_request.uuid,
             docker_process_exit_status=1,
             docker_process_stdout="stdout",
@@ -213,13 +219,13 @@ async def test_miner_is_blacklisted__after_job_reported_cheated(
 ):
     await faci_transport.add_message(job_request, send_before=0)
 
-    accept_job_msg = miner_requests.V0AcceptJobRequest(job_uuid=job_request.uuid)
+    accept_job_msg = V0AcceptJobRequest(job_uuid=job_request.uuid)
     await miner_transport.add_message(accept_job_msg, send_before=1)
 
-    executor_ready_msg = miner_requests.V0ExecutorReadyRequest(job_uuid=job_request.uuid)
+    executor_ready_msg = V0ExecutorReadyRequest(job_uuid=job_request.uuid)
     await miner_transport.add_message(executor_ready_msg, send_before=1)
 
-    completed_job_msg = mv_protocol.miner_requests.V0JobFinishedRequest(
+    completed_job_msg = V0JobFinishedRequest(
         job_uuid=job_request.uuid,
         docker_process_stdout="stdout",
         docker_process_stderr="stderr",

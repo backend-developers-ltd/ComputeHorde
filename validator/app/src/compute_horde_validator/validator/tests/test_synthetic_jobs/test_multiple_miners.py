@@ -19,7 +19,14 @@ from compute_horde.executor_class import (
     DEFAULT_LLM_EXECUTOR_CLASS,
 )
 from compute_horde.miner_client.base import AbstractTransport
-from compute_horde.mv_protocol import miner_requests
+from compute_horde.protocol_messages import (
+    V0AcceptJobRequest,
+    V0DeclineJobRequest,
+    V0ExecutorReadyRequest,
+    V0JobFailedRequest,
+    V0JobFinishedRequest,
+    V0StreamingJobReadyRequest,
+)
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
@@ -126,11 +133,6 @@ def miner_axon_infos(miner_hotkeys: str):
     ]
 
 
-@pytest.fixture
-def axon_dict(miner_axon_infos: list[bittensor.AxonInfo]):
-    return {axon.hotkey: axon for axon in miner_axon_infos}
-
-
 @pytest_asyncio.fixture
 async def transports(miner_hotkeys: str):
     return [SimulationTransport(hotkey) for hotkey in miner_hotkeys]
@@ -154,7 +156,6 @@ def ssl_public_key():
 
 
 async def test_all_succeed(
-    axon_dict: dict[str, bittensor.AxonInfo],
     transports: list[SimulationTransport],
     miners: list[Miner],
     create_simulation_miner_client: Callable,
@@ -164,15 +165,13 @@ async def test_all_succeed(
     for job_uuid, transport in zip(job_uuids, transports):
         await transport.add_message(manifest_message, send_before=1)
 
-        accept_message = miner_requests.V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+        accept_message = V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
         await transport.add_message(accept_message, send_before=1)
 
-        executor_ready_message = miner_requests.V0ExecutorReadyRequest(
-            job_uuid=str(job_uuid)
-        ).model_dump_json()
+        executor_ready_message = V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
         await transport.add_message(executor_ready_message, send_before=0)
 
-        job_finish_message = miner_requests.V0JobFinishedRequest(
+        job_finish_message = V0JobFinishedRequest(
             job_uuid=str(job_uuid),
             docker_process_stdout="",
             docker_process_stderr="",
@@ -187,7 +186,6 @@ async def test_all_succeed(
     )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
-            axon_dict,
             miners,
             [],
             batch.id,
@@ -246,7 +244,6 @@ def shuffled(list_: list[Any]) -> list[Any]:
     DYNAMIC_SYNTHETIC_STREAMING_JOB_READY_TIMEOUT=0.5,
 )
 async def test_some_streaming_succeed(
-    axon_dict: dict[str, bittensor.AxonInfo],
     transports: list[SimulationTransport],
     miners: list[Miner],
     create_simulation_miner_client: Callable,
@@ -395,16 +392,14 @@ async def test_some_streaming_succeed(
         # WS configuration
         await transport.add_message(streaming_manifest_message, send_before=1)
 
-        accept_message = miner_requests.V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+        accept_message = V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
         await transport.add_message(accept_message, send_before=1)
 
-        executor_ready_message = miner_requests.V0ExecutorReadyRequest(
-            job_uuid=str(job_uuid)
-        ).model_dump_json()
+        executor_ready_message = V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
         await transport.add_message(executor_ready_message, send_before=0)
 
         if miner_behaviour.ws_messages_pattern == "all_good":
-            streaming_ready_message = miner_requests.V0StreamingJobReadyRequest(
+            streaming_ready_message = V0StreamingJobReadyRequest(
                 job_uuid=str(job_uuid),
                 public_key=ssl_public_key,
                 ip="127.0.0.1",
@@ -412,7 +407,7 @@ async def test_some_streaming_succeed(
             ).model_dump_json()
             await transport.add_message(streaming_ready_message, send_before=0)
 
-            job_finish_message = miner_requests.V0JobFinishedRequest(
+            job_finish_message = V0JobFinishedRequest(
                 job_uuid=str(job_uuid),
                 docker_process_stdout="",
                 docker_process_stderr="",
@@ -495,7 +490,6 @@ async def test_some_streaming_succeed(
     )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
-            axon_dict,
             miners,
             [],
             batch.id,
@@ -535,15 +529,13 @@ async def flow_0(
 
     await transport.add_message(manifest_message, send_before=1)
 
-    accept_message = miner_requests.V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+    accept_message = V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(accept_message, send_before=1)
 
-    executor_ready_message = miner_requests.V0ExecutorReadyRequest(
-        job_uuid=str(job_uuid)
-    ).model_dump_json()
+    executor_ready_message = V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(executor_ready_message, send_before=0)
 
-    job_finish_message = miner_requests.V0JobFinishedRequest(
+    job_finish_message = V0JobFinishedRequest(
         job_uuid=str(job_uuid),
         docker_process_stdout="",
         docker_process_stderr="",
@@ -567,15 +559,13 @@ async def flow_1(
 
     await transport.add_message(manifest_message, send_before=1)
 
-    accept_message = miner_requests.V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+    accept_message = V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(accept_message, send_before=1)
 
-    executor_ready_message = miner_requests.V0ExecutorReadyRequest(
-        job_uuid=str(job_uuid)
-    ).model_dump_json()
+    executor_ready_message = V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(executor_ready_message, send_before=0)
 
-    job_finish_message = miner_requests.V0JobFinishedRequest(
+    job_finish_message = V0JobFinishedRequest(
         job_uuid=str(job_uuid),
         docker_process_stdout="",
         docker_process_stderr="",
@@ -599,15 +589,13 @@ async def flow_2(
 
     await transport.add_message(manifest_message, send_before=1)
 
-    accept_message = miner_requests.V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+    accept_message = V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(accept_message, send_before=1)
 
-    executor_ready_message = miner_requests.V0ExecutorReadyRequest(
-        job_uuid=str(job_uuid)
-    ).model_dump_json()
+    executor_ready_message = V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(executor_ready_message, send_before=0)
 
-    job_failed_message = miner_requests.V0JobFailedRequest(
+    job_failed_message = V0JobFailedRequest(
         job_uuid=str(job_uuid), docker_process_stdout="", docker_process_stderr=""
     ).model_dump_json()
 
@@ -628,7 +616,7 @@ async def flow_3(
 
     await transport.add_message(manifest_message, send_before=1)
 
-    decline_message = miner_requests.V0DeclineJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+    decline_message = V0DeclineJobRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(decline_message, send_before=1)
 
 
@@ -646,9 +634,9 @@ async def flow_4(
 
     await transport.add_message(manifest_message, send_before=1)
 
-    decline_message = miner_requests.V0DeclineJobRequest(
+    decline_message = V0DeclineJobRequest(
         job_uuid=str(job_uuid),
-        reason=miner_requests.V0DeclineJobRequest.Reason.BUSY,
+        reason=V0DeclineJobRequest.Reason.BUSY,
     ).model_dump_json()
     await transport.add_message(decline_message, send_before=1)
 
@@ -673,9 +661,9 @@ async def flow_5(
 
     await transport.add_message(manifest_message, send_before=1)
 
-    decline_message = miner_requests.V0DeclineJobRequest(
+    decline_message = V0DeclineJobRequest(
         job_uuid=str(job_uuid),
-        reason=miner_requests.V0DeclineJobRequest.Reason.BUSY,
+        reason=V0DeclineJobRequest.Reason.BUSY,
         receipts=_build_invalid_excuse_receipts(
             active_valis[0], miner_wallet, inactive_valis[0], job_uuid
         ),
@@ -715,9 +703,9 @@ async def flow_6(
     )
     excuse_blob = excuse.blob_for_signing()
 
-    decline_message = miner_requests.V0DeclineJobRequest(
+    decline_message = V0DeclineJobRequest(
         job_uuid=str(job_uuid),
-        reason=miner_requests.V0DeclineJobRequest.Reason.BUSY,
+        reason=V0DeclineJobRequest.Reason.BUSY,
         receipts=[
             Receipt(
                 payload=excuse,
@@ -748,7 +736,6 @@ def mock_excuse_score():
 )
 @patch("compute_horde_validator.validator.synthetic_jobs.batch_run.random.shuffle", lambda x: x)
 async def test_complex(
-    axon_dict: dict[str, bittensor.AxonInfo],
     miners: list[Miner],
     transports,
     create_simulation_miner_client: Callable,
@@ -772,7 +759,6 @@ async def test_complex(
     )
     await asyncio.wait_for(
         execute_synthetic_batch_run(
-            axon_dict,
             miners,
             [v.ss58_address for v in active_valis],
             batch.id,

@@ -11,17 +11,18 @@ from typing import Union
 
 import billiard.exceptions
 import bittensor
-import bittensor.core.metagraph
 import celery.exceptions
 import numpy as np
 import requests
-from asgiref.sync import async_to_sync
+from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.core.errors import SubstrateRequestException
+from bittensor.core.metagraph import Metagraph, NonTorchMetagraph
 from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
-from celery.result import allow_join_result
+from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
+from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
@@ -29,15 +30,15 @@ from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
 from numpy.typing import NDArray
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
-from compute_horde_validator.validator.metagraph_client import get_miner_axon_info
 from compute_horde_validator.validator.models import (
     Cycle,
+    Miner,
     OrganicJob,
     Prompt,
     PromptSample,
@@ -48,7 +49,10 @@ from compute_horde_validator.validator.models import (
     Weights,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
-from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job
+from compute_horde_validator.validator.organic_jobs.miner_driver import (
+    drive_organic_job,
+    execute_organic_job_request,
+)
 from compute_horde_validator.validator.s3 import (
     download_prompts_from_s3_url,
     generate_upload_url,
@@ -64,7 +68,8 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
-from .models import AdminJobRequest
+from .dynamic_config import aget_config
+from .models import AdminJobRequest, MetagraphSnapshot
 from .scoring import score_batches
 
 if False:
@@ -575,16 +580,12 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-async def run_admin_job_request(
-    job_request_id: int, callback=None, *, miner_axon_info: bittensor.AxonInfo | None = None
-):
+async def run_admin_job_request(job_request_id: int, callback=None):
     job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
         id=job_request_id
     )
     try:
         miner = job_request.miner
-        if miner_axon_info is None:
-            miner_axon_info = await get_miner_axon_info(miner.hotkey)
 
         # FIXME: The following code blocks the event loop.
         #        This function is run from either a management command (a new process),
@@ -600,9 +601,9 @@ async def run_admin_job_request(
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
             miner=miner,
-            miner_address=miner_axon_info.ip,
-            miner_address_ip_version=miner_axon_info.ip_type,
-            miner_port=miner_axon_info.port,
+            miner_address=miner.address,
+            miner_address_ip_version=miner.ip_version,
+            miner_port=miner.port,
             executor_class=job_request.executor_class,
             job_description="Validator Job from Admin Panel",
             block=current_block,
@@ -611,8 +612,8 @@ async def run_admin_job_request(
         my_keypair = get_keypair()
         miner_client = MinerClient(
             miner_hotkey=miner.hotkey,
-            miner_address=miner_axon_info.ip,
-            miner_port=miner_axon_info.port,
+            miner_address=miner.address,
+            miner_port=miner.port,
             job_uuid=str(job.job_uuid),
             my_keypair=my_keypair,
         )
@@ -627,7 +628,7 @@ async def run_admin_job_request(
         return
 
     print(f"\nProcessing job request: {job_request}")
-    await execute_organic_job(
+    await drive_organic_job(
         miner_client,
         job,
         job_request,
@@ -732,7 +733,7 @@ def apply_dancing_burners(
     uids: Union["torch.Tensor", NDArray[np.int64]],
     weights: Union["torch.FloatTensor", NDArray[np.float32]],
     subtensor,
-    metagraph: bittensor.core.metagraph.NonTorchMetagraph,
+    metagraph: NonTorchMetagraph,
     cycle_block_start: int,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
     burner_hotkeys = config.DYNAMIC_BURN_TARGET_SS58ADDRESSES.split(",")
@@ -1150,6 +1151,156 @@ def send_events_to_facilitator():
             logger.error(f"Failed to send system events to facilitator: {response}")
 
 
+def fetch_metagraph(subtensor: bittensor.subtensor, block=None):
+    try:
+        start_ts = time.time()
+        metagraph = subtensor.metagraph(
+            netuid=settings.BITTENSOR_NETUID,
+            block=block,
+            lite=True,
+        )
+        duration = time.time() - start_ts
+        msg = f"Metagraph fetched: {metagraph} in {duration:.2f} seconds"
+        logger.info(msg)
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.METAGRAPH_SYNCING,
+            subtype=SystemEvent.EventSubType.SUCCESS,
+            long_description=msg,
+            data={"duration": duration},
+        )
+        return metagraph
+    except Exception as e:
+        msg = f"Failed to fetch metagraph: {e}"
+        logger.warning(msg)
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.METAGRAPH_SYNCING,
+            subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+            long_description=msg,
+            data={},
+        )
+    return None
+
+
+def save_metagraph_snapshot(
+    metagraph: Metagraph,
+    snapshot_type: MetagraphSnapshot.SnapshotType = MetagraphSnapshot.SnapshotType.LATEST,
+) -> None:
+    MetagraphSnapshot.objects.update_or_create(
+        id=snapshot_type,  # current metagraph snapshot
+        defaults={
+            "block": metagraph.block.item(),
+            "updated_at": now(),
+            "alpha_stake": metagraph.alpha_stake.tolist(),
+            "tao_stake": metagraph.tao_stake.tolist(),
+            "stake": metagraph.stake.tolist(),
+            "uids": [n.uid for n in metagraph.neurons],
+            "hotkeys": [n.hotkey for n in metagraph.neurons],
+            "serving_hotkeys": [
+                n.hotkey for n in metagraph.neurons if n.axon_info and n.axon_info.is_serving
+            ],
+        },
+    )
+
+
+@app.task
+def sync_metagraph() -> None:
+    subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+    metagraph = fetch_metagraph(subtensor)
+    if metagraph is None:
+        return
+
+    block = metagraph.block.item()
+
+    # save current cycle start metagraph snapshot
+    current_cycle = get_cycle_containing_block(block=block, netuid=settings.BITTENSOR_NETUID)
+
+    # check metagraph sync lag
+    previous_block = None
+    try:
+        previous_metagraph = MetagraphSnapshot.get_latest()
+        if previous_metagraph:
+            previous_block = previous_metagraph.block
+    except Exception as e:
+        logger.warning(f"Failed to fetch previous metagraph snapshot block: {e}")
+    blocks_diff = block - previous_block if previous_block else None
+    if blocks_diff is not None and blocks_diff != 1:
+        if blocks_diff == 0:
+            return
+        else:
+            msg = f"Metagraph is {blocks_diff} blocks lagging - previous: {previous_block}, current: {block}"
+            logger.warning(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.METAGRAPH_SYNCING,
+                subtype=SystemEvent.EventSubType.WARNING,
+                long_description=msg,
+                data={
+                    "blocks_diff": blocks_diff,
+                    "previous_block": previous_block,
+                    "block": block,
+                },
+            )
+
+    save_metagraph_snapshot(metagraph)
+
+    # sync neurons
+    current_hotkeys = [n.hotkey for n in metagraph.neurons]
+    miners = list(Miner.objects.filter(hotkey__in=current_hotkeys).all())
+    existing_hotkeys = {m.hotkey for m in miners}
+    new_hotkeys = set(current_hotkeys) - existing_hotkeys
+    if len(new_hotkeys) > 0:
+        new_miners = Miner.objects.bulk_create([Miner(hotkey=hotkey) for hotkey in new_hotkeys])
+        miners.extend(new_miners)
+        logger.info(f"Created new neurons: {new_hotkeys}")
+
+    # update axon info of neurons
+    miners_to_update = []
+    hotkey_to_neuron = {
+        n.hotkey: n for n in metagraph.neurons if n.axon_info and n.axon_info.is_serving
+    }
+    for miner in miners:
+        neuron = hotkey_to_neuron.get(miner.hotkey)
+        if (
+            neuron
+            and neuron.axon_info
+            and (
+                miner.uid != neuron.uid
+                or miner.address != neuron.axon_info.ip
+                or miner.port != neuron.axon_info.port
+                or miner.ip_version != neuron.axon_info.ip_type
+            )
+        ):
+            miner.uid = neuron.uid
+            miner.address = neuron.axon_info.ip
+            miner.port = neuron.axon_info.port
+            miner.ip_version = neuron.axon_info.ip_type
+            miners_to_update.append(miner)
+    Miner.objects.bulk_update(miners_to_update, fields=["uid", "address", "port", "ip_version"])
+    logger.info(f"Updated axon infos for {len(miners_to_update)} miners")
+
+    data = {
+        "block": block,
+        "new_neurons": len(new_hotkeys),
+        "updated_axon_infos": len(miners_to_update),
+    }
+    SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        type=SystemEvent.EventType.VALIDATOR_MINERS_REFRESH,
+        subtype=SystemEvent.EventSubType.SUCCESS,
+        data=data,
+    )
+
+    # update cycle start metagraph snapshot if cycle has changed
+    cycle_start_metagraph = None
+    try:
+        cycle_start_metagraph = MetagraphSnapshot.get_cycle_start()
+    except Exception as e:
+        logger.warning(f"Failed to fetch cycle start metagraph snapshot: {e}")
+    if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
+        new_cycle_start_metagraph = fetch_metagraph(subtensor, block=current_cycle.start)
+        save_metagraph_snapshot(
+            new_cycle_start_metagraph, snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START
+        )
+
+
 @app.task
 def fetch_dynamic_config() -> None:
     # if same key exists in both places, common config wins
@@ -1468,3 +1619,23 @@ def create_sample_workloads(num_needed_prompt_samples: int) -> int:
 @app.task
 def evict_old_data():
     eviction.evict_all()
+
+
+async def execute_organic_job_request_on_worker(
+    job_request: OrganicJobRequest, miner: Miner
+) -> OrganicJob:
+    future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
+        args=(job_request.model_dump(), miner.hotkey)
+    )
+    timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
+    # Note - thread sensitive is essential otherwise the wait will block the sync thread.
+    # If this poses to be a problem, another approach is to  asyncio.sleep then poll for result (in a loop)
+    await sync_to_async(future_result.get, thread_sensitive=False)(timeout=timeout)
+    return await OrganicJob.objects.aget(job_uuid=job_request.uuid)
+
+
+@app.task
+def _execute_organic_job_on_worker(job_request: JsonValue, miner_hotkey: str) -> None:
+    request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
+    miner = Miner.objects.get(hotkey=miner_hotkey)
+    async_to_sync(execute_organic_job_request)(request, miner)

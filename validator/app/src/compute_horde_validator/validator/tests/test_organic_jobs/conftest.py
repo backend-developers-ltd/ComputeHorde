@@ -1,8 +1,7 @@
 import asyncio
 import uuid
-from collections import namedtuple
 from collections.abc import Callable
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -55,11 +54,6 @@ class _SimulationTransportWsAdapter:
 
 
 @pytest_asyncio.fixture
-async def miner_transport():
-    return SimulationTransport("miner_01")
-
-
-@pytest_asyncio.fixture
 async def faci_transport():
     transport = SimulationTransport("facilitator")
     # This responds to validator authenticating to faci.
@@ -68,17 +62,39 @@ async def faci_transport():
 
 
 @pytest_asyncio.fixture
-async def miner_transports(miner_transport):
+async def miner_transports():
     """
     In case of multiple job attempts within a single test, the transports will be used sequentially.
     This does not mean each one will use a different miner - the miner used depends on actual job routing.
-    The first transport is the same as returned by the singular `miner_transport` fixture.
     """
-    return [
-        miner_transport,
+
+    transports = [
+        SimulationTransport("miner_01"),
         SimulationTransport("miner_02"),
         SimulationTransport("miner_03"),
     ]
+
+    transports_iter = iter(transports)
+
+    def fake_miner_client_factory(*args, **kwargs):
+        """
+        Creates a real organic miner client, but replaces the WS transport with a pre-programmed sequence.
+        """
+        return OrganicMinerClient(*args, **kwargs, transport=next(transports_iter))
+
+    with patch(
+        "compute_horde_validator.validator.organic_jobs.miner_driver.MINER_CLIENT_CLASS",
+        fake_miner_client_factory,
+    ):
+        yield transports
+
+
+@pytest_asyncio.fixture
+async def miner_transport(miner_transports):
+    """
+    Convenience fixture if only one transport is needed
+    """
+    return miner_transports[0]
 
 
 @pytest.fixture
@@ -89,17 +105,8 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
     """
 
     async def actually_execute_scenario(until: Callable[[], bool], timeout_seconds: int = 1):
-        miner_transport_iter = iter(miner_transports)
-
-        def fake_miner_client_factory(*args, **kwargs):
-            """
-            Creates a real organic miner client, but replaces the WS transport with a pre-programmed sequence.
-            """
-            return OrganicMinerClient(*args, **kwargs, transport=next(miner_transport_iter))
-
         # The actual client being tested
         faci_client = FacilitatorClient(validator_keypair, "")
-        faci_client.MINER_CLIENT_CLASS = fake_miner_client_factory
 
         async def wait_for_condition(condition: asyncio.Condition, until: Callable[[], bool]):
             async with condition:
@@ -132,17 +139,7 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
 
     with (
         patch.object(FacilitatorClient, "heartbeat", AsyncMock()),
-        patch.object(FacilitatorClient, "create_metagraph_refresh_task", Mock()),
-        patch.object(FacilitatorClient, "get_current_block", AsyncMock(return_value=1)),
-        patch.object(
-            FacilitatorClient,
-            "get_miner_axon_info",
-            AsyncMock(
-                return_value=namedtuple("MockAxonInfo", "ip,port,ip_type")(
-                    ip="500.500.500.500", port=1, ip_type=4
-                )
-            ),
-        ),
+        patch.object(FacilitatorClient, "wait_for_specs", AsyncMock()),
         patch(
             "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_job_request",
             AsyncMock(),
@@ -157,7 +154,6 @@ def job_request():
         uuid=str(uuid.uuid4()),
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="doesntmatter",
-        raw_script="doesntmatter",
         args=[],
         env={},
         use_gpu=False,

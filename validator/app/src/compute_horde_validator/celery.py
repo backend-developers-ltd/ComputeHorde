@@ -19,11 +19,13 @@ app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 DEFAULT_QUEUE = "default"
 
 TASK_QUEUE_MAP = {
-    # Jobs
+    # Synthetic jobs
     "compute_horde_validator.validator.tasks.check_missed_synthetic_jobs": "jobs",
     "compute_horde_validator.validator.tasks._run_synthetic_jobs": "jobs",
     "compute_horde_validator.validator.tasks.run_synthetic_jobs": "jobs",
     "compute_horde_validator.validator.tasks.schedule_synthetic_jobs": "jobs",
+    # Organic jobs
+    "compute_horde_validator.validator.tasks._execute_organic_job_on_worker": "organic_jobs",
     # LLM job tasks
     "compute_horde_validator.validator.tasks.llm_prompt_generation": "llm",
     "compute_horde_validator.validator.tasks.llm_prompt_sampling": "llm",
@@ -35,6 +37,8 @@ TASK_QUEUE_MAP = {
     # Misc
     "compute_horde_validator.validator.tasks.send_events_to_facilitator": DEFAULT_QUEUE,
     "compute_horde_validator.validator.tasks.fetch_dynamic_config": DEFAULT_QUEUE,
+    # Metagraph Sync
+    "compute_horde_validator.validator.tasks.sync_metagraph": "metagraph",
 }
 
 CELERY_TASK_QUEUES = list(set(TASK_QUEUE_MAP.values()))

@@ -1,13 +1,17 @@
 import logging
 import shlex
 import uuid
+from datetime import datetime, timedelta
+from enum import IntEnum
 from os import urandom
 from typing import Self
 
+from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde_core.volume import Volume, ZipUrlVolume
+from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Exists, OuterRef, UniqueConstraint
@@ -44,6 +48,7 @@ class SystemEvent(models.Model):
         LLM_PROMPT_ANSWERING = "LLM_PROMPT_ANSWERING"
         LLM_PROMPT_SAMPLING = "LLM_PROMPT_SAMPLING"
         BURNING_INCENTIVE = "BURNING_INCENTIVE"
+        METAGRAPH_SYNCING = "METAGRAPH_SYNCING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -131,11 +136,67 @@ class MinerQueryset(models.QuerySet["Miner"]):
         ).filter(is_blacklisted=False)
 
 
+class MetagraphSnapshot(models.Model):
+    """
+    Snapshot of the metagraph at a specific block.
+    """
+
+    block = models.BigIntegerField()
+    updated_at = models.DateTimeField(auto_now_add=True)
+
+    alpha_stake = ArrayField(models.FloatField())
+    tao_stake = ArrayField(models.FloatField())
+    stake = ArrayField(models.FloatField())
+
+    uids = ArrayField(models.IntegerField())
+    hotkeys = ArrayField(models.CharField(max_length=255))
+
+    # current active miners
+    serving_hotkeys = ArrayField(models.CharField(max_length=255))
+
+    class SnapshotType(IntEnum):
+        LATEST = 0
+        CYCLE_START = 1
+
+    @classmethod
+    def get_latest(cls) -> "MetagraphSnapshot":
+        metagraph = MetagraphSnapshot.objects.get(id=cls.SnapshotType.LATEST)
+        if metagraph.updated_at < now() - timedelta(minutes=1):
+            msg = f"Tried to fetch stale metagraph last updated at: {metagraph.updated_at}"
+            logger.error(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.METAGRAPH_SYNCING,
+                subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+                long_description=msg,
+                data={"block": metagraph.block},
+            )
+            raise Exception(msg)
+        return metagraph
+
+    @classmethod
+    async def aget_latest(cls) -> "MetagraphSnapshot":
+        return await sync_to_async(cls.get_latest)()
+
+    @classmethod
+    def get_cycle_start(cls) -> "MetagraphSnapshot":
+        return MetagraphSnapshot.objects.get(id=cls.SnapshotType.CYCLE_START)
+
+    @classmethod
+    async def aget_cycle_start(cls) -> "MetagraphSnapshot":
+        return await sync_to_async(cls.get_cycle_start)()
+
+
+# contains all neurons not only miners
 class Miner(models.Model):
     objects = MinerQueryset.as_manager()
 
     hotkey = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    uid = models.IntegerField(null=True)
+    address = models.CharField(max_length=255, default="0.0.0.0")
+    ip_version = models.IntegerField(default=4)
+    port = models.IntegerField(default=0)
 
     def __str__(self):
         return f"hotkey: {self.hotkey}"
@@ -303,7 +364,6 @@ class AdminJobRequest(models.Model):
     timeout = models.PositiveIntegerField(default=300, help_text="timeout in seconds")
 
     docker_image = models.CharField(max_length=255, help_text="docker image for job execution")
-    raw_script = models.TextField(blank=True, help_text="raw script to be executed")
 
     args = models.TextField(blank=True, help_text="arguments passed to the script or docker image")
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
@@ -421,3 +481,19 @@ class Prompt(models.Model):
     sample = models.ForeignKey(PromptSample, on_delete=models.CASCADE, related_name="prompts")
     content = models.TextField()
     answer = models.TextField(null=True)
+
+
+class MinerPreliminaryReservationQueryset(models.QuerySet["MinerPreliminaryReservation"]):
+    def active(self, at: datetime | None = None) -> Self:
+        at = at or now()
+        return self.filter(expires_at__gt=at)
+
+
+class MinerPreliminaryReservation(models.Model):
+    miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
+    executor_class = models.CharField(max_length=255)
+    job_uuid = models.UUIDField(default=uuid.uuid4, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    objects = MinerPreliminaryReservationQueryset.as_manager()

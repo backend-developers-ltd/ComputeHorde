@@ -44,7 +44,6 @@ class AdminJobRequestForm(forms.ModelForm):
             "executor_class",
             "docker_image",
             "timeout",
-            "raw_script",
             "args",
             "use_gpu",
             "input_url",

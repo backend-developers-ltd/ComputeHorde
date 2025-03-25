@@ -1,19 +1,26 @@
 import asyncio
 import base64
+import dataclasses
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping, Sequence
 from datetime import timedelta
-from typing import Self
+from typing import Any, Self, TypeAlias
 from urllib.parse import urljoin
 
 import bittensor
 import httpx
 import pydantic
+import tenacity
 
 from compute_horde_core.executor_class import ExecutorClass
-from compute_horde_core.signature import BittensorWalletSigner, SignatureScope, SignedFields, signature_to_headers
+from compute_horde_core.signature import (
+    BittensorWalletSigner,
+    SignatureScope,
+    SignedFields,
+    signature_to_headers,
+)
 
 from .exceptions import ComputeHordeError, ComputeHordeJobTimeoutError, ComputeHordeNotFoundError
 from .models import (
@@ -30,11 +37,85 @@ logger = logging.getLogger(__name__)
 JOB_REFRESH_INTERVAL = timedelta(seconds=3)
 
 DEFAULT_FACILITATOR_URL = "https://facilitator.computehorde.io/"
+DEFAULT_MAX_JOB_RUN_ATTEMPTS = 3
+HTTP_RETRY_MAX_ATTEMPTS = 5
+RETRYABLE_HTTP_EXCEPTIONS = (
+    httpx.ConnectTimeout,
+    httpx.PoolTimeout,
+    # httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    # httpx.ReadError,
+    httpx.WriteError,
+    httpx.ConnectError,
+    # httpx.DecodingError,
+)
+
+JobAttemptCallbackType: TypeAlias = (
+    Callable[["ComputeHordeJob"], None]
+    | Callable[["ComputeHordeJob"], Awaitable[None]]
+    | Callable[["ComputeHordeJob"], Coroutine[Any, Any, None]]
+)
+
+
+def _retryable_status_code(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500
+
+
+def _retryable_exception(exc: BaseException) -> bool:
+    """Retry requests, if request failed for with a retryable exception"""
+    if not isinstance(exc, ComputeHordeError):
+        return False
+
+    if isinstance(exc.__cause__, httpx.HTTPStatusError):
+        return _retryable_status_code(exc.__cause__.response.status_code)
+
+    return isinstance(exc.__cause__, RETRYABLE_HTTP_EXCEPTIONS)
+
+
+@dataclasses.dataclass
+class ComputeHordeJobSpec:
+    """
+    Specification of a Job to run in the Compute Horde.
+
+    :ivar executor_class: Class of the executor machine to run the job on.
+    :ivar job_namespace: Specifies where the job comes from.
+        The recommended format is the subnet number and version, like e.g. ``"SN123.0"``.
+    :ivar docker_image: Docker image of the job, in the form of ``user/image:tag``.
+    :ivar args: Positional arguments and flags to run the job with.
+    :ivar env: Environment variables to run the job with.
+    :ivar artifacts_dir: Path of the directory that the job will write its results to.
+        Contents of files found in this directory will be returned after the job completes
+        as a part of the job result. It should be an absolute path (starting with ``/``).
+    :ivar input_volumes: The data to be made available to the job in Docker volumes.
+        The keys should be absolute file/directory paths under which you want your data to be available.
+        The values should be :class:`InputVolume` instances representing how to obtain the input data.
+        For now, input volume paths must start with ``/volume/``.
+    :ivar output_volumes: The data to be read from the Docker volumes after job completion
+        and uploaded to the described destinations. Use this for outputs that are too big
+        to be treated as ``artifacts``.
+        The keys should be absolute file paths under which job output data will be available.
+        The values should be :class:`OutputVolume` instances representing how to handle the output data.
+        For now, output volume paths must start with ``/output/``.
+    """
+
+    executor_class: ExecutorClass
+    job_namespace: str
+    docker_image: str
+    args: Sequence[str] = dataclasses.field(default_factory=list)
+    env: Mapping[str, str] = dataclasses.field(default_factory=dict)
+    artifacts_dir: str | None = None
+    input_volumes: Mapping[str, InputVolume] | None = None
+    output_volumes: Mapping[str, OutputVolume] | None = None
 
 
 class ComputeHordeJob:
     """
     The class representing a job running on the Compute Horde.
+    Do not construct it directly, always use :class:`ComputeHordeClient`.
+
+    :ivar str uuid: The UUID of the job.
+    :ivar ComputeHordeJobStatus status: The status of the job.
+    :ivar ComputeHordeJobResult | None result: The result of the job, if it has completed.
     """
 
     def __init__(
@@ -71,7 +152,7 @@ class ComputeHordeJob:
         self.status = new_job.status
         self.result = new_job.result
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self.__class__.__qualname__}: {self.uuid!r}>"
 
     @classmethod
@@ -119,12 +200,18 @@ class ComputeHordeClient:
         self._client = httpx.AsyncClient(base_url=self.facilitator_url, follow_redirects=True)
         self._signer = BittensorWalletSigner(hotkey)
 
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception(_retryable_exception),
+        stop=tenacity.stop_after_attempt(HTTP_RETRY_MAX_ATTEMPTS),
+        wait=tenacity.wait_exponential_jitter(initial=0.2),
+        reraise=True,
+    )
     async def _make_request(
         self,
         method: str,
         url: str,
         *,
-        json: dict | None = None,
+        json: dict[str, Any] | None = None,
         params: Mapping[str, str | int] | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> str:
@@ -140,23 +227,29 @@ class ComputeHordeClient:
             headers={**headers, **auth_headers} if headers else auth_headers,
         )
         logger.debug("%s %s", method, request.url)
-        response = await self._client.send(request)
+        try:
+            response = await self._client.send(request)
+        except httpx.HTTPError as e:
+            raise ComputeHordeError(f"Compute Horde request failed: {e}") from e
+
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
             logger.error("Response status=%d: %s", e.response.status_code, e.response.text)
             if e.response.status_code == 404:
                 raise ComputeHordeNotFoundError(f"Resource under {request.url} not found") from e
-            raise ComputeHordeError(f"Compute Horde responded with status code {e.response.status_code}") from e
+            raise ComputeHordeError(
+                f"Compute Horde responded with status code {e.response.status_code} and text {response.text}"
+            ) from e
 
         return response.text
 
-    def _get_signature_headers(self, data: dict) -> dict[str, str]:
+    def _get_signature_headers(self, data: dict[str, pydantic.JsonValue]) -> dict[str, str]:
         signed_fields = SignedFields.from_facilitator_sdk_json(data)
         signature = self._signer.sign(payload=signed_fields.model_dump_json())
         return signature_to_headers(signature, SignatureScope.SignedFields)
 
-    def _get_cheated_job_headers(self, data: dict) -> dict[str, str]:
+    def _get_cheated_job_headers(self, data: dict[str, str]) -> dict[str, str]:
         payload = json.dumps(data, sort_keys=True)
         signature = self._signer.sign(payload=payload)
         return signature_to_headers(signature, SignatureScope.FullRequest)
@@ -165,7 +258,7 @@ class ComputeHordeClient:
         self,
         method: str,
         url: str,
-    ):
+    ) -> dict[str, str]:
         headers = {
             "Realm": "mainnet",
             "SubnetID": "12",
@@ -177,9 +270,7 @@ class ComputeHordeClient:
 
         data_to_sign = f"{method}{url}{headers_str}".encode()
 
-        signature = self.hotkey.sign(
-            data_to_sign,
-        ).hex()
+        signature = self.hotkey.sign(data_to_sign).hex()
         headers["Signature"] = signature
 
         return headers
@@ -189,7 +280,6 @@ class ComputeHordeClient:
         Reports to validator that a miner has cheated on a job.
 
         :param job_uuid: The UUID of the job that was cheated on.
-        :param miner_hotkey: The hotkey of the miner that cheated.
         """
         data = {"job_uuid": job_uuid}
         signature_headers = self._get_cheated_job_headers(data)
@@ -197,79 +287,40 @@ class ComputeHordeClient:
         logger.debug("Reported job %s", job_uuid)
         return response
 
-    async def create_job(
-        self,
-        executor_class: ExecutorClass,
-        job_namespace: str,
-        docker_image: str,
-        args: Sequence[str] | None = None,
-        env: Mapping[str, str] | None = None,
-        artifacts_dir: str | None = None,
-        input_volumes: Mapping[str, InputVolume] | None = None,
-        output_volumes: Mapping[str, OutputVolume] | None = None,
-        run_cross_validation: bool = False,
-        trusted_output_volumes: Mapping[str, OutputVolume] | None = None,
-        on_trusted_miner: bool = False,
-    ) -> ComputeHordeJob:
+    async def create_job(self, job_spec: ComputeHordeJobSpec, on_trusted_miner: bool = False) -> ComputeHordeJob:
         """
-        Create a new job to run in the Compute Horde.
+        Run a job in the Compute Horde. This method does not retry a failed job.
+        Use :meth:`run_until_complete` if you want failed jobs to be automatically retried.
 
-        :param executor_class: Class of the executor machine to run the job on.
-        :param job_namespace: Specifies where the job comes from.
-            The recommended format is the subnet number and version, like e.g. ``"SN123.0"``.
-        :param docker_image: Docker image of the job, in the form of ``user/image:tag``.
-        :param args: Positional arguments and flags to run the job with.
-        :param env: Environment variables to run the job with.
-        :param artifacts_dir: Path of the directory that the job will write its results to.
-            Contents of files found in this directory will be returned after the job completes
-            as a part of the job result. It should be an absolute path (starting with ``/``).
-        :param input_volumes: The data to be made available to the job in Docker volumes.
-            The keys should be absolute file/directory paths under which you want your data to be available.
-            The values should be ``InputVolume`` instances representing how to obtain the input data.
-            For now, input volume paths must start with ``/volume/``.
-        :param output_volumes: The data to be read from the Docker volumes after job completion
-            and uploaded to the described destinations. Use this for outputs that are too big
-            or too unstable to be treated as ``artifacts``.
-            The keys should be absolute file paths under which job output data will be available.
-            The values should be ``OutputVolume`` instances representing how to handle the output data.
-            For now, output volume paths must start with ``/output/``.
-        :param run_cross_validation: Whether to run cross validation on a trusted miner.
-        :param trusted_output_volumes: Output volumes for cross validation on a trusted miner.
-            If these are omitted then cross validating on a trusted miner will not result in any uploads.
+        :param job_spec: Job specification to run.
         :param on_trusted_miner: If true, the job will be run on the sn12 validator's trusted miner.
-        :return: A ``ComputeHordeJob`` class instance representing the created job.
+        :return: A :class:`ComputeHordeJob` class instance representing the created job.
         """
-
-        if run_cross_validation:
-            # Or should we remove this argument for now?
-            raise NotImplementedError(
-                "Cross validation is not supported yet, please call create_job with run_cross_validation=False"
-            )
 
         # TODO: make this a pydantic model?
         data: dict[str, pydantic.JsonValue] = {
             "target_validator_hotkey": self.compute_horde_validator_hotkey,
-            "executor_class": executor_class,
-            "docker_image": docker_image,
-            "args": args or [],  # type: ignore
-            "env": env or {},  # type: ignore
+            "executor_class": job_spec.executor_class,
+            "docker_image": job_spec.docker_image,
+            "args": job_spec.args or [],  # type: ignore
+            "env": job_spec.env or {},  # type: ignore
             "use_gpu": True,
-            "artifacts_dir": artifacts_dir,
+            "artifacts_dir": job_spec.artifacts_dir,
             "on_trusted_miner": on_trusted_miner,
         }
-        if input_volumes is not None:
+        if job_spec.input_volumes is not None:
             data["volumes"] = [
                 input_volume.to_compute_horde_volume(mount_path).model_dump()
-                for mount_path, input_volume in input_volumes.items()
+                for mount_path, input_volume in job_spec.input_volumes.items()
             ]
 
-        if output_volumes is not None:
+        if job_spec.output_volumes is not None:
             data["uploads"] = [
                 output_volume.to_compute_horde_output_upload(mount_path).model_dump()
-                for mount_path, output_volume in output_volumes.items()
+                for mount_path, output_volume in job_spec.output_volumes.items()
             ]
 
-        logger.debug("Creating job from image %s", docker_image)
+        logger.debug("Creating job from image %s", job_spec.docker_image)
         signature_headers = self._get_signature_headers(data)
 
         response = await self._make_request("POST", "/api/v1/job-docker/", json=data, headers=signature_headers)
@@ -284,12 +335,66 @@ class ComputeHordeClient:
 
         return job
 
+    async def run_until_complete(
+        self,
+        job_spec: ComputeHordeJobSpec,
+        on_trusted_miner: bool = False,
+        job_attempt_callback: JobAttemptCallbackType | None = None,
+        timeout: float | None = None,
+        max_attempts: int = DEFAULT_MAX_JOB_RUN_ATTEMPTS,
+    ) -> ComputeHordeJob:
+        """
+        Run a job in the Compute Horde until it is successful.
+        It will call :meth:`create_job` repeatedly until the job is successful.
+
+        :param job_spec: Job specification to run.
+        :param on_trusted_miner: If true, the job will be run on the sn12 validator's trusted miner.
+        :param job_attempt_callback: A callback function that will be called after every attempt of running the job.
+            The callback will be called immediately after an attempt is made run the job,
+            before waiting for the job to complete.
+            The function must take one argument of type ComputeHordeJob.
+            It can be a regular or an async function.
+        :param timeout: Maximum number of seconds to wait for.
+        :param max_attempts: Maximum number times the job will be attempted to run within ``timeout`` seconds.
+            Negative or ``0`` means unlimited attempts.
+        :return: A :class:`ComputeHordeJob` class instance representing the created job.
+            If the job was rerun, it will represent the last attempt.
+        """
+        start_time = time.monotonic()
+
+        def remaining_timeout() -> float | None:
+            if timeout is None:
+                return None
+            new_timeout = timeout - (time.monotonic() - start_time)
+            return max(new_timeout, 0)
+
+        attempt = 0
+        while True:
+            attempt += 1
+            attempt_msg = f"{attempt}/{max_attempts}" if max_attempts > 0 else f"{attempt}"
+            logger.info(f"Attempting to run job [{attempt_msg}]")
+
+            job = await self.create_job(job_spec, on_trusted_miner)
+
+            if job_attempt_callback:
+                maybe_coro = job_attempt_callback(job)
+                if asyncio.iscoroutine(maybe_coro):
+                    await maybe_coro
+
+            await job.wait(timeout=remaining_timeout())
+
+            if job.status.is_successful():
+                return job
+
+            if max_attempts > 0 and attempt >= max_attempts:
+                return job
+
     async def get_job(self, job_uuid: str) -> ComputeHordeJob:
         """
         Retrieve information about a job from the Compute Horde.
 
         :param job_uuid: The UUID of the job to retrieve.
-        :return: A ``ComputeHordeJob`` instance representing this job.
+        :return: A :class:`ComputeHordeJob` instance representing this job.
         :raises ComputeHordeNotFoundError: If the job with this UUID does not exist.
         """
         logger.debug("Fetching job with UUID=%s", job_uuid)
@@ -321,7 +426,7 @@ class ComputeHordeClient:
 
         :param page: The page number.
         :param page_size: The page size.
-        :return: A list of ``ComputeHordeJob`` instances representing your jobs.
+        :return: A list of :class:`ComputeHordeJob` instances representing your jobs.
         :raises ComputeHordeNotFoundError: If the requested page does not exist.
         """
         logger.debug("Fetching jobs page=%d, page_size%d", page, page_size)
@@ -333,7 +438,7 @@ class ComputeHordeClient:
         """
         Retrieve information about your jobs from the Compute Horde.
 
-        :return: An async iterator of ``ComputeHordeJob`` instances representing your jobs.
+        :return: An async iterator of :class:`ComputeHordeJob` instances representing your jobs.
 
         Usage::
 
