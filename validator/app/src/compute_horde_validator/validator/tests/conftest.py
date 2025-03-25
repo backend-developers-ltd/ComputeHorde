@@ -134,3 +134,15 @@ def validators_with_this_hotkey(settings, validators):
 @pytest.fixture(scope="session")
 def run_uuid():
     return str(uuid.uuid4())
+
+
+# NOTE: Use this fixture when you need to find dangling asyncio tasks. It is currently commented
+#       because redis channels layers keeps dangling tasks, that makes the tests fail -_-
+# @pytest_asyncio.fixture(autouse=True)
+# async def check_still_running_tasks():
+#     yield
+#     tasks = asyncio.all_tasks()
+#     if len(tasks) > 1:
+#         raise ValueError(
+#             "\n" + "\n".join(f"{task.get_name()}: {task.get_coro()}" for task in tasks)
+#         )
