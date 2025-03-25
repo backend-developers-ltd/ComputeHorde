@@ -64,18 +64,21 @@ from compute_horde_executor.executor.output_uploader import OutputUploader, Outp
 
 logger = logging.getLogger(__name__)
 
-CVE_2022_0492_TIMEOUT_SECONDS = 120
-CVE_2024_0132_TIMEOUT_SECONDS = 120
 MAX_RESULT_SIZE_IN_RESPONSE = 1_000_000  # 1 MB
 TRUNCATED_RESPONSE_PREFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 TRUNCATED_RESPONSE_SUFFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 MAX_ARTIFACT_SIZE = 1_000_000
 DOCKER_STOP_TIMEOUT_SECONDS = 15
 INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 60 * 15
+
+CVE_2022_0492_TIMEOUT_SECONDS = 120
 CVE_2022_0492_IMAGE = (
     "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
 )
-NVIDIA_CONTAINER_TOOLKIT_CVE_2024_0132_FIXED_VERSION = packaging.version.parse("1.16.2")
+# Previous CVE: CVE-2024-0132 fixed in 1.16.2
+# Current CVE: CVE-2025-23359 fixed in 1.17.4
+NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION = packaging.version.parse("1.17.4")
+NVIDIA_CONTAINER_TOOLKIT_VERSION_CHECK_TIMEOUT = 120
 
 NGINX_CONF = """
 http {
@@ -966,7 +969,7 @@ class Command(BaseCommand):
 
         return True
 
-    async def is_nvidia_toolkit_version_safe_cve_2024_0132(self):
+    async def is_nvidia_toolkit_version_safe(self):
         process = await asyncio.create_subprocess_exec(
             "docker",
             "run",
@@ -988,34 +991,34 @@ class Command(BaseCommand):
 
         try:
             stdout, stderr = await asyncio.wait_for(
-                process.communicate(), CVE_2024_0132_TIMEOUT_SECONDS
+                process.communicate(), NVIDIA_CONTAINER_TOOLKIT_VERSION_CHECK_TIMEOUT
             )
         except TimeoutError:
             process.kill()
-            logger.error("NVIDIA Container Toolkit Version for CVE-2024-0132 check timed out")
+            logger.error("NVIDIA Container Toolkit minimum safe version check timed out")
             return False
 
         if process.returncode != 0:
             logger.error(
-                f'NVIDIA Container Toolkit Version for CVE-2024-0132 check failed: stdout="{stdout.decode()}"\nstderr="{stderr.decode()}'
+                f'NVIDIA Container Toolkit minimum safe version check failed: stdout="{stdout.decode()}"\nstderr="{stderr.decode()}'
             )
             return False
         lines = stdout.decode().splitlines()
         if not lines:
             logger.error(
-                f'NVIDIA Container Toolkit Version for CVE-2024-0132 check failed: stdout="{stdout.decode()}"\nstderr="{stderr.decode()}'
+                f'NVIDIA Container Toolkit minimum safe version check failed: stdout="{stdout.decode()}"\nstderr="{stderr.decode()}'
             )
             return False
         version = lines[0].rpartition(" ")[2]
 
         is_fixed_version = (
-            packaging.version.parse(version) >= NVIDIA_CONTAINER_TOOLKIT_CVE_2024_0132_FIXED_VERSION
+            packaging.version.parse(version) >= NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION
         )
 
         if not is_fixed_version:
             logger.error(
-                f"VIDIA Container Toolkit Version for CVE-2024-0132 check failed: "
-                f'{version}" not >= {NVIDIA_CONTAINER_TOOLKIT_CVE_2024_0132_FIXED_VERSION}'
+                f"NVIDIA Container Toolkit minimum safe version check failed: "
+                f'{version}" not >= {NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION}'
                 f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}'
             )
             return False
@@ -1034,8 +1037,8 @@ class Command(BaseCommand):
                 return
 
             if not settings.DEBUG_NO_GPU_MODE:
-                logger.debug("Checking for CVE-2024-0132 vulnerability")
-                if not await self.is_nvidia_toolkit_version_safe_cve_2024_0132():
+                logger.debug("Checking for NVIDIA Container Toolkit minimum safe version")
+                if not await self.is_nvidia_toolkit_version_safe():
                     await miner_client.send_failed_to_prepare()
                     return
 
