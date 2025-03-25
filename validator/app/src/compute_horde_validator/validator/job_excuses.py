@@ -1,14 +1,14 @@
 import logging
 from datetime import datetime, timedelta
 
-from asgiref.sync import sync_to_async
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
-from compute_horde.utils import BAC_VALIDATOR_SS58_ADDRESS, ValidatorInfo, get_validators
+from compute_horde.utils import BAC_VALIDATOR_SS58_ADDRESS, ValidatorInfo
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
-from compute_horde_validator.validator.models import MinerManifest
+from compute_horde_validator.validator.models import MetagraphSnapshot, MinerManifest
+from compute_horde_validator.validator.synthetic_jobs.utils import get_validator_infos
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,8 @@ async def filter_valid_excuse_receipts(
         return []
 
     if active_validators is None:
-        active_validators = await sync_to_async(get_validators, thread_sensitive=False)(
-            netuid=settings.BITTENSOR_NETUID,
-            network=settings.BITTENSOR_NETWORK,
-        )
+        metagraph = await MetagraphSnapshot.aget_latest()
+        active_validators = get_validator_infos(metagraph)
 
     allowed_validators = {
         validator_info.hotkey
