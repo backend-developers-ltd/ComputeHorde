@@ -50,7 +50,7 @@ To get started, install the ComputeHorde SDK with:
 pip install compute-horde-sdk
 ```
 
-For detailed API documentation, visit the [ComputeHorde SDK Reference](TODO_API_REFERENCE_LINK).
+For detailed API documentation, visit the [ComputeHorde SDK Reference](https://sdk.computehorde.io).
 
 
 > [!IMPORTANT]
@@ -99,7 +99,7 @@ This example demonstrates how to submit a job with **additional parameters**, in
 - input & output volume configuration
 - artifact (results) storage
 
-For a full list of available parameters and detailed descriptions, see the [ComputeHorde SDK Reference](TODO_API_REFERENCE_LINK).
+For a full list of available parameters and detailed descriptions, see the [ComputeHorde SDK Reference](https://sdk.computehorde.io).
 
 
 ```python
