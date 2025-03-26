@@ -1,10 +1,10 @@
 class ComputeHordeError(Exception):
-    """The base class for all errors thrown by the Compute Horde."""
+    """The base class for all errors thrown by the ComputeHorde."""
 
 
 class ComputeHordeNotFoundError(ComputeHordeError):
-    """The requested resource was not found in Compute Horde."""
+    """The requested resource was not found in ComputeHorde."""
 
 
 class ComputeHordeJobTimeoutError(ComputeHordeError, TimeoutError):
-    """Compute Horde job timed out."""
+    """ComputeHorde job timed out."""
