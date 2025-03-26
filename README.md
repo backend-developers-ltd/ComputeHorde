@@ -94,6 +94,28 @@ This encourages **variance**, which is essential for preventing [weight-copying]
 - Each **hardware class** in ComputeHorde has a **configurable weight**.  
 - These weights influence the miner’s final score, prioritizing certain hardware types based on network demand.
 
+## Optimizing Miner Strategy
+
+To maximize rewards in ComputeHorde, miners should implement **adaptive executor scaling** based on the **scoring mechanism**.
+Two key functions in the `BaseExecutorManager` control when and how many executors should be declared:
+
+### `is_active()` – controls dancing & executor variability
+- Determines whether a miner's **UID should declare a large or small horde of executors**.
+- Returns:
+  - `True` - Declare a **large horde of executors**.
+  - `False` - Declare a **small horde of executors**.
+- Impact on scoring:
+  - Properly alternating between large and small hordes when changing UIDs ensures eligibility for the [30% dancing bonus](#dancing-bonus-validated-in-peak-cycles-only).
+
+### `is_peak()` – controls peak vs. non-peak executor declaration
+- Determines whether the current **cycle is a peak cycle**.
+- Returns:
+  - `True` - **Peak cycle** - Declare the **maximum** number of executors (large or small horde depending on `is_active()`).
+  - `False` - **Non-peak cycle** - Declare **at least 10%** of the peak horde size (large or small).
+- Impact on scoring:
+  - Declaring **less than 10%** results in a **20% penalty**.
+  - Declaring **more than 10%** won’t increase synthetic job allocation, leading to idle resources.
+
 ## Components
 
 ### **Facilitator**
