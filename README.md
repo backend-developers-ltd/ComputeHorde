@@ -61,8 +61,6 @@ The SDK allows you to:
 - **Reduce infrastructure costs** by eliminating the need for physical GPUs.
 - **Accelerate validation** by leveraging ComputeHorde’s ready-to-go GPU pool.
 
-For installation, usage examples, and API reference, see the [ComputeHorde SDK README](https://github.com/backend-developers-ltd/ComputeHorde/compute_horde_sdk#readme).
-
 ## Scoring Mechanism
 
 The scoring mechanism in ComputeHorde is designed to **incentivize miners to perform organic jobs** while 
