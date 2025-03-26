@@ -225,7 +225,7 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
             logger.debug(f"Passed streaming start barrier for {job_uuid}")
 
             url = f"https://{server_address}:{server_port}/execute-job"
-            logger.debug("About to send seed to %s (job_uuid=%s)", url, job_uuid)
+            logger.info("Connecting to streaming job executor at %s (job_uuid=%s)", url, job_uuid)
 
             async with httpx.AsyncClient(
                 verify=executor_cert_file.name,
@@ -240,7 +240,7 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
                     )
                 except Exception as e:
                     msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}"
-                    logger.debug(msg)
+                    logger.warning(msg)
                     self.fail_reason = msg
                 else:
                     try:
@@ -248,7 +248,7 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
                         self.streaming_processing_time = time.time() - t_before
                     except Exception as e:
                         msg = f"Failed to execute streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]!r}"
-                        logger.debug(msg)
+                        logger.warning(msg)
                         self.fail_reason = msg
                     else:
                         logger.debug(
@@ -262,7 +262,7 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
                             assert isinstance(self.response_hash, str)
                         except Exception as e:
                             msg = f"Malformed response from {url} (job_uuid={job_uuid}), reason={str(e)}"
-                            logger.debug(msg)
+                            logger.warning(msg)
                             self.fail_reason = msg
 
                 url = f"https://{server_address}:{server_port}/terminate"
@@ -271,13 +271,13 @@ class LlmPromptsSyntheticJobGenerator(LlmPromptsJobGenerator):
                     r = await client.get(url, headers={"Host": server_address})
                 except Exception as e:
                     msg = f"Failed to terminate streaming job {job_uuid} on {url}: {e}"
-                    logger.debug(msg)
+                    logger.warning(msg)
                 else:
                     try:
                         r.raise_for_status()
                     except Exception as e:
                         msg = f"Failed to terminate streaming job {job_uuid} on {url}: {e}, the response was: {r.content[:100]!r}"
-                        logger.debug(msg)
+                        logger.warning(msg)
                     else:
                         logger.debug(
                             "Successfully terminated %s (job_uuid=%s)",
