@@ -172,7 +172,7 @@ This encourages **variance**, which is essential for preventing [weight-copying]
 - ComputeHorde testnet netuid: 174
 - [ComputeHorde channel](https://discordapp.com/channels/799672011265015819/1201941624243109888) within Bittensor discord
 - **SDK for Subnet Owners & Validators:**  
-  [ComputeHorde SDK README](https://github.com/backend-developers-ltd/compute-horde-sdk#readme) – integrate ComputeHorde into your subnet's validator
+  [ComputeHorde SDK README](https://github.com/backend-developers-ltd/compute-horde-sdk#readme)
 - Information dashboards:
   - [Subnet 12 health monitor](https://grafana.bactensor.io/d/subnet/metagraph-subnet?var-subnet=12)
   - [Subnet 12 TaoStats](https://taostats.io/subnets/12) 
