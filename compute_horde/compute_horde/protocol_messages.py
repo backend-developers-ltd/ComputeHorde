@@ -132,6 +132,10 @@ class V0StreamingJobReadyRequest(BaseModel):
     public_key: str
     ip: str | None = None  # set by miner after it receives the message from executor
     port: int
+    miner_signature: str | None = None
+
+    def blob_for_signing(self) -> str:
+        return f"{self.job_uuid}:{self.ip}:{self.port}:{self.public_key}"
 
 
 # validator -> miner.vc -> miner.ec -> executor

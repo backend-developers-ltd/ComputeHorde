@@ -67,28 +67,32 @@ This minimal example shows how to submit a job to ComputeHorde with **basic para
 
 ```python
 import asyncio
+
 import bittensor
-from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass
+
+from compute_horde_sdk.v1 import ComputeHordeClient, ComputeHordeJobSpec, ExecutorClass
 
 wallet = bittensor.wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
-    hotkey=wallet.hotkey,  
-    compute_horde_validator_hotkey="...",  # usually the same as the ss58 address of hotkey above
+    hotkey=wallet.hotkey,
+    compute_horde_validator_hotkey="...",  # usually the ss58_address of the hotkey above
 )
 
+
 async def main():
-    # Create a job to run on the Compute Horde.
-    job = await compute_horde_client.create_job(
+    # Define your job
+    job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
         docker_image="my-username/my-image:latest",
-        artifact_dir="/artifacts",
     )
 
-    await job.wait(timeout=10 * 60)
+    # Run the job
+    job = await compute_horde_client.run_until_complete(job_spec)
 
     print(job.status)  # should be "Completed".
+
 
 asyncio.run(main())
 ```
@@ -104,19 +108,30 @@ For a full list of available parameters and detailed descriptions, see the [Comp
 
 ```python
 import asyncio
+
 import bittensor
-from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass, InlineInputVolume, HuggingfaceInputVolume, HTTPInputVolume, HTTPOutputVolume
+
+from compute_horde_sdk.v1 import (
+    ComputeHordeClient,
+    ComputeHordeJobSpec,
+    ExecutorClass,
+    HTTPInputVolume,
+    HTTPOutputVolume,
+    HuggingfaceInputVolume,
+    InlineInputVolume,
+)
 
 wallet = bittensor.wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
-    hotkey=wallet.hotkey,  
-    compute_horde_validator_hotkey="...",  # usually the same as the ss58 address of hotkey above
+    hotkey=wallet.hotkey,
+    compute_horde_validator_hotkey="...",  # usually the ss58_address of the hotkey above
 )
 
+
 async def main():
-    # Create a job to run on the Compute Horde.
-    job = await compute_horde_client.create_job(
+    # Define your job
+    job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
         docker_image="my-username/my-image:latest",
@@ -142,10 +157,16 @@ async def main():
         },
     )
 
-    await job.wait(timeout=10 * 60)
+    # Run the job
+    job = await compute_horde_client.run_until_complete(
+        job_spec=job_spec,
+        timeout=300,  # retry/wait for up to 300 seconds for the job to complete
+        max_attempts=5,  # try at most 5 times, if the job fails
+    )
 
     print(job.status)  # should be "Completed".
     print(job.result)
+
 
 asyncio.run(main())
 ```

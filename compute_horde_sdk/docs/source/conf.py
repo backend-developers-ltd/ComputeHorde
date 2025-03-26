@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "Compute Horde SDK"
+project = "ComputeHorde SDK"
 copyright = "2025, Backend Developers Ltd"
 author = "Backend Developers Ltd"
 

@@ -26,7 +26,7 @@ Running Jobs on ComputeHorde
 
     compute_horde_client = ComputeHordeClient(
         hotkey=wallet.hotkey,
-        compute_horde_validator_hotkey="...",  # usually the ss58_address of the same hotkey above
+        compute_horde_validator_hotkey="...",  # usually the ss58_address of the hotkey above
     )
 
 
@@ -76,7 +76,7 @@ This example demonstrates how to submit a job with additional parameters, includ
 
     compute_horde_client = ComputeHordeClient(
         hotkey=wallet.hotkey,
-        compute_horde_validator_hotkey="...",  # usually the ss58_address of the same hotkey above
+        compute_horde_validator_hotkey="...",  # usually the ss58_address of the hotkey above
     )
 
 
