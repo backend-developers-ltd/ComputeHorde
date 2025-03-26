@@ -1,4 +1,5 @@
 version = 1
+revision = 1
 requires-python = "==3.11.*"
 
 [manifest]
@@ -522,6 +523,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 docs = [
     { name = "sphinx", specifier = ">=8.2.3" },
+    { name = "sphinx-multiversion", specifier = ">=0.2.4" },
     { name = "sphinx-rtd-theme", specifier = ">=3.0.2" },
 ]
 format = [
