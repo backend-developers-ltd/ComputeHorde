@@ -34,7 +34,7 @@ paving the way for Bittensor to scale beyond its current limitations to support 
 
 - **Developer SDK for Easy Integration**  
   A Python SDK is available to help **subnet owners and validators** run jobs on ComputeHorde.  
-  See [ComputeHorde SDK README](https://github.com/backend-developers-ltd/ComputeHorde/compute_horde_sdk#readme) for installation and usage examples.
+  See [ComputeHorde SDK README](compute_horde_sdk/README.md#readme) for installation and usage examples.
 
 
 ## Bittensor Context
@@ -53,7 +53,7 @@ ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnet
 ## Using ComputeHorde to Power Other Subnets
 
 If you're a **subnet owner or validator** looking to access scalable, decentralized GPU compute power from ComputeHorde,
-check out the [ComputeHorde SDK](https://github.com/backend-developers-ltd/ComputeHorde/compute_horde_sdk#readme).
+check out the [ComputeHorde SDK](compute_horde_sdk/README.md#readme).
 
 The SDK allows you to:
 - **Submit jobs easily** from your own subnet validator code.
