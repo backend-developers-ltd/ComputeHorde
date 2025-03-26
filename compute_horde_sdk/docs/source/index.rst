@@ -7,7 +7,6 @@
 ComputeHorde SDK documentation
 ###############################
 
-
 The **ComputeHorde SDK** is a Python library for Bittensor subnet validators to offload compute jobs to
 ComputeHorde’s decentralized GPU infrastructure.
 
@@ -26,7 +25,6 @@ The SDK handles job submission, tracking, and result retrieval. You are responsi
 
 The SDK offers built-in support for submitting jobs to the trusted miner, 
 but the logic around when and how to use it depends on the **nature of your jobs** and your subnet’s validation design.
-
 
 .. toctree::
    :maxdepth: 2
