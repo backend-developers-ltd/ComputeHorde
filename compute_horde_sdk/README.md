@@ -103,7 +103,7 @@ This example demonstrates how to submit a job with **additional parameters**, in
 - input & output volume configuration
 - artifact (results) storage
 
-For a full list of available parameters and detailed descriptions, see the [ComputeHorde SDK Reference](https://sdk.computehorde.io).
+For a full list of available parameters and detailed descriptions, see the [ComputeHorde SDK Reference](https://sdk.computehorde.io/master/api/client.html).
 
 
 ```python
@@ -176,10 +176,11 @@ asyncio.run(main())
 To ensure fairness and detect potential cheating, **cross-validation** should be performed on **1-2% of submitted jobs**. 
 This is done by **executing a copy** of a job on a **trusted miner** and comparing the results.
 
-Flag `on_trusted_miner=True` tells `create_job` to run the duplicate job on the **ComputeHorde validator’s trusted miner** 
-instead of regular ComputeHorde miners.
+Flag `on_trusted_miner=True` tells [`create_job`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.create_job) 
+to run the duplicate job on the **ComputeHorde validator’s trusted miner** instead of regular ComputeHorde miners.
 
-**If results differ, report the cheating miner** using `report_cheated_job()` method. 
+**If results differ, report the cheating miner** using 
+[`report_cheated_job()`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.report_cheated_job) method. 
 The details of the punishment are described in [ComputeHorde's README](https://github.com/backend-developers-ltd/ComputeHorde#formula-calculated-per-validator-in-peak-cycles). 
 
 Cross-validation is a crucial mechanism to **ensure honest mining and maintain ComputeHorde’s reliability**.
@@ -187,14 +188,14 @@ Cross-validation is a crucial mechanism to **ensure honest mining and maintain C
 ### **4. Managing ComputeHorde Jobs**
 
 #### **Retrieve a Job by UUID**
-If you need to fetch a specific job, use:
+If you need to fetch a specific job, use [`get_job()`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.get_job):
 
 ```python
 job = await client.get_job("7b522daa-e807-4094-8d96-99b9a863f960")
 ```
 
 #### **Iterate Over All Jobs**  
-To process all of your submitted jobs:  
+To process all of your submitted jobs, use [`iter_jobs()`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.iter_jobs):  
 
 ```python
 async for job in client.iter_jobs():
