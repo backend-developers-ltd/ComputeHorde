@@ -15,6 +15,7 @@ author = "Backend Developers Ltd"
 
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx_multiversion",
 ]
 
 autodoc_typehints = "description"
@@ -42,3 +43,11 @@ html_theme_options = {
     "prev_next_buttons_location": "both",
     "collapse_navigation": True,
 }
+
+# -- Multiversion configuration ----------------------------------------------
+# https://sphinx-contrib.github.io/multiversion/main/configuration.html
+
+smv_tag_whitelist = r"^(draft/)?sdk\-v.*$"
+smv_branch_whitelist = r"^(master|main)$"
+smv_remote_whitelist = r"^.*$"
+smv_released_pattern = r"^refs/tags/sdk\-v.*$"
