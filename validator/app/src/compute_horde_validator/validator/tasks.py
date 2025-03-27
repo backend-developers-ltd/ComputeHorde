@@ -1625,7 +1625,8 @@ async def execute_organic_job_request_on_worker(
     job_request: OrganicJobRequest, miner: Miner
 ) -> OrganicJob:
     future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
-        args=(job_request.model_dump(), miner.hotkey)
+        args=(job_request.model_dump(), miner.hotkey),
+        expires=600,
     )
     timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
     # Note - thread sensitive is essential otherwise the wait will block the sync thread.
