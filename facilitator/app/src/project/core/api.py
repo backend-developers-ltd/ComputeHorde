@@ -274,15 +274,7 @@ class JobFeedbackViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, vie
         return self.create(request, *args, **kwargs)
 
 
-class APIRootView(routers.DefaultRouter.APIRootView):
-    description = "api-root"
-
-
-class APIRouter(routers.DefaultRouter):
-    APIRootView = APIRootView
-
-
-router = APIRouter()
+router = routers.SimpleRouter()
 router.register(r"jobs", JobViewSet)
 router.register(r"job-docker", DockerJobViewset, basename="job_docker")
 router.register(r"job-raw", RawJobViewset, basename="job_raw")
