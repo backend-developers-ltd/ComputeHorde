@@ -295,6 +295,11 @@ CONSTANCE_CONFIG = {
         "Score for each properly excused synthetic job",
         float,
     ),
+    "DYNAMIC_MINIMUM_VALIDATOR_STAKE_FOR_EXCUSE": (
+        30_000.0,
+        "The minimum effective stake that a validator must have for its job to properly excuse other jobs (denominated in alpha)",
+        float,
+    ),
     "DYNAMIC_ORGANIC_JOB_SCORE": (
         1.0,
         "Score of each successful organic job",

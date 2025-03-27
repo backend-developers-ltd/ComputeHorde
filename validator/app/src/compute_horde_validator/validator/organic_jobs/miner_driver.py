@@ -278,6 +278,9 @@ async def drive_organic_job(
                 declined_job_uuid=str(job.job_uuid),
                 declined_job_executor_class=ExecutorClass(job.executor_class),
                 declined_job_is_synthetic=False,
+                minimum_validator_stake_for_excuse=await aget_config(
+                    "DYNAMIC_MINIMUM_VALIDATOR_STAKE_FOR_EXCUSE"
+                ),
                 miner_hotkey=job.miner.hotkey,
             )
             expected_executor_count = await job_excuses.get_expected_miner_executor_count(

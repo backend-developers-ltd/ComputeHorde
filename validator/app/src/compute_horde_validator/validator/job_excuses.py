@@ -1,14 +1,14 @@
 import logging
 from datetime import datetime, timedelta
 
-from asgiref.sync import sync_to_async
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
-from compute_horde.utils import get_validators
+from compute_horde.utils import BAC_VALIDATOR_SS58_ADDRESS, ValidatorInfo
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
-from compute_horde_validator.validator.models import MinerManifest
+from compute_horde_validator.validator.models import MetagraphSnapshot, MinerManifest
+from compute_horde_validator.validator.synthetic_jobs.utils import get_validator_infos
 
 logger = logging.getLogger(__name__)
 
@@ -20,20 +20,28 @@ async def filter_valid_excuse_receipts(
     declined_job_executor_class: ExecutorClass,
     declined_job_is_synthetic: bool,
     miner_hotkey: str,
-    allowed_validators: set[str] | None = None,
+    minimum_validator_stake_for_excuse: float,
+    active_validators: list[ValidatorInfo] | None = None,
 ) -> list[Receipt]:
     if not receipts_to_check:
         return []
 
-    if allowed_validators is None:
-        allowed_validators = {
-            neuron.hotkey
-            for neuron in await sync_to_async(get_validators)(
-                netuid=settings.BITTENSOR_NETUID,
-                network=settings.BITTENSOR_NETWORK,
-            )
-        }
-        allowed_validators.add(settings.BITTENSOR_WALLET().get_hotkey().ss58_address)
+    if active_validators is None:
+        metagraph = await MetagraphSnapshot.aget_latest()
+        active_validators = get_validator_infos(metagraph)
+
+    allowed_validators = {
+        validator_info.hotkey
+        for validator_info in active_validators
+        if (
+            validator_info.stake >= minimum_validator_stake_for_excuse
+            or validator_info.hotkey == BAC_VALIDATOR_SS58_ADDRESS
+        )
+    }
+    # Note: valid jobs by BAC validator are always excused (for easier testing subnet of development)
+
+    # Vali should probably trust itself in any case.
+    allowed_validators.add(settings.BITTENSOR_WALLET().get_hotkey().ss58_address)
 
     # We need time leeway so that if the miner receives multiple jobs in a short time, a slight
     # time difference caused by clock desync and network latencies doesn't cause the miner to lose

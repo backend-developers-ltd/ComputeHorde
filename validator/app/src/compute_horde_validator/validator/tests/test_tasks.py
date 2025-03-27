@@ -31,6 +31,7 @@ from .helpers import (
     MockMinerClient,
     MockSubtensor,
     check_system_events,
+    neurons_to_validator_infos,
 )
 
 
@@ -151,7 +152,8 @@ def test__calculate_job_start_block():
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test__schedule_validation_run__not_in_validators(validators):
     with patch(
-        "compute_horde_validator.validator.tasks.get_validators", lambda *args, **kwargs: validators
+        "compute_horde_validator.validator.tasks.get_validators",
+        lambda *args, **kwargs: neurons_to_validator_infos(validators),
     ):
         assert SyntheticJobBatch.objects.count() == 0
         with pytest.raises(ScheduleError):
@@ -192,7 +194,7 @@ def test__schedule_validation_run__simple(validators_with_this_hotkey):
 def test__schedule_validation_run__concurrent(validators_with_this_hotkey):
     with patch(
         "compute_horde_validator.validator.tasks.get_validators",
-        lambda *args, **kwargs: validators_with_this_hotkey,
+        lambda *args, **kwargs: neurons_to_validator_infos(validators_with_this_hotkey),
     ):
         assert SyntheticJobBatch.objects.count() == 0
         num_threads = 10
@@ -213,7 +215,7 @@ def test__schedule_validation_run__already_scheduled(validators_with_this_hotkey
     SyntheticJobBatch.objects.create(block=current_block + 20, cycle=_get_cycle(current_block + 20))
     with patch(
         "compute_horde_validator.validator.tasks.get_validators",
-        lambda *args, **kwargs: validators_with_this_hotkey,
+        lambda *args, **kwargs: neurons_to_validator_infos(validators_with_this_hotkey),
     ):
         schedule_synthetic_jobs()
         assert SyntheticJobBatch.objects.count() == 1
