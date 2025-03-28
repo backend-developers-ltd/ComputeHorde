@@ -12,6 +12,8 @@ log = get_logger(__name__)
 
 
 class JWTAuthentication(authentication.BaseAuthentication):
+    keyword = "Bearer"
+
     def authenticate(self, request: HttpRequest) -> tuple[AbstractBaseUser, str] | None:
         auth_header = authentication.get_authorization_header(request)
         if not auth_header:
@@ -27,7 +29,7 @@ class JWTAuthentication(authentication.BaseAuthentication):
         except Exception:
             raise AuthenticationFailed("Invalid token header format.")
 
-        if prefix.lower() != "bearer":
+        if prefix.lower() != self.keyword.lower():
             return None
 
         try:
@@ -54,3 +56,6 @@ class JWTAuthentication(authentication.BaseAuthentication):
             whitelist_entry.save()
         request.hotkey = hotkey
         return whitelist_entry.user, hotkey
+
+    def authenticate_header(self, request):
+        return self.keyword
