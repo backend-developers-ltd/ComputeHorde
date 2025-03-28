@@ -107,7 +107,6 @@ def user(db):
 def dummy_job_params(settings):
     return dict(
         docker_image="",
-        raw_script="import this",
         args=["arg1", "value1"],
         env={"ENV1": "VALUE1"},
         input_url="http://localhost/input",

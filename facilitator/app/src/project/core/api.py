@@ -55,7 +55,6 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "last_update",
             "status",
             "docker_image",
-            "raw_script",
             "args",
             "env",
             "use_gpu",
@@ -105,16 +104,6 @@ class DynamicJobFields:
             fields.pop("uploads", None)
             fields.pop("volumes", None)
         return fields
-
-
-class RawJobSerializer(DynamicJobFields, JobSerializer):
-    class Meta:
-        model = Job
-        fields = JobSerializer.Meta.fields
-        read_only_fields = tuple(
-            set(JobSerializer.Meta.fields)
-            - {"raw_script", "input_url", "hf_repo_id", "hf_revision", "tag", "volumes", "uploads"}
-        )
 
 
 class DockerJobSerializer(DynamicJobFields, JobSerializer):
@@ -216,10 +205,6 @@ class JobViewSet(mixins.RetrieveModelMixin, mixins.ListModelMixin, viewsets.Gene
         return self.queryset.filter(**params)
 
 
-class RawJobViewset(BaseCreateJobViewSet):
-    serializer_class = RawJobSerializer
-
-
 class DockerJobViewset(BaseCreateJobViewSet):
     serializer_class = DockerJobSerializer
 
@@ -277,6 +262,5 @@ class JobFeedbackViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, vie
 router = routers.SimpleRouter()
 router.register(r"jobs", JobViewSet)
 router.register(r"job-docker", DockerJobViewset, basename="job_docker")
-router.register(r"job-raw", RawJobViewset, basename="job_raw")
 router.register(r"jobs/(?P<job_uuid>[^/.]+)/feedback", JobFeedbackViewSet, basename="job_feedback")
 router.register(r"cheated-job", CheatedJobViewSet, basename="cheated_job")

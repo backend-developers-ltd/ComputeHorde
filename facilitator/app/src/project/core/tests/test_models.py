@@ -21,7 +21,6 @@ def test__job__autocreating_signed_urls(user, validator, miner, settings):
         user=user,
         validator=validator,
         miner=miner,
-        raw_script="import this",
     )
     assert job.output_upload_url
     assert job.output_download_url
@@ -62,7 +61,6 @@ def test__job__output_url_expiration(settings, user, connected_validator, miner)
         job = Job.objects.create(
             user=user,
             validator=None,
-            raw_script="import this",
             output_upload_url="http://localhost/output/upload",
         )
         assert job.output_download_url
@@ -88,7 +86,6 @@ def test__job__selecting_validator__failure__not_exist(user):
         Job.objects.create(
             user=user,
             validator=None,
-            raw_script="import this",
             output_upload_url="http://localhost/output/upload",
             output_download_url="http://localhost/output/download",
         )
@@ -101,7 +98,6 @@ def test__job__selecting_validator__failure__not_connected(user, validator):
         Job.objects.create(
             user=user,
             validator=None,
-            raw_script="import this",
             output_upload_url="http://localhost/output/upload",
             output_download_url="http://localhost/output/download",
         )
@@ -114,7 +110,6 @@ def test__job__selecting_validator__failure__not_authorized(user, validator):
         Job.objects.create(
             user=user,
             validator=None,
-            raw_script="import this",
             output_upload_url="http://localhost/output/upload",
             output_download_url="http://localhost/output/download",
         )
@@ -126,7 +121,6 @@ def test__job__selecting_validator__success(user, connected_validator, miner):
     job = Job.objects.create(
         user=user,
         validator=None,
-        raw_script="import this",
         output_upload_url="http://localhost/output/upload",
         output_download_url="http://localhost/output/download",
     )
@@ -152,7 +146,6 @@ def test__job__selecting_validator__user_preference(user, connected_validator, m
     job_kwargs = dict(
         user=user,
         validator=None,
-        raw_script="import this",
         output_upload_url="http://localhost/output/upload",
         output_download_url="http://localhost/output/download",
     )
@@ -184,7 +177,6 @@ def test__job__selecting_miner__user_preference(user, validator, miners):
     job_kwargs = dict(
         user=user,
         validator=validator,
-        raw_script="import this",
         output_upload_url="http://localhost/output/upload",
         output_download_url="http://localhost/output/download",
     )
@@ -213,7 +205,6 @@ async def test__job__selecting_miner__doesnt_exist(user, validator):
             user=user,
             validator=validator,
             miner=None,
-            raw_script="import this",
             output_upload_url="http://localhost/output/upload",
             output_download_url="http://localhost/output/download",
         )
@@ -234,7 +225,6 @@ async def test__job__selecting_miner__unavailable(
             user=user,
             validator=validator,
             miner=None,
-            raw_script="import this",
             output_upload_url="http://localhost/output/upload",
             output_download_url="http://localhost/output/download",
         )

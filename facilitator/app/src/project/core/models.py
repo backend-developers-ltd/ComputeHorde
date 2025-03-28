@@ -208,8 +208,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     )
     docker_image = models.CharField(max_length=255, blank=True, help_text="docker image for job execution")
 
-    # TODO: remove raw_script field. Support for running raw_script jobs has been removed.
-    raw_script = models.TextField(blank=True, help_text="raw script to be executed")
     args = ArrayField(
         models.TextField(),
         default=list,
@@ -246,10 +244,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             CheckConstraint(
                 check=Q(user__isnull=True) & ~Q(hotkey="") | Q(user__isnull=False) & Q(hotkey=""),
                 name="user_or_hotkey",
-            ),
-            CheckConstraint(
-                check=Q(docker_image="") & ~Q(raw_script="") | ~Q(docker_image="") & Q(raw_script=""),
-                name="docker_image_or_raw_script",
             ),
         ]
         indexes = [
@@ -417,11 +411,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     def reset_download_url(self) -> None:
         self.output_download_url = create_signed_download_url(self.filename)
         self.output_download_url_expires_at = now() + settings.DOWNLOAD_PRESIGNED_URL_LIFETIME
-
-    def clean(self, *args, **kwargs) -> None:
-        if (self.docker_image == "") == (self.raw_script == ""):
-            raise MutuallyExclusiveFieldsError("Either docker_image or raw_script should be provided, but not both")
-        return super().clean(*args, **kwargs)
 
     @property
     def sender(self) -> str:
