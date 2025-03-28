@@ -829,16 +829,6 @@ wheels = [
 ]
 
 [[package]]
-name = "django-allauth"
-version = "65.4.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "asgiref", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "django", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b1/e7/b3232c27da9f43e3db72d16addd90891ee233fa058ddd0588bafcded2ea7/django_allauth-65.4.1.tar.gz", hash = "sha256:60b32aef7dbbcc213319aa4fd8f570e985266ea1162ae6ef7a26a24efca85c8c", size = 1558220 }
-
-[[package]]
 name = "django-business-metrics"
 version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1147,7 +1137,6 @@ dependencies = [
     { name = "compute-horde", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "compute-horde-sdk", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "django-allauth", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django-business-metrics", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django-constance", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django-cors-headers", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1225,7 +1214,6 @@ requires-dist = [
     { name = "compute-horde", editable = "../compute_horde" },
     { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },
     { name = "django", specifier = "~=4.2.4" },
-    { name = "django-allauth", specifier = ">=0.61.1" },
     { name = "django-business-metrics", specifier = ">=1.0.1,<2" },
     { name = "django-constance", specifier = "==3.1.0" },
     { name = "django-cors-headers", specifier = "~=4.2.0" },

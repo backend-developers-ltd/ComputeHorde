@@ -65,15 +65,11 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "allauth",
-    "allauth.account",
-    "allauth.socialaccount",
     "django_structlog",
     "django_extensions",
     "django_probes",
     "constance",
     "rest_framework",
-    "rest_framework.authtoken",
     "django_filters",
     *ADDITIONAL_APPS,
     "project.core",
@@ -112,19 +108,10 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django_prometheus.middleware.PrometheusAfterMiddleware",
     "django_structlog.middlewares.RequestMiddleware",
-    "allauth.account.middleware.AccountMiddleware",
-    "project.core.middleware.FacilitatorSignatureMiddleware",
+    "project.core.middleware.FacilitatorSignatureMiddleware",  # TODO: replace with authentication class
 ]
 
-AUTHENTICATION_BACKENDS = [
-    "django.contrib.auth.backends.ModelBackend",
-    "allauth.account.auth_backends.AuthenticationBackend",
-]
-SOCIALACCOUNT_PROVIDERS = {}
-ACCOUNT_EMAIL_VERIFICATION = "mandatory"
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
-ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
+AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
 LOGIN_REDIRECT_URL = "/"
 
 if DEBUG_TOOLBAR := env.bool("DEBUG_TOOLBAR", default=False):
@@ -415,10 +402,7 @@ if SENTRY_DSN := env("SENTRY_DSN", default=""):
 
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
-    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],

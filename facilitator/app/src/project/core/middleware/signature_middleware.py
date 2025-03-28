@@ -8,6 +8,7 @@ from ..services.signatures import signature_from_request
 logger = logging.getLogger(__name__)
 
 
+# TODO: remove after proper authentication class is introduced
 class FacilitatorSignatureMiddleware(MiddlewareMixin):
     """
     Middleware that extracts the signature from the request and saves it to the database

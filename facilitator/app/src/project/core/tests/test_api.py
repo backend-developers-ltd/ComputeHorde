@@ -168,7 +168,7 @@ def generate_signed_headers(
 # def test_hotkey_authentication__job_create(api_client, wallet, connected_validator, miner):
 #     data = {"input_url": "http://example.com/input.zip"}
 #     response = api_client.post("/api/v1/job-raw/", data)
-#     assert response.status_code == 401
+#     assert response.status_code == 403
 #
 #     signed_headers = generate_signed_headers(
 #         wallet=wallet,
@@ -182,7 +182,7 @@ def generate_signed_headers(
 #         data,
 #         **{f"HTTP_{header.upper()}": value for header, value in signed_headers.items()},
 #     )
-#     assert response.status_code == 401
+#     assert response.status_code == 403
 #
 #     Validator.objects.create(ss58_address=wallet.hotkey.ss58_address, is_active=True)
 #     response = api_client.post(
@@ -202,9 +202,9 @@ def generate_signed_headers(
 
 @pytest.mark.django_db
 def test_hotkey_authentication__job_details(api_client, wallet, job_with_hotkey):
-    # no authentication -> 401
+    # no authentication -> 403
     response = api_client.get(f"/api/v1/jobs/{job_with_hotkey.uuid}/")
-    assert response.status_code == 401, response.content
+    assert response.status_code == 403, response.content
 
     signed_headers = generate_signed_headers(
         wallet=wallet,
@@ -213,12 +213,12 @@ def test_hotkey_authentication__job_details(api_client, wallet, job_with_hotkey)
         subnet_id=12,
     )
 
-    # unknown hotkey -> 401
+    # unknown hotkey -> 403
     response = api_client.get(
         f"/api/v1/jobs/{job_with_hotkey.uuid}/",
         **{f"HTTP_{header.upper()}": value for header, value in signed_headers.items()},
     )
-    assert response.status_code == 401, response.content
+    assert response.status_code == 403, response.content
 
     # known hotkey -> success
     Validator.objects.create(ss58_address=wallet.hotkey.ss58_address, is_active=True)
@@ -244,7 +244,7 @@ def test_hotkey_authentication__job_list(api_client, wallet, job_with_hotkey):
         "/api/v1/jobs/",
         **{f"HTTP_{header.upper()}": value for header, value in signed_headers.items()},
     )
-    assert response.status_code == 401, response.content
+    assert response.status_code == 403, response.content
 
 
 def test_job_feedback__create__requires_signature(authenticated_api_client):
