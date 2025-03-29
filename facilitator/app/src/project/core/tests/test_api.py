@@ -61,7 +61,6 @@ def job_docker(db, user, connected_validator, miner):
         args=["my", "args"],
         env={"MY_ENV": "my value"},
         use_gpu=True,
-        input_url="http://example.com/input.zip",
     )
 
 
@@ -75,7 +74,6 @@ def another_user_job_docker(db, another_user, connected_validator, miner):
         args=["my", "args"],
         env={"MY_ENV": "my value"},
         use_gpu=True,
-        input_url="http://example.com/input.zip",
     )
 
 
@@ -90,7 +88,6 @@ def check_docker_job(job_result):
     assert job_result["args"] == ["my", "args"]
     assert job_result["env"] == {"MY_ENV": "my value"}
     assert job_result["use_gpu"] is True
-    assert job_result["input_url"] == "http://example.com/input.zip"
     assert set(job_result.keys()) & generated_fields == generated_fields
 
 
@@ -166,7 +163,7 @@ def generate_signed_headers(
 # TODO: convert this test into job-docker if possible, otherwise remove entirely
 # @pytest.mark.django_db
 # def test_hotkey_authentication__job_create(api_client, wallet, connected_validator, miner):
-#     data = {"input_url": "http://example.com/input.zip"}
+#     data = {}
 #     response = api_client.post("/api/v1/job-raw/", data)
 #     assert response.status_code == 403
 #
@@ -194,7 +191,6 @@ def generate_signed_headers(
 #
 #     assert Job.objects.count() == 1
 #     job = Job.objects.first()
-#     assert job.input_url == "http://example.com/input.zip"
 #     assert job.use_gpu is False
 #     assert job.user is None
 #     assert job.hotkey == wallet.hotkey.ss58_address
