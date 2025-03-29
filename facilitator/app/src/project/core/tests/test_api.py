@@ -89,7 +89,6 @@ def check_docker_job(job_result):
         "created_at",
         "last_update",
         "status",
-        "output_download_url",
     }
     assert job_result["docker_image"] == "hello-world"
     assert job_result["args"] == ["my", "args"]

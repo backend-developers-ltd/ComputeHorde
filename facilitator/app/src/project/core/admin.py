@@ -162,8 +162,6 @@ class JobStatusAdmin(admin.ModelAdmin):
         "job__user__username",
         "job__user__email",
         "job__docker_image",
-        "job__output_upload_url",
-        "job__output_download_url",
     )
     autocomplete_fields = ("job",)
     ordering = ("-created_at",)
@@ -193,10 +191,7 @@ class JobAdminForm(forms.ModelForm):
             "args",
             "env",
             "use_gpu",
-            "output_download_url_expires_at",
             "tag",
-            "output_upload_url",
-            "output_download_url",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -225,17 +220,11 @@ class JobAdmin(admin.ModelAdmin):
         "user__username",
         "user__email",
         "docker_image",
-        "output_upload_url",
-        "output_download_url",
     )
     ordering = ("-created_at",)
     autocomplete_fields = (
         "user",
         "validator",
-    )
-    readonly_fields = (
-        "output_upload_url",
-        "output_download_url",
     )
     inlines = [JobStatusInline]
 

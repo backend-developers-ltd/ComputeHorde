@@ -109,9 +109,6 @@ def dummy_job_params(settings):
         docker_image="",
         args=["arg1", "value1"],
         env={"ENV1": "VALUE1"},
-        output_upload_url="http://localhost/output/upload",
-        output_download_url="http://localhost/output/download",
-        output_download_url_expires_at=now() + settings.DOWNLOAD_PRESIGNED_URL_LIFETIME,
     )
 
 

@@ -1,83 +1,12 @@
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
-from datetime import timedelta
-from uuid import uuid4
 
 import pytest
-import requests
 from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext
-from django.utils.timezone import now
-from freezegun import freeze_time
 
 from ..models import Channel, Job, JobStatus, Miner, UserPreferences, Validator
-from ..utils import create_signed_download_url, create_signed_upload_url
-
-
-@pytest.mark.django_db(transaction=True)
-def test__job__autocreating_signed_urls(user, validator, miner, settings):
-    job = Job.objects.create(
-        user=user,
-        validator=validator,
-        miner=miner,
-    )
-    assert job.output_upload_url
-    assert job.output_download_url
-
-
-@pytest.mark.skip(reason="this makes actual request - cannot have this in CI")
-def test__signed_url__uploading_and_downloading(settings):
-    settings.OUTPUT_PRESIGNED_URL_LIFETIME = timedelta(seconds=30)
-    settings.DOWNLOAD_PRESIGNED_URL_LIFETIME = timedelta(seconds=30)
-
-    # generate url
-    filename = str(uuid4())
-    upload_url = create_signed_upload_url(filename)
-    download_url = create_signed_download_url(filename)
-    for url in (upload_url, download_url):
-        assert url.startswith("https://")
-        assert "r2.cloudflarestorage.com" in url
-
-    # upload sample file
-    content = b"test"
-    response = requests.put(upload_url, data=content, headers={"Content-type": "text/plain"}, timeout=3)
-    assert response.ok, response.content
-
-    # download sample file
-    response = requests.get(download_url, timeout=3)
-    assert response.ok, response.content
-    assert response.content == content
-
-
-@pytest.mark.django_db(transaction=True)
-def test__job__output_url_expiration(settings, user, connected_validator, miner):
-    """Check that output urls are created with correct expiration time and it works"""
-
-    settings.DOWNLOAD_PRESIGNED_URL_LIFETIME = timedelta(seconds=30)
-
-    now_ = now()
-    with freeze_time(now_):
-        job = Job.objects.create(
-            user=user,
-            validator=None,
-            output_upload_url="http://localhost/output/upload",
-        )
-        assert job.output_download_url
-        assert job.output_download_url_expires_at == now_ + timedelta(seconds=30)
-        assert job.is_download_url_expired() is False
-
-    with freeze_time(now_ + timedelta(seconds=30)):
-        assert job.is_download_url_expired() is False
-
-    with freeze_time(now_ + timedelta(seconds=31)):
-        assert job.is_download_url_expired() is True
-
-    with freeze_time(now_ + timedelta(seconds=60)):
-        job.save()
-
-        assert job.output_download_url_expires_at == now_ + timedelta(seconds=90)
-        assert job.is_download_url_expired() is False
 
 
 @pytest.mark.django_db(transaction=True)
@@ -86,8 +15,6 @@ def test__job__selecting_validator__failure__not_exist(user):
         Job.objects.create(
             user=user,
             validator=None,
-            output_upload_url="http://localhost/output/upload",
-            output_download_url="http://localhost/output/download",
         )
 
 
@@ -98,8 +25,6 @@ def test__job__selecting_validator__failure__not_connected(user, validator):
         Job.objects.create(
             user=user,
             validator=None,
-            output_upload_url="http://localhost/output/upload",
-            output_download_url="http://localhost/output/download",
         )
 
 
@@ -110,8 +35,6 @@ def test__job__selecting_validator__failure__not_authorized(user, validator):
         Job.objects.create(
             user=user,
             validator=None,
-            output_upload_url="http://localhost/output/upload",
-            output_download_url="http://localhost/output/download",
         )
 
 
@@ -121,8 +44,6 @@ def test__job__selecting_validator__success(user, connected_validator, miner):
     job = Job.objects.create(
         user=user,
         validator=None,
-        output_upload_url="http://localhost/output/upload",
-        output_download_url="http://localhost/output/download",
     )
     assert job.validator == connected_validator
 
@@ -146,8 +67,6 @@ def test__job__selecting_validator__user_preference(user, connected_validator, m
     job_kwargs = dict(
         user=user,
         validator=None,
-        output_upload_url="http://localhost/output/upload",
-        output_download_url="http://localhost/output/download",
     )
 
     # no matter how many times we request job, only preferred validators are chosen
@@ -177,8 +96,6 @@ def test__job__selecting_miner__user_preference(user, validator, miners):
     job_kwargs = dict(
         user=user,
         validator=validator,
-        output_upload_url="http://localhost/output/upload",
-        output_download_url="http://localhost/output/download",
     )
 
     # no matter how many times we request job, only preferred miners are chosen
@@ -205,8 +122,6 @@ async def test__job__selecting_miner__doesnt_exist(user, validator):
             user=user,
             validator=validator,
             miner=None,
-            output_upload_url="http://localhost/output/upload",
-            output_download_url="http://localhost/output/download",
         )
 
 
@@ -225,8 +140,6 @@ async def test__job__selecting_miner__unavailable(
             user=user,
             validator=validator,
             miner=None,
-            output_upload_url="http://localhost/output/upload",
-            output_download_url="http://localhost/output/download",
         )
 
 
