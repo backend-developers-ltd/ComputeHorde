@@ -109,7 +109,6 @@ def dummy_job_params(settings):
         docker_image="",
         args=["arg1", "value1"],
         env={"ENV1": "VALUE1"},
-        input_url="http://localhost/input",
         hf_repo_id="http://localhost/hf",
         hf_revision="123456",
         output_upload_url="http://localhost/output/upload",
