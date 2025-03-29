@@ -22,10 +22,7 @@ from compute_horde_core.output_upload import (
     SingleFileUpload,
     ZipAndHttpPutUpload,
 )
-from compute_horde_core.volume import (
-    HuggingfaceVolume,
-    MultiVolume,
-)
+from compute_horde_core.volume import MultiVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
@@ -216,13 +213,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     )
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
     use_gpu = models.BooleanField(default=False, help_text="Whether to use GPU for the job")
-    hf_repo_id = models.CharField(max_length=255, blank=True, default="", help_text="Huggingface model repo id")
-    hf_revision = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        help_text="Huggingface model revision id: branch name / tag / commit hash",
-    )
     output_upload_url = models.TextField(blank=True, help_text="URL for uploading output")
     output_download_url = models.TextField(blank=True, help_text="URL for retrieving output")
     output_download_url_expires_at = models.DateTimeField(blank=True)
@@ -454,18 +444,8 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 output_url=self.output_upload_url,
             )
         else:
-            if self.volumes or self.hf_repo_id:
-                subvolumes = []
-                if self.hf_repo_id:
-                    subvolumes.append(
-                        HuggingfaceVolume(
-                            repo_id=self.hf_repo_id,
-                            revision=self.hf_revision,
-                            relative_path="",
-                        )
-                    )
-                subvolumes.extend(self.volumes)
-                volume = MultiVolume(volumes=subvolumes)
+            if self.volumes:
+                volume = MultiVolume(volumes=self.volumes)
             else:
                 volume = None
             if self.output_upload_url or self.uploads:
