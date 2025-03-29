@@ -58,7 +58,6 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "args",
             "env",
             "use_gpu",
-            "output_download_url",
             "tag",
             "stdout",
             "volumes",
@@ -68,10 +67,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "target_validator_hotkey",
             "on_trusted_miner",
         )
-        read_only_fields = (
-            "created_at",
-            "output_download_url",
-        )
+        read_only_fields = ("created_at",)
 
     uploads = SmartSchemaField(schema=list[SingleFileUpload], required=False)
     volumes = SmartSchemaField(schema=list[MuliVolumeAllowedVolume], required=False)

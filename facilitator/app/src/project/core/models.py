@@ -20,10 +20,8 @@ from compute_horde.fv_protocol.facilitator_requests import (
 from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
-    ZipAndHttpPutUpload,
 )
 from compute_horde_core.volume import MultiVolume
-from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
@@ -40,7 +38,7 @@ from .schemas import (
     JobStatusMetadata,
     MuliVolumeAllowedVolume,
 )
-from .utils import create_signed_download_url, create_signed_upload_url, safe_config
+from .utils import safe_config
 
 log = get_logger(__name__)
 
@@ -213,9 +211,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     )
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
     use_gpu = models.BooleanField(default=False, help_text="Whether to use GPU for the job")
-    output_upload_url = models.TextField(blank=True, help_text="URL for uploading output")
-    output_download_url = models.TextField(blank=True, help_text="URL for retrieving output")
-    output_download_url_expires_at = models.DateTimeField(blank=True)
     target_validator_hotkey = models.TextField(blank=True, default=None, null=True, help_text="target validator")
     volumes = SchemaField(schema=list[MuliVolumeAllowedVolume], blank=True, default=list)
     uploads = SchemaField(schema=list[SingleFileUpload], blank=True, default=list)
@@ -248,9 +243,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         is_new = self.pk is None
 
         self.uuid = self.uuid or uuid4()
-        self.output_upload_url = self.output_upload_url or create_signed_upload_url(self.filename)
-        if self.is_download_url_expired():
-            self.reset_download_url()
 
         # if there is no validator selected -> we need a transaction for locking
         # active validators during selection process
@@ -389,17 +381,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         )
         return miners[0]
 
-    def is_download_url_expired(self) -> bool:
-        return (
-            not self.output_download_url
-            or not self.output_download_url_expires_at
-            or now() > self.output_download_url_expires_at
-        )
-
-    def reset_download_url(self) -> None:
-        self.output_download_url = create_signed_download_url(self.filename)
-        self.output_download_url_expires_at = now() + settings.DOWNLOAD_PRESIGNED_URL_LIFETIME
-
     @property
     def sender(self) -> str:
         return self.hotkey or self.user.username
@@ -441,17 +422,17 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 env=self.env,
                 use_gpu=self.use_gpu,
                 input_url="",
-                output_url=self.output_upload_url,
+                output_url="",
             )
         else:
             if self.volumes:
                 volume = MultiVolume(volumes=self.volumes)
             else:
                 volume = None
-            if self.output_upload_url or self.uploads:
+            if self.uploads:
                 output_upload = MultiUpload(
                     uploads=self.uploads,
-                    system_output=ZipAndHttpPutUpload(url=self.output_upload_url) if self.output_upload_url else None,
+                    system_output=None,
                 )
             else:
                 output_upload = None
