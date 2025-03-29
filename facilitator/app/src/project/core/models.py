@@ -25,7 +25,6 @@ from compute_horde_core.output_upload import (
 from compute_horde_core.volume import (
     HuggingfaceVolume,
     MultiVolume,
-    ZipUrlVolume,
 )
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -217,7 +216,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     )
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
     use_gpu = models.BooleanField(default=False, help_text="Whether to use GPU for the job")
-    input_url = models.URLField(blank=True, help_text="URL to the input data source", max_length=1000)
     hf_repo_id = models.CharField(max_length=255, blank=True, default="", help_text="Huggingface model repo id")
     hf_revision = models.CharField(
         max_length=255,
@@ -452,19 +450,12 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 args=self.args,
                 env=self.env,
                 use_gpu=self.use_gpu,
-                input_url=self.input_url,
+                input_url="",
                 output_url=self.output_upload_url,
             )
         else:
-            if self.input_url or self.volumes or self.hf_repo_id:
+            if self.volumes or self.hf_repo_id:
                 subvolumes = []
-                if self.input_url:
-                    subvolumes.append(
-                        ZipUrlVolume(
-                            contents=self.input_url,
-                            relative_path="",
-                        )
-                    )
                 if self.hf_repo_id:
                     subvolumes.append(
                         HuggingfaceVolume(
