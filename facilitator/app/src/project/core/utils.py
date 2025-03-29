@@ -2,7 +2,6 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
-import boto3
 import wandb
 from asgiref.sync import AsyncToSync, SyncToAsync
 from constance import config
@@ -14,14 +13,6 @@ if TYPE_CHECKING:
 
 
 log = get_logger(__name__)
-
-s3 = boto3.client(
-    service_name="s3",
-    endpoint_url=settings.R2_ENDPOINT_URL,
-    aws_access_key_id=settings.R2_ACCESS_KEY_ID,
-    aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
-    region_name=settings.R2_REGION_NAME,
-)
 
 
 def get_thread_sensitive_executor(loop):
@@ -92,57 +83,6 @@ class SafeConfig:
 
 
 safe_config = SafeConfig()
-
-
-def create_signed_upload_url(key: str) -> str:
-    """
-    Create a signed URL for executor's output.
-
-    https://developers.cloudflare.com/r2/api/s3/presigned-urls/
-    """
-    # R2: POST, which performs uploads via native HTML forms, is not currently supported.
-
-    # result = s3.generate_presigned_post(
-    #     Bucket=settings.R2_BUCKET_NAME,
-    #     Key=key,
-    #     ExpiresIn=int(expires_in.total_seconds()),
-    #     Conditions=[
-    #         ['content-length-range', 0, max_content_length],
-    #     ],
-    # )
-    # return result['url'], result['fields']
-    if not settings.R2_BUCKET_NAME:
-        return ""
-    return s3.generate_presigned_url(
-        ClientMethod="put_object",
-        Params={
-            "Bucket": settings.R2_BUCKET_NAME,
-            "Key": key,
-        },
-        ExpiresIn=int(settings.OUTPUT_PRESIGNED_URL_LIFETIME.total_seconds()),
-    )
-
-
-def create_signed_download_url(key: str) -> str:
-    if not settings.R2_BUCKET_NAME:
-        return ""
-    return s3.generate_presigned_url(
-        ClientMethod="get_object",
-        Params={
-            "Bucket": settings.R2_BUCKET_NAME,
-            "Key": key,
-        },
-        ExpiresIn=int(settings.DOWNLOAD_PRESIGNED_URL_LIFETIME.total_seconds()),
-    )
-
-
-def upload_data(key: str, data: bytes) -> str:
-    s3.put_object(
-        Bucket=settings.R2_BUCKET_NAME,
-        Key=key,
-        Body=data,
-    )
-    return create_signed_download_url(key)
 
 
 def is_validator(neuron: "NeuronInfo") -> bool:
