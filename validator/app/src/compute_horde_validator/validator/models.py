@@ -6,8 +6,10 @@ from enum import IntEnum
 from os import urandom
 from typing import Self
 
+from .generation_profile import PromptGenerationProfile
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde_core.executor_class import ExecutorClass
 from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde_core.volume import Volume, ZipUrlVolume
@@ -440,6 +442,11 @@ class PromptSeries(models.Model):
     s3_url = models.URLField(max_length=1000)
     created_at = models.DateTimeField(default=now)
     generator_version = models.PositiveSmallIntegerField()
+    generation_profile = models.CharField(
+        max_length=255,
+        choices=[(profile, profile) for profile in PromptGenerationProfile],
+        default=PromptGenerationProfile.default_a6000
+    )
 
 
 class SolveWorkload(models.Model):
@@ -452,6 +459,11 @@ class SolveWorkload(models.Model):
     s3_url = models.URLField(max_length=1000)
     created_at = models.DateTimeField(default=now)
     finished_at = models.DateTimeField(null=True, default=None, db_index=True)
+    executor_class = models.CharField(
+        max_length=255,
+        choices=[(cls, cls) for cls in ExecutorClass],
+        default=ExecutorClass.always_on__llm__a6000
+    )
 
     def __str__(self):
         return f"uuid: {self.workload_uuid} - seed: {self.seed}"
