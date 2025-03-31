@@ -9,6 +9,7 @@ from django.utils.safestring import mark_safe
 from .models import (
     GPU,
     Channel,
+    HotkeyWhitelist,
     Job,
     JobFeedback,
     JobStatus,
@@ -281,6 +282,12 @@ class JobFeedbackAdmin(admin.ModelAdmin):
 
     def signature_info__signature_type(self, obj):
         return obj.signature_info.signature_type
+
+
+@register(HotkeyWhitelist)
+class HotkeyWhitelistAdmin(admin.ModelAdmin):
+    list_display = ("ss58_address",)
+    search_fields = ("ss58_address",)
 
 
 # TODO: deprecate

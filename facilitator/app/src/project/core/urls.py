@@ -9,6 +9,8 @@ from .views import (
     JobListView,
     RawScriptJobCreateView,
     api_token_view,
+    auth_login_view,
+    auth_nonce_view,
 )
 
 urlpatterns = [
@@ -25,4 +27,6 @@ urlpatterns = [
         get_schema_view(title="Compute Horde Facilitator", description="API creating organic jobs", version="1.0.0"),
         name="openapi-schema",
     ),
+    path("auth/nonce", auth_nonce_view, name="auth_nonce"),
+    path("auth/login", auth_login_view, name="auth_login"),
 ]

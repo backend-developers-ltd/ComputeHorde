@@ -46,6 +46,7 @@ dependencies = [
     "pyyaml>=6.0.1",
     "compute-horde",
     "compute-horde-sdk",
+    "PyJWT>=2.10.0"
 ]
 description = "Compute Horde app facilitating interaction between end users and Validators"
 authors = [{name = "Backend Developers LTD"}]

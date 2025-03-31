@@ -16,7 +16,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from structlog import get_logger
 
-from .authentication import HotkeyAuthentication
+from .authentication import JWTAuthentication
 from .middleware.signature_middleware import require_signature
 from .models import Job, JobCreationDisabledError, JobFeedback
 from .schemas import MuliVolumeAllowedVolume
@@ -161,7 +161,7 @@ class BaseCreateJobViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
     permission_classes = (IsAuthenticated | RequestHasHotkey,)
 
     def get_authenticators(self) -> list[BaseAuthentication]:
-        return super().get_authenticators() + [HotkeyAuthentication()]
+        return super().get_authenticators() + [JWTAuthentication()]
 
     def perform_create(self, serializer):
         try:
@@ -205,7 +205,7 @@ class JobViewSet(mixins.RetrieveModelMixin, mixins.ListModelMixin, viewsets.Gene
     def get_authenticators(self) -> list[BaseAuthentication]:
         authenticators = super().get_authenticators()
         if self.detail:
-            authenticators.append(HotkeyAuthentication())
+            authenticators.append(JWTAuthentication())
         return authenticators
 
     def get_queryset(self) -> QuerySet:
