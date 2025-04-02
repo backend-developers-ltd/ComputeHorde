@@ -32,6 +32,11 @@ paving the way for Bittensor to scale beyond its current limitations to support 
   Currently, **A6000** is the supported class, with **A100** coming next.
   The end goal is to eventually support all GPU types/configurations required by validators across Bittensor subnets.
 
+- **Developer SDK for Easy Integration**  
+  A Python SDK is available to help **subnet owners and validators** run jobs on ComputeHorde.  
+  See [ComputeHorde SDK README](compute_horde_sdk/README.md#readme) for installation and usage examples.
+
+
 ## Bittensor Context
 
 Bittensor is a decentralized network designed to ensure that AI, the most critical technology of our era, remains accessible to everyone and free from the control of centralized entities.
@@ -44,6 +49,17 @@ This is achieved by distributing $TAO tokens to incentivize:
 
 Bittensor's end goal is to create an unstoppable, self-sustaining ecosystem free from single-point control, enabling innovation and resilience for the entire network.
 ComputeHorde adds GPU-powered validation to this ecosystem, helping other subnets operate effectively without relying on centralized cloud services.
+
+## Using ComputeHorde to Power Other Subnets
+
+If you're a **subnet owner or validator** looking to access scalable, decentralized GPU compute power from ComputeHorde,
+check out the [ComputeHorde SDK](compute_horde_sdk/README.md#readme).
+
+The SDK allows you to:
+- **Submit jobs easily** from your own subnet validator code.
+- Perform **cross-validation** to verify result integrity and protect against malicious miners.
+- **Reduce infrastructure costs** by eliminating the need for physical GPUs.
+- **Accelerate validation** by leveraging ComputeHorde’s ready-to-go GPU pool.
 
 ## Scoring Mechanism
 
@@ -155,6 +171,7 @@ This encourages **variance**, which is essential for preventing [weight-copying]
 - ComputeHorde mainnet netuid: 12
 - ComputeHorde testnet netuid: 174
 - [ComputeHorde channel](https://discordapp.com/channels/799672011265015819/1201941624243109888) within Bittensor discord
+- [ComputeHorde SDK README](compute_horde_sdk/README.md#readme) for subnet owners & validators
 - Information dashboards:
   - [Subnet 12 health monitor](https://grafana.bactensor.io/d/subnet/metagraph-subnet?var-subnet=12)
   - [Subnet 12 TaoStats](https://taostats.io/subnets/12) 
@@ -363,3 +380,4 @@ To start all the core services locally and be able to schedule jobs that don't r
 etc.) go to run [screen](local_stack/run_in_screen.sh). Once all the tabs look like ready, execute
 [hello_world](local_stack/send_hello_world_job.py). This setup does not require (currently) a subtensor, is 
 self-contained and should run on anything that has a CPU, RAM and an operating system. And docker.
+

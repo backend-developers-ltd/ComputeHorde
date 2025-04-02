@@ -68,6 +68,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
+from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot
 from .scoring import score_batches
 
@@ -579,9 +580,7 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-async def run_admin_job_request(
-    job_request_id: int, callback=None, *, miner_axon_info: bittensor.AxonInfo | None = None
-):
+async def run_admin_job_request(job_request_id: int, callback=None):
     job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
         id=job_request_id
     )
@@ -599,17 +598,12 @@ async def run_admin_job_request(
         except Exception:
             raise
 
-        # Explicit miner axon info overrides miner address
-        miner_ip = miner_axon_info.ip if miner_axon_info else miner.address
-        miner_ip_type = miner_axon_info.ip_type if miner_axon_info else miner.ip_version
-        miner_port = miner_axon_info.port if miner_axon_info else miner.port
-
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
             miner=miner,
-            miner_address=miner_ip,
-            miner_address_ip_version=miner_ip_type,
-            miner_port=miner_port,
+            miner_address=miner.address,
+            miner_address_ip_version=miner.ip_version,
+            miner_port=miner.port,
             executor_class=job_request.executor_class,
             job_description="Validator Job from Admin Panel",
             block=current_block,
@@ -618,8 +612,8 @@ async def run_admin_job_request(
         my_keypair = get_keypair()
         miner_client = MinerClient(
             miner_hotkey=miner.hotkey,
-            miner_address=miner_ip,
-            miner_port=miner_port,
+            miner_address=miner.address,
+            miner_port=miner.port,
             job_uuid=str(job.job_uuid),
             my_keypair=my_keypair,
         )
@@ -1188,10 +1182,11 @@ def fetch_metagraph(subtensor: bittensor.subtensor, block=None):
 
 
 def save_metagraph_snapshot(
-    metagraph: Metagraph, metagraph_type=MetagraphSnapshot.SnapshotType.LATEST
+    metagraph: Metagraph,
+    snapshot_type: MetagraphSnapshot.SnapshotType = MetagraphSnapshot.SnapshotType.LATEST,
 ) -> None:
     MetagraphSnapshot.objects.update_or_create(
-        id=metagraph_type,  # current metagraph snapshot
+        id=snapshot_type,  # current metagraph snapshot
         defaults={
             "block": metagraph.block.item(),
             "updated_at": now(),
@@ -1302,7 +1297,7 @@ def sync_metagraph() -> None:
     if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
         new_cycle_start_metagraph = fetch_metagraph(subtensor, block=current_cycle.start)
         save_metagraph_snapshot(
-            new_cycle_start_metagraph, metagraph_type=MetagraphSnapshot.SnapshotType.CYCLE_START
+            new_cycle_start_metagraph, snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START
         )
 
 
@@ -1633,9 +1628,10 @@ async def execute_organic_job_request_on_worker(
         args=(job_request.model_dump(), miner.hotkey),
         expires=600,
     )
+    timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
     # Note - thread sensitive is essential otherwise the wait will block the sync thread.
     # If this poses to be a problem, another approach is to  asyncio.sleep then poll for result (in a loop)
-    await sync_to_async(future_result.get, thread_sensitive=False)(timeout=600)
+    await sync_to_async(future_result.get, thread_sensitive=False)(timeout=timeout)
     return await OrganicJob.objects.aget(job_uuid=job_request.uuid)
 
 

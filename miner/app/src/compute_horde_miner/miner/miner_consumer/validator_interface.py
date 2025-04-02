@@ -564,7 +564,10 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
         job_uuid = str(job.job_uuid)
         assert job_uuid == msg.job_uuid
-        await self.send(msg.model_copy(update={"executor_token": None}).model_dump_json())
+        new_msg = msg.model_copy()
+        new_msg.executor_token = None
+        new_msg.miner_signature = get_miner_signature(new_msg)
+        await self.send(new_msg.model_dump_json())
         logger.debug(
             f"Streaming readiness for job {job_uuid} reported to validator {self.validator_key}"
         )

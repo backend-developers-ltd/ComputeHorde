@@ -1,7 +1,7 @@
 Client
 ======
 
-The :class:`~compute_horde_sdk.v1.ComputeHordeClient` class provides an interface for interacting with the Compute Horde service,
+The :class:`~compute_horde_sdk.v1.ComputeHordeClient` class provides an interface for interacting with the ComputeHorde service,
 which allows users to run jobs on decentralized, scalable compute resources.
 This class includes methods for creating, managing, and retrieving jobs.
 

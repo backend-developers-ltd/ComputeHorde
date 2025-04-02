@@ -27,6 +27,7 @@ from compute_horde.protocol_messages import (
     V0JobFinishedRequest,
     ValidatorToMinerMessage,
 )
+from compute_horde.utils import ValidatorInfo
 from django.conf import settings
 from pydantic import TypeAdapter
 
@@ -373,6 +374,13 @@ class MockNeuron:
         self.uid = uid
         self.stake = bittensor.Balance((uid + 1) * 1001.0)
         self.axon_info = axon_info
+
+
+def neurons_to_validator_infos(neurons: list[MockNeuron]) -> list[ValidatorInfo]:
+    return [
+        ValidatorInfo(uid=neuron.uid, hotkey=neuron.hotkey, stake=neuron.stake.tao)
+        for neuron in neurons
+    ]
 
 
 class MockBlock:

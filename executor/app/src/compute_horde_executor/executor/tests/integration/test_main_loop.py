@@ -79,7 +79,7 @@ class CommandTested(Command):
         self.MINER_CLIENT_CLASS = partial(MinerClient, transport=transport)
         super().__init__(*args, **kwargs)
 
-    async def is_nvidia_toolkit_version_safe_cve_2024_0132(self):
+    async def is_nvidia_toolkit_version_safe(self):
         is_toolkit_installed = None
 
         try:
@@ -106,10 +106,10 @@ class CommandTested(Command):
             is_toolkit_installed = True
 
         if is_toolkit_installed:
-            return await super().is_nvidia_toolkit_version_safe_cve_2024_0132()
+            return await super().is_nvidia_toolkit_version_safe()
         else:
             logger.warning(
-                "NVIDIA Container Toolkit not installed - skipping CVE-2024-0132 in tests"
+                "NVIDIA Container Toolkit not installed - skipping safe toolkit version check in tests"
             )
             return True
 
@@ -275,6 +275,7 @@ def test_main_loop_streaming_job():
             "public_key": mock.ANY,
             "ip": None,
             "port": mock.ANY,
+            "miner_signature": None,
         },
         {
             "message_type": "V0MachineSpecsRequest",

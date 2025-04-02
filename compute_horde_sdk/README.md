@@ -1,64 +1,137 @@
-# compute_horde_sdk
-&nbsp;[![Continuous Integration](https://github.com/backend-developers-ltd/compute-horde-sdk/workflows/Continuous%20Integration/badge.svg)](https://github.com/backend-developers-ltd/compute-horde-sdk/actions?query=workflow%3A%22Continuous+Integration%22)&nbsp;[![License](https://img.shields.io/pypi/l/compute_horde_sdk.svg?label=License)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![python versions](https://img.shields.io/pypi/pyversions/compute_horde_sdk.svg?label=python%20versions)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![PyPI version](https://img.shields.io/pypi/v/compute_horde_sdk.svg?label=PyPI%20version)](https://pypi.python.org/pypi/compute_horde_sdk)
+# ComputeHorde SDK – Scalable GPU Power for Subnet Owners & Validators 
+&nbsp;[![Compute Horde SDK CI](https://github.com/backend-developers-ltd/ComputeHorde/workflows/Compute%20Horde%20SDK%20CI/badge.svg)](https://github.com/backend-developers-ltd/ComputeHorde/actions?query=workflow%3A%22Compute+Horde+SDK+CI%22)&nbsp;[![License](https://img.shields.io/pypi/l/compute_horde_sdk.svg?label=License)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![python versions](https://img.shields.io/pypi/pyversions/compute_horde_sdk.svg?label=python%20versions)](https://pypi.python.org/pypi/compute_horde_sdk)&nbsp;[![PyPI version](https://img.shields.io/pypi/v/compute_horde_sdk.svg?label=PyPI%20version)](https://pypi.python.org/pypi/compute_horde_sdk)
+
+The **ComputeHorde SDK** enables **Bittensor subnet owners to improve the quality** of their subnets by providing **validators with cost-effective, scalable compute resources**.
+Instead of requiring validators to maintain their own physical GPUs, ComputeHorde offers on-demand decentralized access to trustworthy hardware, 
+**reducing costs and increasing validation power**.
+
+## Why Use ComputeHorde? 
+:heavy_check_mark: **Lower Costs** – Validators don’t need to buy, manage, or maintain GPUs.
+
+:heavy_check_mark: **Massive Scalability** – Instant access to as many trustworthy GPUs as needed. 
+
+:heavy_check_mark: **Faster Validation** – Increased compute power leads to better validation. 
+
+:heavy_check_mark: **Secure by Design** – Only computation tasks are offloaded; private keys & weight setting remain on validator machines. 
+
+## How It Works for Subnet Owners
+Subnet owners **prepare validation code** that can run **both on ComputeHorde and on physical GPUs**. 
+This ensures validators can seamlessly opt in to use ComputeHorde’s computing power. 
+
+By enabling ComputeHorde support in their subnet, **subnet owners** benefit by: 
+
+:heavy_check_mark: **Attracting More Validators** – Lower costs and easier maintenance make validators more likely to participate. 
+
+:heavy_check_mark: **Increasing Available Compute Power** – More GPU resources mean faster, higher-quality validation. 
+
+:heavy_check_mark: **Improving Subnet Quality** – Stronger validation enhances the reliability and competitiveness of the subnet’s commodity. 
+
+## How It Works for Validators
+Each validator **chooses whether to use ComputeHorde**. To gain access to ComputeHorde’s stake-based compute power, a validator must: 
+
+:heavy_check_mark: Be or become a ComputeHorde validator. 
+
+:heavy_check_mark: Partner with an existing ComputeHorde validator. 
+
+## We’re Here to Help 
+We actively support **subnet owners and validators** in integrating the SDK—both technically and business-wise. 
+If you need guidance, **reach out to us** on the [ComputeHorde Discord channel](https://discordapp.com/channels/799672011265015819/1201941624243109888), 
+and we’ll ensure your validator is ComputeHorde-ready. 
+
+For more details, see the [ComputeHorde README](https://github.com/backend-developers-ltd/ComputeHorde#readme). 
+
+---
 
 ## Installation
+
+To get started, install the ComputeHorde SDK with:  
 
 ```
 pip install compute-horde-sdk
 ```
 
-## Usage
+For detailed API documentation, visit the [ComputeHorde SDK Reference](https://sdk.computehorde.io).
+
 
 > [!IMPORTANT]
 > This package uses [ApiVer](#versioning), make sure to import `compute_horde_sdk.v1`.
 
-Simple example:
+
+## Running Jobs on ComputeHorde
+
+The **ComputeHorde SDK** allows validators to request ComputeHorde execution effortlessly. 
+Below are examples demonstrating **basic job execution**, **advanced job configuration**, **cross-validation**, and **job management**.
+
+### **1. Requesting ComputeHorde Execution (Simplest Example)**
+This minimal example shows how to submit a job to ComputeHorde with **basic parameters**:
 
 ```python
 import asyncio
+
 import bittensor
-from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass
+
+from compute_horde_sdk.v1 import ComputeHordeClient, ComputeHordeJobSpec, ExecutorClass
 
 wallet = bittensor.wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
     hotkey=wallet.hotkey,
-    compute_horde_validator_hotkey="...",  # In the common case it's going to be the same as the ss58 address of the hotkey above.
+    compute_horde_validator_hotkey="...",  # usually the ss58_address of the hotkey above
 )
 
+
 async def main():
-    # Create a job to run on the Compute Horde.
-    job = await compute_horde_client.create_job(
+    # Define your job
+    job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
         docker_image="my-username/my-image:latest",
-        artifact_dir="/artifacts",
     )
 
-    await job.wait(timeout=10 * 60)
+    # Run the job
+    job = await compute_horde_client.run_until_complete(job_spec)
 
-    print(job.status)  # Should be "Completed".
+    print(job.status)  # should be "Completed".
+
 
 asyncio.run(main())
 ```
 
-Advanced example:
+### **2. Advanced Job Configuration**
+This example demonstrates how to submit a job with **additional parameters**, including:
+- arguments & environment variables
+- input & output volume configuration
+- artifact (results) storage
+
+For a full list of available parameters and detailed descriptions, see the [ComputeHorde SDK Reference](https://sdk.computehorde.io/master/api/client.html).
+
 
 ```python
 import asyncio
+
 import bittensor
-from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass, InlineInputVolume, HuggingfaceInputVolume, HTTPInputVolume, HTTPOutputVolume
+
+from compute_horde_sdk.v1 import (
+    ComputeHordeClient,
+    ComputeHordeJobSpec,
+    ExecutorClass,
+    HTTPInputVolume,
+    HTTPOutputVolume,
+    HuggingfaceInputVolume,
+    InlineInputVolume,
+)
 
 wallet = bittensor.wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
     hotkey=wallet.hotkey,
-    compute_horde_validator_hotkey="...",  # In the common case it's going to be the same as the ss58 address of the hotkey above.
+    compute_horde_validator_hotkey="...",  # usually the ss58_address of the hotkey above
 )
 
+
 async def main():
-    # Create a job to run on the Compute Horde.
-    job = await compute_horde_client.create_job(
+    # Define your job
+    job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
         docker_image="my-username/my-image:latest",
@@ -84,27 +157,52 @@ async def main():
         },
     )
 
-    await job.wait(timeout=10 * 60)
+    # Run the job
+    job = await compute_horde_client.run_until_complete(
+        job_spec=job_spec,
+        timeout=300,  # retry/wait for up to 300 seconds for the job to complete
+        max_attempts=5,  # try at most 5 times, if the job fails
+    )
 
-    print(job.status)  # Should be "Completed".
+    print(job.status)  # should be "Completed".
     print(job.result)
+
 
 asyncio.run(main())
 ```
 
-Get job by UUID:
+### 3. **Cross-Validation**
 
+To ensure fairness and detect potential cheating, **cross-validation** should be performed on **1-2% of submitted jobs**. 
+This is done by **executing a copy** of a job on a **trusted miner** and comparing the results.
+
+Flag `on_trusted_miner=True` tells [`create_job`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.create_job) 
+to run the duplicate job on the **ComputeHorde validator’s trusted miner** instead of regular ComputeHorde miners.
+
+**If results differ, report the cheating miner** using 
+[`report_cheated_job()`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.report_cheated_job) method. 
+The details of the punishment are described in [ComputeHorde's README](https://github.com/backend-developers-ltd/ComputeHorde#formula-calculated-per-validator-in-peak-cycles). 
+
+Cross-validation is a crucial mechanism to **ensure honest mining and maintain ComputeHorde’s reliability**.
+
+### **4. Managing ComputeHorde Jobs**
+
+#### **Retrieve a Job by UUID**
+If you need to fetch a specific job, use [`get_job()`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.get_job):
 
 ```python
 job = await client.get_job("7b522daa-e807-4094-8d96-99b9a863f960")
 ```
 
-Iterate over all of your jobs:
+#### **Iterate Over All Jobs**  
+To process all of your submitted jobs, use [`iter_jobs()`](https://sdk.computehorde.io/master/api/client.html#compute_horde_sdk.v1.ComputeHordeClient.iter_jobs):  
 
 ```python
 async for job in client.iter_jobs():
     process(job)
 ```
+
+If `job.status` is `"Completed"`, the `job.result` should be available.
 
 ## Versioning
 

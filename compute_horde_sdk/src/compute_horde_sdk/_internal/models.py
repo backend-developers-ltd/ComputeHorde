@@ -18,7 +18,7 @@ OUTPUT_MOUNT_PATH_PREFIX = "/output/"
 
 class ComputeHordeJobStatus(StrEnum):
     """
-    Status of a Compute Horde job.
+    Status of a ComputeHorde job.
     """
 
     SENT = "Sent"
@@ -34,14 +34,14 @@ class ComputeHordeJobStatus(StrEnum):
         return self in (self.SENT, self.ACCEPTED)
 
     def is_successful(self) -> bool:
-        """Check if the job has finished unsuccessfully"""
+        """Check if the job has finished successfully."""
         return self == self.COMPLETED
 
 
 @dataclass
 class ComputeHordeJobResult:
     """
-    Result of a Compute Horde job.
+    Result of a ComputeHorde job.
     """
 
     stdout: str
