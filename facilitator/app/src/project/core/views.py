@@ -27,10 +27,6 @@ from .forms import DockerImageJobForm, GenerateAPITokenForm, RawScriptJobForm
 from .models import Job, Miner, Validator
 from .authentication import is_hotkey_allowed
 
-JWT_LIFETIME = 3600
-
-NONCE_LIFETIME = 300
-
 
 class SignupView(AllauthSignupView):
     """Regular view but redirects if public registration is disabled"""
