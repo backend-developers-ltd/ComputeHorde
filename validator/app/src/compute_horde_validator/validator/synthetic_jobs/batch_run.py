@@ -1570,7 +1570,7 @@ def _limit_non_peak_executors_per_class(ctx: BatchContext) -> None:
                 allowed_count = ctx.batch_config.default_executor_limits_for_missed_peak.get(
                     executor_class, 1
                 )
-            ctx.executors[hotkey][executor_class] = allowed_count
+            ctx.executors[hotkey][executor_class] = min(allowed_count, count)
 
 
 async def _multi_close_client(ctx: BatchContext) -> None:
