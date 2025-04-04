@@ -89,12 +89,14 @@ def keypair():
 
 @pytest.fixture
 def compute_horde_client(keypair, apiver_module) -> "ComputeHordeClient":
-    return apiver_module.ComputeHordeClient(
+    client = apiver_module.ComputeHordeClient(
         hotkey=keypair,
         compute_horde_validator_hotkey="abcdef",
         job_queue="sn123",
         facilitator_url=TEST_FACILITATOR_URL,
     )
+    client._token = "test_jwt_token"
+    return client
 
 
 @pytest.fixture
@@ -131,6 +133,8 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
         job_queue="sn123",
         facilitator_url=TEST_FACILITATOR_URL,
     )
+
+    client._token = "test_jwt_token"
 
     job = await client.create_job(
         apiver_module.ComputeHordeJobSpec(
@@ -663,3 +667,38 @@ async def test_run_until_complete__timeout(
 
     with pytest.raises(apiver_module.ComputeHordeJobTimeoutError):
         await compute_horde_client.run_until_complete(job_spec, timeout=timeout)
+
+
+@pytest.mark.asyncio
+async def test_lazy_authentication_flow(apiver_module, compute_horde_client, httpx_mock):
+    """
+    Test that authentication is performed lazily on the first request.
+    """
+
+    # Ensure the client is not authenticated
+    compute_horde_client._token = None
+
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/auth/nonce",
+        json={"nonce": "test_nonce"},
+    )
+
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/auth/login",
+        json={"token": "test_token"},
+    )
+
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"),
+    )
+
+    job = await compute_horde_client.get_job(TEST_JOB_UUID)
+
+    assert compute_horde_client._token == "test_token"
+    requests = httpx_mock.get_requests()
+    job_request = requests[-1]
+    assert "Authorization" in job_request.headers
+    assert job_request.headers["Authorization"] == "Bearer test_token"
+    assert job.uuid == TEST_JOB_UUID
+    assert job.status == "Accepted"

@@ -426,6 +426,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
+        "project.core.authentication.JWTAuthentication",
     ],
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
@@ -438,3 +439,6 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "project.core.exception_handlers.api_exception_handler",
     "DEFAULT_SCHEMA_CLASS": "django_pydantic_field.rest_framework.AutoSchema",
 }
+
+NONCE_LIFETIME = env("NONCE_LIFETIME", default=300)
+JWT_LIFETIME = env("JWT_LIFETIME", default=3600)

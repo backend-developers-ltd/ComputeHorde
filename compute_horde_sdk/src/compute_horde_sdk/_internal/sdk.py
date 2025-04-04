@@ -213,6 +213,34 @@ class ComputeHordeClient:
         self.facilitator_url = facilitator_url
         self._client = httpx.AsyncClient(base_url=self.facilitator_url, follow_redirects=True)
         self._signer = BittensorWalletSigner(hotkey)
+        self._token: str | None = None
+
+    async def authenticate(self) -> None:
+        nonce_url = urljoin(self.facilitator_url, "auth/nonce")
+        try:
+            response = await self._client.get(nonce_url)
+        except httpx.HTTPError as e:
+            raise ComputeHordeError(f"Nonce request failed: {e}") from e
+
+        nonce = response.json().get("nonce")
+        if not nonce:
+            raise ComputeHordeError("Failed to obtain nonce from facilitator")
+
+        signature = self.hotkey.sign(nonce.encode("utf-8")).hex()
+
+        login_url = urljoin(self.facilitator_url, "auth/login")
+        payload = {"hotkey": self.hotkey.ss58_address, "signature": signature, "nonce": nonce}
+
+        try:
+            login_response = await self._client.post(login_url, json=payload)
+        except httpx.HTTPError as e:
+            raise ComputeHordeError(f"Login request failed: {e}") from e
+
+        token = login_response.json().get("token")
+        if not token:
+            raise ComputeHordeError("Failed to obtain JWT token from facilitator")
+        self._token = token
+        logger.info("Authenticated successfully")
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception(_retryable_exception),
@@ -232,7 +260,10 @@ class ComputeHordeClient:
         """
         :return: Response content as string.
         """
-        auth_headers = self._get_authentication_headers(method, urljoin(self.facilitator_url, url))
+        if not self._token:
+            await self.authenticate()
+
+        auth_headers = self._get_authentication_headers()
         request = self._client.build_request(
             method=method,
             url=url,
@@ -268,26 +299,14 @@ class ComputeHordeClient:
         signature = self._signer.sign(payload=payload)
         return signature_to_headers(signature, SignatureScope.FullRequest)
 
-    def _get_authentication_headers(
-        self,
-        method: str,
-        url: str,
-    ) -> dict[str, str]:
-        headers = {
+    def _get_authentication_headers(self) -> dict[str, str]:
+        if not self._token:
+            raise ComputeHordeError("Not authenticated")
+        return {
+            "Authorization": f"Bearer {self._token}",
             "Realm": "mainnet",
             "SubnetID": "12",
-            "Nonce": str(time.time()),
-            "Hotkey": self.hotkey.ss58_address,
         }
-
-        headers_str = json.dumps(headers, sort_keys=True)
-
-        data_to_sign = f"{method}{url}{headers_str}".encode()
-
-        signature = self.hotkey.sign(data_to_sign).hex()
-        headers["Signature"] = signature
-
-        return headers
 
     async def report_cheated_job(self, job_uuid: str) -> str:
         """
