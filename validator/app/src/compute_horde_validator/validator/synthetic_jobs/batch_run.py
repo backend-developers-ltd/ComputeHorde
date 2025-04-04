@@ -1557,20 +1557,20 @@ def _limit_non_peak_executors_per_class(ctx: BatchContext) -> None:
     ).first()
 
     peak_counts = get_executor_counts(peak_batch)
+    non_peak_ratio = ctx.batch_config.non_peak_cycle_executor_min_ratio
     for hotkey, executors in ctx.executors.items():
         miner_peak_counts = peak_counts.get(hotkey, {})
-        for executor_class, count in executors.items():
+        for executor_class, miner_reported_count in executors.items():
             if executor_class in miner_peak_counts:
-                peak_count = miner_peak_counts.get(executor_class, 0)
-                max_count = math.ceil(
-                    peak_count * ctx.batch_config.non_peak_cycle_executor_min_ratio
-                )
-                allowed_count = min(max_count, count)
+                # Miner was present during peak
+                miner_peak_count = miner_peak_counts.get(executor_class, 0)
+                allowed_count = math.ceil(miner_peak_count * non_peak_ratio)
             else:
+                # Miner was not present during peak
                 allowed_count = ctx.batch_config.default_executor_limits_for_missed_peak.get(
-                    executor_class, 0
+                    executor_class, 1
                 )
-            ctx.executors[hotkey][executor_class] = allowed_count
+            ctx.executors[hotkey][executor_class] = min(miner_reported_count, allowed_count)
 
 
 async def _multi_close_client(ctx: BatchContext) -> None:
