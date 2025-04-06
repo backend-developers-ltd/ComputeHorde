@@ -57,6 +57,10 @@ JobAttemptCallbackType: TypeAlias = (
 )
 
 
+class ExpiredTokenError(ComputeHordeError):
+    pass
+
+
 def _retryable_status_code(status_code: int) -> bool:
     return status_code == 429 or status_code >= 500
 
@@ -65,6 +69,9 @@ def _retryable_exception(exc: BaseException) -> bool:
     """Retry requests, if request failed for with a retryable exception"""
     if not isinstance(exc, ComputeHordeError):
         return False
+
+    if isinstance(exc, ExpiredTokenError):
+        return True
 
     if isinstance(exc.__cause__, httpx.HTTPStatusError):
         return _retryable_status_code(exc.__cause__.response.status_code)
@@ -213,6 +220,7 @@ class ComputeHordeClient:
         self.facilitator_url = facilitator_url
         self._client = httpx.AsyncClient(base_url=self.facilitator_url, follow_redirects=True)
         self._signer = BittensorWalletSigner(hotkey)
+        self._token_lock = asyncio.Lock()
         self._token: str | None = None
 
     async def authenticate(self) -> None:
@@ -222,7 +230,12 @@ class ComputeHordeClient:
         except httpx.HTTPError as e:
             raise ComputeHordeError(f"Nonce request failed: {e}") from e
 
-        nonce = response.json().get("nonce")
+        try:
+            data = response.json()
+        except Exception as e:
+            raise ComputeHordeError("Failed to parse nonce response") from e
+
+        nonce = data.get("nonce")
         if not nonce:
             raise ComputeHordeError("Failed to obtain nonce from facilitator")
 
@@ -236,7 +249,12 @@ class ComputeHordeClient:
         except httpx.HTTPError as e:
             raise ComputeHordeError(f"Login request failed: {e}") from e
 
-        token = login_response.json().get("token")
+        try:
+            data = login_response.json()
+        except Exception as e:
+            raise ComputeHordeError("Failed to parse login response") from e
+
+        token = data.get("token")
         if not token:
             raise ComputeHordeError("Failed to obtain JWT token from facilitator")
         self._token = token
@@ -260,10 +278,11 @@ class ComputeHordeClient:
         """
         :return: Response content as string.
         """
-        if not self._token:
-            await self.authenticate()
+        async with self._token_lock:
+            if not self._token:
+                await self.authenticate()
+            auth_headers = self._get_authentication_headers()
 
-        auth_headers = self._get_authentication_headers()
         request = self._client.build_request(
             method=method,
             url=url,
@@ -281,6 +300,11 @@ class ComputeHordeClient:
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
             logger.error("Response status=%d: %s", e.response.status_code, e.response.text)
+            if e.response.status_code == 401 and "Token expired" in e.response.text:
+                async with self._token_lock:
+                    self._token = None
+                logger.info("Token expired, re-authenticating")
+                raise ExpiredTokenError("Token expired") from e
             if e.response.status_code == 404:
                 raise ComputeHordeNotFoundError(f"Resource under {request.url} not found") from e
             raise ComputeHordeError(

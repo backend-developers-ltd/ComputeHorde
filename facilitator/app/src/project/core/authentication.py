@@ -1,6 +1,6 @@
 import jwt
 from django.conf import settings
-from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
+from django.contrib.auth.models import AbstractBaseUser, User
 from django.http import HttpRequest
 from rest_framework import authentication
 from rest_framework.exceptions import AuthenticationFailed
@@ -12,10 +12,7 @@ log = get_logger(__name__)
 
 
 def is_hotkey_allowed(hotkey: str) -> bool:
-    return HotkeyWhitelist.objects.filter(ss58_address=hotkey).exists() and \
-           (Validator.objects.filter(ss58_address=hotkey, is_active=True) or
-            Miner.objects.filter(ss58_address=hotkey, is_active=True)
-            )
+    return HotkeyWhitelist.objects.filter(ss58_address=hotkey).exists()
 
 
 class JWTAuthentication(authentication.BaseAuthentication):
@@ -51,5 +48,12 @@ class JWTAuthentication(authentication.BaseAuthentication):
         if not is_hotkey_allowed(hotkey):
             raise AuthenticationFailed("Unauthorized hotkey.")
 
+        user, created = User.objects.get_or_create(
+            username=hotkey,
+            defaults={"is_active": True}
+        )
+        if created:
+            user.set_unusable_password()
+            user.save()
         request.hotkey = hotkey
-        return AnonymousUser(), hotkey
+        return user, hotkey
