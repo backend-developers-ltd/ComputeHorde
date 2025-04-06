@@ -1,41 +1,155 @@
 @startuml
-Actor Client
+!pragma teoz true
+skinparam sequenceBoxBorderColor #gray
 participant Facilitator
-participant Validator
-participant Miner
+box Validator #eef5ff
+participant "Facilitator connection"
+participant "Miner Driver"
+end box
+box Miner #lightyellow
+participant "Validator Consumer"
+participant "Reservation task"
+participant "Executor Consumer"
+end box
+box Executor #efefef
 participant Executor
+participant "Task/Subprocess"
 participant Job
-participant Storage
+end box
 
-Client->Facilitator: Send job details
-Facilitator->Facilitator: Choose Validator and Miner
-Facilitator->Validator: Send job details
-Validator->Miner: Send initial job details
-Miner->Miner: Check for a free executor,\npossibly spin up a new one
-Miner->Executor: Pass initial job details
-Executor->Miner: Report readiness (initial preparations done)
-Miner->Validator: Report readiness (initial preparations done)
-Validator->Miner: Send all job details
-Miner->Executor: Send all job details
+activate "Facilitator connection"
 
-opt job requires fetching data
-    Executor->Storage: Fetch data
-end
+-> Facilitator: Create job
+activate Facilitator
+Facilitator -> Facilitator: Store job
+Facilitator -> "Facilitator connection": Job request
+deactivate Facilitator
 
-Executor->Job: Start Job process
-activate Job #lightgreen
-note over Job: run
-Job->Executor: Report finish
-deactivate Job
+"Facilitator connection" -> "Facilitator connection": Pick miner
+"Facilitator connection" -> "Facilitator connection": Submit celery job
+"Facilitator connection" -> "Facilitator connection": Wait for celery job result
+    activate "Facilitator connection" #lightgreen
+    rnote right of "Facilitator connection" #lightgreen: celery result timeout
+    rnote over "Facilitator connection", "Miner Driver": Waiting for celery task to start
+    activate "Miner Driver" #lightgreen
+    rnote right of "Miner Driver" #lightgreen: celery task\ntimeout
+    "Miner Driver" -> "Validator Consumer": Initial job request
+        activate "Validator Consumer"
+        activate "Miner Driver" #0c0
+        rnote right of "Miner Driver" #0c0: initial response\ntimeout
+        "Validator Consumer" -> "Reservation task" **: "Reserve" executor
+        activate "Reservation task"
+        activate "Validator Consumer" #lightgreen
+        rnote right of "Validator Consumer" #lightgreen: reservation\ntimeout
+        "Reservation task" -> "Reservation task": Reserve executor\nfrom pool
+        "Reservation task" -> "Validator Consumer": set reservation future
+        deactivate "Validator Consumer"
+        "Validator Consumer" -> "Miner Driver": Job accepted
+        deactivate "Miner Driver"
+    "Miner Driver" -> "Facilitator connection": Job accepted
+    activate "Miner Driver" #0c0
+    rnote right of "Miner Driver" #0c0: executor ready\ntimeout
+    "Facilitator connection" -> Facilitator: Job accepted
+        activate Facilitator
+        Facilitator -> Facilitator: Store job status
+        |||
+        deactivate Facilitator
+        "Reservation task" --> Executor: Start executor\n(via vendor code)
+        activate Executor
+        "Reservation task" --> "Validator Consumer":
+        deactivate "Reservation task"
+        "Validator Consumer" -> "Validator Consumer": Store executor IP
+        |||
+        deactivate "Validator Consumer"
+        Executor -> "Executor Consumer": Connect
+        activate "Executor Consumer"
+        "Executor Consumer" -> Executor: Initial job details
+            deactivate "Executor Consumer"
+            Executor -> "Task/Subprocess": CVE check
+            activate "Task/Subprocess"
+            activate Executor #lightgreen
+            rnote right of Executor #lightgreen: CVE check\ntimeout
+            return done
+            deactivate Executor
+            deactivate "Task/Subprocess"
 
-opt job requires uploading data
-    Executor->Storage: Upload data
-end
-Executor->Storage: Upload stdout and stderr
+            Executor -> "Task/Subprocess": toolkit ver. check
+            activate "Task/Subprocess"
+            activate Executor #lightgreen
+            rnote right of Executor #lightgreen: toolkit check\ntimeout
+            return done
+            deactivate Executor
+            deactivate "Task/Subprocess"
 
-Executor->Miner: Report job done
-Miner->Validator: Report job done
-Validator->Facilitator: Report job done
-Facilitator->Client: Report job done
+            Executor -> Executor: clear old jobs
 
+            group docker image in initial details?
+            Executor -> Executor: pull docker image
+            end group
+
+        Executor -> "Executor Consumer": Ready
+        activate "Executor Consumer"
+        "Executor Consumer" -> "Validator Consumer": Ready
+        deactivate "Executor Consumer"
+        activate "Validator Consumer"
+        "Validator Consumer" -> "Miner Driver": Ready
+        deactivate "Validator Consumer"
+        deactivate "Miner Driver"
+    "Miner Driver" -> "Validator Consumer": Job details
+    activate "Miner Driver" #0c0
+    activate "Validator Consumer"
+        "Validator Consumer" -> "Executor Consumer": Job details
+        deactivate "Validator Consumer"
+        activate "Executor Consumer"
+        "Executor Consumer" -> Executor: Job details
+        deactivate "Executor Consumer"
+
+        Executor -> "Task/Subprocess": ""unpack_volume()""
+            activate "Task/Subprocess"
+            activate Executor #lightgreen
+            rnote right of Executor #lightgreen: unpack timeout
+            note right of "Task/Subprocess": Implementation depends\non volume type
+            note right of "Task/Subprocess": Multi volume does a loop here
+            "Task/Subprocess" -> "Task/Subprocess": **Download** + unpack
+            return done
+            deactivate Executor
+            deactivate "Task/Subprocess"
+        Executor -> Executor: docker run
+        hnote over Executor, Job #faa: docker will pull the image here\nif it's not present
+        Executor --> Job
+        activate Executor #lightgreen
+        rnote right of Executor #lightgreen: job execution\ntimeout
+        activate Job
+        Job -> Job: Actual work
+        Job -> Executor: stdout, stderr
+        deactivate Job
+        deactivate Executor
+        Executor -> Executor: Serialize artifacts
+        loop for each upload
+        Executor -> Executor: Zip the volume
+        Executor -> "Task/Subprocess": Upload
+        activate "Task/Subprocess"
+        activate Executor #lightgreen
+        rnote right of Executor #lightgreen: upload timeout
+        "Task/Subprocess" --> Executor: done
+        deactivate Executor
+        deactivate "Task/Subprocess"
+        end loop
+        Executor -> "Executor Consumer": Job result
+        deactivate Executor
+        activate "Executor Consumer"
+        "Executor Consumer" -> "Validator Consumer": Job result
+        deactivate "Executor Consumer"
+        activate "Validator Consumer"
+        "Validator Consumer" -> "Miner Driver": Job result
+        deactivate "Validator Consumer"
+        deactivate "Miner Driver"
+    "Miner Driver" --> "Facilitator connection": (Celery task result)
+    deactivate "Miner Driver"
+    deactivate "Facilitator connection"
+"Facilitator connection" -> Facilitator: Job result
+        activate Facilitator
+        Facilitator -> Facilitator: Store job status
+        |||
+        deactivate Facilitator
 @enduml
