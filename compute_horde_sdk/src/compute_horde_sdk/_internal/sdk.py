@@ -298,11 +298,7 @@ class ComputeHordeClient:
                 response.raise_for_status()
             except httpx.HTTPStatusError as e:
                 logger.error("Response status=%d: %s", e.response.status_code, e.response.text)
-                if (
-                        e.response.status_code == 401
-                        and "Token expired" in e.response.text
-                        and attempt == 0
-                ):
+                if e.response.status_code == 401 and "Token expired" in e.response.text and attempt == 0:
                     async with self._token_lock:
                         self._token = None
                     logger.info("Token expired, re-authenticating")
@@ -314,6 +310,7 @@ class ComputeHordeClient:
                 ) from e
 
             return response.text
+        raise ComputeHordeError("ComputeHorde request failed after re-authentication.")
 
     def _get_signature_headers(self, data: dict[str, pydantic.JsonValue]) -> dict[str, str]:
         signed_fields = SignedFields.from_facilitator_sdk_json(data)
