@@ -24,8 +24,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .forms import DockerImageJobForm, GenerateAPITokenForm, RawScriptJobForm
-from .models import Job, Miner, Validator
-from .authentication import is_hotkey_allowed
+from .models import HotkeyWhitelist, Job, Miner, Validator
 
 
 class SignupView(AllauthSignupView):
@@ -210,6 +209,9 @@ def auth_login_view(request):
 
     if not is_valid:
         return Response({"error": "Invalid signature"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    if not HotkeyWhitelist.objects.filter(ss58_address=hotkey).exists():
+        return Response({"error": "Hotkey not allowed"}, status=status.HTTP_400_BAD_REQUEST)
 
     jwt_lifetime = settings.JWT_LIFETIME
     payload = {

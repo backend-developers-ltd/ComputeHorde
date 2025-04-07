@@ -760,6 +760,13 @@ class GpuSpecs(ExportModelOperationsMixin("gpu_specs"), models.Model):
 
 class HotkeyWhitelist(models.Model):
     ss58_address = models.CharField(max_length=255, unique=True)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        related_name="hotkey_user"
+    )
 
     def __str__(self) -> str:
         return self.ss58_address

@@ -11,10 +11,6 @@ from .models import HotkeyWhitelist, Miner, Validator
 log = get_logger(__name__)
 
 
-def is_hotkey_allowed(hotkey: str) -> bool:
-    return HotkeyWhitelist.objects.filter(ss58_address=hotkey).exists()
-
-
 class JWTAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request: HttpRequest) -> tuple[AbstractBaseUser, str] | None:
         auth_header = authentication.get_authorization_header(request)
@@ -45,15 +41,19 @@ class JWTAuthentication(authentication.BaseAuthentication):
         if not hotkey:
             raise AuthenticationFailed("Token missing subject.")
 
-        if not is_hotkey_allowed(hotkey):
+        whitelist_entry = HotkeyWhitelist.objects.filter(ss58_address=hotkey).first()
+        if not whitelist_entry:
             raise AuthenticationFailed("Unauthorized hotkey.")
 
-        user, created = User.objects.get_or_create(
-            username=hotkey,
-            defaults={"is_active": True}
-        )
-        if created:
-            user.set_unusable_password()
-            user.save()
+        if whitelist_entry.user is None:
+            user, created = User.objects.get_or_create(
+                username=hotkey,
+                defaults={"is_active": True}
+            )
+            if created:
+                user.set_unusable_password()
+                user.save()
+            whitelist_entry.user = user
+            whitelist_entry.save()
         request.hotkey = hotkey
-        return user, hotkey
+        return whitelist_entry.user, hotkey
