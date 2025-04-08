@@ -6,7 +6,7 @@ from rest_framework import authentication
 from rest_framework.exceptions import AuthenticationFailed
 from structlog import get_logger
 
-from .models import HotkeyWhitelist, Miner, Validator
+from .models import HotkeyWhitelist
 
 log = get_logger(__name__)
 
@@ -46,10 +46,7 @@ class JWTAuthentication(authentication.BaseAuthentication):
             raise AuthenticationFailed("Unauthorized hotkey.")
 
         if whitelist_entry.user is None:
-            user, created = User.objects.get_or_create(
-                username=hotkey,
-                defaults={"is_active": True}
-            )
+            user, created = User.objects.get_or_create(username=hotkey, defaults={"is_active": True})
             if created:
                 user.set_unusable_password()
                 user.save()

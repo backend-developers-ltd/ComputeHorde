@@ -8,7 +8,6 @@ from constance import config
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.cache import cache
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db.models import QuerySet
 from django.forms.models import ModelForm

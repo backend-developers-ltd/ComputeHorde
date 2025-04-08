@@ -1,9 +1,9 @@
 import base64
 import json
-import jwt
 import time
 from unittest.mock import patch
 
+import jwt
 import pytest
 from bittensor_wallet import Wallet
 from compute_horde.fv_protocol.facilitator_requests import Signature
@@ -91,9 +91,7 @@ def another_user_job_raw(db, another_user, connected_validator, miner):
 
 @pytest.fixture
 def whitelisted_hotkey(db, wallet):
-    HotkeyWhitelist.objects.create(
-        ss58_address=wallet.hotkey.ss58_address
-    )
+    HotkeyWhitelist.objects.create(ss58_address=wallet.hotkey.ss58_address)
 
 
 def check_docker_job(job_result):
