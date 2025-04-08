@@ -3,14 +3,16 @@ import json
 import time
 from unittest.mock import patch
 
+import jwt
 import pytest
 from bittensor_wallet import Wallet
 from compute_horde.fv_protocol.facilitator_requests import Signature
+from django.conf import settings
 from django.contrib.auth.models import User
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.test import APIClient
 
-from project.core.models import Job, JobFeedback, Validator
+from project.core.models import HotkeyWhitelist, Job, JobFeedback, Validator
 
 
 @pytest.fixture
@@ -85,6 +87,11 @@ def another_user_job_raw(db, another_user, connected_validator, miner):
         raw_script="print(1)",
         input_url="http://example.com/input.zip",
     )
+
+
+@pytest.fixture
+def whitelisted_hotkey(db, wallet):
+    HotkeyWhitelist.objects.create(ss58_address=wallet.hotkey.ss58_address)
 
 
 def check_docker_job(job_result):
@@ -198,8 +205,6 @@ def generate_signed_headers(
     headers = {
         "Realm": subnet_chain,
         "SubnetID": str(subnet_id),
-        "Nonce": str(time.time()),
-        "Hotkey": wallet.hotkey.ss58_address,
     }
 
     headers_str = json.dumps(headers, sort_keys=True)
@@ -212,11 +217,41 @@ def generate_signed_headers(
     return headers
 
 
+def get_auth_token(api_client: APIClient, wallet: Wallet) -> str:
+    """Perform the nonce->login flow to return a valid JWT token."""
+    nonce_response = api_client.get("/auth/nonce")
+    assert nonce_response.status_code == 200, "Failed to get nonce"
+    nonce = nonce_response.json().get("nonce")
+    signature = wallet.hotkey.sign(nonce.encode("utf-8")).hex()
+    payload = {"hotkey": wallet.hotkey.ss58_address, "signature": signature, "nonce": nonce}
+    login_response = api_client.post("/auth/login", payload)
+    assert login_response.status_code == 200, "Login failed"
+    token = login_response.json().get("token")
+    return token
+
+
+def build_http_headers(headers: dict[str, str]) -> dict[str, str]:
+    """Convert headers dict to HTTP_ prefixed keyword arguments for the test client."""
+    return {f"HTTP_{key.upper()}": value for key, value in headers.items()}
+
+
 @pytest.mark.django_db
-def test_hotkey_authentication__job_create(api_client, wallet, connected_validator, miner):
+def test_hotkey_authentication__job_create(api_client, wallet, whitelisted_hotkey, connected_validator, miner):
     data = {"raw_script": "print(1)", "input_url": "http://example.com/input.zip"}
+    # First call without any authentication must return 401.
     response = api_client.post("/api/v1/job-raw/", data)
     assert response.status_code == 401
+
+    # Create an active validator for this wallet.
+    Validator.objects.create(ss58_address=wallet.hotkey.ss58_address, is_active=True)
+
+    # Create a token for a non-whitelisted hotkey and test unauthorized access.
+    token_payload = {
+        "sub": "non-whiletelisted-hotkey",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 3600,
+    }
+    token = jwt.encode(token_payload, settings.SECRET_KEY, algorithm="HS256")
 
     signed_headers = generate_signed_headers(
         wallet=wallet,
@@ -224,22 +259,27 @@ def test_hotkey_authentication__job_create(api_client, wallet, connected_validat
         method="POST",
         subnet_id=12,
     )
+    signed_headers["Authorization"] = f"Bearer {token}"
 
     response = api_client.post(
         "/api/v1/job-raw/",
         data,
-        **{f"HTTP_{header.upper()}": value for header, value in signed_headers.items()},
+        **build_http_headers(signed_headers),
     )
+    # Still unauthorized since the hotkey in the token isn’t allowed.
     assert response.status_code == 401
 
-    Validator.objects.create(ss58_address=wallet.hotkey.ss58_address, is_active=True)
+    # Now get a valid token using the authentication flow.
+    token = get_auth_token(api_client, wallet)
+    signed_headers["Authorization"] = f"Bearer {token}"
     response = api_client.post(
         "/api/v1/job-raw/",
         data,
-        **{f"HTTP_{header.upper()}": value for header, value in signed_headers.items()},
+        **build_http_headers(signed_headers),
     )
     assert response.status_code == 201, response.content
 
+    # Verify job creation.
     assert Job.objects.count() == 1
     job = Job.objects.first()
     assert job.raw_script == "print(1)"
@@ -250,8 +290,8 @@ def test_hotkey_authentication__job_create(api_client, wallet, connected_validat
 
 
 @pytest.mark.django_db
-def test_hotkey_authentication__job_details(api_client, wallet, job_with_hotkey):
-    # no authentication -> 401
+def test_hotkey_authentication__job_details(api_client, wallet, job_with_hotkey, whitelisted_hotkey):
+    # No authentication returns 401.
     response = api_client.get(f"/api/v1/jobs/{job_with_hotkey.uuid}/")
     assert response.status_code == 401, response.content
 
@@ -262,18 +302,37 @@ def test_hotkey_authentication__job_details(api_client, wallet, job_with_hotkey)
         subnet_id=12,
     )
 
-    # unknown hotkey -> 401
+    # Test without Authorization header.
     response = api_client.get(
         f"/api/v1/jobs/{job_with_hotkey.uuid}/",
-        **{f"HTTP_{header.upper()}": value for header, value in signed_headers.items()},
+        **build_http_headers(signed_headers),
     )
     assert response.status_code == 401, response.content
 
-    # known hotkey -> success
+    # Create an active validator for this wallet.
     Validator.objects.create(ss58_address=wallet.hotkey.ss58_address, is_active=True)
+
+    # Test with a non-allowed token.
+    token_payload = {
+        "sub": "non-whiletelisted-hotkey",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 3600,
+    }
+    token = jwt.encode(token_payload, settings.SECRET_KEY, algorithm="HS256")
+    signed_headers["Authorization"] = f"Bearer {token}"
     response = api_client.get(
         f"/api/v1/jobs/{job_with_hotkey.uuid}/",
-        **{f"HTTP_{header.upper()}": value for header, value in signed_headers.items()},
+        **build_http_headers(signed_headers),
+    )
+    assert response.status_code == 401, response.content
+
+    # Now obtain a valid token.
+    token = get_auth_token(api_client, wallet)
+    signed_headers["Authorization"] = f"Bearer {token}"
+    # With proper authentication, access succeeds.
+    response = api_client.get(
+        f"/api/v1/jobs/{job_with_hotkey.uuid}/",
+        **build_http_headers(signed_headers),
     )
     assert response.status_code == 200, response.content
 
@@ -291,7 +350,7 @@ def test_hotkey_authentication__job_list(api_client, wallet, job_with_hotkey):
 
     response = api_client.get(
         "/api/v1/jobs/",
-        **{f"HTTP_{header.upper()}": value for header, value in signed_headers.items()},
+        **build_http_headers(signed_headers),
     )
     assert response.status_code == 401, response.content
 

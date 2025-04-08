@@ -80,6 +80,17 @@ def assert_signature(request: httpx.Request):
         raise SignatureInvalidException(f"Invalid signature scope: {signature}")
 
 
+def setup_successful_authentication(httpx_mock):
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/auth/nonce",
+        json={"nonce": "test_nonce"},
+    )
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/auth/login",
+        json={"token": "test_token"},
+    )
+
+
 @pytest.fixture
 def keypair():
     return bittensor.Keypair.create_from_mnemonic(
@@ -89,12 +100,14 @@ def keypair():
 
 @pytest.fixture
 def compute_horde_client(keypair, apiver_module) -> "ComputeHordeClient":
-    return apiver_module.ComputeHordeClient(
+    client = apiver_module.ComputeHordeClient(
         hotkey=keypair,
         compute_horde_validator_hotkey="abcdef",
         job_queue="sn123",
         facilitator_url=TEST_FACILITATOR_URL,
     )
+    client._token = "test_jwt_token"
+    return client
 
 
 @pytest.fixture
@@ -131,6 +144,8 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
         job_queue="sn123",
         facilitator_url=TEST_FACILITATOR_URL,
     )
+
+    client._token = "test_jwt_token"
 
     job = await client.create_job(
         apiver_module.ComputeHordeJobSpec(
@@ -663,3 +678,68 @@ async def test_run_until_complete__timeout(
 
     with pytest.raises(apiver_module.ComputeHordeJobTimeoutError):
         await compute_horde_client.run_until_complete(job_spec, timeout=timeout)
+
+
+@pytest.mark.asyncio
+async def test_lazy_authentication_flow(apiver_module, compute_horde_client, httpx_mock):
+    """
+    Test that authentication is performed lazily on the first request.
+    """
+
+    # Ensure the client is not authenticated
+    compute_horde_client._token = None
+
+    setup_successful_authentication(httpx_mock)
+
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"),
+    )
+
+    job = await compute_horde_client.get_job(TEST_JOB_UUID)
+
+    assert compute_horde_client._token == "test_token"
+    requests = httpx_mock.get_requests()
+    job_request = requests[-1]
+    assert "Authorization" in job_request.headers
+    assert job_request.headers["Authorization"] == "Bearer test_token"
+    assert job.uuid == TEST_JOB_UUID
+    assert job.status == "Accepted"
+
+
+@pytest.mark.asyncio
+async def test_retry_on_token_expire(apiver_module, compute_horde_client, httpx_mock):
+    """
+    Test that when a request returns a 401 "Token expired",
+    the client re-authenticates and then retries request.
+    """
+    compute_horde_client._token = "expired_token"
+
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/", status_code=401, text="Token expired"
+    )
+
+    setup_successful_authentication(httpx_mock)
+
+    # Retry: successful response for the retried job request.
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"),
+    )
+
+    job = await compute_horde_client.get_job(TEST_JOB_UUID)
+
+    # Verify that the client's token was updated.
+    assert compute_horde_client._token == "test_token"
+
+    # Ensure that the final job request used the new token.
+    requests = httpx_mock.get_requests()
+    job_requests = [r for r in requests if r.url == f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/"]
+    # We expect two job requests: the initial (failed) one and the retried successful one.
+    assert len(job_requests) == 2
+    final_job_request = job_requests[-1]
+    assert final_job_request.headers.get("Authorization") == "Bearer test_token"
+
+    # Validate that the job response is successful.
+    assert job.uuid == TEST_JOB_UUID
+    assert job.status == "Accepted"

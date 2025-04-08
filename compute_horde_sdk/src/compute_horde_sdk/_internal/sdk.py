@@ -213,6 +213,47 @@ class ComputeHordeClient:
         self.facilitator_url = facilitator_url
         self._client = httpx.AsyncClient(base_url=self.facilitator_url, follow_redirects=True)
         self._signer = BittensorWalletSigner(hotkey)
+        self._token_lock = asyncio.Lock()
+        self._token: str | None = None
+
+    async def authenticate(self) -> None:
+        nonce_url = urljoin(self.facilitator_url, "auth/nonce")
+        try:
+            response = await self._client.get(nonce_url)
+            response.raise_for_status()
+        except (httpx.HTTPError, httpx.HTTPStatusError) as e:
+            raise ComputeHordeError(f"Nonce request failed: {e}") from e
+
+        try:
+            data = response.json()
+            nonce = data.get("nonce")
+        except Exception as e:
+            raise ComputeHordeError("Failed to parse nonce response") from e
+
+        if not nonce:
+            raise ComputeHordeError("Failed to obtain nonce from facilitator")
+
+        signature = self.hotkey.sign(nonce.encode("utf-8")).hex()
+
+        login_url = urljoin(self.facilitator_url, "auth/login")
+        payload = {"hotkey": self.hotkey.ss58_address, "signature": signature, "nonce": nonce}
+
+        try:
+            login_response = await self._client.post(login_url, json=payload)
+            login_response.raise_for_status()
+        except (httpx.HTTPError, httpx.HTTPStatusError) as e:
+            raise ComputeHordeError(f"Login request failed: {e}") from e
+
+        try:
+            data = login_response.json()
+            token = data.get("token")
+        except Exception as e:
+            raise ComputeHordeError("Failed to parse login response") from e
+
+        if not token:
+            raise ComputeHordeError("Failed to obtain JWT token from facilitator")
+        self._token = token
+        logger.info("Authenticated successfully")
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception(_retryable_exception),
@@ -232,31 +273,44 @@ class ComputeHordeClient:
         """
         :return: Response content as string.
         """
-        auth_headers = self._get_authentication_headers(method, urljoin(self.facilitator_url, url))
-        request = self._client.build_request(
-            method=method,
-            url=url,
-            json=json,
-            params=params,
-            headers={**headers, **auth_headers} if headers else auth_headers,
-        )
-        logger.debug("%s %s", method, request.url)
-        try:
-            response = await self._client.send(request)
-        except httpx.HTTPError as e:
-            raise ComputeHordeError(f"ComputeHorde request failed: {e}") from e
+        # If we receive a 401 token expired error, we will re-authenticate and immediately retry the failed request.
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            async with self._token_lock:
+                if not self._token:
+                    await self.authenticate()
+                auth_headers = self._get_authentication_headers()
 
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            logger.error("Response status=%d: %s", e.response.status_code, e.response.text)
-            if e.response.status_code == 404:
-                raise ComputeHordeNotFoundError(f"Resource under {request.url} not found") from e
-            raise ComputeHordeError(
-                f"ComputeHorde responded with status code {e.response.status_code} and text {response.text}"
-            ) from e
+            request = self._client.build_request(
+                method=method,
+                url=url,
+                json=json,
+                params=params,
+                headers={**headers, **auth_headers} if headers else auth_headers,
+            )
+            logger.debug("%s %s", method, request.url)
+            try:
+                response = await self._client.send(request)
+            except httpx.HTTPError as e:
+                raise ComputeHordeError(f"ComputeHorde request failed: {e}") from e
 
-        return response.text
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                logger.error("Response status=%d: %s", e.response.status_code, e.response.text)
+                if e.response.status_code == 401 and "Token expired" in e.response.text and attempt == 0:
+                    async with self._token_lock:
+                        self._token = None
+                    logger.info("Token expired, re-authenticating")
+                    continue
+                if e.response.status_code == 404:
+                    raise ComputeHordeNotFoundError(f"Resource under {request.url} not found") from e
+                raise ComputeHordeError(
+                    f"ComputeHorde responded with status code {e.response.status_code} and text {response.text}"
+                ) from e
+
+            return response.text
+        raise ComputeHordeError("ComputeHorde request failed after re-authentication.")
 
     def _get_signature_headers(self, data: dict[str, pydantic.JsonValue]) -> dict[str, str]:
         signed_fields = SignedFields.from_facilitator_sdk_json(data)
@@ -268,26 +322,14 @@ class ComputeHordeClient:
         signature = self._signer.sign(payload=payload)
         return signature_to_headers(signature, SignatureScope.FullRequest)
 
-    def _get_authentication_headers(
-        self,
-        method: str,
-        url: str,
-    ) -> dict[str, str]:
-        headers = {
+    def _get_authentication_headers(self) -> dict[str, str]:
+        if not self._token:
+            raise ComputeHordeError("Not authenticated")
+        return {
+            "Authorization": f"Bearer {self._token}",
             "Realm": "mainnet",
             "SubnetID": "12",
-            "Nonce": str(time.time()),
-            "Hotkey": self.hotkey.ss58_address,
         }
-
-        headers_str = json.dumps(headers, sort_keys=True)
-
-        data_to_sign = f"{method}{url}{headers_str}".encode()
-
-        signature = self.hotkey.sign(data_to_sign).hex()
-        headers["Signature"] = signature
-
-        return headers
 
     async def report_cheated_job(self, job_uuid: str) -> str:
         """

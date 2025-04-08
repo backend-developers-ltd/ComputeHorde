@@ -119,4 +119,5 @@ $DOCKER_COMPOSE_COMMAND up -d
 timeout 30s uv run python app/src/manage.py wait_for_database
 uv run python app/src/manage.py migrate
 uv run python app/src/manage.py debug_add_validator 5CDYBwxDZwXnYSp7E39Vy92MVbCMtcK2i953oRxDm9Veko7M
+uv run python app/src/manage.py whitelist_hotkey 5CDYBwxDZwXnYSp7E39Vy92MVbCMtcK2i953oRxDm9Veko7M
 
