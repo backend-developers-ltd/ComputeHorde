@@ -1,12 +1,11 @@
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import suppress
 
 import pytest
 from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext
 
-from ..models import Channel, Job, JobStatus, Miner, UserPreferences, Validator
+from ..models import Job, JobStatus, Miner, Validator
 
 
 @pytest.mark.django_db(transaction=True)
@@ -46,71 +45,6 @@ def test__job__selecting_validator__success(user, connected_validator, miner):
         validator=None,
     )
     assert job.validator == connected_validator
-
-
-@pytest.mark.django_db(transaction=True)
-def test__job__selecting_validator__user_preference(user, connected_validator, miners):
-    """Check that new job is assigned to user's preferred validators first"""
-
-    # make two preferred validators for the user and connect them
-    preferred_validator1 = Validator.objects.create(ss58_address="specific_validator1", is_active=True)
-    preferred_validator2 = Validator.objects.create(ss58_address="specific_validator2", is_active=True)
-    channel1 = Channel.objects.create(name="test1", validator=preferred_validator1)
-    channel2 = Channel.objects.create(name="test2", validator=preferred_validator2)
-
-    preferences = UserPreferences.objects.create(user=user)
-    preferences.validators.add(preferred_validator1)
-    preferences.validators.add(preferred_validator2)
-
-    assert Validator.objects.count() == 3
-
-    job_kwargs = dict(
-        user=user,
-        validator=None,
-    )
-
-    # no matter how many times we request job, only preferred validators are chosen
-    for _ in range(5):
-        job = Job.objects.create(**job_kwargs)
-        assert job.validator in (preferred_validator1, preferred_validator2)
-
-    # now disconnect preferred validators and ensure that other validator is chosen
-    channel1.delete()
-    channel2.delete()
-    job = Job.objects.create(**job_kwargs)
-    assert job.validator == connected_validator
-
-
-@pytest.mark.django_db(transaction=True)
-def test__job__selecting_miner__user_preference(user, validator, miners):
-    """Check that new job is assigned to user's preferred miners first"""
-
-    preferences = UserPreferences.objects.create(user=user)
-    preferred_miner1 = miners[0]
-    preferred_miner2 = miners[1]
-    preferences.miners.add(preferred_miner1)
-    preferences.miners.add(preferred_miner2)
-
-    assert Miner.objects.count() > 2
-
-    job_kwargs = dict(
-        user=user,
-        validator=validator,
-    )
-
-    # no matter how many times we request job, only preferred miners are chosen
-    for _ in range(5):
-        job = Job.objects.create(**job_kwargs)
-        assert job.miner in (preferred_miner1, preferred_miner2)
-        job.statuses.create(status=JobStatus.Status.COMPLETED)
-
-    # now disconnect preferred miners and ensure that other miner is chosen
-    preferred_miner1.is_active = False
-    preferred_miner1.save()
-    preferred_miner2.is_active = False
-    preferred_miner2.save()
-    job = Job.objects.create(**job_kwargs)
-    assert job.miner in miners[2:]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -262,10 +196,6 @@ def test__job__selecting_miner__constant_queries(
             with transaction.atomic():
                 job.select_miner()
         return len(context)
-
-    # pre-fetch preferences
-    with suppress(UserPreferences.DoesNotExist):
-        _ = user.preferences
 
     create_job()
     count1 = get_query_count()

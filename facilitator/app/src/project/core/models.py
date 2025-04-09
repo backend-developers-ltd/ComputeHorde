@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from math import ceil
 from operator import attrgetter
@@ -127,30 +126,6 @@ class MinerVersion(models.Model):
         indexes = [
             models.Index(fields=["created_at"]),
         ]
-
-
-class UserPreferences(models.Model):
-    user = models.OneToOneField("auth.User", on_delete=models.CASCADE, related_name="preferences")
-    validators = models.ManyToManyField(
-        Validator,
-        blank=True,
-        related_name="preferred_by_users",
-        help_text="validators which will be prioritized for this user; if none of them are present, \
-                   other validators will be used",
-    )
-    miners = models.ManyToManyField(
-        Miner,
-        blank=True,
-        related_name="preferred_by_users",
-        help_text="miners which will be prioritized for this user; if none of them are present, \
-                   other miners will be used",
-    )
-    exclusive = models.BooleanField(
-        default=False, help_text="If set only preference miners/validators are used. Error rised if unavailable."
-    )
-
-    def __str__(self) -> str:
-        return f"Preferences for {self.user.username}"
 
 
 class Channel(models.Model):
@@ -296,19 +271,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 return validator
             raise Validator.DoesNotExist
 
-        # use user's preferences to select specific validators
-        with suppress(UserPreferences.DoesNotExist):
-            if not self.user:
-                raise UserPreferences.DoesNotExist
-
-            exclusive_preference = self.user.preferences.exclusive
-            if preferred_validator_ids := set(self.user.preferences.validators.values_list("id", flat=True)):
-                # we either select one of preferred validators, but if none of them is available - select any
-                log.debug("preferred validators", user=self.user, preferred_validators=preferred_validator_ids)
-                available_preferred_validator_ids = validator_ids & preferred_validator_ids
-                if available_preferred_validator_ids or exclusive_preference:
-                    validator_ids = available_preferred_validator_ids
-
         log.debug("choosing from validators", validator_ids=validator_ids)
         debug_validator = Validator.objects.filter(
             ss58_address="5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
@@ -357,18 +319,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
         # select miners which don't have active jobs
         miners = [miner for miner in miners if all(job.is_completed() for job in miner.jobs.all())]
-
-        # use user's preferences to select specific miners
-        with suppress(UserPreferences.DoesNotExist):
-            if not self.user:
-                raise UserPreferences.DoesNotExist
-
-            exclusive_preference = self.user.preferences.exclusive
-            if preferred_miners := self.user.preferences.miners.all():
-                # we either select one of preferred miners, but if none of them is available - select any
-                available_preferred_miners = [miner for miner in miners if miner in preferred_miners]
-                if available_preferred_miners or exclusive_preference:
-                    miners = available_preferred_miners
 
         if not miners:
             raise Miner.DoesNotExist

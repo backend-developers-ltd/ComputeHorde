@@ -4,7 +4,6 @@ from django.contrib import admin, messages
 from django.contrib.admin import register
 from django.db.models import QuerySet
 from django.http.request import HttpRequest
-from django.utils.safestring import mark_safe
 
 from .models import (
     GPU,
@@ -16,7 +15,6 @@ from .models import (
     Miner,
     MinerVersion,
     SignatureInfo,
-    UserPreferences,
     Validator,
 )
 
@@ -108,42 +106,6 @@ class MinerVersionAdmin(admin.ModelAdmin):
     )
     search_fields = ("miner__ss58_address",)
     ordering = ("-created_at",)
-
-
-@register(UserPreferences)
-class UserPreferencesAdmin(admin.ModelAdmin):
-    list_display = (
-        "pk",
-        "user",
-        "get_validators_display",
-        "get_miners_display",
-        "exclusive",
-    )
-    search_fields = (
-        "user__username",
-        "user__email",
-        "validators__ss58_address",
-        "miners__ss58_address",
-    )
-    autocomplete_fields = (
-        "user",
-        "validators",
-        "miners",
-    )
-    ordering = ("user__username",)
-
-    def get_queryset(self, request: HttpRequest) -> QuerySet[UserPreferences]:
-        return super().get_queryset(request).select_related("user").prefetch_related("validators", "miners")
-
-    @admin.display(description="Validators")
-    @mark_safe
-    def get_validators_display(self, obj: UserPreferences) -> str:
-        return "<ul>" + "".join(f"<li>{validator.ss58_address}</li>" for validator in obj.validators.all()) + "</ul>"
-
-    @admin.display(description="Miners")
-    @mark_safe
-    def get_miners_display(self, obj: UserPreferences) -> str:
-        return "<ul>" + "".join(f"<li>{miner.ss58_address}</li>" for miner in obj.miners.all()) + "</ul>"
 
 
 @register(JobStatus)
