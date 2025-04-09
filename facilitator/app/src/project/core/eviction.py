@@ -15,13 +15,11 @@ from project.core.models import (
     OtherSpecs,
     RawSpecsData,
     RawSpecsSnapshot,
-    SignatureInfo,
 )
 
 RECEIPTS_RETENTION_PERIOD = timedelta(days=7)
 JOBS_RETENTION_PERIOD = timedelta(days=7)
 MINER_VERSION_RETENTION_PERIOD = timedelta(days=30)
-SIGNATURE_INFO_RETENTION_PERIOD = timedelta(days=7)
 MACHINE_SPECS_RETENTION_PERIOD = timedelta(days=7)
 
 logger = logging.getLogger(__name__)
@@ -31,7 +29,6 @@ def evict_all() -> None:
     evict_receipts()
     evict_jobs()
     evict_miner_versions()
-    evict_signature_info()
     evict_machine_specs()
     evict_from_additional_apps()
 
@@ -54,12 +51,6 @@ def evict_miner_versions() -> None:
     logger.info("Evicting old miner versions")
     cutoff = now() - MINER_VERSION_RETENTION_PERIOD
     MinerVersion.objects.filter(created_at__lt=cutoff).delete()
-
-
-def evict_signature_info() -> None:
-    logger.info("Evicting old signature infos")
-    cutoff = now() - SIGNATURE_INFO_RETENTION_PERIOD
-    SignatureInfo.objects.filter(created_at__lt=cutoff).delete()
 
 
 def evict_machine_specs() -> None:

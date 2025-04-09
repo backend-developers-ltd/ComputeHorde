@@ -55,37 +55,6 @@ class JobCreationDisabledError(Exception):
     pass
 
 
-# TODO: deprecate this model
-class SignatureInfo(models.Model):
-    """
-    Model for storing signed requests issued through Facilitator SDK.
-    """
-
-    signature_type = models.CharField(max_length=255, db_comment="type of the signature (e.g. 'bittensor')")
-    signatory = models.CharField(
-        max_length=1000, db_comment="identity of the signer (e.g. sa58 address if signature_type == bittensor"
-    )
-    timestamp_ns = models.BigIntegerField(
-        db_comment="UNIX timestamp in nanoseconds; required for signature verification"
-    )
-    signature = models.BinaryField(db_comment="signature of the payload")
-
-    signed_payload = models.JSONField(db_comment="raw payload that was signed")
-
-    # timestamp_ns is part of an incoming request,
-    # we need created_at to track row insertion time for cleanup etc.
-    created_at = models.DateTimeField(default=now)
-
-    @classmethod
-    def from_signature(cls, user, signature):
-        return cls.objects.create(
-            user=user,
-            timestamp_ns=signature.timestamp_ns,
-            signature=signature.signature,
-            signed_payload=signature.signed_payload,
-        )
-
-
 class AbstractNodeQuerySet(models.QuerySet):
     def with_last_job_time(self) -> QuerySet:
         return self.annotate(last_job_time=Max("jobs__created_at"))
@@ -166,9 +135,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     hotkey = models.CharField(blank=True, help_text="hotkey of job sender if hotkey authentication was used")
     validator = models.ForeignKey(Validator, blank=True, on_delete=models.PROTECT, related_name="jobs")
     miner = models.ForeignKey(Miner, blank=True, null=True, on_delete=models.PROTECT, related_name="jobs")
-    signature_info = models.ForeignKey(
-        SignatureInfo, blank=True, default=None, null=True, on_delete=models.PROTECT, related_name="jobs"
-    )
     signature = models.JSONField(blank=True, default=None, null=True)
     created_at = models.DateTimeField(default=now)
     cheated = models.BooleanField(default=False)
@@ -488,7 +454,6 @@ class JobFeedback(models.Model):
 
     result_correctness = models.FloatField(default=1, help_text="<0-1> where 1 means 100% correct")
     expected_duration = models.FloatField(blank=True, null=True, help_text="Expected duration of the job in seconds")
-    signature_info = models.ForeignKey(SignatureInfo, on_delete=models.CASCADE, null=True)
     signature = models.JSONField(blank=True, null=True)
 
     def __str__(self) -> str:

@@ -14,7 +14,6 @@ from .models import (
     JobStatus,
     Miner,
     MinerVersion,
-    SignatureInfo,
     Validator,
 )
 
@@ -217,29 +216,17 @@ class JobFeedbackAdmin(admin.ModelAdmin):
         "created_at",
         "result_correctness",
         "expected_duration",
-        "signature_info__signature_type",
     )
     search_fields = ("=job__uuid", "^user__username")
     list_filter = ("created_at", "result_correctness")
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        queryset = queryset.select_related("job", "user", "signature_info")
+        queryset = queryset.select_related("job", "user")
         return queryset
-
-    def signature_info__signature_type(self, obj):
-        return obj.signature_info.signature_type
 
 
 @register(HotkeyWhitelist)
 class HotkeyWhitelistAdmin(admin.ModelAdmin):
     list_display = ("ss58_address",)
     search_fields = ("ss58_address",)
-
-
-# TODO: deprecate
-@admin.register(SignatureInfo)
-class SignatureInfoAdmin(admin.ModelAdmin):
-    list_display = ("timestamp_ns", "signature_type", "signatory", "signed_payload")
-    search_fields = ("=signature_type", "^signatory")
-    list_filter = ("signature_type",)
