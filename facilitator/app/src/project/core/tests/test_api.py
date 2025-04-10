@@ -6,7 +6,7 @@ from unittest.mock import patch
 import jwt
 import pytest
 from bittensor_wallet import Wallet
-from compute_horde.fv_protocol.facilitator_requests import Signature
+from compute_horde_core.signature import Signature
 from django.conf import settings
 from django.contrib.auth.models import User
 from rest_framework.exceptions import ErrorDetail

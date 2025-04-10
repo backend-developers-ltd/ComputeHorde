@@ -7,7 +7,12 @@ from typing import Annotated, ClassVar, Union
 import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.fv_protocol.facilitator_requests import Error, Response
-from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest, V0Heartbeat, V0MachineSpecsUpdate
+from compute_horde.fv_protocol.validator_requests import (
+    JobStatusUpdate,
+    V0AuthenticationRequest,
+    V0Heartbeat,
+    V0MachineSpecsUpdate,
+)
 from django.conf import settings
 from django.db import IntegrityError
 from django.utils.timezone import now
@@ -15,7 +20,6 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from structlog.contextvars import bound_contextvars
 
 from .models import Channel, Job, JobStatus, Validator
-from .schemas import JobStatusUpdate
 from .specs import save_machine_specs
 
 log = structlog.get_logger(__name__)

@@ -1,5 +1,6 @@
 import pytest
 from compute_horde.fv_protocol import facilitator_requests
+from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
@@ -9,7 +10,6 @@ from compute_horde.protocol_messages import (
     V0JobFinishedRequest,
 )
 
-from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.tests.helpers import patch_constance
 
 # NOTE: In case this test is taking unreasonable amount of time before timing out:

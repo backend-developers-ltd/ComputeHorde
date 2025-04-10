@@ -7,7 +7,12 @@ import responses
 from bittensor import Keypair
 from bittensor_wallet import Wallet
 from channels.testing import WebsocketCommunicator
-from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest
+from compute_horde.fv_protocol.validator_requests import (
+    JobStatusMetadata,
+    JobStatusUpdate,
+    MinerResponse,
+    V0AuthenticationRequest,
+)
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.utils.timezone import now
@@ -15,7 +20,6 @@ from freezegun import freeze_time
 
 from ...asgi import application
 from ..models import Channel, Job, JobStatus, Miner, Validator
-from ..schemas import JobStatusMetadata, JobStatusUpdate, MinerResponse
 
 for package in settings.ADDITIONAL_APPS:
     module = import_module(f"{package}.tests.conftest")

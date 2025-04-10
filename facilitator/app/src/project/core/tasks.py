@@ -7,7 +7,6 @@ import tempfile
 from collections import defaultdict
 from datetime import timedelta
 
-import pydantic
 import requests
 import structlog
 from asgiref.sync import async_to_sync
@@ -325,7 +324,7 @@ def fetch_receipts_from_miner(hotkey: str, ip: str, port: int):
                     miner_signature=raw_receipt["miner_signature"],
                 )
 
-            except (ValueError, pydantic.ValidationError):
+            except (ValueError, ValidationError):
                 log.warning("Miner sent invalid receipt", miner_hotkey=hotkey, raw_receipt=raw_receipt)
                 continue
 

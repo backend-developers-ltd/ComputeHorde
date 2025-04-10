@@ -16,6 +16,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V1JobRequest,
     V2JobRequest,
 )
+from compute_horde.fv_protocol.validator_requests import JobStatusMetadata
 from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
@@ -35,7 +36,6 @@ from structlog.contextvars import bound_contextvars
 from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
 
 from .schemas import (
-    JobStatusMetadata,
     MuliVolumeAllowedVolume,
 )
 from .utils import safe_config
