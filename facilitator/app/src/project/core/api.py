@@ -58,10 +58,6 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "args",
             "env",
             "use_gpu",
-            "hf_repo_id",
-            "hf_revision",
-            "input_url",
-            "output_download_url",
             "tag",
             "stdout",
             "volumes",
@@ -71,10 +67,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "target_validator_hotkey",
             "on_trusted_miner",
         )
-        read_only_fields = (
-            "created_at",
-            "output_download_url",
-        )
+        read_only_fields = ("created_at",)
 
     uploads = SmartSchemaField(schema=list[SingleFileUpload], required=False)
     volumes = SmartSchemaField(schema=list[MuliVolumeAllowedVolume], required=False)
@@ -118,9 +111,6 @@ class DockerJobSerializer(DynamicJobFields, JobSerializer):
                 "args",
                 "env",
                 "use_gpu",
-                "input_url",
-                "hf_repo_id",
-                "hf_revision",
                 "tag",
                 "volumes",
                 "uploads",

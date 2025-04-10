@@ -146,18 +146,6 @@ BITTENSOR_NETUID = env("BITTENSOR_NETUID")
 BITTENSOR_NETWORK = env("BITTENSOR_NETWORK")
 SIGNATURE_EXPIRE_DURATION = env("SIGNATURE_EXPIRE_DURATION", default="300")
 
-R2_ENDPOINT_URL = env("R2_ENDPOINT_URL")
-R2_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID")  # https://developers.cloudflare.com/r2/api/s3/tokens/
-R2_SECRET_ACCESS_KEY = env("R2_SECRET_ACCESS_KEY")
-R2_REGION_NAME = env("R2_REGION_NAME")  # must be one of: wnam, enam, weur, eeur, apac, auto
-R2_BUCKET_NAME = env("R2_BUCKET_NAME")
-
-# how long the signed URLs are valid for in general
-OUTPUT_PRESIGNED_URL_LIFETIME = timedelta(seconds=env.int("OUTPUT_PRESIGNED_URL_LIFETIME"))
-# how often the signed URLs are valid for downloading; after this timedelta, the download URL
-# is invalid and should be regenerated (this is to prevent long-term access to the file)
-DOWNLOAD_PRESIGNED_URL_LIFETIME = timedelta(seconds=env.int("DOWNLOAD_PRESIGNED_URL_LIFETIME"))
-
 WANDB_API_KEY = env("WANDB_API_KEY")
 COMPUTE_SUBNET_UID = 27
 

@@ -63,7 +63,6 @@ def job_docker(db, user, connected_validator, miner):
         args=["my", "args"],
         env={"MY_ENV": "my value"},
         use_gpu=True,
-        input_url="http://example.com/input.zip",
     )
 
 
@@ -77,7 +76,6 @@ def another_user_job_docker(db, another_user, connected_validator, miner):
         args=["my", "args"],
         env={"MY_ENV": "my value"},
         use_gpu=True,
-        input_url="http://example.com/input.zip",
     )
 
 
@@ -91,13 +89,11 @@ def check_docker_job(job_result):
         "created_at",
         "last_update",
         "status",
-        "output_download_url",
     }
     assert job_result["docker_image"] == "hello-world"
     assert job_result["args"] == ["my", "args"]
     assert job_result["env"] == {"MY_ENV": "my value"}
     assert job_result["use_gpu"] is True
-    assert job_result["input_url"] == "http://example.com/input.zip"
     assert set(job_result.keys()) & generated_fields == generated_fields
 
 
@@ -188,7 +184,7 @@ def build_http_headers(headers: dict[str, str]) -> dict[str, str]:
 
 @pytest.mark.django_db
 def test_hotkey_authentication__job_create(api_client, wallet, whitelisted_hotkey, connected_validator, miner):
-    data = {"docker_image": "hello-world", "input_url": "http://example.com/input.zip"}
+    data = {"docker_image": "hello-world"}
     # First call without any authentication must return 401.
     response = api_client.post("/api/v1/job-docker/", data)
     assert response.status_code == 401, response.content
@@ -234,7 +230,6 @@ def test_hotkey_authentication__job_create(api_client, wallet, whitelisted_hotke
     assert Job.objects.count() == 1
     job = Job.objects.first()
     assert job.docker_image == "hello-world"
-    assert job.input_url == "http://example.com/input.zip"
     assert job.use_gpu is False
     assert job.user is None
     assert job.hotkey == wallet.hotkey.ss58_address

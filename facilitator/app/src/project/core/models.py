@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from math import ceil
 from operator import attrgetter
@@ -20,13 +19,8 @@ from compute_horde.fv_protocol.facilitator_requests import (
 from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
-    ZipAndHttpPutUpload,
 )
-from compute_horde_core.volume import (
-    HuggingfaceVolume,
-    MultiVolume,
-    ZipUrlVolume,
-)
+from compute_horde_core.volume import MultiVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
@@ -44,7 +38,7 @@ from .schemas import (
     JobStatusMetadata,
     MuliVolumeAllowedVolume,
 )
-from .utils import create_signed_download_url, create_signed_upload_url, safe_config
+from .utils import safe_config
 
 log = get_logger(__name__)
 
@@ -59,37 +53,6 @@ class JobNotFinishedError(Exception):
 
 class JobCreationDisabledError(Exception):
     pass
-
-
-# TODO: deprecate this model
-class SignatureInfo(models.Model):
-    """
-    Model for storing signed requests issued through Facilitator SDK.
-    """
-
-    signature_type = models.CharField(max_length=255, db_comment="type of the signature (e.g. 'bittensor')")
-    signatory = models.CharField(
-        max_length=1000, db_comment="identity of the signer (e.g. sa58 address if signature_type == bittensor"
-    )
-    timestamp_ns = models.BigIntegerField(
-        db_comment="UNIX timestamp in nanoseconds; required for signature verification"
-    )
-    signature = models.BinaryField(db_comment="signature of the payload")
-
-    signed_payload = models.JSONField(db_comment="raw payload that was signed")
-
-    # timestamp_ns is part of an incoming request,
-    # we need created_at to track row insertion time for cleanup etc.
-    created_at = models.DateTimeField(default=now)
-
-    @classmethod
-    def from_signature(cls, user, signature):
-        return cls.objects.create(
-            user=user,
-            timestamp_ns=signature.timestamp_ns,
-            signature=signature.signature,
-            signed_payload=signature.signed_payload,
-        )
 
 
 class AbstractNodeQuerySet(models.QuerySet):
@@ -134,30 +97,6 @@ class MinerVersion(models.Model):
         ]
 
 
-class UserPreferences(models.Model):
-    user = models.OneToOneField("auth.User", on_delete=models.CASCADE, related_name="preferences")
-    validators = models.ManyToManyField(
-        Validator,
-        blank=True,
-        related_name="preferred_by_users",
-        help_text="validators which will be prioritized for this user; if none of them are present, \
-                   other validators will be used",
-    )
-    miners = models.ManyToManyField(
-        Miner,
-        blank=True,
-        related_name="preferred_by_users",
-        help_text="miners which will be prioritized for this user; if none of them are present, \
-                   other miners will be used",
-    )
-    exclusive = models.BooleanField(
-        default=False, help_text="If set only preference miners/validators are used. Error rised if unavailable."
-    )
-
-    def __str__(self) -> str:
-        return f"Preferences for {self.user.username}"
-
-
 class Channel(models.Model):
     """
     This is a simple model to remember Validator-channel association.
@@ -196,9 +135,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     hotkey = models.CharField(blank=True, help_text="hotkey of job sender if hotkey authentication was used")
     validator = models.ForeignKey(Validator, blank=True, on_delete=models.PROTECT, related_name="jobs")
     miner = models.ForeignKey(Miner, blank=True, null=True, on_delete=models.PROTECT, related_name="jobs")
-    signature_info = models.ForeignKey(
-        SignatureInfo, blank=True, default=None, null=True, on_delete=models.PROTECT, related_name="jobs"
-    )
     signature = models.JSONField(blank=True, default=None, null=True)
     created_at = models.DateTimeField(default=now)
     cheated = models.BooleanField(default=False)
@@ -217,17 +153,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     )
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
     use_gpu = models.BooleanField(default=False, help_text="Whether to use GPU for the job")
-    input_url = models.URLField(blank=True, help_text="URL to the input data source", max_length=1000)
-    hf_repo_id = models.CharField(max_length=255, blank=True, default="", help_text="Huggingface model repo id")
-    hf_revision = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        help_text="Huggingface model revision id: branch name / tag / commit hash",
-    )
-    output_upload_url = models.TextField(blank=True, help_text="URL for uploading output")
-    output_download_url = models.TextField(blank=True, help_text="URL for retrieving output")
-    output_download_url_expires_at = models.DateTimeField(blank=True)
     target_validator_hotkey = models.TextField(blank=True, default=None, null=True, help_text="target validator")
     volumes = SchemaField(schema=list[MuliVolumeAllowedVolume], blank=True, default=list)
     uploads = SchemaField(schema=list[SingleFileUpload], blank=True, default=list)
@@ -260,9 +185,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         is_new = self.pk is None
 
         self.uuid = self.uuid or uuid4()
-        self.output_upload_url = self.output_upload_url or create_signed_upload_url(self.filename)
-        if self.is_download_url_expired():
-            self.reset_download_url()
 
         # if there is no validator selected -> we need a transaction for locking
         # active validators during selection process
@@ -315,19 +237,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 return validator
             raise Validator.DoesNotExist
 
-        # use user's preferences to select specific validators
-        with suppress(UserPreferences.DoesNotExist):
-            if not self.user:
-                raise UserPreferences.DoesNotExist
-
-            exclusive_preference = self.user.preferences.exclusive
-            if preferred_validator_ids := set(self.user.preferences.validators.values_list("id", flat=True)):
-                # we either select one of preferred validators, but if none of them is available - select any
-                log.debug("preferred validators", user=self.user, preferred_validators=preferred_validator_ids)
-                available_preferred_validator_ids = validator_ids & preferred_validator_ids
-                if available_preferred_validator_ids or exclusive_preference:
-                    validator_ids = available_preferred_validator_ids
-
         log.debug("choosing from validators", validator_ids=validator_ids)
         debug_validator = Validator.objects.filter(
             ss58_address="5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
@@ -377,18 +286,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         # select miners which don't have active jobs
         miners = [miner for miner in miners if all(job.is_completed() for job in miner.jobs.all())]
 
-        # use user's preferences to select specific miners
-        with suppress(UserPreferences.DoesNotExist):
-            if not self.user:
-                raise UserPreferences.DoesNotExist
-
-            exclusive_preference = self.user.preferences.exclusive
-            if preferred_miners := self.user.preferences.miners.all():
-                # we either select one of preferred miners, but if none of them is available - select any
-                available_preferred_miners = [miner for miner in miners if miner in preferred_miners]
-                if available_preferred_miners or exclusive_preference:
-                    miners = available_preferred_miners
-
         if not miners:
             raise Miner.DoesNotExist
 
@@ -400,17 +297,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             key=lambda miner: jobs[0].created_at if (jobs := miner.jobs.all()) else datetime.min.replace(tzinfo=UTC)
         )
         return miners[0]
-
-    def is_download_url_expired(self) -> bool:
-        return (
-            not self.output_download_url
-            or not self.output_download_url_expires_at
-            or now() > self.output_download_url_expires_at
-        )
-
-    def reset_download_url(self) -> None:
-        self.output_download_url = create_signed_download_url(self.filename)
-        self.output_download_url_expires_at = now() + settings.DOWNLOAD_PRESIGNED_URL_LIFETIME
 
     @property
     def sender(self) -> str:
@@ -452,35 +338,18 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 args=self.args,
                 env=self.env,
                 use_gpu=self.use_gpu,
-                input_url=self.input_url,
-                output_url=self.output_upload_url,
+                input_url="",
+                output_url="",
             )
         else:
-            if self.input_url or self.volumes or self.hf_repo_id:
-                subvolumes = []
-                if self.input_url:
-                    subvolumes.append(
-                        ZipUrlVolume(
-                            contents=self.input_url,
-                            relative_path="",
-                        )
-                    )
-                if self.hf_repo_id:
-                    subvolumes.append(
-                        HuggingfaceVolume(
-                            repo_id=self.hf_repo_id,
-                            revision=self.hf_revision,
-                            relative_path="",
-                        )
-                    )
-                subvolumes.extend(self.volumes)
-                volume = MultiVolume(volumes=subvolumes)
+            if self.volumes:
+                volume = MultiVolume(volumes=self.volumes)
             else:
                 volume = None
-            if self.output_upload_url or self.uploads:
+            if self.uploads:
                 output_upload = MultiUpload(
                     uploads=self.uploads,
-                    system_output=ZipAndHttpPutUpload(url=self.output_upload_url) if self.output_upload_url else None,
+                    system_output=None,
                 )
             else:
                 output_upload = None
@@ -585,7 +454,6 @@ class JobFeedback(models.Model):
 
     result_correctness = models.FloatField(default=1, help_text="<0-1> where 1 means 100% correct")
     expected_duration = models.FloatField(blank=True, null=True, help_text="Expected duration of the job in seconds")
-    signature_info = models.ForeignKey(SignatureInfo, on_delete=models.CASCADE, null=True)
     signature = models.JSONField(blank=True, null=True)
 
     def __str__(self) -> str:

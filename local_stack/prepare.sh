@@ -112,7 +112,6 @@ cd $PROJECT_ROOT/facilitator
 # the line below ensures no subtensor will be reached, so if any piece of code requires it it will fail. This is
 # not a hard requirement for this local stack setup, if it becomes too bothersome to maintain we can drop that
 update_env_var "BITTENSOR_NETWORK" "non-existent" ".env"
-update_env_var "R2_BUCKET_NAME" "''" ".env"
 
 $DOCKER_COMPOSE_COMMAND up -d
 
@@ -120,4 +119,3 @@ timeout 30s uv run python app/src/manage.py wait_for_database
 uv run python app/src/manage.py migrate
 uv run python app/src/manage.py debug_add_validator 5CDYBwxDZwXnYSp7E39Vy92MVbCMtcK2i953oRxDm9Veko7M
 uv run python app/src/manage.py whitelist_hotkey 5CDYBwxDZwXnYSp7E39Vy92MVbCMtcK2i953oRxDm9Veko7M
-
