@@ -191,7 +191,6 @@ class JobAdminForm(forms.ModelForm):
             "created_at",
             "executor_class",
             "docker_image",
-            "raw_script",
             "args",
             "env",
             "use_gpu",

@@ -65,21 +65,14 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "allauth",
-    "allauth.account",
-    "allauth.socialaccount",
     "django_structlog",
     "django_extensions",
     "django_probes",
-    "fingerprint",
     "constance",
     "rest_framework",
-    "rest_framework.authtoken",
     "django_filters",
     *ADDITIONAL_APPS,
     "project.core",
-    "crispy_forms",
-    "crispy_bootstrap5",
     "compute_horde.receipts",
     "compute_horde.base",
 ]
@@ -115,19 +108,12 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django_prometheus.middleware.PrometheusAfterMiddleware",
     "django_structlog.middlewares.RequestMiddleware",
-    "allauth.account.middleware.AccountMiddleware",
     "project.core.middleware.FacilitatorSignatureMiddleware",
 ]
 
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
-    "allauth.account.auth_backends.AuthenticationBackend",
 ]
-SOCIALACCOUNT_PROVIDERS = {}
-ACCOUNT_EMAIL_VERIFICATION = "mandatory"
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
-ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 LOGIN_REDIRECT_URL = "/"
 
 if DEBUG_TOOLBAR := env.bool("DEBUG_TOOLBAR", default=False):
@@ -150,7 +136,6 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_CONFIG = {
-    "ENABLE_PUBLIC_REGISTRATION": (False, "Whether to allow anyone to register as a user", bool),
     "ENABLE_ORGANIC_JOBS": (True, "Whether to allow users to post organic jobss", bool),
     "VALIDATORS_LIMIT": (12, "Maximum number of active validators", int),
     "OUR_VALIDATOR_SS58_ADDRESS": ("", "Our validator's SS58 address", str),
@@ -417,20 +402,13 @@ if SENTRY_DSN := env("SENTRY_DSN", default=""):
         ],
     )
 
-# Crispy forms
-CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
-CRISPY_TEMPLATE_PACK = "bootstrap5"
-
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
         "project.core.authentication.JWTAuthentication",
     ],
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
-        "rest_framework.renderers.BrowsableAPIRenderer",
     ],
     "DEFAULT_PARSER_CLASSES": [
         "rest_framework.parsers.JSONParser",
