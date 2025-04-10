@@ -13,6 +13,7 @@ Skeleton of this project was generated with `cookiecutter-rt-django`, which some
 - python 3.11
 - [uv](https://docs.astral.sh/uv/)
 - [nox](https://nox.thea.codes)
+- 500GB disc space
 
 # Setup development environment
 
