@@ -1,0 +1,167 @@
+@startuml
+!pragma teoz true
+skinparam sequenceBoxBorderColor #gray
+box Facilitator #ffb
+participant Facilitator
+end box
+box Validator #eef5ff
+participant "Facilitator connection"
+participant "Miner Driver"
+end box
+box Miner #lightyellow
+participant "Validator Consumer"
+participant "Reservation task"
+participant "Executor Consumer"
+end box
+box Executor #efefef
+participant Executor
+participant "Task/Subprocess"
+participant Job
+end box
+
+
+-> Facilitator: Create job
+activate Facilitator
+Facilitator -> Facilitator: Store job
+Facilitator -> "Facilitator connection": ""V2JobRequest""
+activate "Facilitator connection"
+deactivate Facilitator
+
+"Facilitator connection" -> "Facilitator connection": Pick miner
+"Facilitator connection" -> "Facilitator connection": Submit celery job
+"Facilitator connection" -> "Facilitator connection": Wait for celery job result
+activate "Facilitator connection" #lightgreen
+rnote right of "Facilitator connection" #lightgreen: celery result timeout
+rnote over "Facilitator connection", "Miner Driver": Waiting for celery task to start
+activate "Miner Driver" #lightgreen
+rnote right of "Miner Driver" #lightgreen: celery task\ntimeout
+"Miner Driver" -> "Validator Consumer": ""V0InitialJobRequest""
+activate "Validator Consumer"
+activate "Miner Driver" #0c0
+rnote right of "Miner Driver" #0c0: initial response\ntimeout
+"Validator Consumer" -> "Reservation task" **: "Reserve" executor
+activate "Reservation task"
+activate "Validator Consumer" #lightgreen
+rnote right of "Validator Consumer" #lightgreen: reservation\ntimeout
+"Reservation task" -> "Reservation task": Reserve executor\nfrom pool
+"Reservation task" -> "Validator Consumer": set reservation future
+deactivate "Validator Consumer"
+"Validator Consumer" -> "Miner Driver": ""V0AcceptJobRequest""
+deactivate "Miner Driver"
+"Miner Driver" -> "Facilitator connection": Status update
+activate "Miner Driver" #0c0
+rnote right of "Miner Driver" #0c0: executor ready\ntimeout
+"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""
+activate Facilitator
+Facilitator -> Facilitator: Store job status
+|||
+deactivate Facilitator
+"Reservation task" -> Executor: Start executor\n(via vendor code)
+activate Executor
+"Reservation task" --> "Validator Consumer":
+deactivate "Reservation task"
+"Validator Consumer" -> "Validator Consumer": Store executor IP
+|||
+deactivate "Validator Consumer"
+Executor -> "Executor Consumer": Connect
+activate "Executor Consumer"
+"Executor Consumer" -> Executor: ""V0InitialJobRequest""
+deactivate "Executor Consumer"
+Executor -> "Task/Subprocess": CVE check
+activate "Task/Subprocess"
+activate Executor #lightgreen
+rnote right of Executor #lightgreen: CVE check\ntimeout
+return done
+deactivate Executor
+deactivate "Task/Subprocess"
+
+Executor -> "Task/Subprocess": toolkit ver. check
+activate "Task/Subprocess"
+activate Executor #lightgreen
+rnote right of Executor #lightgreen: toolkit check\ntimeout
+return done
+deactivate Executor
+deactivate "Task/Subprocess"
+
+Executor -> Executor: clear old jobs
+
+group docker image in initial details?
+Executor -> Executor: pull docker image
+end group
+
+Executor -> "Executor Consumer": ""V0ExecutorReadyRequest""
+activate "Executor Consumer"
+"Executor Consumer" -> "Validator Consumer": ""V0ExecutorReadyRequest""
+deactivate "Executor Consumer"
+activate "Validator Consumer"
+"Validator Consumer" -> "Miner Driver": ""V0ExecutorReadyRequest""
+deactivate "Validator Consumer"
+deactivate "Miner Driver"
+"Miner Driver" -> "Validator Consumer": ""V0JobRequest""
+activate "Miner Driver" #0c0
+activate "Validator Consumer"
+"Validator Consumer" -> "Executor Consumer": ""V0JobRequest""
+deactivate "Validator Consumer"
+activate "Executor Consumer"
+"Executor Consumer" -> Executor: ""V0JobRequest""
+deactivate "Executor Consumer"
+
+Executor -> "Task/Subprocess": ""unpack_volume()""
+activate "Task/Subprocess"
+activate Executor #lightgreen
+rnote right of Executor #lightgreen: unpack timeout
+note right of "Task/Subprocess": Implementation depends\non volume type
+note right of "Task/Subprocess": Multi volume does a loop here
+"Task/Subprocess" -> "Task/Subprocess": **Download** + unpack
+return done
+deactivate Executor
+deactivate "Task/Subprocess"
+Executor -> Executor: docker run
+hnote over Executor, Job #faa: docker will pull the image here\nif it's not present
+Executor --> Job
+activate Executor #lightgreen
+rnote right of Executor #lightgreen: job execution\ntimeout
+activate Job
+Job -> Job: Actual work
+Job -> Executor: stdout, stderr
+deactivate Job
+deactivate Executor
+Executor -> Executor: Serialize artifacts
+loop ""MultiUploadOutputUploader""
+Executor -> Executor: Zip the volume
+Executor -> "Task/Subprocess": Start upload
+activate "Task/Subprocess" #lightgreen
+activate "Task/Subprocess" #lightgreen
+activate "Task/Subprocess" #lightgreen
+rnote right of "Task/Subprocess" #lightgreen: upload timeout
+end loop
+Executor -> "Task/Subprocess": Upload stdout/stderr
+activate "Task/Subprocess" #lightgreen
+Executor -> Executor: await upload tasks
+"Task/Subprocess" --> Executor: Upload done
+deactivate "Task/Subprocess"
+"Task/Subprocess" --> Executor: Upload done
+deactivate "Task/Subprocess"
+"Task/Subprocess" --> Executor: Upload done
+deactivate "Task/Subprocess"
+"Task/Subprocess" --> Executor: Upload done
+deactivate "Task/Subprocess"
+Executor -> "Executor Consumer": ""V0JobFinished""
+deactivate Executor
+activate "Executor Consumer"
+"Executor Consumer" -> "Validator Consumer": ""V0JobFinished""
+deactivate "Executor Consumer"
+activate "Validator Consumer"
+"Validator Consumer" -> "Miner Driver": ""V0JobFinished""
+deactivate "Validator Consumer"
+deactivate "Miner Driver"
+"Miner Driver" --> "Facilitator connection": (Celery task done)
+deactivate "Miner Driver"
+deactivate "Facilitator connection"
+"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(contains artifacts)
+deactivate "Facilitator connection"
+activate Facilitator
+Facilitator -> Facilitator: Store job status
+|||
+deactivate Facilitator
+@enduml
