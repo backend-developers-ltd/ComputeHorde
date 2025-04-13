@@ -74,7 +74,9 @@ docs = [
     "sphinx-multiversion>=0.2.4",
     "sphinx-rtd-theme>=3.0.2",
 ]
-
+fallback = [
+    "skypilot[runpod]>=0.8.1,<1.0",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]  # allow for `import tests` in test files
