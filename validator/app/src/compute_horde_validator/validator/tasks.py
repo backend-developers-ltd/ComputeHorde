@@ -17,7 +17,7 @@ import requests
 from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.core.errors import SubstrateRequestException
 from bittensor.core.metagraph import Metagraph
-from bittensor.utils.weight_utils import process_weights_for_netuid
+from bittensor.utils.weight_utils import process_weights
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
@@ -287,8 +287,6 @@ def schedule_synthetic_jobs() -> None:
 )
 def _run_synthetic_jobs(synthetic_jobs_batch_id: int) -> None:
     try:
-        # metagraph will be refetched and that's fine, after sleeping
-        # for e.g. 30 minutes we should refetch the miner list
         create_and_run_synthetic_job_batch(
             settings.BITTENSOR_NETUID,
             settings.BITTENSOR_NETWORK,
@@ -689,7 +687,8 @@ def get_subtensor(network):
 
 def normalize_batch_scores(
     hotkey_scores: dict[str, float],
-    subtensor,
+    min_allowed_weights: int = 1,
+    max_weight_limit: float = 1.0,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
     metagraph = MetagraphSnapshot.get_latest()
     hotkey_to_uid = {hotkey: uid for (hotkey, uid) in zip(metagraph.hotkeys, metagraph.uids)}
@@ -715,11 +714,12 @@ def normalize_batch_scores(
         uids[ind] = uid
         weights[ind] = score_per_uid.get(uid, 0)
 
-    uids, weights = process_weights_for_netuid(
+    uids, weights = process_weights(
         uids,
         weights,
-        settings.BITTENSOR_NETUID,
-        subtensor,
+        num_neurons,
+        min_allowed_weights,
+        max_weight_limit,
     )
 
     return uids, weights
@@ -728,8 +728,9 @@ def normalize_batch_scores(
 def apply_dancing_burners(
     uids: Union["torch.Tensor", NDArray[np.int64]],
     weights: Union["torch.FloatTensor", NDArray[np.float32]],
-    subtensor,
     cycle_block_start: int,
+    min_allowed_weights: int = 1,
+    max_weight_limit: float = 1.0,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
     burner_hotkeys = config.DYNAMIC_BURN_TARGET_SS58ADDRESSES.split(",")
     burn_rate = config.DYNAMIC_BURN_RATE
@@ -797,11 +798,12 @@ def apply_dancing_burners(
             index = np.where(uids == uid)[0]
             weights[index] = weights[index] + weight
 
-    uids, weights = process_weights_for_netuid(
+    uids, weights = process_weights(
         uids,
         weights,
-        settings.BITTENSOR_NETUID,
-        subtensor,
+        len(uids),
+        min_allowed_weights,
+        max_weight_limit,
     )
 
     return uids, weights
@@ -815,8 +817,13 @@ def set_scores():
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
 
-    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor.get_current_block()
+    netuid = settings.BITTENSOR_NETUID
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    min_allowed_weights = subtensor_.min_allowed_weights(netuid=netuid)
+    max_weight_limit = subtensor_.max_weight_limit(netuid=netuid)
+
+    metagraph = MetagraphSnapshot.get_latest()
+    current_block = metagraph.block
 
     if commit_reveal_weights_enabled:
         interval = CommitRevealInterval(current_block)
@@ -864,9 +871,13 @@ def set_scores():
 
             hotkey_scores = score_batches(batches)
 
-            uids, weights = normalize_batch_scores(hotkey_scores, subtensor)
+            uids, weights = normalize_batch_scores(
+                hotkey_scores, min_allowed_weights, max_weight_limit
+            )
 
-            uids, weights = apply_dancing_burners(uids, weights, subtensor, batches[-1].cycle.start)
+            uids, weights = apply_dancing_burners(
+                uids, weights, batches[-1].cycle.start, min_allowed_weights, max_weight_limit
+            )
 
             for batch in batches:
                 batch.scored = True
@@ -881,7 +892,7 @@ def set_scores():
                 try:
                     result = do_set_weights.apply_async(
                         kwargs=dict(
-                            netuid=settings.BITTENSOR_NETUID,
+                            netuid=netuid,
                             uids=uids.tolist(),
                             weights=weights.tolist(),
                             wait_for_inclusion=True,
