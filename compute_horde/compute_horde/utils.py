@@ -1,6 +1,7 @@
 import asyncio
 import dataclasses
 import datetime
+import random
 from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import Any, ParamSpec, TypeVar
@@ -90,6 +91,13 @@ class Timer:
         if self.timeout is None:
             raise ValueError("timeout was not specified")
         return self.timeout - self.passed_time()
+
+
+def random_keypair(seed_bytes: bytes | None = None) -> bittensor.Keypair:
+    if seed_bytes is None:
+        # Generate a random seed
+        seed_bytes = bytes(random.getrandbits(8) for _ in range(32))
+    return bittensor.Keypair.create_from_seed(seed_bytes.hex())
 
 
 def sign_blob(kp: bittensor.Keypair, blob: str):

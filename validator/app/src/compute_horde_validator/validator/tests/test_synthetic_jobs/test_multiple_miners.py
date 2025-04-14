@@ -33,7 +33,7 @@ from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.utils import ValidatorInfo, sign_blob
+from compute_horde.utils import ValidatorInfo, random_keypair, sign_blob
 from compute_horde_core.executor_class import ExecutorClass
 from constance.test import override_config
 from django.utils import timezone
@@ -85,7 +85,7 @@ def job_uuids(num_miners: int):
 
 @pytest.fixture
 def miner_wallets(num_miners: int):
-    return [bittensor.Keypair.create_from_seed(bytes([*range(31), i])) for i in range(num_miners)]
+    return [random_keypair() for _ in range(num_miners)]
 
 
 @pytest.fixture
@@ -96,18 +96,18 @@ def miner_hotkeys(miner_wallets: list[bittensor.Keypair]):
 @pytest.fixture
 def active_validator_keypairs() -> list[bittensor.Keypair]:
     return [
-        bittensor.Keypair.create_from_seed(b"a" * 32),
-        bittensor.Keypair.create_from_seed(b"b" * 32),
-        bittensor.Keypair.create_from_seed(b"c" * 32),
+        random_keypair(b"a" * 32),
+        random_keypair(b"b" * 32),
+        random_keypair(b"c" * 32),
     ]
 
 
 @pytest.fixture
 def inactive_validator_keypairs() -> list[bittensor.Keypair]:
     return [
-        bittensor.Keypair.create_from_seed(b"d" * 32),
-        bittensor.Keypair.create_from_seed(b"e" * 32),
-        bittensor.Keypair.create_from_seed(b"f" * 32),
+        random_keypair(b"d" * 32),
+        random_keypair(b"e" * 32),
+        random_keypair(b"f" * 32),
     ]
 
 
@@ -1042,9 +1042,7 @@ def _build_invalid_excuse_receipts(
     )
 
     non_organic = good_payload.__replace__(is_organic=False)
-    other_miner = good_payload.__replace__(
-        miner_hotkey=bittensor.Keypair.create_from_seed(b"7" * 32).ss58_address
-    )
+    other_miner = good_payload.__replace__(miner_hotkey=random_keypair(b"7" * 32).ss58_address)
     same_job = good_payload.__replace__(job_uuid=str(job))
     bad_executor_class = good_payload.__replace__(
         executor_class=next(c for c in ExecutorClass if c != DEFAULT_EXECUTOR_CLASS)

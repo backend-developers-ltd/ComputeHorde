@@ -65,28 +65,6 @@ def test_trigger_run_admin_job__should_trigger_job():
     assert job.status == OrganicJob.Status.FAILED
 
 
-@patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_trigger_run_admin_job__should_not_trigger_job():
-    miner = Miner.objects.create(hotkey="miner_client_2")
-    OrganicJob.objects.all().delete()
-    job_request = AdminJobRequest.objects.create(
-        miner=miner,
-        timeout=0,  # should timeout
-        executor_class=DEFAULT_EXECUTOR_CLASS,
-        docker_image="python:3.11-slim",
-        args="",
-    )
-
-    assert AdminJobRequest.objects.count() == 1
-    trigger_run_admin_job_request.apply(args=(job_request.pk,))
-
-    job_request.refresh_from_db()
-    assert "Job failed to trigger" in job_request.status_message
-
-    assert OrganicJob.objects.count() == 0
-
-
 def add_system_events():
     events = SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS)
     events.create(

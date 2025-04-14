@@ -31,7 +31,7 @@ from compute_horde.utils import ValidatorInfo
 from django.conf import settings
 from pydantic import TypeAdapter
 
-from compute_horde_validator.validator.models import SystemEvent
+from compute_horde_validator.validator.models import MetagraphSnapshot, SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.synthetic_jobs import batch_run
 
@@ -280,7 +280,7 @@ class MockSubtensor:
         mocked_metagraph=lambda block: MockMetagraph(block_num=block),
         hyperparameters=None,
         block_duration=timedelta(seconds=1),
-        override_block_number=None,
+        override_block_number: int | None = None,
         increase_block_number_with_each_call=False,
         block_hash="0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464",
     ):
@@ -301,7 +301,11 @@ class MockSubtensor:
         self.override_block_number = override_block_number
         self.block_hash = block_hash
         self.increase_block_number_with_each_call = increase_block_number_with_each_call
-        self.previously_returned_block = None
+        self.previously_returned_block: int | None = None
+        self.netuid = 12
+
+        if override_block_number is not None:
+            self.metagraph(self.netuid, override_block_number).update_snapshot()
 
     def get_block_hash(self, block_id) -> str:
         return self.block_hash
@@ -310,13 +314,14 @@ class MockSubtensor:
         return 0
 
     def max_weight_limit(self, netuid):
-        return 99999
+        return 65535
 
     def get_subnet_hyperparameters(self, netuid: int) -> MockHyperparameters:
         return self.hyperparameters
 
     def metagraph(self, netuid, block: int | None = None, lite=None):
-        if block is not None and block < self.get_current_block() - 300:
+        current_block = self.override_block_number or self.previously_returned_block
+        if block is not None and current_block is not None and block < current_block - 300:
             raise SubstrateRequestException(
                 {
                     "code": -32000,
@@ -354,13 +359,18 @@ class MockSubtensor:
         return False, "MockSubtensor doesn't support reveal_weights"
 
     def get_current_block(self) -> int:
+        current_block = None
         if not self.increase_block_number_with_each_call:
-            return self._get_block_number()
-        if self.previously_returned_block is not None:
+            current_block = self._get_block_number()
+        elif self.previously_returned_block is not None:
             self.previously_returned_block += 1
-            return self.previously_returned_block
-        self.previously_returned_block = self._get_block_number()
-        return self.previously_returned_block
+            current_block = self.previously_returned_block
+        else:
+            self.previously_returned_block = self._get_block_number()
+            current_block = self.previously_returned_block
+
+        self.metagraph(self.netuid, current_block).update_snapshot()
+        return current_block
 
     def _get_block_number(self) -> int:
         if self.override_block_number is not None:
@@ -420,6 +430,20 @@ class MockMetagraph:
         self.total_stake = np.array([1001.0 * (i + 1) for i in range(num_neurons)])
         self.uids = np.array(list(range(num_neurons)))
         self.block = MockBlock(block_num)
+
+    def update_snapshot(self):
+        MetagraphSnapshot.objects.update_or_create(
+            id=MetagraphSnapshot.SnapshotType.LATEST,
+            defaults={
+                "block": self.block.value,
+                "alpha_stake": self.alpha_stake.tolist(),
+                "tao_stake": self.tao_stake.tolist(),
+                "stake": self.stake.tolist(),
+                "uids": self.uids.tolist(),
+                "hotkeys": self.hotkeys,
+                "serving_hotkeys": self.hotkeys,
+            },
+        )
 
 
 def check_system_events(

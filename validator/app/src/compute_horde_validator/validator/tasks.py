@@ -571,30 +571,29 @@ def do_set_weights(
 
 @shared_task
 def trigger_run_admin_job_request(job_request_id: int):
-    async_to_sync(run_admin_job_request)(job_request_id)
+    # FIXME: The following code blocks the event loop.
+    #        This function is run from either a management command (a new process),
+    #        or from django admin for debugging (infrequent).
+    #        So the blocking loop should not be a big problem.
+    #        Hopefully.
+    try:
+        subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+        current_block = subtensor_.get_current_block()
+    except Exception:
+        raise
+    async_to_sync(run_admin_job_request)(job_request_id, current_block)
 
 
 def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-async def run_admin_job_request(job_request_id: int, callback=None):
+async def run_admin_job_request(job_request_id: int, current_block: int, callback=None):
     job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
         id=job_request_id
     )
     try:
         miner = job_request.miner
-
-        # FIXME: The following code blocks the event loop.
-        #        This function is run from either a management command (a new process),
-        #        or from django admin for debugging (infrequent).
-        #        So the blocking loop should not be a big problem.
-        #        Hopefully.
-        try:
-            subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-            current_block = subtensor_.get_current_block()
-        except Exception:
-            raise
 
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
@@ -606,7 +605,6 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             job_description="Validator Job from Admin Panel",
             block=current_block,
         )
-
         my_keypair = get_keypair()
         miner_client = MinerClient(
             miner_hotkey=miner.hotkey,
@@ -709,7 +707,7 @@ def normalize_batch_scores(
         logger.warning("Batch produced no scores")
         return uids, weights
 
-    for ind, uid in enumerate(uids):
+    for ind, uid in enumerate(metagraph.uids):
         assert uid is not None  # mypy+numpy
         uids[ind] = uid
         weights[ind] = score_per_uid.get(uid, 0)
