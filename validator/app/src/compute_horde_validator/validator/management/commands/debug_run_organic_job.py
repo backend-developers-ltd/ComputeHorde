@@ -2,6 +2,7 @@ import sys
 
 from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -11,7 +12,6 @@ from compute_horde_validator.validator.models import (
     MinerBlacklist,
     OrganicJob,
 )
-from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.tasks import run_admin_job_request
 
 

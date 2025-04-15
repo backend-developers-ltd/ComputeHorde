@@ -18,6 +18,8 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V2JobRequest,
 )
 from compute_horde.fv_protocol.validator_requests import (
+    JobStatusMetadata,
+    JobStatusUpdate,
     V0AuthenticationRequest,
     V0Heartbeat,
     V0MachineSpecsUpdate,
@@ -34,10 +36,6 @@ from compute_horde_validator.validator.models import (
     ValidatorWhitelist,
 )
 from compute_horde_validator.validator.organic_jobs import routing
-from compute_horde_validator.validator.organic_jobs.miner_driver import (
-    JobStatusMetadata,
-    JobStatusUpdate,
-)
 from compute_horde_validator.validator.tasks import execute_organic_job_request_on_worker
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 

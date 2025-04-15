@@ -15,6 +15,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     Response,
 )
 from compute_horde.fv_protocol.validator_requests import (
+    JobStatusUpdate,
     V0AuthenticationRequest,
     V0MachineSpecsUpdate,
 )
@@ -30,7 +31,6 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.organic_jobs.facilitator_client import (
     FacilitatorClient,
 )
-from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
 
 from .helpers import (

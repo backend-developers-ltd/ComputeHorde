@@ -139,7 +139,6 @@ CONSTANCE_CONFIG = {
     "ENABLE_ORGANIC_JOBS": (True, "Whether to allow users to post organic jobss", bool),
     "VALIDATORS_LIMIT": (12, "Maximum number of active validators", int),
     "OUR_VALIDATOR_SS58_ADDRESS": ("", "Our validator's SS58 address", str),
-    "JOB_REQUEST_VERSION": (1, "Version used of job request protocol (allows smooth migration)", int),
 }
 
 BITTENSOR_NETUID = env("BITTENSOR_NETUID")
