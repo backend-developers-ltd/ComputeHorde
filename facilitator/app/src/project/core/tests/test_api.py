@@ -1,4 +1,3 @@
-import base64
 import json
 import time
 from unittest.mock import patch
@@ -6,7 +5,6 @@ from unittest.mock import patch
 import jwt
 import pytest
 from bittensor_wallet import Wallet
-from compute_horde_core.signature import Signature
 from django.conf import settings
 from django.contrib.auth.models import User
 from rest_framework.exceptions import ErrorDetail
@@ -37,16 +35,6 @@ def authenticated_api_client(api_client, user):
 
 
 @pytest.fixture
-def signature():
-    return Signature(
-        signature_type="dummy_signature_type",
-        signatory="dummy_signatory",
-        timestamp_ns=time.time_ns(),
-        signature=base64.b64encode(b"dummy_signature"),
-    )
-
-
-@pytest.fixture
 def mock_signature_from_request(signature):
     with patch("project.core.middleware.signature_middleware.signature_from_request") as mock:
         mock.return_value = signature
@@ -54,34 +42,36 @@ def mock_signature_from_request(signature):
 
 
 @pytest.fixture
-def job_docker(db, user, connected_validator, miner):
+def job_docker(db, user, connected_validator, signature):
     return Job.objects.create(
         user=user,
         validator=connected_validator,
-        miner=miner,
+        target_validator_hotkey=connected_validator.ss58_address,
         docker_image="hello-world",
         args=["my", "args"],
         env={"MY_ENV": "my value"},
         use_gpu=True,
+        signature=signature.model_dump(),
     )
 
 
 @pytest.fixture
-def another_user_job_docker(db, another_user, connected_validator, miner):
+def another_user_job_docker(db, another_user, connected_validator, signature):
     return Job.objects.create(
         user=another_user,
         validator=connected_validator,
-        miner=miner,
+        target_validator_hotkey=connected_validator.ss58_address,
         docker_image="hello-world",
         args=["my", "args"],
         env={"MY_ENV": "my value"},
         use_gpu=True,
+        signature=signature.model_dump(),
     )
 
 
 @pytest.fixture
 def whitelisted_hotkey(db, wallet):
-    HotkeyWhitelist.objects.create(ss58_address=wallet.hotkey.ss58_address)
+    return HotkeyWhitelist.objects.create(ss58_address=wallet.hotkey.ss58_address)
 
 
 def check_docker_job(job_result):
@@ -128,9 +118,15 @@ def test_job_viewset_retrieve_docker(api_client, user, job_docker):
 
 
 @pytest.mark.django_db
-def test_docker_job_viewset_create(api_client, user, connected_validator, miner):
+def test_docker_job_viewset_create(api_client, user, connected_validator, mock_signature_from_request):
     api_client.force_authenticate(user=user)
-    data = {"docker_image": "hello-world", "args": ["my", "args"], "env": {"MY_ENV": "my value"}, "use_gpu": True}
+    data = {
+        "docker_image": "hello-world",
+        "args": ["my", "args"],
+        "env": {"MY_ENV": "my value"},
+        "use_gpu": True,
+        "target_validator_hotkey": connected_validator.ss58_address,
+    }
     response = api_client.post("/api/v1/job-docker/", data)
     assert response.status_code == 201
     assert Job.objects.count() == 1
@@ -183,8 +179,10 @@ def build_http_headers(headers: dict[str, str]) -> dict[str, str]:
 
 
 @pytest.mark.django_db
-def test_hotkey_authentication__job_create(api_client, wallet, whitelisted_hotkey, connected_validator, miner):
-    data = {"docker_image": "hello-world"}
+def test_hotkey_authentication__job_create(
+    api_client, wallet, whitelisted_hotkey, connected_validator, mock_signature_from_request
+):
+    data = {"docker_image": "hello-world", "target_validator_hotkey": connected_validator.ss58_address}
     # First call without any authentication must return 401.
     response = api_client.post("/api/v1/job-docker/", data)
     assert response.status_code == 401, response.content

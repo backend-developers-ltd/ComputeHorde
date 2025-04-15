@@ -237,7 +237,7 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
         await Channel.objects.filter(name=self.channel_name).aupdate(last_heartbeat=now())
 
     async def job_new(self, payload: dict) -> None:
-        """Receive V0JobRequest from backend and forward it to validator via WS"""
+        """Receive V2JobRequest from backend and forward it to validator via WS"""
         await self.send(text_data=json.dumps(payload))
 
     async def job_cheated(self, payload: dict) -> None:
