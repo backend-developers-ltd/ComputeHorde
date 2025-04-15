@@ -1,4 +1,3 @@
-import random
 from uuid import uuid4
 
 from bittensor import Keypair
@@ -6,7 +5,7 @@ from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
 
 from compute_horde.receipts.schemas import JobStartedReceiptPayload, Receipt, ReceiptType
-from compute_horde.utils import sign_blob
+from compute_horde.utils import random_keypair, sign_blob
 
 _USE_RANDOM = object()
 
@@ -38,7 +37,3 @@ def random_receipt(
         miner_signature=sign_blob(miner_keypair, blob),
         validator_signature=sign_blob(validator_keypair, blob),
     )
-
-
-def random_keypair() -> Keypair:
-    return Keypair.create_from_seed(bytes(random.randint(0, 255) for _ in range(32)))

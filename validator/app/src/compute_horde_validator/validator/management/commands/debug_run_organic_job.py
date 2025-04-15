@@ -1,7 +1,9 @@
 import sys
 
+import bittensor
 from asgiref.sync import async_to_sync
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -111,7 +113,14 @@ class Command(BaseCommand):
         )
 
         try:
-            async_to_sync(run_admin_job_request)(job_request.pk, callback=notify_job_status_update)
+            try:
+                subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+                current_block = subtensor_.get_current_block()
+            except Exception:
+                raise
+            async_to_sync(run_admin_job_request)(
+                job_request.pk, current_block, callback=notify_job_status_update
+            )
         except KeyboardInterrupt:
             print("Interrupted by user")
             sys.exit(1)
