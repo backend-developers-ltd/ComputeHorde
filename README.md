@@ -137,7 +137,7 @@ This encourages **variance**, which is essential for preventing [weight-copying]
   - downloading docker images,
   - handling job data.
 - Executors form a **horde** of a miner and are assigned hardware classes.
-- At least **500GB of disc space** is recommended to be able to handle job data and container images reliably.
+- At least **500GB of shared disk space** is recommended to reliably handle docker images and job data stored in `/tmp`.
 - [See executor's README for more details](executor/README.md)
 
 ## Innovations to Highlight
