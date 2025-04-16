@@ -117,6 +117,9 @@ class DockerJobSerializer(DynamicJobFields, JobSerializer):
                 "target_validator_hotkey",
                 "artifacts_dir",
                 "on_trusted_miner",
+                "time_limit_download",
+                "time_limit_execution",
+                "time_limit_upload",
             }
         )
 
