@@ -21,10 +21,12 @@ end box
 
 -> Facilitator: Create job
 activate Facilitator
+Facilitator -> Facilitator: Store job
 Facilitator -> "Facilitator connection": ""V2JobRequest""
 activate "Facilitator connection"
 deactivate Facilitator
 
+"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(Received)
 "Facilitator connection" -> "Facilitator connection": Pick miner
 "Facilitator connection" -> "Facilitator connection": Submit celery task
 "Facilitator connection" -> "Facilitator connection": Wait for celery task result
@@ -110,7 +112,7 @@ Executor -> "Executor Consumer": V0ExecutionDone
 "Executor Consumer" -> "Validator Consumer": V0ExecutionDone
 "Validator Consumer" -> "Miner Driver": Job status update
 "Miner Driver" -> "Facilitator connection": Job status update
-"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(Computation done)
+"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(Execution done)
 
 |||
 activate Executor #0c0
