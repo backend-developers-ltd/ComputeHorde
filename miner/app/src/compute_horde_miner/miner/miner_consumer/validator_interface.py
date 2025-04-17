@@ -338,7 +338,9 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         # This reserves AND starts the executor.
         executor_spinup = asyncio.create_task(
             current.executor_manager.reserve_executor_class(
-                executor_token, msg.executor_class, msg.timeout_seconds
+                executor_token,
+                msg.executor_class,
+                timeout=12345 # TODO: TIMEOUTS
             ),
         )
         executor_reservation_timeout_seconds = await aget_config(

@@ -4,7 +4,6 @@ from datetime import datetime
 
 import bittensor
 from asgiref.sync import sync_to_async
-from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
     OrganicJobError,
@@ -67,13 +66,6 @@ async def answer_prompts(
         docker_image=job_generator.docker_image_name(),
         docker_run_options_preset=job_generator.docker_run_options_preset(),
         docker_run_cmd=job_generator.docker_run_cmd(),
-        total_job_timeout=(
-            job_generator.timeout_seconds()
-            + max(
-                EXECUTOR_CLASS[ExecutorClass.always_on__llm__a6000].spin_up_time,
-                MIN_SPIN_UP_TIME,
-            )
-        ),
         volume=await job_generator.volume(),
         output=await job_generator.output_upload(),
     )

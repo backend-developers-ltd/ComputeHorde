@@ -211,10 +211,12 @@ async def drive_organic_job(
         docker_image=job_request.docker_image,
         docker_run_options_preset="nvidia_all" if job_request.use_gpu else "none",
         docker_run_cmd=job_request.get_args(),
-        total_job_timeout=total_job_timeout,
         volume=job_request.volume,
         output=job_request.output_upload,
         artifacts_dir=artifacts_dir,
+        time_limit_download=job_request.time_limit_download,
+        time_limit_execution=job_request.time_limit_execution,
+        time_limit_upload=job_request.time_limit_upload,
     )
 
     try:
