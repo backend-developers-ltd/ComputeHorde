@@ -24,6 +24,9 @@ class FallbackJobSpec:
 
     run: str | None = None
     envs: Mapping[str, str] | None = None
+    artifacts_dir: str | None = None
+    input_volumes: Mapping[str, str] | None = None
+    output_volumes: Mapping[str, str] | None = None
 
     cpus: int | float | str | None = None
     memory: int | float | str | None = None
@@ -47,6 +50,7 @@ class FallbackJobSpec:
         return cls(
             run=" ".join(job_spec.args),
             envs=job_spec.env,
+            artifacts_dir=job_spec.artifacts_dir,
             accelerators=accelerators,
             image_id=f"docker:{job_spec.docker_image}",
             **kwargs,
@@ -100,9 +104,13 @@ class FallbackJob:
                     f"Job {self.uuid} did not complete within {timeout} seconds, last status: {self.status}"
                 )
             await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
-            await self.refresh_from_facilitator()
+            await self.refresh()
 
-    async def refresh_from_facilitator(self) -> None:
+    async def refresh(self) -> None:
+        """
+        Refresh the current status and result of the job.
+        """
+
         new_job = await self._client.get_job(self.uuid)
         self.status = new_job.status
         self.result = new_job.result

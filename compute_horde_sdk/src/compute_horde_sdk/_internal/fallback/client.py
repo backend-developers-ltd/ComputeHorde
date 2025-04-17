@@ -1,13 +1,18 @@
+import asyncio
+import logging
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from .adaptors.utils import lazy_import_adaptor
 from .exceptions import FallbackNotFoundError
-from .job import FallbackJob, FallbackJobSpec
+from .job import FallbackJob, FallbackJobResult, FallbackJobSpec
 
 if TYPE_CHECKING:
     from .adaptors.sky import SkyCloud as SkyCloudType
     from .adaptors.sky import SkyJob as SkyJobType
+
+logger = logging.getLogger(__name__)
 
 sky = lazy_import_adaptor("sky")
 
@@ -24,8 +29,9 @@ class FallbackClient:
     """
 
     DEFAULT_MAX_JOB_RUN_ATTEMPTS = 3
+    MAX_ARTIFACT_SIZE = 1_000_000
 
-    def __init__(self, cloud: str, idle_minutes: int = 5, **kwargs: Any) -> None:
+    def __init__(self, cloud: str, idle_minutes: int = 15, **kwargs: Any) -> None:
         try:
             self.cloud: SkyCloudType = sky.SkyCloud(cloud, **kwargs)
         except ModuleNotFoundError:
@@ -45,6 +51,8 @@ class FallbackClient:
         :param job_spec: Job specification to run.
         :return: A :class:`FallbackJob` class instance representing the created job.
         """
+        logger.info("Running job")
+
         job: SkyJobType = sky.SkyJob(self.cloud, job_spec)
         status = job.submit(idle_minutes=self.idle_minutes)
         self._jobs[job.job_uuid] = job
@@ -54,7 +62,6 @@ class FallbackClient:
             uuid=job.job_uuid,
             status=status,
         )
-        # sky.tail_logs(cluster_name, job_id, True)
 
     async def run_until_complete(
         self,
@@ -79,6 +86,34 @@ class FallbackClient:
         :return: A :class:`FallbackJob` class instance representing the created job.
             If the job was rerun, it will represent the last attempt.
         """
+        start_time = time.monotonic()
+
+        def remaining_timeout() -> float | None:
+            if timeout is None:
+                return None
+            new_timeout = timeout - (time.monotonic() - start_time)
+            return max(new_timeout, 0)
+
+        attempt = 0
+        while True:
+            attempt += 1
+            attempt_msg = f"{attempt}/{max_attempts}" if max_attempts > 0 else f"{attempt}"
+            logger.info("Attempting to run job [%s]", attempt_msg)
+
+            job = await self.create_job(job_spec)
+
+            if job_attempt_callback:
+                maybe_coro = job_attempt_callback(job)
+                if asyncio.iscoroutine(maybe_coro):
+                    await maybe_coro
+
+            await job.wait(timeout=remaining_timeout())
+
+            if job.status.is_successful():
+                return job
+
+            if 0 < max_attempts <= attempt:
+                return job
 
     async def get_job(self, job_uuid: str) -> FallbackJob:
         """
@@ -93,11 +128,19 @@ class FallbackClient:
             raise FallbackNotFoundError(f"Job with UUID {job_uuid} not found")
 
         status = job.status()
+        if not status.is_in_progress():
+            result = FallbackJobResult(
+                stdout=job.output(),
+                artifacts=job.artifacts(max_size=self.MAX_ARTIFACT_SIZE),
+            )
+        else:
+            result = None
 
         return FallbackJob(
             self,
             uuid=job_uuid,
             status=status,
+            result=result,
         )
 
     async def get_jobs(self) -> list[FallbackJob]:
