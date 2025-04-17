@@ -11,7 +11,6 @@ import shlex
 import shutil
 import subprocess
 import tempfile
-import time
 import typing
 import zipfile
 
@@ -248,6 +247,10 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
                 details=details,
             )
         )
+
+    async def send_failed_to_unpack_volumes(self):
+        # TODO: TIMEOUTS
+        await self.send_failed_to_prepare()
 
     async def send_failed_to_prepare(self):
         await self.send_model(
@@ -576,7 +579,6 @@ class JobRunner:
             docker_run_options = RunConfigManager.preset_to_docker_run_args(
                 job_request.docker_run_options_preset
             )
-            await self.unpack_volume()
         except JobError as ex:
             logger.error("Job error: %s", ex.description)
             return JobResult(
@@ -694,33 +696,32 @@ class JobRunner:
         if self.process is not None:
             self.process.kill()
 
-    async def wait_for_job(self, job_request: V0JobRequest) -> JobResult:
+    async def wait_for_job(self) -> tuple[int, str, str, bool]:
         """
         Waits for the existing job process to finish and returns the result.
         """
         if self.process is None:
             raise JobError("Job process not started")
 
-        t1 = time.time()
         try:
             result = await asyncio.wait_for(
-                self.process.communicate(), timeout=self.initial_job_request.timeout_seconds
+                self.process.communicate(), timeout=self.full_job_request.time_limit_execution # TODO: TIMEOUTS
             )
             stdout = result[0].decode()
             stderr = result[1].decode()
+            timed_out = False
         except TimeoutError:
             # If the process did not finish in time, kill it
             logger.error(
                 f"Process didn't finish in time, killing it, job_uuid={self.initial_job_request.job_uuid}"
             )
             self.process.kill()
-            timeout = True
             exit_status = None
             stdout = (await self.process.stdout.read()).decode() if self.process.stdout else ""
             stderr = (await self.process.stderr.read()).decode() if self.process.stderr else ""
+            timed_out = True
         else:
             exit_status = self.process.returncode
-            timeout = False
 
         if self.is_streaming_job:
             # stop the associated nginx server
@@ -739,6 +740,9 @@ class JobRunner:
             except Exception as e:
                 logger.error(f"Failed to stop Nginx: {e}")
 
+        return exit_status, stdout, stderr, timed_out
+
+    async def upload_results(self, job_request: V0JobRequest, exit_status: int, stdout: str, stderr: str, timed_out: bool) -> JobResult:
         # Save the streams in output volume and truncate them in response.
         with open(self.output_volume_mount_dir / "stdout.txt", "w") as f:
             f.write(stdout)
@@ -779,22 +783,10 @@ class JobRunner:
                     stdout = ex.description
                     stderr = ""
 
-            time_took = time.time() - t1
-            logger.info(
-                f'Job "{self.initial_job_request.job_uuid}" finished successfully in {time_took:0.2f} seconds'
-            )
-        else:
-            time_took = time.time() - t1
-            logger.error(
-                f'"{" ".join(self.cmd)}" (job_uuid={self.initial_job_request.job_uuid})'
-                f" failed after {time_took:0.2f} seconds with status={self.process.returncode}"
-                f' \nstdout="{stdout}"\nstderr="{stderr}'
-            )
-
         return JobResult(
             success=success,
             exit_status=exit_status,
-            timeout=timeout,
+            timeout=timed_out,
             stdout=stdout,
             stderr=stderr,
             artifacts=artifacts,
@@ -1044,6 +1036,7 @@ class Command(BaseCommand):
 
             job_runner = self.JOB_RUNNER_CLASS(initial_message)
             try:
+                #### STAGE 1: STARTUP
                 logger.debug(f"Preparing for job {initial_message.job_uuid}")
                 try:
                     await job_runner.prepare()
@@ -1061,32 +1054,47 @@ class Command(BaseCommand):
                 job_request = await miner_client.full_payload
                 logger.debug(f"Running job {initial_message.job_uuid}")
 
-                # start the job running process
-                result = await job_runner.start_job(job_request)
-                if result is None:
-                    if job_runner.is_streaming_job:
-                        assert job_runner.executor_certificate is not None
-                        # check that the job is ready to serve requests
-                        ip = await get_docker_container_ip(
-                            job_runner.nginx_container_name, bridge_network=True
-                        )
-                        logger.debug(f"Checking if streaming job is ready at http://{ip}/health")
-                        job_ready = await check_endpoint(
-                            f"http://{ip}/health", WAIT_FOR_STREAMING_JOB_TIMEOUT
-                        )
-                        if job_ready:
-                            logger.debug("Job ready for streaming")
-                            await miner_client.send_streaming_job_ready(
-                                certificate=job_runner.executor_certificate
-                            )
-                        else:
-                            logger.debug("Job timed out waiting to be ready for streaming")
-                            await miner_client.send_streaming_job_failed_to_prepare()
-                            job_runner.kill_job()
+                #### STAGE 2: DOWNLOAD
+                try:
+                    await job_runner.unpack_volume()
+                except JobError:
+                    logger.exception("Failed to download and unpack volumes")
+                    await miner_client.send_failed_to_unpack_volumes()
+                    return
 
-                    # wait for the job process to finish
-                    result = await job_runner.wait_for_job(job_request)
+                #### STAGE 3: EXECUTE
+                startup_error_result = await job_runner.start_job(job_request)
+                if startup_error_result is not None:
+                    await miner_client.send_failed(startup_error_result)
+                    return
 
+                if job_runner.is_streaming_job:
+                    assert job_runner.executor_certificate is not None
+                    # check that the job is ready to serve requests
+                    ip = await get_docker_container_ip(
+                        job_runner.nginx_container_name, bridge_network=True
+                    )
+                    logger.debug(f"Checking if streaming job is ready at http://{ip}/health")
+                    job_ready = await check_endpoint(
+                        f"http://{ip}/health", WAIT_FOR_STREAMING_JOB_TIMEOUT
+                    )
+                    if job_ready:
+                        logger.debug("Job ready for streaming")
+                        await miner_client.send_streaming_job_ready(
+                            certificate=job_runner.executor_certificate
+                        )
+                    else:
+                        logger.debug("Job timed out waiting to be ready for streaming")
+                        await miner_client.send_streaming_job_failed_to_prepare()
+                        job_runner.kill_job()
+
+                # wait for the job process to finish
+                process_output = await job_runner.wait_for_job()
+
+                #### STAGE 4: UPLOAD
+                result = await job_runner.upload_results(job_request, *process_output)
+                
+                #### DONE
                 result.specs = specs
                 if result.success:
                     await miner_client.send_finished(result)
