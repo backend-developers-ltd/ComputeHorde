@@ -158,6 +158,8 @@ module = [
     "bittensor",
     "nox",
     "pytest",
+    "runpod",
+    "sky.*",
     "tests.*",
 ]
 ignore_missing_imports = true

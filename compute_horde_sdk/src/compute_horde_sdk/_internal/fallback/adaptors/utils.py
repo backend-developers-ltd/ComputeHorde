@@ -16,7 +16,7 @@ def lazy_import_adaptor(adaptor: str) -> Any:
         module = sys.modules[module_name]
     else:
         spec = importlib.util.find_spec(module_name)
-        if not spec:
+        if not spec or not spec.loader:
             raise ModuleNotFoundError(f"Module '{module_name}' could not be found.")
 
         loader = importlib.util.LazyLoader(spec.loader)

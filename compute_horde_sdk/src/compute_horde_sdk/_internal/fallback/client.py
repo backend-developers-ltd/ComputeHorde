@@ -25,7 +25,7 @@ class FallbackClient:
 
     DEFAULT_MAX_JOB_RUN_ATTEMPTS = 3
 
-    def __init__(self, cloud: str, idle_minutes: int = 5, **kwargs) -> None:
+    def __init__(self, cloud: str, idle_minutes: int = 5, **kwargs: Any) -> None:
         try:
             self.cloud: SkyCloudType = sky.SkyCloud(cloud, **kwargs)
         except ModuleNotFoundError:
@@ -115,4 +115,4 @@ class FallbackClient:
         :return: An async iterator of :class:`FallbackJob` instances representing your jobs.
         """
         for job_uuid in self._jobs.keys():
-            yield self.get_job(job_uuid)
+            yield await self.get_job(job_uuid)
