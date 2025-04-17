@@ -1,7 +1,7 @@
 @startuml
 !pragma teoz true
 skinparam sequenceBoxBorderColor #gray
-box Facilitator #ffb
+box Facilitator (simplified) #ffb
 participant Facilitator
 end box
 box Validator #eef5ff
@@ -10,7 +10,6 @@ participant "Miner Driver"
 end box
 box Miner #lightyellow
 participant "Validator Consumer"
-participant "Reservation task"
 participant "Executor Consumer"
 end box
 box Executor #efefef
@@ -19,124 +18,143 @@ participant "Task/Subprocess"
 participant Job
 end box
 
+"Facilitator connection" -> Facilitator: Connect
+activate Facilitator
+|||
+...
+
 
 -> Facilitator: Create job
-activate Facilitator
 Facilitator -> Facilitator: Store job
 Facilitator -> "Facilitator connection": ""V2JobRequest""
 activate "Facilitator connection"
+Facilitator -> Facilitator: Reset watchdog
+activate Facilitator #lightgreen
+rnote right of Facilitator #lightgreen: Watchdog:\nJob received
+"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(Received)
+
 deactivate Facilitator
+Facilitator -> Facilitator: Reset watchdog
+activate Facilitator #lightgreen
+rnote right of Facilitator #lightgreen: Watchdog:\nJob accepted
 
 "Facilitator connection" -> "Facilitator connection": Pick miner
-"Facilitator connection" -> "Facilitator connection": Submit celery job
-"Facilitator connection" -> "Facilitator connection": Wait for celery job result
+"Facilitator connection" -> "Facilitator connection": Submit celery task
+"Facilitator connection" -> "Facilitator connection": Wait for celery task result
 activate "Facilitator connection" #lightgreen
 rnote right of "Facilitator connection" #lightgreen: celery result timeout
+|||
 rnote over "Facilitator connection", "Miner Driver": Waiting for celery task to start
+|||
 activate "Miner Driver" #lightgreen
-rnote right of "Miner Driver" #lightgreen: celery task\ntimeout
-"Miner Driver" -> "Validator Consumer": ""V0InitialJobRequest""
+rnote right of "Miner Driver" #lightgreen: celery task\nTTL
+"Miner Driver" -> "Validator Consumer": Connect
 activate "Validator Consumer"
+"Miner Driver" -> "Validator Consumer": ""V0InitialJobRequest""
 activate "Miner Driver" #0c0
-rnote right of "Miner Driver" #0c0: initial response\ntimeout
-"Validator Consumer" -> "Reservation task" **: "Reserve" executor
-activate "Reservation task"
-activate "Validator Consumer" #lightgreen
-rnote right of "Validator Consumer" #lightgreen: reservation\ntimeout
-"Reservation task" -> "Reservation task": Reserve executor\nfrom pool
-"Reservation task" -> "Validator Consumer": set reservation future
-deactivate "Validator Consumer"
+rnote right of "Miner Driver" #0c0: initial response\ntimeout (short)
+"Validator Consumer" -> "Validator Consumer": Reserve executor from pool
 "Validator Consumer" -> "Miner Driver": ""V0AcceptJobRequest""
 deactivate "Miner Driver"
 "Miner Driver" -> "Facilitator connection": Status update
+"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(Accepted)
+
+deactivate Facilitator
+Facilitator -> Facilitator: Reset watchdog
+activate Facilitator #lightgreen
+rnote right of Facilitator #lightgreen: Watchdog:\nExecutor ready
+
 activate "Miner Driver" #0c0
 rnote right of "Miner Driver" #0c0: executor ready\ntimeout
-"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""
-activate Facilitator
-Facilitator -> Facilitator: Store job status
+"Validator Consumer" -> Executor: Start executor\n(via vendor code)\n(pass executor TTL to deal with zombie executors)
+activate Executor #lightgreen
+rnote right of Executor #lightgreen: executor TTL
+
 |||
-deactivate Facilitator
-"Reservation task" -> Executor: Start executor\n(via vendor code)
-activate Executor
-"Reservation task" --> "Validator Consumer":
-deactivate "Reservation task"
-"Validator Consumer" -> "Validator Consumer": Store executor IP
-|||
-deactivate "Validator Consumer"
 Executor -> "Executor Consumer": Connect
 activate "Executor Consumer"
 "Executor Consumer" -> Executor: ""V0InitialJobRequest""
-deactivate "Executor Consumer"
-Executor -> "Task/Subprocess": CVE check
-activate "Task/Subprocess"
-activate Executor #lightgreen
-rnote right of Executor #lightgreen: CVE check\ntimeout
-return done
-deactivate Executor
-deactivate "Task/Subprocess"
-
-Executor -> "Task/Subprocess": toolkit ver. check
-activate "Task/Subprocess"
-activate Executor #lightgreen
-rnote right of Executor #lightgreen: toolkit check\ntimeout
-return done
-deactivate Executor
-deactivate "Task/Subprocess"
-
+activate Executor #0c0
+rnote right of Executor #0c0: startup timeout (short)
+Executor -> "Executor": CVE check
+Executor -> "Executor": toolkit ver. check
 Executor -> Executor: clear old jobs
-
 group docker image in initial details?
+note right of Executor: this is only for small images, large job\nimages must be preloaded somewhere else\nor this takes too long
+note right of Executor: if image is preloaded, this will exit quickly
 Executor -> Executor: pull docker image
 end group
-
+deactivate Executor
 Executor -> "Executor Consumer": ""V0ExecutorReadyRequest""
-activate "Executor Consumer"
 "Executor Consumer" -> "Validator Consumer": ""V0ExecutorReadyRequest""
-deactivate "Executor Consumer"
-activate "Validator Consumer"
 "Validator Consumer" -> "Miner Driver": ""V0ExecutorReadyRequest""
-deactivate "Validator Consumer"
+"Miner Driver" -> "Facilitator connection": Status update
 deactivate "Miner Driver"
+"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(Executor ready)
+
+deactivate Facilitator
+Facilitator -> Facilitator: Reset watchdog
+activate Facilitator #lightgreen
+rnote right of Facilitator #lightgreen: Watchdog:\nVolumes ready
+
 "Miner Driver" -> "Validator Consumer": ""V0JobRequest""
 activate "Miner Driver" #0c0
-activate "Validator Consumer"
+rnote right of "Miner Driver" #0c0: job timeout
 "Validator Consumer" -> "Executor Consumer": ""V0JobRequest""
-deactivate "Validator Consumer"
-activate "Executor Consumer"
 "Executor Consumer" -> Executor: ""V0JobRequest""
-deactivate "Executor Consumer"
-
 Executor -> "Task/Subprocess": ""unpack_volume()""
 activate "Task/Subprocess"
-activate Executor #lightgreen
-rnote right of Executor #lightgreen: unpack timeout
+activate Executor #0c0
+rnote right of Executor #0c0: download timeout
 note right of "Task/Subprocess": Implementation depends\non volume type
 note right of "Task/Subprocess": Multi volume does a loop here
 "Task/Subprocess" -> "Task/Subprocess": **Download** + unpack
 return done
 deactivate Executor
 deactivate "Task/Subprocess"
-Executor -> Executor: docker run
-hnote over Executor, Job #faa: docker will pull the image here\nif it's not present
-Executor --> Job
-activate Executor #lightgreen
-rnote right of Executor #lightgreen: job execution\ntimeout
+Executor -> "Executor Consumer": V0VolumesReady
+"Executor Consumer" -> "Validator Consumer": V0VolumesReady
+"Validator Consumer" -> "Miner Driver": V0VolumesReady
+"Miner Driver" -> "Facilitator connection": Job status update
+"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(Volumes ready)
+
+deactivate Facilitator
+Facilitator -> Facilitator: Reset watchdog
+activate Facilitator #lightgreen
+rnote right of Facilitator #lightgreen: Watchdog:\nExecution done
+
+
+Executor --> Job: docker run
+activate Executor #0c0
+rnote right of Executor #0c0: execution timeout
 activate Job
 Job -> Job: Actual work
 Job -> Executor: stdout, stderr
 deactivate Job
 deactivate Executor
+Executor -> "Executor Consumer": V0ExecutionDone
+"Executor Consumer" -> "Validator Consumer": V0ExecutionDone
+"Validator Consumer" -> "Miner Driver": Job status update
+"Miner Driver" -> "Facilitator connection": Job status update
+"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(Execution done)
+
+deactivate Facilitator
+Facilitator -> Facilitator: Reset watchdog
+activate Facilitator #lightgreen
+rnote right of Facilitator #lightgreen: Watchdog:\nJob complete
+
+activate Executor #0c0
+rnote right of Executor #0c0: upload timeout
 Executor -> Executor: Serialize artifacts
 loop ""MultiUploadOutputUploader""
 Executor -> Executor: Zip the volume
 Executor -> "Task/Subprocess": Start upload
-activate "Task/Subprocess" #lightgreen
-activate "Task/Subprocess" #lightgreen
-activate "Task/Subprocess" #lightgreen
-rnote right of "Task/Subprocess" #lightgreen: upload timeout
+activate "Task/Subprocess"
+activate "Task/Subprocess"
+activate "Task/Subprocess"
 end loop
 Executor -> "Task/Subprocess": Upload stdout/stderr
-activate "Task/Subprocess" #lightgreen
+activate "Task/Subprocess"
 Executor -> Executor: await upload tasks
 "Task/Subprocess" --> Executor: Upload done
 deactivate "Task/Subprocess"
@@ -148,20 +166,21 @@ deactivate "Task/Subprocess"
 deactivate "Task/Subprocess"
 Executor -> "Executor Consumer": ""V0JobFinished""
 deactivate Executor
-activate "Executor Consumer"
+deactivate Executor
 "Executor Consumer" -> "Validator Consumer": ""V0JobFinished""
 deactivate "Executor Consumer"
-activate "Validator Consumer"
 "Validator Consumer" -> "Miner Driver": ""V0JobFinished""
 deactivate "Validator Consumer"
 deactivate "Miner Driver"
-"Miner Driver" --> "Facilitator connection": (Celery task done)
 deactivate "Miner Driver"
+rnote over "Facilitator connection": Waiting for celery task result
 deactivate "Facilitator connection"
-"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(contains artifacts)
-deactivate "Facilitator connection"
-activate Facilitator
-Facilitator -> Facilitator: Store job status
-|||
+"Facilitator connection" -> Facilitator: ""V0JobStatusUpdate""\n(Complete)
+
 deactivate Facilitator
+
+deactivate "Facilitator connection"
+Facilitator -> Facilitator: Store job status
+...
+|||
 @enduml
