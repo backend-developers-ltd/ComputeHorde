@@ -70,12 +70,11 @@ rnote right of "Miner Driver" #0c0: executor ready\ntimeout
 activate Executor #lightgreen
 rnote right of Executor #lightgreen: executor TTL
 
-|||
+activate Executor #0c0
+rnote right of Executor #0c0: startup timeout (short)
 Executor -> "Executor Consumer": Connect
 activate "Executor Consumer"
 "Executor Consumer" -> Executor: ""V0InitialJobRequest""
-activate Executor #0c0
-rnote right of Executor #0c0: startup timeout (short)
 Executor -> "Executor": CVE check
 Executor -> "Executor": toolkit ver. check
 Executor -> Executor: clear old jobs
@@ -84,8 +83,8 @@ note right of Executor: this is only for small images, large job\nimages must be
 note right of Executor: if image is preloaded, this will exit quickly
 Executor -> Executor: pull docker image
 end group
-deactivate Executor
 Executor -> "Executor Consumer": ""V0ExecutorReadyRequest""
+deactivate Executor
 "Executor Consumer" -> "Validator Consumer": ""V0ExecutorReadyRequest""
 "Validator Consumer" -> "Miner Driver": ""V0ExecutorReadyRequest""
 "Miner Driver" -> "Facilitator connection": Status update

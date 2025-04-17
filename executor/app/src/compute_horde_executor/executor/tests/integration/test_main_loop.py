@@ -1531,7 +1531,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
 
 
 def test_artifacts():
-    original_JobRunner_prepare = JobRunner.prepare
+    original_JobRunner_prepare = JobRunner.prepare_initial
 
     async def patch_JobRunner_prepare(self):
         await original_JobRunner_prepare(self)
