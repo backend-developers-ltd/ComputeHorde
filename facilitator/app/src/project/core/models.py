@@ -159,6 +159,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     artifacts_dir = models.CharField(max_length=255, blank=True, help_text="image mount directory for artifacts")
     artifacts = models.JSONField(blank=True, default=dict)
     on_trusted_miner = models.BooleanField(default=False)
+    upload_results = models.JSONField(blank=True, default=dict)
 
     tag = models.CharField(max_length=255, blank=True, default="", help_text="may be used to group jobs")
 

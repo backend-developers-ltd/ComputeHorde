@@ -50,6 +50,9 @@ class ComputeHordeJobResult:
     artifacts: dict[str, bytes]
     """Artifact file contents, keyed by file path, as :class:`bytes`."""
 
+    upload_results: dict[str, compute_horde_output_upload.HttpOutputVolumeResponse]
+    """Service responses for files uploaded to HTTP output volumes, keyed by file name."""
+
 
 class FacilitatorJobResponse(pydantic.BaseModel):
     uuid: str
@@ -71,6 +74,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # uploads: list = []
     # target_validator_hotkey: str
     artifacts: dict[str, str] = {}
+    upload_results: dict[str, str] = {}
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):

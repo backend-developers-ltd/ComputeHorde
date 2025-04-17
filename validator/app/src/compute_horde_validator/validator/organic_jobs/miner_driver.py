@@ -46,6 +46,7 @@ class MinerResponse(BaseModel, extra="allow"):
     docker_process_stderr: str
     docker_process_stdout: str
     artifacts: dict[str, str]
+    upload_results: dict[str, str]
 
 
 class JobStatusMetadata(BaseModel, extra="allow"):
@@ -72,6 +73,7 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
                 docker_process_stdout=job.stdout,
                 docker_process_stderr=job.stderr,
                 artifacts=job.artifacts,
+                upload_results=job.upload_results,
             )
         else:
             miner_response = None
@@ -218,7 +220,7 @@ async def drive_organic_job(
     )
 
     try:
-        stdout, stderr, artifacts = await run_organic_job(
+        stdout, stderr, artifacts, upload_results = await run_organic_job(
             miner_client,
             job_details,
             initial_response_timeout=initial_response_timeout,
@@ -229,6 +231,7 @@ async def drive_organic_job(
         job.stdout = stdout
         job.stderr = stderr
         job.artifacts = artifacts
+        job.upload_results = upload_results
         job.status = OrganicJob.Status.COMPLETED
         job.comment = comment
         await job.asave()

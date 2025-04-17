@@ -123,6 +123,11 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
                 "docker_run_cmd": [],
                 "docker_run_options_preset": "none",
                 "volume": {"volume_type": "inline", "contents": "nonsense"},
+                "output_upload": {
+                    "output_upload_type": "zip_and_http_post",
+                    "url": "http://localhost/output/upload",
+                    "form_fields": {},
+                },
             }
         )
         response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
@@ -132,6 +137,9 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
             "docker_process_stdout": "some stdout",
             "docker_process_stderr": "some stderr",
             "artifacts": {},
+            "upload_results": {
+                "output.zip": '{"headers": {"Content-Length": "123", "ETag": "abc123"}, "body": "response body content"}'
+            },
         }
 
 

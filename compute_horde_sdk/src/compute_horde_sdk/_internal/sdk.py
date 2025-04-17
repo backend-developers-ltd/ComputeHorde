@@ -15,6 +15,7 @@ import pydantic
 import tenacity
 
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.output_upload import HttpOutputVolumeResponse
 from compute_horde_core.signature import (
     BittensorWalletSigner,
     SignatureScope,
@@ -173,10 +174,18 @@ class ComputeHordeJob:
     def _from_response(cls, client: "ComputeHordeClient", response: FacilitatorJobResponse) -> Self:
         result = None
         if not response.status.is_in_progress():
+            upload_results = {}
+            for path, raw_data in response.upload_results.items():
+                try:
+                    upload_results[path] = HttpOutputVolumeResponse.parse_raw(raw_data)
+                except Exception as e:
+                    logger.error(f"Failed to parse upload result for '{path}': {e}")
+
             # TODO: Handle base64 decode errors
             result = ComputeHordeJobResult(
                 stdout=response.stdout,
                 artifacts={path: base64.b64decode(base64_data) for path, base64_data in response.artifacts.items()},
+                upload_results=upload_results,
             )
         return cls(
             client,
