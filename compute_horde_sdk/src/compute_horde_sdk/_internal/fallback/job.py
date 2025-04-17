@@ -3,7 +3,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from ..models import ComputeHordeJobResult, ComputeHordeJobStatus
 from ..sdk import ComputeHordeJobSpec
@@ -38,7 +38,7 @@ class FallbackJobSpec:
     zone: str | None = None
 
     @classmethod
-    def from_job_spec(cls, job_spec: ComputeHordeJobSpec, **kwargs) -> Self:
+    def from_job_spec(cls, job_spec: ComputeHordeJobSpec, **kwargs: Any) -> Self:
         if job_spec.executor_class == job_spec.executor_class.__class__.always_on__llm__a6000:
             accelerators = {"RTXA6000": 1}
         else:

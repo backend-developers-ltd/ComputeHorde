@@ -1,5 +1,6 @@
 import uuid
 from functools import cache, cached_property
+from typing import Any
 
 import sky
 import sky.sky_logging
@@ -21,7 +22,7 @@ class SkyCloud:
     :type cloud: str
     """
 
-    def __init__(self, cloud: str, **kwargs) -> None:
+    def __init__(self, cloud: str, **kwargs: Any) -> None:
         self.cloud = cloud
 
         setup = getattr(self, f"_{self.cloud}")
@@ -37,7 +38,7 @@ class SkyCloud:
 
             runpod.api_key = api_key
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.cloud
 
 
@@ -72,9 +73,9 @@ class SkyJob:
         return self._job_id
 
     @cached_property
-    def job_uuid(self) -> str | None:
+    def job_uuid(self) -> str:
         if not self.submitted:
-            return None
+            return ""
 
         return str(uuid.uuid5(self.UUID_NAMESPACE, f"{self.cluster_name}-{self.job_id}"))
 

@@ -57,7 +57,7 @@ def lint(session: nox.Session):
 
 @nox.session(python=PYTHON_VERSION)
 def type_check(session):
-    install(session, "type_check")
+    install(session, "type_check", "fallback")
     session.run("mypy", "src", *session.posargs)
 
 
