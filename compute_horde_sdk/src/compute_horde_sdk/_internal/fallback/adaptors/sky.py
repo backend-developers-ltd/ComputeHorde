@@ -1,12 +1,22 @@
+import base64
+import logging
+import os
+import shutil
+import tempfile
 import uuid
 from functools import cache, cached_property
+from pathlib import Path
 from typing import Any
 
 import sky
+import sky.backends
+import sky.exceptions
 import sky.sky_logging
 
 from ..exceptions import FallbackError
 from ..job import FallbackJobSpec, FallbackJobStatus
+
+logger = logging.getLogger(__name__)
 
 
 class SkyCloud:
@@ -27,6 +37,7 @@ class SkyCloud:
 
         setup = getattr(self, f"_{self.cloud}")
         if setup is None:
+            logger.error("Unsupported cloud: %s", cloud)
             raise FallbackError(f"Unsupported cloud: {cloud}")
 
         setup(**kwargs)
@@ -57,12 +68,16 @@ class SkyJob:
     """
 
     UUID_NAMESPACE = uuid.NAMESPACE_OID
+    PREFIX = "ch-"
 
     def __init__(self, cloud: SkyCloud, job_spec: FallbackJobSpec) -> None:
         self.cloud = cloud
         self.job_spec = job_spec
 
+        self.temp_dir = self._get_tempdir()
+
         self._job_id: int | None = None
+        self._job_resource_handle: sky.backends.CloudVmRayResourceHandle | None = None
 
     @property
     def submitted(self) -> bool:
@@ -82,19 +97,26 @@ class SkyJob:
     @cached_property
     def cluster_name(self) -> str:
         resources_token = str(uuid.uuid5(self.UUID_NAMESPACE, str(self._get_resources())))[:8]
-        return f"ch-{resources_token}"
+        return f"{self.PREFIX}{resources_token}"
 
     def submit(self, idle_minutes: int = 1) -> FallbackJobStatus:
         if self.submitted:
+            logger.error("Attempted to submit a job that is already submitted.")
             raise FallbackError("Job already submitted")
 
+        logger.info("Submitting job to cloud: %s", self.cloud)
+
         resources = self._get_resources()
+        logger.debug("Resources for job submission: %s", resources)
         task = self._get_task(resources)
+        logger.debug("Task for job submission: %s", task)
 
         with sky.sky_logging.silent():
-            self._job_id, _ = sky.launch(
+            logger.debug("Launching job on cluster: %s", self.cluster_name)
+            self._job_id, self._job_resource_handle = sky.launch(
                 task,
                 cluster_name=self.cluster_name,
+                backend=sky.backends.CloudVmRayBackend(),
                 idle_minutes_to_autostop=idle_minutes,
                 down=True,
                 detach_setup=True,
@@ -102,14 +124,19 @@ class SkyJob:
                 stream_logs=False,
             )
 
+        logger.info("Job submitted successfully with UUID: %s", self.job_uuid)
+
         return FallbackJobStatus.SENT
 
     def status(self) -> FallbackJobStatus:
         if not self.submitted:
+            logger.error("Attempted to get a status from a job that is not yet submitted.")
             raise FallbackError("Job not yet submitted")
 
         with sky.sky_logging.silent():
             sky_status = sky.job_status(self.cluster_name, job_ids=[self.job_id]).get(self.job_id)
+
+        logger.debug("Job %s status is: %s", self.job_uuid, sky_status)
 
         if sky_status is None:
             return FallbackJobStatus.SENT
@@ -123,6 +150,68 @@ class SkyJob:
             return FallbackJobStatus.FAILED
         else:
             raise NotImplementedError()
+
+    def output(self) -> str:
+        if not self.submitted:
+            logger.error("Attempted to get a status from a job that is not yet submitted.")
+            raise FallbackError("Job not yet submitted")
+
+        with sky.sky_logging.silent():
+            logs_dir = sky.download_logs(self.cluster_name, [str(self.job_id)], local_dir=str(self.temp_dir))[
+                str(self.job_id)
+            ]
+
+        logger.debug("Job %s output downloaded to: %s", self.job_uuid, logs_dir)
+
+        return (Path(logs_dir) / "tasks/run.log").read_text()
+
+    def artifacts(self, max_size: int = 1_000_000) -> dict[str, bytes]:
+        if not self.submitted:
+            logger.error("Attempted to get a status from a job that is not yet submitted.")
+            raise FallbackError("Job not yet submitted")
+
+        if self.job_spec.artifacts_dir is None:
+            return {}
+
+        assert self._job_resource_handle is not None  # make mypy happy
+        head_runner = self._job_resource_handle.get_command_runners()[0]
+
+        source = Path(self.job_spec.artifacts_dir)
+        destination = Path(tempfile.mkdtemp(prefix="download-", dir=self.temp_dir))
+        try:
+            head_runner.rsync(f"{source}{os.sep}", str(destination), up=False, stream_logs=False)
+        except sky.exceptions.CommandError as e:
+            if e.returncode == sky.exceptions.RSYNC_FILE_NOT_FOUND_CODE:
+                return {}
+            else:
+                raise
+
+        logger.debug("Job %s artifacts downloaded to: %s", self.job_uuid, destination)
+
+        artifacts = {}
+        for item in destination.iterdir():
+            if item.is_dir():
+                logger.warning("Directory found in artifacts: %s", item)
+            else:
+                content = item.read_bytes()
+                size = len(content)
+                if size < max_size:
+                    path = str(Path(self.job_spec.artifacts_dir) / item.name)
+                    artifacts[path] = base64.b64encode(content)
+                else:
+                    logger.error(f"Artifact {item} too large: {size:,} bytes")
+
+        return artifacts
+
+    def _get_tempdir(self) -> Path:
+        tempdir = Path(tempfile.mkdtemp(prefix=self.cluster_name))
+        for item in tempdir.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+
+        return tempdir
 
     @cache
     def _get_resources(self) -> sky.Resources:
