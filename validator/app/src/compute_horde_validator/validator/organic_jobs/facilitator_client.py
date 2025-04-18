@@ -151,6 +151,7 @@ class FacilitatorClient:
         try:
             async for ws in self.connect():
                 try:
+                    logger.info("connected to facilitator")
                     await self.handle_connection(ws)
                 except websockets.ConnectionClosed as exc:
                     self.ws = None

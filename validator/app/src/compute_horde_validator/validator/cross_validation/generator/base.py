@@ -53,7 +53,6 @@ class BasePromptJobGenerator(abc.ABC):
             docker_image=self.docker_image_name(),
             docker_run_options_preset=self.docker_run_options_preset(),
             docker_run_cmd=self.docker_run_cmd(),
-            total_job_timeout=self.timeout_seconds(),
             volume=self.volume(),
             output=self.output(),
         )

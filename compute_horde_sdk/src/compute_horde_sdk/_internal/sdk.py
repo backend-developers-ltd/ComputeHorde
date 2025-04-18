@@ -90,6 +90,28 @@ class ComputeHordeJobSpec:
     docker_image: str
     """Docker image of the job, in the form of ``user/image:tag``."""
 
+    time_limit_download_sec: int
+    """
+    Time dedicated to downloading job volumes to the executor machine.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail before starting execution.
+    """
+
+    time_limit_execution_sec: int
+    """
+    Time dedicated to executing the job.
+    Part of the paid cost to run the job.
+    This is only the upper time limit for the execution stage of the job. When this limit is reached, the job will be
+    stopped, but it won't be considered failed - it will proceed to the upload stage anyway.
+    """
+
+    time_limit_upload_sec: int
+    """
+    Time dedicated to uploading the job's output.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail.
+    """
+
     args: Sequence[str] = dataclasses.field(default_factory=list)
     """Positional arguments and flags to run the job with."""
 
@@ -363,6 +385,9 @@ class ComputeHordeClient:
             "use_gpu": True,
             "artifacts_dir": job_spec.artifacts_dir,
             "on_trusted_miner": on_trusted_miner,
+            "time_limit_download": job_spec.time_limit_download_sec,
+            "time_limit_execution": job_spec.time_limit_execution_sec,
+            "time_limit_upload": job_spec.time_limit_upload_sec,
         }
         if job_spec.input_volumes is not None:
             data["volumes"] = [

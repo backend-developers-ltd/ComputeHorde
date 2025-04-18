@@ -41,13 +41,21 @@ from compute_horde.protocol_messages import (
     ValidatorAuthForMiner,
     ValidatorToMinerMessage,
 )
-from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.models import (
+    JobAcceptedReceipt,
+    JobFinishedReceipt,
+    JobStartedReceipt,
+)
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.transport import AbstractTransport, TransportConnectionError, WSTransport
+from compute_horde.transport import (
+    AbstractTransport,
+    TransportConnectionError,
+    WSTransport,
+)
 from compute_horde.utils import MachineSpecs, Timer, sign_blob
 
 logger = logging.getLogger(__name__)
@@ -367,15 +375,16 @@ class OrganicJobError(Exception):
             return ""
         return self.received.model_dump_json()
 
-
 @dataclass
 class OrganicJobDetails:
     job_uuid: str
     executor_class: ExecutorClass
     docker_image: str
+    time_limit_download: int
+    time_limit_execution: int
+    time_limit_upload: int
     docker_run_options_preset: DockerRunOptionsPreset = "nvidia_all"
     docker_run_cmd: list[str] = field(default_factory=list)
-    total_job_timeout: int = 300
     volume: Volume | None = None
     output: OutputUpload | None = None
     artifacts_dir: str | None = None
@@ -404,7 +413,7 @@ async def run_organic_job(
         except TransportConnectionError as exc:
             raise OrganicJobError(FailureReason.MINER_CONNECTION_FAILED) from exc
 
-        job_timer = Timer(timeout=job_details.total_job_timeout)
+        job_timer = Timer(timeout=12345) # TODO: TIMEOUTS
 
         receipt_payload, receipt_signature = client.generate_job_started_receipt_message(
             executor_class=job_details.executor_class,
@@ -419,7 +428,6 @@ async def run_organic_job(
                 job_uuid=job_details.job_uuid,
                 executor_class=job_details.executor_class,
                 docker_image=job_details.docker_image,
-                timeout_seconds=job_details.total_job_timeout,
                 volume=job_details.volume,
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
@@ -471,6 +479,9 @@ async def run_organic_job(
                     volume=None,  # Was sent in the initial request
                     output_upload=job_details.output,
                     artifacts_dir=job_details.artifacts_dir,
+                    time_limit_download=job_details.time_limit_download,
+                    time_limit_execution=job_details.time_limit_execution,
+                    time_limit_upload=job_details.time_limit_upload,
                 )
             )
 
