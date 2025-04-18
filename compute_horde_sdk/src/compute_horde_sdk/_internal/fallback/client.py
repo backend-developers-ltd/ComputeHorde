@@ -2,11 +2,13 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
+from functools import cache
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from .adaptors.utils import lazy_import_adaptor
 from .exceptions import FallbackNotFoundError
-from .job import FallbackJob, FallbackJobResult, FallbackJobSpec
+from .job import FallbackJob, FallbackJobResult, FallbackJobSpec, FallbackJobStatus
+from .utils import PackageAnalyzer, get_tempdir
 
 if TYPE_CHECKING:
     from .adaptors.sky import SkyCloud as SkyCloudType
@@ -53,14 +55,32 @@ class FallbackClient:
         """
         logger.info("Running job")
 
-        job: SkyJobType = sky.SkyJob(self.cloud, job_spec)
-        status = job.submit(idle_minutes=self.idle_minutes)
+        workdir = get_tempdir()
+        setup = self._get_setup(str(workdir))
+        job: SkyJobType = sky.SkyJob(
+            cloud=self.cloud,
+            workdir=workdir,
+            setup=setup,
+            run=job_spec.run,
+            envs=job_spec.envs,
+            artifacts_dir=job_spec.artifacts_dir,
+            accelerators=job_spec.accelerators,
+            cpus=job_spec.cpus,
+            memory=job_spec.memory,
+            disk_size=job_spec.disk_size,
+            ports=job_spec.ports,
+            instance_type=job_spec.instance_type,
+            image_id=job_spec.image_id,
+            region=job_spec.region,
+            zone=job_spec.zone,
+        )
+        job.submit(idle_minutes=self.idle_minutes)
         self._jobs[job.job_uuid] = job
 
         return FallbackJob(
             self,
             uuid=job.job_uuid,
-            status=status,
+            status=FallbackJobStatus.SENT,
         )
 
     async def run_until_complete(
@@ -127,12 +147,9 @@ class FallbackClient:
         if job is None:
             raise FallbackNotFoundError(f"Job with UUID {job_uuid} not found")
 
-        status = job.status()
+        status = self._get_status(job)
         if not status.is_in_progress():
-            result = FallbackJobResult(
-                stdout=job.output(),
-                artifacts=job.artifacts(max_size=self.MAX_ARTIFACT_SIZE),
-            )
+            result = self._get_result(job)
         else:
             result = None
 
@@ -159,3 +176,40 @@ class FallbackClient:
         """
         for job_uuid in self._jobs.keys():
             yield await self.get_job(job_uuid)
+
+    @cache
+    def _get_setup(self, workdir: str) -> str:
+        pa = PackageAnalyzer("compute-horde-sdk")
+        source = pa.to_source(temp_dir=workdir)
+        # TODO(maciek): use already preinstalled uv (by SkyPilot) for managing python and virtualenv
+        return f"pip install {source}"
+
+    def _get_status(self, job: "SkyJobType") -> FallbackJobStatus:
+        status = job.status()
+
+        if status is None:
+            return FallbackJobStatus.SENT
+        elif status in {
+            sky.SkyJobStatus.INIT,
+            sky.SkyJobStatus.PENDING,
+            sky.SkyJobStatus.SETTING_UP,
+            sky.SkyJobStatus.RUNNING,
+        }:
+            return FallbackJobStatus.ACCEPTED
+        elif status in {sky.SkyJobStatus.FAILED_DRIVER, sky.SkyJobStatus.FAILED_SETUP}:
+            return FallbackJobStatus.REJECTED
+        elif status == sky.SkyJobStatus.SUCCEEDED:
+            return FallbackJobStatus.COMPLETED
+        elif status == sky.SkyJobStatus.FAILED:
+            return FallbackJobStatus.FAILED
+        else:
+            raise NotImplementedError(f"Unsupported status: {status}")
+
+    def _get_result(self, job: "SkyJobType") -> FallbackJobResult:
+        stdout = job.output()
+        if job.artifacts_dir is not None:
+            artifacts = job.download(job.artifacts_dir, max_size=self.MAX_ARTIFACT_SIZE)
+        else:
+            artifacts = {}
+
+        return FallbackJobResult(stdout=stdout, artifacts=artifacts)
