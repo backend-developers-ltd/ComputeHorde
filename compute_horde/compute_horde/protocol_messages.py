@@ -156,27 +156,33 @@ class V0JobRequest(BaseModel):
 
 # executor -> miner.ec -> miner.vc -> validator
 class V0JobFailedRequest(BaseModel):
+    """
+    Job has failed somewhere outside the execution process.
+    """
     class ErrorType(enum.StrEnum):
+        TIMEOUT = "TIMEOUT"
+        SECURITY_CHECK = "SECURITY_CHECK"
         HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
-        # TODO: add uploading errors here?
 
     message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
     job_uuid: str
-    docker_process_exit_status: int | None = None
-    docker_process_stdout: str
-    docker_process_stderr: str
+    error_message: str | None = None
     error_type: ErrorType | None = None
     error_detail: str | None = None
-    timeout: bool = False
 
 
 # executor -> miner.ec -> miner.vc -> validator
 class V0JobFinishedRequest(BaseModel):
+    """
+    All steps finished successfully, and we have the output.
+    """
     message_type: Literal["V0JobFinishedRequest"] = "V0JobFinishedRequest"
     job_uuid: str
+    return_code: int
+    timed_out: bool
     docker_process_stdout: str
     docker_process_stderr: str
-    artifacts: dict[str, str] | None = None
+    artifacts: dict[str, str]
 
 
 # validator -> miner.vc

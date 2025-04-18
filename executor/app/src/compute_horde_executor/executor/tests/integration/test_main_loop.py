@@ -79,7 +79,7 @@ class CommandTested(Command):
         self.MINER_CLIENT_CLASS = partial(MinerClient, transport=transport)
         super().__init__(*args, **kwargs)
 
-    async def is_nvidia_toolkit_version_safe(self):
+    async def run_nvidia_toolkit_version_check_or_fail(self):
         is_toolkit_installed = None
 
         try:
@@ -106,7 +106,7 @@ class CommandTested(Command):
             is_toolkit_installed = True
 
         if is_toolkit_installed:
-            return await super().is_nvidia_toolkit_version_safe()
+            return await super().run_nvidia_toolkit_version_check_or_fail()
         else:
             logger.warning(
                 "NVIDIA Container Toolkit not installed - skipping safe toolkit version check in tests"
