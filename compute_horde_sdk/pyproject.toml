@@ -21,6 +21,7 @@ dependencies = [
     "httpx>=0.26.0",
     "bittensor>=9.0.0,<9.1",
     "tenacity>=9.0.0,<10.0.0",
+    "huggingface-hub[hf_transfer]>=0.26.1",
 ]
 
 [project.urls]

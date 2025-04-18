@@ -11,6 +11,7 @@ from collections.abc import Callable
 from functools import wraps
 
 import httpx
+
 from compute_horde_core.output_upload import (
     MultiUpload,
     OutputUpload,
@@ -18,7 +19,6 @@ from compute_horde_core.output_upload import (
     ZipAndHttpPostUpload,
     ZipAndHttpPutUpload,
 )
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +48,7 @@ def retry(max_retries=3, initial_delay=1, backoff_factor=2, exceptions=Exception
                     if i == max_retries - 1:
                         logger.debug(f"Got exception {exc} - but max number of retries reached")
                         raise
-                    logger.debug(
-                        f"Got exception {exc} but will retry because it is {i + 1} attempt"
-                    )
+                    logger.debug(f"Got exception {exc} but will retry because it is {i + 1} attempt")
                     await asyncio.sleep(delay)
                     delay *= backoff_factor
 
@@ -80,6 +78,9 @@ class OutputUploader(metaclass=abc.ABCMeta):
         super().__init_subclass__(**kwargs)
         cls.__output_type_map[cls.handles_output_type()] = lambda upload: cls(upload)  # type: ignore
 
+    def __init__(self):
+        self.max_size_bytes = 2147483648
+
     @classmethod
     def for_upload_output(cls, upload_output: OutputUpload) -> OutputUploader:
         return cls.__output_type_map[upload_output.__class__](upload_output)
@@ -89,6 +90,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP POST the zip file to the given URL"""
 
     def __init__(self, upload_output: ZipAndHttpPostUpload):
+        super().__init__()
         self.upload_output = upload_output
 
     @classmethod
@@ -96,7 +98,7 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
         return ZipAndHttpPostUpload
 
     async def upload(self, directory: pathlib.Path):
-        with zipped_directory(directory) as (file_size, fp):
+        with zipped_directory(directory, max_size_bytes=self.max_size_bytes) as (file_size, fp):
             await upload_post(
                 fp,
                 "output.zip",
@@ -111,6 +113,7 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP PUT the zip file to the given URL"""
 
     def __init__(self, upload_output: ZipAndHttpPutUpload):
+        super().__init__()
         self.upload_output = upload_output
 
     @classmethod
@@ -118,7 +121,7 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
         return ZipAndHttpPutUpload
 
     async def upload(self, directory: pathlib.Path):
-        with zipped_directory(directory) as (file_size, fp):
+        with zipped_directory(directory, max_size_bytes=self.max_size_bytes) as (file_size, fp):
             await upload_put(fp, file_size, self.upload_output.url)
 
 
@@ -126,6 +129,7 @@ class MultiUploadOutputUploader(OutputUploader):
     """Upload multiple files to the specified URLs"""
 
     def __init__(self, upload_output: MultiUpload):
+        super().__init__()
         self.upload_output = upload_output
 
     @classmethod
@@ -160,9 +164,7 @@ class MultiUploadOutputUploader(OutputUploader):
                 # we run those concurrently but for loop changes slots - we need to bind
                 async def _single_put_upload_task(file_path, upload):
                     with file_path.open("rb") as fp:
-                        await upload_put(
-                            fp, file_path.stat().st_size, upload.url, headers=upload.signed_headers
-                        )
+                        await upload_put(fp, file_path.stat().st_size, upload.url, headers=upload.signed_headers)
 
                 tasks.append(limiter.wrap_task(_single_put_upload_task(file_path, upload)))
                 single_file_uploads.append(upload.relative_path)
@@ -174,7 +176,7 @@ class MultiUploadOutputUploader(OutputUploader):
             if isinstance(system_output_upload, ZipAndHttpPostUpload):
                 # we don't need to bind any vars because we don't run it in a loop
                 async def _output_post_upload_task(upload: ZipAndHttpPostUpload):
-                    with zipped_directory(directory, exclude=single_file_uploads) as (
+                    with zipped_directory(directory, exclude=single_file_uploads, max_size_bytes=self.max_size_bytes) as (
                         file_size,
                         fp,
                     ):
@@ -191,7 +193,7 @@ class MultiUploadOutputUploader(OutputUploader):
             elif isinstance(system_output_upload, ZipAndHttpPutUpload):
                 # we don't need to bind any vars because we don't run it in a loop
                 async def _output_put_upload_task(upload: ZipAndHttpPutUpload):
-                    with zipped_directory(directory, exclude=single_file_uploads) as (
+                    with zipped_directory(directory, exclude=single_file_uploads, max_size_bytes=self.max_size_bytes) as (
                         file_size,
                         fp,
                     ):
@@ -210,7 +212,11 @@ class MultiUploadOutputUploader(OutputUploader):
 
 
 async def make_iterator_async(it):
-    """This is stupid."""
+    """
+    Make an iterator async.
+
+    This is stupid.
+    """
     for x in it:
         yield x
 
@@ -272,16 +278,16 @@ async def upload_put(fp, file_size, url, headers=None):
 
 
 @contextlib.contextmanager
-def zipped_directory(directory: pathlib.Path, exclude=None):
+def zipped_directory(directory: pathlib.Path, exclude=None, max_size_bytes=2147483648):
     """
     Context manager that creates a temporary zip file with the files from given directory.
     The temporary file is cleared after the context manager exits.
 
-    Args:
-        directory: The directory to zip.
-        exclude: A list of relative paths to exclude from the zip file.
+    :param directory: The directory to zip.
+    :param exclude: A list of relative paths to exclude from the zip file.
+    :param max_size_bytes: Maximum allowed size of the zip file in bytes. Defaults to 2147483648.
 
-    Returns: tuple of size and the file object of the zip file
+    :return: tuple of size and the file object of the zip file
     """
     files = list(directory.glob("**/*"))
     exclude_set = set(exclude) if exclude else set()
@@ -299,7 +305,7 @@ def zipped_directory(directory: pathlib.Path, exclude=None):
         file_size = fp.tell()
         fp.seek(0)
 
-        if file_size > settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES:
+        if file_size > max_size_bytes:
             raise OutputUploadFailed("Attempting to upload too large file")
 
         yield file_size, fp

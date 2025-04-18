@@ -565,6 +565,7 @@ source = { editable = "../compute_horde_sdk" }
 dependencies = [
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "huggingface-hub", extra = ["hf-transfer"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "tenacity", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
@@ -573,6 +574,7 @@ dependencies = [
 requires-dist = [
     { name = "bittensor", specifier = ">=9.0.0,<9.1" },
     { name = "httpx", specifier = ">=0.26.0" },
+    { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=0.26.1" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "tenacity", specifier = ">=9.0.0,<10.0.0" },
 ]
@@ -919,8 +921,6 @@ dependencies = [
     { name = "django-prometheus", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "flower", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "gunicorn", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "huggingface-hub", extra = ["hf-transfer"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "ipython", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "nox", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -977,8 +977,6 @@ requires-dist = [
     { name = "django-prometheus", specifier = "==2.3.1" },
     { name = "flower", specifier = "~=2.0.0" },
     { name = "gunicorn", specifier = "==20.1.0" },
-    { name = "httpx", specifier = "==0.26.0" },
-    { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=0.26.1" },
     { name = "ipython", specifier = "==8.14.0" },
     { name = "nox", specifier = "==2024.10.9" },
     { name = "packaging", specifier = ">=24.2" },
