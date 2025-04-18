@@ -7,18 +7,21 @@ import logging
 import pathlib
 import tempfile
 import zipfile
-from collections.abc import Callable
+from collections.abc import AsyncIterable, Callable, Coroutine, Iterable, Iterator
 from functools import wraps
+from typing import IO, Any
 
 import httpx
-from compute_horde_core.output_upload import (
+
+from ._models import (
     MultiUpload,
     OutputUpload,
     OutputUploadType,
+    SingleFilePostUpload,
+    SingleFilePutUpload,
     ZipAndHttpPostUpload,
     ZipAndHttpPutUpload,
 )
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -28,18 +31,20 @@ MAX_CONCURRENT_UPLOADS = 3
 
 
 class ConcurrencyLimiter:
-    def __init__(self, concurrency):
+    def __init__(self, concurrency: int) -> None:
         self.semaphore = asyncio.Semaphore(concurrency)
 
-    async def wrap_task(self, task):
+    async def wrap_task(self, task: Coroutine[Any, Any, None]) -> Any:
         async with self.semaphore:
             return await task
 
 
-def retry(max_retries=3, initial_delay=1, backoff_factor=2, exceptions=Exception):
-    def decorator(func):
+def retry(
+    max_retries: int = 3, initial_delay: float = 1, backoff_factor: float = 2, exceptions: type[Exception] = Exception
+) -> Callable[..., Any]:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             delay = initial_delay
             for i in range(max_retries):
                 try:
@@ -48,9 +53,7 @@ def retry(max_retries=3, initial_delay=1, backoff_factor=2, exceptions=Exception
                     if i == max_retries - 1:
                         logger.debug(f"Got exception {exc} - but max number of retries reached")
                         raise
-                    logger.debug(
-                        f"Got exception {exc} but will retry because it is {i + 1} attempt"
-                    )
+                    logger.debug(f"Got exception {exc} but will retry because it is {i + 1} attempt")
                     await asyncio.sleep(delay)
                     delay *= backoff_factor
 
@@ -74,11 +77,14 @@ class OutputUploader(metaclass=abc.ABCMeta):
     def handles_output_type(cls) -> type[OutputUpload]: ...
 
     @abc.abstractmethod
-    async def upload(self, directory: pathlib.Path): ...
+    async def upload(self, directory: pathlib.Path) -> None: ...
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         cls.__output_type_map[cls.handles_output_type()] = lambda upload: cls(upload)  # type: ignore
+
+    def __init__(self) -> None:
+        self.max_size_bytes = 2147483648
 
     @classmethod
     def for_upload_output(cls, upload_output: OutputUpload) -> OutputUploader:
@@ -88,15 +94,16 @@ class OutputUploader(metaclass=abc.ABCMeta):
 class ZipAndHTTPPostOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP POST the zip file to the given URL"""
 
-    def __init__(self, upload_output: ZipAndHttpPostUpload):
+    def __init__(self, upload_output: ZipAndHttpPostUpload) -> None:
+        super().__init__()
         self.upload_output = upload_output
 
     @classmethod
-    def handles_output_type(cls):
+    def handles_output_type(cls) -> type[OutputUpload]:
         return ZipAndHttpPostUpload
 
-    async def upload(self, directory: pathlib.Path):
-        with zipped_directory(directory) as (file_size, fp):
+    async def upload(self, directory: pathlib.Path) -> None:
+        with zipped_directory(directory, max_size_bytes=self.max_size_bytes) as (file_size, fp):
             await upload_post(
                 fp,
                 "output.zip",
@@ -110,15 +117,16 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
 class ZipAndHTTPPutOutputUploader(OutputUploader):
     """Zip the upload the output directory and HTTP PUT the zip file to the given URL"""
 
-    def __init__(self, upload_output: ZipAndHttpPutUpload):
+    def __init__(self, upload_output: ZipAndHttpPutUpload) -> None:
+        super().__init__()
         self.upload_output = upload_output
 
     @classmethod
-    def handles_output_type(cls):
+    def handles_output_type(cls) -> type[OutputUpload]:
         return ZipAndHttpPutUpload
 
-    async def upload(self, directory: pathlib.Path):
-        with zipped_directory(directory) as (file_size, fp):
+    async def upload(self, directory: pathlib.Path) -> None:
+        with zipped_directory(directory, max_size_bytes=self.max_size_bytes) as (file_size, fp):
             await upload_put(fp, file_size, self.upload_output.url)
 
 
@@ -126,13 +134,14 @@ class MultiUploadOutputUploader(OutputUploader):
     """Upload multiple files to the specified URLs"""
 
     def __init__(self, upload_output: MultiUpload):
+        super().__init__()
         self.upload_output = upload_output
 
     @classmethod
-    def handles_output_type(cls):
+    def handles_output_type(cls) -> type[OutputUpload]:
         return MultiUpload
 
-    async def upload(self, directory: pathlib.Path):
+    async def upload(self, directory: pathlib.Path) -> None:
         single_file_uploads = []
         limiter = ConcurrencyLimiter(MAX_CONCURRENT_UPLOADS)
         tasks = []
@@ -143,7 +152,7 @@ class MultiUploadOutputUploader(OutputUploader):
 
             if upload.output_upload_type == OutputUploadType.single_file_post:
                 # we run those concurrently but for loop changes slots - we need to bind
-                async def _single_post_upload_task(file_path, upload):
+                async def _single_post_upload_task(file_path: pathlib.Path, upload: SingleFilePostUpload) -> None:
                     with file_path.open("rb") as fp:
                         await upload_post(
                             fp,
@@ -158,11 +167,9 @@ class MultiUploadOutputUploader(OutputUploader):
                 single_file_uploads.append(upload.relative_path)
             elif upload.output_upload_type == OutputUploadType.single_file_put:
                 # we run those concurrently but for loop changes slots - we need to bind
-                async def _single_put_upload_task(file_path, upload):
+                async def _single_put_upload_task(file_path: pathlib.Path, upload: SingleFilePutUpload) -> None:
                     with file_path.open("rb") as fp:
-                        await upload_put(
-                            fp, file_path.stat().st_size, upload.url, headers=upload.signed_headers
-                        )
+                        await upload_put(fp, file_path.stat().st_size, upload.url, headers=upload.signed_headers)
 
                 tasks.append(limiter.wrap_task(_single_put_upload_task(file_path, upload)))
                 single_file_uploads.append(upload.relative_path)
@@ -173,8 +180,10 @@ class MultiUploadOutputUploader(OutputUploader):
         if system_output_upload:
             if isinstance(system_output_upload, ZipAndHttpPostUpload):
                 # we don't need to bind any vars because we don't run it in a loop
-                async def _output_post_upload_task(upload: ZipAndHttpPostUpload):
-                    with zipped_directory(directory, exclude=single_file_uploads) as (
+                async def _output_post_upload_task(upload: ZipAndHttpPostUpload) -> None:
+                    with zipped_directory(
+                        directory, exclude=single_file_uploads, max_size_bytes=self.max_size_bytes
+                    ) as (
                         file_size,
                         fp,
                     ):
@@ -190,8 +199,10 @@ class MultiUploadOutputUploader(OutputUploader):
                 tasks.append(limiter.wrap_task(_output_post_upload_task(system_output_upload)))
             elif isinstance(system_output_upload, ZipAndHttpPutUpload):
                 # we don't need to bind any vars because we don't run it in a loop
-                async def _output_put_upload_task(upload: ZipAndHttpPutUpload):
-                    with zipped_directory(directory, exclude=single_file_uploads) as (
+                async def _output_put_upload_task(upload: ZipAndHttpPutUpload) -> None:
+                    with zipped_directory(
+                        directory, exclude=single_file_uploads, max_size_bytes=self.max_size_bytes
+                    ) as (
                         file_size,
                         fp,
                     ):
@@ -209,22 +220,26 @@ class MultiUploadOutputUploader(OutputUploader):
         await asyncio.gather(*tasks)
 
 
-async def make_iterator_async(it):
-    """This is stupid."""
+async def make_iterator_async(it: Iterable[Any]) -> AsyncIterable[Any]:
+    """
+    Make an iterator async.
+
+    This is stupid.
+    """
     for x in it:
         yield x
 
 
 @retry(max_retries=3, exceptions=OutputUploadFailed)
 async def upload_post(
-    fp,
-    file_name,
-    file_size,
-    url,
-    content_type="application/octet-stream",
-    form_fields=None,
-    headers=None,
-):
+    fp: IO[bytes],
+    file_name: str,
+    file_size: int,
+    url: str,
+    content_type: str = "application/octet-stream",
+    form_fields: dict[str, str] | None = None,
+    headers: dict[str, str] | None = None,
+) -> None:
     fp.seek(0)
     async with httpx.AsyncClient() as client:
         form_fields = {
@@ -251,7 +266,7 @@ async def upload_post(
 
 
 @retry(max_retries=3, exceptions=OutputUploadFailed)
-async def upload_put(fp, file_size, url, headers=None):
+async def upload_put(fp: IO[bytes], file_size: int, url: str, headers: dict[str, str] | None = None) -> None:
     fp.seek(0)
     async with httpx.AsyncClient() as client:
         headers = {
@@ -272,16 +287,18 @@ async def upload_put(fp, file_size, url, headers=None):
 
 
 @contextlib.contextmanager
-def zipped_directory(directory: pathlib.Path, exclude=None):
+def zipped_directory(
+    directory: pathlib.Path, exclude: list[str] | None = None, max_size_bytes: int = 2147483648
+) -> Iterator[tuple[int, IO[bytes]]]:
     """
     Context manager that creates a temporary zip file with the files from given directory.
     The temporary file is cleared after the context manager exits.
 
-    Args:
-        directory: The directory to zip.
-        exclude: A list of relative paths to exclude from the zip file.
+    :param directory: The directory to zip.
+    :param exclude: A list of relative paths to exclude from the zip file.
+    :param max_size_bytes: Maximum allowed size of the zip file in bytes. Defaults to 2147483648.
 
-    Returns: tuple of size and the file object of the zip file
+    :return: tuple of size and the file object of the zip file
     """
     files = list(directory.glob("**/*"))
     exclude_set = set(exclude) if exclude else set()
@@ -299,7 +316,7 @@ def zipped_directory(directory: pathlib.Path, exclude=None):
         file_size = fp.tell()
         fp.seek(0)
 
-        if file_size > settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES:
+        if file_size > max_size_bytes:
             raise OutputUploadFailed("Attempting to upload too large file")
 
         yield file_size, fp

@@ -365,6 +365,7 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
             "repo_type": None,
             "revision": None,
             "allow_patterns": None,
+            "token": None,
         },
         {
             "volume_type": "inline",
