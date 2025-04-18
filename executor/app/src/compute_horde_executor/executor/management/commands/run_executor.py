@@ -404,37 +404,39 @@ class DownloadManager:
         last_exc = None
         hf_old_enable_hf_transfer = None
 
-        while retries < self.max_retries:
-            try:
-                huggingface_hub.snapshot_download(
-                    repo_id=repo_id,
-                    repo_type=repo_type,
-                    revision=revision,
-                    token=settings.HF_ACCESS_TOKEN,
-                    local_dir=relative_path,
-                    allow_patterns=allow_patterns,
-                )
-                return
-            except (
-                ValueError,
-                huggingface_hub.utils.RepositoryNotFoundError,
-                huggingface_hub.utils.RevisionNotFoundError,
-            ) as e:
-                logger.error(f"Failed to download model from Hugging Face: {e}")
-                last_exc = e
-                break
-            except Exception as e:
-                logger.error(f"Failed to download model from Hugging Face: {e}")
-                last_exc = e
-                retries += 1
-                if huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER:
-                    # hf_transfer makes downloads faster, but sometimes fails where vanilla download doesn't.
-                    logger.info("Disabling hf_transfer for retry")
-                    hf_old_enable_hf_transfer = huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER
-                    huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER = False
+        try:
+            while retries < self.max_retries:
+                try:
+                    huggingface_hub.snapshot_download(
+                        repo_id=repo_id,
+                        repo_type=repo_type,
+                        revision=revision,
+                        token=settings.HF_ACCESS_TOKEN,
+                        local_dir=relative_path,
+                        allow_patterns=allow_patterns,
+                    )
+                    return
+                except (
+                    ValueError,
+                    huggingface_hub.utils.RepositoryNotFoundError,
+                    huggingface_hub.utils.RevisionNotFoundError,
+                ) as e:
+                    logger.error(f"Failed to download model from Hugging Face: {e}")
+                    last_exc = e
+                    break
+                except Exception as e:
+                    logger.error(f"Failed to download model from Hugging Face: {e}")
+                    last_exc = e
+                    retries += 1
+                    if huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER:
+                        # hf_transfer makes downloads faster, but sometimes fails where vanilla download doesn't.
+                        logger.info("Disabling hf_transfer for retry")
+                        hf_old_enable_hf_transfer = huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER
+                        huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER = False
 
-        if hf_old_enable_hf_transfer is not None:  # True or False
-            huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER = hf_old_enable_hf_transfer
+        finally:
+            if hf_old_enable_hf_transfer is not None:  # True or False
+                huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER = hf_old_enable_hf_transfer
 
         raise JobError(
             f"Failed to download model from Hugging Face after {retries} retries: {last_exc}",
