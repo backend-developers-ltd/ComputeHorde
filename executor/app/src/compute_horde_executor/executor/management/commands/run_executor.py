@@ -16,6 +16,7 @@ import typing
 import zipfile
 
 import httpx
+import huggingface_hub
 import packaging.version
 import pydantic
 from asgiref.sync import sync_to_async
@@ -57,7 +58,6 @@ from compute_horde_core.volume import (
 )
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from huggingface_hub import snapshot_download
 from pydantic import TypeAdapter
 
 from compute_horde_executor.executor.output_uploader import OutputUploader, OutputUploadFailed
@@ -400,22 +400,34 @@ class DownloadManager:
         repo_type: str | None = None,
         allow_patterns: str | list[str] | None = None,
     ):
-        try:
-            snapshot_download(
-                repo_id=repo_id,
-                repo_type=repo_type,
-                revision=revision,
-                token=settings.HF_ACCESS_TOKEN,
-                local_dir=relative_path,
-                allow_patterns=allow_patterns,
-            )
-        except Exception as e:
-            logger.error(f"Failed to download model from Hugging Face: {e}")
-            raise JobError(
-                f"Failed to download model from Hugging Face: {e}",
-                V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD,
-                str(e),
-            ) from e
+        retries = 0
+        last_exc = None
+
+        while retries < self.max_retries:
+            try:
+                huggingface_hub.snapshot_download(
+                    repo_id=repo_id,
+                    repo_type=repo_type,
+                    revision=revision,
+                    token=settings.HF_ACCESS_TOKEN,
+                    local_dir=relative_path,
+                    allow_patterns=allow_patterns,
+                )
+                return
+            except Exception as e:
+                logger.error(f"Failed to download model from Hugging Face: {e}")
+                last_exc = e
+                retries += 1
+                if huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER:
+                    # hf_transfer makes downloads faster, but sometimes fails where vanilla download doesn't.
+                    logger.info("Disabling hf_transfer for retry")
+                    huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER = False
+
+        raise JobError(
+            f"Failed to download model from Hugging Face after {self.max_retries} retries: {last_exc}",
+            V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD,
+            str(last_exc),
+        ) from last_exc
 
     async def download(self, fp, url):
         async with self.semaphore:
