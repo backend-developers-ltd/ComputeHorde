@@ -77,6 +77,15 @@ class MultiUpload(pydantic.BaseModel):
     system_output: ZipAndHttpPostUpload | ZipAndHttpPutUpload | None = None
 
 
+class HttpOutputVolumeResponse(pydantic.BaseModel):
+    """
+    Represents an HTTP response from and output volume upload
+    """
+
+    headers: dict[str, str]
+    body: str
+
+
 OutputUpload = Annotated[
     SingleFilePostUpload | SingleFilePutUpload | ZipAndHttpPostUpload | ZipAndHttpPutUpload | MultiUpload,
     Field(discriminator="output_upload_type"),
