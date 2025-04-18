@@ -297,10 +297,7 @@ def test_huggingface_volume():
     repo_id = "huggingface/model"
     revision = "main"
 
-    with patch(
-        "compute_horde_executor.executor.management.commands.run_executor.snapshot_download",
-        mock_download,
-    ):
+    with patch("huggingface_hub.snapshot_download", mock_download):
         command = CommandTested(
             iter(
                 [
@@ -374,10 +371,7 @@ def test_huggingface_volume_failure():
     repo_id = "huggingface/model"
     revision = "main"
 
-    with patch(
-        "compute_horde_executor.executor.management.commands.run_executor.snapshot_download",
-        mock_download_failure,
-    ):
+    with patch("huggingface_hub.snapshot_download", mock_download_failure):
         command = CommandTested(
             iter(
                 [
@@ -434,7 +428,7 @@ def test_huggingface_volume_failure():
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "docker_process_stdout": "Failed to download model from Hugging Face: Download failed",
+            "docker_process_stdout": "Failed to download model from Hugging Face after 3 retries: Download failed",
             "docker_process_stderr": "",
             "error_type": V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD.value,
             "error_detail": "Download failed",
@@ -461,8 +455,7 @@ def test_huggingface_volume_dataset():
     ]
 
     with patch(
-        "compute_horde_executor.executor.management.commands.run_executor.snapshot_download",
-        side_effect=mock_download,
+        "huggingface_hub.snapshot_download", side_effect=mock_download
     ) as mock_snapshot_download:
         command = CommandTested(
             iter(
