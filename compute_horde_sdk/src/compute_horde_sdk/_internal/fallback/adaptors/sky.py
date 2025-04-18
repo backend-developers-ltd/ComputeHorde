@@ -1,7 +1,6 @@
 import base64
 import logging
 import os
-import shutil
 import tempfile
 import uuid
 from functools import cache, cached_property
@@ -12,11 +11,13 @@ import sky
 import sky.backends
 import sky.exceptions
 import sky.sky_logging
-
-from ..exceptions import FallbackError
-from ..job import FallbackJobSpec, FallbackJobStatus
+import sky.skylet.constants
 
 logger = logging.getLogger(__name__)
+
+
+class SkyError(Exception):
+    """The base class for all errors thrown by the SkyPilot adaptor."""
 
 
 class SkyCloud:
@@ -33,14 +34,21 @@ class SkyCloud:
     """
 
     def __init__(self, cloud: str, **kwargs: Any) -> None:
+        try:
+            sky.clouds.CLOUD_REGISTRY.from_str(cloud)
+        except ValueError:
+            logger.error("Unsupported cloud: %s", cloud)
+            raise SkyError(f"Unsupported cloud: {cloud}")
+
         self.cloud = cloud
 
         setup = getattr(self, f"_{self.cloud}")
-        if setup is None:
-            logger.error("Unsupported cloud: %s", cloud)
-            raise FallbackError(f"Unsupported cloud: {cloud}")
+        if setup is not None:
+            logger.info("Running cloud setup for: %s", cloud)
+            setup(**kwargs)
 
-        setup(**kwargs)
+    def __str__(self) -> str:
+        return self.cloud
 
     @classmethod
     def _runpod(cls, api_key: str | None = None) -> None:
@@ -48,9 +56,6 @@ class SkyCloud:
             import runpod
 
             runpod.api_key = api_key
-
-    def __str__(self) -> str:
-        return self.cloud
 
 
 class SkyJob:
@@ -63,18 +68,72 @@ class SkyJob:
 
     :ivar cloud: The cloud environment configuration.
     :type cloud: SkyCloud
-    :ivar job_spec: The specifications of the job to be run.
-    :type job_spec: FallbackJobSpec
+    :ivar workdir: The working directory.
+    :type workdir: str
+    :ivar setup: The command to setup.
+    :type setup: str or None
+    :ivar run: The command to run.
+    :type run: str or None
+    :ivar envs: Environment variables for the job.
+    :type envs: dict[str, str] or None
+    :ivar artifacts_dir: Directory to store job artifacts.
+    :type artifacts_dir: str or None
+    :ivar accelerators: GPU accelerators required.
+    :type accelerators: str or dict[str, int] or None
+    :ivar cpus: Number of CPUs required.
+    :type cpus: int or float or str or None
+    :ivar memory: Amount of memory required.
+    :type memory: int or float or str or None
+    :ivar disk_size: Amount of disk space required.
+    :type disk_size: int or None
+    :ivar ports: Ports to expose.
+    :type ports: int or str or list[str] or None
+    :ivar instance_type: Type of instance to use.
+    :type instance_type: str or None
+    :ivar image_id: Docker image ID.
+    :type image_id: str or None
+    :ivar region: Cloud region.
+    :type region: str or None
+    :ivar zone: Cloud zone.
+    :type zone: str or None
     """
 
     UUID_NAMESPACE = uuid.NAMESPACE_OID
     PREFIX = "ch-"
 
-    def __init__(self, cloud: SkyCloud, job_spec: FallbackJobSpec) -> None:
+    def __init__(
+        self,
+        cloud: SkyCloud,
+        workdir: str,
+        setup: str | None = None,
+        run: str | None = None,
+        envs: dict[str, str] | None = None,
+        artifacts_dir: str | None = None,
+        accelerators: str | dict[str, int] | None = None,
+        cpus: int | float | str | None = None,
+        memory: int | float | str | None = None,
+        disk_size: int | None = None,
+        ports: int | str | list[str] | None = None,
+        instance_type: str | None = None,
+        image_id: str | None = None,
+        region: str | None = None,
+        zone: str | None = None,
+    ) -> None:
         self.cloud = cloud
-        self.job_spec = job_spec
-
-        self.temp_dir = self._get_tempdir()
+        self.workdir = workdir
+        self.setup = setup
+        self.run = run
+        self.envs = envs
+        self.artifacts_dir = artifacts_dir
+        self.accelerators = accelerators
+        self.cpus = cpus
+        self.memory = memory
+        self.disk_size = disk_size
+        self.ports = ports
+        self.instance_type = instance_type
+        self.image_id = image_id
+        self.region = region
+        self.zone = zone
 
         self._job_id: int | None = None
         self._job_resource_handle: sky.backends.CloudVmRayResourceHandle | None = None
@@ -99,10 +158,10 @@ class SkyJob:
         resources_token = str(uuid.uuid5(self.UUID_NAMESPACE, str(self._get_resources())))[:8]
         return f"{self.PREFIX}{resources_token}"
 
-    def submit(self, idle_minutes: int = 1) -> FallbackJobStatus:
+    def submit(self, idle_minutes: int = 1) -> None:
         if self.submitted:
             logger.error("Attempted to submit a job that is already submitted.")
-            raise FallbackError("Job already submitted")
+            raise SkyError("Job already submitted")
 
         logger.info("Submitting job to cloud: %s", self.cloud)
 
@@ -126,38 +185,25 @@ class SkyJob:
 
         logger.info("Job submitted successfully with UUID: %s", self.job_uuid)
 
-        return FallbackJobStatus.SENT
-
-    def status(self) -> FallbackJobStatus:
+    def status(self) -> sky.JobStatus:
         if not self.submitted:
             logger.error("Attempted to get a status from a job that is not yet submitted.")
-            raise FallbackError("Job not yet submitted")
+            raise SkyError("Job not yet submitted")
 
         with sky.sky_logging.silent():
             sky_status = sky.job_status(self.cluster_name, job_ids=[self.job_id]).get(self.job_id)
 
         logger.debug("Job %s status is: %s", self.job_uuid, sky_status)
 
-        if sky_status is None:
-            return FallbackJobStatus.SENT
-        elif sky_status in {sky.JobStatus.INIT, sky.JobStatus.PENDING, sky.JobStatus.SETTING_UP, sky.JobStatus.RUNNING}:
-            return FallbackJobStatus.ACCEPTED
-        elif sky_status in {sky.JobStatus.FAILED_DRIVER, sky.JobStatus.FAILED_SETUP}:
-            return FallbackJobStatus.REJECTED
-        elif sky_status == sky.JobStatus.SUCCEEDED:
-            return FallbackJobStatus.COMPLETED
-        elif sky_status == sky.JobStatus.FAILED:
-            return FallbackJobStatus.FAILED
-        else:
-            raise NotImplementedError()
+        return sky_status
 
     def output(self) -> str:
         if not self.submitted:
             logger.error("Attempted to get a status from a job that is not yet submitted.")
-            raise FallbackError("Job not yet submitted")
+            raise SkyError("Job not yet submitted")
 
         with sky.sky_logging.silent():
-            logs_dir = sky.download_logs(self.cluster_name, [str(self.job_id)], local_dir=str(self.temp_dir))[
+            logs_dir = sky.download_logs(self.cluster_name, [str(self.job_id)], local_dir=str(self.workdir))[
                 str(self.job_id)
             ]
 
@@ -165,19 +211,16 @@ class SkyJob:
 
         return (Path(logs_dir) / "tasks/run.log").read_text()
 
-    def artifacts(self, max_size: int = 1_000_000) -> dict[str, bytes]:
+    def download(self, source_dir: str, max_size: int = 1_000_000) -> dict[str, bytes]:
         if not self.submitted:
             logger.error("Attempted to get a status from a job that is not yet submitted.")
-            raise FallbackError("Job not yet submitted")
-
-        if self.job_spec.artifacts_dir is None:
-            return {}
+            raise SkyError("Job not yet submitted")
 
         assert self._job_resource_handle is not None  # make mypy happy
         head_runner = self._job_resource_handle.get_command_runners()[0]
 
-        source = Path(self.job_spec.artifacts_dir)
-        destination = Path(tempfile.mkdtemp(prefix="download-", dir=self.temp_dir))
+        source = Path(source_dir)
+        destination = Path(tempfile.mkdtemp(prefix="download-", dir=self.workdir))
         try:
             head_runner.rsync(f"{source}{os.sep}", str(destination), up=False, stream_logs=False)
         except sky.exceptions.CommandError as e:
@@ -196,46 +239,40 @@ class SkyJob:
                 content = item.read_bytes()
                 size = len(content)
                 if size < max_size:
-                    path = str(Path(self.job_spec.artifacts_dir) / item.name)
+                    path = str(source / item.name)
                     artifacts[path] = base64.b64encode(content)
                 else:
                     logger.error(f"Artifact {item} too large: {size:,} bytes")
 
         return artifacts
 
-    def _get_tempdir(self) -> Path:
-        tempdir = Path(tempfile.mkdtemp(prefix=self.cluster_name))
-        for item in tempdir.iterdir():
-            if item.is_dir():
-                shutil.rmtree(item)
-            else:
-                item.unlink()
-
-        return tempdir
-
     @cache
     def _get_resources(self) -> sky.Resources:
         return sky.Resources(
             cloud=sky.clouds.CLOUD_REGISTRY.from_str(str(self.cloud)),
-            accelerators=self.job_spec.accelerators,
-            cpus=self.job_spec.cpus,
-            memory=self.job_spec.memory,
-            disk_size=self.job_spec.disk_size,
-            ports=self.job_spec.ports,
-            instance_type=self.job_spec.instance_type,
-            image_id=self.job_spec.image_id,
-            region=self.job_spec.region,
-            zone=self.job_spec.zone,
+            accelerators=self.accelerators,
+            cpus=self.cpus,
+            memory=self.memory,
+            disk_size=self.disk_size,
+            ports=self.ports,
+            instance_type=self.instance_type,
+            image_id=self.image_id,
+            region=self.region,
+            zone=self.zone,
         )
 
     @cache
     def _get_task(self, resources: sky.Resources | None = None) -> sky.Task:
         task = sky.Task(
-            setup='echo "Running setup."',
-            run=self.job_spec.run,
-            envs=self.job_spec.envs,
+            setup=self.setup,
+            run=self.run,
+            envs=self.envs,
+            workdir=str(self.workdir),
         )
         if resources is not None:
             task = task.set_resources(resources)
 
         return task
+
+
+SkyJobStatus = sky.JobStatus

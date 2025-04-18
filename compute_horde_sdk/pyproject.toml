@@ -30,7 +30,7 @@ dependencies = [
 "Issue Tracker" = "https://github.com/backend-developers-ltd/compute-horde-sdk/issues"
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.uv]
@@ -75,6 +75,7 @@ docs = [
     "sphinx-rtd-theme>=3.0.2",
 ]
 fallback = [
+    "build",
     "skypilot[runpod]>=0.8.1,<1.0",
 ]
 
