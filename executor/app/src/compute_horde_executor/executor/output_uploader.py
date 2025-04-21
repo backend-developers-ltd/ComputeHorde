@@ -226,7 +226,9 @@ async def make_iterator_async(it):
         yield x
 
 
-async def read_stream_with_cap(response: httpx.Response, max_allowed_size: int = 10 * 1024 * 1024) -> str:
+async def read_stream_with_cap(
+    response: httpx.Response, max_allowed_size: int = 10 * 1024 * 1024
+) -> str:
     """
     Reads the response in a streaming fashion, enforcing a maximum allowed response size.
 
@@ -237,17 +239,19 @@ async def read_stream_with_cap(response: httpx.Response, max_allowed_size: int =
     Returns:
         The response body as a decoded string.
     """
-    content_length = response.headers.get('Content-Length')
+    content_length = response.headers.get("Content-Length")
     if content_length:
         try:
             if int(content_length) > max_allowed_size:
-                raise OutputUploadFailed("Response size exceeds allowed limit based on Content-Length header")
+                raise OutputUploadFailed(
+                    "Response size exceeds allowed limit based on Content-Length header"
+                )
         except ValueError:
             # If conversion fails, proceed to check the chunks.
             pass
 
     total_bytes = 0
-    chunks = []
+    chunks: list[bytes] = []
     async for chunk in response.aiter_bytes():
         total_bytes += len(chunks)
         if total_bytes > max_allowed_size:
