@@ -226,6 +226,37 @@ async def make_iterator_async(it):
         yield x
 
 
+async def read_stream_with_cap(response: httpx.Response, max_allowed_size: int = 10 * 1024 * 1024) -> str:
+    """
+    Reads the response in a streaming fashion, enforcing a maximum allowed response size.
+
+    Args:
+        response: The httpx response object.
+        max_allowed_size: Maximum allowed size in bytes for the response body, defaults to 10MB.
+
+    Returns:
+        The response body as a decoded string.
+    """
+    content_length = response.headers.get('Content-Length')
+    if content_length:
+        try:
+            if int(content_length) > max_allowed_size:
+                raise OutputUploadFailed("Response size exceeds allowed limit based on Content-Length header")
+        except ValueError:
+            # If conversion fails, proceed to check the chunks.
+            pass
+
+    total_bytes = 0
+    chunks = []
+    async for chunk in response.aiter_bytes():
+        total_bytes += len(chunks)
+        if total_bytes > max_allowed_size:
+            raise OutputUploadFailed("Response size exceeds allowed limit")
+        chunks.append(chunk)
+
+    return b"".join(chunks).decode("utf-8")
+
+
 @retry(max_retries=3, exceptions=OutputUploadFailed)
 async def upload_post(
     fp,
@@ -255,18 +286,20 @@ async def upload_post(
 
         try:
             logger.debug("Upload (POST) file to: %s", url)
-            response = await client.post(
+            async with client.stream(
+                method="POST",
                 url=url,
                 data=form_fields,
                 files=files,
                 headers=headers,
                 timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
-            return HttpOutputVolumeResponse(
-                headers=dict(response.headers),
-                body=response.text,
-            )
+            ) as response:
+                response.raise_for_status()
+                body = await read_stream_with_cap(response)
+                return HttpOutputVolumeResponse(
+                    headers=dict(response.headers),
+                    body=body,
+                )
         except httpx.HTTPError as ex:
             raise OutputUploadFailed(f"Uploading output failed with http error {ex}")
 
@@ -293,17 +326,19 @@ async def upload_put(fp, file_size, url, headers=None) -> HttpOutputVolumeRespon
         }
         try:
             logger.debug("Upload (PUT) file to: %s", url)
-            response = await client.put(
+            async with client.stream(
+                method="PUT",
                 url=url,
                 content=make_iterator_async(fp),
                 headers=headers,
                 timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
-            return HttpOutputVolumeResponse(
-                headers=dict(response.headers),
-                body=response.text,
-            )
+            ) as response:
+                response.raise_for_status()
+                body = await read_stream_with_cap(response)
+                return HttpOutputVolumeResponse(
+                    headers=dict(response.headers),
+                    body=body,
+                )
         except httpx.HTTPError as ex:
             raise OutputUploadFailed(f"Uploading output failed with http error {ex}")
 

@@ -178,8 +178,8 @@ class ComputeHordeJob:
             for path, raw_data in response.upload_results.items():
                 try:
                     upload_results[path] = HttpOutputVolumeResponse.parse_raw(raw_data)
-                except Exception as e:
-                    logger.error(f"Failed to parse upload result for '{path}': {e}")
+                except Exception:
+                    logger.error(f"Failed to parse upload result for '{path}'", exc_info=True)
 
             # TODO: Handle base64 decode errors
             result = ComputeHordeJobResult(
