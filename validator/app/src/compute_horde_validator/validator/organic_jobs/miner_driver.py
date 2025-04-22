@@ -170,16 +170,10 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
             {"type": "job_status_update", "payload": status_update.model_dump()},
         )
 
-    total_job_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_TIMEOUT")
-    initial_response_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT")
-    executor_ready_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT")
     await drive_organic_job(
         miner_client,
         job,
         job_request,
-        total_job_timeout=total_job_timeout,
-        initial_response_timeout=initial_response_timeout,
-        executor_ready_timeout=executor_ready_timeout,
         notify_callback=job_status_callback,
     )
 
@@ -190,9 +184,6 @@ async def drive_organic_job(
     miner_client: MinerClient,
     job: OrganicJob,
     job_request: OrganicJobRequest | AdminJobRequest,
-    total_job_timeout: int = 300,
-    initial_response_timeout: int = 3,
-    executor_ready_timeout: int = 300,
     notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] = _dummy_notify_callback,
 ) -> bool:
     """
@@ -235,12 +226,7 @@ async def drive_organic_job(
     )
 
     try:
-        stdout, stderr, artifacts = await run_organic_job(
-            miner_client,
-            job_details,
-            initial_response_timeout=initial_response_timeout,
-            executor_ready_timeout=executor_ready_timeout,
-        )
+        stdout, stderr, artifacts = await run_organic_job(miner_client, job_details)
 
         comment = f"Miner {miner_client.miner_name} finished: {stdout=} {stderr=}"
         job.stdout = stdout

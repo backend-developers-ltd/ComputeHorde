@@ -28,7 +28,6 @@ def random_receipt(
         timestamp=timezone.now(),
         receipt_type=ReceiptType.JobStartedReceipt,
         executor_class=ExecutorClass.always_on__gpu_24gb,
-        max_timeout=100,
         ttl=100,
         is_organic=False,
     )

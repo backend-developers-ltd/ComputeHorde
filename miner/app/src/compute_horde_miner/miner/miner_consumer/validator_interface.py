@@ -467,7 +467,6 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         logger.info(
             f"Received job started receipt for"
             f" job_uuid={payload.job_uuid} validator_hotkey={payload.validator_hotkey}"
-            f" max_timeout={payload.max_timeout}"
         )
 
         if settings.IS_LOCAL_MINER:
@@ -484,7 +483,6 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             miner_signature=get_miner_signature(payload),
             timestamp=payload.timestamp,
             executor_class=payload.executor_class,
-            max_timeout=payload.max_timeout,
             is_organic=payload.is_organic,
             ttl=payload.ttl,
         )

@@ -29,7 +29,6 @@ async def fake_executor(token):
             "validator_hotkey": "some_public_key",
             "timestamp": "2020-01-01T00:00:00Z",
             "executor_class": DEFAULT_EXECUTOR_CLASS,
-            "max_timeout": 60,
             "is_organic": True,
             "ttl": 5,
         },

@@ -113,7 +113,6 @@ async def test_pick_miner_for_job__all_executors_busy(validator_keypair, miner_k
                 validator_hotkey=validator_keypair.ss58_address,
                 timestamp=timezone.now(),
                 executor_class=DEFAULT_EXECUTOR_CLASS,
-                max_timeout=60,
                 is_organic=True,
                 ttl=60,
             )

@@ -52,7 +52,6 @@ async def _send_initial_job_request(validator_channel, validator_wallet, miner_w
         validator_hotkey=validator_wallet.hotkey.ss58_address,
         timestamp=timezone.now(),
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        max_timeout=60,
         ttl=60,
     )
     job_started_receipt_signature = sign_blob(
@@ -64,7 +63,6 @@ async def _send_initial_job_request(validator_channel, validator_wallet, miner_w
             job_uuid=job_uuid,
             executor_class=DEFAULT_EXECUTOR_CLASS,
             docker_image="it's teeeeests",
-            timeout_seconds=60,
             job_started_receipt_payload=job_started_receipt_payload,
             job_started_receipt_signature=job_started_receipt_signature,
         ).model_dump_json()
@@ -106,7 +104,6 @@ async def test_reject_as_busy_when_busy(job_uuid, validator_wallet, miner_wallet
         miner_hotkey=miner_wallet.hotkey.ss58_address,
         validator_hotkey=validator_wallet.hotkey.ss58_address,
         timestamp=timezone.now(),
-        max_timeout=60,
         ttl=60,
     )
     synthetic_receipt = base_good_receipt.__replace__(is_organic=False)

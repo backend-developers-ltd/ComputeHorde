@@ -79,17 +79,28 @@ def json_dumps_default(obj):
 
 
 class Timer:
-    def __init__(self, timeout=None):
+    def __init__(self, timeout: float = None):
         self.start_time = datetime.datetime.now()
         self.timeout = timeout
 
-    def passed_time(self):
+    def passed_time(self) -> float:
         return (datetime.datetime.now() - self.start_time).total_seconds()
 
-    def time_left(self):
+    def extend_timeout(self, amount: float):
+        if self.timeout is None:
+            raise ValueError("timeout was not specified")
+        self.timeout += amount
+
+    def time_left(self) -> float:
         if self.timeout is None:
             raise ValueError("timeout was not specified")
         return self.timeout - self.passed_time()
+
+    def deadline(self) -> datetime.datetime:
+        if self.timeout is None:
+            raise ValueError("timeout was not specified")
+        return self.start_time + datetime.timedelta(seconds=self.timeout)
+
 
 
 def sign_blob(kp: bittensor.Keypair, blob: str):

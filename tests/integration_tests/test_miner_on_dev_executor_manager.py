@@ -184,7 +184,6 @@ class Test(ActiveSubnetworkBaseTest):
                 "validator_hotkey": validator_key,
                 "timestamp": datetime.now(tz=UTC).isoformat(),
                 "executor_class": DEFAULT_EXECUTOR_CLASS,
-                "max_timeout": 60,
                 "is_organic": True,
                 "ttl": 30,
             }

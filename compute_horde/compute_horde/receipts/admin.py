@@ -11,7 +11,6 @@ class JobStartedReceiptsReadOnlyAdmin(admin.ModelAdmin, ReadOnlyAdminMixin):
         "validator_hotkey",
         "timestamp",
         "executor_class",
-        "max_timeout",
         "ttl",
     ]
     ordering = ["-timestamp"]
