@@ -417,11 +417,16 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     class Status(models.IntegerChoices):
+        # These correspond to JobStatusUpdate.Status
         FAILED = -2
         REJECTED = -1
         SENT = 0
-        ACCEPTED = 1
-        COMPLETED = 2
+        RECEIVED = 1
+        ACCEPTED = 2
+        EXECUTOR_READY = 3
+        VOLUMES_READY = 4
+        EXECUTION_DONE = 5
+        COMPLETED = 6
 
     FINAL_STATUS_VALUES = (
         Status.COMPLETED,

@@ -137,6 +137,16 @@ class V0StreamingJobReadyRequest(BaseModel):
         return f"{self.job_uuid}:{self.ip}:{self.port}:{self.public_key}"
 
 
+class V0VolumesReadyRequest(BaseModel):
+    message_type: Literal["V0VolumesReadyRequest"] = "V0VolumesReadyRequest"
+    job_uuid: str
+
+
+class V0ExecutionDoneRequest(BaseModel):
+    message_type: Literal["V0ExecutionDoneRequest"] = "V0ExecutionDoneRequest"
+    job_uuid: str
+
+
 # validator -> miner.vc -> miner.ec -> executor
 class V0JobRequest(BaseModel):
     message_type: Literal["V0JobRequest"] = "V0JobRequest"
@@ -233,6 +243,8 @@ ExecutorToMinerMessage = Annotated[
     | V0StreamingJobNotReadyRequest
     | V0ExecutorReadyRequest
     | V0StreamingJobReadyRequest
+    | V0VolumesReadyRequest
+    | V0ExecutionDoneRequest
     | V0JobFailedRequest
     | V0JobFinishedRequest
     | V0MachineSpecsRequest,
@@ -250,6 +262,8 @@ MinerToValidatorMessage = Annotated[
     | V0ExecutorReadyRequest
     | V0StreamingJobReadyRequest
     | V0JobFailedRequest
+    | V0VolumesReadyRequest
+    | V0ExecutionDoneRequest
     | V0JobFinishedRequest
     | V0MachineSpecsRequest,
     Field(discriminator="message_type"),

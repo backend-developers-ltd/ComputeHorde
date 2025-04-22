@@ -12,6 +12,7 @@ from compute_horde.protocol_messages import (
     GenericError,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
+    V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
@@ -24,6 +25,7 @@ from compute_horde.protocol_messages import (
     V0MachineSpecsRequest,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
+    V0VolumesReadyRequest,
     ValidatorAuthForMiner,
     ValidatorToMinerMessage,
 )
@@ -604,6 +606,12 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         await job.arefresh_from_db()
         job.result_reported_to_validator = timezone.now()
         await job.asave()
+        
+    async def _volumes_ready(self, msg: V0VolumesReadyRequest):
+        await self.send(msg.model_dump_json())
+
+    async def _execution_done(self, msg: V0ExecutionDoneRequest):
+        await self.send(msg.model_dump_json())
 
     async def disconnect(self, close_code):
         logger.info(f"Validator {self.validator_key} disconnected")

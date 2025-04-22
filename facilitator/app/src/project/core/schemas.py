@@ -1,4 +1,5 @@
 from decimal import Decimal
+from enum import StrEnum
 from typing import Annotated, Literal
 
 from compute_horde_core.volume import (
@@ -31,10 +32,19 @@ class JobStatusUpdate(BaseModel, extra=Extra.forbid):
     """
     Message sent from validator to this app in response to NewJobRequest.
     """
+    class Status(StrEnum):
+        RECEIVED = "received"
+        ACCEPTED = "accepted"
+        EXECUTOR_READY = "executor_ready"
+        VOLUMES_READY = "volumes_ready"
+        EXECUTION_DONE = "execution_done"
+        COMPLETED = "completed"
+        REJECTED = "rejected"
+        FAILED = "failed"
 
     message_type: Literal["V0JobStatusUpdate"] = Field(default="V0JobStatusUpdate")
     uuid: str
-    status: Literal["failed", "rejected", "accepted", "completed"]
+    status: Status
     metadata: JobStatusMetadata | None = None
 
 

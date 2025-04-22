@@ -37,6 +37,7 @@ from compute_horde.protocol_messages import (
     ExecutorToMinerMessage,
     GenericError,
     MinerToExecutorMessage,
+    V0ExecutionDoneRequest,
     V0ExecutorReadyRequest,
     V0InitialJobRequest,
     V0JobFailedRequest,
@@ -45,6 +46,7 @@ from compute_horde.protocol_messages import (
     V0MachineSpecsRequest,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
+    V0VolumesReadyRequest,
 )
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
@@ -251,9 +253,14 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
             )
         )
 
-    async def send_ready(self):
-        await self.send_model(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
+    async def send_volumes_ready(self):
+        await self.send_model(V0VolumesReadyRequest(job_uuid=self.job_uuid))
 
+    async def send_execution_done(self):
+        await self.send_model(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
+
+    async def send_executor_ready(self):
+        await self.send_model(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
 
     async def send_error(self, job_error: JobError):
         await self.send_model(
@@ -964,7 +971,7 @@ class Command(BaseCommand):
                 try:
                     deadline += job_request.time_limit_upload
                     async with asyncio.timeout_at(deadline):
-                        logger.info(f"Entering upload stage; Time left: {time_left():.2f}s")
+                        logger.debug(f"Entering upload stage; Time left: {time_left():.2f}s")
                         await self._upload_stage()
                 except TimeoutError as e:
                     raise JobError(
@@ -986,7 +993,7 @@ class Command(BaseCommand):
         initial_job_request = await self.miner_client.initial_msg
         await self.runner.prepare_initial(initial_job_request)
 
-        await self.miner_client.send_ready()
+        await self.miner_client.send_executor_ready()
 
         full_job_request = await self.miner_client.full_payload
         await self.runner.prepare_full(full_job_request)
@@ -995,11 +1002,13 @@ class Command(BaseCommand):
 
     async def _download_stage(self):
         await self.runner.unpack_volume()
+        await self.miner_client.send_volumes_ready()
 
     async def _execution_stage(self):
         async with self.runner.start_job():
             if self.runner.is_streaming_job:
                 await self.miner_client.send_streaming_job_ready(self.runner.executor_certificate)
+        await self.miner_client.send_execution_done()
 
     async def _upload_stage(self):
         job_result = await self.runner.upload_results()
@@ -1060,7 +1069,7 @@ class Command(BaseCommand):
 
         if return_code != 0:
             raise JobError(
-                f'nvidia-container-toolkit check failed: exit code {process.returncode}',
+                f'nvidia-container-toolkit check failed: exit code {return_code}',
                 error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
             )
 

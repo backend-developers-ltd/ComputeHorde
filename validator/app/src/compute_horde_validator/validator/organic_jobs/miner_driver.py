@@ -1,8 +1,9 @@
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from enum import StrEnum
 from functools import partial
-from typing import Literal, assert_never
+from typing import assert_never
 
 from channels.layers import get_channel_layer
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
@@ -13,7 +14,7 @@ from compute_horde.miner_client.organic import (
     run_organic_job,
 )
 from compute_horde.protocol_messages import (
-    V0AcceptJobRequest,
+    MinerToValidatorMessage,
     V0DeclineJobRequest,
     V0JobFailedRequest,
 )
@@ -57,10 +58,19 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
     """
     Message sent from validator to facilitator in response to NewJobRequest.
     """
+    class Status(StrEnum):
+        RECEIVED = "received"
+        ACCEPTED = "accepted"
+        EXECUTOR_READY = "executor_ready"
+        VOLUMES_READY = "volumes_ready"
+        EXECUTION_DONE = "execution_done"
+        COMPLETED = "completed"
+        REJECTED = "rejected"
+        FAILED = "failed"
 
     message_type: str = "V0JobStatusUpdate"
     uuid: str
-    status: Literal["failed", "rejected", "accepted", "completed"]
+    status: Status
     metadata: JobStatusMetadata | None = None
 
     @staticmethod
@@ -154,7 +164,7 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
     )
 
     async def job_status_callback(status_update: JobStatusUpdate):
-        logger.debug("Job status update: %s", status_update)
+        logger.debug("Broadcasting job status update: %s %s", status_update.uuid, status_update)
         await get_channel_layer().send(
             f"job_status_updates__{status_update.uuid}",
             {"type": "job_status_update", "payload": status_update.model_dump()},
@@ -198,10 +208,15 @@ async def drive_organic_job(
         data: JsonValue = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
         save_event = partial(save_job_execution_event, data=data)
 
-    async def notify_job_accepted(msg: V0AcceptJobRequest) -> None:
-        await notify_callback(JobStatusUpdate.from_job(job, "accepted", msg.message_type))
+    def status_callback(status: JobStatusUpdate.Status):
+        async def relay(msg: MinerToValidatorMessage) -> None:
+            await notify_callback(JobStatusUpdate.from_job(job, status, msg.message_type))
+        return relay
 
-    miner_client.notify_job_accepted = notify_job_accepted  # type: ignore[method-assign]
+    miner_client.notify_job_accepted = status_callback(JobStatusUpdate.Status.ACCEPTED)  # type: ignore[method-assign]
+    miner_client.notify_executor_ready = status_callback(JobStatusUpdate.Status.EXECUTOR_READY)  # type: ignore[method-assign]
+    miner_client.notify_volumes_ready = status_callback(JobStatusUpdate.Status.VOLUMES_READY)  # type: ignore[method-assign]
+    miner_client.notify_execution_done = status_callback(JobStatusUpdate.Status.EXECUTION_DONE)  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
 
     artifacts_dir = job_request.artifacts_dir if isinstance(job_request, V2JobRequest) else None

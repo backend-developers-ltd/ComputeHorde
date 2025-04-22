@@ -256,21 +256,25 @@ class FacilitatorClient:
 
     async def handle_job_status_updates(self, job_uuid: str):
         """
-        Route job status updates for given job back to the Facilitator.
+        Relay job status updates for given job back to the Facilitator.
         Loop until a terminal status is received.
         """
         # see compute_horde_validator.validator.organic_jobs.miner_driver.JobStatusUpdate status field
         terminal_states = {"failed", "rejected", "completed"}
 
-        while True:
-            msg = await get_channel_layer().receive(f"job_status_updates__{job_uuid}")
-            try:
-                envelope = _JobStatusChannelEnvelope.model_validate(msg)
-                await self.send_model(envelope.payload)
-                if envelope.payload.status in terminal_states:
-                    return
-            except pydantic.ValidationError as exc:
-                logger.warning("Received malformed job status update: %s", exc)
+        logger.debug(f"Listening for job status updates for job {job_uuid}")
+        try:
+            while True:
+                msg = await get_channel_layer().receive(f"job_status_updates__{job_uuid}")
+                try:
+                    envelope = _JobStatusChannelEnvelope.model_validate(msg)
+                    asyncio.create_task(self.send_model(envelope.payload))
+                    if envelope.payload.status in terminal_states:
+                        return
+                except pydantic.ValidationError as exc:
+                    logger.warning("Received malformed job status update: %s", exc)
+        finally:
+            logger.debug(f"Finished listening for job status updates for job {job_uuid}")
 
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(7),
@@ -352,11 +356,19 @@ class FacilitatorClient:
                 await self.send_model(
                     JobStatusUpdate(
                         uuid=job_request.uuid,
-                        status="failed",
+                        status=JobStatusUpdate.Status.FAILED,
                         metadata=JobStatusMetadata(comment=msg),
                     )
                 )
                 return
+        
+        await self.send_model(
+            JobStatusUpdate(
+                uuid=job_request.uuid,
+                status=JobStatusUpdate.Status.RECEIVED,
+                metadata=JobStatusMetadata(comment=""),
+            )
+        )
 
         try:
             miner = await routing.pick_miner_for_job_request(job_request)
@@ -367,7 +379,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status="rejected",
+                    status=JobStatusUpdate.Status.REJECTED,
                     metadata=JobStatusMetadata(comment=msg),
                 )
             )
@@ -378,7 +390,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status="rejected",
+                    status=JobStatusUpdate.Status.REJECTED,
                     metadata=JobStatusMetadata(comment=msg),
                 )
             )
@@ -389,7 +401,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status="failed",
+                    status=JobStatusUpdate.Status.FAILED,
                     metadata=JobStatusMetadata(comment=msg),
                 )
             )
@@ -410,7 +422,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status="failed",
+                    status=JobStatusUpdate.Status.FAILED,
                     metadata=JobStatusMetadata(comment=msg),
                 )
             )

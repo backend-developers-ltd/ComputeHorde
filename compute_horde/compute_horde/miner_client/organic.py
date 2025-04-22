@@ -26,6 +26,7 @@ from compute_horde.protocol_messages import (
     UnauthorizedError,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
+    V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
@@ -38,6 +39,7 @@ from compute_horde.protocol_messages import (
     V0MachineSpecsRequest,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
+    V0VolumesReadyRequest,
     ValidatorAuthForMiner,
     ValidatorToMinerMessage,
 )
@@ -121,6 +123,12 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         ] = loop.create_future()
         self.streaming_job_ready_or_not_timestamp: int = 0
 
+        self.volumes_ready_future: asyncio.Future[V0VolumesReadyRequest] = loop.create_future()
+        self.volumes_ready_timestamp: int = 0
+
+        self.execution_done_future: asyncio.Future[V0ExecutionDoneRequest] = loop.create_future()
+        self.execution_done_timestamp: int = 0
+
         self.miner_finished_or_failed_future: asyncio.Future[
             V0JobFailedRequest | V0JobFinishedRequest
         ] = loop.create_future()
@@ -160,6 +168,12 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         """This method is called when miner sends job accepted message"""
 
     async def notify_executor_ready(self, msg: V0ExecutorReadyRequest) -> None:
+        """This method is called when miner sends executor ready message"""
+
+    async def notify_volumes_ready(self, msg: V0VolumesReadyRequest) -> None:
+        """This method is called when miner sends executor ready message"""
+
+    async def notify_execution_done(self, msg: V0ExecutionDoneRequest) -> None:
         """This method is called when miner sends executor ready message"""
 
     async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
@@ -208,6 +222,18 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             try:
                 self.streaming_job_ready_or_not_future.set_result(msg)
                 self.streaming_job_ready_or_not_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
+        elif isinstance(msg, V0VolumesReadyRequest):
+            try:
+                self.volumes_ready_future.set_result(msg)
+                self.volumes_ready_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
+        elif isinstance(msg, V0ExecutionDoneRequest):
+            try:
+                self.execution_done_future.set_result(msg)
+                self.execution_done_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
         elif isinstance(msg, V0JobFailedRequest | V0JobFinishedRequest):
@@ -349,6 +375,8 @@ class FailureReason(enum.Enum):
     MINER_CONNECTION_FAILED = enum.auto()
     INITIAL_RESPONSE_TIMED_OUT = enum.auto()
     EXECUTOR_READINESS_RESPONSE_TIMED_OUT = enum.auto()
+    VOLUMES_TIMED_OUT = enum.auto()
+    EXECUTION_TIMED_OUT = enum.auto()
     FINAL_RESPONSE_TIMED_OUT = enum.auto()
     JOB_DECLINED = enum.auto()
     EXECUTOR_FAILED = enum.auto()
@@ -484,6 +512,24 @@ async def run_organic_job(
                     time_limit_upload=job_details.time_limit_upload,
                 )
             )
+
+            try:
+                volumes_ready_response = await asyncio.wait_for(
+                    client.volumes_ready_future,
+                    timeout=job_timer.time_left(),
+                )
+            except TimeoutError as exc:
+                raise OrganicJobError(FailureReason.VOLUMES_TIMED_OUT) from exc
+            await client.notify_volumes_ready(volumes_ready_response)
+
+            try:
+                execution_done_response = await asyncio.wait_for(
+                    client.execution_done_future,
+                    timeout=job_timer.time_left(),
+                )
+            except TimeoutError as exc:
+                raise OrganicJobError(FailureReason.EXECUTION_TIMED_OUT) from exc
+            await client.notify_execution_done(execution_done_response)
 
             try:
                 final_response = await asyncio.wait_for(
