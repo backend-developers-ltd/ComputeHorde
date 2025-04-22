@@ -58,6 +58,7 @@ from compute_horde_core.volume import (
 )
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from huggingface_hub.errors import RepositoryNotFoundError, RevisionNotFoundError
 from pydantic import TypeAdapter
 
 from compute_horde_executor.executor.output_uploader import OutputUploader, OutputUploadFailed
@@ -401,8 +402,9 @@ class DownloadManager:
         allow_patterns: str | list[str] | None = None,
     ):
         retries = 0
-        last_exc = None
+        last_exc: Exception | None = None
         hf_old_enable_hf_transfer = None
+        logger.info("Downloading %r from Hugging Face", repo_id)
 
         try:
             while retries < self.max_retries:
@@ -416,11 +418,7 @@ class DownloadManager:
                         allow_patterns=allow_patterns,
                     )
                     return
-                except (
-                    ValueError,
-                    huggingface_hub.utils.RepositoryNotFoundError,
-                    huggingface_hub.utils.RevisionNotFoundError,
-                ) as e:
+                except (ValueError, RepositoryNotFoundError, RevisionNotFoundError) as e:
                     logger.error(f"Failed to download model from Hugging Face: {e}")
                     last_exc = e
                     break
@@ -431,7 +429,9 @@ class DownloadManager:
                     if huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER:
                         # hf_transfer makes downloads faster, but sometimes fails where vanilla download doesn't.
                         logger.info("Disabling hf_transfer for retry")
-                        hf_old_enable_hf_transfer = huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER
+                        hf_old_enable_hf_transfer = (
+                            huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER
+                        )
                         huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER = False
 
         finally:
