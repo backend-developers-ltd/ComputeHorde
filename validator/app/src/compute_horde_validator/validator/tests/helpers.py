@@ -12,7 +12,6 @@ from unittest import mock
 import bittensor
 import constance
 import numpy as np
-from bittensor.core.errors import SubstrateRequestException
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     Signature,
@@ -277,7 +276,6 @@ class MockSubtensor:
         mocked_set_weights=lambda: (True, ""),
         mocked_commit_weights=lambda: (True, ""),
         mocked_reveal_weights=lambda: (True, ""),
-        mocked_metagraph=lambda block: MockMetagraph(block_num=block),
         hyperparameters=None,
         block_duration=timedelta(seconds=1),
         override_block_number=None,
@@ -287,7 +285,6 @@ class MockSubtensor:
         self.mocked_set_weights = mocked_set_weights
         self.mocked_commit_weights = mocked_commit_weights
         self.mocked_reveal_weights = mocked_reveal_weights
-        self.mocked_metagraph = mocked_metagraph
         self.hyperparameters = hyperparameters or MockHyperparameters(
             commit_reveal_weights_enabled=False,
             commit_reveal_weights_interval=1000,
@@ -316,14 +313,7 @@ class MockSubtensor:
         return self.hyperparameters
 
     def metagraph(self, netuid, block: int | None = None, lite=None):
-        if block is not None and block < self.get_current_block() - 300:
-            raise SubstrateRequestException(
-                {
-                    "code": -32000,
-                    "message": "Client error: UnknownBlock: State already discarded for 0xabc",
-                }
-            )
-        return self.mocked_metagraph(block)
+        raise RuntimeError("Always use ShieldMetagraph.")
 
     def set_weights(
         self,
@@ -391,10 +381,12 @@ class MockBlock:
         return self.value
 
 
-class MockMetagraph:
+class MockShieldMetagraph:
     def __init__(
         self,
-        netuid=1,
+        wallet: bittensor.Wallet,
+        netuid: int,
+        subtensor: bittensor.Subtensor | None = None,
         num_neurons: int | None = NUM_NEURONS,
         neurons: list[MockNeuron] | None = None,
         block_num: int = 1000,

@@ -30,6 +30,7 @@ from .helpers import (
     NUM_NEURONS,
     Celery,
     MockHyperparameters,
+    MockShieldMetagraph,
     MockSubtensor,
     check_system_events,
     patch_constance,
@@ -96,6 +97,7 @@ def test_normalize_scores():
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=361))
+@patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__no_batches_found(settings):
     set_scores()
@@ -261,7 +263,10 @@ def test_set_scores__set_weight_success(
         return {uid: w / total for uid, w in weights.items()}
 
     subtensor_ = MockSubtensor(override_block_number=723 + cycle_number * 722)
-    with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
+    with (
+        patch("bittensor.subtensor", lambda *a, **kw: subtensor_),
+        patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph),
+    ):
         setup_db(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score)
         with override_config(
             DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
@@ -296,6 +301,7 @@ def test_set_scores__set_weight_success(
         mocked_set_weights=lambda: (False, "error"), override_block_number=723
     ),
 )
+@patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight_failure(settings):
@@ -327,6 +333,7 @@ def set_weights_succeed_third_time():
         mocked_set_weights=set_weights_succeed_third_time, override_block_number=723
     ),
 )
+@patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight_eventual_success(settings):
@@ -355,6 +362,7 @@ def test_set_scores__set_weight_eventual_success(settings):
         mocked_set_weights=throw_error, override_block_number=723
     ),
 )
+@patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight__exception(settings):
@@ -384,6 +392,7 @@ def test_set_scores__set_weight__exception(settings):
         ),
     ),
 )
+@patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__set_weight__commit__exception(settings):
     setup_db()
@@ -401,6 +410,7 @@ def test_set_scores__set_weight__commit__exception(settings):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=723))
+@patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight_timeout(settings):
@@ -575,7 +585,10 @@ def test_set_scores__set_weight__commit(
             commit_reveal_weights_enabled=True,
         ),
     )
-    with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
+    with (
+        patch("bittensor.subtensor", lambda *a, **kw: subtensor_),
+        patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph),
+    ):
         setup_db(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score)
         with override_config(
             DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
@@ -613,7 +626,10 @@ def test_set_scores__set_weight__commit__too_early_or_too_late(current_block: in
             commit_reveal_weights_enabled=True,
         ),
     )
-    with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
+    with (
+        patch("bittensor.subtensor", lambda *a, **kw: subtensor_),
+        patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph),
+    ):
         setup_db()
         set_scores()
 
@@ -642,7 +658,10 @@ def test_set_scores__set_weight__reveal__in_time(reveal_block: int):
             commit_reveal_weights_enabled=True,
         ),
     )
-    with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
+    with (
+        patch("bittensor.subtensor", lambda *a, **kw: subtensor_),
+        patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph),
+    ):
         setup_db()
         set_scores()
 
@@ -690,7 +709,10 @@ def test_set_scores__set_weight__reveal__out_of_window(reveal_block: int):
             commit_reveal_weights_enabled=True,
         ),
     )
-    with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
+    with (
+        patch("bittensor.subtensor", lambda *a, **kw: subtensor_),
+        patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph),
+    ):
         setup_db()
         set_scores()
 
@@ -723,7 +745,10 @@ def test_set_scores__set_weight__reveal__timeout(run_uuid):
         ),
     )
 
-    with patch("bittensor.subtensor", lambda *a, **kw: subtensor_):
+    with (
+        patch("bittensor.subtensor", lambda *a, **kw: subtensor_),
+        patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph),
+    ):
         setup_db()
         set_scores()
         last_weights = Weights.objects.order_by("-id").first()
@@ -779,6 +804,7 @@ def test_set_scores__set_weight__reveal__timeout(run_uuid):
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_HARD_TTL", 1)
 @patch("compute_horde_validator.validator.tasks.WEIGHT_SETTING_TTL", 1)
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=1234))
+@patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
 # TODO: Address the unclosed socket warning

@@ -18,6 +18,7 @@ from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.core.errors import SubstrateRequestException
 from bittensor.core.metagraph import Metagraph, NonTorchMetagraph
 from bittensor.utils.weight_utils import process_weights_for_netuid
+from bt_ddos_shield import ShieldMetagraph
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
@@ -103,9 +104,14 @@ def when_to_run(subtensor_: bittensor.subtensor, current_cycle) -> int:
     The order of validators within a cycle is random, seeded by a block
     preceding the cycle, therefore all validators should arrive at the same order.
     """
+    try:
+        metagraph = get_metagraph(subtensor=subtensor_, netuid=settings.BITTENSOR_NETUID)
+    except Exception as ex:
+        raise ScheduleError("Cannot get metagraph") from ex
 
     try:
         validators = get_validators(
+            metagraph=metagraph,
             netuid=settings.BITTENSOR_NETUID,
             network=settings.BITTENSOR_NETWORK,
             block=current_cycle.start,
@@ -689,7 +695,9 @@ def get_subtensor(network):
 
 def get_metagraph(subtensor, netuid):
     with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
-        return subtensor.metagraph(netuid=netuid)
+        return ShieldMetagraph(
+            wallet=settings.BITTENSOR_WALLET(), netuid=netuid, subtensor=subtensor
+        )
 
 
 def normalize_batch_scores(
@@ -1154,8 +1162,10 @@ def send_events_to_facilitator():
 def fetch_metagraph(subtensor: bittensor.subtensor, block=None):
     try:
         start_ts = time.time()
-        metagraph = subtensor.metagraph(
+        metagraph = ShieldMetagraph(
+            wallet=settings.BITTENSOR_WALLET(),
             netuid=settings.BITTENSOR_NETUID,
+            subtensor=subtensor,
             block=block,
             lite=True,
         )

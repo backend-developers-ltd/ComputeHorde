@@ -27,8 +27,8 @@ from compute_horde_validator.validator.tasks import (
 )
 
 from .helpers import (
-    MockMetagraph,
     MockMinerClient,
+    MockShieldMetagraph,
     MockSubtensor,
     check_system_events,
     neurons_to_validator_infos,
@@ -151,9 +151,12 @@ def test__calculate_job_start_block():
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test__schedule_validation_run__not_in_validators(validators):
-    with patch(
-        "compute_horde_validator.validator.tasks.get_validators",
-        lambda *args, **kwargs: neurons_to_validator_infos(validators),
+    with (
+        patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph),
+        patch(
+            "compute_horde_validator.validator.tasks.get_validators",
+            lambda *args, **kwargs: neurons_to_validator_infos(validators),
+        ),
     ):
         assert SyntheticJobBatch.objects.count() == 0
         with pytest.raises(ScheduleError):
@@ -162,6 +165,7 @@ def test__schedule_validation_run__not_in_validators(validators):
 
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=1200))
+@patch("compute_horde_validator.validator.tasks.ShieldMetagraph", side_effect=Exception("Nope!"))
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test__schedule_validation_run__unable_to_fetch_metagraph(validators):
     assert SyntheticJobBatch.objects.count() == 0
@@ -172,12 +176,15 @@ def test__schedule_validation_run__unable_to_fetch_metagraph(validators):
 
 @pytest.mark.django_db(databases=["default", "default_alias"])
 def test__schedule_validation_run__simple(validators_with_this_hotkey):
-    with patch(
-        "bittensor.subtensor",
-        lambda *args, **kwargs: MockSubtensor(
-            override_block_number=140,
-            mocked_metagraph=lambda *a, **kw: MockMetagraph(
-                neurons=validators_with_this_hotkey, num_neurons=None
+    with (
+        patch(
+            "bittensor.subtensor",
+            lambda *args, **kwargs: MockSubtensor(override_block_number=140),
+        ),
+        patch(
+            "compute_horde_validator.validator.tasks.ShieldMetagraph",
+            return_value=MockShieldMetagraph(
+                None, None, neurons=validators_with_this_hotkey, num_neurons=None
             ),
         ),
     ):
@@ -192,9 +199,12 @@ def test__schedule_validation_run__simple(validators_with_this_hotkey):
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test__schedule_validation_run__concurrent(validators_with_this_hotkey):
-    with patch(
-        "compute_horde_validator.validator.tasks.get_validators",
-        lambda *args, **kwargs: neurons_to_validator_infos(validators_with_this_hotkey),
+    with (
+        patch("compute_horde_validator.validator.tasks.ShieldMetagraph", MockShieldMetagraph),
+        patch(
+            "compute_horde_validator.validator.tasks.get_validators",
+            lambda *args, **kwargs: neurons_to_validator_infos(validators_with_this_hotkey),
+        ),
     ):
         assert SyntheticJobBatch.objects.count() == 0
         num_threads = 10
