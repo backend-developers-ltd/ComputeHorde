@@ -90,16 +90,18 @@ async def main() -> None:
     if job.status != "Completed" or job.result.artifacts != expected_artifacts:
         raise RuntimeError(f"Job failed: status={job.status}, artifacts={job.result.artifacts}")
 
+    post_object_path = f"/output/{post_object_key}"
+    put_object_path = f"/output/{put_object_key}"
     if ci_run:
         if len(job.result.upload_results) != 2:
             raise RuntimeError(f"Expected 2 keys in upload results, found {len(job.result.upload_results)}")
-        if post_object_key not in job.result.upload_results:
-            raise RuntimeError(f"Missing key: {post_object_key}")
-        if put_object_key not in job.result.upload_results:
-            raise RuntimeError(f"Missing key: {put_object_key}")
-        if not job.result.upload_results[post_object_key].headers:
+        if post_object_path not in job.result.upload_results:
+            raise RuntimeError(f"Missing key: {post_object_path}")
+        if put_object_path not in job.result.upload_results:
+            raise RuntimeError(f"Missing key: {put_object_path}")
+        if not job.result.upload_results[post_object_path].headers:
             raise RuntimeError("No headers for POST upload")
-        if not job.result.upload_results[put_object_key].headers:
+        if not job.result.upload_results[put_object_path].headers:
             raise RuntimeError("No headers for PUT upload")
 
     logger.info("Success!")

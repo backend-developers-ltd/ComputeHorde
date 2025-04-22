@@ -174,19 +174,16 @@ class ComputeHordeJob:
     def _from_response(cls, client: "ComputeHordeClient", response: FacilitatorJobResponse) -> Self:
         result = None
         if not response.status.is_in_progress():
-            upload_results = {}
-            for path, raw_data in response.upload_results.items():
-                try:
-                    upload_results[path] = HttpOutputVolumeResponse.parse_raw(raw_data)
-                except Exception:
-                    logger.error(f"Failed to parse upload result for '{path}'", exc_info=True)
-
             # TODO: Handle base64 decode errors
             result = ComputeHordeJobResult(
                 stdout=response.stdout,
                 artifacts={path: base64.b64decode(base64_data) for path, base64_data in response.artifacts.items()},
-                upload_results=upload_results,
             )
+            for path, raw_data in response.upload_results.items():
+                try:
+                    result.add_upload_result(path, HttpOutputVolumeResponse.parse_raw(raw_data))
+                except Exception:
+                    logger.error(f"Failed to parse upload result for '{path}'", exc_info=True)
         return cls(
             client,
             uuid=response.uuid,
