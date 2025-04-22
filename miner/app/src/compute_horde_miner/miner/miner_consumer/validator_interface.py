@@ -8,6 +8,7 @@ from functools import cached_property
 from typing import Protocol
 
 import bittensor
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.protocol_messages import (
     GenericError,
     V0AcceptJobRequest,
@@ -36,13 +37,11 @@ from django.db.models import DateTimeField, ExpressionWrapper, F
 from django.utils import timezone
 from pydantic import TypeAdapter
 
-from compute_horde_miner.miner.dynamic_config import aget_config
 from compute_horde_miner.miner.executor_manager import current
 from compute_horde_miner.miner.executor_manager.base import (
     AllExecutorsBusy,
     ExecutorUnavailable,
 )
-from compute_horde_miner.miner.executor_manager.v0 import ExecutorReservationTimeout
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
     BaseConsumer,
     log_errors_explicitly,
@@ -337,31 +336,25 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         await job.asave()
         self.pending_jobs[msg.job_uuid] = job
 
-        # This reserves AND starts the executor.
+        # This will reserve AND start the executor.
         executor_spinup = asyncio.create_task(
             current.executor_manager.reserve_executor_class(
                 executor_token,
                 msg.executor_class,
-                timeout=12345 # TODO: TIMEOUTS
+                timeout=EXECUTOR_CLASS[msg.executor_class].spin_up_time
             ),
-        )
-        executor_reservation_timeout_seconds = await aget_config(
-            "DYNAMIC_EXECUTOR_RESERVATION_TIMEOUT_SECONDS"
         )
 
         try:
-            # First, wait for short time for the manager to confirm an executor will be available
-            # so that we can accept the job. This should not take long: the validator is only
-            # waiting for a couple of seconds for this, and the asyncio loop may be busy with other
-            # things - so this must return very fast.
+            # Wait for a signal from the executor_manager that the executor is reserved.
+            # This should be a fast operation, so the validator only waits for a short time for this.
             await current.executor_manager.wait_for_executor_reservation(
                 executor_token,
                 msg.executor_class,
-                timeout=executor_reservation_timeout_seconds,
             )
 
-            # If there is no executor, the above future throws an appropriate exception so we will
-            # never proceed further down.
+            # If there is no executor, the above future throws an appropriate exception,
+            # so we will never proceed further down.
             await self.send(V0AcceptJobRequest(job_uuid=msg.job_uuid).model_dump_json())
 
             # Then, wait for the executor to actually start up.
@@ -413,22 +406,6 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                 V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
                     reason=V0DeclineJobRequest.Reason.EXECUTOR_FAILURE,
-                ).model_dump_json()
-            )
-
-        except ExecutorReservationTimeout:
-            await self.group_discard(executor_token)
-            job.status = AcceptedJob.Status.FAILED
-            await job.asave()
-            self.pending_jobs.pop(msg.job_uuid)
-            logger.info(
-                f"Declining job {msg.job_uuid}: executor reservation timed out after "
-                f"{executor_reservation_timeout_seconds} seconds"
-            )
-            await self.send(
-                V0DeclineJobRequest(
-                    job_uuid=msg.job_uuid,
-                    reason=V0DeclineJobRequest.Reason.EXECUTOR_RESERVATION_FAILURE,
                 ).model_dump_json()
             )
 
