@@ -38,8 +38,6 @@ from .helpers import (
     MockMetagraph,
     MockSubtensor,
     MockSuccessfulMinerClient,
-    get_dummy_job_request_v0,
-    get_dummy_job_request_v1,
     get_dummy_job_request_v2,
     get_keypair,
 )
@@ -98,7 +96,7 @@ class FacilitatorWs:
             await self.condition.wait()
 
     def get_dummy_job(self, job_uuid) -> OrganicJobRequest:
-        return get_dummy_job_request_v0(job_uuid)
+        return get_dummy_job_request_v2(job_uuid)
 
     async def verify_auth(self, ws):
         response = await asyncio.wait_for(ws.recv(), timeout=5)
@@ -137,21 +135,6 @@ class FacilitatorWs:
         finally:
             async with self.condition:
                 self.condition.notify()
-
-
-class FacilitatorJobStatusUpdatesWsV0(FacilitatorWs):
-    def get_dummy_job(self, job_uuid) -> OrganicJobRequest:
-        return get_dummy_job_request_v0(job_uuid)
-
-
-class FacilitatorJobStatusUpdatesWsV1(FacilitatorWs):
-    def get_dummy_job(self, job_uuid):
-        return get_dummy_job_request_v1(job_uuid)
-
-
-class FacilitatorJobStatusUpdatesWsV2(FacilitatorWs):
-    def get_dummy_job(self, job_uuid):
-        return get_dummy_job_request_v2(job_uuid)
 
 
 class FacilitatorJobOnTrustedMiner(FacilitatorWs):
@@ -214,7 +197,7 @@ class FacilitatorBadMessageWs(FacilitatorWs):
             self.condition.notify()
 
 
-class FacilitatorJobStatusUpdatesWsV2Retries(FacilitatorJobStatusUpdatesWsV2):
+class FacilitatorJobStatusUpdatesWsV2Retries(FacilitatorWs):
     async def serve(self, ws):
         try:
             await self.verify_auth(ws)
@@ -247,9 +230,7 @@ class FacilitatorJobStatusUpdatesWsV2Retries(FacilitatorJobStatusUpdatesWsV2):
 @pytest.mark.parametrize(
     "ws_server_cls",
     [
-        FacilitatorJobStatusUpdatesWsV0,
-        FacilitatorJobStatusUpdatesWsV1,
-        FacilitatorJobStatusUpdatesWsV2,
+        FacilitatorWs,
         FacilitatorBadMessageWs,
     ],
 )

@@ -1,5 +1,5 @@
 import pytest
-from compute_horde.fv_protocol import facilitator_requests
+from compute_horde.fv_protocol.facilitator_requests import V0JobCheated
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
@@ -234,7 +234,7 @@ async def test_miner_is_blacklisted__after_job_reported_cheated(
 
     # report previous job as cheated
     await faci_transport.add_message(
-        facilitator_requests.V0JobCheated(job_uuid=job_request.uuid),
+        V0JobCheated(job_uuid=job_request.uuid),
         send_before=2,  # job status=accepted, job status=failed
         sleep_before=0.2,  # needed to ensure validator finishes the job flow
     )
