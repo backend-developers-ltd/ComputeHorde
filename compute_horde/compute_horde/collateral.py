@@ -130,7 +130,7 @@ def associate_evm_key(
 
     Args:
         wallet (bittensor.wallet): The wallet object containing the hotkey for signing
-            the transaction.
+            the transaction. The wallet.hotkey will be associated with the EVM key.
         evm_address (str): The Ethereum Virtual Machine (EVM) address to be associated
             with the wallet.
         evm_private_key (str): The private key corresponding to the EVM address, used
