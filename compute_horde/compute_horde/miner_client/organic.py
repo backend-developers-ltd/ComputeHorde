@@ -3,7 +3,6 @@ import contextlib
 import datetime
 import enum
 import logging
-import math
 import time
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -400,14 +399,15 @@ class OrganicJobError(Exception):
             return ""
         return self.received.model_dump_json()
 
+
 @dataclass
 class OrganicJobDetails:
     job_uuid: str
     executor_class: ExecutorClass
     docker_image: str
-    time_limit_download: int
-    time_limit_execution: int
-    time_limit_upload: int
+    download_time_limit: int
+    execution_time_limit: int
+    upload_time_limit: int
     docker_run_options_preset: DockerRunOptionsPreset = "nvidia_all"
     docker_run_cmd: list[str] = field(default_factory=list)
     volume: Volume | None = None
@@ -418,6 +418,8 @@ class OrganicJobDetails:
 async def run_organic_job(
     client: OrganicMinerClient,
     job_details: OrganicJobDetails,
+    executor_ready_timeout: float = None,
+    initial_response_timeout: float = None,
 ) -> tuple[str, str, dict[str, str]]:  # stdout, stderr, artifacts
     """
     Run an organic job. This is a simpler way to use OrganicMinerClient.
@@ -429,24 +431,35 @@ async def run_organic_job(
     """
     assert client.job_uuid == job_details.job_uuid
 
-    total_leeway = 10 # TODO: TIMEOUTS
-    # Deadline timer.
-    # Initiate with the leeway - leftovers will be shared across all stages.
-    job_timer = Timer(total_leeway)
-
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
             await exit_stack.enter_async_context(client)
         except TransportConnectionError as exc:
             raise OrganicJobError(FailureReason.MINER_CONNECTION_FAILED) from exc
 
+
+        reservation_time_limit = 3  # TODO: TIMEOUTS
+        miner_timing = V0InitialJobRequest.TimingDetails(
+            allowed_leeway=5, # TODO: Timeouts
+            startup_time_limit=5, # TODO: TIMEOUTS
+            download_time_limit=job_details.download_time_limit,
+            execution_time_limit=job_details.execution_time_limit,
+            upload_time_limit=job_details.upload_time_limit,
+        )
+        validator_total_leeway = 5  # TODO: TIMEOUTS
+
+        # Deadline timer.
+        # Initiate with the leeway - leftovers will be shared across all stages.
+        job_timer = Timer(validator_total_leeway)
+
         ## STAGE: reservation
-        # Miner should reserve an executor and respond with accept/reject quickly
-        initial_response_time_limit = 3  # TODO: TIMEOUTS
-        job_timer.extend_timeout(initial_response_time_limit)
+        # Miner should reserve an executor and respond with accept/reject quickly.from
+        # The receipt should only be good enough for the reservation time.
+        # Miner will receive a "job accepted" receipt with a longer TTL as soon as we get a reservation.
+        job_timer.extend(reservation_time_limit)
         receipt_payload, receipt_signature = client.generate_job_started_receipt_message(
             executor_class=job_details.executor_class,
-            ttl=math.floor(job_timer.time_left()),
+            ttl=reservation_time_limit,
         )
         await client.send_model(
             V0InitialJobRequest(
@@ -456,6 +469,7 @@ async def run_organic_job(
                 volume=job_details.volume,
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
+                timing_details=miner_timing
             ),
         )
         logger.debug(f"Sent initial job request for {job_details.job_uuid}")
@@ -466,7 +480,9 @@ async def run_organic_job(
 
         try:
             try:
-                logger.debug(f"Waiting for initial response for {job_details.job_uuid} (time left: {job_timer.time_left():.2f}s)")
+                logger.debug(
+                    f"Waiting for initial response for {job_details.job_uuid} (time left: {job_timer.time_left():.2f}s)"
+                )
                 initial_response = await asyncio.wait_for(
                     client.miner_accepting_or_declining_future,
                     timeout=job_timer.time_left(),
@@ -477,17 +493,21 @@ async def run_organic_job(
                 raise OrganicJobError(FailureReason.JOB_DECLINED, initial_response)
 
             await client.notify_job_accepted(initial_response)
-            await client.send_job_accepted_receipt_message(
-                accepted_timestamp=time.time(),
-                ttl=int(job_timer.time_left()),
-            )
+
+            ## STAGE: Spinup
+            # Validator waits for the executor to start up and report readiness.
+            # This includes executor startup checks.
 
             try:
-                ## STAGE: executor startup
-                # Always-on executors' spinup time (==0) should fit within the leeway.
                 executor_spinup_time = EXECUTOR_CLASS[job_details.executor_class].spin_up_time
-                job_timer.extend_timeout(executor_spinup_time)
-                logger.debug(f"Waiting for executor startup for {job_details.job_uuid} (time left: {job_timer.time_left():.2f}s)")
+                job_timer.extend(executor_spinup_time)
+                await client.send_job_accepted_receipt_message(
+                    accepted_timestamp=time.time(),
+                    ttl=int(job_timer.time_left()),
+                )
+                logger.debug(
+                    f"Waiting for executor startup for {job_details.job_uuid} (time left: {job_timer.time_left():.2f}s)"
+                )
                 executor_readiness_response = await asyncio.wait_for(
                     client.executor_ready_or_failed_future,
                     timeout=job_timer.time_left(),
@@ -509,18 +529,17 @@ async def run_organic_job(
                     volume=None,  # Was sent in the initial request
                     output_upload=job_details.output,
                     artifacts_dir=job_details.artifacts_dir,
-                    time_limit_download=job_details.time_limit_download,
-                    time_limit_execution=job_details.time_limit_execution,
-                    time_limit_upload=job_details.time_limit_upload,
                 )
             )
 
             try:
                 ## STAGE: volume download
                 # The consumer defines the time limit for this stage.
-                time_limit_download = job_details.time_limit_download
-                job_timer.extend_timeout(time_limit_download)
-                logger.debug(f"Waiting for volume download for {job_details.job_uuid} (time left: {job_timer.time_left():.2f}s)")
+                download_time_limit = job_details.download_time_limit
+                job_timer.extend(download_time_limit)
+                logger.debug(
+                    f"Waiting for volume download for {job_details.job_uuid} (time left: {job_timer.time_left():.2f}s)"
+                )
                 volumes_ready_response = await asyncio.wait_for(
                     client.volumes_ready_future,
                     timeout=job_timer.time_left(),
@@ -532,9 +551,11 @@ async def run_organic_job(
             try:
                 ## STAGE: execution
                 # The consumer defines the time limit for this stage.
-                time_limit_execution = job_details.time_limit_execution
-                job_timer.extend_timeout(time_limit_execution)
-                logger.debug(f"Waiting for execution for {job_details.job_uuid} (time left: {job_timer.time_left():.2f}s)")
+                execution_time_limit = job_details.execution_time_limit
+                job_timer.extend(execution_time_limit)
+                logger.debug(
+                    f"Waiting for execution for {job_details.job_uuid} (time left: {job_timer.time_left():.2f}s)"
+                )
                 execution_done_response = await asyncio.wait_for(
                     client.execution_done_future,
                     timeout=job_timer.time_left(),
@@ -546,9 +567,11 @@ async def run_organic_job(
             try:
                 ## STAGE: upload
                 # The consumer defines the time limit for this stage.
-                time_limit_upload = job_details.time_limit_upload
-                job_timer.extend_timeout(time_limit_upload)
-                logger.debug(f"Waiting for upload for {job_details.job_uuid} (time left: {job_timer.time_left():.2f}s)")
+                upload_time_limit = job_details.upload_time_limit
+                job_timer.extend(upload_time_limit)
+                logger.debug(
+                    f"Waiting for upload for {job_details.job_uuid} (time left: {job_timer.time_left():.2f}s)"
+                )
                 final_response = await asyncio.wait_for(
                     client.miner_finished_or_failed_future,
                     timeout=job_timer.time_left(),

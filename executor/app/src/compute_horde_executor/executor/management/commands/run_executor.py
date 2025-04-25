@@ -49,7 +49,7 @@ from compute_horde.protocol_messages import (
     V0VolumesReadyRequest,
 )
 from compute_horde.transport import AbstractTransport, WSTransport
-from compute_horde.utils import MachineSpecs
+from compute_horde.utils import MachineSpecs, Timer
 from compute_horde_core.volume import (
     HuggingfaceVolume,
     InlineVolume,
@@ -125,6 +125,7 @@ JOB_CONTAINER_PORT = 8000
 WAIT_FOR_STREAMING_JOB_TIMEOUT = 25
 WAIT_FOR_NGINX_TIMEOUT = 10
 
+
 class JobError(Exception):
     def __init__(
         self,
@@ -135,6 +136,7 @@ class JobError(Exception):
         self.error_message = error_message
         self.error_type = error_type
         self.error_detail = error_detail
+
 
 @asynccontextmanager
 async def temporary_process(program, *args, clean_exit_timeout: float = 1.0, **subprocess_kwargs):
@@ -158,10 +160,12 @@ async def temporary_process(program, *args, clean_exit_timeout: float = 1.0, **s
                 process.terminate()
                 await asyncio.wait_for(process.wait(), timeout=clean_exit_timeout)
             except ProcessLookupError:
-                # Proces already gone - nothing to do
+                # Process already gone - nothing to do
                 pass
             except TimeoutError:
-                logger.warning(f"Process `{program}` didn't exit after {clean_exit_timeout} seconds - killing ({args=})")
+                logger.warning(
+                    f"Process `{program}` didn't exit after {clean_exit_timeout} seconds - killing ({args=})"
+                )
                 process.kill()
         except Exception as e:
             logger.error(f"Failed to clean up process `{program}` ({args=}): {e}", exc_info=True)
@@ -517,11 +521,23 @@ def network_name(docker_objects_infix: str) -> str:
     return f"ch-{docker_objects_infix}"
 
 
+class _ExecutionResult(typing.NamedTuple):
+    """Exit output and status of the job's docker container."""
+    timed_out: bool
+    """Whether the job's docker container timed out and was forced to exit."""
+    
+    return_code: int | None
+    """Status code returned by the job process. None means the job timed out and was stopped."""
+    
+    stdout: str
+    stderr: str
+
+
 class JobRunner:
     def __init__(self):
         self.initial_job_request: V0InitialJobRequest | None = None
         self.full_job_request: V0JobRequest | None = None
-        
+
         self.temp_dir = pathlib.Path(tempfile.mkdtemp())
         self.volume_mount_dir = self.temp_dir / "volume"
         self.output_volume_mount_dir = self.temp_dir / "output"
@@ -535,7 +551,7 @@ class JobRunner:
         self.process: asyncio.subprocess.Process | None = None
         self.cmd: list[str] = []
 
-        self.execution_result: tuple | None = None
+        self.execution_result: _ExecutionResult | None = None
 
         # for streaming job
         self.is_streaming_job: bool = False
@@ -566,9 +582,7 @@ class JobRunner:
             self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(
                 alternative_name=initial_job_request.streaming_details.executor_ip
             )
-            save_public_key(
-                initial_job_request.streaming_details.public_key, self.nginx_dir_path
-            )
+            save_public_key(initial_job_request.streaming_details.public_key, self.nginx_dir_path)
             self.is_streaming_job = True
 
         self.volume_mount_dir.mkdir(exist_ok=True)
@@ -598,10 +612,12 @@ class JobRunner:
         self.full_job_request = full_job_request
 
     @asynccontextmanager
-    async def start_job(self) -> AsyncGenerator[str | None, Any]:
+    async def start_job(self) -> AsyncGenerator[None, Any]:
         """
         Trigger a job to run in a Docker container.
         """
+        assert self.full_job_request is not None, "Call prepare_initial() and prepare_full() first"
+
         docker_run_options = RunConfigManager.preset_to_docker_run_args(
             self.full_job_request.docker_run_options_preset
         )
@@ -670,6 +686,9 @@ class JobRunner:
                     job_ip = await get_docker_container_ip(self.job_container_name)
                     # update the nginx conf with the job container ip
                     nginx_conf = NGINX_CONF.replace("CONTAINER", f"{job_ip}:{JOB_CONTAINER_PORT}")
+                    assert self.nginx_dir_path is not None, (
+                        "nginx dir path is None. Call prepare_initial() first."
+                    )
                     await start_nginx(
                         nginx_conf,
                         port=settings.NGINX_PORT,
@@ -683,9 +702,7 @@ class JobRunner:
 
                 assert self.executor_certificate is not None
                 # check that the job is ready to serve requests
-                ip = await get_docker_container_ip(
-                    self.nginx_container_name, bridge_network=True
-                )
+                ip = await get_docker_container_ip(self.nginx_container_name, bridge_network=True)
                 logger.debug(f"Checking if streaming job is ready at http://{ip}/health")
                 job_ready = await check_endpoint(
                     f"http://{ip}/health",
@@ -697,22 +714,32 @@ class JobRunner:
             yield
 
             try:
+                # Support for the legacy single-timeout
+                docker_process_timeout = (
+                    self.initial_job_request.timing_details.execution_time_limit
+                    if self.initial_job_request
+                    else self.initial_job_request.timeout_seconds
+                )
                 result = await asyncio.wait_for(
                     job_process.communicate(),
-                    timeout=self.full_job_request.time_limit_execution,
+                    timeout=docker_process_timeout,
                 )
-                timed_out = False
-                exit_status = job_process.returncode
-                stdout = result[0].decode()
-                stderr = result[1].decode()
-                self.execution_result = exit_status, stdout, stderr, timed_out
-                
+                self.execution_result = _ExecutionResult(
+                    timed_out=False,
+                    return_code=job_process.returncode,
+                    stdout=result[0].decode(),
+                    stderr=result[1].decode(),
+                )
+
             except TimeoutError:
-                timed_out = True
-                exit_status = None
                 stdout = (await job_process.stdout.read()).decode() if job_process.stdout else ""
                 stderr = (await job_process.stderr.read()).decode() if job_process.stderr else ""
-                self.execution_result = exit_status, stdout, stderr, timed_out
+                self.execution_result = _ExecutionResult(
+                    timed_out=True,
+                    return_code=None,
+                    stdout=stdout,
+                    stderr=stderr,
+                )
 
             if self.is_streaming_job:
                 # stop the associated nginx server
@@ -732,17 +759,23 @@ class JobRunner:
                     logger.error(f"Failed to stop Nginx: {e}")
 
     async def upload_results(self) -> JobResult:
-        exit_status, stdout, stderr, timed_out = self.execution_result
+        assert self.execution_result is not None, "No execution result"
+        assert self.full_job_request is not None, (
+            "Full job request must be set. Call prepare_full() first."
+        )
+        assert self.initial_job_request is not None, (
+            "Initial job request must be set. Call prepare_initial() first."
+        )
 
         # Save the streams in output volume and truncate them in response.
         with open(self.output_volume_mount_dir / "stdout.txt", "w") as f:
-            f.write(stdout)
-        stdout = truncate(stdout)
+            f.write(self.execution_result.stdout)
+        stdout = truncate(self.execution_result.stdout)
         with open(self.output_volume_mount_dir / "stderr.txt", "w") as f:
-            f.write(stderr)
-        stderr = truncate(stderr)
+            f.write(self.execution_result.stderr)
+        stderr = truncate(self.execution_result.stderr)
 
-        success = exit_status == 0
+        success = self.execution_result.return_code == 0
 
         artifacts = {}
         for artifact_filename in os.listdir(self.artifacts_mount_dir):
@@ -764,7 +797,9 @@ class JobRunner:
             # upload the output if requested and job succeeded
             if self.full_job_request.output_upload:
                 try:
-                    output_uploader = OutputUploader.for_upload_output(self.full_job_request.output_upload)
+                    output_uploader = OutputUploader.for_upload_output(
+                        self.full_job_request.output_upload
+                    )
                     await output_uploader.upload(self.output_volume_mount_dir)
                 except OutputUploadFailed as ex:
                     logger.warning(
@@ -776,8 +811,8 @@ class JobRunner:
 
         return JobResult(
             success=success,
-            exit_status=exit_status,
-            timed_out=timed_out,
+            exit_status=self.execution_result.return_code,
+            timed_out=self.execution_result.timed_out,
             stdout=stdout,
             stderr=stderr,
             artifacts=artifacts,
@@ -887,6 +922,13 @@ class JobRunner:
                 raise NotImplementedError(f"Unsupported sub-volume type: {type(sub_volume)}")
 
     async def get_job_volume(self) -> Volume | None:
+        assert self.full_job_request is not None, (
+            "Full job request must be set. Call prepare_full() first."
+        )
+        assert self.initial_job_request is not None, (
+            "Initial job request must be set. Call prepare_initial() first."
+        )
+
         initial_volume = self.initial_job_request.volume
         late_volume = self.full_job_request.volume if self.full_job_request else None
 
@@ -915,38 +957,42 @@ class Command(BaseCommand):
     async def handle(self, *args, **options):
         self.runner = self.JOB_RUNNER_CLASS()
         self.miner_client = self.MINER_CLIENT_CLASS(settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN)
-        self.miner_client_for_tests = self.miner_client # TODO: Remove this?
-        await self._execute()
+        self.miner_client_for_tests = self.miner_client  # TODO: Remove this?
+        await self._execute(
+            total_leeway=5,
+            startup_time_limit=5,  # TODO: Get this from somewhere - manage.py arg?
+        )
 
-    async def _execute(self):
-        leeway = 5
-        start_time = asyncio.get_running_loop().time()
-        deadline = start_time + leeway
-
-        def time_left() -> float:
-            return deadline - asyncio.get_running_loop().time()
+    async def _execute(self, total_leeway: int, startup_time_limit: int):
+        deadline = Timer(total_leeway)
 
         logger.debug(f"Connecting to miner: {settings.MINER_ADDRESS}")
-        async with self.miner_client: # TODO: Can this hang?
+        async with self.miner_client:  # TODO: Can this hang?
             logger.debug(f"Connected to miner: {settings.MINER_ADDRESS}")
 
             try:
                 try:
-                    startup_time_limit = 5 # TODO: Get this from somewhere - manage.py arg?
-                    deadline += startup_time_limit
-                    async with asyncio.timeout_at(deadline):
-                        logger.debug(f"Entering startup stage; Time left: {time_left():.2f}s")
+                    # This limit should be enough to receive the initial job request, which contains further timing
+                    # details.
+                    deadline.extend(startup_time_limit)
+                    async with asyncio.timeout(deadline.time_left()):
+                        logger.debug(f"Entering startup stage; Time left: {deadline.time_left():.2f}s")
                         initial_job_request, job_request = await self._startup_stage()
+                        timing_details = initial_job_request.timing_details
                 except TimeoutError as e:
                     raise JobError(
                         "Timed out during startup stage",
                         error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
                     ) from e
 
+                if not timing_details:
+                    deadline.extend(initial_job_request.timeout_seconds)
+
                 try:
-                    deadline += job_request.time_limit_download
-                    async with asyncio.timeout_at(deadline):
-                        logger.debug(f"Entering download stage; Time left: {time_left():.2f}s")
+                    if timing_details:
+                        deadline.extend(timing_details.download_time_limit)
+                    async with asyncio.timeout(deadline.time_left()):
+                        logger.debug(f"Entering download stage; Time left: {deadline.time_left():.2f}s")
                         await self._download_stage()
                 except TimeoutError as e:
                     raise JobError(
@@ -955,23 +1001,26 @@ class Command(BaseCommand):
                     ) from e
 
                 try:
-                    deadline += job_request.time_limit_execution
-                    async with asyncio.timeout_at(deadline):
-                        logger.debug(f"Entering execution stage; Time left: {time_left():.2f}s")
+                    if timing_details:
+                        deadline.extend(timing_details.execution_time_limit)
+                    async with asyncio.timeout(deadline.time_left()):
+                        logger.debug(f"Entering execution stage; Time left: {deadline.time_left():.2f}s")
                         await self._execution_stage()
                 except TimeoutError as e:
                     # Note - this timeout should never really fire.
-                    # The job container itself has a time_limit_execution timeout and considering there's most likely
-                    # some accumulated leeway, it should always finish or get stopped.
+                    # The job subprocess itself has an `execution_time_limit` timeout,
+                    # and considering there is most likely some accumulated leeway,
+                    # it should always either finish or time out by itself.
                     raise JobError(
                         "Timed out during execution stage",
                         error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
                     ) from e
 
                 try:
-                    deadline += job_request.time_limit_upload
-                    async with asyncio.timeout_at(deadline):
-                        logger.debug(f"Entering upload stage; Time left: {time_left():.2f}s")
+                    if timing_details:
+                        deadline.extend(timing_details.upload_time_limit)
+                    async with asyncio.timeout(deadline.time_left()):
+                        logger.debug(f"Entering upload stage; Time left: {deadline.time_left():.2f}s")
                         await self._upload_stage()
                 except TimeoutError as e:
                     raise JobError(
@@ -985,7 +1034,6 @@ class Command(BaseCommand):
             except BaseException as e:
                 await self.miner_client.send_error(JobError(f"Unexpected error: {e}"))
                 raise
-
 
     async def _startup_stage(self) -> tuple[V0InitialJobRequest, V0JobRequest]:
         await self.run_security_checks_or_fail()
@@ -1007,6 +1055,9 @@ class Command(BaseCommand):
     async def _execution_stage(self):
         async with self.runner.start_job():
             if self.runner.is_streaming_job:
+                assert self.runner.executor_certificate is not None, (
+                    "Executor certificate is missing."
+                )
                 await self.miner_client.send_streaming_job_ready(self.runner.executor_certificate)
         await self.miner_client.send_execution_done()
 
@@ -1033,7 +1084,7 @@ class Command(BaseCommand):
 
         if return_code != 0:
             raise JobError(
-                'CVE-2022-0492 check failed',
+                "CVE-2022-0492 check failed",
                 error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
             )
 
@@ -1069,14 +1120,14 @@ class Command(BaseCommand):
 
         if return_code != 0:
             raise JobError(
-                f'nvidia-container-toolkit check failed: exit code {return_code}',
+                f"nvidia-container-toolkit check failed: exit code {return_code}",
                 error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
             )
 
         lines = stdout.decode().splitlines()
         if not lines:
             raise JobError(
-                'nvidia-container-toolkit check failed: no output from nvidia-container-toolkit',
+                "nvidia-container-toolkit check failed: no output from nvidia-container-toolkit",
                 error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
             )
 

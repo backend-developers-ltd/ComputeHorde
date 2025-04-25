@@ -86,10 +86,10 @@ class Timer:
     def passed_time(self) -> float:
         return (datetime.datetime.now() - self.start_time).total_seconds()
 
-    def extend_timeout(self, amount: float):
+    def extend(self, seconds: float):
         if self.timeout is None:
             raise ValueError("timeout was not specified")
-        self.timeout += amount
+        self.timeout += seconds
 
     def time_left(self) -> float:
         if self.timeout is None:
@@ -100,7 +100,6 @@ class Timer:
         if self.timeout is None:
             raise ValueError("timeout was not specified")
         return self.start_time + datetime.timedelta(seconds=self.timeout)
-
 
 
 def sign_blob(kp: bittensor.Keypair, blob: str):

@@ -214,12 +214,19 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         # we should not send any messages until validator authorizes itself
         for job in await AcceptedJob.get_not_reported(self.validator):
             if job.status == AcceptedJob.Status.FINISHED:
+                if job.artifacts is None or job.timed_out is None:
+                    logger.warning(
+                        f"Finished job {job.job_uuid} has no artifacts or timed_out, not reporting."
+                    )
+                    continue
+
                 await self.send(
                     V0JobFinishedRequest(
                         job_uuid=str(job.job_uuid),
                         docker_process_stdout=job.stdout,
                         docker_process_stderr=job.stderr,
                         artifacts=job.artifacts,
+                        timed_out=job.timed_out,
                     ).model_dump_json()
                 )
                 logger.debug(
@@ -229,9 +236,6 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                 await self.send(
                     V0JobFailedRequest(
                         job_uuid=str(job.job_uuid),
-                        docker_process_stdout=job.stdout,
-                        docker_process_stderr=job.stderr,
-                        docker_process_exit_status=job.exit_status,
                         error_type=V0JobFailedRequest.ErrorType(job.error_type)
                         if job.error_type
                         else None,
@@ -341,7 +345,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             current.executor_manager.reserve_executor_class(
                 executor_token,
                 msg.executor_class,
-                timeout=EXECUTOR_CLASS[msg.executor_class].spin_up_time
+                timeout=EXECUTOR_CLASS[msg.executor_class].spin_up_time,
             ),
         )
 
@@ -581,7 +585,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         await job.arefresh_from_db()
         job.result_reported_to_validator = timezone.now()
         await job.asave()
-        
+
     async def _volumes_ready(self, msg: V0VolumesReadyRequest):
         await self.send(msg.model_dump_json())
 

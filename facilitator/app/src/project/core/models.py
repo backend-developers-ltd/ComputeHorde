@@ -138,9 +138,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     signature = models.JSONField(blank=True, default=None, null=True)
     created_at = models.DateTimeField(default=now)
     cheated = models.BooleanField(default=False)
-    time_limit_download = models.IntegerField()
-    time_limit_execution = models.IntegerField()
-    time_limit_upload = models.IntegerField()
+    download_time_limit = models.IntegerField()
+    execution_time_limit = models.IntegerField()
+    upload_time_limit = models.IntegerField()
 
     executor_class = models.CharField(
         max_length=255, default=DEFAULT_EXECUTOR_CLASS, help_text="executor hardware class"
@@ -373,9 +373,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                     signature=signature,
                     artifacts_dir=self.artifacts_dir or None,
                     on_trusted_miner=self.on_trusted_miner,
-                    time_limit_download=self.time_limit_download,
-                    time_limit_execution=self.time_limit_execution,
-                    time_limit_upload=self.time_limit_upload,
+                    download_time_limit=self.download_time_limit,
+                    execution_time_limit=self.execution_time_limit,
+                    upload_time_limit=self.upload_time_limit,
                 )
             else:
                 assert self.miner is not None

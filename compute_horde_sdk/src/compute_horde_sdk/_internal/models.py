@@ -32,15 +32,14 @@ class ComputeHordeJobStatus(StrEnum):
     FAILED = "Failed"
 
     @classmethod
-    @property
-    def terminal_states(cls) -> set[Self]:
+    def terminal_states(cls) -> set["ComputeHordeJobStatus"]:
         return {cls.COMPLETED, cls.FAILED, cls.REJECTED}
 
     def is_in_progress(self) -> bool:
         """
         Check if the job is in progress (has not completed or failed yet).
         """
-        return self not in ComputeHordeJobStatus.terminal_states
+        return self not in ComputeHordeJobStatus.terminal_states()
 
     def is_successful(self) -> bool:
         """Check if the job has finished successfully."""

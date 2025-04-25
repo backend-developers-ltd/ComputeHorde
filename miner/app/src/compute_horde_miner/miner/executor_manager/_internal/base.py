@@ -31,7 +31,6 @@ class ExecutorUnavailable(Exception):
     pass
 
 
-
 class ReservedExecutor:
     def __init__(self, executor, timeout, token):
         self.executor = executor
@@ -199,11 +198,12 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
     async def reserve_executor_class(
         self, token: str, executor_class: ExecutorClass, timeout: float
     ) -> object:
-        await asyncio.sleep(5)
         pool = await self.get_executor_class_pool(executor_class)
         return await pool.reserve_executor(token, self.get_total_timeout(executor_class, timeout))
 
-    async def wait_for_executor_reservation(self, token: str, executor_class: ExecutorClass) -> None:
+    async def wait_for_executor_reservation(
+        self, token: str, executor_class: ExecutorClass
+    ) -> None:
         """
         Resolves as soon as the executor is reserved - before it's launched.
         If there are no free executors, raises AllExecutorsBusy.

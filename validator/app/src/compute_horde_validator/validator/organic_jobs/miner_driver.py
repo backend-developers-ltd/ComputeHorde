@@ -58,6 +58,7 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
     """
     Message sent from validator to facilitator in response to NewJobRequest.
     """
+
     class Status(StrEnum):
         RECEIVED = "received"
         ACCEPTED = "accepted"
@@ -202,6 +203,7 @@ async def drive_organic_job(
     def status_callback(status: JobStatusUpdate.Status):
         async def relay(msg: MinerToValidatorMessage) -> None:
             await notify_callback(JobStatusUpdate.from_job(job, status, msg.message_type))
+
         return relay
 
     miner_client.notify_job_accepted = status_callback(JobStatusUpdate.Status.ACCEPTED)  # type: ignore[method-assign]
@@ -220,9 +222,9 @@ async def drive_organic_job(
         volume=job_request.volume,
         output=job_request.output_upload,
         artifacts_dir=artifacts_dir,
-        time_limit_download=job_request.time_limit_download,
-        time_limit_execution=job_request.time_limit_execution,
-        time_limit_upload=job_request.time_limit_upload,
+        download_time_limit=job_request.download_time_limit,
+        execution_time_limit=job_request.execution_time_limit,
+        upload_time_limit=job_request.upload_time_limit,
     )
 
     try:
@@ -343,9 +345,7 @@ async def drive_organic_job(
             await notify_callback(JobStatusUpdate.from_job(job, "failed"))
 
         elif exc.reason == FailureReason.STREAMING_JOB_READY_TIMED_OUT:
-            comment = (
-                f"Streaming job {job.job_uuid} readiness timeout"
-            )
+            comment = f"Streaming job {job.job_uuid} readiness timeout"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()

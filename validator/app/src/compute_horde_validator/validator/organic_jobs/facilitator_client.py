@@ -361,7 +361,7 @@ class FacilitatorClient:
                     )
                 )
                 return
-        
+
         await self.send_model(
             JobStatusUpdate(
                 uuid=job_request.uuid,

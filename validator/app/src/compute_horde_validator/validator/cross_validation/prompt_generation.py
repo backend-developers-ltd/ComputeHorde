@@ -58,7 +58,6 @@ async def generate_prompts(
     job_details = job_generator.get_job_details()
 
     create_miner_client = create_miner_client or TrustedMinerClient
-    wait_timeout = wait_timeout or job_generator.timeout_seconds()
 
     miner_client = create_miner_client(
         miner_address=settings.TRUSTED_MINER_ADDRESS,
@@ -68,7 +67,7 @@ async def generate_prompts(
     )
 
     try:
-        await run_organic_job(miner_client, job_details, executor_ready_timeout=wait_timeout)
+        await run_organic_job(miner_client, job_details)
     except Exception as e:
         if (
             isinstance(e, OrganicJobError)

@@ -39,6 +39,9 @@ def get_mock_job_details():
         docker_image="backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
         docker_run_options_preset="none",
         docker_run_cmd=["python", "./mock_streaming_job.py"],
+        download_time_limit=30,
+        execution_time_limit=30,
+        upload_time_limit=30,
     )
 
 
@@ -68,7 +71,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
         except TransportConnectionError as exc:
             raise OrganicJobError(FailureReason.MINER_CONNECTION_FAILED) from exc
 
-        job_timer = Timer(timeout=12345) # TODO: TIMEOUTS
+        job_timer = Timer(timeout=12345)  # TODO: TIMEOUTS
 
         receipt_payload, receipt_signature = client.generate_job_started_receipt_message(
             executor_class=job_details.executor_class,
