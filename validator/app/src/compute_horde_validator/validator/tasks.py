@@ -16,8 +16,8 @@ import numpy as np
 import requests
 from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.core.errors import SubstrateRequestException
-from bittensor.core.metagraph import Metagraph, NonTorchMetagraph
-from bittensor.utils.weight_utils import process_weights_for_netuid
+from bittensor.core.metagraph import Metagraph
+from bittensor.utils.weight_utils import process_weights
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
@@ -287,8 +287,6 @@ def schedule_synthetic_jobs() -> None:
 )
 def _run_synthetic_jobs(synthetic_jobs_batch_id: int) -> None:
     try:
-        # metagraph will be refetched and that's fine, after sleeping
-        # for e.g. 30 minutes we should refetch the miner list
         create_and_run_synthetic_job_batch(
             settings.BITTENSOR_NETUID,
             settings.BITTENSOR_NETWORK,
@@ -573,30 +571,29 @@ def do_set_weights(
 
 @shared_task
 def trigger_run_admin_job_request(job_request_id: int):
-    async_to_sync(run_admin_job_request)(job_request_id)
+    # FIXME: The following code blocks the event loop.
+    #        This function is run from either a management command (a new process),
+    #        or from django admin for debugging (infrequent).
+    #        So the blocking loop should not be a big problem.
+    #        Hopefully.
+    try:
+        subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+        current_block = subtensor_.get_current_block()
+    except Exception:
+        raise
+    async_to_sync(run_admin_job_request)(job_request_id, current_block)
 
 
 def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-async def run_admin_job_request(job_request_id: int, callback=None):
+async def run_admin_job_request(job_request_id: int, current_block: int, callback=None):
     job_request: AdminJobRequest = await AdminJobRequest.objects.prefetch_related("miner").aget(
         id=job_request_id
     )
     try:
         miner = job_request.miner
-
-        # FIXME: The following code blocks the event loop.
-        #        This function is run from either a management command (a new process),
-        #        or from django admin for debugging (infrequent).
-        #        So the blocking loop should not be a big problem.
-        #        Hopefully.
-        try:
-            subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-            current_block = subtensor_.get_current_block()
-        except Exception:
-            raise
 
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
@@ -608,7 +605,6 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             job_description="Validator Job from Admin Panel",
             block=current_block,
         )
-
         my_keypair = get_keypair()
         miner_client = MinerClient(
             miner_hotkey=miner.hotkey,
@@ -687,19 +683,16 @@ def get_subtensor(network):
         return bittensor.subtensor(network=network)
 
 
-def get_metagraph(subtensor, netuid):
-    with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
-        return subtensor.metagraph(netuid=netuid)
-
-
 def normalize_batch_scores(
     hotkey_scores: dict[str, float],
-    subtensor,
-    metagraph,
+    min_allowed_weights: int = 1,
+    max_weight_limit: float = 1.0,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
-    neurons = metagraph.neurons
-    hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
+    metagraph = MetagraphSnapshot.get_latest()
+    hotkey_to_uid = {hotkey: uid for (hotkey, uid) in zip(metagraph.hotkeys, metagraph.uids)}
     score_per_uid = {}
+
+    num_neurons = len(metagraph.hotkeys)
 
     for hotkey, score in hotkey_scores.items():
         uid = hotkey_to_uid.get(hotkey)
@@ -707,23 +700,24 @@ def normalize_batch_scores(
             continue
         score_per_uid[uid] = score
 
-    uids = np.zeros(len(neurons), dtype=np.int64)
-    weights = np.zeros(len(neurons), dtype=np.float32)
+    uids = np.zeros(num_neurons, dtype=np.int64)
+    weights = np.zeros(num_neurons, dtype=np.float32)
 
     if not score_per_uid:
         logger.warning("Batch produced no scores")
         return uids, weights
 
-    for ind, n in enumerate(neurons):
-        uids[ind] = n.uid
-        weights[ind] = score_per_uid.get(n.uid, 0)
+    for ind, uid in enumerate(metagraph.uids):
+        assert uid is not None  # mypy+numpy
+        uids[ind] = uid
+        weights[ind] = score_per_uid.get(uid, 0)
 
-    uids, weights = process_weights_for_netuid(
+    uids, weights = process_weights(
         uids,
         weights,
-        settings.BITTENSOR_NETUID,
-        subtensor,
-        metagraph,
+        num_neurons,
+        min_allowed_weights,
+        max_weight_limit,
     )
 
     return uids, weights
@@ -732,14 +726,15 @@ def normalize_batch_scores(
 def apply_dancing_burners(
     uids: Union["torch.Tensor", NDArray[np.int64]],
     weights: Union["torch.FloatTensor", NDArray[np.float32]],
-    subtensor,
-    metagraph: NonTorchMetagraph,
     cycle_block_start: int,
+    min_allowed_weights: int = 1,
+    max_weight_limit: float = 1.0,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
     burner_hotkeys = config.DYNAMIC_BURN_TARGET_SS58ADDRESSES.split(",")
     burn_rate = config.DYNAMIC_BURN_RATE
     burn_partition = config.DYNAMIC_BURN_PARTITION
 
+    metagraph = MetagraphSnapshot.get_latest()
     registered_burner_hotkeys = sorted([h for h in burner_hotkeys if h in metagraph.hotkeys])
     se_data = {
         "registered_burner_hotkeys": registered_burner_hotkeys,
@@ -791,7 +786,7 @@ def apply_dancing_burners(
 
     weights = weights * (1 - burn_rate)
 
-    hotkey_to_uid = {n.hotkey: n.uid for n in metagraph.neurons}
+    hotkey_to_uid = {hotkey: uid for (hotkey, uid) in zip(metagraph.hotkeys, metagraph.uids)}
     for hotkey, weight in weight_adjustment.items():
         uid = hotkey_to_uid[hotkey]
         if uid not in uids:
@@ -801,12 +796,12 @@ def apply_dancing_burners(
             index = np.where(uids == uid)[0]
             weights[index] = weights[index] + weight
 
-    uids, weights = process_weights_for_netuid(
+    uids, weights = process_weights(
         uids,
         weights,
-        settings.BITTENSOR_NETUID,
-        subtensor,
-        metagraph,
+        len(uids),
+        min_allowed_weights,
+        max_weight_limit,
     )
 
     return uids, weights
@@ -820,8 +815,13 @@ def set_scores():
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
 
-    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor.get_current_block()
+    netuid = settings.BITTENSOR_NETUID
+    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    min_allowed_weights = subtensor_.min_allowed_weights(netuid=netuid)
+    max_weight_limit = subtensor_.max_weight_limit(netuid=netuid)
+
+    metagraph = MetagraphSnapshot.get_latest()
+    current_block = metagraph.block
 
     if commit_reveal_weights_enabled:
         interval = CommitRevealInterval(current_block)
@@ -842,7 +842,6 @@ def set_scores():
                 logger.debug("Another thread already setting weights")
                 return
 
-            metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
             batches = list(
                 SyntheticJobBatch.objects.select_related("cycle")
                 .filter(
@@ -870,10 +869,12 @@ def set_scores():
 
             hotkey_scores = score_batches(batches)
 
-            uids, weights = normalize_batch_scores(hotkey_scores, subtensor, metagraph)
+            uids, weights = normalize_batch_scores(
+                hotkey_scores, min_allowed_weights, max_weight_limit
+            )
 
             uids, weights = apply_dancing_burners(
-                uids, weights, subtensor, metagraph, batches[-1].cycle.start
+                uids, weights, batches[-1].cycle.start, min_allowed_weights, max_weight_limit
             )
 
             for batch in batches:
@@ -889,7 +890,7 @@ def set_scores():
                 try:
                     result = do_set_weights.apply_async(
                         kwargs=dict(
-                            netuid=settings.BITTENSOR_NETUID,
+                            netuid=netuid,
                             uids=uids.tolist(),
                             weights=weights.tolist(),
                             wait_for_inclusion=True,
