@@ -11,7 +11,7 @@ from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,
     OrganicJobError,
-    run_organic_job,
+    execute_organic_job_on_miner,
 )
 from compute_horde.protocol_messages import (
     MinerToValidatorMessage,
@@ -223,7 +223,7 @@ async def drive_organic_job(
         output=job_request.output_upload,
         artifacts_dir=artifacts_dir,
         job_timing=OrganicJobDetails.TimingDetails(
-            allowed_leeway=await aget_config("DYNAMIC_ALLOWED_LEEWAY_FOR_JOB_EXECUTION"),
+            allowed_leeway=await aget_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME"),
             download_time_limit=job_request.download_time_limit,
             execution_time_limit=job_request.execution_time_limit,
             upload_time_limit=job_request.upload_time_limit,
@@ -233,7 +233,12 @@ async def drive_organic_job(
     )
 
     try:
-        stdout, stderr, artifacts = await run_organic_job(miner_client, job_details)
+        stdout, stderr, artifacts = await execute_organic_job_on_miner(
+            miner_client,
+            job_details,
+            reservation_time_limit=await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT"),
+            executor_startup_time_limit=await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
+        )
 
         comment = f"Miner {miner_client.miner_name} finished: {stdout=} {stderr=}"
         job.stdout = stdout

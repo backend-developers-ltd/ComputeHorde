@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterable
 import bittensor
 from compute_horde.miner_client.organic import (
     OrganicJobError,
-    run_organic_job,
+    execute_organic_job_on_miner,
 )
 from compute_horde.protocol_messages import V0DeclineJobRequest
 from django.conf import settings
@@ -67,7 +67,12 @@ async def generate_prompts(
     )
 
     try:
-        await run_organic_job(miner_client, job_details)
+        await execute_organic_job_on_miner(
+            miner_client,
+            job_details,
+            reservation_time_limit=await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT"),
+            executor_startup_time_limit=await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
+        )
     except Exception as e:
         if (
             isinstance(e, OrganicJobError)

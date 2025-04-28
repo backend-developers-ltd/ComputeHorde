@@ -20,8 +20,8 @@ pytestmark = [
     pytest.mark.asyncio,
     pytest.mark.django_db(transaction=True),
     pytest.mark.override_config(
-        DYNAMIC_ORGANIC_JOB_RESERVATION_TIMEOUT=0.5,
-        DYNAMIC_ORGANIC_JOB_EXECUTOR_STARTUP_TIMEOUT=0.5,
+        DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT=0.5,
+        DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT=0.5,
     ),
 ]
 

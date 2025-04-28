@@ -11,7 +11,6 @@ import bittensor
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.volume import Volume
-from compute_horde_validator.validator.dynamic_config import aget_config
 from pydantic import TypeAdapter
 
 from compute_horde.base.docker import DockerRunOptionsPreset
@@ -464,26 +463,27 @@ class OrganicJobDetails:
     artifacts_dir: str | None = None
 
 
-async def run_organic_job(
+async def execute_organic_job_on_miner(
     client: OrganicMinerClient,
     job_details: OrganicJobDetails,
+    reservation_time_limit: int,
+    executor_startup_time_limit: int,
 ) -> tuple[str, str, dict[str, str]]:  # stdout, stderr, artifacts
     """
     Run an organic job. This is a simpler way to use OrganicMinerClient.
 
     :param client: the organic miner client
     :param job_details: details specific to the job that needs to be run
+    :param reservation_time_limit: time for the miner to report reservation success (or decline the job)
+    :param executor_startup_time_limit: time for executor to perform startup checks
     :return: standard out, standard error of the job container and artifacts
     """
     assert client.job_uuid == job_details.job_uuid
 
     timer = Timer()  # Only used for measurement, not used for timeouts.
 
-    executor_spinup_time = EXECUTOR_CLASS[job_details.executor_class].spin_up_time
-    executor_startup_time = int(await aget_config("DYNAMIC_ORGANIC_JOB_EXECUTOR_STARTUP_TIMEOUT"))
-
-    reservation_time_limit = int(await aget_config("DYNAMIC_ORGANIC_JOB_RESERVATION_TIMEOUT"))
-    readiness_time_limit = executor_spinup_time + executor_startup_time
+    executor_spinup_time_limit = EXECUTOR_CLASS[job_details.executor_class].spin_up_time
+    readiness_time_limit = executor_spinup_time_limit + executor_startup_time_limit
 
     if job_details.job_timing is not None:
         executor_timing = job_details.job_timing

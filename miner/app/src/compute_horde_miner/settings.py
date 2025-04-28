@@ -155,13 +155,6 @@ CONSTANCE_CONFIG = {
         "Whether continuous receipt transfer between miners and validators should be enabled",
         bool,
     ),
-    "DYNAMIC_EXECUTOR_RESERVATION_TIMEOUT_SECONDS": (
-        7,
-        "How long to wait for the executor pool to confirm that an executor will or will not be "
-        "available for a job. Must be lower than validator's "
-        "DYNAMIC_ORGANIC_JOB_RESERVATION_TIMEOUT",
-        float,
-    ),
 }
 
 # Content Security Policy

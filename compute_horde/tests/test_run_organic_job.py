@@ -5,7 +5,7 @@ from pydantic import TypeAdapter
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
     OrganicMinerClient,
-    run_organic_job,
+    execute_organic_job_on_miner,
 )
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
@@ -62,7 +62,7 @@ async def test_run_organic_job__success(keypair):
         executor_class=ExecutorClass.always_on__llm__a6000,
         docker_image="mock",
     )
-    stdout, stderr, artifacts = await run_organic_job(client, job_details)
+    stdout, stderr, artifacts = await execute_organic_job_on_miner(client, job_details)
 
     assert stdout == "stdout"
     assert stderr == "stderr"
