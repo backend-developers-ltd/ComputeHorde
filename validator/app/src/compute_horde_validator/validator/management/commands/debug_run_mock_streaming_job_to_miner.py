@@ -68,7 +68,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
         except TransportConnectionError as exc:
             raise OrganicJobError(FailureReason.MINER_CONNECTION_FAILED) from exc
 
-        job_timer = Timer(timeout=12345)  # TODO: TIMEOUTS
+        job_timer = Timer(timeout=job_details.total_job_timeout)
 
         receipt_payload, receipt_signature = client.generate_job_started_receipt_message(
             executor_class=job_details.executor_class,
@@ -81,6 +81,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                 job_uuid=job_details.job_uuid,
                 executor_class=job_details.executor_class,
                 docker_image=job_details.docker_image,
+                timeout_seconds=job_details.total_job_timeout,
                 volume=job_details.volume,
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
