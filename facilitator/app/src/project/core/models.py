@@ -2,7 +2,6 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from math import ceil
 from operator import attrgetter
-from typing import ClassVar
 from uuid import uuid4
 
 from asgiref.sync import async_to_sync
@@ -32,7 +31,7 @@ from django_prometheus.models import ExportModelOperationsMixin
 from django_pydantic_field import SchemaField
 from structlog import get_logger
 from structlog.contextvars import bound_contextvars
-from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
+from tenacity import retry, retry_if_exception_type, wait_fixed
 
 from .schemas import (
     JobStatusMetadata,
@@ -128,8 +127,6 @@ class JobQuerySet(models.QuerySet):
 
 
 class Job(ExportModelOperationsMixin("job"), models.Model):
-    JOB_TIMEOUT: ClassVar = timedelta(minutes=5, seconds=30)
-
     uuid = models.UUIDField(primary_key=True, editable=False, blank=True)
     user = models.ForeignKey("auth.User", on_delete=models.PROTECT, blank=True, null=True, related_name="jobs")
     hotkey = models.CharField(blank=True, help_text="hotkey of job sender if hotkey authentication was used")
@@ -321,7 +318,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         return self.statuses_ordered[-1]
 
     def is_completed(self) -> bool:
-        return self.status.status in JobStatus.FINAL_STATUS_VALUES or self.created_at < now() - self.JOB_TIMEOUT
+        return self.status.status in JobStatus.FINAL_STATUS_VALUES
 
     @property
     def elapsed(self) -> timedelta:
@@ -400,7 +397,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             send(channel_name, payload)
 
     @retry(
-        stop=stop_after_delay(JOB_TIMEOUT),
         wait=wait_fixed(3),
         retry=retry_if_exception_type(JobNotFinishedError),
         reraise=True,
