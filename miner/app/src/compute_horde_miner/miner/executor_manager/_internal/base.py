@@ -143,7 +143,9 @@ class ExecutorClassPool:
 
 
 class BaseExecutorManager(metaclass=abc.ABCMeta):
-    EXECUTOR_TIMEOUT_LEEWAY = dt.timedelta(seconds=30).total_seconds()  # TODO: TIMEOUTS - what's this
+    EXECUTOR_TIMEOUT_LEEWAY = dt.timedelta(
+        seconds=30
+    ).total_seconds()  # TODO: TIMEOUTS - what's this
 
     def __init__(self):
         self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
@@ -221,7 +223,8 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         Arguments passed in to the executor's `manage.py run_executor` command.
         """
         return [
-            "--startup-time-limit", "5",
+            "--startup-time-limit",
+            "5",
         ]
 
     async def is_active(self) -> bool:

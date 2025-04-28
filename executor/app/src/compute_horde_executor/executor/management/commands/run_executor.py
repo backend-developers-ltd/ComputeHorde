@@ -15,7 +15,7 @@ import typing
 import zipfile
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import packaging.version
@@ -973,7 +973,7 @@ class Command(BaseCommand):
         self.runner = self.JOB_RUNNER_CLASS()
         self.miner_client = self.MINER_CLIENT_CLASS(settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN)
         self.miner_client_for_tests = self.miner_client  # TODO: Remove this?
-        await self._execute(startup_time_limit=options.get("startup_time_limit"))
+        await self._execute(startup_time_limit=cast(int, options.get("startup_time_limit")))
 
     async def _execute(self, startup_time_limit: int):
         async with self.miner_client:  # TODO: Can this hang?
@@ -994,7 +994,9 @@ class Command(BaseCommand):
                 deadline = Timer()
                 if timing_details:
                     # Initialize the deadline with leeway; it will be extended before each stage down the line
-                    logger.debug(f"Initializing deadline with leeway: {timing_details.allowed_leeway}s")
+                    logger.debug(
+                        f"Initializing deadline with leeway: {timing_details.allowed_leeway}s"
+                    )
                     deadline.set_timeout(timing_details.allowed_leeway)
                 elif initial_job_request.timeout_seconds is not None:
                     # For single-timeout, initialize with the full timeout for the whole job

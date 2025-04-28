@@ -87,7 +87,7 @@ class DockerExecutorManager(BaseExecutorManager):
             "manage.py",
             "run_executor",
             *self.get_executor_cmdline_args(),
-        ) # noqa: S607
+        )  # noqa: S607
         return DockerExecutor(process_executor, token)
 
     async def kill_executor(self, executor):
