@@ -116,13 +116,10 @@ rnote right of "Job driver" #aae: Extend deadline:\n**execution time limit**
 &rnote right of Executor #aae: Extend deadline:\n**execution time limit**
 
 Executor --> "Task/Subprocess": docker run
-activate Executor #lightgreen
-rnote right of Executor #lightgreen: additional timeout:\nexecution time limit
 activate "Task/Subprocess"
 "Task/Subprocess" -> "Task/Subprocess": Actual work
 "Task/Subprocess" -> Executor: stdout, stderr
 deactivate "Task/Subprocess"
-deactivate Executor
 
 "Executor" -> "Job driver": V0ExecutionDone
 &"Job driver" -> Facilitator: ""V0JobStatusUpdate""\n(Execution done)

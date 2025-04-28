@@ -226,7 +226,7 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
             if self.initial_msg.done():
                 details = f"Received duplicate initial job request: first {self.job_uuid=} and then {msg.job_uuid=}"
                 logger.error(details)
-                self.deferred_send_model(GenericError(details=details))
+                await self.send_generic_error(details)
                 return
             self._maybe_job_uuid = msg.job_uuid
             logger.debug(f"Received initial job request: {msg.job_uuid=}")
@@ -237,7 +237,7 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
             if not self.initial_msg.done():
                 details = f"Received job request before an initial job request {msg.job_uuid=}"
                 logger.error(details)
-                self.deferred_send_model(GenericError(details=details))
+                await self.send_generic_error(details)
                 return
             if self.full_payload.done():
                 details = (
@@ -245,26 +245,26 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
                     f"{self.job_uuid=} and then {msg.job_uuid=}"
                 )
                 logger.error(details)
-                self.deferred_send_model(GenericError(details=details))
+                await self.send_generic_error(details)
                 return
             logger.debug(f"Received full job payload request: {msg.job_uuid=}")
             self.full_payload.set_result(msg)
 
     async def send_streaming_job_ready(self, certificate: str):
-        await self.send_model(
+        self.deferred_send_model(
             V0StreamingJobReadyRequest(
                 job_uuid=self.job_uuid, public_key=certificate, port=settings.NGINX_PORT
             )
         )
 
     async def send_volumes_ready(self):
-        await self.send_model(V0VolumesReadyRequest(job_uuid=self.job_uuid))
+        self.deferred_send_model(V0VolumesReadyRequest(job_uuid=self.job_uuid))
 
     async def send_execution_done(self):
-        await self.send_model(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
+        self.deferred_send_model(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
 
     async def send_executor_ready(self):
-        await self.send_model(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
+        self.deferred_send_model(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
 
     async def send_job_error(self, job_error: JobError):
         await self.send_model(
@@ -282,7 +282,7 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
 
     async def send_result(self, job_result: "JobResult"):
         if job_result.specs:
-            await self.send_model(
+            self.deferred_send_model(
                 V0MachineSpecsRequest(
                     job_uuid=self.job_uuid,
                     specs=job_result.specs,
@@ -594,6 +594,7 @@ class JobRunner:
         await self.cleanup_potential_old_jobs()
 
         if self.initial_job_request.docker_image is not None:
+            # TODO: TIMEOUTS - Check if this actually kills the process on timeout
             async with temporary_process(
                 "docker",
                 "pull",
@@ -678,6 +679,7 @@ class JobRunner:
             *docker_run_cmd,
         ]
 
+        # TODO: TIMEOUTS - This doesn't kill the docker container, just the docker process that communicates with it.
         async with temporary_process(
             *self.cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -951,6 +953,14 @@ class Command(BaseCommand):
     MINER_CLIENT_CLASS = MinerClient
     JOB_RUNNER_CLASS = JobRunner
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--startup-time-limit",
+            type=int,
+            help="Time limit in seconds for startup stage.",
+            required=True,
+        )
+
     runner: JobRunner
     miner_client: MinerClient
 
@@ -962,28 +972,17 @@ class Command(BaseCommand):
         self.runner = self.JOB_RUNNER_CLASS()
         self.miner_client = self.MINER_CLIENT_CLASS(settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN)
         self.miner_client_for_tests = self.miner_client  # TODO: Remove this?
-        await self._execute(
-            total_leeway=5,
-            startup_time_limit=5,  # TODO: Get this from somewhere - manage.py arg?
-        )
+        await self._execute(startup_time_limit=options.get("startup_time_limit"))
 
-    async def _execute(self, total_leeway: int, startup_time_limit: int):
-        deadline = Timer(total_leeway)
-
-        logger.debug(f"Connecting to miner: {settings.MINER_ADDRESS}")
+    async def _execute(self, startup_time_limit: int):
         async with self.miner_client:  # TODO: Can this hang?
-            logger.debug(f"Connected to miner: {settings.MINER_ADDRESS}")
-
             try:
                 try:
                     # This limit should be enough to receive the initial job request, which contains further timing
                     # details.
-                    deadline.extend_timeout(startup_time_limit)
-                    async with asyncio.timeout(deadline.time_left()):
-                        logger.debug(
-                            f"Entering startup stage; Time left: {deadline.time_left():.2f}s"
-                        )
-                        initial_job_request, job_request = await self._startup_stage()
+                    async with asyncio.timeout(startup_time_limit):
+                        logger.debug("Entering startup stage")
+                        initial_job_request = await self._startup_stage()
                         timing_details = initial_job_request.executor_timing
                 except TimeoutError as e:
                     raise JobError(
@@ -991,14 +990,27 @@ class Command(BaseCommand):
                         error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
                     ) from e
 
-                if not timing_details:
-                    assert initial_job_request.timeout_seconds, (
-                        "Either timeout_seconds or timing_details must be set"
+                deadline = Timer()
+                if timing_details:
+                    # Initialize the deadline with leeway; it will be extended before each stage down the line
+                    logger.debug(f"Initializing deadline with leeway: {timing_details.allowed_leeway}s")
+                    deadline.set_timeout(timing_details.allowed_leeway)
+                elif initial_job_request.timeout_seconds is not None:
+                    # For single-timeout, initialize with the full timeout for the whole job
+                    logger.debug(
+                        f"Initializing deadline with deprecated total timeout: {initial_job_request.timeout_seconds}s"
                     )
-                    deadline.extend_timeout(initial_job_request.timeout_seconds)
+                    deadline.set_timeout(initial_job_request.timeout_seconds)
+                else:
+                    raise JobError(
+                        "No timing received: either timeout_seconds or timing_details must be set"
+                    )
 
                 try:
                     if timing_details:
+                        logger.debug(
+                            f"Extending deadline by download time limit: +{timing_details.allowed_leeway}s"
+                        )
                         deadline.extend_timeout(timing_details.download_time_limit)
                     async with asyncio.timeout(deadline.time_left()):
                         logger.debug(
@@ -1013,6 +1025,9 @@ class Command(BaseCommand):
 
                 try:
                     if timing_details:
+                        logger.debug(
+                            f"Extending deadline by execution time limit: +{timing_details.execution_time_limit}s"
+                        )
                         deadline.extend_timeout(timing_details.execution_time_limit)
                     async with asyncio.timeout(deadline.time_left()):
                         logger.debug(
@@ -1031,6 +1046,9 @@ class Command(BaseCommand):
 
                 try:
                     if timing_details:
+                        logger.debug(
+                            f"Extending deadline by upload time limit: +{timing_details.upload_time_limit}s"
+                        )
                         deadline.extend_timeout(timing_details.upload_time_limit)
                     async with asyncio.timeout(deadline.time_left()):
                         logger.debug(
@@ -1043,27 +1061,27 @@ class Command(BaseCommand):
                         error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
                     ) from e
 
+                logger.debug(f"Finished with {deadline.time_left():.2f}s time left")
+
             except JobError as e:
+                logger.warning(f"Job error: {e}")
                 await self.miner_client.send_job_error(e)
 
             except BaseException as e:
+                logger.error(f"Unexpected error: {e}")
                 await self.miner_client.send_job_error(JobError(f"Unexpected error: {e}"))
                 raise
 
-    async def _startup_stage(self) -> tuple[V0InitialJobRequest, V0JobRequest]:
+    async def _startup_stage(self) -> V0InitialJobRequest:
         await self.run_security_checks_or_fail()
-
         initial_job_request = await self.miner_client.initial_msg
         await self.runner.prepare_initial(initial_job_request)
-
         await self.miner_client.send_executor_ready()
-
-        full_job_request = await self.miner_client.full_payload
-        await self.runner.prepare_full(full_job_request)
-
-        return initial_job_request, full_job_request
+        return initial_job_request
 
     async def _download_stage(self):
+        full_job_request = await self.miner_client.full_payload
+        await self.runner.prepare_full(full_job_request)
         await self.runner.unpack_volume()
         await self.miner_client.send_volumes_ready()
 
@@ -1086,6 +1104,7 @@ class Command(BaseCommand):
             await self.run_nvidia_toolkit_version_check_or_fail()
 
     async def run_cve_2022_0492_check_or_fail(self):
+        # TODO: TIMEOUTS - This doesn't kill the docker container, just the docker process that communicates with it.
         async with temporary_process(
             "docker",
             "run",
@@ -1112,6 +1131,7 @@ class Command(BaseCommand):
             )
 
     async def run_nvidia_toolkit_version_check_or_fail(self):
+        # TODO: TIMEOUTS - This doesn't kill the docker container, just the docker process that communicates with it.
         async with temporary_process(
             "docker",
             "run",

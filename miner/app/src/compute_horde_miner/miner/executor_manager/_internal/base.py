@@ -143,7 +143,7 @@ class ExecutorClassPool:
 
 
 class BaseExecutorManager(metaclass=abc.ABCMeta):
-    EXECUTOR_TIMEOUT_LEEWAY = dt.timedelta(seconds=30).total_seconds()
+    EXECUTOR_TIMEOUT_LEEWAY = dt.timedelta(seconds=30).total_seconds()  # TODO: TIMEOUTS - what's this
 
     def __init__(self):
         self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
@@ -215,6 +215,14 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         spec = EXECUTOR_CLASS.get(executor_class)
         spin_up_time = spec.spin_up_time if spec else 0
         return spin_up_time + job_timeout + self.EXECUTOR_TIMEOUT_LEEWAY
+
+    def get_executor_cmdline_args(self) -> list[str]:
+        """
+        Arguments passed in to the executor's `manage.py run_executor` command.
+        """
+        return [
+            "--startup-time-limit", "5",
+        ]
 
     async def is_active(self) -> bool:
         """Check if the Miner is an active one for configured Cluster"""

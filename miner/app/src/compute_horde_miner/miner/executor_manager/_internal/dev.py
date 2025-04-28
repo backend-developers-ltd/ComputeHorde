@@ -23,7 +23,7 @@ class DevExecutorManager(BaseExecutorManager):
         nginx_port = executor_port_dispenser.get_port()
 
         return subprocess.Popen(
-            ["uv", "run", "python", "app/src/manage.py", "run_executor"],
+            ["uv", "run", "python", "app/src/manage.py", "run_executor", *self.get_executor_cmdline_args()],
             env={
                 "MINER_ADDRESS": f"ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
                 "EXECUTOR_TOKEN": token,
