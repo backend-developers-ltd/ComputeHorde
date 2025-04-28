@@ -403,6 +403,17 @@ CONSTANCE_CONFIG = {
         "How long to wait for Celery to execute the organic job",
         int,
     ),
+    # collateral params
+    "DYNAMIC_MINIMUM_COLLATERAL_AMOUNT": (
+        0.01,
+        "Minimum collateral amount (in tao) for a miner to be considered for a job",
+        float,
+    ),
+    "DYNAMIC_COLLATERAL_SLASH_AMOUNT": (
+        0.005,
+        "Amount (in tao) of collateral to be slashed if a miner cheats on a job",
+        float,
+    ),
 }
 
 # Content Security Policy

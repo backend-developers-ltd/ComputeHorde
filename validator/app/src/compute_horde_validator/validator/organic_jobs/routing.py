@@ -94,9 +94,12 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         raise NoMinerForExecutorType()
 
     random.shuffle(manifests)
+    minimum_collateral = await aget_config("DYNAMIC_MINIMUM_COLLATERAL_AMOUNT")
 
     for manifest in manifests:
         miner = manifest.miner
+        if settings.COLLATERAL_CONTRACT_ADDRESS and miner.collateral < minimum_collateral:
+            continue
 
         preliminary_reservation_jobs: set[str] = {
             str(job_uuid)

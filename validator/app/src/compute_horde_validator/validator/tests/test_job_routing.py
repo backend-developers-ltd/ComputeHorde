@@ -32,13 +32,17 @@ JOB_REQUEST = V2JobRequest(
     use_gpu=False,
 )
 
+pytestmark = [
+    pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT=0.01),
+]
+
 
 @pytest.fixture(autouse=True)
 def setup_db():
     now = timezone.now()
     cycle = Cycle.objects.create(start=1, stop=2)
     batch = SyntheticJobBatch.objects.create(block=1, created_at=now, cycle=cycle)
-    miners = [Miner.objects.create(hotkey=f"miner_{i}") for i in range(5)]
+    miners = [Miner.objects.create(hotkey=f"miner_{i}", collateral=1) for i in range(5)]
     for i, miner in enumerate(miners):
         MinerManifest.objects.create(
             miner=miner,
@@ -152,6 +156,33 @@ async def test_preliminary_reservation__prevents_double_select():
 
     # No miner is double-selected
     assert len(picked_miners) == 5
+
+    # Last request has nothing to choose from
+    with pytest.raises(routing.AllMinersBusy):
+        await routing.pick_miner_for_job_request(JOB_REQUEST.__replace__(uuid=str(uuid.uuid4())))
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_preliminary_reservation__minimum_collateral():
+    await MinerManifest.objects.aupdate(executor_count=1, online_executor_count=1)
+    miner_ne = await Miner.objects.afirst()
+    miner_ne.collateral = 0.009
+    await miner_ne.asave()
+
+    picked_miners: set[str] = set()
+
+    # We have 4 miners who have enough collateral
+    for _ in range(4):
+        job_request = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
+        miner = await routing.pick_miner_for_job_request(job_request)
+        picked_miners.add(miner.hotkey)
+
+    # No miner is double-selected
+    assert len(picked_miners) == 4
+
+    # Miner with not enough collateral is not picked
+    assert miner_ne.hotkey not in picked_miners
 
     # Last request has nothing to choose from
     with pytest.raises(routing.AllMinersBusy):
