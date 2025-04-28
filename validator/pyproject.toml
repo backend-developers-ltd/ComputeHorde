@@ -33,6 +33,7 @@ dependencies = [
     "httpx==0.26.0",
     "class-registry>=2.1.2",
     "kombu~=5.3",
+    "eth-typing<5.0",
 ]
 
 [tool.uv.sources]

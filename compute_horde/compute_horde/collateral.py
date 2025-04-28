@@ -176,26 +176,25 @@ def associate_evm_key(
         raise ValueError(error_message)  # TODO: fix exception type
 
 
-def get_evm_key_associations(netuid: int, network: str) -> dict[int, str]:
+def get_evm_key_associations(subtensor: bittensor.Subtensor, netuid: int) -> dict[int, str]:
     """
     Retrieve all EVM key associations for a specific subnet.
 
     Arguments:
+        subtensor (bittensor.Subtensor): The Subtensor object to use for querying the network.
         netuid (int): The NetUID for which to retrieve EVM key associations.
-        network (str): The Subtensor network name to connect to.
 
     Returns:
         dict: A dictionary mapping UIDs (int) to their associated EVM key addresses (str).
     """
-    with bittensor.subtensor(network=network) as subtensor:
-        # TODO: check if there is a way to get the association for a specific uid
-        # this gets all the uid to evm key associations for the netuid
-        associations = subtensor.query_map_subtensor("AssociatedEvmAddress", params=[netuid])
+    # TODO: check if there is a way to get the association for a specific uid
+    # this gets all the uid to evm key associations for the netuid
+    associations = subtensor.query_map_subtensor("AssociatedEvmAddress", params=[netuid])
 
-        uid_evm_address_map = {}
-        for uid, scale_obj in associations:
-            evm_address_raw, block = scale_obj.value
-            evm_address = bytes(evm_address_raw[0]).hex()
-            uid_evm_address_map[uid] = evm_address
+    uid_evm_address_map = {}
+    for uid, scale_obj in associations:
+        evm_address_raw, block = scale_obj.value
+        evm_address = '0x' + bytes(evm_address_raw[0]).hex()
+        uid_evm_address_map[uid] = evm_address
 
-        return uid_evm_address_map
+    return uid_evm_address_map

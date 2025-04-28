@@ -49,6 +49,7 @@ class SystemEvent(models.Model):
         LLM_PROMPT_SAMPLING = "LLM_PROMPT_SAMPLING"
         BURNING_INCENTIVE = "BURNING_INCENTIVE"
         METAGRAPH_SYNCING = "METAGRAPH_SYNCING"
+        COLLATERAL_SYNCING = "COLLATERAL_SYNCING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -101,6 +102,7 @@ class SystemEvent(models.Model):
         LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED = "LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED"
         APPLIED_BURNING = "APPLIED_BURNING"
         NO_BURNING = "NO_BURNING"
+        GETTING_MINER_COLLATERAL_FAILED = "GETTING_MINER_COLLATERAL_FAILED"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
@@ -197,6 +199,9 @@ class Miner(models.Model):
     address = models.CharField(max_length=255, default="0.0.0.0")
     ip_version = models.IntegerField(default=4)
     port = models.IntegerField(default=0)
+
+    evm_address = models.CharField(max_length=42, default="")
+    collateral = models.FloatField(default=0)
 
     def __str__(self):
         return f"hotkey: {self.hotkey}"

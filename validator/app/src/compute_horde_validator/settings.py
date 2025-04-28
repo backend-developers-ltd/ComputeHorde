@@ -728,6 +728,10 @@ BITTENSOR_WALLET_DIRECTORY = env.path(
 )
 BITTENSOR_WALLET_NAME = env.str("BITTENSOR_WALLET_NAME")
 BITTENSOR_WALLET_HOTKEY_NAME = env.str("BITTENSOR_WALLET_HOTKEY_NAME")
+
+BITTENSOR_EVM_RPC_URL = env.str("BITTENSOR_EVM_RPC_URL", default="https://lite.chain.opentensor.ai")
+COLLATERAL_CONTRACT_ADDRESS = env("COLLATERAL_CONTRACT_ADDRESS", default=None)
+
 SYNTHETIC_JOB_GENERATOR_FACTORY = env.str(
     "SYNTHETIC_JOB_GENERATOR_FACTORY",
     default="compute_horde_validator.validator.synthetic_jobs.generator.factory:DefaultSyntheticJobGeneratorFactory",

@@ -1085,14 +1085,14 @@ wheels = [
 
 [[package]]
 name = "eth-typing"
-version = "5.2.0"
+version = "4.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bd/4a/1faf216a53427ae9111524ebd139b99c0b93fb3dcadf0c972c3433055370/eth_typing-5.2.0.tar.gz", hash = "sha256:28685f7e2270ea0d209b75bdef76d8ecef27703e1a16399f6929820d05071c28", size = 21794 }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/24/b913ef5d1a9ff300b05de0f0c06a4d00caa2b1b81f8c7448d069f94a4168/eth_typing-4.4.0.tar.gz", hash = "sha256:93848083ac6bb4c20cc209ea9153a08b0a528be23337c889f89e1e5ffbe9807d", size = 22180 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/83/7b29c2cfde5d2131eac18c47692440465a61122ce28164b5f480c800e358/eth_typing-5.2.0-py3-none-any.whl", hash = "sha256:e1f424e97990fc3c6a1c05a7b0968caed4e20e9c99a4d5f4db3df418e25ddc80", size = 19120 },
+    { url = "https://files.pythonhosted.org/packages/d7/b3/ab02e4da8b2616e7c370084d8f355f6a1c9b8755c4e5820766a34ddfedf5/eth_typing-4.4.0-py3-none-any.whl", hash = "sha256:a5e30a6e69edda7b1d1e96e9d71bab48b9bb988a77909d8d1666242c5562f841", size = 19322 },
 ]
 
 [[package]]
@@ -2685,6 +2685,7 @@ dependencies = [
     { name = "django-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django-probes", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "django-prometheus", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "eth-typing", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "flower", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "gunicorn", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2751,6 +2752,7 @@ requires-dist = [
     { name = "django-extensions", specifier = "==3.2.3" },
     { name = "django-probes", specifier = "==1.7.0" },
     { name = "django-prometheus", specifier = "==2.3.1" },
+    { name = "eth-typing", specifier = "<5.0" },
     { name = "flower", specifier = "~=2.0.0" },
     { name = "gunicorn", specifier = "==20.1.0" },
     { name = "httpx", specifier = "==0.26.0" },
