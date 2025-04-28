@@ -72,17 +72,6 @@ class V0InitialJobRequest(BaseModel):
         execution_time_limit: int
         upload_time_limit: int
 
-        @property
-        def total(self):
-            return sum(
-                (
-                    self.allowed_leeway,
-                    self.download_time_limit,
-                    self.execution_time_limit,
-                    self.upload_time_limit,
-                )
-            )
-
     message_type: Literal["V0InitialJobRequest"] = "V0InitialJobRequest"
     job_uuid: str
     executor_class: ExecutorClass

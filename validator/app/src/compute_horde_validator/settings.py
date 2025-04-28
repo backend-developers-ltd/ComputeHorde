@@ -320,6 +320,11 @@ CONSTANCE_CONFIG = {
         "Time it takes for the executor to perform its startup stage",
         int,
     ),
+    "DYNAMIC_ALLOWED_LEEWAY_FOR_JOB_EXECUTION": (
+        5,
+        "Additional time granted to the executor for the whole execution phase. ",
+        int,
+    ),
     "DYNAMIC_ORGANIC_JOB_MAX_RETRIES": (
         3,
         "Maximum retries for organic jobs (Currently ignored)",

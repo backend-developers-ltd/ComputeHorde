@@ -361,7 +361,6 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         job_details: "OrganicJobDetails",
         receipt_payload: JobStartedReceiptPayload,
         receipt_signature: str,
-        executor_timing: V0InitialJobRequest.ExecutorTimingDetails | None = None,
     ) -> None:
         await self.send_model(
             V0InitialJobRequest(
@@ -372,7 +371,14 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
                 timeout_seconds=job_details.total_job_timeout,
-                executor_timing=executor_timing,
+                executor_timing=V0InitialJobRequest.ExecutorTimingDetails(
+                    allowed_leeway=job_details.job_timing.allowed_leeway,
+                    download_time_limit=job_details.job_timing.download_time_limit,
+                    execution_time_limit=job_details.job_timing.execution_time_limit,
+                    upload_time_limit=job_details.job_timing.upload_time_limit,
+                )
+                if job_details.job_timing is not None
+                else None,
             ),
         )
 
@@ -430,9 +436,21 @@ class OrganicJobDetails:
         Job time limits as requested by the consumer.
         """
 
+        allowed_leeway: int
         download_time_limit: int
         execution_time_limit: int
         upload_time_limit: int
+
+        @property
+        def total(self):
+            return sum(
+                (
+                    self.allowed_leeway,
+                    self.download_time_limit,
+                    self.execution_time_limit,
+                    self.upload_time_limit,
+                )
+            )
 
     job_uuid: str
     executor_class: ExecutorClass
@@ -460,7 +478,6 @@ async def run_organic_job(
     assert client.job_uuid == job_details.job_uuid
 
     timer = Timer()  # Only used for measurement, not used for timeouts.
-    job_logger = logger.getChild(job_details.job_uuid)
 
     executor_spinup_time = EXECUTOR_CLASS[job_details.executor_class].spin_up_time
     executor_startup_time = int(await aget_config("DYNAMIC_ORGANIC_JOB_EXECUTOR_STARTUP_TIMEOUT"))
@@ -469,15 +486,7 @@ async def run_organic_job(
     readiness_time_limit = executor_spinup_time + executor_startup_time
 
     if job_details.job_timing is not None:
-        # TODO: TIMEOUTS - Is this a good value?
-        leeway = 5
-
-        executor_timing = V0InitialJobRequest.ExecutorTimingDetails(
-            allowed_leeway=leeway,
-            download_time_limit=job_details.job_timing.download_time_limit,
-            execution_time_limit=job_details.job_timing.execution_time_limit,
-            upload_time_limit=job_details.job_timing.upload_time_limit,
-        )
+        executor_timing = job_details.job_timing
     else:
         # Single-timeout mode.
         executor_timing = None
@@ -497,10 +506,8 @@ async def run_organic_job(
             ttl=reservation_time_limit,
         )
 
-        await client.send_initial_job_request(
-            job_details, receipt_payload, receipt_signature, executor_timing
-        )
-        job_logger.debug("Sent initial job request")
+        await client.send_initial_job_request(job_details, receipt_payload, receipt_signature)
+        logger.debug("Sent initial job request")
         await JobStartedReceipt.from_payload(
             receipt_payload,
             validator_signature=receipt_signature,
@@ -508,7 +515,7 @@ async def run_organic_job(
 
         try:
             try:
-                job_logger.debug(f"Waiting for initial response for {reservation_time_limit:.2f}s")
+                logger.debug(f"Waiting for initial response for {reservation_time_limit:.2f}s")
                 initial_response = await asyncio.wait_for(
                     client.miner_accepting_or_declining_future,
                     timeout=reservation_time_limit,
@@ -545,11 +552,11 @@ async def run_organic_job(
 
             if executor_timing is not None:
                 # For fine-grained timeouts, the deadline will be extended at the start of each stage.
-                job_logger.debug(f"Starting deadline with {executor_timing.allowed_leeway}s leeway")
+                logger.debug(f"Starting deadline with {executor_timing.allowed_leeway}s leeway")
                 deadline = Timer(executor_timing.allowed_leeway)
             else:
                 # For single-timeout mode, the deadline is set once here.
-                job_logger.debug(
+                logger.debug(
                     f"Starting deadline with {job_details.total_job_timeout}s total timeout"
                 )
                 deadline = Timer(job_details.total_job_timeout)
@@ -570,18 +577,18 @@ async def run_organic_job(
             ## STAGE: volume download
             try:
                 if executor_timing:
-                    job_logger.debug(
+                    logger.debug(
                         f"Extending deadline by download_time_limit: +{executor_timing.download_time_limit}s"
                     )
                     deadline.extend_timeout(executor_timing.download_time_limit)
-                job_logger.debug(
+                logger.debug(
                     f"Waiting for volume download (time left: {deadline.time_left():.2f}s)"
                 )
                 volumes_ready_response = await asyncio.wait_for(
                     client.volumes_ready_future,
                     timeout=deadline.time_left(),
                 )
-                job_logger.debug(f"Volume download done with {deadline.time_left():.2f}s left")
+                logger.debug(f"Volume download done with {deadline.time_left():.2f}s left")
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.VOLUMES_TIMED_OUT) from exc
             await client.notify_volumes_ready(volumes_ready_response)
@@ -589,16 +596,16 @@ async def run_organic_job(
             ## STAGE: execution
             try:
                 if executor_timing:
-                    job_logger.debug(
+                    logger.debug(
                         f"Extending deadline by execution_time_limit: +{executor_timing.execution_time_limit}s"
                     )
                     deadline.extend_timeout(executor_timing.execution_time_limit)
-                job_logger.debug(f"Waiting for execution (time left: {deadline.time_left():.2f}s)")
+                logger.debug(f"Waiting for execution (time left: {deadline.time_left():.2f}s)")
                 execution_done_response = await asyncio.wait_for(
                     client.execution_done_future,
                     timeout=deadline.time_left(),
                 )
-                job_logger.debug(f"Execution done with {deadline.time_left():.2f}s left")
+                logger.debug(f"Execution done with {deadline.time_left():.2f}s left")
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.EXECUTION_TIMED_OUT) from exc
             await client.notify_execution_done(execution_done_response)
@@ -606,20 +613,20 @@ async def run_organic_job(
             ## STAGE: upload
             try:
                 if executor_timing:
-                    job_logger.debug(
+                    logger.debug(
                         f"Extending deadline by upload_time_limit: +{executor_timing.upload_time_limit}s"
                     )
                     deadline.extend_timeout(executor_timing.upload_time_limit)
-                job_logger.debug(f"Waiting for upload (time left: {deadline.time_left():.2f}s)")
+                logger.debug(f"Waiting for upload (time left: {deadline.time_left():.2f}s)")
                 final_response = await asyncio.wait_for(
                     client.miner_finished_or_failed_future,
                     timeout=deadline.time_left(),
                 )
                 if isinstance(final_response, V0JobFailedRequest):
                     raise OrganicJobError(FailureReason.JOB_FAILED, final_response)
-                job_logger.debug(f"Upload done with {deadline.time_left():.2f}s left")
+                logger.debug(f"Upload done with {deadline.time_left():.2f}s left")
 
-                job_logger.info(f"Job finished in time with {deadline.time_left():.2f}s left")
+                logger.info(f"Job finished in time with {deadline.time_left():.2f}s left")
                 await client.send_job_finished_receipt_message(
                     started_timestamp=timer.start_time.timestamp(),
                     time_took_seconds=timer.passed_time(),
