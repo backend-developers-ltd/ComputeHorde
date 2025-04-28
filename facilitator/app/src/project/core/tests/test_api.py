@@ -63,6 +63,9 @@ def job_docker(db, user, connected_validator, miner):
         args=["my", "args"],
         env={"MY_ENV": "my value"},
         use_gpu=True,
+        download_time_limit=3,
+        execution_time_limit=3,
+        upload_time_limit=3,
     )
 
 
@@ -76,6 +79,9 @@ def another_user_job_docker(db, another_user, connected_validator, miner):
         args=["my", "args"],
         env={"MY_ENV": "my value"},
         use_gpu=True,
+        download_time_limit=3,
+        execution_time_limit=3,
+        upload_time_limit=3,
     )
 
 
