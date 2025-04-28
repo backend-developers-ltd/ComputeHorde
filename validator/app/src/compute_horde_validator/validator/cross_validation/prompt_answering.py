@@ -38,7 +38,6 @@ async def answer_prompts(
     workload: SolveWorkload,
     create_miner_client=TrustedMinerClient,
     job_uuid: uuid.UUID | None = None,
-    wait_timeout: int | None = None,
 ) -> bool:
     if not all(
         [
@@ -70,8 +69,6 @@ async def answer_prompts(
         output=await job_generator.output_upload(),
     )
 
-    wait_timeout = wait_timeout or job_generator.timeout_seconds()
-
     miner_client = create_miner_client(
         miner_address=settings.TRUSTED_MINER_ADDRESS,
         miner_port=settings.TRUSTED_MINER_PORT,
@@ -80,7 +77,7 @@ async def answer_prompts(
     )
 
     try:
-        await run_organic_job(miner_client, job_details, executor_ready_timeout=wait_timeout)
+        await run_organic_job(miner_client, job_details)
     except Exception as e:
         if (
             isinstance(e, OrganicJobError)

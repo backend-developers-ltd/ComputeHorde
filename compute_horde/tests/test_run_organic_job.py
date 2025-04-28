@@ -62,9 +62,7 @@ async def test_run_organic_job__success(keypair):
         executor_class=ExecutorClass.always_on__llm__a6000,
         docker_image="mock",
     )
-    stdout, stderr, artifacts = await run_organic_job(
-        client, job_details, executor_ready_timeout=2, initial_response_timeout=2
-    )
+    stdout, stderr, artifacts = await run_organic_job(client, job_details)
 
     assert stdout == "stdout"
     assert stderr == "stderr"

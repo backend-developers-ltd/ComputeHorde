@@ -222,9 +222,13 @@ async def drive_organic_job(
         volume=job_request.volume,
         output=job_request.output_upload,
         artifacts_dir=artifacts_dir,
-        download_time_limit=job_request.download_time_limit,
-        execution_time_limit=job_request.execution_time_limit,
-        upload_time_limit=job_request.upload_time_limit,
+        job_timing=OrganicJobDetails.TimingDetails(
+            download_time_limit=job_request.download_time_limit,
+            execution_time_limit=job_request.execution_time_limit,
+            upload_time_limit=job_request.upload_time_limit,
+        )
+        if isinstance(job_request, V2JobRequest)
+        else None,
     )
 
     try:
@@ -370,14 +374,20 @@ async def drive_organic_job(
             )
             await notify_callback(JobStatusUpdate.from_job(job, "failed"))
 
-        elif exc.reason == FailureReason.FINAL_RESPONSE_TIMED_OUT:
-            comment = f"Miner {miner_client.miner_name} final response timed out"
+        elif (
+            exc.reason == FailureReason.VOLUMES_TIMED_OUT
+            or exc.reason == FailureReason.EXECUTION_TIMED_OUT
+            or exc.reason == FailureReason.FINAL_RESPONSE_TIMED_OUT
+            # mypy doesn't understand `elif exc.reason in { ... }`
+        ):
+            comment = f"Miner {miner_client.miner_name} timed out: {exc.reason}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
             logger.warning(comment)
             await save_event(
-                subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=comment
+                subtype=SystemEvent.EventSubType.ERROR_TIMEOUT_WAITING_FOR_MINER,
+                long_description=comment,
             )
             await notify_callback(JobStatusUpdate.from_job(job, "failed"))
 
@@ -394,6 +404,10 @@ async def drive_organic_job(
                         pass
                     case V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD:
                         subtype = SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_HUGGINGFACE
+                    case V0JobFailedRequest.ErrorType.SECURITY_CHECK:
+                        subtype = SystemEvent.EventSubType.ERROR_FAILED_SECURITY_CHECK
+                    case V0JobFailedRequest.ErrorType.TIMEOUT:
+                        subtype = SystemEvent.EventSubType.ERROR_EXECUTOR_REPORTED_TIMEOUT
                     case _:
                         assert_never(exc.received.error_type)
             job.status = OrganicJob.Status.FAILED

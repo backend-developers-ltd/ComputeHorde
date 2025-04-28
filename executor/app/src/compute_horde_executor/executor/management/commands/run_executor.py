@@ -266,15 +266,19 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
     async def send_executor_ready(self):
         await self.send_model(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
 
-    async def send_error(self, job_error: JobError):
+    async def send_job_error(self, job_error: JobError):
         await self.send_model(
             V0JobFailedRequest(
                 job_uuid=self.job_uuid,
-                error_message=job_error.error_message,
                 error_type=job_error.error_type,
-                error_detail=job_error.error_detail,
+                error_detail=f"{job_error.error_message} - {job_error.error_detail}",
+                docker_process_stdout="",
+                docker_process_stderr="",
             )
         )
+
+    async def send_job_process_error(self, job_error: JobError, result: "_ExecutionResult"):
+        pass
 
     async def send_result(self, job_result: "JobResult"):
         if job_result.specs:
@@ -287,8 +291,6 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
         await self.send_model(
             V0JobFinishedRequest(
                 job_uuid=self.job_uuid,
-                return_code=job_result.exit_status,
-                timed_out=job_result.timed_out,
                 docker_process_stdout=job_result.stdout,
                 docker_process_stderr=job_result.stderr,
                 artifacts=job_result.artifacts,
@@ -313,7 +315,6 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
 class JobResult(pydantic.BaseModel):
     success: bool
     exit_status: int | None
-    timed_out: bool
     stdout: str
     stderr: str
     artifacts: dict[str, str]
@@ -523,12 +524,13 @@ def network_name(docker_objects_infix: str) -> str:
 
 class _ExecutionResult(typing.NamedTuple):
     """Exit output and status of the job's docker container."""
+
     timed_out: bool
     """Whether the job's docker container timed out and was forced to exit."""
-    
+
     return_code: int | None
     """Status code returned by the job process. None means the job timed out and was stopped."""
-    
+
     stdout: str
     stderr: str
 
@@ -616,6 +618,9 @@ class JobRunner:
         """
         Trigger a job to run in a Docker container.
         """
+        assert self.initial_job_request is not None, (
+            "Call prepare_initial() and prepare_full() first"
+        )
         assert self.full_job_request is not None, "Call prepare_initial() and prepare_full() first"
 
         docker_run_options = RunConfigManager.preset_to_docker_run_args(
@@ -716,8 +721,8 @@ class JobRunner:
             try:
                 # Support for the legacy single-timeout
                 docker_process_timeout = (
-                    self.initial_job_request.timing_details.execution_time_limit
-                    if self.initial_job_request
+                    self.initial_job_request.executor_timing.execution_time_limit
+                    if self.initial_job_request.executor_timing
                     else self.initial_job_request.timeout_seconds
                 )
                 result = await asyncio.wait_for(
@@ -812,7 +817,6 @@ class JobRunner:
         return JobResult(
             success=success,
             exit_status=self.execution_result.return_code,
-            timed_out=self.execution_result.timed_out,
             stdout=stdout,
             stderr=stderr,
             artifacts=artifacts,
@@ -974,11 +978,13 @@ class Command(BaseCommand):
                 try:
                     # This limit should be enough to receive the initial job request, which contains further timing
                     # details.
-                    deadline.extend(startup_time_limit)
+                    deadline.extend_timeout(startup_time_limit)
                     async with asyncio.timeout(deadline.time_left()):
-                        logger.debug(f"Entering startup stage; Time left: {deadline.time_left():.2f}s")
+                        logger.debug(
+                            f"Entering startup stage; Time left: {deadline.time_left():.2f}s"
+                        )
                         initial_job_request, job_request = await self._startup_stage()
-                        timing_details = initial_job_request.timing_details
+                        timing_details = initial_job_request.executor_timing
                 except TimeoutError as e:
                     raise JobError(
                         "Timed out during startup stage",
@@ -986,13 +992,18 @@ class Command(BaseCommand):
                     ) from e
 
                 if not timing_details:
-                    deadline.extend(initial_job_request.timeout_seconds)
+                    assert initial_job_request.timeout_seconds, (
+                        "Either timeout_seconds or timing_details must be set"
+                    )
+                    deadline.extend_timeout(initial_job_request.timeout_seconds)
 
                 try:
                     if timing_details:
-                        deadline.extend(timing_details.download_time_limit)
+                        deadline.extend_timeout(timing_details.download_time_limit)
                     async with asyncio.timeout(deadline.time_left()):
-                        logger.debug(f"Entering download stage; Time left: {deadline.time_left():.2f}s")
+                        logger.debug(
+                            f"Entering download stage; Time left: {deadline.time_left():.2f}s"
+                        )
                         await self._download_stage()
                 except TimeoutError as e:
                     raise JobError(
@@ -1002,9 +1013,11 @@ class Command(BaseCommand):
 
                 try:
                     if timing_details:
-                        deadline.extend(timing_details.execution_time_limit)
+                        deadline.extend_timeout(timing_details.execution_time_limit)
                     async with asyncio.timeout(deadline.time_left()):
-                        logger.debug(f"Entering execution stage; Time left: {deadline.time_left():.2f}s")
+                        logger.debug(
+                            f"Entering execution stage; Time left: {deadline.time_left():.2f}s"
+                        )
                         await self._execution_stage()
                 except TimeoutError as e:
                     # Note - this timeout should never really fire.
@@ -1018,9 +1031,11 @@ class Command(BaseCommand):
 
                 try:
                     if timing_details:
-                        deadline.extend(timing_details.upload_time_limit)
+                        deadline.extend_timeout(timing_details.upload_time_limit)
                     async with asyncio.timeout(deadline.time_left()):
-                        logger.debug(f"Entering upload stage; Time left: {deadline.time_left():.2f}s")
+                        logger.debug(
+                            f"Entering upload stage; Time left: {deadline.time_left():.2f}s"
+                        )
                         await self._upload_stage()
                 except TimeoutError as e:
                     raise JobError(
@@ -1029,10 +1044,10 @@ class Command(BaseCommand):
                     ) from e
 
             except JobError as e:
-                await self.miner_client.send_error(e)
+                await self.miner_client.send_job_error(e)
 
             except BaseException as e:
-                await self.miner_client.send_error(JobError(f"Unexpected error: {e}"))
+                await self.miner_client.send_job_error(JobError(f"Unexpected error: {e}"))
                 raise
 
     async def _startup_stage(self) -> tuple[V0InitialJobRequest, V0JobRequest]:

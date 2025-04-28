@@ -32,6 +32,7 @@ class JobStatusUpdate(BaseModel, extra=Extra.forbid):
     """
     Message sent from validator to this app in response to NewJobRequest.
     """
+
     class Status(StrEnum):
         RECEIVED = "received"
         ACCEPTED = "accepted"

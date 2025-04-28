@@ -66,22 +66,22 @@ class V0InitialJobRequest(BaseModel):
         public_key: str
         executor_ip: str | None = None  # set by miner before sending to executor
 
-    class TimingDetails(BaseModel):
+    class ExecutorTimingDetails(BaseModel):
         allowed_leeway: int
-        startup_time_limit: int
         download_time_limit: int
         execution_time_limit: int
         upload_time_limit: int
 
         @property
         def total(self):
-            return sum((
-                self.allowed_leeway,
-                self.startup_time_limit,
-                self.download_time_limit,
-                self.execution_time_limit,
-                self.upload_time_limit,
-            ))
+            return sum(
+                (
+                    self.allowed_leeway,
+                    self.download_time_limit,
+                    self.execution_time_limit,
+                    self.upload_time_limit,
+                )
+            )
 
     message_type: Literal["V0InitialJobRequest"] = "V0InitialJobRequest"
     job_uuid: str
@@ -94,10 +94,10 @@ class V0InitialJobRequest(BaseModel):
 
     # this field should be set if the job is a streaming job
     streaming_details: StreamingDetails | None = None
-    
+
     # This field should be set if the job should use fine-grained timing.
-    # Otherwise, the job will use `timeout_seconds` as the total time limit.
-    timing_details: TimingDetails | None = None
+    # Otherwise, the executor will use `timeout_seconds` as the total time limit.
+    executor_timing: ExecutorTimingDetails | None = None
 
 
 # miner.vc -> validator
@@ -196,25 +196,22 @@ class V0JobFailedRequest(BaseModel):
 
     message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
     job_uuid: str
-    error_message: str | None = None
+    docker_process_exit_status: int | None = None
+    docker_process_stdout: str
+    docker_process_stderr: str
     error_type: ErrorType | None = None
     error_detail: str | None = None
+    timeout: bool = False
 
 
 # executor -> miner.ec -> miner.vc -> validator
 class V0JobFinishedRequest(BaseModel):
-    """
-    All steps finished successfully, and we have the output.
-    """
-
     message_type: Literal["V0JobFinishedRequest"] = "V0JobFinishedRequest"
     job_uuid: str
-    timed_out: bool
     # These could be empty if the execution timed out
-    return_code: int | None = None
     docker_process_stdout: str
     docker_process_stderr: str
-    artifacts: dict[str, str]
+    artifacts: dict[str, str] | None = None
 
 
 # validator -> miner.vc

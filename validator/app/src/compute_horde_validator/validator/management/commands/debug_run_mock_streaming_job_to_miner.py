@@ -39,9 +39,6 @@ def get_mock_job_details():
         docker_image="backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
         docker_run_options_preset="none",
         docker_run_cmd=["python", "./mock_streaming_job.py"],
-        download_time_limit=30,
-        execution_time_limit=30,
-        upload_time_limit=30,
     )
 
 

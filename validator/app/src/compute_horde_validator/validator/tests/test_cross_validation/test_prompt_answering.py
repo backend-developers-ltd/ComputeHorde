@@ -68,9 +68,7 @@ async def test_answer_prompts__success(
 
     prompts, workload = await db_setup()
 
-    await answer_prompts(
-        workload, create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
-    )
+    await answer_prompts(workload, create_miner_client=create_miner_client, job_uuid=job_uuid)
 
     await workload.arefresh_from_db()
     assert workload.finished_at is not None
@@ -101,9 +99,7 @@ async def test_answer_prompts__missing_answers(
     _, workload = await db_setup()
     await Prompt.objects.aupdate(content="missing_prompt")
 
-    await answer_prompts(
-        workload, create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
-    )
+    await answer_prompts(workload, create_miner_client=create_miner_client, job_uuid=job_uuid)
 
     await workload.arefresh_from_db()
     assert workload.finished_at is None
@@ -125,9 +121,7 @@ async def test_answer_prompts__job_failed(
 
     prompts, workload = await db_setup()
 
-    await answer_prompts(
-        workload, create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
-    )
+    await answer_prompts(workload, create_miner_client=create_miner_client, job_uuid=job_uuid)
 
     await workload.arefresh_from_db()
     assert workload.finished_at is None
@@ -158,9 +152,7 @@ async def test_answer_prompts__download_failed(
 
     prompts, workload = await db_setup()
 
-    await answer_prompts(
-        workload, create_miner_client=create_miner_client, job_uuid=job_uuid, wait_timeout=2
-    )
+    await answer_prompts(workload, create_miner_client=create_miner_client, job_uuid=job_uuid)
 
     await workload.arefresh_from_db()
     assert workload.finished_at is None

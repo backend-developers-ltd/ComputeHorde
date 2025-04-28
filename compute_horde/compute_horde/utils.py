@@ -79,17 +79,21 @@ def json_dumps_default(obj):
 
 
 class Timer:
-    def __init__(self, timeout: float = None):
+    def __init__(self, timeout: float | None = None):
         self.start_time = datetime.datetime.now()
         self.timeout = timeout
 
-    def passed_time(self) -> float:
-        return (datetime.datetime.now() - self.start_time).total_seconds()
+    def set_timeout(self, seconds: float):
+        self.start_time = datetime.datetime.now()
+        self.timeout = seconds
 
-    def extend(self, seconds: float):
+    def extend_timeout(self, seconds: float):
         if self.timeout is None:
             raise ValueError("timeout was not specified")
         self.timeout += seconds
+
+    def passed_time(self) -> float:
+        return (datetime.datetime.now() - self.start_time).total_seconds()
 
     def time_left(self) -> float:
         if self.timeout is None:

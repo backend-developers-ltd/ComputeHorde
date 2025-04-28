@@ -48,7 +48,6 @@ class AcceptedJob(models.Model):
     status = models.CharField(choices=Status.choices, max_length=255)
     initial_job_details = models.JSONField(encoder=EnumEncoder)
     full_job_details = models.JSONField(encoder=EnumEncoder, null=True)
-    timed_out = models.BooleanField(null=True)
     exit_status = models.PositiveSmallIntegerField(null=True)
     stdout = models.TextField(blank=True, default="")
     stderr = models.TextField(blank=True, default="")

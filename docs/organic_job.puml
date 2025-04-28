@@ -40,23 +40,23 @@ rnote right of "Job driver" #f99: celery task TTL
 "Job driver" -> "Validator Consumer": Connect
 activate "Validator Consumer"
 
-activate "Job driver" #aae
-rnote right of "Job driver" #aae: Job deadline
-
 
 == =Preparation ==
 
 group Reservation stage
-rnote right of "Job driver" #aae: Set deadline:\n**reservation time limit**
+activate "Job driver" #lightgreen
+rnote right of "Job driver" #lightgreen: Timeout:\n**reservation time limit**
 "Job driver" -> "Validator Consumer": ""V0InitialJobRequest""\n- ""JobStartedReceipt""\n- Executor class\n- Job timing
 &note right of "Validator Consumer": This is essentially a dual\nreserve+start executor\nrequest in one
 "Validator Consumer" -> "Validator Consumer": Reserve executor from pool
 "Validator Consumer" -> "Job driver": ""V0AcceptJobRequest""
 &"Job driver" -> Facilitator: ""V0JobStatusUpdate""\n(Accepted)
+deactivate "Job driver"
 end group
 
 group Spinup stage
-rnote right of "Job driver" #aae: Set deadline:\n**executor class spinup**\n**startup time limit**
+activate "Job driver" #lightgreen
+rnote right of "Job driver" #lightgreen: Timeout:\n**executor class spinup**\n**startup time limit**
 &"Validator Consumer" --> Executor: Start executor\n(via vendor code)\n(pass executor TTL to deal with zombie executors)
 Executor -> Executor: ...
 rnote over "Job driver", Executor: Waiting for executor spinup
@@ -66,13 +66,12 @@ Executor -> Executor: ...
 
 activate Executor #f99
 rnote right of Executor #f99: executor TTL
-activate Executor #aae
-rnote right of Executor #aae: Job deadline
 end group
 
 group Startup stage
-rnote right of "Executor" #aae: Set deadline:\n**startup time limit**
-note right of "Executor": Startup time is constant\nunless we want to allow\nheavy volume downloads here
+activate Executor #lightgreen
+rnote right of "Executor" #lightgreen: Timeout:\n**startup time limit**
+&note left of "Executor": Startup time is constant\nunless we want to allow\nheavy volume downloads here
 
 Executor -> "Executor Consumer": Connect
 activate "Executor Consumer"
@@ -87,13 +86,17 @@ Executor -> Executor: pull docker image
 end group
 Executor -> "Job driver": ""V0ExecutorReadyRequest""
 &"Job driver" -> Facilitator: ""V0JobStatusUpdate""\n(Executor ready)
+deactivate "Job driver"
+deactivate Executor
 end group
 
 == =Job execution ==
 
 group Download stage
-rnote right of "Job driver" #aae: Extend deadline:\n**leeway**\n**download time limit**
-&rnote right of Executor #aae: Extend deadline:\n**leeway**\n**download time limit**
+activate "Job driver" #aae
+activate Executor #aae
+rnote right of "Job driver" #aae: Set deadline:\n**leeway**\n**download time limit**
+&rnote right of Executor #aae: Set deadline:\n**leeway**\n**download time limit**
 
 "Job driver" -> "Executor": ""V0JobRequest""\n- Job volumes
 Executor -> "Task/Subprocess": ""unpack_volume()""

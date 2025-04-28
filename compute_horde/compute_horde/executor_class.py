@@ -30,13 +30,13 @@ EXECUTOR_CLASS = {
         description="always on, generic GPU machine",
         has_gpu=True,
         gpu_vram_gb=24,
-        spin_up_time=5,  # Just enough time to let the executor container start up.
+        spin_up_time=0,
     ),
     ExecutorClass.always_on__llm__a6000: ExecutorClassSpec(
         description="always on, NVIDIA RTX A6000 GPU machine for LLM prompts solving",
         has_gpu=True,
         gpu_vram_gb=48,
-        spin_up_time=5,  # Just enough time to let the executor container start up.
+        spin_up_time=0,
     ),
 }
 
