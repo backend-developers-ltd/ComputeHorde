@@ -386,7 +386,7 @@ async def drive_organic_job(
             await job.asave()
             logger.warning(comment)
             await save_event(
-                subtype=SystemEvent.EventSubType.ERROR_TIMEOUT_WAITING_FOR_MINER,
+                subtype=SystemEvent.EventSubType.ERROR_VALIDATOR_REPORTED_TIMEOUT,
                 long_description=comment,
             )
             await notify_callback(JobStatusUpdate.from_job(job, "failed"))

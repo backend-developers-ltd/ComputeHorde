@@ -63,7 +63,9 @@ class DockerExecutorManager(BaseExecutorManager):
             else ["-e", f"HF_ACCESS_TOKEN={settings.HF_ACCESS_TOKEN}"]
         )
 
-        args = [
+        nginx_port = executor_port_dispenser.get_port()
+        process_executor = await asyncio.create_subprocess_exec(
+            "docker",
             "run",
             "--rm",
             "-e",
@@ -71,7 +73,7 @@ class DockerExecutorManager(BaseExecutorManager):
             "-e",
             f"EXECUTOR_TOKEN={token}",
             "-e",
-            f"NGINX_PORT={executor_port_dispenser.get_port()}",
+            f"NGINX_PORT={nginx_port}",
             *hf_args,
             "--name",
             token,
@@ -85,10 +87,7 @@ class DockerExecutorManager(BaseExecutorManager):
             "manage.py",
             "run_executor",
             *self.get_executor_cmdline_args(),
-        ]
-        
-        process_executor = await asyncio.create_subprocess_exec("docker", args) # noqa: S607
-        logger.debug(f"Running command: docker {args}")
+        ) # noqa: S607
         return DockerExecutor(process_executor, token)
 
     async def kill_executor(self, executor):

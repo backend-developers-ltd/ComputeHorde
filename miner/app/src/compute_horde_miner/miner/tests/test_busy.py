@@ -63,6 +63,7 @@ async def _send_initial_job_request(validator_channel, validator_wallet, miner_w
             job_uuid=job_uuid,
             executor_class=DEFAULT_EXECUTOR_CLASS,
             docker_image="it's teeeeests",
+            timeout_seconds=60,
             job_started_receipt_payload=job_started_receipt_payload,
             job_started_receipt_signature=job_started_receipt_signature,
         ).model_dump_json()

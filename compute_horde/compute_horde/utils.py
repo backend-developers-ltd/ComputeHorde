@@ -79,15 +79,15 @@ def json_dumps_default(obj):
 
 
 class Timer:
-    def __init__(self, timeout: float | None = None):
+    def __init__(self, timeout: float | None = None) -> None:
         self.start_time = datetime.datetime.now()
         self.timeout = timeout
 
-    def set_timeout(self, seconds: float):
+    def set_timeout(self, seconds: float) -> None:
         self.start_time = datetime.datetime.now()
         self.timeout = seconds
 
-    def extend_timeout(self, seconds: float):
+    def extend_timeout(self, seconds: float) -> None:
         if self.timeout is None:
             raise ValueError("timeout was not specified")
         self.timeout += seconds
@@ -100,13 +100,8 @@ class Timer:
             raise ValueError("timeout was not specified")
         return self.timeout - self.passed_time()
 
-    def deadline(self) -> datetime.datetime:
-        if self.timeout is None:
-            raise ValueError("timeout was not specified")
-        return self.start_time + datetime.timedelta(seconds=self.timeout)
 
-
-def sign_blob(kp: bittensor.Keypair, blob: str):
+def sign_blob(kp: bittensor.Keypair, blob: str) -> str:
     """
     Signs a string blob with a bittensor keypair and returns the signature
     """

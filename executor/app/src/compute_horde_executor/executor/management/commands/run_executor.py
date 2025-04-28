@@ -315,6 +315,7 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
 class JobResult(pydantic.BaseModel):
     success: bool
     exit_status: int | None
+    timeout: bool
     stdout: str
     stderr: str
     artifacts: dict[str, str]
@@ -819,10 +820,10 @@ class JobRunner:
         return JobResult(
             success=success,
             exit_status=self.execution_result.return_code,
+            timeout=self.execution_result.timed_out,
             stdout=stdout,
             stderr=stderr,
             artifacts=artifacts,
-            specs=get_machine_specs(),
         )
 
     async def clean(self):

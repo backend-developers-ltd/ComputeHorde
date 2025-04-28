@@ -56,7 +56,7 @@ end group
 
 group Spinup stage
 activate "Job driver" #lightgreen
-rnote right of "Job driver" #lightgreen: Timeout:\n**executor class spinup**\n**startup time limit**
+rnote right of "Job driver" #lightgreen: Timeout:\n**executor class spinup**\n+ **startup time limit**
 &"Validator Consumer" --> Executor: Start executor\n(via vendor code)\n(pass executor TTL to deal with zombie executors)
 Executor -> Executor: ...
 rnote over "Job driver", Executor: Waiting for executor spinup
@@ -91,12 +91,15 @@ deactivate Executor
 end group
 
 == =Job execution ==
+note over "Job driver", "Executor": It's important for both parties to start the deadline timer right here.\nIn practice, the validator will start its timer a bit later than executor - this is good,\nas the validator is then less likely to time out before the executor. (unless the executor is dead)
 
-group Download stage
-activate "Job driver" #aae
 activate Executor #aae
-rnote right of "Job driver" #aae: Set deadline:\n**leeway**\n**download time limit**
-&rnote right of Executor #aae: Set deadline:\n**leeway**\n**download time limit**
+rnote right of Executor #aae: Set deadline:\n**leeway**
+activate "Job driver" #aae
+rnote right of "Job driver" #aae: Set deadline:\n**leeway**
+group Download stage
+rnote right of "Job driver" #aae: Extend deadline:\n**download time limit**
+&rnote right of Executor #aae: Extend deadline:\n**download time limit**
 
 "Job driver" -> "Executor": ""V0JobRequest""\n- Job volumes
 Executor -> "Task/Subprocess": ""unpack_volume()""
@@ -111,9 +114,9 @@ deactivate "Task/Subprocess"
 end group
 
 
-group Execution stage
 rnote right of "Job driver" #aae: Extend deadline:\n**execution time limit**
 &rnote right of Executor #aae: Extend deadline:\n**execution time limit**
+group Execution stage
 
 Executor --> "Task/Subprocess": docker run
 activate "Task/Subprocess"
@@ -125,9 +128,9 @@ deactivate "Task/Subprocess"
 &"Job driver" -> Facilitator: ""V0JobStatusUpdate""\n(Execution done)
 end group
 
-group Upload stage
 rnote right of "Job driver" #aae: Extend deadline:\n**upload time limit**
 &rnote right of Executor #aae: Extend deadline:\n**upload time limit**
+group Upload stage
 
 Executor -> Executor: Serialize artifacts
 loop ""MultiUploadOutputUploader""

@@ -11,6 +11,7 @@ import bittensor
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.volume import Volume
+from compute_horde_validator.validator.dynamic_config import aget_config
 from pydantic import TypeAdapter
 
 from compute_horde.base.docker import DockerRunOptionsPreset
@@ -436,10 +437,10 @@ class OrganicJobDetails:
     job_uuid: str
     executor_class: ExecutorClass
     docker_image: str
-    total_job_timeout: int = 300  # Deprecated, use job_timing instead.
     job_timing: TimingDetails | None = None
     docker_run_options_preset: DockerRunOptionsPreset = "nvidia_all"
     docker_run_cmd: list[str] = field(default_factory=list)
+    total_job_timeout: int = 300  # Deprecated, use job_timing instead.
     volume: Volume | None = None
     output: OutputUpload | None = None
     artifacts_dir: str | None = None
@@ -461,12 +462,11 @@ async def run_organic_job(
     timer = Timer()  # Only used for measurement, not used for timeouts.
     job_logger = logger.getChild(job_details.job_uuid)
 
-    # TODO: TIMEOUTS - Is this a good value?
-    reservation_time_limit = 5
-    # TODO: TIMEOUTS - This is 0 now
     executor_spinup_time = EXECUTOR_CLASS[job_details.executor_class].spin_up_time
-    # TODO: TIMEOUTS - How long it takes to do the startup checks?
-    executor_startup_time = 5
+    executor_startup_time = int(await aget_config("DYNAMIC_ORGANIC_JOB_EXECUTOR_STARTUP_TIMEOUT"))
+
+    reservation_time_limit = int(await aget_config("DYNAMIC_ORGANIC_JOB_RESERVATION_TIMEOUT"))
+    readiness_time_limit = executor_spinup_time + executor_startup_time
 
     if job_details.job_timing is not None:
         # TODO: TIMEOUTS - Is this a good value?
@@ -524,21 +524,9 @@ async def run_organic_job(
             # Validator waits for the executor to start up and report readiness.
             # This includes executor startup checks.
             if executor_timing:
-                job_accepted_receipt_ttl = sum(
-                    (
-                        executor_startup_time,
-                        executor_spinup_time,
-                        executor_timing.total,
-                    )
-                )
+                job_accepted_receipt_ttl = readiness_time_limit + executor_timing.total
             else:
-                job_accepted_receipt_ttl = sum(
-                    (
-                        executor_startup_time,
-                        executor_spinup_time,
-                        job_details.total_job_timeout,
-                    )
-                )
+                job_accepted_receipt_ttl = readiness_time_limit + job_details.total_job_timeout
             try:
                 await client.send_job_accepted_receipt_message(
                     accepted_timestamp=time.time(),
@@ -546,7 +534,7 @@ async def run_organic_job(
                 )
                 executor_readiness_response = await asyncio.wait_for(
                     client.executor_ready_or_failed_future,
-                    timeout=executor_spinup_time + executor_startup_time,
+                    timeout=readiness_time_limit,
                 )
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc

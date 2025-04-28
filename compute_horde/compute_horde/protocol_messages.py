@@ -87,7 +87,7 @@ class V0InitialJobRequest(BaseModel):
     job_uuid: str
     executor_class: ExecutorClass
     docker_image: str | None = None
-    timeout_seconds: int | None = None
+    timeout_seconds: int | None = None  # Deprecated - use executor_timing instead
     volume: Volume | None = None
     job_started_receipt_payload: JobStartedReceiptPayload
     job_started_receipt_signature: str
@@ -185,10 +185,6 @@ class V0JobRequest(BaseModel):
 
 # executor -> miner.ec -> miner.vc -> validator
 class V0JobFailedRequest(BaseModel):
-    """
-    Job has failed somewhere outside the execution process.
-    """
-
     class ErrorType(enum.StrEnum):
         TIMEOUT = "TIMEOUT"
         SECURITY_CHECK = "SECURITY_CHECK"
@@ -208,7 +204,6 @@ class V0JobFailedRequest(BaseModel):
 class V0JobFinishedRequest(BaseModel):
     message_type: Literal["V0JobFinishedRequest"] = "V0JobFinishedRequest"
     job_uuid: str
-    # These could be empty if the execution timed out
     docker_process_stdout: str
     docker_process_stderr: str
     artifacts: dict[str, str] | None = None

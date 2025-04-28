@@ -159,7 +159,7 @@ CONSTANCE_CONFIG = {
         7,
         "How long to wait for the executor pool to confirm that an executor will or will not be "
         "available for a job. Must be lower than validator's "
-        "DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT",
+        "DYNAMIC_ORGANIC_JOB_RESERVATION_TIMEOUT",
         float,
     ),
 }

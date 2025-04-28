@@ -40,8 +40,7 @@ EXECUTOR_CLASS = {
     ),
 }
 
-
-MAX_EXECUTOR_TIMEOUT = timedelta(minutes=20).total_seconds()
+MAX_EXECUTOR_TIMEOUT = timedelta(minutes=20).total_seconds()  # TODO: TIMEOUTS - what's this?
 
 DEFAULT_EXECUTOR_CLASS = ExecutorClass.spin_up_4min__gpu_24gb
 DEFAULT_LLM_EXECUTOR_CLASS = ExecutorClass.always_on__llm__a6000
