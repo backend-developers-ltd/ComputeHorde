@@ -344,18 +344,17 @@ class FacilitatorClient:
         # slash collateral
         slash_amount = await aget_config("DYNAMIC_COLLATERAL_SLASH_AMOUNT")
         if slash_amount > 0 and job.miner.evm_address:
-            w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
-
             try:
-                # TODO: make the following call async
-                collateral.slash_collateral(
-                    w3=w3,
-                    contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
-                    private_key=settings.EVM_PRIVATE_KEY,
-                    miner_address=job.miner.evm_address,
-                    amount_tao=slash_amount,
-                    url=f"job {job_uuid} cheated",
-                )
+                w3 = await collateral.get_async_web3_connection(network=settings.BITTENSOR_NETWORK)
+                async with w3:
+                    await collateral.slash_collateral(
+                        w3=w3,
+                        contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
+                        private_key=settings.EVM_PRIVATE_KEY,
+                        miner_address=job.miner.evm_address,
+                        amount_tao=slash_amount,
+                        url=f"job {job_uuid} cheated",
+                    )
             except Exception as e:
                 logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
 

@@ -1,3 +1,4 @@
+import functools
 import hashlib
 import json
 import pathlib
@@ -6,12 +7,12 @@ from typing import Any
 
 import bittensor
 import bittensor.utils
-import requests
+import httpx
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from hexbytes import HexBytes
-from web3 import Web3
-from web3.contract.contract import ContractFunction
+from web3 import AsyncWeb3, Web3
+from web3.contract.async_contract import AsyncContractFunction
 from web3.types import Wei
 
 WEI_PER_TAO = 10**18
@@ -25,10 +26,22 @@ def get_collateral_abi() -> Any:
 
 
 def get_web3_connection(network: str) -> Web3:
-    """Connects to a Web3 provider using the provided RPC URL."""
+    """Connects to a Web3 provider using the provided network."""
     _, rpc_url = bittensor.utils.determine_chain_endpoint_and_network(network)
     w3 = Web3(Web3.LegacyWebSocketProvider(rpc_url))
     if not w3.is_connected():
+        raise ConnectionError(f"Failed to connect to RPC node at {rpc_url}")
+    return w3
+
+
+async def get_async_web3_connection(network: str) -> AsyncWeb3:
+    """
+    Connects to a Web3 provider using the provided network using persistent websocket connection.
+    Remember to use `async with` to ensure the connection is closed properly after use.
+    """
+    _, rpc_url = bittensor.utils.determine_chain_endpoint_and_network(network)
+    w3: AsyncWeb3 = await AsyncWeb3(AsyncWeb3.WebSocketProvider(rpc_url))
+    if not await w3.is_connected():
         raise ConnectionError(f"Failed to connect to RPC node at {rpc_url}")
     return w3
 
@@ -62,8 +75,8 @@ def get_miner_collateral(
         Collateral amount in Wei
     """
     abi = get_collateral_abi()
-    contract_checksum_address = Web3.to_checksum_address(contract_address)
-    miner_checksum_address = Web3.to_checksum_address(miner_address)
+    contract_checksum_address = w3.to_checksum_address(contract_address)
+    miner_checksum_address = w3.to_checksum_address(miner_address)
 
     contract = w3.eth.contract(address=contract_checksum_address, abi=abi)
     collateral: int = contract.functions.collaterals(miner_checksum_address).call(
@@ -92,42 +105,35 @@ def get_evm_key_associations(subtensor: bittensor.Subtensor, netuid: int) -> dic
     return uid_evm_address_map
 
 
-def calculate_md5_checksum(url: str) -> bytes:
-    """Calculate the MD5 checksum of url contents."""
-    response = requests.get(url, timeout=10)
-    response.raise_for_status()
-    return hashlib.md5(response.content).digest()
-
-
-def build_and_send_transaction(
-    w3: Web3,
-    function_call: ContractFunction,
+async def build_and_send_transaction(
+    w3: AsyncWeb3,
+    function: AsyncContractFunction,
     account: LocalAccount,
     gas_limit: int = 100000,
     value: int = 0,
-):
+) -> HexBytes:
     """Build, sign and send a transaction.
 
     Args:
-        w3: Web3 instance
-        function_call: Contract function call to execute
+        w3: AsyncWeb3 instance
+        function: Contract function call to execute
         account: Account to send transaction from
         gas_limit: Maximum gas to use for the transaction
         value: Amount of ETH to send with the transaction (in Wei)
     """
-    transaction = function_call.build_transaction(
+    transaction = await function.build_transaction(
         {
             "from": account.address,
-            "nonce": w3.eth.get_transaction_count(account.address),
+            "nonce": await w3.eth.get_transaction_count(account.address),
             "gas": gas_limit,
-            "gasPrice": w3.eth.gas_price,
-            "chainId": w3.eth.chain_id,
+            "gasPrice": await w3.eth.gas_price,
+            "chainId": await w3.eth.chain_id,
             "value": Wei(value),
         }
     )
 
     signed_txn = w3.eth.account.sign_transaction(transaction, account.key)
-    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+    tx_hash = await w3.eth.send_raw_transaction(signed_txn.raw_transaction)
     return tx_hash
 
 
@@ -157,8 +163,8 @@ class SlashedEvent:
         )
 
 
-def slash_collateral(
-    w3: Web3,
+async def slash_collateral(
+    w3: AsyncWeb3,
     contract_address: str,
     private_key: str,
     miner_address: str,
@@ -168,7 +174,7 @@ def slash_collateral(
     """Slash collateral from a miner.
 
     Args:
-        w3: Web3 instance to use for blockchain interaction.
+        w3: AsyncWeb3 instance to use for blockchain interaction.
         contract_address: Address of the Collateral contract.
         private_key: Private key of the validator.
         miner_address: EVM address of the miner to query.
@@ -180,25 +186,25 @@ def slash_collateral(
     """
     abi = get_collateral_abi()
     account: LocalAccount = Account.from_key(private_key)
-    contract_checksum_address = Web3.to_checksum_address(contract_address)
-    miner_checksum_address = Web3.to_checksum_address(miner_address)
-
+    contract_checksum_address = w3.to_checksum_address(contract_address)
+    miner_checksum_address = w3.to_checksum_address(miner_address)
     contract = w3.eth.contract(address=contract_checksum_address, abi=abi)
 
     # Calculate MD5 checksum if URL is valid
     if url.startswith(("http://", "https://")):
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        md5_checksum = hashlib.md5(response.content).digest()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=10)
+            response.raise_for_status()
+            md5_checksum = hashlib.md5(response.content).digest()
     else:
         md5_checksum = b"\x00" * 16
 
-    call = contract.functions.slashCollateral(
+    function = contract.functions.slashCollateral(
         miner_checksum_address, tao_to_wei(amount_tao), url, md5_checksum
     )
-    tx_hash = build_and_send_transaction(w3, call, account, gas_limit=200_000)
+    tx_hash = await build_and_send_transaction(w3, function, account, gas_limit=200_000)
 
-    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, 300, 2)
+    receipt = await w3.eth.wait_for_transaction_receipt(tx_hash, 300, 2)
     if receipt["status"] == 0:
         raise SlashCollateralError("collateral slashing transaction failed")
 
