@@ -404,7 +404,7 @@ class TestMultiUploadOutputUploader:
                 return await self.sem.__aexit__(*args)
 
         # Patch the semaphore with our mock
-        with mock.patch("asyncio.Semaphore", MockSemaphore):
+        with mock.patch("compute_horde_core.output_upload.OutputUploader._semaphore", MockSemaphore(3)):
             uploader = MultiUploadOutputUploader(upload_without_system_output)
             await uploader.upload(setup_test_dir)
 

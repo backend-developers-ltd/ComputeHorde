@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 import pathlib
@@ -352,6 +353,20 @@ class TestMultiVolumeDownloader:
     def mixed_multi_volume(self, mixed_volumes):
         return MultiVolume(volumes=mixed_volumes)
 
+    @pytest.fixture
+    def setup_test_dir(self, tmp_path, text_file_content):
+        # Create test files
+        test_file = tmp_path / "test_file.txt"
+        test_file.write_bytes(text_file_content)
+
+        # Create a subdirectory with a file
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        subdir_file = subdir / "subdir_file.txt"
+        subdir_file.write_bytes(text_file_content)
+
+        return tmp_path
+
     @pytest.mark.asyncio
     async def test_download(self, multi_volume, tmp_path, httpx_mock, text_file_content):
         """Test that MultiVolumeDownloader downloads multiple files correctly."""
@@ -409,6 +424,59 @@ class TestMultiVolumeDownloader:
         file1 = tmp_path / "file1.txt"
         assert file1.exists()
         assert file1.read_bytes() == text_file_content
+
+    @pytest.mark.asyncio
+    async def test_concurrency_limit(self, multi_volume, setup_test_dir, httpx_mock):
+        """Test that concurrency limit is respected."""
+        # Create many download to test concurrency
+        many_downloads = []
+        for i in range(10):
+            # Create files
+            file_path = setup_test_dir / f"file_{i}.txt"
+            file_path.write_text(f"Content {i}")
+
+            # Create download for each file
+            many_downloads.append(
+                SingleFileVolume(
+                    url=f"https://example.com/download/{i}",
+                    relative_path=f"file_{i}.txt",
+                )
+            )
+
+        # Replace downloads in the fixture
+        multi_volume.volumes = many_downloads
+
+        # Mock responses for all URLs
+        for i in range(10):
+            httpx_mock.add_response(url=f"https://example.com/download/{i}", method="GET", status_code=200)
+
+        # Mock the semaphore to verify it's used correctly
+        original_semaphore = asyncio.Semaphore
+        semaphore_acquire_count = 0
+
+        class MockSemaphore:
+            def __init__(self, value):
+                self.sem = original_semaphore(value)
+                self.value = value
+
+            async def __aenter__(self):
+                nonlocal semaphore_acquire_count
+                semaphore_acquire_count += 1
+                return await self.sem.__aenter__()
+
+            async def __aexit__(self, *args):
+                return await self.sem.__aexit__(*args)
+
+        # Patch the semaphore with our mock
+        with mock.patch("compute_horde_core.volume.VolumeDownloader._semaphore", MockSemaphore(3)):
+            downloader = MultiVolumeDownloader(multi_volume)
+            await downloader.download(setup_test_dir)
+
+        # Verify all requests were made
+        assert len(httpx_mock.get_requests()) == 10
+
+        # Verify semaphore was used for each download
+        assert semaphore_acquire_count == 10
 
     @pytest.mark.asyncio
     async def test_empty_volumes(self, tmp_path):

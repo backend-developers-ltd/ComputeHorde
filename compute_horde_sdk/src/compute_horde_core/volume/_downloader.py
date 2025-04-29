@@ -46,6 +46,7 @@ class VolumeDownloader(metaclass=abc.ABCMeta):
     """Download the volume to the directory."""
 
     __volume_type_map: dict[type[Volume], Callable[[Volume], VolumeDownloader]] = {}
+    _semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
 
     @classmethod
     @abc.abstractmethod
@@ -59,7 +60,6 @@ class VolumeDownloader(metaclass=abc.ABCMeta):
         cls.__volume_type_map[cls.handles_volume_type()] = lambda download: cls(download)  # type: ignore
 
     def __init__(self) -> None:
-        self.semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
         self.max_size_bytes = 2147483648
         self.max_retries = 3
 
@@ -178,7 +178,7 @@ class SingleFileVolumeDownloader(VolumeDownloader):
         file_path = directory / self.volume.relative_path
         file_path.parent.mkdir(parents=True, exist_ok=True)
         with file_path.open("wb") as file:
-            async with self.semaphore:
+            async with self._semaphore:
                 await download_get(
                     file, self.volume.url, max_size_bytes=self.max_size_bytes, max_retries=self.max_retries
                 )
@@ -197,7 +197,7 @@ class ZipUrlVolumeDownloader(VolumeDownloader):
 
     async def download(self, directory: pathlib.Path) -> None:
         with tempfile.NamedTemporaryFile() as download_file:
-            async with self.semaphore:
+            async with self._semaphore:
                 await download_get(
                     download_file,
                     self.volume.contents,

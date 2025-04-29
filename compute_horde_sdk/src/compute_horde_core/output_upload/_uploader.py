@@ -7,7 +7,7 @@ import logging
 import pathlib
 import tempfile
 import zipfile
-from collections.abc import AsyncIterable, Callable, Coroutine, Iterable, Iterator
+from collections.abc import AsyncIterable, Callable, Iterable, Iterator
 from functools import wraps
 from typing import IO, Any
 
@@ -28,15 +28,6 @@ logger = logging.getLogger(__name__)
 OUTPUT_UPLOAD_TIMEOUT_SECONDS = 300
 MAX_NUMBER_OF_FILES = 1000
 MAX_CONCURRENT_UPLOADS = 3
-
-
-class ConcurrencyLimiter:
-    def __init__(self, concurrency: int) -> None:
-        self.semaphore = asyncio.Semaphore(concurrency)
-
-    async def wrap_task(self, task: Coroutine[Any, Any, None]) -> Any:
-        async with self.semaphore:
-            return await task
 
 
 def retry(
@@ -71,6 +62,7 @@ class OutputUploader(metaclass=abc.ABCMeta):
     """Upload the output directory to JobRequest.OutputUpload"""
 
     __output_type_map: dict[type[OutputUpload], Callable[[OutputUpload], OutputUploader]] = {}
+    _semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
 
     @classmethod
     @abc.abstractmethod
@@ -104,14 +96,15 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
 
     async def upload(self, directory: pathlib.Path) -> None:
         with zipped_directory(directory, max_size_bytes=self.max_size_bytes) as (file_size, fp):
-            await upload_post(
-                fp,
-                "output.zip",
-                file_size,
-                self.upload_output.url,
-                content_type="application/zip",
-                form_fields=self.upload_output.form_fields,
-            )
+            async with self._semaphore:
+                await upload_post(
+                    fp,
+                    "output.zip",
+                    file_size,
+                    self.upload_output.url,
+                    content_type="application/zip",
+                    form_fields=self.upload_output.form_fields,
+                )
 
 
 class ZipAndHTTPPutOutputUploader(OutputUploader):
@@ -127,7 +120,8 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
 
     async def upload(self, directory: pathlib.Path) -> None:
         with zipped_directory(directory, max_size_bytes=self.max_size_bytes) as (file_size, fp):
-            await upload_put(fp, file_size, self.upload_output.url)
+            async with self._semaphore:
+                await upload_put(fp, file_size, self.upload_output.url)
 
 
 class MultiUploadOutputUploader(OutputUploader):
@@ -143,7 +137,6 @@ class MultiUploadOutputUploader(OutputUploader):
 
     async def upload(self, directory: pathlib.Path) -> None:
         single_file_uploads = []
-        limiter = ConcurrencyLimiter(MAX_CONCURRENT_UPLOADS)
         tasks = []
         for upload in self.upload_output.uploads:
             file_path = directory / upload.relative_path
@@ -163,7 +156,8 @@ class MultiUploadOutputUploader(OutputUploader):
                             headers=upload.signed_headers,
                         )
 
-                tasks.append(limiter.wrap_task(_single_post_upload_task(file_path, upload)))
+                async with self._semaphore:
+                    tasks.append(_single_post_upload_task(file_path, upload))
                 single_file_uploads.append(upload.relative_path)
             elif upload.output_upload_type == OutputUploadType.single_file_put:
                 # we run those concurrently but for loop changes slots - we need to bind
@@ -171,7 +165,8 @@ class MultiUploadOutputUploader(OutputUploader):
                     with file_path.open("rb") as fp:
                         await upload_put(fp, file_path.stat().st_size, upload.url, headers=upload.signed_headers)
 
-                tasks.append(limiter.wrap_task(_single_put_upload_task(file_path, upload)))
+                async with self._semaphore:
+                    tasks.append(_single_put_upload_task(file_path, upload))
                 single_file_uploads.append(upload.relative_path)
             else:
                 raise OutputUploadFailed(f"Unsupported upload type: {upload.output_upload_type}")
@@ -196,7 +191,8 @@ class MultiUploadOutputUploader(OutputUploader):
                             form_fields=upload.form_fields,
                         )
 
-                tasks.append(limiter.wrap_task(_output_post_upload_task(system_output_upload)))
+                async with self._semaphore:
+                    tasks.append(_output_post_upload_task(system_output_upload))
             elif isinstance(system_output_upload, ZipAndHttpPutUpload):
                 # we don't need to bind any vars because we don't run it in a loop
                 async def _output_put_upload_task(upload: ZipAndHttpPutUpload) -> None:
@@ -212,7 +208,8 @@ class MultiUploadOutputUploader(OutputUploader):
                             upload.url,
                         )
 
-                tasks.append(limiter.wrap_task(_output_put_upload_task(system_output_upload)))
+                async with self._semaphore:
+                    tasks.append(_output_put_upload_task(system_output_upload))
             else:
                 raise OutputUploadFailed(
                     f"Unsupported system output upload type: {system_output_upload.output_upload_type}"
