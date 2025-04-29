@@ -1337,6 +1337,9 @@ def sync_collaterals(subtensor: bittensor.subtensor, hotkeys: list[str], block: 
 
     to_update = []
     for miner in miners:
+        if not miner.uid:
+            continue
+
         evm_address = associations.get(miner.uid)
         if not evm_address:
             continue

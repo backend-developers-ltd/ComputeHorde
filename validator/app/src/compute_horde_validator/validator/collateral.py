@@ -8,10 +8,11 @@ import bittensor
 import bittensor.utils
 import requests
 from eth_account import Account
-from eth_keys.datatypes import PrivateKey
-from eth_utils import keccak
+from eth_account.signers.local import LocalAccount
 from hexbytes import HexBytes
 from web3 import Web3
+from web3.contract.contract import ContractFunction
+from web3.types import Wei
 
 WEI_PER_TAO = 10**18
 
@@ -26,7 +27,7 @@ def get_collateral_abi() -> Any:
 def get_web3_connection(network: str) -> Web3:
     """Connects to a Web3 provider using the provided RPC URL."""
     _, rpc_url = bittensor.utils.determine_chain_endpoint_and_network(network)
-    w3 = Web3(Web3.WebsocketProvider(rpc_url))
+    w3 = Web3(Web3.LegacyWebSocketProvider(rpc_url))
     if not w3.is_connected():
         raise ConnectionError(f"Failed to connect to RPC node at {rpc_url}")
     return w3
@@ -71,119 +72,6 @@ def get_miner_collateral(
     return collateral
 
 
-@dataclass
-class DepositEvent:
-    account: str
-    amount: int
-    block_number: int
-    transaction_hash: str
-
-
-def get_deposit_events(
-    w3: Web3, contract_address: str, block_num_low: int, block_num_high: int
-) -> list[DepositEvent]:
-    """Fetch all Deposit events emitted by the Collateral contract within a block range.
-
-    Args:
-        w3 (Web3): Web3 instance to use for blockchain interaction
-        contract_address (str): The address of the deployed Collateral contract
-        block_num_low (int): The starting block number (inclusive)
-        block_num_high (int): The ending block number (inclusive)
-
-    Returns:
-        list[DepositEvent]: List of Deposit events
-    """
-    abi = get_collateral_abi()
-    contract_checksum_address = Web3.to_checksum_address(contract_address)
-    contract = w3.eth.contract(address=contract_checksum_address, abi=abi)
-
-    event_signature = "Deposit(address,uint256)"
-    event_topic = w3.keccak(text=event_signature).hex()
-
-    filter_params = {
-        "address": contract_checksum_address,
-        "fromBlock": hex(block_num_low),
-        "toBlock": hex(block_num_high),
-        "topics": [event_topic],
-    }
-
-    logs = w3.eth.get_logs(filter_params)
-
-    events = []
-    for log in logs:
-        account_address = "0x" + log["topics"][1].hex()[-40:]
-        account = w3.to_checksum_address(account_address)
-        decoded_event = contract.events.Deposit().process_log(log)
-        events.append(
-            DepositEvent(
-                account=account,
-                amount=decoded_event["args"]["amount"],
-                block_number=log["blockNumber"],
-                transaction_hash=log["transactionHash"].hex(),
-            )
-        )
-
-    return events
-
-
-def associate_evm_key(
-    wallet: bittensor.wallet,
-    evm_address: str,
-    evm_private_key: str,
-    network: str,
-    netuid: int,
-) -> None:
-    """
-    Associate an EVM key with a given wallet for a specific subnet.
-
-    Args:
-        wallet (bittensor.wallet): The wallet object containing the hotkey for signing
-            the transaction. The wallet.hotkey will be associated with the EVM key.
-        evm_address (str): The Ethereum Virtual Machine (EVM) address to be associated
-            with the wallet.
-        evm_private_key (str): The private key corresponding to the EVM address, used
-            for signing the message.
-        network (str): The name of the Subtensor network where the EVM key is to be
-            associated.
-        netuid (int): The numerical identifier (UID) of the Subtensor network.
-    """
-    subtensor = bittensor.subtensor(network=network)
-    block_number = subtensor.get_current_block()
-
-    # subtensor encodes the u64 block number as little endian bytes before hashing
-    # https://github.com/opentensor/subtensor/blob/6b86ebf30d3fb83f9d43ed4ce713c43204394e67/pallets/subtensor/src/tests/evm.rs#L44
-    # https://github.com/paritytech/parity-scale-codec/blob/v3.6.12/src/codec.rs#L220
-    # https://github.com/paritytech/parity-scale-codec/blob/v3.6.12/src/codec.rs#L1439
-    encoded_block_number = block_number.to_bytes(length=8, byteorder="little")
-    hashed_block_number = bytes(keccak(encoded_block_number))
-
-    hotkey_bytes: bytes = wallet.hotkey.public_key
-    message = hotkey_bytes + hashed_block_number
-    signature = PrivateKey(HexBytes(evm_private_key)).sign_msg(message)
-
-    call = subtensor.substrate.compose_call(
-        call_module="SubtensorModule",
-        call_function="associate_evm_key",
-        call_params={
-            "netuid": netuid,
-            "hotkey": wallet.hotkey.ss58_address,
-            "evm_key": evm_address,
-            "block_number": block_number,
-            "signature": signature.to_bytes(),
-        },
-    )
-
-    success, error_message = subtensor.sign_and_send_extrinsic(
-        call,
-        wallet,
-        wait_for_inclusion=True,
-        wait_for_finalization=True,
-    )
-
-    if not success:
-        raise ValueError(error_message)  # TODO: fix exception type
-
-
 def get_evm_key_associations(subtensor: bittensor.Subtensor, netuid: int) -> dict[int, str]:
     """
     Retrieve all EVM key associations for a specific subnet.
@@ -211,7 +99,13 @@ def calculate_md5_checksum(url: str) -> bytes:
     return hashlib.md5(response.content).digest()
 
 
-def build_and_send_transaction(w3, function_call, account, gas_limit=100000, value=0):
+def build_and_send_transaction(
+    w3: Web3,
+    function_call: ContractFunction,
+    account: LocalAccount,
+    gas_limit: int = 100000,
+    value: int = 0,
+):
     """Build, sign and send a transaction.
 
     Args:
@@ -228,7 +122,7 @@ def build_and_send_transaction(w3, function_call, account, gas_limit=100000, val
             "gas": gas_limit,
             "gasPrice": w3.eth.gas_price,
             "chainId": w3.eth.chain_id,
-            "value": value,
+            "value": Wei(value),
         }
     )
 
@@ -285,7 +179,7 @@ def slash_collateral(
         Transaction receipt with slash event details
     """
     abi = get_collateral_abi()
-    account = Account.from_key(private_key)
+    account: LocalAccount = Account.from_key(private_key)
     contract_checksum_address = Web3.to_checksum_address(contract_address)
     miner_checksum_address = Web3.to_checksum_address(miner_address)
 
