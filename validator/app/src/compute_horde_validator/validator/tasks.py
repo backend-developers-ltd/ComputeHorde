@@ -251,7 +251,7 @@ def schedule_synthetic_jobs() -> None:
             logger.debug("Another thread already scheduling validation")
             return
 
-        subtensor_ = _get_subtensor_for_settings_scores(network=settings.BITTENSOR_NETWORK)
+        subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
         current_block = subtensor_.get_current_block()
         current_cycle = get_cycle_containing_block(
             block=current_block, netuid=settings.BITTENSOR_NETUID
@@ -317,7 +317,7 @@ def run_synthetic_jobs(
         logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
         return
 
-    subtensor_ = _get_subtensor_for_settings_scores(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
     if settings.DEBUG_DONT_STAGGER_VALIDATORS:
@@ -432,7 +432,7 @@ def check_missed_synthetic_jobs() -> None:
     """
     Check if there are any synthetic jobs that were scheduled to run, but didn't.
     """
-    subtensor_ = _get_subtensor_for_settings_scores(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
     with transaction.atomic():
@@ -475,7 +475,7 @@ def do_set_weights(
     Set weights. To be used in other celery tasks in order to facilitate a timeout,
      since the multiprocessing version of this doesn't work in celery.
     """
-    subtensor_ = _get_subtensor_for_settings_scores(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
@@ -683,7 +683,7 @@ def save_event_on_error(subtype):
         raise
 
 
-def _get_subtensor_for_settings_scores(network):
+def _get_subtensor_for_setting_scores(network):
     with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
         return bittensor.subtensor(network=network)
 
@@ -823,7 +823,7 @@ def set_scores():
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
 
-    subtensor = _get_subtensor_for_settings_scores(network=settings.BITTENSOR_NETWORK)
+    subtensor = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor.get_current_block()
 
     if commit_reveal_weights_enabled:
@@ -949,7 +949,7 @@ def reveal_scores() -> None:
         logger.debug("No weights to reveal")
         return
 
-    subtensor_ = _get_subtensor_for_settings_scores(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
     interval = CommitRevealInterval(current_block)
     if current_block not in interval.reveal_window:
@@ -1062,7 +1062,7 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
         return True, "nothing_to_do"
 
     wallet = settings.BITTENSOR_WALLET()
-    subtensor_ = _get_subtensor_for_settings_scores(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     try:
         is_success, message = subtensor_.reveal_weights(
             wallet=wallet,
