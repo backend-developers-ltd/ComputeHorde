@@ -104,14 +104,9 @@ def when_to_run(subtensor_: bittensor.subtensor, current_cycle) -> int:
     The order of validators within a cycle is random, seeded by a block
     preceding the cycle, therefore all validators should arrive at the same order.
     """
-    try:
-        metagraph = get_metagraph(subtensor=subtensor_, netuid=settings.BITTENSOR_NETUID)
-    except Exception as ex:
-        raise ScheduleError("Cannot get metagraph") from ex
 
     try:
         validators = get_validators(
-            metagraph=metagraph,
             netuid=settings.BITTENSOR_NETUID,
             network=settings.BITTENSOR_NETWORK,
             block=current_cycle.start,
