@@ -9,6 +9,7 @@ from typing import cast
 import aiohttp
 import bittensor
 from asgiref.sync import async_to_sync
+from bt_ddos_shield import ShieldMetagraph
 from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
 from compute_horde.receipts.transfer import (
     MinerInfo,
@@ -122,7 +123,11 @@ class Command(BaseCommand):
             subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
 
             async def miners():
-                metagraph = subtensor.metagraph(netuid=settings.BITTENSOR_NETUID)
+                metagraph = ShieldMetagraph(
+                    wallet=settings.BITTENSOR_WALLET(),
+                    netuid=settings.BITTENSOR_NETUID,
+                    subtensor=subtensor,
+                )
                 return [
                     (
                         cast(str, neuron.hotkey),

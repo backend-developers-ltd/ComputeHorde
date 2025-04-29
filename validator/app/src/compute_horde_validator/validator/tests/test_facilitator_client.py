@@ -35,7 +35,6 @@ from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTE
 
 from .helpers import (
     MockFaillingMinerClient,
-    MockMetagraph,
     MockSubtensor,
     MockSuccessfulMinerClient,
     get_dummy_job_request_v0,
@@ -55,7 +54,6 @@ async def async_patch_all():
             return_value=True,
         ),
         patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor()),
-        patch("bittensor.metagraph", lambda *args, **kwargs: MockMetagraph()),
     ):
         yield
 
