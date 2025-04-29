@@ -10,6 +10,7 @@ import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
+from compute_horde import collateral
 from compute_horde.fv_protocol.facilitator_requests import (
     Error,
     OrganicJobRequest,
@@ -339,6 +340,24 @@ class FacilitatorClient:
                 "miner_hotkey": job.miner.hotkey,
             },
         )
+
+        # slash collateral
+        slash_amount = await aget_config("DYNAMIC_COLLATERAL_SLASH_AMOUNT")
+        if slash_amount > 0 and job.miner.evm_address:
+            w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
+
+            try:
+                # TODO: make the following call async
+                collateral.slash_collateral(
+                    w3=w3,
+                    contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
+                    private_key=settings.EVM_PRIVATE_KEY,
+                    miner_address=job.miner.evm_address,
+                    amount_tao=slash_amount,
+                    url=f"job {job_uuid} cheated",
+                )
+            except Exception as e:
+                logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
 
     async def process_job_request(self, job_request: OrganicJobRequest) -> None:
         if isinstance(job_request, V2JobRequest):

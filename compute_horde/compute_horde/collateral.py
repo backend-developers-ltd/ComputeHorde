@@ -1,9 +1,13 @@
+import hashlib
 import json
 import pathlib
 from dataclasses import dataclass
 from typing import Any
 
 import bittensor
+import bittensor.utils
+import requests
+from eth_account import Account
 from eth_keys.datatypes import PrivateKey
 from eth_utils import keccak
 from hexbytes import HexBytes
@@ -19,9 +23,10 @@ def get_collateral_abi() -> Any:
     return abi
 
 
-def get_web3_connection(rpc_url: str) -> Web3:
+def get_web3_connection(network: str) -> Web3:
     """Connects to a Web3 provider using the provided RPC URL."""
-    w3 = Web3(Web3.HTTPProvider(rpc_url))
+    _, rpc_url = bittensor.utils.determine_chain_endpoint_and_network(network)
+    w3 = Web3(Web3.WebsocketProvider(rpc_url))
     if not w3.is_connected():
         raise ConnectionError(f"Failed to connect to RPC node at {rpc_url}")
     return w3
@@ -38,19 +43,22 @@ def tao_to_wei(tao: float) -> int:
 
 
 def get_miner_collateral(
-    w3: Web3, contract_address: str, miner_address: str, block_identifier: int | None = None
+    w3: Web3,
+    contract_address: str,
+    miner_address: str,
+    block_identifier: int | None = None,
 ) -> int:
     """
     Query the collateral amount for a given miner address.
 
     Args:
         w3: Web3 instance to use for blockchain interaction.
-        contract_address: Address of the Collateral contract
-        miner_address: H160 address of the miner to query
+        contract_address: Address of the Collateral contract.
+        miner_address: EVM address of the miner to query.
         block_identifier: Block number to query the latest block. Defaults to None, which queries the latest block.
 
     Returns:
-        number: Collateral amount in Wei
+        Collateral amount in Wei
     """
     abi = get_collateral_abi()
     contract_checksum_address = Web3.to_checksum_address(contract_address)
@@ -187,14 +195,118 @@ def get_evm_key_associations(subtensor: bittensor.Subtensor, netuid: int) -> dic
     Returns:
         dict: A dictionary mapping UIDs (int) to their associated EVM key addresses (str).
     """
-    # TODO: check if there is a way to get the association for a specific uid
-    # this gets all the uid to evm key associations for the netuid
     associations = subtensor.query_map_subtensor("AssociatedEvmAddress", params=[netuid])
-
     uid_evm_address_map = {}
     for uid, scale_obj in associations:
         evm_address_raw, block = scale_obj.value
-        evm_address = '0x' + bytes(evm_address_raw[0]).hex()
+        evm_address = "0x" + bytes(evm_address_raw[0]).hex()
         uid_evm_address_map[uid] = evm_address
-
     return uid_evm_address_map
+
+
+def calculate_md5_checksum(url: str) -> bytes:
+    """Calculate the MD5 checksum of url contents."""
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+    return hashlib.md5(response.content).digest()
+
+
+def build_and_send_transaction(w3, function_call, account, gas_limit=100000, value=0):
+    """Build, sign and send a transaction.
+
+    Args:
+        w3: Web3 instance
+        function_call: Contract function call to execute
+        account: Account to send transaction from
+        gas_limit: Maximum gas to use for the transaction
+        value: Amount of ETH to send with the transaction (in Wei)
+    """
+    transaction = function_call.build_transaction(
+        {
+            "from": account.address,
+            "nonce": w3.eth.get_transaction_count(account.address),
+            "gas": gas_limit,
+            "gasPrice": w3.eth.gas_price,
+            "chainId": w3.eth.chain_id,
+            "value": value,
+        }
+    )
+
+    signed_txn = w3.eth.account.sign_transaction(transaction, account.key)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+    return tx_hash
+
+
+class SlashCollateralError(Exception): ...
+
+
+@dataclass
+class SlashedEvent:
+    event: str
+    logIndex: int
+    transactionIndex: int
+    transactionHash: HexBytes
+    address: str
+    blockHash: HexBytes
+    blockNumber: int
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SlashedEvent":
+        return cls(
+            event=data["event"],
+            logIndex=data["logIndex"],
+            transactionIndex=data["transactionIndex"],
+            transactionHash=data["transactionHash"],
+            address=data["address"],
+            blockHash=data["blockHash"],
+            blockNumber=data["blockNumber"],
+        )
+
+
+def slash_collateral(
+    w3: Web3,
+    contract_address: str,
+    private_key: str,
+    miner_address: str,
+    amount_tao: float,
+    url: str,
+) -> SlashedEvent:
+    """Slash collateral from a miner.
+
+    Args:
+        w3: Web3 instance to use for blockchain interaction.
+        contract_address: Address of the Collateral contract.
+        private_key: Private key of the validator.
+        miner_address: EVM address of the miner to query.
+        amount_tao: Amount of TAO to slash.
+        url: URL containing information about the slash.
+
+    Returns:
+        Transaction receipt with slash event details
+    """
+    abi = get_collateral_abi()
+    account = Account.from_key(private_key)
+    contract_checksum_address = Web3.to_checksum_address(contract_address)
+    miner_checksum_address = Web3.to_checksum_address(miner_address)
+
+    contract = w3.eth.contract(address=contract_checksum_address, abi=abi)
+
+    # Calculate MD5 checksum if URL is valid
+    if url.startswith(("http://", "https://")):
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        md5_checksum = hashlib.md5(response.content).digest()
+    else:
+        md5_checksum = b"\x00" * 16
+
+    call = contract.functions.slashCollateral(
+        miner_checksum_address, tao_to_wei(amount_tao), url, md5_checksum
+    )
+    tx_hash = build_and_send_transaction(w3, call, account, gas_limit=200_000)
+
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, 300, 2)
+    if receipt["status"] == 0:
+        raise SlashCollateralError("collateral slashing transaction failed")
+
+    raw_event = contract.events.Slashed().process_receipt(receipt)
+    return SlashedEvent.from_dict(raw_event[0])
