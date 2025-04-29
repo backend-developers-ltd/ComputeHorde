@@ -390,6 +390,7 @@ class MockBlock:
     def item(self) -> int:
         return self.value
 
+
 class MockMetagraph:
     def __init__(
         self,
@@ -429,10 +430,12 @@ class MockShieldMetagraph(MockMetagraph):
         subtensor: bittensor.Subtensor | None = None,
         num_neurons: int | None = NUM_NEURONS,
         neurons: list[MockNeuron] | None = None,
-        block_num: int = 1000
+        block_num: int = 1000,
     ):
-        super().__init__(netuid=netuid, num_neurons=num_neurons, neurons=neurons, block_num=block_num)
-        
+        super().__init__(
+            netuid=netuid, num_neurons=num_neurons, neurons=neurons, block_num=block_num
+        )
+
 
 def check_system_events(
     type: SystemEvent.EventType, subtype: SystemEvent.EventSubType, count: int = 1
