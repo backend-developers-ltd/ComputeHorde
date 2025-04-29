@@ -10,7 +10,6 @@ import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde import collateral
 from compute_horde.fv_protocol.facilitator_requests import (
     Error,
     OrganicJobRequest,
@@ -27,6 +26,7 @@ from compute_horde_core.signature import verify_signature
 from django.conf import settings
 from pydantic import BaseModel
 
+from compute_horde_validator.validator import collateral
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     MinerBlacklist,

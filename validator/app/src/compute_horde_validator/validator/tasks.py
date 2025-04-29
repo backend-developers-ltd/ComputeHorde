@@ -21,12 +21,6 @@ from bittensor.utils.weight_utils import process_weights_for_netuid
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
-from compute_horde.collateral import (
-    get_evm_key_associations,
-    get_miner_collateral,
-    get_web3_connection,
-    wei_to_tao,
-)
 from compute_horde.dynamic_config import sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.subtensor import get_cycle_containing_block
@@ -39,6 +33,12 @@ from numpy.typing import NDArray
 from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.collateral import (
+    get_evm_key_associations,
+    get_miner_collateral,
+    get_web3_connection,
+    wei_to_tao,
+)
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
