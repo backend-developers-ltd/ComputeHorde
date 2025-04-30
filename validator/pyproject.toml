@@ -33,7 +33,7 @@ dependencies = [
     "httpx==0.26.0",
     "class-registry>=2.1.2",
     "kombu~=5.3",
-    "bt-ddos-shield-client~=0.1.7",
+    "bt-ddos-shield-client~=0.1.8",
 ]
 
 [tool.uv.sources]

@@ -13,6 +13,7 @@ import bittensor
 import constance
 import numpy as np
 from bittensor.core.errors import SubstrateRequestException
+from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     Signature,
@@ -427,6 +428,7 @@ class MockShieldMetagraph(MockMetagraph):
         self,
         wallet: bittensor.Wallet,
         netuid: int,
+        options: ShieldMetagraphOptions = None,
         subtensor: bittensor.Subtensor | None = None,
         num_neurons: int | None = NUM_NEURONS,
         neurons: list[MockNeuron] | None = None,
