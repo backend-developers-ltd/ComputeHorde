@@ -125,6 +125,7 @@ class Command(BaseCommand):
             async def miners():
                 metagraph = ShieldMetagraph(
                     wallet=settings.BITTENSOR_WALLET(),
+                    options=settings.BITTENSOR_SHIELD_METAGRAPH_OPTIONS(),
                     netuid=settings.BITTENSOR_NETUID,
                     subtensor=subtensor,
                 )
