@@ -350,7 +350,6 @@ class FacilitatorClient:
                     await collateral.slash_collateral(
                         w3=w3,
                         contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
-                        private_key=settings.EVM_PRIVATE_KEY,
                         miner_address=job.miner.evm_address,
                         amount_tao=slash_amount,
                         url=f"job {job_uuid} cheated",

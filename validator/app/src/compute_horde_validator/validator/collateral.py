@@ -8,6 +8,7 @@ from typing import Any
 import bittensor
 import bittensor.utils
 import httpx
+from django.conf import settings
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from hexbytes import HexBytes
@@ -18,6 +19,21 @@ from web3.types import Wei
 WEI_PER_TAO = 10**18
 
 
+@functools.cache
+def get_private_key() -> str | None:
+    wallet = settings.BITTENSOR_WALLET()
+    path = (
+        pathlib.Path(settings.BITTENSOR_WALLET_DIRECTORY) / wallet.name / "h160" / wallet.hotkey_str
+    )
+    try:
+        content = json.loads(path.read_text())
+        private_key: str = content["private_key"]
+        return private_key
+    except (FileNotFoundError, KeyError, json.JSONDecodeError):
+        return None
+
+
+@functools.cache
 def get_collateral_abi() -> Any:
     """Retrieve the ABI definition for the collateral smart contract."""
     path = pathlib.Path(__file__).parent / "collateral_abi.json"
@@ -166,7 +182,6 @@ class SlashedEvent:
 async def slash_collateral(
     w3: AsyncWeb3,
     contract_address: str,
-    private_key: str,
     miner_address: str,
     amount_tao: float,
     url: str,
@@ -184,6 +199,9 @@ async def slash_collateral(
     Returns:
         Transaction receipt with slash event details
     """
+    private_key = get_private_key()
+    assert private_key is not None, "EVM private key not found"
+
     abi = get_collateral_abi()
     account: LocalAccount = Account.from_key(private_key)
     contract_checksum_address = w3.to_checksum_address(contract_address)
