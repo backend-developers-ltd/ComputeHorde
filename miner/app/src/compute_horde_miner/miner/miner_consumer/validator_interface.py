@@ -219,6 +219,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                         docker_process_stdout=job.stdout,
                         docker_process_stderr=job.stderr,
                         artifacts=job.artifacts,
+                        upload_results=job.upload_results,
                     ).model_dump_json()
                 )
                 logger.debug(

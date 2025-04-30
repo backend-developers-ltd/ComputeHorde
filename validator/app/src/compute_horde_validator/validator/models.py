@@ -340,6 +340,7 @@ class OrganicJob(JobBase):
     error_type = models.TextField(null=True, default=None)
     error_detail = models.TextField(null=True, default=None)
     artifacts = models.JSONField(blank=True, default=dict)
+    upload_results = models.JSONField(blank=True, default=dict)
     cheated = models.BooleanField(default=False)
     block = models.BigIntegerField(
         null=True, help_text="Block number on which this job is scheduled"
