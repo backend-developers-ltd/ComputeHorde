@@ -10,6 +10,7 @@ from functools import wraps
 
 import bittensor
 import environ
+from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from celery.schedules import crontab
 from compute_horde import base  # noqa
 
@@ -741,6 +742,26 @@ BITTENSOR_WALLET_NAME = env.str("BITTENSOR_WALLET_NAME")
 BITTENSOR_WALLET_HOTKEY_NAME = env.str("BITTENSOR_WALLET_HOTKEY_NAME")
 
 COLLATERAL_CONTRACT_ADDRESS = env("COLLATERAL_CONTRACT_ADDRESS", default=None)
+
+BITTENSOR_SHIELD_CERTIFICATE_PATH = env.path(
+    "BITTENSOR_SHIELD_CERTIFICATE_PATH",
+    default=BITTENSOR_WALLET_DIRECTORY.path(
+        BITTENSOR_WALLET_NAME, "shield", BITTENSOR_WALLET_HOTKEY_NAME, "validator_cert.pem"
+    ),
+)
+BITTENSOR_SHIELD_DISABLE_UPLOADING_CERTIFICATE = env.bool(
+    "BITTENSOR_SHIELD_DISABLE_UPLOADING_CERTIFICATE",
+    default=False,
+)
+
+
+def BITTENSOR_SHIELD_METAGRAPH_OPTIONS() -> ShieldMetagraphOptions:
+    pathlib.Path(BITTENSOR_SHIELD_CERTIFICATE_PATH).parent.mkdir(parents=True, exist_ok=True)
+    return ShieldMetagraphOptions(
+        disable_uploading_certificate=BITTENSOR_SHIELD_DISABLE_UPLOADING_CERTIFICATE,
+        certificate_path=str(BITTENSOR_SHIELD_CERTIFICATE_PATH),
+    )
+
 
 SYNTHETIC_JOB_GENERATOR_FACTORY = env.str(
     "SYNTHETIC_JOB_GENERATOR_FACTORY",

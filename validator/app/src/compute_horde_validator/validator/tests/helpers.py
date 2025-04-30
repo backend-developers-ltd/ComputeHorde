@@ -13,6 +13,7 @@ import bittensor
 import constance
 import numpy as np
 from bittensor.core.errors import SubstrateRequestException
+from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     Signature,
@@ -420,6 +421,22 @@ class MockMetagraph:
         self.total_stake = np.array([1001.0 * (i + 1) for i in range(num_neurons)])
         self.uids = np.array(list(range(num_neurons)))
         self.block = MockBlock(block_num)
+
+
+class MockShieldMetagraph(MockMetagraph):
+    def __init__(
+        self,
+        wallet: bittensor.Wallet,
+        netuid: int,
+        options: ShieldMetagraphOptions = None,
+        subtensor: bittensor.Subtensor | None = None,
+        num_neurons: int | None = NUM_NEURONS,
+        neurons: list[MockNeuron] | None = None,
+        block_num: int = 1000,
+    ):
+        super().__init__(
+            netuid=netuid, num_neurons=num_neurons, neurons=neurons, block_num=block_num
+        )
 
 
 def check_system_events(
