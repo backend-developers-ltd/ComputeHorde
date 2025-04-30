@@ -422,6 +422,21 @@ class MockMetagraph:
         self.block = MockBlock(block_num)
 
 
+class MockShieldMetagraph(MockMetagraph):
+    def __init__(
+        self,
+        wallet: bittensor.Wallet,
+        netuid: int,
+        subtensor: bittensor.Subtensor | None = None,
+        num_neurons: int | None = NUM_NEURONS,
+        neurons: list[MockNeuron] | None = None,
+        block_num: int = 1000,
+    ):
+        super().__init__(
+            netuid=netuid, num_neurons=num_neurons, neurons=neurons, block_num=block_num
+        )
+
+
 def check_system_events(
     type: SystemEvent.EventType, subtype: SystemEvent.EventSubType, count: int = 1
 ):
