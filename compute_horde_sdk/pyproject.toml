@@ -76,7 +76,7 @@ docs = [
 ]
 fallback = [
     "build",
-    "skypilot[runpod]>=0.8.1,<1.0",
+    "skypilot[runpod]>=0.8.1,<0.9.0",
 ]
 
 [tool.pytest.ini_options]

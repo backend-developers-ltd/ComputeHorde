@@ -1,14 +1,15 @@
 import asyncio
 import logging
+import pathlib
+import tempfile
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
-from functools import cache
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from .adaptors.utils import lazy_import_adaptor
 from .exceptions import FallbackNotFoundError
 from .job import FallbackJob, FallbackJobResult, FallbackJobSpec, FallbackJobStatus
-from .utils import PackageAnalyzer, get_tempdir
+from .utils import PackageAnalyzer, change_dir
 
 if TYPE_CHECKING:
     from .adaptors.sky import SkyCloud as SkyCloudType
@@ -23,6 +24,33 @@ JobAttemptCallbackType: TypeAlias = (
     | Callable[["FallbackJob"], Awaitable[None]]
     | Callable[["FallbackJob"], Coroutine[Any, Any, None]]
 )
+
+_SETUP_TMPL = """
+#!/bin/bash
+
+set -euo pipefail
+
+{command}
+"""
+
+_RUN_TMPL = """
+#!/bin/bash
+
+set -euo pipefail
+shopt -s nullglob
+
+volumes=(volume-*.json)
+if (( ${{#volumes[@]}} )); then
+  python -m compute_horde_core.volume "${{volumes[@]}}" --dir /volume > ./ch-volume.log 2>&1
+fi
+
+{command}
+
+output_uploads=(output_upload-*.json)
+if (( ${{#output_uploads[@]}} )); then
+  python -m compute_horde_core.output_upload "${{output_uploads[@]}}" --dir /output > ./ch-output_upload.log 2>&1
+fi
+"""
 
 
 class FallbackClient:
@@ -53,15 +81,18 @@ class FallbackClient:
         :param job_spec: Job specification to run.
         :return: A :class:`FallbackJob` class instance representing the created job.
         """
-        logger.info("Running job")
+        logger.info("Running fallback job...")
+        logger.debug("Fallback job spec: %s", job_spec)
 
-        workdir = get_tempdir()
-        setup = self._get_setup(str(workdir))
-        job: SkyJobType = sky.SkyJob(
+        workdir = self._prepare_workdir()
+        setup = self._prepare_setup(workdir)
+        run = self._prepare_run(workdir, job_spec)
+
+        sky_job: SkyJobType = sky.SkyJob(
             cloud=self.cloud,
             workdir=workdir,
             setup=setup,
-            run=job_spec.run,
+            run=run,
             envs=job_spec.envs,
             artifacts_dir=job_spec.artifacts_dir,
             accelerators=job_spec.accelerators,
@@ -74,14 +105,17 @@ class FallbackClient:
             region=job_spec.region,
             zone=job_spec.zone,
         )
-        job.submit(idle_minutes=self.idle_minutes)
-        self._jobs[job.job_uuid] = job
+        sky_job.submit(idle_minutes=self.idle_minutes)
+        self._jobs[sky_job.job_uuid] = sky_job
 
-        return FallbackJob(
+        job = FallbackJob(
             self,
-            uuid=job.job_uuid,
+            uuid=sky_job.job_uuid,
             status=FallbackJobStatus.SENT,
         )
+        logger.info("The job has been submitted: %s", job)
+
+        return job
 
     async def run_until_complete(
         self,
@@ -148,6 +182,7 @@ class FallbackClient:
             raise FallbackNotFoundError(f"Job with UUID {job_uuid} not found")
 
         status = self._get_status(job)
+        logger.debug("Fallback job status: %s", status)
         if not status.is_in_progress():
             result = self._get_result(job)
         else:
@@ -177,12 +212,47 @@ class FallbackClient:
         for job_uuid in self._jobs.keys():
             yield await self.get_job(job_uuid)
 
-    @cache
-    def _get_setup(self, workdir: str) -> str:
-        pa = PackageAnalyzer("compute-horde-sdk")
-        source = pa.to_source(temp_dir=workdir)
-        # TODO(maciek): use already preinstalled uv (by SkyPilot) for managing python and virtualenv
-        return f"pip install {source}"
+    @classmethod
+    def _prepare_workdir(cls) -> pathlib.Path:
+        workdir = pathlib.Path(tempfile.mkdtemp(prefix="ch-"))
+        logger.debug("Working directory: %s", workdir)
+
+        return workdir
+
+    @classmethod
+    def _prepare_setup(cls, workdir: pathlib.Path) -> str:
+        script = "./setup.sh"
+        with change_dir(workdir):
+            pa = PackageAnalyzer("compute-horde-sdk")
+            source = pa.to_source()
+            logger.debug("ComputeHorde SDK installable: %s", source)
+
+            setup_sh = pathlib.Path(script)
+            # TODO(maciek): use already preinstalled uv (by SkyPilot) for managing python and virtualenv
+            setup_sh.write_text(_SETUP_TMPL.format(command=f"pip install {source}"))
+            setup_sh.chmod(0o755)
+
+        return script
+
+    @classmethod
+    def _prepare_run(cls, workdir: pathlib.Path, job_spec: FallbackJobSpec) -> str:
+        script = "./run.sh"
+        with change_dir(workdir):
+            if job_spec.input_volumes is not None:
+                for index, input_volume in enumerate(job_spec.input_volumes.values()):
+                    volume_json = pathlib.Path(f"./volume-{index}.json")
+                    volume_json.write_text(input_volume.to_compute_horde_volume("/volume/").json())
+
+            if job_spec.output_volumes is not None:
+                for index, output_volume in enumerate(job_spec.output_volumes.values()):
+                    output_upload_json = pathlib.Path(f"./output_upload-{index}.json")
+                    output_upload_json.write_text(output_volume.to_compute_horde_output_upload("/output/").json())
+
+            run_sh = pathlib.Path(script)
+            run_sh.write_text(_RUN_TMPL.format(command=job_spec.run))
+            run_sh.chmod(0o755)
+
+        return script
 
     def _get_status(self, job: "SkyJobType") -> FallbackJobStatus:
         status = job.status()

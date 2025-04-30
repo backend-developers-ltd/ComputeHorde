@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Self
 
-from ..models import ComputeHordeJobResult, ComputeHordeJobStatus
+from ..models import ComputeHordeJobResult, ComputeHordeJobStatus, InputVolume, OutputVolume
 from ..sdk import ComputeHordeJobSpec
 from .exceptions import FallbackJobTimeoutError
 
@@ -23,22 +23,62 @@ class FallbackJobSpec:
     """
 
     run: str | None = None
+    """A command to execute. It should be a single string, not a list of arguments."""
+
     envs: Mapping[str, str] | None = None
+    """Environment variables to run the job with."""
+
     artifacts_dir: str | None = None
-    input_volumes: Mapping[str, str] | None = None
-    output_volumes: Mapping[str, str] | None = None
+    """
+    Path of the directory that the job will write its results to.
+    Contents of files found in this directory will be returned after the job completes
+    as a part of the job result. It should be an absolute path (starting with ``/``).
+    """
+
+    input_volumes: Mapping[str, InputVolume] | None = None
+    """
+    The data to be made available to the job in Docker volumes.
+    The keys should be absolute file/directory paths under which you want your data to be available.
+    The values should be :class:`InputVolume` instances representing how to obtain the input data.
+    For now, input volume paths must start with ``/volume/``.
+    """
+
+    output_volumes: Mapping[str, OutputVolume] | None = None
+    """
+    The data to be read from the Docker volumes after job completion
+    and uploaded to the described destinations. Use this for outputs that are too big
+    to be treated as ``artifacts``.
+    The keys should be absolute file paths under which job output data will be available.
+    The values should be :class:`OutputVolume` instances representing how to handle the output data.
+    For now, output volume paths must start with ``/output/``.
+    """
 
     cpus: int | float | str | None = None
+    """Required number of CPUs for the job."""
+
     memory: int | float | str | None = None
+    """Required amount of memory for the job."""
+
     accelerators: str | Mapping[str, int] | None = None
+    """Required GPUs for the job."""
+
     disk_size: int | None = None
+    """Required amount of memory for the job."""
+
     ports: int | str | Sequence[str] | None = None
+    """Required amount of memory for the job."""
 
     instance_type: str | None = None
+    """Instance type."""
+
     image_id: str | None = None
+    """Image ID. For docker it must be in the form of ``docker:<image>``."""
 
     region: str | None = None
+    """Region to run the job in."""
+
     zone: str | None = None
+    """Zone to run the job in."""
 
     @classmethod
     def from_job_spec(cls, job_spec: ComputeHordeJobSpec, **kwargs: Any) -> Self:
@@ -51,6 +91,8 @@ class FallbackJobSpec:
             run=" ".join(job_spec.args),
             envs=job_spec.env,
             artifacts_dir=job_spec.artifacts_dir,
+            input_volumes=job_spec.input_volumes,
+            output_volumes=job_spec.output_volumes,
             accelerators=accelerators,
             image_id=f"docker:{job_spec.docker_image}",
             **kwargs,

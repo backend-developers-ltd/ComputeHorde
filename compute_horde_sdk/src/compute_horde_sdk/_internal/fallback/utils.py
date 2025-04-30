@@ -1,7 +1,7 @@
 import json
 import os.path
-import shutil
-import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from importlib.metadata import distribution, version
 from pathlib import Path
 from typing import Any
@@ -57,7 +57,7 @@ class PackageAnalyzer:
         """
         return self.direct_url.get("url") if self.direct_url else None
 
-    def to_source(self, temp_dir: str | None = None) -> str:
+    def to_source(self) -> str:
         """
         Convert package information to a source specification string.
 
@@ -65,7 +65,6 @@ class PackageAnalyzer:
         For packages installed in editable mode from local directory, builds a wheel and returns its path.
         For regular installations, returns "package_name==version".
 
-        :param temp_dir: Optional temporary directory path where wheel will be built for editable installations
         :return: A string representing the package source specification
         """
 
@@ -73,18 +72,16 @@ class PackageAnalyzer:
             if self.vcs:
                 return f"{self.package_name} @ {self.url}"
             else:
-                if temp_dir is None:
-                    temp_dir = tempfile.gettempdir()
                 assert self.url is not None  # make mypy happy
-                return self._build_wheel(self.url, temp_dir)
+                return self._build_wheel(self.url)
         else:
             return f"{self.package_name}=={self.package_version}"
 
     @classmethod
-    def _build_wheel(cls, project_dir: str, output_dir: str) -> str:
+    def _build_wheel(cls, project_dir: str) -> str:
         project_dir = project_dir.replace("file://", "")
         builder = build.ProjectBuilder(project_dir)
-        wheel_file = builder.build("wheel", output_dir)
+        wheel_file = builder.build("wheel", os.getcwd())
         return os.path.basename(wheel_file)
 
     @classmethod
@@ -97,24 +94,20 @@ class PackageAnalyzer:
             return None
 
 
-def get_tempdir() -> Path:
+@contextmanager
+def change_dir(destination: Path) -> Iterator[None]:
     """
-    Creates and returns a clean temporary directory.
+    A context manager that temporarily changes the current working directory.
 
-    This function creates a new temporary directory with prefix 'ch-' and ensures it's empty
-    by removing any existing contents. If there are subdirectories, they are removed recursively.
-    If there are files, they are unlinked.
+    This function allows you to temporarily change the working directory and ensures
+    that the original directory is restored when exiting the context, even if an
+    exception occurs.
 
-    Returns:
-        Path: A Path object pointing to the clean temporary directory
-
+    :param destination: The path to the directory to change to.
     """
-
-    tempdir = Path(tempfile.mkdtemp(prefix="ch-"))
-    for item in tempdir.iterdir():
-        if item.is_dir():
-            shutil.rmtree(item)
-        else:
-            item.unlink()
-
-    return tempdir
+    prev_cwd = os.getcwd()
+    try:
+        os.chdir(destination)
+        yield
+    finally:
+        os.chdir(prev_cwd)

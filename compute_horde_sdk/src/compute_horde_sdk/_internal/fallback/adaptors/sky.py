@@ -199,7 +199,7 @@ class SkyJob:
 
     def output(self) -> str:
         if not self.submitted:
-            logger.error("Attempted to get a status from a job that is not yet submitted.")
+            logger.error("Attempted to get an output from a job that is not yet submitted.")
             raise SkyError("Job not yet submitted")
 
         with sky.sky_logging.silent():
@@ -213,7 +213,7 @@ class SkyJob:
 
     def download(self, source_dir: str, max_size: int = 1_000_000) -> dict[str, bytes]:
         if not self.submitted:
-            logger.error("Attempted to get a status from a job that is not yet submitted.")
+            logger.error("Attempted to download artifacts from a job that is not yet submitted.")
             raise SkyError("Job not yet submitted")
 
         assert self._job_resource_handle is not None  # make mypy happy
