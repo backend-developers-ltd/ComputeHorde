@@ -278,6 +278,8 @@ services:
     init: true
     restart: unless-stopped
     env_file: ./.env
+    volumes:
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     command: python manage.py transfer_receipts --daemon
     depends_on:
       - redis
