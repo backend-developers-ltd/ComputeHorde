@@ -6,8 +6,6 @@ from importlib.metadata import distribution, version
 from pathlib import Path
 from typing import Any
 
-import build
-
 
 class PackageAnalyzer:
     """
@@ -79,6 +77,8 @@ class PackageAnalyzer:
 
     @classmethod
     def _build_wheel(cls, project_dir: str) -> str:
+        import build
+
         project_dir = project_dir.replace("file://", "")
         builder = build.ProjectBuilder(project_dir)
         wheel_file = builder.build("wheel", os.getcwd())
