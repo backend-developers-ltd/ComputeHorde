@@ -16,7 +16,8 @@ def parse_args() -> argparse.Namespace:
             return json.load(f)
 
     parser = argparse.ArgumentParser(
-        prog="ch-output-upload", description="Run uploader for a given output-upload specification."
+        prog="python -m compute_horde_core.output_upload",
+        description="Run uploader for a given output-upload specification.",
     )
     parser.add_argument("input", nargs="+", type=json_file, help="JSON input file")
     parser.add_argument("-d", "--dir", default=pathlib.Path("/output"), type=pathlib.Path, help="Output directory.")

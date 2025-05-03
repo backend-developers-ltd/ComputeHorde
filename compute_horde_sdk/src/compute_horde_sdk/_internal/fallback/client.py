@@ -30,6 +30,12 @@ _SETUP_TMPL = """
 
 set -euo pipefail
 
+ARTIFACTS_DIR="{artifacts_dir}"
+VOLUME_DIR="/volume"
+OUTPUT_UPLOAD_DIR="/output"
+[ -n "$ARTIFACTS_DIR" ] && rm -rf "$ARTIFACTS_DIR" && mkdir -p "$ARTIFACTS_DIR"
+rm -rf "$VOLUME_DIR" && mkdir -p "$VOLUME_DIR"
+rm -rf "$OUTPUT_UPLOAD_DIR" && mkdir -p "$OUTPUT_UPLOAD_DIR"
 {command}
 """
 
@@ -41,14 +47,14 @@ shopt -s nullglob
 
 volumes=(volume-*.json)
 if (( ${{#volumes[@]}} )); then
-  python -m compute_horde_core.volume "${{volumes[@]}}" --dir /volume > ./ch-volume.log 2>&1
+  python3 -m compute_horde_core.volume ${{volumes[@]}} --dir /volume > ./ch-volume.log 2>&1
 fi
-
+pushd "{workdir}" > /dev/null
 {command}
-
+popd > /dev/null
 output_uploads=(output_upload-*.json)
 if (( ${{#output_uploads[@]}} )); then
-  python -m compute_horde_core.output_upload "${{output_uploads[@]}}" --dir /output > ./ch-output_upload.log 2>&1
+  python3 -m compute_horde_core.output_upload ${{output_uploads[@]}} --dir /output > ./ch-output_upload.log 2>&1
 fi
 """
 
@@ -85,7 +91,7 @@ class FallbackClient:
         logger.debug("Fallback job spec: %s", job_spec)
 
         workdir = self._prepare_workdir()
-        setup = self._prepare_setup(workdir)
+        setup = self._prepare_setup(workdir, job_spec)
         run = self._prepare_run(workdir, job_spec)
 
         sky_job: SkyJobType = sky.SkyJob(
@@ -220,7 +226,7 @@ class FallbackClient:
         return workdir
 
     @classmethod
-    def _prepare_setup(cls, workdir: pathlib.Path) -> str:
+    def _prepare_setup(cls, workdir: pathlib.Path, job_spec: FallbackJobSpec) -> str:
         script = "./setup.sh"
         with change_dir(workdir):
             pa = PackageAnalyzer("compute-horde-sdk")
@@ -229,7 +235,11 @@ class FallbackClient:
 
             setup_sh = pathlib.Path(script)
             # TODO(maciek): use already preinstalled uv (by SkyPilot) for managing python and virtualenv
-            setup_sh.write_text(_SETUP_TMPL.format(command=f"pip install {source}"))
+            setup_sh.write_text(
+                _SETUP_TMPL.format(
+                    command=f"pip install --force-reinstall {source}", artifacts_dir=job_spec.artifacts_dir or ""
+                )
+            )
             setup_sh.chmod(0o755)
 
         return script
@@ -239,17 +249,21 @@ class FallbackClient:
         script = "./run.sh"
         with change_dir(workdir):
             if job_spec.input_volumes is not None:
-                for index, input_volume in enumerate(job_spec.input_volumes.values()):
+                for index, input_volume in enumerate(job_spec.input_volumes):
                     volume_json = pathlib.Path(f"./volume-{index}.json")
-                    volume_json.write_text(input_volume.to_compute_horde_volume("/volume/").json())
+                    volume_json.write_text(
+                        job_spec.input_volumes[input_volume].to_compute_horde_volume(input_volume).json()
+                    )
 
             if job_spec.output_volumes is not None:
-                for index, output_volume in enumerate(job_spec.output_volumes.values()):
+                for index, output_volume in enumerate(job_spec.output_volumes):
                     output_upload_json = pathlib.Path(f"./output_upload-{index}.json")
-                    output_upload_json.write_text(output_volume.to_compute_horde_output_upload("/output/").json())
+                    output_upload_json.write_text(
+                        job_spec.output_volumes[output_volume].to_compute_horde_output_upload(output_volume).json()
+                    )
 
             run_sh = pathlib.Path(script)
-            run_sh.write_text(_RUN_TMPL.format(command=job_spec.run))
+            run_sh.write_text(_RUN_TMPL.format(command=job_spec.run, workdir=job_spec.work_dir))
             run_sh.chmod(0o755)
 
         return script

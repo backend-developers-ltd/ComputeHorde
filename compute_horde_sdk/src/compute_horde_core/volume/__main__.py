@@ -15,7 +15,9 @@ def parse_args() -> argparse.Namespace:
         with open(path) as f:
             return json.load(f)
 
-    parser = argparse.ArgumentParser(prog="ch-volume", description="Run downloader for a given volume specification.")
+    parser = argparse.ArgumentParser(
+        prog="python -m compute_horde_core.volume", description="Run downloader for a given volume specification."
+    )
     parser.add_argument("input", nargs="+", type=json_file, help="JSON input file")
     parser.add_argument("-d", "--dir", default=pathlib.Path("/volume"), type=pathlib.Path, help="Volume directory.")
 

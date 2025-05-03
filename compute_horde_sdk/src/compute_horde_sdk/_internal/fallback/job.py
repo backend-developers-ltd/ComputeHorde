@@ -28,6 +28,9 @@ class FallbackJobSpec:
     envs: Mapping[str, str] | None = None
     """Environment variables to run the job with."""
 
+    work_dir: str = "/"
+    """Path to the working directory for the job. Defaults to ``/``."""
+
     artifacts_dir: str | None = None
     """
     Path of the directory that the job will write its results to.

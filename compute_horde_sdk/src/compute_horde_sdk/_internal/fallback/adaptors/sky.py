@@ -220,7 +220,7 @@ class SkyJob:
         head_runner = self._job_resource_handle.get_command_runners()[0]
 
         source = Path(source_dir)
-        destination = Path(tempfile.mkdtemp(prefix="download-", dir=self.workdir))
+        destination = Path(tempfile.mkdtemp(prefix="sky-download-", dir=self.workdir))
         try:
             head_runner.rsync(f"{source}{os.sep}", str(destination), up=False, stream_logs=False)
         except sky.exceptions.CommandError as e:
