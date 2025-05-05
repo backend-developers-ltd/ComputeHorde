@@ -64,7 +64,7 @@ test = [
 ]
 format = [
     "ruff",
-    "nox==2024.10.09",
+    "nox==2025.05.01",
 ]
 lint = [
     "ruff",
