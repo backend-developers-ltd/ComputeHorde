@@ -7,7 +7,7 @@ readme = "README.md"
 requires-python = "==3.11.*"
 dependencies = [
     "pydantic<3,>=2.3",
-    "bittensor~=9.1.0",
+    "bittensor>=9.0.0,<9.2",
     "websockets>=14.0,<15.0",
     "more-itertools>=10.2.0",
     "requests>=2.32.2",
@@ -24,11 +24,6 @@ build-backend = "pdm.backend"
 
 [tool.uv.sources]
 compute-horde-sdk = { path = "../compute_horde_sdk", editable = true }
-
-[tool.uv]
-# Instead of allowing prerelease for all packages,
-# we add overrides here so only the specified packages can resolve to prerelease.
-override-dependencies = ["bt-decode>=0.5.0a2"]
 
 [tool.pdm]
 distribution = true
