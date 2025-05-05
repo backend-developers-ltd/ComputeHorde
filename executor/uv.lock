@@ -138,7 +138,7 @@ wheels = [
 
 [[package]]
 name = "async-substrate-interface"
-version = "1.0.3"
+version = "1.0.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "asyncstdlib", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -149,9 +149,9 @@ dependencies = [
     { name = "wheel", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "xxhash", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/d7/71421a4f2ecb82a0141e61dab83770c0f9b2257543ad09f8a7eb4ed3017e/async_substrate_interface-1.0.3.tar.gz", hash = "sha256:da944b42aad508a6681a58b3223801013fbabc2f3d63c1e599eada4ecb53a2e9", size = 61528, upload_time = "2025-02-20T17:51:32.248Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/48/4e/e0ac170032c850c523105fc777221b7626d9a3cf580f980904b4bfa11741/async_substrate_interface-1.0.5.tar.gz", hash = "sha256:a9e36159262b750bbea0cb0bd1676b083e6a5892b75218363faa1bec96207d0c", size = 61252, upload_time = "2025-03-06T19:33:22.996Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5d/a9/6c36e68b0b7cce2ff2a35a3a76c19e0dd2a1a6dedcf72189f6dd52b5d4a3/async_substrate_interface-1.0.3-py3-none-any.whl", hash = "sha256:d51db230fa0c0de6f9960089faad806da773c7500727096a2659c0fd398edc92", size = 64397, upload_time = "2025-02-20T17:51:30.694Z" },
+    { url = "https://files.pythonhosted.org/packages/01/72/01ab5d18a2e21bc85e4e669311b299202279cfc84b40d46d08157052182c/async_substrate_interface-1.0.5-py3-none-any.whl", hash = "sha256:1b70948f31071680bddba8e5f76738fa2a1049e36568fa158a45a5e7e9b46ec9", size = 63631, upload_time = "2025-03-06T19:33:21.018Z" },
 ]
 
 [[package]]
@@ -248,7 +248,7 @@ wheels = [
 
 [[package]]
 name = "bittensor"
-version = "9.0.3"
+version = "9.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -278,9 +278,9 @@ dependencies = [
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "wheel", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/66/51/b05459ff0f8910c7617cd098d0917029015a70613757941163a22d514e1e/bittensor-9.0.3.tar.gz", hash = "sha256:54b13149d86c3de5e71b587e8474e49dffbb4ee864fb66f27e1efdc9e107504b", size = 223737, upload_time = "2025-02-27T03:07:00.947Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/5e/1ecb75a7d1f28bf610be5fa03eea9c4353e05f027ff739e3ce87c1d57e87/bittensor-9.1.0.tar.gz", hash = "sha256:32f963a5bdb1e0ba0603da3bd963b5c108407b1348a6728593f6bd75c848da2a", size = 228001, upload_time = "2025-03-13T22:32:35.216Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ab/55/03618fe9200575828401433d93f23037b9f8522d0e1d8018eda95d7f0bd8/bittensor-9.0.3-py3-none-any.whl", hash = "sha256:00d46eb2a61bb06f9c5f0a5ad551f8380db7e3c28441a39899f284b96edccbe6", size = 264616, upload_time = "2025-02-27T03:06:58.023Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/a3/91365f318072cd9f166da4f8e49d109632fd834b1c067e42a33bdf183241/bittensor-9.1.0-py3-none-any.whl", hash = "sha256:7af67b38efebbe7084bd58f26205fc25783fea9d3161714e5a784861d856f628", size = 270472, upload_time = "2025-03-13T22:32:33.326Z" },
 ]
 
 [[package]]
@@ -506,6 +506,7 @@ version = "0.0.24"
 source = { editable = "../compute_horde" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "async-substrate-interface", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "celery", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "compute-horde-sdk", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -520,7 +521,8 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.10.10" },
-    { name = "bittensor", specifier = ">=9.0.0,<9.1" },
+    { name = "async-substrate-interface", specifier = "==1.0.5" },
+    { name = "bittensor", specifier = "~=9.1.0" },
     { name = "celery", specifier = ">=5.3.0,<6" },
     { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },
     { name = "cryptography", specifier = ">=42.0.8" },
@@ -574,7 +576,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "asgiref", specifier = ">=3.8.0,<4" },
-    { name = "bittensor", specifier = ">=9.0.0,<9.1" },
+    { name = "bittensor", specifier = "~=9.1.0" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=0.26.1" },
     { name = "pydantic", specifier = ">=2.10,<3" },
