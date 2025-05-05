@@ -573,7 +573,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 format = [
-    { name = "nox", specifier = "==2024.10.9" },
+    { name = "nox", specifier = "==2025.5.1" },
     { name = "ruff" },
 ]
 lint = [
@@ -628,7 +628,7 @@ docs = [
     { name = "sphinx-rtd-theme", specifier = ">=3.0.2" },
 ]
 format = [
-    { name = "nox", specifier = "==2024.10.9" },
+    { name = "nox", specifier = "==2025.5.1" },
     { name = "ruff" },
 ]
 lint = [
