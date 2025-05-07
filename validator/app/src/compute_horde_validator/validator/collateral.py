@@ -101,18 +101,23 @@ def get_miner_collateral(
     return collateral
 
 
-def get_evm_key_associations(subtensor: bittensor.Subtensor, netuid: int, block: int|None=None) -> dict[int, str]:
+def get_evm_key_associations(
+    subtensor: bittensor.Subtensor, netuid: int, block: int | None = None
+) -> dict[int, str]:
     """
     Retrieve all EVM key associations for a specific subnet.
 
     Arguments:
         subtensor (bittensor.Subtensor): The Subtensor object to use for querying the network.
         netuid (int): The NetUID for which to retrieve EVM key associations.
+        block (int | None, optional): The block number to query. Defaults to None, which queries the latest block.
 
     Returns:
         dict: A dictionary mapping UIDs (int) to their associated EVM key addresses (str).
     """
-    associations = subtensor.query_map_subtensor("AssociatedEvmAddress", block=block, params=[netuid])
+    associations = subtensor.query_map_subtensor(
+        "AssociatedEvmAddress", block=block, params=[netuid]
+    )
     uid_evm_address_map = {}
     for uid, scale_obj in associations:
         evm_address_raw, block = scale_obj.value

@@ -1342,7 +1342,9 @@ def sync_collaterals(subtensor: bittensor.subtensor, hotkeys: list[str], block: 
     :type block: int
     :return: None
     """
-    associations = get_evm_key_associations(subtensor=subtensor, netuid=settings.BITTENSOR_NETUID, block=block)
+    associations = get_evm_key_associations(
+        subtensor=subtensor, netuid=settings.BITTENSOR_NETUID, block=block
+    )
     miners = Miner.objects.filter(hotkey__in=hotkeys)
     w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
 
