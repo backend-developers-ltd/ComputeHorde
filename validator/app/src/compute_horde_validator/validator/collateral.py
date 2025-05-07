@@ -101,7 +101,7 @@ def get_miner_collateral(
     return collateral
 
 
-def get_evm_key_associations(subtensor: bittensor.Subtensor, netuid: int) -> dict[int, str]:
+def get_evm_key_associations(subtensor: bittensor.Subtensor, netuid: int, block: int|None=None) -> dict[int, str]:
     """
     Retrieve all EVM key associations for a specific subnet.
 
@@ -112,7 +112,7 @@ def get_evm_key_associations(subtensor: bittensor.Subtensor, netuid: int) -> dic
     Returns:
         dict: A dictionary mapping UIDs (int) to their associated EVM key addresses (str).
     """
-    associations = subtensor.query_map_subtensor("AssociatedEvmAddress", params=[netuid])
+    associations = subtensor.query_map_subtensor("AssociatedEvmAddress", block=block, params=[netuid])
     uid_evm_address_map = {}
     for uid, scale_obj in associations:
         evm_address_raw, block = scale_obj.value
@@ -191,8 +191,7 @@ async def slash_collateral(
     Args:
         w3: AsyncWeb3 instance to use for blockchain interaction.
         contract_address: Address of the Collateral contract.
-        private_key: Private key of the validator.
-        miner_address: EVM address of the miner to query.
+        miner_address: EVM address of the miner to slash.
         amount_tao: Amount of TAO to slash.
         url: URL containing information about the slash.
 
