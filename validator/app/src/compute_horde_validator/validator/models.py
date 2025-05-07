@@ -200,7 +200,7 @@ class Miner(models.Model):
     ip_version = models.IntegerField(default=4)
     port = models.IntegerField(default=0)
 
-    evm_address = models.CharField(max_length=42, default="")
+    evm_address = models.CharField(max_length=42, null=True)
     collateral = models.FloatField(default=0)
 
     def __str__(self):
@@ -346,6 +346,7 @@ class OrganicJob(JobBase):
     error_detail = models.TextField(null=True, default=None)
     artifacts = models.JSONField(blank=True, default=dict)
     cheated = models.BooleanField(default=False)
+    slashed = models.BooleanField(default=False)
     block = models.BigIntegerField(
         null=True, help_text="Block number on which this job is scheduled"
     )

@@ -1,21 +1,19 @@
-import contextlib
 import functools
 import hashlib
 import json
 import pathlib
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Any
 
 import bittensor
 import bittensor.utils
-import httpx
+import requests
 from django.conf import settings
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from hexbytes import HexBytes
-from web3 import AsyncWeb3, Web3
-from web3.contract.async_contract import AsyncContractFunction
+from web3 import Web3
+from web3.contract.contract import ContractFunction
 from web3.types import Wei
 
 WEI_PER_TAO = 10**18
@@ -50,19 +48,6 @@ def get_web3_connection(network: str) -> Web3:
     if not w3.is_connected():
         raise ConnectionError(f"Failed to connect to RPC node at {rpc_url}")
     return w3
-
-
-@contextlib.asynccontextmanager
-async def get_async_web3_connection(network: str) -> AsyncGenerator[AsyncWeb3, Any]:
-    """
-    Connects to a Web3 provider using the provided network using persistent websocket connection.
-    """
-    _, rpc_url = bittensor.utils.determine_chain_endpoint_and_network(network)
-    w3: AsyncWeb3 = await AsyncWeb3(AsyncWeb3.WebSocketProvider(rpc_url))
-    if not await w3.is_connected():
-        raise ConnectionError(f"Failed to connect to RPC node at {rpc_url}")
-    async with w3:
-        yield w3
 
 
 def wei_to_tao(wei: int) -> float:
@@ -129,9 +114,9 @@ def get_evm_key_associations(
     return uid_evm_address_map
 
 
-async def build_and_send_transaction(
-    w3: AsyncWeb3,
-    function: AsyncContractFunction,
+def build_and_send_transaction(
+    w3: Web3,
+    function: ContractFunction,
     account: LocalAccount,
     gas_limit: int = 100000,
     value: int = 0,
@@ -139,25 +124,25 @@ async def build_and_send_transaction(
     """Build, sign and send a transaction.
 
     Args:
-        w3: AsyncWeb3 instance
+        w3: Web3 instance
         function: Contract function call to execute
         account: Account to send transaction from
         gas_limit: Maximum gas to use for the transaction
         value: Amount of ETH to send with the transaction (in Wei)
     """
-    transaction = await function.build_transaction(
+    transaction = function.build_transaction(
         {
             "from": account.address,
-            "nonce": await w3.eth.get_transaction_count(account.address),
+            "nonce": w3.eth.get_transaction_count(account.address),
             "gas": gas_limit,
-            "gasPrice": await w3.eth.gas_price,
-            "chainId": await w3.eth.chain_id,
+            "gasPrice": w3.eth.gas_price,
+            "chainId": w3.eth.chain_id,
             "value": Wei(value),
         }
     )
 
     signed_txn = w3.eth.account.sign_transaction(transaction, account.key)
-    tx_hash = await w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
     return tx_hash
 
 
@@ -187,8 +172,8 @@ class SlashedEvent:
         )
 
 
-async def slash_collateral(
-    w3: AsyncWeb3,
+def slash_collateral(
+    w3: Web3,
     contract_address: str,
     miner_address: str,
     amount_tao: float,
@@ -197,7 +182,7 @@ async def slash_collateral(
     """Slash collateral from a miner.
 
     Args:
-        w3: AsyncWeb3 instance to use for blockchain interaction.
+        w3: Web3 instance to use for blockchain interaction.
         contract_address: Address of the Collateral contract.
         miner_address: EVM address of the miner to slash.
         amount_tao: Amount of TAO to slash.
@@ -217,19 +202,18 @@ async def slash_collateral(
 
     # Calculate MD5 checksum if URL is valid
     if url.startswith(("http://", "https://")):
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=10)
-            response.raise_for_status()
-            md5_checksum = hashlib.md5(response.content).digest()
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        md5_checksum = hashlib.md5(response.content).digest()
     else:
         md5_checksum = b"\x00" * 16
 
     function = contract.functions.slashCollateral(
         miner_checksum_address, tao_to_wei(amount_tao), url, md5_checksum
     )
-    tx_hash = await build_and_send_transaction(w3, function, account, gas_limit=200_000)
+    tx_hash = build_and_send_transaction(w3, function, account, gas_limit=200_000)
 
-    receipt = await w3.eth.wait_for_transaction_receipt(tx_hash, 300, 2)
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, 300, 2)
     if receipt["status"] == 0:
         raise SlashCollateralError("collateral slashing transaction failed")
 
