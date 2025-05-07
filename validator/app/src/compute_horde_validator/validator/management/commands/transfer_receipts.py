@@ -4,12 +4,9 @@ import time
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta
-from typing import cast
 
 import aiohttp
-import bittensor
 from asgiref.sync import async_to_sync
-from bt_ddos_shield import ShieldMetagraph
 from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
 from compute_horde.receipts.transfer import (
     MinerInfo,
@@ -22,6 +19,7 @@ from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
 
 from compute_horde_validator.validator.dynamic_config import aget_config
+from compute_horde_validator.validator.models import MetagraphSnapshot, Miner
 
 logger = logging.getLogger(__name__)
 
@@ -118,25 +116,14 @@ class Command(BaseCommand):
                 return debug_miners
 
         else:
-            # 3rd, if no specific miners were specified, get from metagraph.
-            logger.info("Will fetch receipts from metagraph miners")
-            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+            # 3rd, if no specific miners were specified, get from metagraph snapshot.
+            logger.info("Will fetch receipts from metagraph snapshot miners")
 
             async def miners():
-                metagraph = ShieldMetagraph(
-                    wallet=settings.BITTENSOR_WALLET(),
-                    netuid=settings.BITTENSOR_NETUID,
-                    subtensor=subtensor,
-                )
-                return [
-                    (
-                        cast(str, neuron.hotkey),
-                        cast(str, neuron.axon_info.ip),
-                        cast(int, neuron.axon_info.port),
-                    )
-                    for neuron in metagraph.neurons
-                    if neuron.axon_info.is_serving
-                ]
+                snapshot = await MetagraphSnapshot.aget_latest()
+                serving_hotkeys = snapshot.serving_hotkeys
+                serving_miners = [m async for m in Miner.objects.filter(hotkey__in=serving_hotkeys)]
+                return [(m.hotkey, m.address, m.port) for m in serving_miners]
 
         # IMPORTANT: This encompasses at least the current and the previous cycle.
         cutoff = timezone.now() - timedelta(hours=5)

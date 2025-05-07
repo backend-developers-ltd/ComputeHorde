@@ -20,7 +20,7 @@ dependencies = [
     "asgiref>=3.8.0,<4",
     "pydantic<3,>=2.10",
     "httpx>=0.26.0",
-    "bittensor>=9.0.0,<9.1",
+    "bittensor>=9.0.0,<9.2",
     "tenacity>=9.0.0,<10.0.0",
     "huggingface-hub[hf_transfer]>=0.26.1",
 ]
@@ -32,11 +32,6 @@ dependencies = [
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
-
-[tool.uv]
-# Instead of allowing prerelease for all packages,
-# we add overrides here so only the specified packages can resolve to prerelease.
-override-dependencies = ["bt-decode>=0.5.0a2"]
 
 [dependency-groups]
 format = [
