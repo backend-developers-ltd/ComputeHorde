@@ -261,6 +261,9 @@ def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2Job
             signature="lnX1rPC+Dnbc6fKPunR35T329IgjJBKHxvA1Y5hpWUl7N7GzlwEnjGHuWcdRfOjfamNNXYnT/gaIUWJxbmwChw==",
         ),
         on_trusted_miner=on_trusted_miner,
+        download_time_limit=1,
+        execution_time_limit=1,
+        upload_time_limit=1,
     )
 
 

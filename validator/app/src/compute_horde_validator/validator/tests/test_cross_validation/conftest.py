@@ -5,10 +5,12 @@ import pytest_asyncio
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
+    V0ExecutionDoneRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
+    V0VolumesReadyRequest,
 )
 
 from compute_horde_validator.validator.cross_validation.utils import (
@@ -45,6 +47,13 @@ def manifest_message():
 def executor_ready_message(job_uuid: uuid.UUID):
     return V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
 
+@pytest.fixture
+def volumes_ready_message(job_uuid: uuid.UUID):
+    return V0VolumesReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
+
+@pytest.fixture
+def execution_done_message(job_uuid: uuid.UUID):
+    return V0ExecutionDoneRequest(job_uuid=str(job_uuid)).model_dump_json()
 
 @pytest.fixture
 def accept_job_message(job_uuid: uuid.UUID):

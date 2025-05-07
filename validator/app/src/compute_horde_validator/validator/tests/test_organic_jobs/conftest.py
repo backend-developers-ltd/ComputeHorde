@@ -157,6 +157,9 @@ def job_request():
         args=[],
         env={},
         use_gpu=False,
+        download_time_limit=1,
+        execution_time_limit=1,
+        upload_time_limit=1,
     )
 
 
