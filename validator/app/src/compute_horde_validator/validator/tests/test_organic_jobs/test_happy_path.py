@@ -1,4 +1,5 @@
 import pytest
+from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0ExecutorReadyRequest,
@@ -6,7 +7,6 @@ from compute_horde.protocol_messages import (
 )
 
 from compute_horde_validator.validator.models import Miner, OrganicJob
-from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 
 pytestmark = [
     pytest.mark.asyncio,

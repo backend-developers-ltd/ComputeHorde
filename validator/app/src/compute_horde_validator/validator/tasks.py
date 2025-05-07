@@ -691,7 +691,10 @@ def _get_subtensor_for_setting_scores(network):
 def _get_metagraph_for_setting_scores(subtensor, netuid):
     with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
         return ShieldMetagraph(
-            wallet=settings.BITTENSOR_WALLET(), netuid=netuid, subtensor=subtensor
+            wallet=settings.BITTENSOR_WALLET(),
+            options=settings.BITTENSOR_SHIELD_METAGRAPH_OPTIONS(),
+            netuid=netuid,
+            subtensor=subtensor,
         )
 
 
@@ -1161,6 +1164,7 @@ def _get_metagraph_for_sync(subtensor: bittensor.subtensor, block=None):
         start_ts = time.time()
         metagraph = ShieldMetagraph(
             wallet=settings.BITTENSOR_WALLET(),
+            options=settings.BITTENSOR_SHIELD_METAGRAPH_OPTIONS(),
             netuid=settings.BITTENSOR_NETUID,
             subtensor=subtensor,
             block=block,
