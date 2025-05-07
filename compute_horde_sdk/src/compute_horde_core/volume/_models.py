@@ -31,6 +31,7 @@ class HuggingfaceVolume(pydantic.BaseModel):
     relative_path: str | None = None
     # If provided, only files matching at least one pattern are downloaded.
     allow_patterns: str | list[str] | None = None
+    token: str | None = None
 
     def is_safe(self) -> bool:
         return True

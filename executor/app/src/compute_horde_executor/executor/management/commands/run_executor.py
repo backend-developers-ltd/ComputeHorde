@@ -1,11 +1,9 @@
 import asyncio
 import base64
 import csv
-import io
 import logging
 import os
 import pathlib
-import random
 import re
 import shlex
 import shutil
@@ -13,13 +11,9 @@ import subprocess
 import tempfile
 import time
 import typing
-import zipfile
 
-import httpx
-import huggingface_hub
 import packaging.version
 import pydantic
-from asgiref.sync import sync_to_async
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.certificate import (
     check_endpoint,
@@ -48,20 +42,16 @@ from compute_horde.protocol_messages import (
 )
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
+from compute_horde_core.output_upload import OutputUploader, OutputUploadFailed
 from compute_horde_core.volume import (
     HuggingfaceVolume,
-    InlineVolume,
-    MultiVolume,
-    SingleFileVolume,
     Volume,
-    ZipUrlVolume,
+    VolumeDownloader,
+    VolumeDownloadFailed,
 )
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from huggingface_hub.errors import RepositoryNotFoundError, RevisionNotFoundError
 from pydantic import TypeAdapter
-
-from compute_horde_executor.executor.output_uploader import OutputUploader, OutputUploadFailed
 
 logger = logging.getLogger(__name__)
 
@@ -388,120 +378,6 @@ class JobError(Exception):
         self.error_detail = error_detail
 
 
-class DownloadManager:
-    def __init__(self, concurrency=3, max_retries=3):
-        self.semaphore = asyncio.Semaphore(concurrency)
-        self.max_retries = max_retries
-
-    def download_from_huggingface(
-        self,
-        relative_path: pathlib.Path,
-        repo_id: str,
-        revision: str | None,
-        repo_type: str | None = None,
-        allow_patterns: str | list[str] | None = None,
-    ):
-        retries = 0
-        last_exc: Exception | None = None
-        hf_old_enable_hf_transfer = None
-        logger.info("Downloading %r from Hugging Face", repo_id)
-
-        try:
-            while retries < self.max_retries:
-                try:
-                    huggingface_hub.snapshot_download(
-                        repo_id=repo_id,
-                        repo_type=repo_type,
-                        revision=revision,
-                        token=settings.HF_ACCESS_TOKEN,
-                        local_dir=relative_path,
-                        allow_patterns=allow_patterns,
-                    )
-                    return
-                except (ValueError, RepositoryNotFoundError, RevisionNotFoundError) as e:
-                    logger.error(f"Failed to download model from Hugging Face: {e}")
-                    last_exc = e
-                    break
-                except Exception as e:
-                    logger.error(f"Failed to download model from Hugging Face: {e}")
-                    last_exc = e
-                    retries += 1
-                    if huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER:
-                        # hf_transfer makes downloads faster, but sometimes fails where vanilla download doesn't.
-                        logger.info("Disabling hf_transfer for retry")
-                        hf_old_enable_hf_transfer = (
-                            huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER
-                        )
-                        huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER = False
-
-        finally:
-            if hf_old_enable_hf_transfer is not None:  # True or False
-                huggingface_hub.constants.HF_HUB_ENABLE_HF_TRANSFER = hf_old_enable_hf_transfer
-
-        raise JobError(
-            f"Failed to download model from Hugging Face after {retries} retries: {last_exc}",
-            V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD,
-            str(last_exc),
-        ) from last_exc
-
-    async def download(self, fp, url):
-        async with self.semaphore:
-            retries = 0
-            bytes_received = 0
-            backoff_factor = 1
-
-            while retries < self.max_retries:
-                headers = {}
-                if bytes_received > 0:
-                    headers["Range"] = f"bytes={bytes_received}-"
-
-                async with httpx.AsyncClient() as client:
-                    async with client.stream("GET", url, headers=headers) as response:
-                        if response.status_code == 416:  # Requested Range Not Satisfiable
-                            # Server doesn't support resume, start from the beginning
-                            fp.seek(0)
-                            bytes_received = 0
-                            continue
-                        elif response.status_code != 206 and bytes_received > 0:  # Partial Content
-                            # Server doesn't support resume, start from the beginning
-                            fp.seek(0)
-                            bytes_received = 0
-                            continue
-
-                        if (
-                            bytes_received == 0
-                            and (content_length := response.headers.get("Content-Length"))
-                            is not None
-                        ):
-                            # check size early if Content-Length is present
-                            if 0 < settings.VOLUME_MAX_SIZE_BYTES < int(content_length):
-                                raise JobError("Input volume too large")
-
-                        try:
-                            async for chunk in response.aiter_bytes():
-                                bytes_received += len(chunk)
-                                if 0 < settings.VOLUME_MAX_SIZE_BYTES < bytes_received:
-                                    raise JobError("Input volume too large")
-                                fp.write(chunk)
-                            return  # Download completed successfully
-                        except (httpx.HTTPError, OSError) as e:
-                            retries += 1
-                            if retries >= self.max_retries:
-                                raise e
-
-                            # Exponential backoff with jitter
-                            backoff_time = backoff_factor * (2 ** (retries - 1))
-                            jitter = random.uniform(
-                                0, 0.1
-                            )  # Add jitter to avoid synchronization issues
-                            backoff_time *= 1 + jitter
-                            await asyncio.sleep(backoff_time)
-
-                            backoff_factor *= 2  # Double the backoff factor for the next retry
-
-            raise JobError(f"Download failed after {self.max_retries} retries")
-
-
 def job_container_name(docker_objects_infix: str) -> str:
     return f"ch-{docker_objects_infix}-job"
 
@@ -523,7 +399,6 @@ class JobRunner:
         self.output_volume_mount_dir = self.temp_dir / "output"
         self.specs_volume_mount_dir = self.temp_dir / "specs"
         self.artifacts_mount_dir = self.temp_dir / "artifacts"
-        self.download_manager = DownloadManager()
 
         self.job_container_name = job_container_name(settings.EXECUTOR_TOKEN)
         self.nginx_container_name = nginx_container_name(settings.EXECUTOR_TOKEN)
@@ -797,6 +672,7 @@ class JobRunner:
             if job_request.output_upload:
                 try:
                     output_uploader = OutputUploader.for_upload_output(job_request.output_upload)
+                    output_uploader.max_size_bytes = settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES
                     await output_uploader.upload(self.output_volume_mount_dir)
                 except OutputUploadFailed as ex:
                     logger.warning(
@@ -840,11 +716,19 @@ class JobRunner:
             "sh",
             "-c",
             f"rm -rf {shlex.quote(root_for_remove.as_posix())}/*",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        await process.wait()
-        self.temp_dir.rmdir()
+        stdout, stderr = await process.communicate()
+        if process.returncode == 0:
+            self.temp_dir.rmdir()
+        else:
+            logger.error(
+                f"Failed to clean up {self.temp_dir.as_posix()}/: process exited with return code {process.returncode}\n"
+                "Stdout and stderr:\n"
+                f"{truncate(stdout.decode())}\n"
+                f"{truncate(stderr.decode())}\n"
+            )
         if self.is_streaming_job:
             process = await asyncio.create_subprocess_exec(
                 "docker", "network", "rm", self.job_network_name
@@ -860,74 +744,31 @@ class JobRunner:
                 shutil.rmtree(path)
 
         if volume is not None:
-            if isinstance(volume, InlineVolume):
-                await self._unpack_inline_volume(volume)
-            elif isinstance(volume, ZipUrlVolume):
-                await self._unpack_zip_url_volume(volume)
-            elif isinstance(volume, SingleFileVolume):
-                await self._unpack_single_file_volume(volume)
-            elif isinstance(volume, MultiVolume):
-                await self._unpack_multi_volume(volume)
-            elif isinstance(volume, HuggingfaceVolume):
-                await self._unpack_huggingface_volume(volume)
+            # TODO(mlech): Refactor this to not treat `HuggingfaceVolume` with a special care
+            volume_downloader = VolumeDownloader.for_volume(volume)
+            volume_downloader.max_size_bytes = settings.VOLUME_MAX_SIZE_BYTES
+            if volume_downloader.handles_volume_type() is HuggingfaceVolume:
+                if volume.token is None:
+                    volume.token = settings.HF_ACCESS_TOKEN
+                try:
+                    await volume_downloader.download(self.volume_mount_dir)
+                except VolumeDownloadFailed as exc:
+                    logger.error(f"Failed to download model from Hugging Face: {exc}")
+                    raise JobError(
+                        str(exc),
+                        V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD,
+                        exc.error_detail,
+                    ) from exc
             else:
-                raise NotImplementedError(f"Unsupported volume_type: {volume.volume_type}")
+                try:
+                    await volume_downloader.download(self.volume_mount_dir)
+                except VolumeDownloadFailed as exc:
+                    raise JobError(str(exc)) from exc
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()
         )
         assert 0 == await chmod_proc.wait()
-
-    async def _unpack_inline_volume(self, volume: InlineVolume):
-        decoded_contents = base64.b64decode(volume.contents)
-        bytes_io = io.BytesIO(decoded_contents)
-        zip_file = zipfile.ZipFile(bytes_io)
-        extraction_path = self.volume_mount_dir
-        if volume.relative_path:
-            extraction_path /= volume.relative_path
-        zip_file.extractall(extraction_path.as_posix())
-
-    async def _unpack_zip_url_volume(self, volume: ZipUrlVolume):
-        with tempfile.NamedTemporaryFile() as download_file:
-            await self.download_manager.download(download_file, volume.contents)
-            download_file.seek(0)
-            zip_file = zipfile.ZipFile(download_file)
-            extraction_path = self.volume_mount_dir
-            if volume.relative_path:
-                extraction_path /= volume.relative_path
-            zip_file.extractall(extraction_path.as_posix())
-
-    async def _unpack_huggingface_volume(self, volume: HuggingfaceVolume):
-        with tempfile.NamedTemporaryFile():
-            extraction_path = self.volume_mount_dir
-            if volume.relative_path:
-                extraction_path /= volume.relative_path
-            await sync_to_async(self.download_manager.download_from_huggingface)(
-                relative_path=extraction_path,
-                repo_id=volume.repo_id,
-                revision=volume.revision,
-                repo_type=volume.repo_type,
-                allow_patterns=volume.allow_patterns,
-            )
-
-    async def _unpack_single_file_volume(self, volume: SingleFileVolume):
-        file_path = self.volume_mount_dir / volume.relative_path
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        with file_path.open("wb") as file:
-            await self.download_manager.download(file, volume.url)
-
-    async def _unpack_multi_volume(self, volume: MultiVolume):
-        for sub_volume in volume.volumes:
-            if isinstance(sub_volume, InlineVolume):
-                await self._unpack_inline_volume(sub_volume)
-            elif isinstance(sub_volume, ZipUrlVolume):
-                await self._unpack_zip_url_volume(sub_volume)
-            elif isinstance(sub_volume, SingleFileVolume):
-                await self._unpack_single_file_volume(sub_volume)
-            elif isinstance(sub_volume, HuggingfaceVolume):
-                await self._unpack_huggingface_volume(sub_volume)
-            else:
-                raise NotImplementedError(f"Unsupported sub-volume type: {type(sub_volume)}")
 
     async def get_job_volume(self) -> Volume | None:
         initial_volume = self.initial_job_request.volume

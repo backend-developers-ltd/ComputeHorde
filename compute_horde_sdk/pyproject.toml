@@ -17,10 +17,12 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
+    "asgiref>=3.8.0,<4",
     "pydantic<3,>=2.10",
     "httpx>=0.26.0",
-    "bittensor>=9.0.0,<9.1",
+    "bittensor>=9.0.0,<9.2",
     "tenacity>=9.0.0,<10.0.0",
+    "huggingface-hub[hf_transfer]>=0.26.1",
 ]
 
 [project.urls]
@@ -31,15 +33,10 @@ dependencies = [
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
-[tool.uv]
-# Instead of allowing prerelease for all packages,
-# we add overrides here so only the specified packages can resolve to prerelease.
-override-dependencies = ["bt-decode>=0.5.0a2"]
-
 [dependency-groups]
 format = [
     "ruff",
-    "nox==2024.10.09",
+    "nox==2025.05.01",
 ]
 lint = [
     "ruff",
@@ -96,8 +93,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]
-"test/**" = ["D", "F403", "F405"]
+"__init__.py" = ["F401", "F403"]
+"tests/**" = ["D", "F403", "F405"]
 
 [tool.codespell]
 skip = "*.min.js,pdm.lock,build"

@@ -6,7 +6,7 @@ Compute Horde app facilitating interaction between end users and Validators.
 
 * connect to ws at `/ws/v0/`
 * send `V0AuthenticationRequest` once (and wait for `Response`)
-* wait for incoming `V0JobRequest` (no need to reply)
+* wait for incoming `V2JobRequest` (no need to reply)
 * send `JobStatusUpdate` when there is new info about some specific job (and wait for `Response`)
 
 > Multiple connections may be authenticated, each of them will receive same new jobs.
@@ -20,7 +20,7 @@ sequenceDiagram
     validator->>facilitator: V0AuthenticationRequest
     facilitator->>validator: Response
 
-    facilitator->>validator: <br/><br/>V0JobRequest
+    facilitator->>validator: <br/><br/>V2JobRequest
 
     validator->>facilitator: <br/><br/>JobStatusUpdate
     facilitator->>validator: Response

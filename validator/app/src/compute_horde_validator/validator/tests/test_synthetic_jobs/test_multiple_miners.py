@@ -86,7 +86,8 @@ def job_uuids(num_miners: int):
 @pytest.fixture
 def miner_wallets(num_miners: int):
     return [
-        bittensor.Keypair.create_from_seed(bytes([*range(31), i]).hex()) for i in range(num_miners)
+        bittensor.Keypair.create_from_seed((random.randbytes(31) + bytes([i])).hex())
+        for i in range(num_miners)
     ]
 
 

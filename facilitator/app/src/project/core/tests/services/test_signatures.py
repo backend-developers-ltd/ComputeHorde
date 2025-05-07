@@ -1,7 +1,7 @@
 import pytest
-from compute_horde.fv_protocol.facilitator_requests import Signature
 from compute_horde_core.signature import (
     BittensorWalletVerifier,
+    Signature,
     SignatureInvalidException,
     SignatureScope,
     signature_to_headers,

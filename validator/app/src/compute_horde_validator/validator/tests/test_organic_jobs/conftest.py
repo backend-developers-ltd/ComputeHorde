@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.fv_protocol import facilitator_requests
+from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
 
@@ -150,7 +150,7 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
 
 @pytest.fixture()
 def job_request():
-    return facilitator_requests.V2JobRequest(
+    return V2JobRequest(
         uuid=str(uuid.uuid4()),
         executor_class=DEFAULT_EXECUTOR_CLASS,
         docker_image="doesntmatter",
