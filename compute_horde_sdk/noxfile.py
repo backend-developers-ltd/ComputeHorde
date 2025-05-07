@@ -33,6 +33,7 @@ def install(session: nox.Session, *args):
         "uv",
         "sync",
         "--locked",
+        "--all-extras",
         *groups,
         env={"UV_PROJECT_ENVIRONMENT": uv_env},
     )

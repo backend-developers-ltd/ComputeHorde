@@ -10,3 +10,4 @@ API Reference
    api/jobs
    api/volumes
    api/exceptions
+   api/fallback_reference.rst
