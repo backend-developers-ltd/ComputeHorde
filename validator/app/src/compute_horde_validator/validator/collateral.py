@@ -1,7 +1,9 @@
+import contextlib
 import functools
 import hashlib
 import json
 import pathlib
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Any
 
@@ -50,16 +52,17 @@ def get_web3_connection(network: str) -> Web3:
     return w3
 
 
-async def get_async_web3_connection(network: str) -> AsyncWeb3:
+@contextlib.asynccontextmanager
+async def get_async_web3_connection(network: str) -> AsyncGenerator[AsyncWeb3, Any]:
     """
     Connects to a Web3 provider using the provided network using persistent websocket connection.
-    Remember to use `async with` to ensure the connection is closed properly after use.
     """
     _, rpc_url = bittensor.utils.determine_chain_endpoint_and_network(network)
     w3: AsyncWeb3 = await AsyncWeb3(AsyncWeb3.WebSocketProvider(rpc_url))
     if not await w3.is_connected():
         raise ConnectionError(f"Failed to connect to RPC node at {rpc_url}")
-    return w3
+    async with w3:
+        yield w3
 
 
 def wei_to_tao(wei: int) -> float:

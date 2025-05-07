@@ -343,8 +343,9 @@ class FacilitatorClient:
         slash_amount = await aget_config("DYNAMIC_COLLATERAL_SLASH_AMOUNT")
         if slash_amount > 0 and job.miner.evm_address:
             try:
-                w3 = await collateral.get_async_web3_connection(network=settings.BITTENSOR_NETWORK)
-                async with w3:
+                async with collateral.get_async_web3_connection(
+                    network=settings.BITTENSOR_NETWORK
+                ) as w3:
                     await collateral.slash_collateral(
                         w3=w3,
                         contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
