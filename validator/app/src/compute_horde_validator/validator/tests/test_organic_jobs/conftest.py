@@ -69,9 +69,9 @@ async def miner_transports():
     """
 
     transports = [
-        SimulationTransport("miner_01"),
-        SimulationTransport("miner_02"),
-        SimulationTransport("miner_03"),
+        SimulationTransport("miner_connection_1"),
+        SimulationTransport("miner_connection_2"),
+        SimulationTransport("miner_connection_3"),
     ]
 
     transports_iter = iter(transports)
