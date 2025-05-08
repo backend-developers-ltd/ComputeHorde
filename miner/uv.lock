@@ -730,11 +730,11 @@ dependencies = [
 
 [[package]]
 name = "django-constance"
-version = "4.1.3"
+version = "4.3.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/dd/c2/aed97e68c89b227914bf6a2345d3fc56fba1c9e749e4ff0b860ccb3dc0df/django_constance-4.1.3.tar.gz", hash = "sha256:e8b619ebeab75665d279299cce4bbebbcb0a73caf3539edcd788f2d2275c21a1", size = 173972, upload-time = "2024-11-05T08:08:03.866Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c1/08/58100c61c15c0d187d257c0f01277e48fdfdbe96bda60e88ffe043412ecc/django_constance-4.3.2.tar.gz", hash = "sha256:d86e6b6a797157a4b49d0c679f1b7b9c70b1b540f36dfcda5346736997ae51bd", size = 174866, upload-time = "2025-02-06T10:29:34.604Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/1a/530a132d6b02f00324518833a6c7ca41c46d50932aae30fd854d93ee37dd/django_constance-4.1.3-py3-none-any.whl", hash = "sha256:e5e05acbf329c3addec141f3911989d58c423ebc3bc92e1359f9c1dd77e08e95", size = 65814, upload-time = "2024-11-05T08:08:34.038Z" },
+    { url = "https://files.pythonhosted.org/packages/14/cd/37312ca0a02905fb3d44649a0bd2ec4ec21b60d967c3ccb9ff9d07db157b/django_constance-4.3.2-py3-none-any.whl", hash = "sha256:cd3e08f4cac457016db550a9244177da39cef8e39f4a56859692306cc8f11dc1", size = 64240, upload-time = "2025-02-06T10:28:53.231Z" },
 ]
 
 [[package]]
@@ -1305,7 +1305,7 @@ requires-dist = [
     { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-business-metrics", git = "https://github.com/reef-technologies/django-business-metrics.git?rev=9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01" },
-    { name = "django-constance", specifier = "==4.1.3" },
+    { name = "django-constance", specifier = "==4.3.2" },
     { name = "django-cors-headers", specifier = "~=4.2.0" },
     { name = "django-debug-toolbar", specifier = "==4.1.0" },
     { name = "django-environ", specifier = "~=0.11.2" },
