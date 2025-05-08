@@ -106,11 +106,23 @@ class FacilitatorWs:
         await asyncio.wait_for(ws.send(Response(status="success").model_dump_json()), timeout=5)
 
     async def verify_job_status_update(self, ws):
+        # received
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
         # accept or decline
-        response = await asyncio.wait_for(ws.recv(), timeout=5)
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
+        # executor ready
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
+        # volumes downloaded or failed
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
+        # execution done or failed
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
         JobStatusUpdate.model_validate_json(response)
         # finished or failed
-        response = await asyncio.wait_for(ws.recv(), timeout=5)
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
         JobStatusUpdate.model_validate_json(response)
 
     async def serve(self, ws):
@@ -386,4 +398,5 @@ async def test_routing_to_trusted_miner():
             await reap_tasks(task)
 
             if ws_server.facilitator_error:
+                # Failed: Test failed due to: job not completed: PENDING
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")

@@ -1,8 +1,10 @@
 import pytest
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
+    V0ExecutionDoneRequest,
     V0ExecutorReadyRequest,
     V0JobFinishedRequest,
+    V0VolumesReadyRequest,
 )
 
 from compute_horde_validator.validator.models import Miner, OrganicJob
@@ -12,39 +14,40 @@ pytestmark = [
     pytest.mark.asyncio,
     pytest.mark.django_db(transaction=True),
     pytest.mark.override_config(
-        DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT=0.5,
-        DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT=0.5,
+        DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT=1,
+        DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT=1,
     ),
 ]
 
 
 async def test_basic_flow_works(job_request, faci_transport, miner_transport, execute_scenario):
     await faci_transport.add_message(job_request, send_before=0)
-
+    # vali -> faci: received
     # vali -> miner: initial job request
-
-    accept_job_msg = V0AcceptJobRequest(job_uuid=job_request.uuid)
-    await miner_transport.add_message(accept_job_msg, send_before=1)
-
+    await miner_transport.add_message(V0AcceptJobRequest(job_uuid=job_request.uuid), send_before=1)
+    # vali -> faci: accepted
     # vali -> miner: receipt for accepting the job
-    # vali -> faci: job status update
-
-    executor_ready_msg = V0ExecutorReadyRequest(job_uuid=job_request.uuid)
-    await miner_transport.add_message(executor_ready_msg, send_before=1)
-
+    await miner_transport.add_message(V0ExecutorReadyRequest(job_uuid=job_request.uuid), send_before=1)
+    # vali -> faci: executor ready
     # vali -> miner: actual job request
-
-    job_finished_msg = V0JobFinishedRequest(
+    await miner_transport.add_message(V0VolumesReadyRequest(job_uuid=job_request.uuid), send_before=1)
+    # vali -> faci: volumes ready
+    await miner_transport.add_message(V0ExecutionDoneRequest(job_uuid=job_request.uuid), send_before=0)
+    # vali -> faci: execution done
+    await miner_transport.add_message(V0JobFinishedRequest(
         job_uuid=job_request.uuid, docker_process_stdout="", docker_process_stderr=""
-    )
-    await miner_transport.add_message(job_finished_msg, send_before=2)
-
+    ), send_before=0)
     # vali -> miner: receipt for finishing job
-    # vali -> faci: job status update
+    # vali -> faci: completed
 
-    await execute_scenario(until=lambda: len(faci_transport.sent) >= 3)
+    await execute_scenario(until=lambda: len(faci_transport.sent) >= 7)
 
-    assert JobStatusUpdate.model_validate_json(faci_transport.sent[2]).status == "completed"
+    assert JobStatusUpdate.model_validate_json(faci_transport.sent[1]).status == "received"
+    assert JobStatusUpdate.model_validate_json(faci_transport.sent[2]).status == "accepted"
+    assert JobStatusUpdate.model_validate_json(faci_transport.sent[3]).status == "executor_ready"
+    assert JobStatusUpdate.model_validate_json(faci_transport.sent[4]).status == "volumes_ready"
+    assert JobStatusUpdate.model_validate_json(faci_transport.sent[5]).status == "execution_done"
+    assert JobStatusUpdate.model_validate_json(faci_transport.sent[6]).status == "completed"
     assert (
         await OrganicJob.objects.aget(job_uuid=job_request.uuid)
     ).status == OrganicJob.Status.COMPLETED
@@ -65,46 +68,37 @@ async def test_miner_can_be_selected_after_finishing_job(
     # Job 1
     await faci_transport.add_message(job_request, send_before=0)
 
-    accept_job_msg = V0AcceptJobRequest(job_uuid=job_request.uuid)
-    await miner_transport.add_message(accept_job_msg, send_before=2)
-
-    executor_ready_msg = V0ExecutorReadyRequest(job_uuid=job_request.uuid)
-    await miner_transport.add_message(executor_ready_msg, send_before=1)
-
-    job_finished_msg = V0JobFinishedRequest(
+    await miner_transport.add_message(V0AcceptJobRequest(job_uuid=job_request.uuid), send_before=2)
+    await miner_transport.add_message(V0ExecutorReadyRequest(job_uuid=job_request.uuid), send_before=1)
+    await miner_transport.add_message(V0VolumesReadyRequest(job_uuid=job_request.uuid), send_before=1)
+    await miner_transport.add_message(V0ExecutionDoneRequest(job_uuid=job_request.uuid), send_before=0)
+    await miner_transport.add_message(V0JobFinishedRequest(
         job_uuid=job_request.uuid, docker_process_stdout="", docker_process_stderr=""
-    )
-    await miner_transport.add_message(job_finished_msg, send_before=1)
+    ), send_before=0)
 
     # Job 2
     # Second transport will "connect" to the same "miner", but will have a clean state.
     miner_transport_2 = miner_transports[1]
     await faci_transport.add_message(another_job_request, send_before=2)
 
-    await miner_transport_2.add_message(
-        V0AcceptJobRequest(job_uuid=another_job_request.uuid),
-        send_before=2,
-    )
-
-    await miner_transport_2.add_message(
-        V0ExecutorReadyRequest(job_uuid=another_job_request.uuid),
-        send_before=1,
-    )
-
+    await miner_transport_2.add_message(V0AcceptJobRequest(job_uuid=another_job_request.uuid), send_before=2)
+    await miner_transport_2.add_message(V0ExecutorReadyRequest(job_uuid=another_job_request.uuid), send_before=1)
+    await miner_transport_2.add_message(V0VolumesReadyRequest(job_uuid=another_job_request.uuid), send_before=1)
+    await miner_transport_2.add_message(V0ExecutionDoneRequest(job_uuid=another_job_request.uuid), send_before=0)
     await miner_transport_2.add_message(
         V0JobFinishedRequest(
             job_uuid=another_job_request.uuid, docker_process_stdout="", docker_process_stderr=""
         ),
-        send_before=1,
+        send_before=0,
     )
 
     # Expected messages: auth, job1 status=accepted, job1 status=finished, job2 status=accepted
-    await execute_scenario(until=lambda: len(faci_transport.sent) >= 5)
+    await execute_scenario(until=lambda: len(faci_transport.sent) >= 13, timeout_seconds=3)
 
-    j1_accepted_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[1])
-    j1_finished_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[2])
-    j2_accepted_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[3])
-    j2_finished_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[4])
+    j1_accepted_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[2])
+    j1_finished_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[6])
+    j2_accepted_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[8])
+    j2_finished_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[12])
 
     assert j1_accepted_msg.status == "accepted"
     assert j1_finished_msg.status == "completed"

@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol import facilitator_requests
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
+from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.models import Cycle, Miner, MinerManifest, SyntheticJobBatch
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
@@ -27,7 +27,7 @@ def manifest(miner):
     return MinerManifest.objects.create(
         miner=miner,
         batch=batch,
-        executor_class=DEFAULT_EXECUTOR_CLASS,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=5,
         online_executor_count=5,
     )
@@ -152,7 +152,7 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
 def job_request():
     return facilitator_requests.V2JobRequest(
         uuid=str(uuid.uuid4()),
-        executor_class=DEFAULT_EXECUTOR_CLASS,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
         docker_image="doesntmatter",
         args=[],
         env={},
