@@ -708,7 +708,9 @@ class JobRunner:
             # upload the output if requested and job succeeded
             if self.full_job_request.output_upload:
                 try:
-                    output_uploader = OutputUploader.for_upload_output(self.full_job_request.output_upload)
+                    output_uploader = OutputUploader.for_upload_output(
+                        self.full_job_request.output_upload
+                    )
                     output_uploader.max_size_bytes = settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES
                     await output_uploader.upload(self.output_volume_mount_dir)
                 except OutputUploadFailed as ex:

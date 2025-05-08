@@ -131,12 +131,8 @@ class MockSuccessfulMinerClient(MockMinerClient):
         self.executor_ready_or_failed_future.set_result(
             V0ExecutorReadyRequest(job_uuid=self.job_uuid)
         )
-        self.volumes_ready_future.set_result(
-            V0VolumesReadyRequest(job_uuid=self.job_uuid)
-        )
-        self.execution_done_future.set_result(
-            V0ExecutionDoneRequest(job_uuid=self.job_uuid)
-        )
+        self.volumes_ready_future.set_result(V0VolumesReadyRequest(job_uuid=self.job_uuid))
+        self.execution_done_future.set_result(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
         self.miner_finished_or_failed_future.set_result(
             V0JobFinishedRequest(
                 job_uuid=self.job_uuid,

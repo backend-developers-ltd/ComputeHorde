@@ -116,30 +116,41 @@ async def test_miner_is_blacklisted__after_timing_out(
     # Miner: timeout here (stage==0)
 
     if timeout_stage > 0:
-        await miner_transport.add_message(V0AcceptJobRequest(job_uuid=job_request.uuid), send_before=1)
+        await miner_transport.add_message(
+            V0AcceptJobRequest(job_uuid=job_request.uuid), send_before=1
+        )
         # Miner: timeout here (stage==1)
 
     if timeout_stage > 1:
-        await miner_transport.add_message(V0ExecutorReadyRequest(job_uuid=job_request.uuid), send_before=1)
+        await miner_transport.add_message(
+            V0ExecutorReadyRequest(job_uuid=job_request.uuid), send_before=1
+        )
         # Miner: timeout here (stage==2)
 
     # TODO: Timeout at new execution stages - volumes, execution etc.
 
     await faci_transport.add_message(
         another_job_request,
-        send_before={0:2, 1:3, 2:4}[timeout_stage], # The further we go, the more status updates go to the facilitator.
+        send_before={0: 2, 1: 3, 2: 4}[
+            timeout_stage
+        ],  # The further we go, the more status updates go to the facilitator.
         sleep_before=0.2,
     )
 
     await execute_scenario(
-        until=lambda: len(faci_transport.sent) >= len(expected_status_updates) + 1, # +1 because auth message is also there
+        until=lambda: len(faci_transport.sent)
+        >= len(expected_status_updates) + 1,  # +1 because auth message is also there
         timeout_seconds=3,
     )
 
     for i, (status, comment) in enumerate(expected_status_updates, start=1):
         status_message = JobStatusUpdate.model_validate_json(faci_transport.sent[i])
-        assert status_message.status == status, f"Bad message received at step {i}, expected {status} but got {status_message.status}"
-        assert comment in status_message.metadata.comment, f"Failed checking message {i}, expected {comment} in comment, got {status_message.metadata.comment}"
+        assert status_message.status == status, (
+            f"Bad message received at step {i}, expected {status} but got {status_message.status}"
+        )
+        assert comment in status_message.metadata.comment, (
+            f"Failed checking message {i}, expected {comment} in comment, got {status_message.metadata.comment}"
+        )
 
 
 async def test_miner_is_blacklisted__after_failing_to_start_executor(

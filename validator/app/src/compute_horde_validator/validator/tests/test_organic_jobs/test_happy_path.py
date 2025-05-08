@@ -27,16 +27,25 @@ async def test_basic_flow_works(job_request, faci_transport, miner_transport, ex
     await miner_transport.add_message(V0AcceptJobRequest(job_uuid=job_request.uuid), send_before=1)
     # vali -> faci: accepted
     # vali -> miner: receipt for accepting the job
-    await miner_transport.add_message(V0ExecutorReadyRequest(job_uuid=job_request.uuid), send_before=1)
+    await miner_transport.add_message(
+        V0ExecutorReadyRequest(job_uuid=job_request.uuid), send_before=1
+    )
     # vali -> faci: executor ready
     # vali -> miner: actual job request
-    await miner_transport.add_message(V0VolumesReadyRequest(job_uuid=job_request.uuid), send_before=1)
+    await miner_transport.add_message(
+        V0VolumesReadyRequest(job_uuid=job_request.uuid), send_before=1
+    )
     # vali -> faci: volumes ready
-    await miner_transport.add_message(V0ExecutionDoneRequest(job_uuid=job_request.uuid), send_before=0)
+    await miner_transport.add_message(
+        V0ExecutionDoneRequest(job_uuid=job_request.uuid), send_before=0
+    )
     # vali -> faci: execution done
-    await miner_transport.add_message(V0JobFinishedRequest(
-        job_uuid=job_request.uuid, docker_process_stdout="", docker_process_stderr=""
-    ), send_before=0)
+    await miner_transport.add_message(
+        V0JobFinishedRequest(
+            job_uuid=job_request.uuid, docker_process_stdout="", docker_process_stderr=""
+        ),
+        send_before=0,
+    )
     # vali -> miner: receipt for finishing job
     # vali -> faci: completed
 
@@ -69,22 +78,39 @@ async def test_miner_can_be_selected_after_finishing_job(
     await faci_transport.add_message(job_request, send_before=0)
 
     await miner_transport.add_message(V0AcceptJobRequest(job_uuid=job_request.uuid), send_before=2)
-    await miner_transport.add_message(V0ExecutorReadyRequest(job_uuid=job_request.uuid), send_before=1)
-    await miner_transport.add_message(V0VolumesReadyRequest(job_uuid=job_request.uuid), send_before=1)
-    await miner_transport.add_message(V0ExecutionDoneRequest(job_uuid=job_request.uuid), send_before=0)
-    await miner_transport.add_message(V0JobFinishedRequest(
-        job_uuid=job_request.uuid, docker_process_stdout="", docker_process_stderr=""
-    ), send_before=0)
+    await miner_transport.add_message(
+        V0ExecutorReadyRequest(job_uuid=job_request.uuid), send_before=1
+    )
+    await miner_transport.add_message(
+        V0VolumesReadyRequest(job_uuid=job_request.uuid), send_before=1
+    )
+    await miner_transport.add_message(
+        V0ExecutionDoneRequest(job_uuid=job_request.uuid), send_before=0
+    )
+    await miner_transport.add_message(
+        V0JobFinishedRequest(
+            job_uuid=job_request.uuid, docker_process_stdout="", docker_process_stderr=""
+        ),
+        send_before=0,
+    )
 
     # Job 2
     # Second transport will "connect" to the same "miner", but will have a clean state.
     miner_transport_2 = miner_transports[1]
     await faci_transport.add_message(another_job_request, send_before=2)
 
-    await miner_transport_2.add_message(V0AcceptJobRequest(job_uuid=another_job_request.uuid), send_before=2)
-    await miner_transport_2.add_message(V0ExecutorReadyRequest(job_uuid=another_job_request.uuid), send_before=1)
-    await miner_transport_2.add_message(V0VolumesReadyRequest(job_uuid=another_job_request.uuid), send_before=1)
-    await miner_transport_2.add_message(V0ExecutionDoneRequest(job_uuid=another_job_request.uuid), send_before=0)
+    await miner_transport_2.add_message(
+        V0AcceptJobRequest(job_uuid=another_job_request.uuid), send_before=2
+    )
+    await miner_transport_2.add_message(
+        V0ExecutorReadyRequest(job_uuid=another_job_request.uuid), send_before=1
+    )
+    await miner_transport_2.add_message(
+        V0VolumesReadyRequest(job_uuid=another_job_request.uuid), send_before=1
+    )
+    await miner_transport_2.add_message(
+        V0ExecutionDoneRequest(job_uuid=another_job_request.uuid), send_before=0
+    )
     await miner_transport_2.add_message(
         V0JobFinishedRequest(
             job_uuid=another_job_request.uuid, docker_process_stdout="", docker_process_stderr=""
