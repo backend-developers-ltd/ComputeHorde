@@ -47,13 +47,16 @@ def manifest_message():
 def executor_ready_message(job_uuid: uuid.UUID):
     return V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
 
+
 @pytest.fixture
 def volumes_ready_message(job_uuid: uuid.UUID):
     return V0VolumesReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
 
+
 @pytest.fixture
 def execution_done_message(job_uuid: uuid.UUID):
     return V0ExecutionDoneRequest(job_uuid=str(job_uuid)).model_dump_json()
+
 
 @pytest.fixture
 def accept_job_message(job_uuid: uuid.UUID):

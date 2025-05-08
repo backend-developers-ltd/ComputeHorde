@@ -121,10 +121,14 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         ] = loop.create_future()
         self.streaming_job_ready_or_not_timestamp: int = 0
 
-        self.volumes_ready_future: asyncio.Future[V0VolumesReadyRequest] = loop.create_future()
+        self.volumes_ready_future: asyncio.Future[V0VolumesReadyRequest | V0JobFailedRequest] = (
+            loop.create_future()
+        )
         self.volumes_ready_timestamp: int = 0
 
-        self.execution_done_future: asyncio.Future[V0ExecutionDoneRequest] = loop.create_future()
+        self.execution_done_future: asyncio.Future[V0ExecutionDoneRequest | V0JobFailedRequest] = (
+            loop.create_future()
+        )
         self.execution_done_timestamp: int = 0
 
         self.miner_finished_or_failed_future: asyncio.Future[
@@ -235,12 +239,28 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                 self.execution_done_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
-        elif isinstance(msg, V0JobFailedRequest | V0JobFinishedRequest):
+        elif isinstance(msg, V0JobFinishedRequest):
             try:
                 self.miner_finished_or_failed_future.set_result(msg)
                 self.miner_finished_or_failed_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
+        elif isinstance(msg, V0JobFailedRequest):
+            try:
+                self.volumes_ready_future.set_result(msg)
+                self.volumes_ready_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                pass
+            try:
+                self.execution_done_future.set_result(msg)
+                self.execution_done_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                pass
+            try:
+                self.miner_finished_or_failed_future.set_result(msg)
+                self.miner_finished_or_failed_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                pass
         elif isinstance(msg, V0MachineSpecsRequest):
             await self.handle_machine_specs_request(msg)
         else:
@@ -399,7 +419,9 @@ class FailureReason(enum.Enum):
     INITIAL_RESPONSE_TIMED_OUT = enum.auto()
     EXECUTOR_READINESS_RESPONSE_TIMED_OUT = enum.auto()
     VOLUMES_TIMED_OUT = enum.auto()
+    VOLUMES_FAILED = enum.auto()
     EXECUTION_TIMED_OUT = enum.auto()
+    EXECUTION_FAILED = enum.auto()
     FINAL_RESPONSE_TIMED_OUT = enum.auto()
     JOB_DECLINED = enum.auto()
     EXECUTOR_FAILED = enum.auto()
@@ -588,6 +610,8 @@ async def execute_organic_job_on_miner(
                     client.volumes_ready_future,
                     timeout=deadline.time_left(),
                 )
+                if isinstance(volumes_ready_response, V0JobFailedRequest):
+                    raise OrganicJobError(FailureReason.VOLUMES_FAILED, volumes_ready_response)
                 logger.debug(f"Volume download done with {deadline.time_left():.2f}s left")
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.VOLUMES_TIMED_OUT) from exc
@@ -605,6 +629,8 @@ async def execute_organic_job_on_miner(
                     client.execution_done_future,
                     timeout=deadline.time_left(),
                 )
+                if isinstance(execution_done_response, V0JobFailedRequest):
+                    raise OrganicJobError(FailureReason.EXECUTION_FAILED, execution_done_response)
                 logger.debug(f"Execution done with {deadline.time_left():.2f}s left")
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.EXECUTION_TIMED_OUT) from exc

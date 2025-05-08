@@ -196,10 +196,10 @@ async def test_miner_is_blacklisted__after_failing_job(
     await faci_transport.add_message(
         another_job_request,
         send_before=3,  # job status=accepted, job status=executor ready, job status=failed
-        sleep_before=0.2,  # needed to ensure validator finishes the job flow
+        sleep_before=0.5,  # needed to ensure validator finishes the job flow
     )
 
-    await execute_scenario(until=lambda: len(faci_transport.sent) >= 6, timeout_seconds=3)
+    await execute_scenario(until=lambda: len(faci_transport.sent) >= 7, timeout_seconds=3)
 
     accepted_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[2])
     failed_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[4])
