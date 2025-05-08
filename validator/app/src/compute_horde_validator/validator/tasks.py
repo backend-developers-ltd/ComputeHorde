@@ -34,6 +34,12 @@ from numpy.typing import NDArray
 from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.collateral import (
+    get_evm_key_associations,
+    get_miner_collateral,
+    get_web3_connection,
+    wei_to_tao,
+)
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
@@ -1310,6 +1316,71 @@ def sync_metagraph() -> None:
         save_metagraph_snapshot(
             new_cycle_start_metagraph, snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START
         )
+
+        hotkeys_to_sync = [n.hotkey for n in new_cycle_start_metagraph.neurons]
+
+        try:
+            sync_collaterals(subtensor, hotkeys_to_sync, current_cycle.start)
+        except Exception as e:
+            msg = f"Error while syncing collaterals: {e}"
+            logger.warning(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.COLLATERAL_SYNCING,
+                subtype=SystemEvent.EventSubType.FAILURE,
+                long_description=msg,
+                data={"block": current_cycle.start},
+            )
+
+
+def sync_collaterals(subtensor: bittensor.subtensor, hotkeys: list[str], block: int) -> None:
+    """
+    Synchronizes miner evm addresses and collateral amounts.
+
+    :param hotkeys: Hotkeys to sync collaterals for.
+    :type hotkeys: Iterable[str]
+    :param block: Block number for querying the collateral contract.
+    :type block: int
+    :return: None
+    """
+    associations = get_evm_key_associations(
+        subtensor=subtensor, netuid=settings.BITTENSOR_NETUID, block=block
+    )
+    miners = Miner.objects.filter(hotkey__in=hotkeys)
+    w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
+
+    to_update = []
+    for miner in miners:
+        if not miner.uid:
+            continue
+
+        evm_address = associations.get(miner.uid)
+        if not evm_address:
+            continue
+
+        miner.evm_address = evm_address
+        to_update.append(miner)
+
+        if settings.COLLATERAL_CONTRACT_ADDRESS:
+            try:
+                collateral = get_miner_collateral(
+                    w3, settings.COLLATERAL_CONTRACT_ADDRESS, miner.evm_address, block
+                )
+                miner.collateral = wei_to_tao(collateral)
+            except Exception as e:
+                msg = f"Error while fetching miner collateral: {e}"
+                logger.warning(msg)
+                SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                    type=SystemEvent.EventType.COLLATERAL_SYNCING,
+                    subtype=SystemEvent.EventSubType.GETTING_MINER_COLLATERAL_FAILED,
+                    long_description=msg,
+                    data={
+                        "block": block,
+                        "miner_hotkey": miner.hotkey,
+                        "evm_address": evm_address,
+                    },
+                )
+
+    Miner.objects.bulk_update(to_update, fields=["evm_address", "collateral"])
 
 
 @app.task

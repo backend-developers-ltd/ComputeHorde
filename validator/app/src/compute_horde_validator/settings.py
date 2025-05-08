@@ -404,6 +404,17 @@ CONSTANCE_CONFIG = {
         "How long to wait for Celery to execute the organic job",
         int,
     ),
+    # collateral params
+    "DYNAMIC_MINIMUM_COLLATERAL_AMOUNT": (
+        0.01,
+        "Minimum collateral amount (in tao) for a miner to be considered for a job",
+        float,
+    ),
+    "DYNAMIC_COLLATERAL_SLASH_AMOUNT": (
+        0.005,
+        "Amount (in tao) of collateral to be slashed if a miner cheats on a job",
+        float,
+    ),
 }
 
 # Content Security Policy
@@ -729,6 +740,8 @@ BITTENSOR_WALLET_DIRECTORY = env.path(
 )
 BITTENSOR_WALLET_NAME = env.str("BITTENSOR_WALLET_NAME")
 BITTENSOR_WALLET_HOTKEY_NAME = env.str("BITTENSOR_WALLET_HOTKEY_NAME")
+
+COLLATERAL_CONTRACT_ADDRESS = env("COLLATERAL_CONTRACT_ADDRESS", default=None)
 
 BITTENSOR_SHIELD_CERTIFICATE_PATH = env.path(
     "BITTENSOR_SHIELD_CERTIFICATE_PATH",
