@@ -20,7 +20,6 @@ from .authentication import JWTAuthentication
 from .middleware.signature_middleware import require_signature
 from .models import Job, JobCreationDisabledError, JobFeedback
 from .schemas import MuliVolumeAllowedVolume
-from .utils import safe_config
 
 logger = get_logger(__name__)
 
@@ -92,17 +91,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
         return obj.status.created_at
 
 
-class DynamicJobFields:
-    def get_fields(self):
-        fields = super().get_fields()
-        # Check the Constance config value
-        if safe_config.JOB_REQUEST_VERSION == 0:
-            fields.pop("uploads", None)
-            fields.pop("volumes", None)
-        return fields
-
-
-class DockerJobSerializer(DynamicJobFields, JobSerializer):
+class DockerJobSerializer(JobSerializer):
     class Meta:
         model = Job
         fields = JobSerializer.Meta.fields

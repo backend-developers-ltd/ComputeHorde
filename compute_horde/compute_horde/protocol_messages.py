@@ -114,33 +114,33 @@ class V0AcceptJobRequest(BaseModel):
 class V0ExecutorFailedRequest(BaseModel):
     message_type: Literal["V0ExecutorFailedRequest"] = "V0ExecutorFailedRequest"
     job_uuid: str
-    executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
+    executor_token: str | None = None  # SET ONLY on miner.ec -> miner.vc
 
 
-# TODO: can this be merged into V0ExecutorFailedRequest?
 # executor -> miner.ec -> miner.vc -> validator
 class V0StreamingJobNotReadyRequest(BaseModel):
     message_type: Literal["V0StreamingJobNotReadyRequest"] = "V0StreamingJobNotReadyRequest"
     job_uuid: str
-    executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
+    executor_token: str | None = None  # SET ONLY on miner.ec -> miner.vc
 
 
 # executor -> miner.ec -> miner.vc -> validator
 class V0ExecutorReadyRequest(BaseModel):
     message_type: Literal["V0ExecutorReadyRequest"] = "V0ExecutorReadyRequest"
     job_uuid: str
-    executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
+    executor_token: str | None = None  # SET ONLY on miner.ec -> miner.vc
 
 
-# TODO: can this be merged into V0ExecutorReadyRequest?
 # signaling the streaming job is ready to accept connections from user
 # executor -> miner.ec -> miner.vc -> validator
 class V0StreamingJobReadyRequest(BaseModel):
     message_type: Literal["V0StreamingJobReadyRequest"] = "V0StreamingJobReadyRequest"
     job_uuid: str
-    executor_token: str | None = None  # ONLY on miner.ec -> miner.vc
+    executor_token: str | None = None  # SET ONLY on miner.ec -> miner.vc
     public_key: str
-    ip: str | None = None  # set by miner after it receives the message from executor
+    ip: str | None = (
+        None  # set by miner after it receives streaming job ready message from executor
+    )
     port: int
     miner_signature: str | None = None
 

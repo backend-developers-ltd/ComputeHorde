@@ -18,6 +18,7 @@ from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.core.errors import SubstrateRequestException
 from bittensor.core.metagraph import Metagraph, NonTorchMetagraph
 from bittensor.utils.weight_utils import process_weights_for_netuid
+from bt_ddos_shield import ShieldMetagraph
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
@@ -250,7 +251,7 @@ def schedule_synthetic_jobs() -> None:
             logger.debug("Another thread already scheduling validation")
             return
 
-        subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+        subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
         current_block = subtensor_.get_current_block()
         current_cycle = get_cycle_containing_block(
             block=current_block, netuid=settings.BITTENSOR_NETUID
@@ -316,7 +317,7 @@ def run_synthetic_jobs(
         logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
         return
 
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
     if settings.DEBUG_DONT_STAGGER_VALIDATORS:
@@ -431,7 +432,7 @@ def check_missed_synthetic_jobs() -> None:
     """
     Check if there are any synthetic jobs that were scheduled to run, but didn't.
     """
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
     with transaction.atomic():
@@ -474,7 +475,7 @@ def do_set_weights(
     Set weights. To be used in other celery tasks in order to facilitate a timeout,
      since the multiprocessing version of this doesn't work in celery.
     """
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
@@ -681,14 +682,19 @@ def save_event_on_error(subtype):
         raise
 
 
-def get_subtensor(network):
+def _get_subtensor_for_setting_scores(network):
     with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
         return bittensor.subtensor(network=network)
 
 
-def get_metagraph(subtensor, netuid):
+def _get_metagraph_for_setting_scores(subtensor, netuid):
     with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
-        return subtensor.metagraph(netuid=netuid)
+        return ShieldMetagraph(
+            wallet=settings.BITTENSOR_WALLET(),
+            options=settings.BITTENSOR_SHIELD_METAGRAPH_OPTIONS(),
+            netuid=netuid,
+            subtensor=subtensor,
+        )
 
 
 def normalize_batch_scores(
@@ -819,7 +825,7 @@ def set_scores():
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
 
-    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    subtensor = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor.get_current_block()
 
     if commit_reveal_weights_enabled:
@@ -841,7 +847,9 @@ def set_scores():
                 logger.debug("Another thread already setting weights")
                 return
 
-            metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
+            metagraph = _get_metagraph_for_setting_scores(
+                subtensor, netuid=settings.BITTENSOR_NETUID
+            )
             batches = list(
                 SyntheticJobBatch.objects.select_related("cycle")
                 .filter(
@@ -943,7 +951,7 @@ def reveal_scores() -> None:
         logger.debug("No weights to reveal")
         return
 
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
     interval = CommitRevealInterval(current_block)
     if current_block not in interval.reveal_window:
@@ -1056,7 +1064,7 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
         return True, "nothing_to_do"
 
     wallet = settings.BITTENSOR_WALLET()
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     try:
         is_success, message = subtensor_.reveal_weights(
             wallet=wallet,
@@ -1150,11 +1158,14 @@ def send_events_to_facilitator():
             logger.error(f"Failed to send system events to facilitator: {response}")
 
 
-def fetch_metagraph(subtensor: bittensor.subtensor, block=None):
+def _get_metagraph_for_sync(subtensor: bittensor.subtensor, block=None):
     try:
         start_ts = time.time()
-        metagraph = subtensor.metagraph(
+        metagraph = ShieldMetagraph(
+            wallet=settings.BITTENSOR_WALLET(),
+            options=settings.BITTENSOR_SHIELD_METAGRAPH_OPTIONS(),
             netuid=settings.BITTENSOR_NETUID,
+            subtensor=subtensor,
             block=block,
             lite=True,
         )
@@ -1204,7 +1215,7 @@ def save_metagraph_snapshot(
 @app.task
 def sync_metagraph() -> None:
     subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-    metagraph = fetch_metagraph(subtensor)
+    metagraph = _get_metagraph_for_sync(subtensor)
     if metagraph is None:
         return
 
@@ -1294,7 +1305,7 @@ def sync_metagraph() -> None:
     except Exception as e:
         logger.warning(f"Failed to fetch cycle start metagraph snapshot: {e}")
     if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
-        new_cycle_start_metagraph = fetch_metagraph(subtensor, block=current_cycle.start)
+        new_cycle_start_metagraph = _get_metagraph_for_sync(subtensor, block=current_cycle.start)
         save_metagraph_snapshot(
             new_cycle_start_metagraph, snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START
         )

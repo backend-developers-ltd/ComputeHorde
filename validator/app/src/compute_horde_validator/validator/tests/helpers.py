@@ -13,11 +13,10 @@ import bittensor
 import constance
 import numpy as np
 from bittensor.core.errors import SubstrateRequestException
+from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     Signature,
-    V0JobRequest,
-    V1JobRequest,
     V2JobRequest,
 )
 from compute_horde.protocol_messages import (
@@ -165,68 +164,6 @@ class MockFaillingMinerClient(MockMinerClient):
                 docker_process_exit_status=1,
             )
         )
-
-
-def get_dummy_job_request_v0(uuid: str) -> V0JobRequest:
-    return V0JobRequest(
-        type="job.new",
-        uuid=uuid,
-        miner_hotkey="miner_hotkey",
-        executor_class=DEFAULT_EXECUTOR_CLASS,
-        docker_image="nvidia",
-        args=[],
-        env={},
-        use_gpu=False,
-        input_url="fake.com/input",
-        output_url="fake.com/output",
-    )
-
-
-def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
-    return V1JobRequest(
-        type="job.new",
-        uuid=uuid,
-        miner_hotkey="miner_hotkey",
-        executor_class=DEFAULT_EXECUTOR_CLASS,
-        docker_image="nvidia",
-        args=[],
-        env={},
-        use_gpu=False,
-        volume={
-            "volume_type": "multi_volume",
-            "volumes": [
-                {
-                    "volume_type": "single_file",
-                    "url": "fake.com/input.txt",
-                    "relative_path": "input.txt",
-                },
-                {
-                    "volume_type": "zip_url",
-                    "contents": "fake.com/input.zip",
-                    "relative_path": "zip/",
-                },
-            ],
-        },
-        output_upload={
-            "output_upload_type": "multi_upload",
-            "uploads": [
-                {
-                    "output_upload_type": "single_file_post",
-                    "url": "https://s3.bucket.com/output1.txt",
-                    "relative_path": "output1.txt",
-                },
-                {
-                    "output_upload_type": "single_file_put",
-                    "url": "https://s3.bucket.com/output2.zip",
-                    "relative_path": "zip/output2.zip",
-                },
-            ],
-            "system_output": {
-                "output_upload_type": "zip_and_http_put",
-                "url": "http://r2.bucket.com/output.zip",
-            },
-        },
-    )
 
 
 def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2JobRequest:
@@ -431,6 +368,22 @@ class MockMetagraph:
         self.total_stake = np.array([1001.0 * (i + 1) for i in range(num_neurons)])
         self.uids = np.array(list(range(num_neurons)))
         self.block = MockBlock(block_num)
+
+
+class MockShieldMetagraph(MockMetagraph):
+    def __init__(
+        self,
+        wallet: bittensor.Wallet,
+        netuid: int,
+        options: ShieldMetagraphOptions = None,
+        subtensor: bittensor.Subtensor | None = None,
+        num_neurons: int | None = NUM_NEURONS,
+        neurons: list[MockNeuron] | None = None,
+        block_num: int = 1000,
+    ):
+        super().__init__(
+            netuid=netuid, num_neurons=num_neurons, neurons=neurons, block_num=block_num
+        )
 
 
 def check_system_events(

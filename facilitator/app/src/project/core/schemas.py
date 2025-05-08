@@ -1,5 +1,4 @@
 from decimal import Decimal
-from enum import StrEnum
 from typing import Annotated, Literal
 
 from compute_horde_core.volume import (
@@ -13,40 +12,6 @@ from pydantic import BaseModel, Extra, Field, field_validator
 MuliVolumeAllowedVolume = Annotated[
     InlineVolume | ZipUrlVolume | SingleFileVolume | HuggingfaceVolume, Field(discriminator="volume_type")
 ]
-
-
-class MinerResponse(BaseModel, extra=Extra.allow):
-    job_uuid: str
-    message_type: str | None
-    docker_process_stderr: str
-    docker_process_stdout: str
-    artifacts: dict[str, str] | None = None
-
-
-class JobStatusMetadata(BaseModel, extra=Extra.allow):
-    comment: str
-    miner_response: MinerResponse | None = None
-
-
-class JobStatusUpdate(BaseModel, extra=Extra.forbid):
-    """
-    Message sent from validator to this app in response to NewJobRequest.
-    """
-
-    class Status(StrEnum):
-        RECEIVED = "received"
-        ACCEPTED = "accepted"
-        EXECUTOR_READY = "executor_ready"
-        VOLUMES_READY = "volumes_ready"
-        EXECUTION_DONE = "execution_done"
-        COMPLETED = "completed"
-        REJECTED = "rejected"
-        FAILED = "failed"
-
-    message_type: Literal["V0JobStatusUpdate"] = Field(default="V0JobStatusUpdate")
-    uuid: str
-    status: Status
-    metadata: JobStatusMetadata | None = None
 
 
 class ForceDisconnect(BaseModel, extra=Extra.forbid):

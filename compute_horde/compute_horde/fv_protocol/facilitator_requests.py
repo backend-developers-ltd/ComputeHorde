@@ -3,9 +3,9 @@ from typing import Annotated, Literal, TypeAlias
 
 import pydantic
 from compute_horde_core.executor_class import ExecutorClass
-from compute_horde_core.output_upload import MultiUpload, OutputUpload, ZipAndHttpPutUpload
+from compute_horde_core.output_upload import MultiUpload, OutputUpload
 from compute_horde_core.signature import Signature, SignedFields
-from compute_horde_core.volume import MultiVolume, Volume, ZipUrlVolume
+from compute_horde_core.volume import MultiVolume, Volume
 from pydantic import BaseModel, JsonValue
 
 
@@ -30,59 +30,6 @@ class V0JobCheated(BaseModel, extra="forbid"):
     message_type: Literal["V0JobCheated"] = "V0JobCheated"
 
     job_uuid: str
-
-
-class V0JobRequest(BaseModel, extra="forbid"):
-    """Message sent from facilitator to validator to request a job execution"""
-
-    # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
-    type: Literal["job.new"] = "job.new"
-    message_type: Literal["V0JobRequest"] = "V0JobRequest"
-
-    uuid: str
-    miner_hotkey: str
-    executor_class: ExecutorClass
-    docker_image: str
-    args: list[str]
-    env: dict[str, str]
-    use_gpu: bool
-    input_url: str
-    output_url: str
-
-    def get_args(self):
-        return self.args
-
-    @property
-    def volume(self) -> Volume | None:
-        if self.input_url:
-            return ZipUrlVolume(contents=self.input_url)
-        return None
-
-    @property
-    def output_upload(self) -> OutputUpload | None:
-        if self.output_url:
-            return ZipAndHttpPutUpload(url=self.output_url)
-        return None
-
-
-class V1JobRequest(BaseModel, extra="forbid"):
-    """Message sent from facilitator to validator to request a job execution"""
-
-    # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
-    type: Literal["job.new"] = "job.new"
-    message_type: Literal["V1JobRequest"] = "V1JobRequest"
-    uuid: str
-    miner_hotkey: str
-    executor_class: ExecutorClass
-    docker_image: str
-    args: list[str]
-    env: dict[str, str]
-    use_gpu: bool
-    volume: Volume | None = None
-    output_upload: OutputUpload | None = None
-
-    def get_args(self):
-        return self.args
 
 
 def to_json_array(data) -> list[JsonValue]:
@@ -162,6 +109,6 @@ class V2JobRequest(BaseModel, extra="forbid"):
 
 
 OrganicJobRequest: TypeAlias = Annotated[
-    V0JobRequest | V1JobRequest | V2JobRequest,
+    V2JobRequest,
     pydantic.Field(discriminator="message_type"),
 ]

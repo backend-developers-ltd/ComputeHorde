@@ -11,7 +11,11 @@ from pytest_mock import MockerFixture
 
 from compute_horde_miner import asgi
 from compute_horde_miner.miner.models import Validator
-from compute_horde_miner.miner.tests.executor_manager import StubExecutorManager, fake_executor
+from compute_horde_miner.miner.tests.executor_manager import (
+    StubExecutorManager,
+    StubStreamingExecutorManager,
+    fake_executor,
+)
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.django_db(transaction=True)]
 
@@ -25,13 +29,29 @@ def mock_keypair(mocker: MockerFixture):
     )
 
 
+@pytest.fixture
+def mock_executor_ip(mocker: MockerFixture):
+    return mocker.patch(
+        "compute_horde_miner.miner.miner_consumer.executor_interface.MinerExecutorConsumer.get_executor_ip",
+        lambda self: "0.0.0.0",
+    )
+
+
 # Somehow the regular dependency mechanism doesn't work with multiple test cases
 # Explicit patching with a new instance each time is a temporary workaround
-@pytest.fixture(autouse=True)
-def _patch_executor_manager_class(mocker: MockerFixture):
+@pytest.fixture
+def mock_executor_manager_class(mocker: MockerFixture):
     mocker.patch(
         "compute_horde_miner.miner.executor_manager.current.executor_manager",
         StubExecutorManager(),
+    )
+
+
+@pytest.fixture
+def mock_streaming_executor_manager_class(mocker: MockerFixture):
+    mocker.patch(
+        "compute_horde_miner.miner.executor_manager.current.executor_manager",
+        StubStreamingExecutorManager(),
     )
 
 
@@ -64,7 +84,7 @@ async def make_communicator(validator_key: str):
     await communicator.disconnect()
 
 
-async def run_regular_flow_test(validator_key: str, job_uuid: str):
+async def run_regular_flow_test(validator_key: str, job_uuid: str, streaming: bool = False):
     async with make_communicator(validator_key) as communicator:
         await communicator.send_json_to(
             {
@@ -80,27 +100,32 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
             "message_type": "V0ExecutorManifestRequest",
             "manifest": {DEFAULT_EXECUTOR_CLASS: 1},
         }
-        await communicator.send_json_to(
-            {
-                "message_type": "V0InitialJobRequest",
+        msg = {
+            "message_type": "V0InitialJobRequest",
+            "job_uuid": job_uuid,
+            "executor_class": DEFAULT_EXECUTOR_CLASS,
+            "docker_image": "it's teeeeests",
+            "timeout_seconds": 60,
+            "volume": None,
+            "job_started_receipt_payload": {
+                "receipt_type": "JobStartedReceipt",
                 "job_uuid": job_uuid,
+                "miner_hotkey": "miner_hotkey",
+                "validator_hotkey": validator_key,
+                "timestamp": "2020-01-01T00:00:00Z",
                 "executor_class": DEFAULT_EXECUTOR_CLASS,
-                "docker_image": "it's teeeeests",
-                "timeout_seconds": 60,
-                "volume": None,
-                "job_started_receipt_payload": {
-                    "receipt_type": "JobStartedReceipt",
-                    "job_uuid": job_uuid,
-                    "miner_hotkey": "miner_hotkey",
-                    "validator_hotkey": validator_key,
-                    "timestamp": "2020-01-01T00:00:00Z",
-                    "executor_class": DEFAULT_EXECUTOR_CLASS,
-                    "is_organic": True,
-                    "ttl": 5,
-                },
-                "job_started_receipt_signature": "gibberish",
+                "is_organic": True,
+                "ttl": 5,
+            },
+            "job_started_receipt_signature": "gibberish",
+        }
+        if streaming:
+            msg["streaming_details"] = {
+                "public_key": "some_public_key",
+                "executor_ip": None,
             }
-        )
+        await communicator.send_json_to(msg)
+
         response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
         assert response == {
             "message_type": "V0AcceptJobRequest",
@@ -112,7 +137,6 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
             "job_uuid": job_uuid,
             "executor_token": None,
         }
-
         await communicator.send_json_to(
             {
                 "message_type": "V0JobRequest",
@@ -124,6 +148,18 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
                 "volume": {"volume_type": "inline", "contents": "nonsense"},
             }
         )
+        if streaming:
+            response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
+            response.pop("miner_signature")  # ignore miner_signature field
+            assert response == {
+                "executor_token": None,
+                "message_type": "V0StreamingJobReadyRequest",
+                "job_uuid": job_uuid,
+                "public_key": "some_public_key",
+                "ip": "0.0.0.0",
+                "port": 1234,
+            }
+
         response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
         assert response == {
             "message_type": "V0JobFinishedRequest",
@@ -134,11 +170,29 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str):
         }
 
 
-async def test_main_loop(validator: Validator, job_uuid: str, mock_keypair: MagicMock):
+async def test_main_loop(
+    validator: Validator, job_uuid: str, mock_keypair: MagicMock, mock_executor_manager_class
+):
     await run_regular_flow_test(validator.public_key, job_uuid)
 
 
-async def test_local_miner(validator: Validator, job_uuid: str, mock_keypair: MagicMock, settings):
+async def test_streaming_main_loop(
+    validator: Validator,
+    job_uuid: str,
+    mock_keypair: MagicMock,
+    mock_streaming_executor_manager_class,
+    mock_executor_ip: MagicMock,
+):
+    await run_regular_flow_test(validator.public_key, job_uuid, streaming=True)
+
+
+async def test_local_miner(
+    validator: Validator,
+    job_uuid: str,
+    mock_keypair: MagicMock,
+    mock_executor_manager_class,
+    settings,
+):
     settings.IS_LOCAL_MINER = True
     settings.DEBUG_TURN_AUTHENTICATION_OFF = False
 
@@ -148,7 +202,9 @@ async def test_local_miner(validator: Validator, job_uuid: str, mock_keypair: Ma
     mock_keypair.return_value.verify.assert_called_once()
 
 
-async def test_local_miner_unknown_validator(mock_keypair: MagicMock, settings):
+async def test_local_miner_unknown_validator(
+    mock_keypair: MagicMock, mock_executor_manager_class, settings
+):
     settings.IS_LOCAL_MINER = True
     settings.DEBUG_TURN_AUTHENTICATION_OFF = False
 

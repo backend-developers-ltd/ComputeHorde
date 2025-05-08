@@ -295,10 +295,7 @@ def test_huggingface_volume():
     repo_id = "huggingface/model"
     revision = "main"
 
-    with patch(
-        "compute_horde_executor.executor.management.commands.run_executor.snapshot_download",
-        mock_download,
-    ):
+    with patch("huggingface_hub.snapshot_download", side_effect=mock_download):
         command = CommandTested(
             iter(
                 [
@@ -372,9 +369,8 @@ def test_huggingface_volume_failure():
     revision = "main"
 
     with patch(
-        "compute_horde_executor.executor.management.commands.run_executor.snapshot_download",
-        mock_download_failure,
-    ):
+        "huggingface_hub.snapshot_download", side_effect=mock_download_failure
+    ) as mock_snapshot_download:
         command = CommandTested(
             iter(
                 [
@@ -430,7 +426,7 @@ def test_huggingface_volume_failure():
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "docker_process_stdout": "Failed to download model from Hugging Face: Download failed",
+            "docker_process_stdout": "Failed to download model from Hugging Face after 3 retries: Download failed",
             "docker_process_stderr": "",
             "error_type": V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD.value,
             "error_detail": "Download failed",
@@ -438,6 +434,96 @@ def test_huggingface_volume_failure():
             "job_uuid": job_uuid,
         },
     ]
+
+    assert mock_snapshot_download.call_count == 3
+
+
+def test_huggingface_volume_fail_and_retry():
+    # Arrange
+    repo_id = "huggingface/model"
+    revision = "main"
+
+    first_try = True
+
+    def side_effect(*args, **kwargs):
+        nonlocal first_try
+        if first_try:
+            first_try = False
+            mock_download_failure(*args, **kwargs)
+        else:
+            mock_download(*args, **kwargs)
+
+    with patch(
+        "huggingface_hub.snapshot_download", side_effect=side_effect
+    ) as mock_snapshot_download:
+        command = CommandTested(
+            iter(
+                [
+                    json.dumps(
+                        {
+                            "message_type": "V0InitialJobRequest",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "timeout_seconds": 10,
+                            "volume_type": "huggingface_volume",
+                            "job_uuid": job_uuid,
+                            "job_started_receipt_payload": {
+                                "job_uuid": job_uuid,
+                                "miner_hotkey": "miner_hotkey",
+                                "validator_hotkey": "validator_hotkey",
+                                "timestamp": "2025-01-01T00:00:00+00:00",
+                                "executor_class": "spin_up-4min.gpu-24gb",
+                                "max_timeout": 10,
+                                "is_organic": True,
+                                "ttl": 5,
+                            },
+                            "job_started_receipt_signature": "blah",
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "message_type": "V0JobRequest",
+                            "executor_class": "spin_up-4min.gpu-24gb",
+                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+                            "docker_run_cmd": [],
+                            "docker_run_options_preset": "none",
+                            "volume": {
+                                "volume_type": "huggingface_volume",
+                                "repo_id": repo_id,
+                                "revision": revision,
+                            },
+                            "job_uuid": job_uuid,
+                        }
+                    ),
+                ]
+            )
+        )
+
+        # Act
+        command.handle()
+
+    # Assert
+    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+        {
+            "message_type": "V0ExecutorReadyRequest",
+            "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0MachineSpecsRequest",
+            "specs": mock.ANY,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0JobFinishedRequest",
+            "docker_process_stdout": payload,
+            "docker_process_stderr": mock.ANY,
+            "artifacts": {},
+            "job_uuid": job_uuid,
+        },
+    ]
+
+    assert mock_snapshot_download.call_count == 2
 
 
 def test_huggingface_volume_dataset():
@@ -457,8 +543,7 @@ def test_huggingface_volume_dataset():
     ]
 
     with patch(
-        "compute_horde_executor.executor.management.commands.run_executor.snapshot_download",
-        side_effect=mock_download,
+        "huggingface_hub.snapshot_download", side_effect=mock_download
     ) as mock_snapshot_download:
         command = CommandTested(
             iter(
