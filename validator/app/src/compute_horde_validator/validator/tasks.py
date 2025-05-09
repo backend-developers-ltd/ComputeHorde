@@ -1401,7 +1401,7 @@ def set_compute_time_allowances() -> None:
             long_description=msg,
             data=data,
         )
-        logger.error(msg)
+        logger.error(msg, exc_info=True)
 
 
 @app.task
