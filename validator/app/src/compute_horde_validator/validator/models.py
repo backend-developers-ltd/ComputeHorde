@@ -48,6 +48,7 @@ class SystemEvent(models.Model):
         LLM_PROMPT_ANSWERING = "LLM_PROMPT_ANSWERING"
         LLM_PROMPT_SAMPLING = "LLM_PROMPT_SAMPLING"
         BURNING_INCENTIVE = "BURNING_INCENTIVE"
+        ALLOWANCE_CALCULATION = "ALLOWANCE_CALCULATION"
         METAGRAPH_SYNCING = "METAGRAPH_SYNCING"
 
     class EventSubType(models.TextChoices):
@@ -185,6 +186,25 @@ class MetagraphSnapshot(models.Model):
     async def aget_cycle_start(cls) -> "MetagraphSnapshot":
         return await sync_to_async(cls.get_cycle_start)()
 
+    def get_stake_for_hotkey(self, hotkey: str) -> float:
+        """
+        Get the stake for a specific hotkey.
+        :param hotkey: The hotkey to get the stake for.
+        :return: The stake for the hotkey.
+        """
+        try:
+            index = self.hotkeys.index(hotkey)
+            return self.stake[index]
+        except ValueError:
+            return 0.0
+
+    def get_total_stake(self) -> float:
+        """
+        Get the total stake for all hotkeys.
+        :return: The total stake.
+        """
+        return sum(self.stake)
+
 
 # contains all neurons not only miners
 class Miner(models.Model):
@@ -233,6 +253,7 @@ class MinerBlacklist(models.Model):
 
 class ValidatorWhitelist(models.Model):
     hotkey = models.CharField(max_length=255, unique=True)
+    # root_consumer = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -399,6 +420,32 @@ class AdminJobRequest(models.Model):
 
 def get_random_salt() -> list[int]:
     return list(urandom(8))
+
+
+class ComputeTimeAllowance(models.Model):
+    """
+    Record of executor-seconds allowance for a validator-miner pair.
+    Calculated at the beginning of each cycle.
+    """
+
+    cycle = models.ForeignKey(Cycle, on_delete=models.CASCADE)
+    miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    initial_allowance = models.FloatField(
+        default=0.0, help_text="Executor-seconds allocated at the beginning of the cycle"
+    )
+    remaining_allowance = models.FloatField(
+        default=0.0, help_text="Remaining executor-seconds that can be used"
+    )
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=["miner", "cycle"], name="unique_miner_allowance_per_cycle"),
+        ]
+
+    def __str__(self):
+        return f"Allowance {self.miner.hotkey} in cycle {self.cycle}"
 
 
 class Weights(models.Model):

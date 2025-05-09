@@ -24,7 +24,7 @@ from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
-from compute_horde.subtensor import get_cycle_containing_block
+from compute_horde.subtensor import TEMPO, get_cycle_containing_block
 from compute_horde.utils import ValidatorListError, get_validators
 from constance import config
 from django.conf import settings
@@ -38,8 +38,10 @@ from compute_horde_validator.validator.cross_validation.prompt_answering import 
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
     Cycle,
     Miner,
+    MinerManifest,
     OrganicJob,
     Prompt,
     PromptSample,
@@ -87,6 +89,8 @@ WEIGHT_SETTING_TTL = 60
 WEIGHT_SETTING_HARD_TTL = 65
 WEIGHT_SETTING_ATTEMPTS = 100
 WEIGHT_SETTING_FAILURE_BACKOFF = 5
+
+COMPUTE_TIME_OVERHEAD_SECONDS = 30  # TODO: approximate a realistic value
 
 
 class WeightsRevealError(Exception):
@@ -1310,6 +1314,94 @@ def sync_metagraph() -> None:
         save_metagraph_snapshot(
             new_cycle_start_metagraph, snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START
         )
+
+
+@app.task
+def set_compute_time_allowances() -> None:
+    """
+    Calculate and save allowances for all validator-miner pairs at the beginning of a cycle.
+    """
+
+    metagraph = MetagraphSnapshot.get_latest()
+    current_cycle = Cycle.from_block(metagraph.block, netuid=settings.BITTENSOR_NETUID)
+
+    # Check if we've already calculated allowances for this cycle
+    if ComputeTimeAllowance.objects.filter(cycle=current_cycle).exists():
+        logger.debug(f"Allowances already calculated for cycle {current_cycle}")
+        return
+
+    data: dict[str, int | float] = {
+        "cycle_start": current_cycle.start,
+        "cycle_stop": current_cycle.stop,
+    }
+
+    try:
+        # use the manifests from the latest batch in the previous cycle to calculate allowances
+        prev_cycle = get_cycle_containing_block(
+            block=current_cycle.start - 1, netuid=settings.BITTENSOR_NETUID
+        )
+        latest_batch = (
+            SyntheticJobBatch.objects.filter(
+                block__gte=prev_cycle.start,
+                block__lt=prev_cycle.stop,
+            )
+            .order_by("-block")
+            .first()
+        )
+
+        if not latest_batch:
+            logger.warning(
+                "No synthetic job batch found for previous cycle, skipping allowance calculation"
+            )
+            return
+
+        # compute validator stake proportion
+        validator_hotkey = get_keypair().ss58_address
+        validator_stake = metagraph.get_stake_for_hotkey(validator_hotkey)
+        total_stake = metagraph.get_total_stake()
+        validator_stake_proportion = validator_stake / total_stake if total_stake > 0.0 else 0.0
+        data["validator_stake_proportion"] = validator_stake_proportion
+        logger.info(f"Validator stake proportion: {validator_stake_proportion:.4f}")
+
+        # max compute time for an executor in a full cycle
+        cycle_duration_seconds = (
+            TEMPO * int(settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION.seconds)
+            - COMPUTE_TIME_OVERHEAD_SECONDS
+        )
+
+        # Calculate allowance for each miner based on their manifest
+        allowance_records = []
+        for manifest in MinerManifest.objects.filter(batch=latest_batch).select_related("miner"):
+            miner_executor_seconds = manifest.online_executor_count * cycle_duration_seconds
+            allowance = validator_stake_proportion * miner_executor_seconds
+            allowance_records.append(
+                ComputeTimeAllowance(
+                    cycle=current_cycle,
+                    miner=manifest.miner,
+                    initial_allowance=allowance,
+                    remaining_allowance=allowance,
+                )
+            )
+        ComputeTimeAllowance.objects.bulk_create(allowance_records)
+        data["total_allowance_records_created"] = len(allowance_records)
+
+        msg = f"Set {len(allowance_records)} compute-time allowances for cycle {current_cycle}"
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.ALLOWANCE_CALCULATION,
+            subtype=SystemEvent.EventSubType.SUCCESS,
+            long_description=msg,
+            data=data,
+        )
+        logger.info(msg)
+    except Exception as e:
+        msg = f"Error calculating allowances: {e}"
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.ALLOWANCE_CALCULATION,
+            subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+            long_description=msg,
+            data=data,
+        )
+        logger.error(msg, exc_info=True)
 
 
 @app.task
