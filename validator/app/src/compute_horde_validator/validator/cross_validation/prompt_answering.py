@@ -8,7 +8,7 @@ from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
     OrganicJobError,
-    run_organic_job,
+    execute_organic_job_on_miner,
 )
 from compute_horde.protocol_messages import V0DeclineJobRequest
 from compute_horde_core.executor_class import ExecutorClass
@@ -20,6 +20,7 @@ from compute_horde_validator.validator.cross_validation.utils import (
     TrustedMinerClient,
     trusted_miner_not_configured_system_event,
 )
+from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import Prompt, SolveWorkload, SystemEvent
 from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts import (
     LlmPromptsJobGenerator,
@@ -39,7 +40,6 @@ async def answer_prompts(
     workload: SolveWorkload,
     create_miner_client=TrustedMinerClient,
     job_uuid: uuid.UUID | None = None,
-    wait_timeout: int | None = None,
 ) -> bool:
     if not all(
         [
@@ -78,8 +78,6 @@ async def answer_prompts(
         output=await job_generator.output_upload(),
     )
 
-    wait_timeout = wait_timeout or job_generator.timeout_seconds()
-
     miner_client = create_miner_client(
         miner_address=settings.TRUSTED_MINER_ADDRESS,
         miner_port=settings.TRUSTED_MINER_PORT,
@@ -88,7 +86,12 @@ async def answer_prompts(
     )
 
     try:
-        await run_organic_job(miner_client, job_details, executor_ready_timeout=wait_timeout)
+        await execute_organic_job_on_miner(
+            miner_client,
+            job_details,
+            reservation_time_limit=await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT"),
+            executor_startup_time_limit=await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
+        )
     except Exception as e:
         if (
             isinstance(e, OrganicJobError)

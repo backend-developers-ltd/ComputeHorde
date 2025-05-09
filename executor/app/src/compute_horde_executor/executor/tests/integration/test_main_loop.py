@@ -79,7 +79,7 @@ class CommandTested(Command):
         self.MINER_CLIENT_CLASS = partial(MinerClient, transport=transport)
         super().__init__(*args, **kwargs)
 
-    async def is_nvidia_toolkit_version_safe(self):
+    async def run_nvidia_toolkit_version_check_or_fail(self):
         is_toolkit_installed = None
 
         try:
@@ -106,7 +106,7 @@ class CommandTested(Command):
             is_toolkit_installed = True
 
         if is_toolkit_installed:
-            return await super().is_nvidia_toolkit_version_safe()
+            return await super().run_nvidia_toolkit_version_check_or_fail()
         else:
             logger.warning(
                 "NVIDIA Container Toolkit not installed - skipping safe toolkit version check in tests"
@@ -164,7 +164,6 @@ def test_main_loop_basic():
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -237,7 +236,6 @@ def test_main_loop_streaming_job():
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -315,7 +313,6 @@ def test_huggingface_volume():
                                 "validator_hotkey": "validator_hotkey",
                                 "timestamp": "2025-01-01T00:00:00+00:00",
                                 "executor_class": "spin_up-4min.gpu-24gb",
-                                "max_timeout": 10,
                                 "is_organic": True,
                                 "ttl": 5,
                             },
@@ -391,7 +388,6 @@ def test_huggingface_volume_failure():
                                 "validator_hotkey": "validator_hotkey",
                                 "timestamp": "2025-01-01T00:00:00+00:00",
                                 "executor_class": "spin_up-4min.gpu-24gb",
-                                "max_timeout": 10,
                                 "is_organic": True,
                                 "ttl": 5,
                             },
@@ -566,7 +562,6 @@ def test_huggingface_volume_dataset():
                                 "validator_hotkey": "validator_hotkey",
                                 "timestamp": "2025-01-01T00:00:00+00:00",
                                 "executor_class": "spin_up-4min.gpu-24gb",
-                                "max_timeout": 10,
                                 "is_organic": True,
                                 "ttl": 5,
                             },
@@ -646,7 +641,6 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -715,7 +709,6 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -790,7 +783,6 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -869,7 +861,6 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -936,7 +927,6 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -1018,7 +1008,6 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -1097,7 +1086,6 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -1172,7 +1160,6 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -1252,7 +1239,6 @@ def test_raw_script_job():
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -1329,7 +1315,6 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -1450,7 +1435,6 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -1533,7 +1517,6 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
                             "validator_hotkey": "validator_hotkey",
                             "timestamp": "2025-01-01T00:00:00+00:00",
                             "executor_class": "spin_up-4min.gpu-24gb",
-                            "max_timeout": 10,
                             "is_organic": True,
                             "ttl": 5,
                         },
@@ -1616,7 +1599,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
 
 
 def test_artifacts():
-    original_JobRunner_prepare = JobRunner.prepare
+    original_JobRunner_prepare = JobRunner.prepare_initial
 
     async def patch_JobRunner_prepare(self):
         await original_JobRunner_prepare(self)
@@ -1660,7 +1643,6 @@ def test_artifacts():
                                 "validator_hotkey": "validator_hotkey",
                                 "timestamp": "2025-01-01T00:00:00+00:00",
                                 "executor_class": "spin_up-4min.gpu-24gb",
-                                "max_timeout": 10,
                                 "is_organic": True,
                                 "ttl": 5,
                             },

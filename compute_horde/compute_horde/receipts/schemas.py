@@ -28,7 +28,6 @@ class BaseReceiptPayload(BaseModel):
 class JobStartedReceiptPayload(BaseReceiptPayload):
     receipt_type: Literal[ReceiptType.JobStartedReceipt] = ReceiptType.JobStartedReceipt
     executor_class: ExecutorClass
-    max_timeout: int  # seconds
     is_organic: bool
     ttl: int
 

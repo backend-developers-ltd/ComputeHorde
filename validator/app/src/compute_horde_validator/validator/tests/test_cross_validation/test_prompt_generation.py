@@ -26,6 +26,8 @@ async def test_generate_prompts(
     create_miner_client: Callable,
     manifest_message: str,
     executor_ready_message: str,
+    volumes_ready_message: str,
+    execution_done_message: str,
     accept_job_message: str,
     job_finish_message: str,
     job_uuid: uuid.UUID,
@@ -33,6 +35,8 @@ async def test_generate_prompts(
     await transport.add_message(manifest_message, send_before=1)
     await transport.add_message(accept_job_message, send_before=1)
     await transport.add_message(executor_ready_message, send_before=0)
+    await transport.add_message(volumes_ready_message, send_before=0)
+    await transport.add_message(execution_done_message, send_before=0)
     await transport.add_message(job_finish_message, send_before=2)
 
     await generate_prompts(

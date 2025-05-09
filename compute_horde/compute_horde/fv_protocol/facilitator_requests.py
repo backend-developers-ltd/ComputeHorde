@@ -56,6 +56,9 @@ class V2JobRequest(BaseModel, extra="forbid"):
     output_upload: OutputUpload | None = None
     artifacts_dir: str | None = None
     on_trusted_miner: bool = False
+    download_time_limit: int
+    execution_time_limit: int
+    upload_time_limit: int
     # !!! all fields above are included in the signed json payload
 
     def get_args(self):
@@ -91,6 +94,9 @@ class V2JobRequest(BaseModel, extra="forbid"):
             on_trusted_miner=self.on_trusted_miner,
             volumes=volumes,
             uploads=uploads,
+            download_time_limit=self.download_time_limit,
+            execution_time_limit=self.execution_time_limit,
+            upload_time_limit=self.upload_time_limit,
         )
         return signed_fields
 

@@ -4,6 +4,7 @@ from functools import cached_property
 from compute_horde.protocol_messages import (
     ExecutorToMinerMessage,
     GenericError,
+    V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
     V0InitialJobRequest,
@@ -13,6 +14,7 @@ from compute_horde.protocol_messages import (
     V0MachineSpecsRequest,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
+    V0VolumesReadyRequest,
 )
 from pydantic import TypeAdapter
 
@@ -103,12 +105,17 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
             # Job status is RUNNING
             msg.ip = self.get_executor_ip()
             await self.send_streaming_job_ready(self.executor_token, msg)
+        if isinstance(msg, V0VolumesReadyRequest):
+            await self.send_volumes_ready(self.executor_token, msg)
+        if isinstance(msg, V0ExecutionDoneRequest):
+            await self.send_execution_done(self.executor_token, msg)
         if isinstance(msg, V0StreamingJobNotReadyRequest):
             self.job.status = AcceptedJob.Status.FAILED
             await self.job.asave()
             await self.send_streaming_job_failed_to_prepare(self.executor_token, msg)
         if isinstance(msg, V0JobFinishedRequest):
             self.job.status = AcceptedJob.Status.FINISHED
+            # TODO: self.job.timed_out = msg.timed_out
             self.job.stderr = msg.docker_process_stderr
             self.job.stdout = msg.docker_process_stdout
             self.job.artifacts = msg.artifacts or {}
@@ -121,7 +128,6 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
             self.job.status = AcceptedJob.Status.FAILED
             self.job.stderr = msg.docker_process_stderr
             self.job.stdout = msg.docker_process_stdout
-            self.job.exit_status = msg.docker_process_exit_status
             self.job.error_type = msg.error_type
             self.job.error_detail = msg.error_detail
 

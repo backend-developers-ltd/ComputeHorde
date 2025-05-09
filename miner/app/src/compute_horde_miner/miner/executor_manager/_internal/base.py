@@ -6,7 +6,6 @@ from typing import Any
 
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import (
-    EXECUTOR_CLASS,
     MAX_EXECUTOR_TIMEOUT,
 )
 from compute_horde_core.executor_class import ExecutorClass
@@ -28,10 +27,6 @@ class ExecutorUnavailable(Exception):
     Thrown when an executor that should be available, but for some reason fails to spin up.
     """
 
-    pass
-
-
-class ExecutorReservationTimeout(Exception):
     pass
 
 
@@ -142,15 +137,14 @@ class ExecutorClassPool:
             if reserved_executor not in executors_to_drop
         ]
 
-    async def wait_for_executor_reservation(self, token: str, timeout: float) -> None:
-        try:
-            await asyncio.wait_for(self._reservation_future(token), timeout)
-        except TimeoutError:
-            raise ExecutorReservationTimeout()
+    async def wait_for_executor_reservation(self, token: str) -> None:
+        await self._reservation_future(token)
 
 
 class BaseExecutorManager(metaclass=abc.ABCMeta):
-    EXECUTOR_TIMEOUT_LEEWAY = dt.timedelta(seconds=30).total_seconds()
+    EXECUTOR_TIMEOUT_LEEWAY = dt.timedelta(
+        seconds=30
+    ).total_seconds()  # TODO: TIMEOUTS - what's this
 
     def __init__(self):
         self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
@@ -206,23 +200,26 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         self, token: str, executor_class: ExecutorClass, timeout: float
     ) -> object:
         pool = await self.get_executor_class_pool(executor_class)
-        return await pool.reserve_executor(token, self.get_total_timeout(executor_class, timeout))
+        return await pool.reserve_executor(token, timeout)
 
     async def wait_for_executor_reservation(
-        self, token: str, executor_class: ExecutorClass, timeout: float
+        self, token: str, executor_class: ExecutorClass
     ) -> None:
         """
         Resolves as soon as the executor is reserved - before it's launched.
         If there are no free executors, raises AllExecutorsBusy.
-        If the reservation times out, raises ExecutorReservationTimeout.
         """
         pool = await self.get_executor_class_pool(executor_class)
-        await pool.wait_for_executor_reservation(token, timeout)
+        await pool.wait_for_executor_reservation(token)
 
-    def get_total_timeout(self, executor_class, job_timeout):
-        spec = EXECUTOR_CLASS.get(executor_class)
-        spin_up_time = spec.spin_up_time if spec else 0
-        return spin_up_time + job_timeout + self.EXECUTOR_TIMEOUT_LEEWAY
+    def get_executor_cmdline_args(self) -> list[str]:
+        """
+        Arguments passed in to the executor's `manage.py run_executor` command.
+        """
+        return [
+            "--startup-time-limit",
+            "5",
+        ]
 
     async def is_active(self) -> bool:
         """Check if the Miner is an active one for configured Cluster"""

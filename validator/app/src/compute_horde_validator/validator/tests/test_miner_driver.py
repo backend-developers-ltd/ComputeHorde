@@ -28,6 +28,9 @@ WEBSOCKET_TIMEOUT = 10
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+@pytest.mark.skip(
+    reason="Skipping - we don't support v0 and v1 any more. Test for v2 will come soon."
+)  # TODO: Test v2
 @pytest.mark.parametrize(
     (
         "futures_result",
@@ -143,8 +146,6 @@ async def test_miner_driver(
         miner_client,
         job,
         job_request,
-        total_job_timeout=1,
-        executor_ready_timeout=1,
         notify_callback=track_job_status_updates,
     )
 

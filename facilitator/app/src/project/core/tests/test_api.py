@@ -52,6 +52,9 @@ def job_docker(db, user, connected_validator, signature):
         env={"MY_ENV": "my value"},
         use_gpu=True,
         signature=signature.model_dump(),
+        download_time_limit=3,
+        execution_time_limit=3,
+        upload_time_limit=3,
     )
 
 
@@ -66,6 +69,9 @@ def another_user_job_docker(db, another_user, connected_validator, signature):
         env={"MY_ENV": "my value"},
         use_gpu=True,
         signature=signature.model_dump(),
+        download_time_limit=3,
+        execution_time_limit=3,
+        upload_time_limit=3,
     )
 
 

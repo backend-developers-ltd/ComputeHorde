@@ -22,7 +22,6 @@ started_payload = JobStartedReceiptPayload(
     validator_hotkey=validator_hotkey.ss58_address,
     timestamp=datetime.now(tz=UTC),
     executor_class=DEFAULT_EXECUTOR_CLASS,
-    max_timeout=30,
     is_organic=True,
     ttl=10,
 )

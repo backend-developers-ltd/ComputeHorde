@@ -53,7 +53,6 @@ def receipts(validator_keypair, miner_keypair):
         validator_hotkey=validator_keypair.ss58_address,
         timestamp=datetime.datetime(2020, 1, 1, 0, 0, 0, tzinfo=datetime.UTC),
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        max_timeout=30,
         is_organic=False,
         ttl=30,
     )

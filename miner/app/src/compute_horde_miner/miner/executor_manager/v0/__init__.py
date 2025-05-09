@@ -14,7 +14,6 @@ PULLING_TIMEOUT = v1.PULLING_TIMEOUT
 DOCKER_STOP_TIMEOUT = v1.DOCKER_STOP_TIMEOUT
 ExecutorUnavailable = v1.ExecutorUnavailable
 AllExecutorsBusy = v1.AllExecutorsBusy
-ExecutorReservationTimeout = v1.ExecutorReservationTimeout
 
 
 class BaseExecutorManager(v1.BaseExecutorManager):

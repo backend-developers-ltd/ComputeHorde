@@ -36,12 +36,11 @@ EXECUTOR_CLASS = {
         description="always on, NVIDIA RTX A6000 GPU machine for LLM prompts solving",
         has_gpu=True,
         gpu_vram_gb=48,
-        spin_up_time=int(timedelta(minutes=4).total_seconds()),
+        spin_up_time=0,
     ),
 }
 
-
-MAX_EXECUTOR_TIMEOUT = timedelta(minutes=20).total_seconds()
+MAX_EXECUTOR_TIMEOUT = timedelta(minutes=20).total_seconds()  # TODO: TIMEOUTS - what's this?
 
 DEFAULT_EXECUTOR_CLASS = ExecutorClass.spin_up_4min__gpu_24gb
 DEFAULT_LLM_EXECUTOR_CLASS = ExecutorClass.always_on__llm__a6000

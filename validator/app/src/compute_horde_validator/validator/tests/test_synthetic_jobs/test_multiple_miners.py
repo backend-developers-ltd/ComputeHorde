@@ -719,7 +719,6 @@ async def flow_6(
         validator_hotkey=active_validator_keypairs[2].ss58_address,  # 2 has enough stake
         timestamp=timezone.now() - timedelta(seconds=10),
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        max_timeout=123,
         is_organic=True,
         ttl=60,
     )
@@ -765,7 +764,6 @@ async def flow_7(
         validator_hotkey=active_validator_keypairs[0].ss58_address,  # 0 doesn't have enough stake
         timestamp=timezone.now() - timedelta(seconds=10),
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        max_timeout=123,
         is_organic=True,
         ttl=60,
     )
@@ -1019,7 +1017,6 @@ def _build_invalid_excuse_receipts(
         validator_hotkey=validator.ss58_address,
         timestamp=timezone.now(),
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        max_timeout=123,
         is_organic=True,
         ttl=60,
     )
