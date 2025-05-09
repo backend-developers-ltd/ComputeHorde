@@ -62,8 +62,8 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest"]
-        python-version: ["3.11", "3.12"]
-        bittensor-version: ["8.0.0", "8.5.2"]
+        python-version: ["3.10", "3.11", "3.12"]
+        bittensor-version: ["9.0.4", "9.1.0"]
     defaults:
       run:
         working-directory: ./compute_horde_sdk
