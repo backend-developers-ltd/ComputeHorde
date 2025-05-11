@@ -1,3 +1,12 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = [
+#     "compute_horde_sdk",
+# ]
+# [tool.uv.sources]
+# compute_horde_sdk = { path = "../compute_horde_sdk" }
+# ///
+
 import asyncio
 import pathlib
 
