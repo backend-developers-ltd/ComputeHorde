@@ -249,21 +249,25 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
             )
         )
 
+    async def send_executor_ready(self):
+        await self.send_model(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
+
     async def send_volumes_ready(self):
-        self.deferred_send_model(V0VolumesReadyRequest(job_uuid=self.job_uuid))
+        await self.send_model(V0VolumesReadyRequest(job_uuid=self.job_uuid))
 
     async def send_execution_done(self):
-        self.deferred_send_model(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
-
-    async def send_executor_ready(self):
-        self.deferred_send_model(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
+        await self.send_model(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
 
     async def send_job_error(self, job_error: JobError):
+        error_detail = job_error.error_message
+        if job_error.error_detail:
+            error_detail += f": {job_error.error_detail}"
+
         await self.send_model(
             V0JobFailedRequest(
                 job_uuid=self.job_uuid,
                 error_type=job_error.error_type,
-                error_detail=f"{job_error.error_message} - {job_error.error_detail}",
+                error_detail=error_detail,
                 docker_process_stdout="",
                 docker_process_stderr="",
             )
@@ -274,7 +278,7 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
 
     async def send_result(self, job_result: "JobResult"):
         if job_result.specs:
-            self.deferred_send_model(
+            await self.send_model(
                 V0MachineSpecsRequest(
                     job_uuid=self.job_uuid,
                     specs=job_result.specs,
@@ -714,12 +718,7 @@ class JobRunner:
                     output_uploader.max_size_bytes = settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES
                     await output_uploader.upload(self.output_volume_mount_dir)
                 except OutputUploadFailed as ex:
-                    logger.warning(
-                        f"Uploading output failed for job {self.initial_job_request.job_uuid} with error: {ex!r}"
-                    )
-                    success = False
-                    stdout = ex.description
-                    stderr = ""
+                    raise JobError("Job failed during upload", error_detail=str(ex)) from ex
 
         return JobResult(
             success=success,
@@ -833,6 +832,7 @@ class Command(BaseCommand):
 
     runner: JobRunner
     miner_client: MinerClient
+    specs: MachineSpecs
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -841,7 +841,6 @@ class Command(BaseCommand):
     async def handle(self, *args, **options):
         self.runner = self.JOB_RUNNER_CLASS()
         self.miner_client = self.MINER_CLIENT_CLASS(settings.MINER_ADDRESS, settings.EXECUTOR_TOKEN)
-        self.miner_client_for_tests = self.miner_client  # TODO: Remove this?
         await self._execute(startup_time_limit=cast(int, options.get("startup_time_limit")))
 
     async def _execute(self, startup_time_limit: int):
@@ -945,6 +944,7 @@ class Command(BaseCommand):
                 raise
 
     async def _startup_stage(self) -> V0InitialJobRequest:
+        self.specs = get_machine_specs()
         await self.run_security_checks_or_fail()
         initial_job_request = await self.miner_client.initial_msg
         await self.runner.prepare_initial(initial_job_request)
@@ -968,6 +968,7 @@ class Command(BaseCommand):
 
     async def _upload_stage(self):
         job_result = await self.runner.upload_results()
+        job_result.specs = self.specs
         await self.miner_client.send_result(job_result)
 
     async def run_security_checks_or_fail(self):

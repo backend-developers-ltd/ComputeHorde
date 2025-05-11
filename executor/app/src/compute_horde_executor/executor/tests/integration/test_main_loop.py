@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import httpx
 from compute_horde.certificate import generate_certificate_at
-from compute_horde.protocol_messages import V0JobFailedRequest
+from compute_horde.protocol_messages import V0InitialJobRequest, V0JobFailedRequest
 from compute_horde.transport import StubTransport
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
@@ -188,10 +188,18 @@ def test_main_loop_basic():
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -260,10 +268,14 @@ def test_main_loop_streaming_job():
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -274,6 +286,10 @@ def test_main_loop_streaming_job():
             "ip": None,
             "port": mock.ANY,
             "miner_signature": None,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
+            "job_uuid": job_uuid,
         },
         {
             "message_type": "V0MachineSpecsRequest",
@@ -342,10 +358,18 @@ def test_huggingface_volume():
         command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -417,7 +441,7 @@ def test_huggingface_volume_failure():
         command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
@@ -426,10 +450,10 @@ def test_huggingface_volume_failure():
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "docker_process_stdout": "Failed to download model from Hugging Face after 3 retries: Download failed",
+            "docker_process_stdout": "",
             "docker_process_stderr": "",
             "error_type": V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD.value,
-            "error_detail": "Download failed",
+            "error_detail": "Failed to download model from Hugging Face after 3 retries: Download failed: Download failed",
             "timeout": False,
             "job_uuid": job_uuid,
         },
@@ -503,10 +527,18 @@ def test_huggingface_volume_fail_and_retry():
         command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -593,10 +625,18 @@ def test_huggingface_volume_dataset():
         command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -665,10 +705,18 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -733,7 +781,7 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
@@ -743,10 +791,10 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
             "timeout": False,
-            "docker_process_stdout": "Input volume too large",
+            "docker_process_stdout": "",
             "docker_process_stderr": "",
             "error_type": None,
-            "error_detail": None,
+            "error_detail": "Input volume too large",
             "job_uuid": job_uuid,
         },
     ]
@@ -807,10 +855,18 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -885,7 +941,7 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
@@ -895,10 +951,10 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
             "timeout": False,
-            "docker_process_stdout": "Input volume too large",
+            "docker_process_stdout": "",
             "docker_process_stderr": "",
             "error_type": None,
-            "error_detail": None,
+            "error_detail": "Input volume too large",
             "job_uuid": job_uuid,
         },
     ]
@@ -960,10 +1016,18 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -1040,10 +1104,18 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -1119,20 +1191,28 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
             "job_uuid": job_uuid,
         },
         {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
+            "job_uuid": job_uuid,
+        },
+        {
             "message_type": "V0JobFailedRequest",
-            "docker_process_exit_status": mock.ANY,
-            "timeout": mock.ANY,
-            "docker_process_stdout": ContainsStr("Uploading output failed"),
+            "docker_process_exit_status": None,
+            "timeout": False,
+            "docker_process_stdout": "",
             "docker_process_stderr": "",
             "error_type": None,
-            "error_detail": None,
+            "error_detail": ContainsStr("Job failed during upload"),
             "job_uuid": job_uuid,
         },
     ]
@@ -1193,10 +1273,18 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -1264,10 +1352,18 @@ def test_raw_script_job():
         )
     )
     command.handle()
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -1362,10 +1458,18 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -1464,10 +1568,18 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -1561,10 +1673,18 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     command.handle()
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
@@ -1580,7 +1700,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
             "job_uuid": job_uuid,
         },
     ]
-    print([json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages])
+    print([json.loads(msg) for msg in command.miner_client.transport.sent_messages])
 
     request1 = httpx_mock.get_request(url=url1)
     assert request1 is not None
@@ -1601,8 +1721,10 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
 def test_artifacts():
     original_JobRunner_prepare = JobRunner.prepare_initial
 
-    async def patch_JobRunner_prepare(self):
-        await original_JobRunner_prepare(self)
+    async def patch_JobRunner_prepare_initial(
+        self, initial_job_request: V0InitialJobRequest
+    ) -> None:
+        await original_JobRunner_prepare(self, initial_job_request)
 
         with open(self.artifacts_mount_dir / "empty", "wb") as f:
             pass
@@ -1623,8 +1745,8 @@ def test_artifacts():
             f.write(b"x" * 1_000_000)
 
     with patch(
-        "compute_horde_executor.executor.management.commands.run_executor.JobRunner.prepare",
-        new=patch_JobRunner_prepare,
+        "compute_horde_executor.executor.management.commands.run_executor.JobRunner.prepare_initial",
+        new=patch_JobRunner_prepare_initial,
     ):
         command = CommandTested(
             iter(
@@ -1674,10 +1796,18 @@ def test_artifacts():
     all_bytes = b"".join(bytes([i]) for i in range(256))
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client_for_tests.transport.sent_messages] == [
+    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
             "executor_token": None,
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0VolumesReadyRequest",
+            "job_uuid": job_uuid,
+        },
+        {
+            "message_type": "V0ExecutionDoneRequest",
             "job_uuid": job_uuid,
         },
         {
