@@ -246,6 +246,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
         elif isinstance(msg, V0JobFailedRequest):
+            # Consider remaining stages as failed.
             try:
                 self.volumes_ready_future.set_result(msg)
                 self.volumes_ready_timestamp = int(time.time())
@@ -453,10 +454,6 @@ class OrganicJobError(Exception):
 class OrganicJobDetails:
     @dataclass
     class TimingDetails:
-        """
-        Job time limits as requested by the consumer.
-        """
-
         allowed_leeway: int
         download_time_limit: int
         execution_time_limit: int
@@ -507,11 +504,8 @@ async def execute_organic_job_on_miner(
     executor_spinup_time_limit = EXECUTOR_CLASS[job_details.executor_class].spin_up_time
     readiness_time_limit = executor_spinup_time_limit + executor_startup_time_limit
 
-    if job_details.job_timing is not None:
-        executor_timing = job_details.job_timing
-    else:
-        # Single-timeout mode.
-        executor_timing = None
+    # Note: If this is empty, we're in single-timeout mode.
+    executor_timing = job_details.job_timing
 
     async with contextlib.AsyncExitStack() as exit_stack:
         try:

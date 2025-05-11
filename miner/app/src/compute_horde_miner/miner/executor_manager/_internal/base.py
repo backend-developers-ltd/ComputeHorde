@@ -11,6 +11,7 @@ from compute_horde.executor_class import (
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
+from compute_horde_miner.miner.dynamic_config import aget_config
 from compute_horde_miner.miner.executor_manager._internal.selector import (
     HistoricalRandomMinerSelector,
 )
@@ -91,7 +92,8 @@ class ExecutorClassPool:
                 logger.error("Error during executor startup", exc_info=exc)
                 raise ExecutorUnavailable()
 
-            # TODO: This "timeout" is the executor's upper TTL, after which it will be killed by the pool cleanup.
+            # This "timeout" is the executor's upper TTL, after which it will be killed by the pool cleanup.
+            # TODO: TIMEOUTS - this should depend on various time limits - job, executor spinup etc. with some margin.
             reserved_executor = ReservedExecutor(executor, MAX_EXECUTOR_TIMEOUT, token)
             self._executors.append(reserved_executor)
             logger.debug("Added %s", reserved_executor)
@@ -143,16 +145,9 @@ class ExecutorClassPool:
 
 
 class BaseExecutorManager(metaclass=abc.ABCMeta):
-    EXECUTOR_TIMEOUT_LEEWAY = dt.timedelta(
-        seconds=30
-    ).total_seconds()  # TODO: TIMEOUTS - what's this
-
     def __init__(self):
         self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
-
-        self.selector = HistoricalRandomMinerSelector(
-            settings.CLUSTER_SECRET,
-        )
+        self.selector = HistoricalRandomMinerSelector(settings.CLUSTER_SECRET)
 
     @abc.abstractmethod
     async def start_new_executor(self, token, executor_class, timeout):
@@ -213,13 +208,13 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         pool = await self.get_executor_class_pool(executor_class)
         await pool.wait_for_executor_reservation(token)
 
-    def get_executor_cmdline_args(self) -> list[str]:
+    async def get_executor_cmdline_args(self) -> list[str]:
         """
         Arguments passed in to the executor's `manage.py run_executor` command.
         """
         return [
             "--startup-time-limit",
-            "5",
+            str(await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT")),
         ]
 
     async def is_active(self) -> bool:

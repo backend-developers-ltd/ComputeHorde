@@ -340,6 +340,8 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         self.pending_jobs[msg.job_uuid] = job
 
         # This will reserve AND start the executor.
+        # Note: the timeout is only passed to the vendor executor manager for reference.
+        # This will NOT time out by itself.
         executor_spinup = asyncio.create_task(
             current.executor_manager.reserve_executor_class(
                 executor_token,

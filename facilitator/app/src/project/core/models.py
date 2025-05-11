@@ -243,6 +243,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         return self.statuses_ordered[-1]
 
     def is_completed(self) -> bool:
+        # TODO: TIMEOUTS - Status updates from validator should include a timeout until next update. Job is failed if timeout is reached.
         return self.status.status in JobStatus.FINAL_STATUS_VALUES
 
     @property

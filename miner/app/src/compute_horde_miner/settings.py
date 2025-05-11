@@ -160,6 +160,11 @@ CONSTANCE_CONFIG = {
         "Whether continuous receipt transfer between miners and validators should be enabled",
         bool,
     ),
+    "DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT": (
+        5,
+        "Time it takes for the executor to perform its startup stage (security checks, docker image check)",
+        int,
+    ),
     "DYNAMIC_PRELOAD_DOCKER_JOB_IMAGES": (
         [],
         "List of docker images to preload on the executors",

@@ -94,7 +94,6 @@ class V0DeclineJobRequest(BaseModel):
     class Reason(enum.Enum):
         NOT_SPECIFIED = "not_specified"
         BUSY = "busy"
-        EXECUTOR_RESERVATION_FAILURE = "executor_reservation_failure"
         EXECUTOR_FAILURE = "executor_failure"
         VALIDATOR_BLACKLISTED = "validator_blacklisted"
 

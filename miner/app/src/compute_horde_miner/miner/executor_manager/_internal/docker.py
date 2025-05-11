@@ -86,7 +86,7 @@ class DockerExecutorManager(BaseExecutorManager):
             "python",
             "manage.py",
             "run_executor",
-            *self.get_executor_cmdline_args(),
+            *(await self.get_executor_cmdline_args()),
         )  # noqa: S607
         return DockerExecutor(process_executor, token)
 

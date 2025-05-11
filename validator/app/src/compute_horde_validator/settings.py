@@ -318,17 +318,12 @@ CONSTANCE_CONFIG = {
     ),
     "DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT": (
         5,
-        "Time it takes for the executor to perform its startup stage",
+        "Time it takes for the executor to perform its startup stage (security checks, docker image check)",
         int,
     ),
     "DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME": (
         5,
-        "Additional time granted to the executor for the whole execution phase.",
-        int,
-    ),
-    "DYNAMIC_ORGANIC_JOB_MAX_RETRIES": (
-        3,
-        "Maximum retries for organic jobs (Currently ignored)",
+        "Additional time granted to the executor for the job-related tasks (download, execute, upload)",
         int,
     ),
     "DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS": (

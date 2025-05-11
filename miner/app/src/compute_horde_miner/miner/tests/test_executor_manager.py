@@ -47,7 +47,6 @@ class DummyExecutorManager(BaseExecutorManager):
         self.manifest = manifest
         self.executors = []
         self.runtime_offset = runtime_offset
-        self.EXECUTOR_TIMEOUT_LEEWAY = 0
 
     @asynccontextmanager
     async def set_runtime_offset(self, offset):

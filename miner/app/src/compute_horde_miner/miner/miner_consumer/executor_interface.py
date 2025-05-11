@@ -115,7 +115,6 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
             await self.send_streaming_job_failed_to_prepare(self.executor_token, msg)
         if isinstance(msg, V0JobFinishedRequest):
             self.job.status = AcceptedJob.Status.FINISHED
-            # TODO: self.job.timed_out = msg.timed_out
             self.job.stderr = msg.docker_process_stderr
             self.job.stdout = msg.docker_process_stdout
             self.job.artifacts = msg.artifacts or {}
