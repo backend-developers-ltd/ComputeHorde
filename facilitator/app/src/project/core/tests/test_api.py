@@ -132,6 +132,9 @@ def test_docker_job_viewset_create(api_client, user, connected_validator, mock_s
         "env": {"MY_ENV": "my value"},
         "use_gpu": True,
         "target_validator_hotkey": connected_validator.ss58_address,
+        "download_time_limit": 1,
+        "execution_time_limit": 1,
+        "upload_time_limit": 1,
     }
     response = api_client.post("/api/v1/job-docker/", data)
     assert response.status_code == 201
@@ -188,7 +191,13 @@ def build_http_headers(headers: dict[str, str]) -> dict[str, str]:
 def test_hotkey_authentication__job_create(
     api_client, wallet, whitelisted_hotkey, connected_validator, mock_signature_from_request
 ):
-    data = {"docker_image": "hello-world", "target_validator_hotkey": connected_validator.ss58_address}
+    data = {
+        "docker_image": "hello-world",
+        "target_validator_hotkey": connected_validator.ss58_address,
+        "download_time_limit": 1,
+        "execution_time_limit": 1,
+        "upload_time_limit": 1,
+    }
     # First call without any authentication must return 401.
     response = api_client.post("/api/v1/job-docker/", data)
     assert response.status_code == 401, response.content

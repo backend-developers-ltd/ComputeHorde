@@ -65,9 +65,9 @@ class SignedFields(BaseModel):
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
             artifacts_dir=typing.cast(str, data.get("artifacts_dir") or ""),
             on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
-            download_time_limit=typing.cast(int, data.get("download_time_limit")),
-            execution_time_limit=typing.cast(int, data.get("execution_time_limit")),
-            upload_time_limit=typing.cast(int, data.get("upload_time_limit")),
+            download_time_limit=typing.cast(int, data.get("download_time_limit", 0)),
+            execution_time_limit=typing.cast(int, data.get("execution_time_limit", 0)),
+            upload_time_limit=typing.cast(int, data.get("upload_time_limit", 0)),
         )
         return signed_fields
 
