@@ -469,6 +469,7 @@ class JobRunner:
         self.executor_certificate: str | None = None
 
     async def cleanup_potential_old_jobs(self):
+        logger.debug("Cleaning up potential old jobs")
         await (
             await asyncio.create_subprocess_shell(
                 f"docker kill $(docker ps -q --filter 'name={job_container_name('.*')}')"
@@ -500,8 +501,13 @@ class JobRunner:
         self.artifacts_mount_dir.mkdir(exist_ok=True)
 
         await self.cleanup_potential_old_jobs()
+        await self.pull_initial_job_image()
+
+    async def pull_initial_job_image(self):
+        assert self.initial_job_request, "Initial job request must be set before pulling the image"
 
         if self.initial_job_request.docker_image is not None:
+            logger.debug(f"Pulling Docker image {self.initial_job_request.docker_image}")
             # TODO: TIMEOUTS - Check if this actually kills the process on timeout
             async with temporary_process(
                 "docker",
