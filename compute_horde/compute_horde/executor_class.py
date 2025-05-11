@@ -40,7 +40,9 @@ EXECUTOR_CLASS = {
     ),
 }
 
-MAX_EXECUTOR_TIMEOUT = timedelta(minutes=20).total_seconds()  # TODO: TIMEOUTS - what's this?
+# This is the upper TTL for executors, after which executor pool kills an executor.
+# TODO: TIMEOUTS - this should depend on the requested job timing instead, but capped at seconds left in current cycle
+MAX_EXECUTOR_TIMEOUT = timedelta(minutes=20).total_seconds()
 
 DEFAULT_EXECUTOR_CLASS = ExecutorClass.spin_up_4min__gpu_24gb
 DEFAULT_LLM_EXECUTOR_CLASS = ExecutorClass.always_on__llm__a6000

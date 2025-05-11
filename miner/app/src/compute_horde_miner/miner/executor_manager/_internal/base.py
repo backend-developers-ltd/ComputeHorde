@@ -91,7 +91,8 @@ class ExecutorClassPool:
                 logger.error("Error during executor startup", exc_info=exc)
                 raise ExecutorUnavailable()
 
-            reserved_executor = ReservedExecutor(executor, timeout, token)
+            # TODO: This "timeout" is the executor's upper TTL, after which it will be killed by the pool cleanup.
+            reserved_executor = ReservedExecutor(executor, MAX_EXECUTOR_TIMEOUT, token)
             self._executors.append(reserved_executor)
             logger.debug("Added %s", reserved_executor)
             return executor
