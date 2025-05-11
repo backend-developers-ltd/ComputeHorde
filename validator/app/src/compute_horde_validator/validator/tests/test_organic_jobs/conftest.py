@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
@@ -31,6 +32,14 @@ def manifest(miner):
         executor_count=5,
         online_executor_count=5,
     )
+
+
+@pytest.fixture(autouse=True)
+def patch_executor_spinup_time(monkeypatch):
+    with monkeypatch.context() as m:
+        for spec in EXECUTOR_CLASS.values():
+            m.setattr(spec, "spin_up_time", 1)
+        yield
 
 
 class _SimulationTransportWsAdapter:

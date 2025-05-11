@@ -100,6 +100,7 @@ async def dummy_manager():
     "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.POOL_CLEANUP_PERIOD",
     0.1,
 )
+@patch("compute_horde_miner.miner.executor_manager._internal.base.MAX_EXECUTOR_TIMEOUT", 5)
 async def test_executor_class_pool(dummy_manager):
     # Test reserving executors
     pool = await dummy_manager.get_executor_class_pool(ExecutorClass.always_on__gpu_24gb)

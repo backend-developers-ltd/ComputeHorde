@@ -45,7 +45,7 @@ async def test_miner_is_blacklisted__after_rejecting_job(
     # Vali -> faci: job failed
 
     # Faci: request another job
-    await faci_transport.add_message(another_job_request, send_before=1, sleep_before=0.2)
+    await faci_transport.add_message(another_job_request, send_before=2, sleep_before=0.2)
 
     # Vali -> faci: job rejected (no miners to take it)
     await execute_scenario(until=lambda: len(faci_transport.sent) >= 5)

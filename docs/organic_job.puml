@@ -45,7 +45,7 @@ activate "Validator Consumer"
 
 group Reservation stage
 activate "Job driver" #lightgreen
-rnote right of "Job driver" #lightgreen: Timeout:\n**reservation time limit**
+rnote right of "Job driver" #lightgreen: Timeout:\n**reservation time limit**\n(dynamic config)
 "Job driver" -> "Validator Consumer": ""V0InitialJobRequest""\n- ""JobStartedReceipt""\n- Executor class\n- Job timing
 &note right of "Validator Consumer": This is essentially a dual\nreserve+start executor\nrequest in one
 "Validator Consumer" -> "Validator Consumer": Reserve executor from pool
@@ -56,7 +56,7 @@ end group
 
 group Spinup stage
 activate "Job driver" #lightgreen
-rnote right of "Job driver" #lightgreen: Timeout:\n**executor class spinup**\n+ **startup time limit**
+rnote right of "Job driver" #lightgreen: Timeout:\n**executor class spinup**\n(depends on class)\n+ **startup time limit**\n(dynamic config)
 &"Validator Consumer" --> Executor: Start executor\n(via vendor code)\n(pass executor TTL to deal with zombie executors)
 Executor -> Executor: ...
 rnote over "Job driver", Executor: Waiting for executor spinup

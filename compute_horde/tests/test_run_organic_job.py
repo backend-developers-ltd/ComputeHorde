@@ -9,12 +9,14 @@ from compute_horde.miner_client.organic import (
 )
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
+    V0ExecutionDoneRequest,
     V0ExecutorReadyRequest,
     V0InitialJobRequest,
     V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
     V0JobFinishedRequest,
     V0JobRequest,
+    V0VolumesReadyRequest,
     ValidatorAuthForMiner,
     ValidatorToMinerMessage,
 )
@@ -41,6 +43,8 @@ async def test_run_organic_job__success(keypair):
         [
             V0AcceptJobRequest(job_uuid=JOB_UUID).model_dump_json(),
             V0ExecutorReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
+            V0VolumesReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
+            V0ExecutionDoneRequest(job_uuid=JOB_UUID).model_dump_json(),
             V0JobFinishedRequest(
                 job_uuid=JOB_UUID,
                 docker_process_stdout="stdout",
