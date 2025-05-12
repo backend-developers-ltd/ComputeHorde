@@ -45,7 +45,9 @@ def get_presigned_urls(bucket: str, post_object_key: str, put_object_key: str, e
 
 
 async def main() -> None:
-    ci_run = os.environ.get("GITHUB_ACTIONS") == "true"
+    verify_http_output_volumes = all(
+        var in os.environ for var in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+    )
 
     # Set up the default job specification.
     compute_horde_job_spec = ComputeHordeJobSpec(
@@ -56,7 +58,7 @@ async def main() -> None:
         artifacts_dir="/artifacts",
     )
 
-    if ci_run:
+    if verify_http_output_volumes:
         bucket_name = "compute-horde-integration-tests"
         available_characters = string.ascii_letters + string.digits
         filename = "".join(random.choices(available_characters, k=32))
@@ -92,7 +94,7 @@ async def main() -> None:
 
     post_object_path = f"/output/{post_object_key}"
     put_object_path = f"/output/{put_object_key}"
-    if ci_run:
+    if verify_http_output_volumes:
         if len(job.result.upload_results) != 2:
             raise RuntimeError(f"Expected 2 keys in upload results, found {len(job.result.upload_results)}")
         if post_object_path not in job.result.upload_results:
