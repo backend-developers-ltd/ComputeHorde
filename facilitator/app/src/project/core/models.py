@@ -1,5 +1,4 @@
-from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from math import ceil
 from operator import attrgetter
 from typing import ClassVar
@@ -9,13 +8,11 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
-    OrganicJobRequest,
     Signature,
     V0JobCheated,
-    V0JobRequest,
-    V1JobRequest,
     V2JobRequest,
 )
+from compute_horde.fv_protocol.validator_requests import JobStatusMetadata
 from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
@@ -25,20 +22,17 @@ from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
-from django.db.models import CheckConstraint, F, Max, OuterRef, Prefetch, Q, QuerySet, Subquery, UniqueConstraint
+from django.db.models import CheckConstraint, Max, Prefetch, Q, QuerySet, UniqueConstraint
 from django.urls import reverse
 from django.utils.timezone import now
 from django_prometheus.models import ExportModelOperationsMixin
 from django_pydantic_field import SchemaField
 from structlog import get_logger
 from structlog.contextvars import bound_contextvars
-from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
 
 from .schemas import (
-    JobStatusMetadata,
     MuliVolumeAllowedVolume,
 )
-from .utils import safe_config
 
 log = get_logger(__name__)
 
@@ -134,8 +128,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     user = models.ForeignKey("auth.User", on_delete=models.PROTECT, blank=True, null=True, related_name="jobs")
     hotkey = models.CharField(blank=True, help_text="hotkey of job sender if hotkey authentication was used")
     validator = models.ForeignKey(Validator, blank=True, on_delete=models.PROTECT, related_name="jobs")
-    miner = models.ForeignKey(Miner, blank=True, null=True, on_delete=models.PROTECT, related_name="jobs")
-    signature = models.JSONField(blank=True, default=None, null=True)
+    signature = models.JSONField()
     created_at = models.DateTimeField(default=now)
     cheated = models.BooleanField(default=False)
 
@@ -153,7 +146,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     )
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
     use_gpu = models.BooleanField(default=False, help_text="Whether to use GPU for the job")
-    target_validator_hotkey = models.TextField(blank=True, default=None, null=True, help_text="target validator")
+    target_validator_hotkey = models.TextField(help_text="target validator")
     volumes = SchemaField(schema=list[MuliVolumeAllowedVolume], blank=True, default=list)
     uploads = SchemaField(schema=list[SingleFileUpload], blank=True, default=list)
     artifacts_dir = models.CharField(max_length=255, blank=True, help_text="image mount directory for artifacts")
@@ -191,15 +184,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         # active validators during selection process
         with transaction.atomic(), bound_contextvars(job=self):
             self.validator = getattr(self, "validator", None) or self.select_validator()
-            if self.target_validator_hotkey is None:
-                if not safe_config.ENABLE_ORGANIC_JOBS:
-                    raise JobCreationDisabledError()
-                self.miner = getattr(self, "miner", None) or self.select_miner()
-            else:
-                self.miner = None
             super().save(*args, **kwargs)
             if is_new:
-                job_request = self.as_job_request().dict()
+                job_request = self.as_job_request().model_dump()
                 self.send_to_validator(job_request)
                 JobStatus.objects.create(job=self, status=JobStatus.Status.SENT)
 
@@ -209,7 +196,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         """
         self.cheated = True
         self.save()
-        payload = V0JobCheated(job_uuid=str(self.uuid)).dict()
+        payload = V0JobCheated(job_uuid=str(self.uuid)).model_dump()
         log.debug("sending cheated report", payload=payload)
         self.send_to_validator(payload)
 
@@ -229,75 +216,13 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         )
         log.debug("connected validators", validator_ids=validator_ids)
 
-        if self.target_validator_hotkey is not None:
-            if self.signature is None:
-                raise ValueError("Request must be signed when target_validator_hotkey is set")
-            validator = Validator.objects.filter(ss58_address=self.target_validator_hotkey).first()
-            if validator and validator.id in validator_ids:
-                log.debug("selected (targeted) validator", validator=validator)
-                return validator
-            raise Validator.DoesNotExist
-
-        log.debug("choosing from validators", validator_ids=validator_ids)
-        debug_validator = Validator.objects.filter(
-            ss58_address="5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
-        ).first()
-        if debug_validator and debug_validator.id in validator_ids:
-            return debug_validator
-        try:
-            validator = (
-                Validator.objects.filter(
-                    pk__in=validator_ids,
-                )
-                .with_last_job_time()
-                .order_by(F("last_job_time").asc(nulls_first=True))
-            )[0]
-        except IndexError as exc:
-            raise Validator.DoesNotExist from exc
-
-        log.debug("selected validator", validator=validator)
-        return validator
-
-    def select_miner(self) -> Miner:
-        """
-        Select a miner for the job.
-
-        Currently, the one with the least number of jobs being executed is selected.
-        This method is expected to be called from within a transaction.
-        """
-
-        last_jobs_subquery = Subquery(
-            Job.objects.filter(miner=OuterRef("miner_id")).order_by("-created_at").values_list("pk", flat=True)[:10]
-        )
-        miners = (
-            Miner.objects.select_for_update()
-            .filter(is_active=True)
-            .prefetch_related(
-                Prefetch(
-                    "jobs",
-                    queryset=(
-                        Job.objects.filter(pk__in=last_jobs_subquery)
-                        .order_by("-created_at")
-                        .prefetch_related(Prefetch("statuses", queryset=JobStatus.objects.order_by("-created_at")))
-                    ),
-                )
-            )
-        )
-
-        # select miners which don't have active jobs
-        miners = [miner for miner in miners if all(job.is_completed() for job in miner.jobs.all())]
-
-        if not miners:
-            raise Miner.DoesNotExist
-
-        for miner in miners:
-            if miner.ss58_address == "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE":
-                return miner
-        # sort miners by last job time
-        miners.sort(
-            key=lambda miner: jobs[0].created_at if (jobs := miner.jobs.all()) else datetime.min.replace(tzinfo=UTC)
-        )
-        return miners[0]
+        if self.signature is None:
+            raise ValueError("Request must be signed when target_validator_hotkey is set")
+        validator = Validator.objects.filter(ss58_address=self.target_validator_hotkey).first()
+        if validator and validator.id in validator_ids:
+            log.debug("selected (targeted) validator", validator=validator)
+            return validator
+        raise Validator.DoesNotExist
 
     @property
     def sender(self) -> str:
@@ -327,64 +252,23 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         statuses = self.statuses_ordered
         return statuses[-1].created_at - statuses[0].created_at
 
-    def as_job_request(self) -> OrganicJobRequest:
-        if safe_config.JOB_REQUEST_VERSION == 0:
-            if self.uploads or self.volumes:
-                raise ValueError("upload and volumes are not supported in version 0 of job protocol")
-            return V0JobRequest(
-                uuid=str(self.uuid),
-                miner_hotkey=self.miner.ss58_address,
-                executor_class=self.executor_class,
-                docker_image=self.docker_image,
-                args=self.args,
-                env=self.env,
-                use_gpu=self.use_gpu,
-                input_url="",
-                output_url="",
-            )
-        else:
-            if self.volumes:
-                volume = MultiVolume(volumes=self.volumes)
-            else:
-                volume = None
-            if self.uploads:
-                output_upload = MultiUpload(
-                    uploads=self.uploads,
-                    system_output=None,
-                )
-            else:
-                output_upload = None
-            if self.signature is not None:
-                assert self.miner is None
-
-                signature = Signature.model_validate(self.signature)
-
-                return V2JobRequest(
-                    uuid=str(self.uuid),
-                    executor_class=self.executor_class,
-                    docker_image=self.docker_image,
-                    args=self.args,
-                    env=self.env,
-                    use_gpu=self.use_gpu,
-                    volume=volume,
-                    output_upload=output_upload,
-                    signature=signature,
-                    artifacts_dir=self.artifacts_dir or None,
-                    on_trusted_miner=self.on_trusted_miner,
-                )
-            else:
-                assert self.miner is not None
-                return V1JobRequest(
-                    uuid=str(self.uuid),
-                    miner_hotkey=self.miner.ss58_address,
-                    executor_class=self.executor_class,
-                    docker_image=self.docker_image,
-                    args=self.args,
-                    env=self.env,
-                    use_gpu=self.use_gpu,
-                    volume=volume,
-                    output_upload=output_upload,
-                )
+    def as_job_request(self) -> V2JobRequest:
+        volume = MultiVolume(volumes=self.volumes) if self.volumes else None
+        output_upload = MultiUpload(uploads=self.uploads, system_output=None) if self.uploads else None
+        signature = Signature.model_validate(self.signature)
+        return V2JobRequest(
+            uuid=str(self.uuid),
+            executor_class=self.executor_class,
+            docker_image=self.docker_image,
+            args=self.args,
+            env=self.env,
+            use_gpu=self.use_gpu,
+            volume=volume,
+            output_upload=output_upload,
+            signature=signature,
+            artifacts_dir=self.artifacts_dir or None,
+            on_trusted_miner=self.on_trusted_miner,
+        )
 
     def send_to_validator(self, payload: dict) -> None:
         channels_names = Channel.objects.filter(validator=self.validator).values_list("name", flat=True)
@@ -393,21 +277,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         send = async_to_sync(channel_layer.send)
         for channel_name in channels_names:
             send(channel_name, payload)
-
-    @retry(
-        stop=stop_after_delay(JOB_TIMEOUT),
-        wait=wait_fixed(3),
-        retry=retry_if_exception_type(JobNotFinishedError),
-        reraise=True,
-    )
-    def wait_completed(self: str, on_check: Callable = lambda job: None) -> "JobStatus.Status":
-        job = self.__class__.objects.prefetch_related("statuses").get(uuid=self.uuid)
-        on_check(job)
-        if job.is_completed():
-            return job.status
-
-        log.debug("Still waiting for results from job %s", self.uuid)
-        raise JobNotFinishedError
 
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
@@ -441,7 +310,7 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     @property
     def meta(self) -> JobStatusMetadata | None:
         if self.metadata:
-            return JobStatusMetadata.parse_obj(self.metadata)
+            return JobStatusMetadata.model_validate(self.metadata)
 
 
 class JobFeedback(models.Model):

@@ -17,8 +17,7 @@ dependencies = [
     "redis~=4.6.0",
     "sentry-sdk>=1.29.2",
     "ipython==8.14.0",
-    "nox==2024.10.09",
-    "httpx==0.26.0",
+    "nox==2025.05.01",
     "channels[daphne]==4.*",
     "websockets>=14.0,<15.0",
     "compute-horde",
@@ -26,7 +25,6 @@ dependencies = [
     "prometheus-client~=0.17.0",
     "django-prometheus==2.3.1",
     "django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01",
-    "huggingface-hub[hf_transfer]>=0.26.1",
     "packaging>=24.2",
 ]
 
@@ -36,9 +34,6 @@ compute-horde-sdk = { path = "../compute_horde_sdk", editable = true }
 
 [tool.uv]
 environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
-# Instead of allowing prerelease for all packages,
-# we add overrides here so only the specified packages can resolve to prerelease.
-override-dependencies = ["bt-decode>=0.5.0a2"]
 
 [build-system]
 requires = ["pdm-backend==2.4.3"]

@@ -73,6 +73,9 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
     class NotInitialized(Exception):
         pass
 
+    class MissingExecutorToken(Exception):
+        pass
+
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         if settings.DEBUG_TURN_AUTHENTICATION_OFF or settings.IS_LOCAL_MINER:
@@ -538,6 +541,8 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         (await current_store()).store([created_receipt.to_receipt()])
 
     async def _executor_ready(self, msg: V0ExecutorReadyRequest):
+        if self.check_missing_token(msg):
+            return
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
         job_uuid = str(job.job_uuid)
         assert job_uuid == msg.job_uuid
@@ -546,6 +551,8 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         logger.debug(f"Readiness for job {job_uuid} reported to validator {self.validator_key}")
 
     async def _executor_failed_to_prepare(self, msg: V0ExecutorFailedRequest):
+        if self.check_missing_token(msg):
+            return
         jobs = [
             job for job in self.pending_jobs.values() if job.executor_token == msg.executor_token
         ]
@@ -562,18 +569,25 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         )
 
     async def _streaming_job_ready(self, msg: V0StreamingJobReadyRequest):
+        if self.check_missing_token(msg):
+            return
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
         job_uuid = str(job.job_uuid)
         assert job_uuid == msg.job_uuid
-        new_msg = msg.model_copy()
-        new_msg.executor_token = None
-        new_msg.miner_signature = get_miner_signature(new_msg)
+        new_msg = msg.model_copy(
+            update={
+                "executor_token": None,
+                "miner_signature": get_miner_signature(msg),
+            }
+        )
         await self.send(new_msg.model_dump_json())
         logger.debug(
             f"Streaming readiness for job {job_uuid} reported to validator {self.validator_key}"
         )
 
     async def _streaming_job_failed_to_prepare(self, msg: V0StreamingJobNotReadyRequest):
+        if self.check_missing_token(msg):
+            return
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
         job_uuid = str(job.job_uuid)
         assert job_uuid == msg.job_uuid
@@ -581,6 +595,18 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         logger.debug(
             f"Failure in streaming preparation for job {job_uuid} reported to validator {self.validator_key}"
         )
+
+    def check_missing_token(
+        self,
+        msg: V0ExecutorReadyRequest
+        | V0StreamingJobReadyRequest
+        | V0ExecutorFailedRequest
+        | V0StreamingJobNotReadyRequest,
+    ):
+        if msg.executor_token is None:
+            raise MinerValidatorConsumer.MissingExecutorToken(
+                f"Validator Client received {msg} with missing executor_token"
+            )
 
     async def _executor_finished(self, msg: V0JobFinishedRequest):
         await self.send(msg.model_dump_json())

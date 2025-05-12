@@ -65,3 +65,24 @@ def test_dynamic_config__correct_time_is_picked(mocked_responses, frozen_time, e
 
     # assert
     assert vars(namespace) == {"DYNAMIC_KEY": expected_value}
+
+
+def test_dynamic_config__json_value(mocked_responses):
+    # arrange
+    config_url = "http://127.0.0.1:8000/config.json"
+    mocked_responses.get(
+        config_url,
+        json={
+            "DYNAMIC_KEY": {
+                "description": "...",
+                "items": [{"value": {"key": [1, 2, 3]}}],
+            },
+        },
+    )
+    namespace = Namespace()
+
+    # act
+    sync_dynamic_config(config_url, namespace)
+
+    # assert
+    assert vars(namespace) == {"DYNAMIC_KEY": {"key": [1, 2, 3]}}

@@ -1,4 +1,4 @@
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, TypeAlias
 
 import bittensor
 from pydantic import BaseModel
@@ -36,6 +36,34 @@ class V0AuthenticationRequest(BaseModel, extra="forbid"):
         # make mypy happy
         address: str = bittensor.Keypair(public_key=self.public_key, ss58_format=42).ss58_address
         return address
+
+
+class MinerResponse(BaseModel, extra="allow"):
+    job_uuid: str
+    message_type: str | None
+    docker_process_stderr: str
+    docker_process_stdout: str
+    artifacts: dict[str, str] | None = None
+    upload_results: dict[str, str] | None = None
+
+
+class JobStatusMetadata(BaseModel, extra="allow"):
+    comment: str
+    miner_response: MinerResponse | None = None
+
+
+JobStatusType: TypeAlias = Literal["failed", "rejected", "accepted", "completed"]
+
+
+class JobStatusUpdate(BaseModel, extra="forbid"):
+    """
+    Message sent from validator to facilitator in response to NewJobRequest.
+    """
+
+    message_type: Literal["V0JobStatusUpdate"] = "V0JobStatusUpdate"
+    uuid: str
+    status: JobStatusType
+    metadata: JobStatusMetadata | None = None
 
 
 class V0MachineSpecsUpdate(BaseModel, extra="forbid"):

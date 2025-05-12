@@ -115,6 +115,7 @@ services:
       - PROMETHEUS_MULTIPROC_DIR=/prometheus-multiproc-dir/celery-worker-metagraph
       - WORKER_HEALTHCHECK_FILE_PATH=/tmp/worker-healthcheck
       - WORKER_HEALTHCHECK_TIMEOUT=30
+      - CELERY_MAX_TASKS_PER_CHILD=3
     command: ./celery-entrypoint.sh -Q metagraph
 
   celery-worker-organic-jobs:
@@ -278,6 +279,8 @@ services:
     init: true
     restart: unless-stopped
     env_file: ./.env
+    volumes:
+      - ${HOST_WALLET_DIR}:/root/.bittensor/wallets
     command: python manage.py transfer_receipts --daemon
     depends_on:
       - redis

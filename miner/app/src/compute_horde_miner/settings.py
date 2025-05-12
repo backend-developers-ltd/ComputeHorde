@@ -137,6 +137,11 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 CONSTANCE_BACKEND = "constance.backends.database.DatabaseBackend"
 CONSTANCE_DATABASE_CACHE_BACKEND = "default"
+# Constance docs claim that list works out of the box,
+# but it doesn't in admin panel, so we need to use a custom field.
+CONSTANCE_ADDITIONAL_FIELDS = {
+    "json": ["django.forms.JSONField", {"required": False}],
+}
 CONSTANCE_CONFIG = {
     "SERVING": (
         not env.bool("MIGRATING", default=False),
@@ -156,11 +161,16 @@ CONSTANCE_CONFIG = {
         bool,
     ),
     "DYNAMIC_EXECUTOR_RESERVATION_TIMEOUT_SECONDS": (
-        7,
+        7.0,
         "How long to wait for the executor pool to confirm that an executor will or will not be "
         "available for a job. Must be lower than validator's "
         "DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT",
         float,
+    ),
+    "DYNAMIC_PRELOAD_DOCKER_JOB_IMAGES": (
+        [],
+        "List of docker images to preload on the executors",
+        "json",
     ),
 }
 

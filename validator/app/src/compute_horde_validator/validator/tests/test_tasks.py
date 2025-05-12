@@ -237,7 +237,8 @@ def test__run_synthetic_jobs__not_serving():
 
 
 @patch(
-    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
+    lambda *args, **kwargs: MockSubtensor(),
 )
 @patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
 @pytest.mark.django_db(databases=["default", "default_alias"])
@@ -251,7 +252,8 @@ def test__run_synthetic_jobs__not_scheduled():
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @patch(
-    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
+    lambda *args, **kwargs: MockSubtensor(),
 )
 @patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
 @pytest.mark.django_db(databases=["default", "default_alias"])
@@ -268,7 +270,8 @@ def test__run_synthetic_jobs__debug_dont_stagger_validators__true(settings):
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @patch(
-    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
+    lambda *args, **kwargs: MockSubtensor(),
 )
 @patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
 @pytest.mark.django_db(databases=["default", "default_alias"])
@@ -290,7 +293,7 @@ def test__run_synthetic_jobs__debug_dont_stagger_validators__false(settings):
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @patch(
-    "compute_horde_validator.validator.tasks.get_subtensor",
+    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
     lambda *args, **kwargs: MockSubtensor(
         increase_block_number_with_each_call=True,
         override_block_number=100,
@@ -353,7 +356,7 @@ def test__run_synthetic_jobs__different_timings(
     settings, caplog, trigger_block, expected_logs, expected_runs, increase, system_event
 ):
     with patch(
-        "compute_horde_validator.validator.tasks.get_subtensor",
+        "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
         lambda *args, **kwargs: MockSubtensor(
             increase_block_number_with_each_call=increase,
             override_block_number=100,
@@ -382,7 +385,8 @@ def test__run_synthetic_jobs__different_timings(
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @patch(
-    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
+    lambda *args, **kwargs: MockSubtensor(),
 )
 @patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
 @pytest.mark.django_db(databases=["default", "default_alias"])
@@ -405,7 +409,8 @@ def test__run_synthetic_jobs__many_scheduled_runs(settings):
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @patch(
-    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
+    lambda *args, **kwargs: MockSubtensor(),
 )
 @patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -429,7 +434,8 @@ def test__run_synthetic_jobs__concurrent(settings):
 
 @patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @patch(
-    "compute_horde_validator.validator.tasks.get_subtensor", lambda *args, **kwargs: MockSubtensor()
+    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
+    lambda *args, **kwargs: MockSubtensor(),
 )
 @patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)

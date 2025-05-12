@@ -5,8 +5,6 @@ from typing import assert_never
 
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
-    V0JobRequest,
-    V1JobRequest,
     V2JobRequest,
 )
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
@@ -48,9 +46,6 @@ async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
     if settings.DEBUG_MINER_KEY:
         miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
         return miner
-
-    if isinstance(request, V0JobRequest | V1JobRequest):
-        return await pick_miner_for_job_v0_v1(request)
 
     if isinstance(request, V2JobRequest):
         return await pick_miner_for_job_v2(request)
@@ -140,18 +135,6 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
             return miner
 
     raise AllMinersBusy()
-
-
-async def pick_miner_for_job_v0_v1(request: V0JobRequest | V1JobRequest) -> Miner:
-    """
-    V0 and V1 requests contain miner selected by facilitator - so just return that.
-    """
-    if await MinerBlacklist.objects.active().filter(miner__hotkey=request.miner_hotkey).aexists():
-        raise MinerIsBlacklisted()
-
-    miner, _ = await Miner.objects.aget_or_create(hotkey=request.miner_hotkey)
-
-    return miner
 
 
 async def report_miner_failed_job(job: OrganicJob) -> None:

@@ -7,7 +7,12 @@ from typing import Annotated, ClassVar, Union
 import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.fv_protocol.facilitator_requests import Error, Response
-from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest, V0Heartbeat, V0MachineSpecsUpdate
+from compute_horde.fv_protocol.validator_requests import (
+    JobStatusUpdate,
+    V0AuthenticationRequest,
+    V0Heartbeat,
+    V0MachineSpecsUpdate,
+)
 from django.conf import settings
 from django.db import IntegrityError
 from django.utils.timezone import now
@@ -15,7 +20,6 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from structlog.contextvars import bound_contextvars
 
 from .models import Channel, Job, JobStatus, Validator
-from .schemas import JobStatusUpdate
 from .specs import save_machine_specs
 
 log = structlog.get_logger(__name__)
@@ -235,7 +239,7 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
         await Channel.objects.filter(name=self.channel_name).aupdate(last_heartbeat=now())
 
     async def job_new(self, payload: dict) -> None:
-        """Receive V0JobRequest from backend and forward it to validator via WS"""
+        """Receive V2JobRequest from backend and forward it to validator via WS"""
         await self.send(text_data=json.dumps(payload))
 
     async def job_cheated(self, payload: dict) -> None:

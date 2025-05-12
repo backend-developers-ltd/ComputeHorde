@@ -10,7 +10,7 @@ from compute_horde_miner.miner.executor_manager import v1
 WEBSOCKET_TIMEOUT = 100000
 
 
-async def fake_executor(token):
+async def fake_executor(token, streaming=False):
     communicator = WebsocketCommunicator(asgi.application, f"v0.1/executor_interface/{token}")
     connected, _ = await communicator.connect()
     assert connected
@@ -34,12 +34,18 @@ async def fake_executor(token):
             "ttl": 5,
         },
         "job_started_receipt_signature": "gibberish",
-        "streaming_details": None,
+        "streaming_details": None
+        if not streaming
+        else {
+            "public_key": "some_public_key",
+            "executor_ip": "0.0.0.0",
+        },
     }, response
     await communicator.send_json_to(
         {
             "message_type": "V0ExecutorReadyRequest",
             "job_uuid": fake_executor.job_uuid,
+            "executor_token": None,
         }
     )
     response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
@@ -55,6 +61,15 @@ async def fake_executor(token):
         "output_upload": mock.ANY,
         "artifacts_dir": None,
     }, response
+    if streaming:
+        await communicator.send_json_to(
+            {
+                "message_type": "V0StreamingJobReadyRequest",
+                "job_uuid": fake_executor.job_uuid,
+                "public_key": "some_public_key",
+                "port": 1234,
+            }
+        )
     await communicator.send_json_to(
         {
             "message_type": "V0JobFinishedRequest",
@@ -87,3 +102,9 @@ class StubExecutorManager(v1.BaseExecutorManager):
 
     async def get_manifest(self):
         return {DEFAULT_EXECUTOR_CLASS: 1}
+
+
+class StubStreamingExecutorManager(StubExecutorManager):
+    async def start_new_executor(self, token, executor_class, timeout):
+        asyncio.get_running_loop().create_task(fake_executor(token, streaming=True))
+        return object()

@@ -14,31 +14,6 @@ MuliVolumeAllowedVolume = Annotated[
 ]
 
 
-class MinerResponse(BaseModel, extra=Extra.allow):
-    job_uuid: str
-    message_type: str | None
-    docker_process_stderr: str
-    docker_process_stdout: str
-    artifacts: dict[str, str] | None = None
-    upload_results: dict[str, str] | None = None
-
-
-class JobStatusMetadata(BaseModel, extra=Extra.allow):
-    comment: str
-    miner_response: MinerResponse | None = None
-
-
-class JobStatusUpdate(BaseModel, extra=Extra.forbid):
-    """
-    Message sent from validator to this app in response to NewJobRequest.
-    """
-
-    message_type: Literal["V0JobStatusUpdate"] = Field(default="V0JobStatusUpdate")
-    uuid: str
-    status: Literal["failed", "rejected", "accepted", "completed"]
-    metadata: JobStatusMetadata | None = None
-
-
 class ForceDisconnect(BaseModel, extra=Extra.forbid):
     """Message sent when validator is no longer valid and should be disconnected"""
 
