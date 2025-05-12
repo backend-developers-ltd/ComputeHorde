@@ -527,6 +527,7 @@ def test_huggingface_volume_fail_and_retry():
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
 
