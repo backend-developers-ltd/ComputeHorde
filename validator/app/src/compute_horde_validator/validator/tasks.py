@@ -39,6 +39,7 @@ from compute_horde_validator.validator.collateral import (
     get_evm_key_associations,
     get_miner_collateral,
     get_web3_connection,
+    slash_collateral,
 )
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
@@ -1722,3 +1723,30 @@ def _execute_organic_job_on_worker(job_request: JsonValue, miner_hotkey: str) ->
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
     miner = Miner.objects.get(hotkey=miner_hotkey)
     async_to_sync(execute_organic_job_request)(request, miner)
+
+
+@app.task
+def slash_collateral_task(job_uuid: str) -> None:
+    with transaction.atomic():
+        job = OrganicJob.objects.select_related("miner").select_for_update().get(job_uuid=job_uuid)
+
+        if job.slashed:
+            logger.info(f"Already slashed for this job {job_uuid}")
+            return
+
+        slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
+        if slash_amount > 0 and job.miner.evm_address:
+            try:
+                w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
+                slash_collateral(
+                    w3=w3,
+                    contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
+                    miner_address=job.miner.evm_address,
+                    amount_wei=slash_amount,
+                    url=f"job {job_uuid} cheated",
+                )
+            except Exception as e:
+                logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
+            else:
+                job.slashed = True
+                job.save()

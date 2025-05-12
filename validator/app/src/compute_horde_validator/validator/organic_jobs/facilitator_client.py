@@ -9,7 +9,6 @@ import httpx
 import pydantic
 import tenacity
 import websockets
-from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.fv_protocol.facilitator_requests import (
     Error,
@@ -26,12 +25,9 @@ from compute_horde.fv_protocol.validator_requests import (
     V0MachineSpecsUpdate,
 )
 from compute_horde_core.signature import verify_signature
-from constance import config
 from django.conf import settings
-from django.db import transaction
 from pydantic import BaseModel
 
-from compute_horde_validator.validator import collateral
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     MinerBlacklist,
@@ -40,7 +36,10 @@ from compute_horde_validator.validator.models import (
     ValidatorWhitelist,
 )
 from compute_horde_validator.validator.organic_jobs import routing
-from compute_horde_validator.validator.tasks import execute_organic_job_request_on_worker
+from compute_horde_validator.validator.tasks import (
+    execute_organic_job_request_on_worker,
+    slash_collateral_task,
+)
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
@@ -342,37 +341,8 @@ class FacilitatorClient:
             },
         )
 
-        await self.slash_collateral(job_uuid)
-
-    @sync_to_async(thread_sensitive=True)
-    def slash_collateral(self, job_uuid: str) -> None:
-        with transaction.atomic():
-            job = (
-                OrganicJob.objects.select_related("miner")
-                .select_for_update()
-                .get(job_uuid=job_uuid)
-            )
-
-            if job.slashed:
-                logger.info(f"Already slashed for this job {job_uuid}")
-                return
-
-            slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
-            if slash_amount > 0 and job.miner.evm_address:
-                try:
-                    w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
-                    collateral.slash_collateral(
-                        w3=w3,
-                        contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
-                        miner_address=job.miner.evm_address,
-                        amount_wei=slash_amount,
-                        url=f"job {job_uuid} cheated",
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
-                else:
-                    job.slashed = True
-                    job.save()
+        if not job.slashed:
+            slash_collateral_task.delay(str(job.job_uuid))
 
     async def process_job_request(self, job_request: OrganicJobRequest) -> None:
         if isinstance(job_request, V2JobRequest):
