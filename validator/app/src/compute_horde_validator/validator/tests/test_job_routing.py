@@ -1,5 +1,6 @@
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
@@ -33,7 +34,7 @@ JOB_REQUEST = V2JobRequest(
 )
 
 pytestmark = [
-    pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT=0.01),
+    pytest.mark.override_config(DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=10000000000000000),
 ]
 
 
@@ -42,7 +43,9 @@ def setup_db():
     now = timezone.now()
     cycle = Cycle.objects.create(start=1, stop=2)
     batch = SyntheticJobBatch.objects.create(block=1, created_at=now, cycle=cycle)
-    miners = [Miner.objects.create(hotkey=f"miner_{i}", collateral=1) for i in range(5)]
+    miners = [
+        Miner.objects.create(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18)) for i in range(5)
+    ]
     for i, miner in enumerate(miners):
         MinerManifest.objects.create(
             miner=miner,
@@ -167,7 +170,7 @@ async def test_preliminary_reservation__prevents_double_select():
 async def test_preliminary_reservation__minimum_collateral():
     await MinerManifest.objects.aupdate(executor_count=1, online_executor_count=1)
     miner_ne = await Miner.objects.afirst()
-    miner_ne.collateral = 0.009
+    miner_ne.collateral_wei = Decimal(int(0.009 * 10**18))
     await miner_ne.asave()
 
     picked_miners: set[str] = set()

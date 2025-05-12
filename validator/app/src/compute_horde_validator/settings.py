@@ -2,6 +2,7 @@
 Django settings for compute_horde_validator project.
 """
 
+import decimal
 import inspect
 import logging
 import pathlib
@@ -13,6 +14,12 @@ import environ
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from celery.schedules import crontab
 from compute_horde import base  # noqa
+
+# Set decimal precision.
+# We need to be able to represent 256-bit unsigned integers.
+# Calculated from: math.ceil(math.log10(2**256 - 1))
+DECIMAL_PRECISION = 78
+decimal.getcontext().prec = DECIMAL_PRECISION
 
 root = environ.Path(__file__) - 2
 
@@ -405,15 +412,15 @@ CONSTANCE_CONFIG = {
         int,
     ),
     # collateral params
-    "DYNAMIC_MINIMUM_COLLATERAL_AMOUNT": (
-        0.01,
-        "Minimum collateral amount (in tao) for a miner to be considered for a job",
-        float,
+    "DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI": (
+        10000000000000000,  # 0.01 tao
+        "Minimum collateral amount (in Wei) for a miner to be considered for a job",
+        int,
     ),
-    "DYNAMIC_COLLATERAL_SLASH_AMOUNT": (
-        0.005,
-        "Amount (in tao) of collateral to be slashed if a miner cheats on a job",
-        float,
+    "DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI": (
+        5000000000000000,  # 0.005 tao
+        "Amount (in Wei) of collateral to be slashed if a miner cheats on a job",
+        int,
     ),
 }
 

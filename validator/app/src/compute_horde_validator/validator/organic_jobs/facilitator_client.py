@@ -357,7 +357,7 @@ class FacilitatorClient:
                 logger.info(f"Already slashed for this job {job_uuid}")
                 return
 
-            slash_amount = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT
+            slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
             if slash_amount > 0 and job.miner.evm_address:
                 try:
                     w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
@@ -365,7 +365,7 @@ class FacilitatorClient:
                         w3=w3,
                         contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
                         miner_address=job.miner.evm_address,
-                        amount_tao=slash_amount,
+                        amount_wei=slash_amount,
                         url=f"job {job_uuid} cheated",
                     )
                 except Exception as e:

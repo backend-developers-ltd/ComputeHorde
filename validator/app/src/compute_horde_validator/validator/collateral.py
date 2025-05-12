@@ -16,8 +16,6 @@ from web3 import Web3
 from web3.contract.contract import ContractFunction
 from web3.types import Wei
 
-WEI_PER_TAO = 10**18
-
 
 @functools.cache
 def get_private_key() -> str | None:
@@ -48,16 +46,6 @@ def get_web3_connection(network: str) -> Web3:
     if not w3.is_connected():
         raise ConnectionError(f"Failed to connect to RPC node at {rpc_url}")
     return w3
-
-
-def wei_to_tao(wei: int) -> float:
-    """Convert Wei to TAO."""
-    return wei / WEI_PER_TAO
-
-
-def tao_to_wei(tao: float) -> int:
-    """Convert TAO to Wei."""
-    return int(tao * WEI_PER_TAO)
 
 
 def get_miner_collateral(
@@ -176,7 +164,7 @@ def slash_collateral(
     w3: Web3,
     contract_address: str,
     miner_address: str,
-    amount_tao: float,
+    amount_wei: int,
     url: str,
 ) -> SlashedEvent:
     """Slash collateral from a miner.
@@ -185,7 +173,7 @@ def slash_collateral(
         w3: Web3 instance to use for blockchain interaction.
         contract_address: Address of the Collateral contract.
         miner_address: EVM address of the miner to slash.
-        amount_tao: Amount of TAO to slash.
+        amount_wei: Amount of Wei to slash.
         url: URL containing information about the slash.
 
     Returns:
@@ -209,7 +197,7 @@ def slash_collateral(
         md5_checksum = b"\x00" * 16
 
     function = contract.functions.slashCollateral(
-        miner_checksum_address, tao_to_wei(amount_tao), url, md5_checksum
+        miner_checksum_address, amount_wei, url, md5_checksum
     )
     tx_hash = build_and_send_transaction(w3, function, account, gas_limit=200_000)
 

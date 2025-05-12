@@ -5,6 +5,7 @@ import time
 import traceback
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 from functools import cached_property
 from math import ceil, floor
 from typing import Union
@@ -38,7 +39,6 @@ from compute_horde_validator.validator.collateral import (
     get_evm_key_associations,
     get_miner_collateral,
     get_web3_connection,
-    wei_to_tao,
 )
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
@@ -1357,7 +1357,7 @@ def sync_collaterals(subtensor: bittensor.subtensor, hotkeys: list[str], block: 
         miner.evm_address = evm_address
         to_update.append(miner)
 
-        if not evm_address:
+        if not miner.evm_address:
             continue
 
         if settings.COLLATERAL_CONTRACT_ADDRESS:
@@ -1365,7 +1365,7 @@ def sync_collaterals(subtensor: bittensor.subtensor, hotkeys: list[str], block: 
                 collateral = get_miner_collateral(
                     w3, settings.COLLATERAL_CONTRACT_ADDRESS, miner.evm_address, block
                 )
-                miner.collateral = wei_to_tao(collateral)
+                miner.collateral_wei = Decimal(collateral)
             except Exception as e:
                 msg = f"Error while fetching miner collateral: {e}"
                 logger.warning(msg)

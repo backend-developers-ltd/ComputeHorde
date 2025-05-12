@@ -2,6 +2,7 @@ import logging
 import shlex
 import uuid
 from datetime import datetime, timedelta
+from decimal import Decimal
 from enum import IntEnum
 from os import urandom
 from typing import Self
@@ -201,7 +202,14 @@ class Miner(models.Model):
     port = models.IntegerField(default=0)
 
     evm_address = models.CharField(max_length=42, null=True)
-    collateral = models.FloatField(default=0)
+
+    # This is a 256-bit integer, which is too big to store in any of postgres's int types.
+    # So we are using the NUMERIC(78) here.
+    collateral_wei = models.DecimalField(
+        max_digits=settings.DECIMAL_PRECISION,
+        decimal_places=0,
+        default=Decimal(0),
+    )
 
     def __str__(self):
         return f"hotkey: {self.hotkey}"
