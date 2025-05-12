@@ -148,7 +148,7 @@ class MultiUploadOutputUploader(OutputUploader):
             if upload.output_upload_type == OutputUploadType.single_file_post:
                 # we run those concurrently but for loop changes slots - we need to bind
                 async def _single_post_upload_task(
-                        file_path: pathlib.Path, upload: SingleFilePostUpload
+                    file_path: pathlib.Path, upload: SingleFilePostUpload
                 ) -> tuple[str, HttpOutputVolumeResponse]:
                     with file_path.open("rb") as fp:
                         response = await upload_post(
@@ -166,7 +166,7 @@ class MultiUploadOutputUploader(OutputUploader):
             elif upload.output_upload_type == OutputUploadType.single_file_put:
                 # we run those concurrently but for loop changes slots - we need to bind
                 async def _single_put_upload_task(
-                        file_path: pathlib.Path, upload: SingleFilePutUpload
+                    file_path: pathlib.Path, upload: SingleFilePutUpload
                 ) -> tuple[str, HttpOutputVolumeResponse]:
                     with file_path.open("rb") as fp:
                         response = await upload_put(
@@ -185,7 +185,7 @@ class MultiUploadOutputUploader(OutputUploader):
             if isinstance(system_output_upload, ZipAndHttpPostUpload):
                 # we don't need to bind any vars because we don't run it in a loop
                 async def _output_post_upload_task(
-                        upload: ZipAndHttpPostUpload
+                    upload: ZipAndHttpPostUpload,
                 ) -> tuple[str, HttpOutputVolumeResponse]:
                     with zipped_directory(
                         directory, exclude=single_file_uploads, max_size_bytes=self.max_size_bytes
