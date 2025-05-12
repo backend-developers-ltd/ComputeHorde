@@ -1354,11 +1354,11 @@ def sync_collaterals(subtensor: bittensor.subtensor, hotkeys: list[str], block: 
             continue
 
         evm_address = associations.get(miner.uid)
-        if not evm_address:
-            continue
-
         miner.evm_address = evm_address
         to_update.append(miner)
+
+        if not evm_address:
+            continue
 
         if settings.COLLATERAL_CONTRACT_ADDRESS:
             try:
