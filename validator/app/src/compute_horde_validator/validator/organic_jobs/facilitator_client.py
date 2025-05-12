@@ -324,6 +324,10 @@ class FacilitatorClient:
             logger.error(f"Job {job_uuid} reported for cheating does not exist")
             return
 
+        if job.status != OrganicJob.Status.COMPLETED:
+            logger.info(f"Job {job_uuid} reported for cheating is not complete yet")
+            return
+
         job.cheated = True
         await job.asave()
 
