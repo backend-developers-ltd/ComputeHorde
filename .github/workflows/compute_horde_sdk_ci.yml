@@ -63,7 +63,7 @@ jobs:
       matrix:
         os: ["ubuntu-latest"]
         python-version: ["3.11", "3.12"]
-        bittensor-version: ["8.0.0", "8.5.2"]
+        bittensor-version: ["8.0.0", "8.5.1", "9.0.4"]
     defaults:
       run:
         working-directory: ./compute_horde_sdk
