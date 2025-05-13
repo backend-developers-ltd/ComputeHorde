@@ -1,8 +1,9 @@
 REFERENCE_BLOCK_IN_PEAK_CYCLE = 1000
 CYCLES_IN_TESTING_DAY = 10  # 1 peak cycle + 9 non-peak cycles
+TEMPO = 360
 
 
-def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
+def get_epoch_containing_block(block: int, netuid: int, tempo: int = TEMPO) -> range:
     """
     Reimplementing the logic from subtensor's Rust function:
         pub fn blocks_until_next_epoch(netuid: u16, tempo: u16, block_number: u64) -> u64
@@ -27,7 +28,7 @@ def get_epoch_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
     return range(prev_epoch, next_epoch)
 
 
-def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> range:
+def get_cycle_containing_block(block: int, netuid: int, tempo: int = TEMPO) -> range:
     """
     A cycle contains two epochs, starts on an even one. A cycle is the basic unit of passage of time in compute horde,
     and validators testing miners are synchronised to cycles.
@@ -50,7 +51,7 @@ def get_cycle_containing_block(block: int, netuid: int, tempo: int = 360) -> ran
     return range(first_epoch.start, second_epoch.stop)
 
 
-def get_peak_cycle(block: int, netuid: int, tempo: int = 360) -> range:
+def get_peak_cycle(block: int, netuid: int, tempo: int = TEMPO) -> range:
     """Get the peak cycle of testing day containing block"""
     cycle_interval = 2 * (tempo + 1)
     testing_day_interval = cycle_interval * CYCLES_IN_TESTING_DAY
