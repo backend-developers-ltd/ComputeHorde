@@ -9,7 +9,7 @@ from datetime import timedelta
 from typing import Any, Self, TypeAlias
 from urllib.parse import urljoin
 
-import bittensor
+import bittensor_wallet
 import httpx
 import pydantic
 import tenacity
@@ -199,7 +199,7 @@ class ComputeHordeClient:
 
     def __init__(
         self,
-        hotkey: bittensor.Keypair,
+        hotkey: bittensor_wallet.Keypair,
         compute_horde_validator_hotkey: str,
         job_queue: str | None = None,
         facilitator_url: str = DEFAULT_FACILITATOR_URL,

@@ -32,7 +32,7 @@ If you want to run your job on Runpod in case of any error:
 
     import asyncio
 
-    import bittensor
+    import bittensor_wallet
 
     from compute_horde_sdk.v1 import ComputeHordeClient, ComputeHordeJobSpec, ExecutorClass
     from compute_horde_sdk.v1.fallback import FallbackClient, FallbackJobSpec
@@ -40,7 +40,7 @@ If you want to run your job on Runpod in case of any error:
 
     async def main():
         try:
-            wallet = bittensor.wallet(name="...", hotkey="...")
+            wallet = bittensor_wallet.Wallet(name="...", hotkey="...")
 
             compute_horde_client = ComputeHordeClient(
                 hotkey=wallet.hotkey,

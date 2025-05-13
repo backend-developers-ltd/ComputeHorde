@@ -68,11 +68,11 @@ This minimal example shows how to submit a job to ComputeHorde with **basic para
 ```python
 import asyncio
 
-import bittensor
+import bittensor_wallet
 
 from compute_horde_sdk.v1 import ComputeHordeClient, ComputeHordeJobSpec, ExecutorClass
 
-wallet = bittensor.wallet(name="...", hotkey="...")
+wallet = bittensor_wallet.Wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
     hotkey=wallet.hotkey,
@@ -109,7 +109,7 @@ For a full list of available parameters and detailed descriptions, see the [Comp
 ```python
 import asyncio
 
-import bittensor
+import bittensor_wallet
 
 from compute_horde_sdk.v1 import (
     ComputeHordeClient,
@@ -121,7 +121,7 @@ from compute_horde_sdk.v1 import (
     InlineInputVolume,
 )
 
-wallet = bittensor.wallet(name="...", hotkey="...")
+wallet = bittensor_wallet.Wallet(name="...", hotkey="...")
 
 compute_horde_client = ComputeHordeClient(
     hotkey=wallet.hotkey,

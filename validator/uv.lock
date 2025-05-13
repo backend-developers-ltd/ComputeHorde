@@ -655,11 +655,11 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
-version = "0.0.4"
+version = "0.0.5"
 source = { editable = "../compute_horde_sdk" }
 dependencies = [
     { name = "asgiref", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "bittensor-wallet", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "huggingface-hub", extra = ["hf-transfer"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -669,13 +669,15 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "asgiref", specifier = ">=3.8.0,<4" },
-    { name = "bittensor", specifier = ">=8.5.1,<9.2" },
+    { name = "bittensor-wallet", specifier = ">=3.0.0,<4" },
     { name = "build", marker = "extra == 'fallback'" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=0.26.1" },
     { name = "pydantic", specifier = ">=2.3,<3" },
+    { name = "setuptools", marker = "extra == 'fallback'" },
     { name = "skypilot", extras = ["runpod"], marker = "extra == 'fallback'", specifier = ">=0.8.1,<0.9.0" },
     { name = "tenacity", specifier = ">=9.0.0,<10.0.0" },
+    { name = "wheel", marker = "extra == 'fallback'" },
 ]
 provides-extras = ["fallback"]
 
