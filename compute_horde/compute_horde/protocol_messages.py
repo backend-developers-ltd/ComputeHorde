@@ -175,6 +175,9 @@ class V0JobFinishedRequest(BaseModel):
     docker_process_stdout: str
     docker_process_stderr: str
     artifacts: dict[str, str] | None = None
+    upload_results: dict[str, str] | None = (
+        None  # Contains serialized HTTP upload results (if available)
+    )
 
 
 # validator -> miner.vc

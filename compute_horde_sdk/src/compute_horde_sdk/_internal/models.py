@@ -3,7 +3,7 @@ import io
 import zipfile
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal, Self
 
@@ -50,6 +50,14 @@ class ComputeHordeJobResult:
     artifacts: dict[str, bytes]
     """Artifact file contents, keyed by file path, as :class:`bytes`."""
 
+    upload_results: dict[str, compute_horde_output_upload.HttpOutputVolumeResponse] = field(default_factory=dict)
+    """Service responses for files uploaded to HTTP output volumes, keyed by file name."""
+
+    def add_upload_result(self, path: str, result: compute_horde_output_upload.HttpOutputVolumeResponse) -> None:
+        # Mount point is stripped from the upload path when job is being sent to facilitator. Let's add mount point
+        # back to the artifact file path for consistency.
+        self.upload_results[OUTPUT_MOUNT_PATH_PREFIX + path] = result
+
 
 class FacilitatorJobResponse(pydantic.BaseModel):
     uuid: str
@@ -71,6 +79,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # uploads: list = []
     # target_validator_hotkey: str
     artifacts: dict[str, str] = {}
+    upload_results: dict[str, str] = {}
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):

@@ -14,6 +14,7 @@ from typing import IO, Any
 import httpx
 
 from ._models import (
+    HttpOutputVolumeResponse,
     MultiUpload,
     OutputUpload,
     OutputUploadType,
@@ -69,7 +70,7 @@ class OutputUploader(metaclass=abc.ABCMeta):
     def handles_output_type(cls) -> type[OutputUpload]: ...
 
     @abc.abstractmethod
-    async def upload(self, directory: pathlib.Path) -> None: ...
+    async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]: ...
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -94,17 +95,17 @@ class ZipAndHTTPPostOutputUploader(OutputUploader):
     def handles_output_type(cls) -> type[OutputUpload]:
         return ZipAndHttpPostUpload
 
-    async def upload(self, directory: pathlib.Path) -> None:
+    async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]:
         with zipped_directory(directory, max_size_bytes=self.max_size_bytes) as (file_size, fp):
             async with self._semaphore:
-                await upload_post(
+                file_name = "output.zip"
+                response = await upload_post(
                     fp,
-                    "output.zip",
-                    file_size,
+                    file_name,
                     self.upload_output.url,
-                    content_type="application/zip",
                     form_fields=self.upload_output.form_fields,
                 )
+                return {file_name: response}
 
 
 class ZipAndHTTPPutOutputUploader(OutputUploader):
@@ -118,10 +119,11 @@ class ZipAndHTTPPutOutputUploader(OutputUploader):
     def handles_output_type(cls) -> type[OutputUpload]:
         return ZipAndHttpPutUpload
 
-    async def upload(self, directory: pathlib.Path) -> None:
+    async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]:
         with zipped_directory(directory, max_size_bytes=self.max_size_bytes) as (file_size, fp):
             async with self._semaphore:
-                await upload_put(fp, file_size, self.upload_output.url)
+                response = await upload_put(fp, file_size, self.upload_output.url)
+                return {"output.zip": response}
 
 
 class MultiUploadOutputUploader(OutputUploader):
@@ -135,7 +137,7 @@ class MultiUploadOutputUploader(OutputUploader):
     def handles_output_type(cls) -> type[OutputUpload]:
         return MultiUpload
 
-    async def upload(self, directory: pathlib.Path) -> None:
+    async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]:
         single_file_uploads = []
         tasks = []
         for upload in self.upload_output.uploads:
@@ -145,25 +147,32 @@ class MultiUploadOutputUploader(OutputUploader):
 
             if upload.output_upload_type == OutputUploadType.single_file_post:
                 # we run those concurrently but for loop changes slots - we need to bind
-                async def _single_post_upload_task(file_path: pathlib.Path, upload: SingleFilePostUpload) -> None:
+                async def _single_post_upload_task(
+                    file_path: pathlib.Path, upload: SingleFilePostUpload
+                ) -> tuple[str, HttpOutputVolumeResponse]:
                     with file_path.open("rb") as fp:
-                        await upload_post(
+                        response = await upload_post(
                             fp,
                             file_path.name,
-                            file_path.stat().st_size,
                             upload.url,
                             form_fields=upload.form_fields,
                             headers=upload.signed_headers,
                         )
+                        return upload.relative_path, response
 
                 async with self._semaphore:
                     tasks.append(_single_post_upload_task(file_path, upload))
                 single_file_uploads.append(upload.relative_path)
             elif upload.output_upload_type == OutputUploadType.single_file_put:
                 # we run those concurrently but for loop changes slots - we need to bind
-                async def _single_put_upload_task(file_path: pathlib.Path, upload: SingleFilePutUpload) -> None:
+                async def _single_put_upload_task(
+                    file_path: pathlib.Path, upload: SingleFilePutUpload
+                ) -> tuple[str, HttpOutputVolumeResponse]:
                     with file_path.open("rb") as fp:
-                        await upload_put(fp, file_path.stat().st_size, upload.url, headers=upload.signed_headers)
+                        response = await upload_put(
+                            fp, file_path.stat().st_size, upload.url, headers=upload.signed_headers
+                        )
+                        return upload.relative_path, response
 
                 async with self._semaphore:
                     tasks.append(_single_put_upload_task(file_path, upload))
@@ -175,38 +184,40 @@ class MultiUploadOutputUploader(OutputUploader):
         if system_output_upload:
             if isinstance(system_output_upload, ZipAndHttpPostUpload):
                 # we don't need to bind any vars because we don't run it in a loop
-                async def _output_post_upload_task(upload: ZipAndHttpPostUpload) -> None:
+                async def _output_post_upload_task(
+                    upload: ZipAndHttpPostUpload,
+                ) -> tuple[str, HttpOutputVolumeResponse]:
                     with zipped_directory(
                         directory, exclude=single_file_uploads, max_size_bytes=self.max_size_bytes
                     ) as (
                         file_size,
                         fp,
                     ):
-                        await upload_post(
+                        response = await upload_post(
                             fp,
                             "output.zip",
-                            file_size,
                             upload.url,
-                            content_type="application/zip",
                             form_fields=upload.form_fields,
                         )
+                        return "system_output", response
 
                 async with self._semaphore:
                     tasks.append(_output_post_upload_task(system_output_upload))
             elif isinstance(system_output_upload, ZipAndHttpPutUpload):
                 # we don't need to bind any vars because we don't run it in a loop
-                async def _output_put_upload_task(upload: ZipAndHttpPutUpload) -> None:
+                async def _output_put_upload_task(upload: ZipAndHttpPutUpload) -> tuple[str, HttpOutputVolumeResponse]:
                     with zipped_directory(
                         directory, exclude=single_file_uploads, max_size_bytes=self.max_size_bytes
                     ) as (
                         file_size,
                         fp,
                     ):
-                        await upload_put(
+                        response = await upload_put(
                             fp,
                             file_size,
                             upload.url,
                         )
+                        return "system_output", response
 
                 async with self._semaphore:
                     tasks.append(_output_put_upload_task(system_output_upload))
@@ -214,7 +225,8 @@ class MultiUploadOutputUploader(OutputUploader):
                 raise OutputUploadFailed(
                     f"Unsupported system output upload type: {system_output_upload.output_upload_type}"
                 )
-        await asyncio.gather(*tasks)
+        responses = await asyncio.gather(*tasks)
+        return {path: result for path, result in responses}
 
 
 async def make_iterator_async(it: Iterable[Any]) -> AsyncIterable[Any]:
@@ -231,39 +243,99 @@ async def make_iterator_async(it: Iterable[Any]) -> AsyncIterable[Any]:
 async def upload_post(
     fp: IO[bytes],
     file_name: str,
-    file_size: int,
     url: str,
-    content_type: str = "application/octet-stream",
     form_fields: dict[str, str] | None = None,
     headers: dict[str, str] | None = None,
-) -> None:
+) -> HttpOutputVolumeResponse:
+    """
+    Uploads a file via HTTP POST and returns the response.
+
+    Args:
+        fp: File pointer to the file to upload.
+        file_name: The name assigned to the uploaded file.
+        url: The target URL for the upload.
+        form_fields: Additional form fields to include in the POST.
+        headers: Optional headers for the request,
+
+    Returns:
+        HttpOutputVolumeResponse: Contains the HTTP response headers and body.
+
+    """
     fp.seek(0)
     async with httpx.AsyncClient() as client:
-        form_fields = {
-            "Content-Type": content_type,
-            **(form_fields or {}),
-        }
-        files = {"file": (file_name, fp, content_type)}
-        headers = {
-            "Content-Length": str(file_size),
-            **(headers or {}),
-        }
+        files = {"file": (file_name, fp)}
+        form_fields = {**(form_fields or {})}
+        headers = {**(headers or {})}
+
         try:
             logger.debug("Upload (POST) file to: %s", url)
-            response = await client.post(
+            async with client.stream(
+                method="POST",
                 url=url,
                 data=form_fields,
                 files=files,
                 headers=headers,
                 timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
+            ) as response:
+                response.raise_for_status()
+                body = await read_stream_with_cap(response)
+                return HttpOutputVolumeResponse(
+                    headers=dict(response.headers),
+                    body=body,
+                )
         except httpx.HTTPError as ex:
             raise OutputUploadFailed(f"Uploading output failed with http error {ex}")
 
 
+async def read_stream_with_cap(response: httpx.Response, max_allowed_size: int = 10 * 1024 * 1024) -> str:
+    """
+    Reads the response in a streaming fashion, enforcing a maximum allowed response size.
+
+    Args:
+        response: The httpx response object.
+        max_allowed_size: Maximum allowed size in bytes for the response body, defaults to 10MB.
+
+    Returns:
+        The response body as a decoded string.
+
+    """
+    content_length = response.headers.get("Content-Length")
+    if content_length:
+        try:
+            if int(content_length) > max_allowed_size:
+                raise OutputUploadFailed("Response size exceeds allowed limit based on Content-Length header")
+        except ValueError:
+            # If conversion fails, proceed to check the chunks.
+            pass
+
+    total_bytes = 0
+    chunks: list[bytes] = []
+    async for chunk in response.aiter_bytes():
+        total_bytes += len(chunks)
+        if total_bytes > max_allowed_size:
+            raise OutputUploadFailed("Response size exceeds allowed limit")
+        chunks.append(chunk)
+
+    return b"".join(chunks).decode("utf-8")
+
+
 @retry(max_retries=3, exceptions=OutputUploadFailed)
-async def upload_put(fp: IO[bytes], file_size: int, url: str, headers: dict[str, str] | None = None) -> None:
+async def upload_put(
+    fp: IO[bytes], file_size: int, url: str, headers: dict[str, str] | None = None
+) -> HttpOutputVolumeResponse:
+    """
+    Uploads a file via HTTP PUT and returns the response.
+
+    Args:
+        fp: File pointer to the file to upload.
+        file_size: The size of the file.
+        url: The target URL for the upload.
+        headers: Optional headers for the request,
+
+    Returns:
+        HttpOutputVolumeResponse: Contains the HTTP response headers and body.
+
+    """
     fp.seek(0)
     async with httpx.AsyncClient() as client:
         headers = {
@@ -272,13 +344,19 @@ async def upload_put(fp: IO[bytes], file_size: int, url: str, headers: dict[str,
         }
         try:
             logger.debug("Upload (PUT) file to: %s", url)
-            response = await client.put(
+            async with client.stream(
+                method="PUT",
                 url=url,
                 content=make_iterator_async(fp),
                 headers=headers,
                 timeout=OUTPUT_UPLOAD_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
+            ) as response:
+                response.raise_for_status()
+                body = await read_stream_with_cap(response)
+                return HttpOutputVolumeResponse(
+                    headers=dict(response.headers),
+                    body=body,
+                )
         except httpx.HTTPError as ex:
             raise OutputUploadFailed(f"Uploading output failed with http error {ex}")
 

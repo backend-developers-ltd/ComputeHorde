@@ -56,6 +56,7 @@ def status_update_from_job(
         docker_process_stdout=job.stdout,
         docker_process_stderr=job.stderr,
         artifacts=job.artifacts,
+        upload_results=job.upload_results,
     )
     metadata = JobStatusMetadata(
         comment=job.comment,
@@ -200,7 +201,7 @@ async def drive_organic_job(
     )
 
     try:
-        stdout, stderr, artifacts = await run_organic_job(
+        stdout, stderr, artifacts, upload_results = await run_organic_job(
             miner_client,
             job_details,
             initial_response_timeout=initial_response_timeout,
@@ -211,6 +212,7 @@ async def drive_organic_job(
         job.stdout = stdout
         job.stderr = stderr
         job.artifacts = artifacts
+        job.upload_results = upload_results
         job.status = OrganicJob.Status.COMPLETED
         job.comment = comment
         await job.asave()
