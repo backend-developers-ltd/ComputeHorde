@@ -4,7 +4,7 @@ import datetime
 import enum
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import cached_property
 
 import bittensor
@@ -461,14 +461,7 @@ class OrganicJobDetails:
 
         @property
         def total(self):
-            return sum(
-                (
-                    self.allowed_leeway,
-                    self.download_time_limit,
-                    self.execution_time_limit,
-                    self.upload_time_limit,
-                )
-            )
+            return sum(asdict(self).values())
 
     job_uuid: str
     executor_class: ExecutorClass

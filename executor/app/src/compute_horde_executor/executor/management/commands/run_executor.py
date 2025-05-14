@@ -64,16 +64,13 @@ TRUNCATED_RESPONSE_PREFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 TRUNCATED_RESPONSE_SUFFIX_LEN = MAX_RESULT_SIZE_IN_RESPONSE // 2
 MAX_ARTIFACT_SIZE = 1_000_000
 DOCKER_STOP_TIMEOUT_SECONDS = 15
-INPUT_VOLUME_UNPACK_TIMEOUT_SECONDS = 60 * 15
 
-CVE_2022_0492_TIMEOUT_SECONDS = 120
 CVE_2022_0492_IMAGE = (
     "us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
 )
 # Previous CVE: CVE-2024-0132 fixed in 1.16.2
 # Current CVE: CVE-2025-23359 fixed in 1.17.4
 NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION = packaging.version.parse("1.17.4")
-NVIDIA_CONTAINER_TOOLKIT_VERSION_CHECK_TIMEOUT = 120
 
 NGINX_CONF = """
 http {
@@ -272,9 +269,6 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
                 docker_process_stderr="",
             )
         )
-
-    async def send_job_process_error(self, job_error: JobError, result: "_ExecutionResult"):
-        pass
 
     async def send_result(self, job_result: "JobResult"):
         if job_result.specs:
