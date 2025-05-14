@@ -266,7 +266,8 @@ class FacilitatorClient:
                 msg = await get_channel_layer().receive(f"job_status_updates__{job_uuid}")
                 try:
                     envelope = _JobStatusChannelEnvelope.model_validate(msg)
-                    asyncio.create_task(self.send_model(envelope.payload))
+                    task = asyncio.create_task(self.send_model(envelope.payload))
+                    await self.tasks_to_reap.put(task)
                     if envelope.payload.status in terminal_states:
                         return
                 except pydantic.ValidationError as exc:
