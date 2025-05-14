@@ -197,8 +197,12 @@ class CheatedJobViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
             job = Job.objects.get(uuid=job_uuid)
         except Job.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        job.report_cheated()
-        return Response(status=status.HTTP_200_OK)
+        if job.cheated is False:
+            job.cheated = True
+            job.save()
+            job.report_cheated()
+            return Response(status=status.HTTP_200_OK, data={"message": "Job reported as cheated"})
+        return Response(status=status.HTTP_200_OK, data={"message": "Job already marked as cheated"})
 
 
 class JobFeedbackViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
