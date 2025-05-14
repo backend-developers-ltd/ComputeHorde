@@ -93,7 +93,28 @@ If you don't implement `get_executor_public_address` the executor's public addre
 
 By following these steps, you can create and use a custom executor manager in your compute_horde_miner setup.
 
+## Preloading job images
+
+Your executors need to have the Docker job images preloaded (`docker pull`ed; otherwise the jobs will time out while pulling).
+The list of images is available under the `DYNAMIC_PRELOAD_DOCKER_JOB_IMAGES` key in the dynamic config.
+(See the [dynamic config](https://github.com/backend-developers-ltd/compute-horde-dynamic-config/blob/master/miner-config-prod.json) repository or Constance config in your admin panel.)
+How exactly to do that depends on your executor manager implementation.
+We provide a default bash script: [`preload-job-images.sh`](/docs/preload-job-images.sh),
+which can be run as a cron job on the executor host.
+
+To configure the cron job, copy the script onto your machine,
+make it executable (`chmod +x preload-job-images.sh`), then run `crontab -e` and paste this line in the file:
+
+```
+0 * * * * /<path>/<to>/scripts/preload-job-images.sh >> /<path>/<to>/scripts/preload-job-images.log 2>&1
+```
+
+(the paths should be adjusted).
+
+This is configured to run it every hour; you can see the logs in `<path>/<to>/scripts/preload-job-images.log`.
+
 ## Early Access Features - Preprod Images
+
 Some features are released early and can be used before the official release for the entire subnet. To use these features, you need to set up `v0-preprod` images. Currently, this is only available for miners.
 To switch your miner code to preprod images, follow these steps:
 1. Stop your miner runner: `docker-compose down --remove-orphans`

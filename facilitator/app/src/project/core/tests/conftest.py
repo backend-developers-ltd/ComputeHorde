@@ -159,6 +159,7 @@ def job_status_update(job):
                 docker_process_stderr="some stderr",
                 docker_process_stdout="some stdout",
                 artifacts={},
+                upload_results={},
             ),
         ),
     )

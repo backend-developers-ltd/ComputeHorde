@@ -65,6 +65,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "artifacts_dir",
             "target_validator_hotkey",
             "on_trusted_miner",
+            "upload_results",
             "download_time_limit",
             "execution_time_limit",
             "upload_time_limit",

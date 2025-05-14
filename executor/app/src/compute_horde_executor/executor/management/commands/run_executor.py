@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import csv
+import json
 import logging
 import os
 import pathlib
@@ -284,6 +285,7 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
                 docker_process_stdout=job_result.stdout,
                 docker_process_stderr=job_result.stderr,
                 artifacts=job_result.artifacts,
+                upload_results=job_result.upload_results,
             )
         )
 
@@ -312,6 +314,7 @@ class JobResult(pydantic.BaseModel):
     specs: MachineSpecs | None = None
     error_type: V0JobFailedRequest.ErrorType | None = None
     error_detail: str | None = None
+    upload_results: dict[str, str]
 
 
 def truncate(v: str) -> str:
@@ -708,6 +711,7 @@ class JobRunner:
             else:
                 logger.error(f"Directory found in artifacts: {artifact_filename}")
 
+        upload_results = {}
         if success:
             # upload the output if requested and job succeeded
             if self.full_job_request.output_upload:
@@ -716,7 +720,7 @@ class JobRunner:
                         self.full_job_request.output_upload
                     )
                     output_uploader.max_size_bytes = settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES
-                    await output_uploader.upload(self.output_volume_mount_dir)
+                    upload_results = await output_uploader.upload(self.output_volume_mount_dir)
                 except OutputUploadFailed as ex:
                     raise JobError("Job failed during upload", error_detail=str(ex)) from ex
 
@@ -727,6 +731,9 @@ class JobRunner:
             stdout=stdout,
             stderr=stderr,
             artifacts=artifacts,
+            upload_results=(
+                {key: json.dumps(value.dict()) for key, value in upload_results.items()}
+            ),
         )
 
     async def clean(self):

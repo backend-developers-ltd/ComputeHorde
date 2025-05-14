@@ -70,6 +70,9 @@ def job_finish_message(job_uuid: uuid.UUID):
         docker_process_stdout="",
         docker_process_stderr="",
         artifacts={},
+        upload_results={
+            "output.zip": '{"headers": {"Content-Length": "123", "ETag": "abc123"}, "body": "response body content"}'
+        },
     ).model_dump_json()
 
 

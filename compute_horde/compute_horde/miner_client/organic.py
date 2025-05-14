@@ -480,7 +480,7 @@ async def execute_organic_job_on_miner(
     job_details: OrganicJobDetails,
     reservation_time_limit: int,
     executor_startup_time_limit: int,
-) -> tuple[str, str, dict[str, str]]:  # stdout, stderr, artifacts
+) -> tuple[str, str, dict[str, str], dict[str, str]]:  # stdout, stderr, artifacts, upload_results
     """
     Run an organic job. This is a simpler way to use OrganicMinerClient.
 
@@ -488,7 +488,7 @@ async def execute_organic_job_on_miner(
     :param job_details: details specific to the job that needs to be run
     :param reservation_time_limit: time for the miner to report reservation success (or decline the job)
     :param executor_startup_time_limit: time for executor to perform startup checks
-    :return: standard out, standard error of the job container and artifacts
+    :return: standard out, standard error of the job container, artifacts and a dictionary mapping file names to HTTP upload responses
     """
     assert client.job_uuid == job_details.job_uuid
 
@@ -650,6 +650,7 @@ async def execute_organic_job_on_miner(
                     final_response.docker_process_stdout,
                     final_response.docker_process_stderr,
                     final_response.artifacts or {},
+                    final_response.upload_results or {},
                 )
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc

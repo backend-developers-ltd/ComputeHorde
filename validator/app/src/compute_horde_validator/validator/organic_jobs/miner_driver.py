@@ -55,6 +55,7 @@ def status_update_from_job(
         docker_process_stdout=job.stdout,
         docker_process_stderr=job.stderr,
         artifacts=job.artifacts,
+        upload_results=job.upload_results,
     )
     metadata = JobStatusMetadata(
         comment=job.comment,
@@ -206,7 +207,7 @@ async def drive_organic_job(
     )
 
     try:
-        stdout, stderr, artifacts = await execute_organic_job_on_miner(
+        stdout, stderr, artifacts, upload_results = await execute_organic_job_on_miner(
             miner_client,
             job_details,
             reservation_time_limit=await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT"),
@@ -217,6 +218,7 @@ async def drive_organic_job(
         job.stdout = stdout
         job.stderr = stderr
         job.artifacts = artifacts
+        job.upload_results = upload_results
         job.status = OrganicJob.Status.COMPLETED
         job.comment = comment
         await job.asave()

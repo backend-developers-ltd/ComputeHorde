@@ -213,6 +213,7 @@ def test_main_loop_basic():
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
 
@@ -302,6 +303,7 @@ def test_main_loop_streaming_job():
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
 
@@ -383,6 +385,7 @@ def test_huggingface_volume():
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
 
@@ -552,6 +555,7 @@ def test_huggingface_volume_fail_and_retry():
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
 
@@ -650,6 +654,7 @@ def test_huggingface_volume_dataset():
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
 
@@ -730,6 +735,7 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
 
@@ -880,6 +886,7 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
 
@@ -962,9 +969,12 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
 
 def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     # Arrange
-    httpx_mock.add_response()
     url = "http://localhost/bucket/file.zip?hash=blabla"
     form_fields = {"a": "b", "c": "d"}
+
+    headers = {"Content-Length": "123", "ETag": "abc123"}
+    body = "response body content"
+    httpx_mock.add_response(headers=headers, content=body)
 
     command = CommandTested(
         iter(
@@ -1041,6 +1051,9 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {
+                "output.zip": '{"headers": {"content-length": "123", "etag": "abc123"}, "body": "response body content"}',
+            },
         },
     ]
 
@@ -1052,8 +1065,10 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
 
 def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     # Arrange
-    httpx_mock.add_response()
     url = "http://localhost/bucket/file.zip?hash=blabla"
+    headers = {"Content-Length": "123", "ETag": "abc123"}
+    body = "response body content"
+    httpx_mock.add_response(url=url, headers=headers, content=body)
 
     command = CommandTested(
         iter(
@@ -1129,6 +1144,9 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {
+                "output.zip": '{"headers": {"content-length": "123", "etag": "abc123"}, "body": "response body content"}',
+            },
         },
     ]
 
@@ -1220,9 +1238,12 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
 
 def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
     # Arrange
-    httpx_mock.add_response(status_code=400)
-    httpx_mock.add_response(status_code=400)
-    httpx_mock.add_response(status_code=200)
+    upload_url = "http://localhost"
+    httpx_mock.add_response(url=upload_url, status_code=400)
+    httpx_mock.add_response(url=upload_url, status_code=400)
+    headers = {"Content-Length": "123", "ETag": "abc123"}
+    body = "response body content"
+    httpx_mock.add_response(status_code=200, url=upload_url, headers=headers, content=body)
     command = CommandTested(
         iter(
             [
@@ -1259,7 +1280,7 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
                         },
                         "output_upload": {
                             "output_upload_type": "zip_and_http_post",
-                            "url": "http://localhost",
+                            "url": f"{upload_url}",
                             "form_fields": {},
                         },
                         "job_uuid": job_uuid,
@@ -1298,6 +1319,9 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {
+                "output.zip": '{"headers": {"content-length": "123", "etag": "abc123"}, "body": "response body content"}',
+            },
         },
     ]
 
@@ -1377,20 +1401,34 @@ def test_raw_script_job():
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
 
 
 def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, tmp_path):
-    async def read_file_callback(request: httpx.Request, *args, **kwargs) -> httpx.Response:
-        # Read the content of the file-like object, it should be stored then in `content`
-        await request.aread()
-        return httpx.Response(status_code=200)
-
-    httpx_mock.add_callback(callback=read_file_callback)
     url1 = "http://localhost/bucket/file1.txt"
     url2 = "http://localhost/bucket/file2.txt"
     system_output_url = "http://localhost/bucket/system_output.zip"
+
+    responses = {
+        url1: {"headers": {"Content-Length": "1", "ETag": "a"}, "body": "response body content 1"},
+        url2: {"headers": {"Content-Length": "2", "ETag": "b"}, "body": "response body content 2"},
+        system_output_url: {
+            "headers": {"Content-Length": "3", "ETag": "c"},
+            "body": "response body content 3",
+        },
+    }
+
+    async def read_file_callback(request: httpx.Request, *args, **kwargs) -> httpx.Response:
+        # Read the content of the file-like object, it should be stored then in `content`
+        await request.aread()
+        response_data = responses[request.url]
+        return httpx.Response(
+            status_code=200, headers=response_data["headers"], content=response_data["body"]
+        )
+
+    httpx_mock.add_callback(callback=read_file_callback)
     relative_path1 = "file1.txt"
     relative_path2 = "file2.txt"
 
@@ -1483,6 +1521,11 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {
+                "file1.txt": '{"headers": {"content-length": "1", "etag": "a"}, "body": "response body content 1"}',
+                "file2.txt": '{"headers": {"content-length": "2", "etag": "b"}, "body": "response body content 2"}',
+                "system_output": '{"headers": {"content-length": "3", "etag": "c"}, "body": "response body content 3"}',
+            },
         },
     ]
 
@@ -1593,6 +1636,7 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
 
@@ -1698,6 +1742,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
     print([json.loads(msg) for msg in command.miner_client.transport.sent_messages])
@@ -1834,5 +1879,6 @@ def test_artifacts():
                 "/artifacts/100k zeros": base64.b64encode(b"\x00" * 100_000).decode(),
             },
             "job_uuid": job_uuid,
+            "upload_results": {},
         },
     ]
