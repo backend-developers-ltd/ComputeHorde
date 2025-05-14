@@ -305,7 +305,6 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
 
 
 class JobResult(pydantic.BaseModel):
-    success: bool
     exit_status: int | None
     timeout: bool
     stdout: str
@@ -693,8 +692,6 @@ class JobRunner:
             f.write(self.execution_result.stderr)
         stderr = truncate(self.execution_result.stderr)
 
-        success = self.execution_result.return_code == 0
-
         artifacts = {}
         for artifact_filename in os.listdir(self.artifacts_mount_dir):
             artifact_path = self.artifacts_mount_dir / artifact_filename
@@ -712,20 +709,19 @@ class JobRunner:
                 logger.error(f"Directory found in artifacts: {artifact_filename}")
 
         upload_results = {}
-        if success:
-            # upload the output if requested and job succeeded
-            if self.full_job_request.output_upload:
-                try:
-                    output_uploader = OutputUploader.for_upload_output(
-                        self.full_job_request.output_upload
-                    )
-                    output_uploader.max_size_bytes = settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES
-                    upload_results = await output_uploader.upload(self.output_volume_mount_dir)
-                except OutputUploadFailed as ex:
-                    raise JobError("Job failed during upload", error_detail=str(ex)) from ex
+
+        # upload the output if requested
+        if self.full_job_request.output_upload:
+            try:
+                output_uploader = OutputUploader.for_upload_output(
+                    self.full_job_request.output_upload
+                )
+                output_uploader.max_size_bytes = settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES
+                upload_results = await output_uploader.upload(self.output_volume_mount_dir)
+            except OutputUploadFailed as ex:
+                raise JobError("Job failed during upload", error_detail=str(ex)) from ex
 
         return JobResult(
-            success=success,
             exit_status=self.execution_result.return_code,
             timeout=self.execution_result.timed_out,
             stdout=stdout,
