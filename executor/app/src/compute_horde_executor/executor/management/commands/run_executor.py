@@ -241,7 +241,7 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
             self.full_payload.set_result(msg)
 
     async def send_streaming_job_ready(self, certificate: str):
-        self.deferred_send_model(
+        await self.send_model(
             V0StreamingJobReadyRequest(
                 job_uuid=self.job_uuid, public_key=certificate, port=settings.NGINX_PORT
             )
