@@ -202,9 +202,11 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                 if (
                     status == JobStatus.Status.COMPLETED
                     and (miner_response := message.metadata.miner_response) is not None
-                    and (artifacts := miner_response.artifacts) is not None
                 ):
-                    job.artifacts = artifacts
+                    if (artifacts := miner_response.artifacts) is not None:
+                        job.artifacts = artifacts
+                    if (upload_results := miner_response.upload_results) is not None:
+                        job.upload_results = upload_results
                     await job.asave()
                 if status == JobStatus.Status.STREAMING_READY:
                     job.streaming_server_cert = message.metadata.streaming_details["streaming_server_cert"]

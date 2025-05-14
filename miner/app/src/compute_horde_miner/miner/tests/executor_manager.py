@@ -77,6 +77,10 @@ async def fake_executor(token, streaming=False):
             "docker_process_stdout": "some stdout",
             "docker_process_stderr": "some stderr",
             "artifacts": {},
+            "upload_results": {
+                # This is the raw HTTP response data from the uploader.
+                "output.zip": '{"headers": {"Content-Length": "123", "ETag": "abc123"}, "body": "response body content"}'
+            },
         }
     )
     await communicator.disconnect()

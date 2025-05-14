@@ -69,6 +69,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "streaming_server_cert",
             "streaming_server_address",
             "streaming_server_port",
+            "upload_results",
         )
         read_only_fields = ("created_at",)
 

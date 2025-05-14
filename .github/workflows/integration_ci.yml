@@ -31,8 +31,11 @@ jobs:
         run: local_stack/run_and_await_readiness.sh /tmp/integration_test_logs/
       
       - name: test
-        working-directory: ./compute_horde_sdk
-        run: uv run ../local_stack/send_hello_world_job.py
+        working-directory: ./local_stack
+        run: uv run ./send_hello_world_job.py
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
 
       - name: Upload integration test logs
         uses: actions/upload-artifact@v4
