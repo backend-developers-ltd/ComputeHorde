@@ -9,7 +9,7 @@ import typing
 from enum import StrEnum
 from typing import ClassVar, Protocol
 
-import bittensor
+import bittensor_wallet
 from pydantic import BaseModel, JsonValue, field_serializer, field_validator
 
 
@@ -217,11 +217,11 @@ class BittensorSignatureScheme:
 
 
 class BittensorWalletSigner(BittensorSignatureScheme, Signer):
-    def __init__(self, wallet: bittensor.wallet | bittensor.Keypair | None = None):
-        if isinstance(wallet, bittensor.Keypair):
+    def __init__(self, wallet: bittensor_wallet.Wallet | bittensor_wallet.Keypair | None = None):
+        if isinstance(wallet, bittensor_wallet.Keypair):
             keypair = wallet
         else:
-            keypair = (wallet or bittensor.wallet()).hotkey
+            keypair = (wallet or bittensor_wallet.Wallet()).hotkey
         self._keypair = keypair
 
     def _sign(self, payload: bytes) -> bytes:
@@ -236,7 +236,7 @@ class BittensorWalletSigner(BittensorSignatureScheme, Signer):
 class BittensorWalletVerifier(BittensorSignatureScheme, Verifier):
     def _verify(self, payload: bytes, signature: Signature) -> None:
         try:
-            keypair = bittensor.Keypair(ss58_address=signature.signatory)
+            keypair = bittensor_wallet.Keypair(ss58_address=signature.signatory)
         except ValueError:
             raise SignatureInvalidException("Invalid signatory for BittensorWalletVerifier")
         try:

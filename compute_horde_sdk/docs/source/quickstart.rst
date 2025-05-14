@@ -18,11 +18,11 @@ Running Jobs on ComputeHorde
 
     import asyncio
 
-    import bittensor
+    import bittensor_wallet
 
     from compute_horde_sdk.v1 import ComputeHordeClient, ComputeHordeJobSpec, ExecutorClass
 
-    wallet = bittensor.wallet(name="...", hotkey="...")
+    wallet = bittensor_wallet.Wallet(name="...", hotkey="...")
 
     compute_horde_client = ComputeHordeClient(
         hotkey=wallet.hotkey,
@@ -60,7 +60,7 @@ This example demonstrates how to submit a job with additional parameters, includ
 
     import asyncio
 
-    import bittensor
+    import bittensor_wallet
 
     from compute_horde_sdk.v1 import (
         ComputeHordeClient,
@@ -72,7 +72,7 @@ This example demonstrates how to submit a job with additional parameters, includ
         InlineInputVolume,
     )
 
-    wallet = bittensor.wallet(name="...", hotkey="...")
+    wallet = bittensor_wallet.Wallet(name="...", hotkey="...")
 
     compute_horde_client = ComputeHordeClient(
         hotkey=wallet.hotkey,

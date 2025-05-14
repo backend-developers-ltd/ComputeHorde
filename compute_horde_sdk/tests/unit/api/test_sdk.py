@@ -2,7 +2,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-import bittensor
+import bittensor_wallet
 import httpx
 import pytest
 
@@ -93,7 +93,7 @@ def setup_successful_authentication(httpx_mock):
 
 @pytest.fixture
 def keypair():
-    return bittensor.Keypair.create_from_mnemonic(
+    return bittensor_wallet.Keypair.create_from_mnemonic(
         "slot excuse valid grief praise rifle spoil auction weasel glove pen share"
     )
 
