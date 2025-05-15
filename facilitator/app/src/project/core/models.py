@@ -7,7 +7,6 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
-    Signature,
     V0JobCheated,
     V2JobRequest,
 )
@@ -16,6 +15,7 @@ from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
 )
+from compute_horde_core.signature import Signature
 from compute_horde_core.volume import MultiVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -190,11 +190,11 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 self.send_to_validator(job_request)
                 JobStatus.objects.create(job=self, status=JobStatus.Status.SENT)
 
-    def report_cheated(self) -> None:
+    def report_cheated(self, signature: Signature) -> None:
         """
         Notify validator of cheated job.
         """
-        payload = V0JobCheated(job_uuid=str(self.uuid)).model_dump()
+        payload = V0JobCheated(job_uuid=str(self.uuid), signature=signature).model_dump()
         log.debug("sending cheated report", payload=payload)
         self.send_to_validator(payload)
 

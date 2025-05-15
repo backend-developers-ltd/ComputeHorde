@@ -36,6 +36,15 @@ class Signature(BaseModel, extra="forbid"):
         return base64.b64encode(signature).decode("utf-8")
 
 
+class SignedRequest:
+    signature: Signature | None = None
+
+    @abc.abstractmethod
+    def get_signed_payload(self) -> JsonValue:
+        """Return payload to be signed"""
+        pass
+
+
 class SignedFields(BaseModel):
     executor_class: str
     docker_image: str

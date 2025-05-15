@@ -150,7 +150,7 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
         patch.object(FacilitatorClient, "heartbeat", AsyncMock()),
         patch.object(FacilitatorClient, "wait_for_specs", AsyncMock()),
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_job_request",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request",
             AsyncMock(),
         ),
     ):
