@@ -397,6 +397,8 @@ async def drive_organic_job(
                         subtype = SystemEvent.EventSubType.ERROR_FAILED_SECURITY_CHECK
                     case V0JobFailedRequest.ErrorType.TIMEOUT:
                         subtype = SystemEvent.EventSubType.ERROR_EXECUTOR_REPORTED_TIMEOUT
+                    case V0JobFailedRequest.ErrorType.NONZERO_EXIT_CODE:
+                        subtype = SystemEvent.EventSubType.JOB_PROCESS_NONZERO_EXIT_CODE
                     case _:
                         assert_never(exc.received.error_type)
             job.status = OrganicJob.Status.FAILED

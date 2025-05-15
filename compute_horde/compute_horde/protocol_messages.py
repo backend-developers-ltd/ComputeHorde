@@ -177,6 +177,7 @@ class V0JobFailedRequest(BaseModel):
         TIMEOUT = "TIMEOUT"
         SECURITY_CHECK = "SECURITY_CHECK"
         HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
+        NONZERO_EXIT_CODE = "NONZERO_EXIT_STATUS"
 
     message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
     job_uuid: str

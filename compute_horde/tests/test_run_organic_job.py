@@ -67,7 +67,7 @@ async def test_run_organic_job__success(keypair):
         docker_image="mock",
     )
     stdout, stderr, artifacts, upload_results = await execute_organic_job_on_miner(
-        client, job_details, executor_ready_timeout=2, initial_response_timeout=2
+        client, job_details, reservation_time_limit=2, executor_startup_time_limit=2
     )
 
     assert stdout == "stdout"

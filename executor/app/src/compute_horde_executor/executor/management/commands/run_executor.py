@@ -13,6 +13,7 @@ import tempfile
 import typing
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any, cast
 
 import packaging.version
@@ -116,16 +117,32 @@ WAIT_FOR_STREAMING_JOB_TIMEOUT = 25
 WAIT_FOR_NGINX_TIMEOUT = 10
 
 
+@dataclass
+class ExecutionResult:
+    """Exit output and status of the job's docker container."""
+
+    timed_out: bool
+    """Whether the job's docker container timed out and was forced to exit."""
+
+    return_code: int | None
+    """Exit code returned by the job process. None means the job timed out and was stopped."""
+
+    stdout: str
+    stderr: str
+
+
 class JobError(Exception):
     def __init__(
         self,
         error_message: str,
         error_type: V0JobFailedRequest.ErrorType | None = None,
         error_detail: str | None = None,
+        execution_result: ExecutionResult | None = None,
     ):
         self.error_message = error_message
         self.error_type = error_type
         self.error_detail = error_detail
+        self.execution_result = execution_result
 
 
 @asynccontextmanager
@@ -261,15 +278,20 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
         if job_error.error_detail:
             error_detail += f": {job_error.error_detail}"
 
-        await self.send_model(
-            V0JobFailedRequest(
-                job_uuid=self.job_uuid,
-                error_type=job_error.error_type,
-                error_detail=error_detail,
-                docker_process_stdout="",
-                docker_process_stderr="",
-            )
+        msg = V0JobFailedRequest(
+            job_uuid=self.job_uuid,
+            error_type=job_error.error_type,
+            error_detail=error_detail,
+            docker_process_stdout="",
+            docker_process_stderr="",
         )
+
+        if job_error.execution_result:
+            msg.docker_process_stdout = job_error.execution_result.stdout
+            msg.docker_process_stderr = job_error.execution_result.stderr
+            msg.docker_process_exit_status = job_error.execution_result.return_code
+
+        await self.send_model(msg)
 
     async def send_result(self, job_result: "JobResult"):
         if job_result.specs:
@@ -427,19 +449,6 @@ def network_name(docker_objects_infix: str) -> str:
     return f"ch-{docker_objects_infix}"
 
 
-class _ExecutionResult(typing.NamedTuple):
-    """Exit output and status of the job's docker container."""
-
-    timed_out: bool
-    """Whether the job's docker container timed out and was forced to exit."""
-
-    return_code: int | None
-    """Status code returned by the job process. None means the job timed out and was stopped."""
-
-    stdout: str
-    stderr: str
-
-
 class JobRunner:
     def __init__(self):
         self.initial_job_request: V0InitialJobRequest | None = None
@@ -457,7 +466,7 @@ class JobRunner:
         self.process: asyncio.subprocess.Process | None = None
         self.cmd: list[str] = []
 
-        self.execution_result: _ExecutionResult | None = None
+        self.execution_result: ExecutionResult | None = None
 
         # for streaming job
         self.is_streaming_job: bool = False
@@ -637,11 +646,15 @@ class JobRunner:
                     if self.initial_job_request.executor_timing
                     else self.initial_job_request.timeout_seconds
                 )
+                logger.debug(
+                    f"Waiting {docker_process_timeout} seconds for job container to finish"
+                )
                 result = await asyncio.wait_for(
                     job_process.communicate(),
                     timeout=docker_process_timeout,
                 )
-                self.execution_result = _ExecutionResult(
+                logger.debug(f"Job container exited with return code {job_process.returncode}")
+                self.execution_result = ExecutionResult(
                     timed_out=False,
                     return_code=job_process.returncode,
                     stdout=result[0].decode(),
@@ -649,9 +662,10 @@ class JobRunner:
                 )
 
             except TimeoutError:
+                logger.debug("Job container timed out")
                 stdout = (await job_process.stdout.read()).decode() if job_process.stdout else ""
                 stderr = (await job_process.stderr.read()).decode() if job_process.stderr else ""
-                self.execution_result = _ExecutionResult(
+                self.execution_result = ExecutionResult(
                     timed_out=True,
                     return_code=None,
                     stdout=stdout,
@@ -967,6 +981,7 @@ class Command(BaseCommand):
                     "Executor certificate is missing."
                 )
                 await self.miner_client.send_streaming_job_ready(self.runner.executor_certificate)
+        await self.fail_if_execution_unsuccessful()
         await self.miner_client.send_execution_done()
 
     async def _upload_stage(self):
@@ -1052,4 +1067,21 @@ class Command(BaseCommand):
                 f'{version}" not >= {NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION}',
                 V0JobFailedRequest.ErrorType.SECURITY_CHECK,
                 f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}',
+            )
+
+    async def fail_if_execution_unsuccessful(self):
+        assert self.runner.execution_result is not None, "No execution result"
+
+        if self.runner.execution_result.timed_out:
+            raise JobError(
+                "Job container timed out during execution",
+                error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
+            )
+
+        if self.runner.execution_result.return_code != 0:
+            raise JobError(
+                f"Job container exited with non-zero exit code: {self.runner.execution_result.return_code}",
+                error_type=V0JobFailedRequest.ErrorType.NONZERO_EXIT_CODE,
+                error_detail=f"exit code: {self.runner.execution_result.return_code}",
+                execution_result=self.runner.execution_result,
             )
