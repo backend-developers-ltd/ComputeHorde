@@ -333,3 +333,26 @@ def test_job_feedback__already_exists(authenticated_api_client, mock_signature_f
         {"detail": ErrorDetail(string="Feedback already exists", code="conflict")},
     )
     assert JobFeedback.objects.get() == job_feedback
+
+
+@pytest.mark.django_db
+def test_cheated_job_viewset(authenticated_api_client, job_docker):
+    # Test marking a job as cheated
+    response = authenticated_api_client.post("/api/v1/cheated-job/", {"job_uuid": str(job_docker.uuid)}, format="json")
+    assert response.status_code == 200
+    assert response.data == {"message": "Job reported as cheated"}
+
+    # Verify the job has been marked as cheated in the database
+    job_docker.refresh_from_db()
+    assert job_docker.cheated is True
+
+    # Test reporting an already cheated job
+    response = authenticated_api_client.post("/api/v1/cheated-job/", {"job_uuid": str(job_docker.uuid)}, format="json")
+    assert response.status_code == 200
+    assert response.data == {"message": "Job already marked as cheated"}
+
+    # Test reporting a non-existing job
+    response = authenticated_api_client.post(
+        "/api/v1/cheated-job/", {"job_uuid": "00000000-0000-0000-0000-000000000000"}, format="json"
+    )
+    assert response.status_code == 404

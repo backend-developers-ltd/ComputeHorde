@@ -192,10 +192,8 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
     def report_cheated(self) -> None:
         """
-        Mark the job as cheated and notify the validator.
+        Notify validator of cheated job.
         """
-        self.cheated = True
-        self.save()
         payload = V0JobCheated(job_uuid=str(self.uuid)).model_dump()
         log.debug("sending cheated report", payload=payload)
         self.send_to_validator(payload)
