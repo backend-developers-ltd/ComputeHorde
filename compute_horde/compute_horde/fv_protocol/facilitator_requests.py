@@ -1,10 +1,11 @@
+import json
 import typing
 from typing import Annotated, Literal, TypeAlias
 
 import pydantic
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import MultiUpload, OutputUpload
-from compute_horde_core.signature import Signature, SignedFields
+from compute_horde_core.signature import SignedFields, SignedRequest
 from compute_horde_core.volume import MultiVolume, Volume
 from pydantic import BaseModel, JsonValue
 
@@ -22,7 +23,7 @@ class Response(BaseModel, extra="forbid"):
     errors: list[Error] = []
 
 
-class V0JobCheated(BaseModel, extra="forbid"):
+class V0JobCheated(SignedRequest, BaseModel, extra="forbid"):
     """Message sent from facilitator to report cheated job"""
 
     # this points to a `ValidatorConsumer.job_cheated` handler (fuck you django-channels!)
@@ -31,18 +32,20 @@ class V0JobCheated(BaseModel, extra="forbid"):
 
     job_uuid: str
 
+    def get_signed_payload(self) -> JsonValue | bytes:
+        return json.dumps({"job_uuid": self.job_uuid})
+
 
 def to_json_array(data) -> list[JsonValue]:
     return typing.cast(list[JsonValue], [x.model_dump() for x in data])
 
 
-class V2JobRequest(BaseModel, extra="forbid"):
+class V2JobRequest(SignedRequest, BaseModel, extra="forbid"):
     """Message sent from facilitator to validator to request a job execution"""
 
     # this points to a `ValidatorConsumer.job_new` handler (fuck you django-channels!)
     type: Literal["job.new"] = "job.new"
     message_type: Literal["V2JobRequest"] = "V2JobRequest"
-    signature: Signature | None = None
 
     uuid: str
 
@@ -93,6 +96,9 @@ class V2JobRequest(BaseModel, extra="forbid"):
             uploads=uploads,
         )
         return signed_fields
+
+    def get_signed_payload(self) -> JsonValue | bytes:
+        return self.get_signed_fields().model_dump_json()  # type: ignore
 
     def json_for_signing(self) -> JsonValue:
         payload = self.model_dump(mode="json")
