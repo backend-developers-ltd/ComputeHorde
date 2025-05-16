@@ -4,7 +4,7 @@ import uvloop
 from asgiref.sync import async_to_sync
 from compute_horde.utils import (
     BAC_VALIDATOR_SS58_ADDRESS,
-    MIN_STAKE,
+    MIN_VALIDATOR_STAKE,
     VALIDATORS_LIMIT,
     ValidatorInfo,
 )
@@ -69,7 +69,7 @@ def get_validator_infos(
     validators = [
         (uid, hotkey, stake)
         for (uid, hotkey, stake) in zip(metagraph.uids, metagraph.hotkeys, metagraph.stake)
-        if stake >= MIN_STAKE
+        if stake >= MIN_VALIDATOR_STAKE
     ]
     top_validators = sorted(
         validators, key=lambda data: (data[1] == BAC_VALIDATOR_SS58_ADDRESS, data[2]), reverse=True
