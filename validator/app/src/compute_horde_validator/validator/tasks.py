@@ -1483,7 +1483,7 @@ async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycl
         if stake > MIN_VALIDATOR_STAKE:
             validators_hotkeys.append(hotkey)
             hotkey_to_stake_proportion[hotkey] = stake / total_stake
-    logger.debug(f"Validator stake proportion: {hotkey_to_stake_proportion}")
+    logger.debug(f"Validator stake proportion: {hotkey} {hotkey_to_stake_proportion:.3f}")
     data["validator_stake_proportion"] = hotkey_to_stake_proportion
 
     # Fetch miners and validators from the database
