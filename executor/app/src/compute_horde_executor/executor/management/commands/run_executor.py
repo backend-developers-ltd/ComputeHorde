@@ -16,7 +16,7 @@ import typing
 import packaging.version
 import pydantic
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.certificate import (
+from compute_horde_core.certificate import (
     check_endpoint,
     generate_certificate_at,
     get_docker_container_ip,
@@ -197,7 +197,9 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
     async def send_streaming_job_ready(self, certificate: str):
         await self.send_model(
             V0StreamingJobReadyRequest(
-                job_uuid=self.job_uuid, public_key=certificate, port=settings.NGINX_PORT
+                job_uuid=self.job_uuid, 
+                public_key=certificate, 
+                port=settings.NGINX_PORT,
             )
         )
 
@@ -412,6 +414,7 @@ class JobRunner:
         # for streaming job
         self.is_streaming_job: bool = False
         self.executor_certificate: str | None = None
+        # assert self.initial_job_request.streaming_details is not None
         if self.initial_job_request.streaming_details is not None:
             assert self.initial_job_request.streaming_details.executor_ip is not None
             self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(
@@ -941,29 +944,29 @@ class Command(BaseCommand):
 
                 # start the job running process
                 result = await job_runner.start_job(job_request)
-                if result is None:
-                    if job_runner.is_streaming_job:
-                        assert job_runner.executor_certificate is not None
-                        # check that the job is ready to serve requests
-                        ip = await get_docker_container_ip(
-                            job_runner.nginx_container_name, bridge_network=True
+                # if result is None:
+                if job_runner.is_streaming_job:
+                    assert job_runner.executor_certificate is not None
+                    # check that the job is ready to serve requests
+                    ip = await get_docker_container_ip(
+                        job_runner.nginx_container_name, bridge_network=True
+                    )
+                    logger.debug(f"Checking if streaming job is ready at http://{ip}/health")
+                    job_ready = await check_endpoint(
+                        f"http://{ip}/health", WAIT_FOR_STREAMING_JOB_TIMEOUT
+                    )
+                    if job_ready:
+                        logger.debug("Job ready for streaming")
+                        await miner_client.send_streaming_job_ready(
+                            certificate=job_runner.executor_certificate
                         )
-                        logger.debug(f"Checking if streaming job is ready at http://{ip}/health")
-                        job_ready = await check_endpoint(
-                            f"http://{ip}/health", WAIT_FOR_STREAMING_JOB_TIMEOUT
-                        )
-                        if job_ready:
-                            logger.debug("Job ready for streaming")
-                            await miner_client.send_streaming_job_ready(
-                                certificate=job_runner.executor_certificate
-                            )
-                        else:
-                            logger.debug("Job timed out waiting to be ready for streaming")
-                            await miner_client.send_streaming_job_failed_to_prepare()
-                            job_runner.kill_job()
+                    else:
+                        logger.debug("Job timed out waiting to be ready for streaming")
+                        await miner_client.send_streaming_job_failed_to_prepare()
+                        job_runner.kill_job()
 
-                    # wait for the job process to finish
-                    result = await job_runner.wait_for_job(job_request)
+                # wait for the job process to finish
+                result = await job_runner.wait_for_job(job_request)
 
                 result.specs = specs
                 if result.success:

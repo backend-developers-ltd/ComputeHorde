@@ -12,6 +12,8 @@ from typing import ClassVar, Protocol
 import bittensor_wallet
 from pydantic import BaseModel, JsonValue, field_serializer, field_validator
 
+from compute_horde_core.streaming import StreamingDetails
+
 
 class SignatureScope(StrEnum):
     SignedFields = "SignedFields"
@@ -44,6 +46,7 @@ class SignedFields(BaseModel):
     use_gpu: bool
     artifacts_dir: str
     on_trusted_miner: bool
+    streaming_details: StreamingDetails | None = None
 
     volumes: list[JsonValue]
     uploads: list[JsonValue]
@@ -62,6 +65,7 @@ class SignedFields(BaseModel):
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
             artifacts_dir=typing.cast(str, data.get("artifacts_dir") or ""),
             on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
+            streaming_details=StreamingDetails.model_validate(data["streaming_details"]) if "streaming_details" in data else None,
         )
         return signed_fields
 

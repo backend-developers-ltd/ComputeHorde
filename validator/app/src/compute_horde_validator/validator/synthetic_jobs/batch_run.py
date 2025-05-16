@@ -16,7 +16,8 @@ import bittensor
 import httpx
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
-from compute_horde.certificate import generate_certificate_at
+from compute_horde_core.certificate import generate_certificate_at
+from compute_horde_core.signature import StreamingDetails
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
@@ -1204,7 +1205,7 @@ async def _send_initial_job_request(
             job_started_receipt_signature=job.job_started_receipt_signature,
         )
         if job.executor_class in streaming_classes:
-            request.streaming_details = V0InitialJobRequest.StreamingDetails(
+            request.streaming_details = StreamingDetails(
                 public_key=ctx.own_public_key
             )
         request_json = request.model_dump_json()

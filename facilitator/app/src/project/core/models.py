@@ -34,6 +34,8 @@ from .schemas import (
     MuliVolumeAllowedVolume,
 )
 
+from compute_horde_core.streaming import StreamingDetails
+
 log = get_logger(__name__)
 
 
@@ -156,6 +158,11 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
     tag = models.CharField(max_length=255, blank=True, default="", help_text="may be used to group jobs")
 
+    streaming_client_cert = models.TextField(blank=True, default="")
+    streaming_server_cert = models.TextField(blank=True, default="")
+    streaming_server_address = models.TextField(blank=True, default="")
+    streaming_server_port = models.IntegerField(blank=True, default=0)
+
     objects = JobQuerySet.as_manager()
 
     class Meta:
@@ -266,6 +273,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             signature=signature,
             artifacts_dir=self.artifacts_dir or None,
             on_trusted_miner=self.on_trusted_miner,
+            streaming_details=StreamingDetails(public_key=self.streaming_client_cert),
         )
 
     def send_to_validator(self, payload: dict) -> None:
@@ -284,7 +292,7 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
         SENT = 0
         ACCEPTED = 1
         COMPLETED = 2
-
+        STREAMING_READY = 3
     FINAL_STATUS_VALUES = (
         Status.COMPLETED,
         Status.REJECTED,

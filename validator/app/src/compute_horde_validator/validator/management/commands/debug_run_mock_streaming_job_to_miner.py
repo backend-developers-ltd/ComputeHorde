@@ -8,7 +8,8 @@ from typing import cast
 import requests
 import uvloop
 from asgiref.sync import async_to_sync
-from compute_horde.certificate import generate_certificate_at
+from compute_horde_core.certificate import generate_certificate_at
+from compute_horde_core.signature import StreamingDetails
 from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,
@@ -86,7 +87,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                 volume=job_details.volume,
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
-                streaming_details=V0InitialJobRequest.StreamingDetails(public_key=public_key),
+                streaming_details=StreamingDetails(public_key=public_key),
             ),
         )
 

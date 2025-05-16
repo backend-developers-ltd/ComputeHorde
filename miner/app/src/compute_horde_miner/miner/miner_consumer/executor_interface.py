@@ -91,6 +91,7 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
         return TypeAdapter(ExecutorToMinerMessage).validate_json(raw_msg)
 
     async def handle(self, msg: ExecutorToMinerMessage) -> None:
+        logger.warning(f"Received message: {msg}")
         if isinstance(msg, V0ExecutorReadyRequest):
             self.job.status = AcceptedJob.Status.WAITING_FOR_PAYLOAD
             await self.job.asave()

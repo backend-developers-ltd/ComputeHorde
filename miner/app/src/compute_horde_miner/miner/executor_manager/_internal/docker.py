@@ -3,7 +3,7 @@ import logging
 import os
 import subprocess
 
-from compute_horde.certificate import get_docker_container_ip
+from compute_horde_core.certificate import get_docker_container_ip
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.base import (

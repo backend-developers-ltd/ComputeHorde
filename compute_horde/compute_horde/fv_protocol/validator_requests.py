@@ -52,8 +52,8 @@ class JobStatusMetadata(BaseModel, extra="allow"):
     miner_response: MinerResponse | None = None
 
 
-JobStatusType: TypeAlias = Literal["failed", "rejected", "accepted", "completed"]
-
+# JobStatusType: TypeAlias = Literal["failed", "rejected", "accepted", "completed", "streaming_ready"]
+JobStatusType = Literal["failed", "rejected", "accepted", "completed"]
 
 class JobStatusUpdate(BaseModel, extra="forbid"):
     """
