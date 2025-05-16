@@ -13,7 +13,7 @@ import bittensor
 import httpx
 import pytest
 import pytest_asyncio
-from compute_horde.certificate import generate_certificate_at
+from compute_horde_core.certificate import generate_certificate_at
 from compute_horde.executor_class import (
     DEFAULT_EXECUTOR_CLASS,
     DEFAULT_LLM_EXECUTOR_CLASS,

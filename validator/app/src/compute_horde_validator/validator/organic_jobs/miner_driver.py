@@ -11,6 +11,7 @@ from compute_horde.fv_protocol.validator_requests import (
     JobStatusType,
     JobStatusUpdate,
     MinerResponse,
+    StreamingServerDetails,
 )
 from compute_horde.miner_client.organic import (
     FailureReason,
@@ -22,6 +23,7 @@ from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0JobFailedRequest,
+    V0StreamingJobReadyRequest,
 )
 from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde_core.executor_class import ExecutorClass
@@ -126,6 +128,7 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
         job_description="User job from facilitator",
         block=block,
         on_trusted_miner=on_trusted_miner,
+        streaming_details=job_request.streaming_details.model_dump() if job_request.streaming_details else None,
     )
 
     miner_client = MINER_CLIENT_CLASS(
@@ -187,7 +190,24 @@ async def drive_organic_job(
     miner_client.notify_job_accepted = notify_job_accepted  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
 
+    async def notify_streaming_ready(msg: V0StreamingJobReadyRequest) -> None:
+        logger.debug(f"Received streaming ready response {msg}")
+        status_update = status_update_from_job(
+            job,
+            "streaming_ready",
+            msg.message_type,
+        )
+        status_update.metadata.streaming_details = StreamingServerDetails(
+            streaming_server_cert=msg.public_key,
+            streaming_server_address=msg.ip,
+            streaming_server_port=msg.port,
+        )
+        await notify_callback(status_update)
+
+    miner_client.notify_streaming_readiness = notify_streaming_ready  # type: ignore[method-assign]
+
     artifacts_dir = job_request.artifacts_dir if isinstance(job_request, V2JobRequest) else None
+    print(f"job_request: {job_request}")
     job_details = OrganicJobDetails(
         job_uuid=str(job.job_uuid),  # TODO: fix uuid field in AdminJobRequest
         executor_class=ExecutorClass(job_request.executor_class),
@@ -198,6 +218,7 @@ async def drive_organic_job(
         volume=job_request.volume,
         output=job_request.output_upload,
         artifacts_dir=artifacts_dir,
+        streaming_details=job.streaming_details,
     )
 
     try:

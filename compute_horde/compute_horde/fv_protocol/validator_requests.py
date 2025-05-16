@@ -47,13 +47,20 @@ class MinerResponse(BaseModel, extra="allow"):
     upload_results: dict[str, str] | None = None
 
 
+class StreamingServerDetails(BaseModel, extra="forbid"):
+    streaming_server_cert: str | None = None
+    streaming_server_address: str | None = None
+    streaming_server_port: int | None = None
+
+
 class JobStatusMetadata(BaseModel, extra="allow"):
     comment: str
     miner_response: MinerResponse | None = None
+    streaming_details: StreamingServerDetails | None = None
 
 
-JobStatusType: TypeAlias = Literal["failed", "rejected", "accepted", "completed"]
-
+JobStatusType: TypeAlias = Literal["failed", "rejected", "accepted", "completed", "streaming_ready"]
+# JobStatusType = Literal["failed", "rejected", "accepted", "completed"]
 
 class JobStatusUpdate(BaseModel, extra="forbid"):
     """

@@ -49,6 +49,7 @@ from compute_horde.receipts.schemas import (
 )
 from compute_horde.transport import AbstractTransport, TransportConnectionError, WSTransport
 from compute_horde.utils import MachineSpecs, Timer, sign_blob
+from compute_horde_core.streaming import StreamingDetails
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,9 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         """This method is called when miner sends job accepted message"""
 
     async def notify_executor_ready(self, msg: V0ExecutorReadyRequest) -> None:
+        """This method is called when miner sends executor ready message"""
+
+    async def notify_streaming_readiness(self, msg: V0StreamingJobReadyRequest) -> None:
         """This method is called when miner sends executor ready message"""
 
     async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
@@ -379,6 +383,7 @@ class OrganicJobDetails:
     volume: Volume | None = None
     output: OutputUpload | None = None
     artifacts_dir: str | None = None
+    streaming_details: V0InitialJobRequest.StreamingDetails | None = None
 
 
 async def run_organic_job(
@@ -388,9 +393,7 @@ async def run_organic_job(
     executor_ready_timeout: int = 300,
 ) -> tuple[str, str, dict[str, str], dict[str, str]]:  # stdout, stderr, artifacts, upload_results
     """
-    Run an organic job. This is a simpler way to use OrganicMinerClient.
-
-    :param client: the organic miner client
+    Run an organic job. Tjob_detailsanic miner client
     :param job_details: details specific to the job that needs to be run
     :param initial_response_timeout: timeout for waiting for job acceptance/rejection
     :param executor_ready_timeout: timeout for waiting for executor readiness
@@ -423,6 +426,7 @@ async def run_organic_job(
                 volume=job_details.volume,
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
+                streaming_details=job_details.streaming_details,
             ),
         )
         logger.debug(f"Sent initial job request for {job_details.job_uuid}")
@@ -473,6 +477,20 @@ async def run_organic_job(
                     artifacts_dir=job_details.artifacts_dir,
                 )
             )
+
+            if job_details.streaming_details:
+                try:
+                    streaming_response = await asyncio.wait_for(
+                        client.streaming_job_ready_or_not_future,
+                        timeout=min(job_timer.time_left(), initial_response_timeout),
+                    )
+                    logger.debug(f"Received streaming response {streaming_response}")
+                except TimeoutError as exc:
+                    raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
+                if isinstance(streaming_response, V0StreamingJobNotReadyRequest):
+                    raise OrganicJobError(FailureReason.JOB_DECLINED, streaming_response)
+                
+                await client.notify_streaming_readiness(streaming_response)
 
             try:
                 final_response = await asyncio.wait_for(
