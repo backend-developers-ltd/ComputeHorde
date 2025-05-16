@@ -1,7 +1,6 @@
 from datetime import timedelta
 from math import ceil
 from operator import attrgetter
-from typing import ClassVar
 from uuid import uuid4
 
 from asgiref.sync import async_to_sync
@@ -122,8 +121,6 @@ class JobQuerySet(models.QuerySet):
 
 
 class Job(ExportModelOperationsMixin("job"), models.Model):
-    JOB_TIMEOUT: ClassVar = timedelta(minutes=5, seconds=30)
-
     uuid = models.UUIDField(primary_key=True, editable=False, blank=True)
     user = models.ForeignKey("auth.User", on_delete=models.PROTECT, blank=True, null=True, related_name="jobs")
     hotkey = models.CharField(blank=True, help_text="hotkey of job sender if hotkey authentication was used")
@@ -131,6 +128,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     signature = models.JSONField()
     created_at = models.DateTimeField(default=now)
     cheated = models.BooleanField(default=False)
+    download_time_limit = models.IntegerField()
+    execution_time_limit = models.IntegerField()
+    upload_time_limit = models.IntegerField()
 
     executor_class = models.CharField(
         max_length=255, default=DEFAULT_EXECUTOR_CLASS, help_text="executor hardware class"
@@ -242,7 +242,8 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         return self.statuses_ordered[-1]
 
     def is_completed(self) -> bool:
-        return self.status.status in JobStatus.FINAL_STATUS_VALUES or self.created_at < now() - self.JOB_TIMEOUT
+        # TODO: TIMEOUTS - Status updates from validator should include a timeout until next update. Job is failed if timeout is reached.
+        return self.status.status in JobStatus.FINAL_STATUS_VALUES
 
     @property
     def elapsed(self) -> timedelta:
@@ -266,6 +267,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             signature=signature,
             artifacts_dir=self.artifacts_dir or None,
             on_trusted_miner=self.on_trusted_miner,
+            download_time_limit=self.download_time_limit,
+            execution_time_limit=self.execution_time_limit,
+            upload_time_limit=self.upload_time_limit,
         )
 
     def send_to_validator(self, payload: dict) -> None:
@@ -279,11 +283,16 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     class Status(models.IntegerChoices):
+        # These correspond to JobStatusUpdate.Status
         FAILED = -2
         REJECTED = -1
         SENT = 0
-        ACCEPTED = 1
-        COMPLETED = 2
+        RECEIVED = 1
+        ACCEPTED = 2
+        EXECUTOR_READY = 3
+        VOLUMES_READY = 4
+        EXECUTION_DONE = 5
+        COMPLETED = 6
 
     FINAL_STATUS_VALUES = (
         Status.COMPLETED,

@@ -6,12 +6,12 @@ from typing import Any
 
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import (
-    EXECUTOR_CLASS,
     MAX_EXECUTOR_TIMEOUT,
 )
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
+from compute_horde_miner.miner.dynamic_config import aget_config
 from compute_horde_miner.miner.executor_manager._internal.selector import (
     HistoricalRandomMinerSelector,
 )
@@ -28,10 +28,6 @@ class ExecutorUnavailable(Exception):
     Thrown when an executor that should be available, but for some reason fails to spin up.
     """
 
-    pass
-
-
-class ExecutorReservationTimeout(Exception):
     pass
 
 
@@ -96,7 +92,9 @@ class ExecutorClassPool:
                 logger.error("Error during executor startup", exc_info=exc)
                 raise ExecutorUnavailable()
 
-            reserved_executor = ReservedExecutor(executor, timeout, token)
+            # This "timeout" is the executor's upper TTL, after which it will be killed by the pool cleanup.
+            # TODO: TIMEOUTS - this should depend on various time limits - job, executor spinup etc. with some margin.
+            reserved_executor = ReservedExecutor(executor, MAX_EXECUTOR_TIMEOUT, token)
             self._executors.append(reserved_executor)
             logger.debug("Added %s", reserved_executor)
             return executor
@@ -142,22 +140,14 @@ class ExecutorClassPool:
             if reserved_executor not in executors_to_drop
         ]
 
-    async def wait_for_executor_reservation(self, token: str, timeout: float) -> None:
-        try:
-            await asyncio.wait_for(self._reservation_future(token), timeout)
-        except TimeoutError:
-            raise ExecutorReservationTimeout()
+    async def wait_for_executor_reservation(self, token: str) -> None:
+        await self._reservation_future(token)
 
 
 class BaseExecutorManager(metaclass=abc.ABCMeta):
-    EXECUTOR_TIMEOUT_LEEWAY = dt.timedelta(seconds=30).total_seconds()
-
     def __init__(self):
         self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
-
-        self.selector = HistoricalRandomMinerSelector(
-            settings.CLUSTER_SECRET,
-        )
+        self.selector = HistoricalRandomMinerSelector(settings.CLUSTER_SECRET)
 
     @abc.abstractmethod
     async def start_new_executor(self, token, executor_class, timeout):
@@ -206,23 +196,26 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         self, token: str, executor_class: ExecutorClass, timeout: float
     ) -> object:
         pool = await self.get_executor_class_pool(executor_class)
-        return await pool.reserve_executor(token, self.get_total_timeout(executor_class, timeout))
+        return await pool.reserve_executor(token, timeout)
 
     async def wait_for_executor_reservation(
-        self, token: str, executor_class: ExecutorClass, timeout: float
+        self, token: str, executor_class: ExecutorClass
     ) -> None:
         """
         Resolves as soon as the executor is reserved - before it's launched.
         If there are no free executors, raises AllExecutorsBusy.
-        If the reservation times out, raises ExecutorReservationTimeout.
         """
         pool = await self.get_executor_class_pool(executor_class)
-        await pool.wait_for_executor_reservation(token, timeout)
+        await pool.wait_for_executor_reservation(token)
 
-    def get_total_timeout(self, executor_class, job_timeout):
-        spec = EXECUTOR_CLASS.get(executor_class)
-        spin_up_time = spec.spin_up_time if spec else 0
-        return spin_up_time + job_timeout + self.EXECUTOR_TIMEOUT_LEEWAY
+    async def get_executor_cmdline_args(self) -> list[str]:
+        """
+        Arguments passed in to the executor's `manage.py run_executor` command.
+        """
+        return [
+            "--startup-time-limit",
+            str(await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT")),
+        ]
 
     async def is_active(self) -> bool:
         """Check if the Miner is an active one for configured Cluster"""

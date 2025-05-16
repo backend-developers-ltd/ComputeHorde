@@ -5,16 +5,18 @@ from pydantic import TypeAdapter
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
     OrganicMinerClient,
-    run_organic_job,
+    execute_organic_job_on_miner,
 )
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
+    V0ExecutionDoneRequest,
     V0ExecutorReadyRequest,
     V0InitialJobRequest,
     V0JobAcceptedReceiptRequest,
     V0JobFinishedReceiptRequest,
     V0JobFinishedRequest,
     V0JobRequest,
+    V0VolumesReadyRequest,
     ValidatorAuthForMiner,
     ValidatorToMinerMessage,
 )
@@ -41,6 +43,8 @@ async def test_run_organic_job__success(keypair):
         [
             V0AcceptJobRequest(job_uuid=JOB_UUID).model_dump_json(),
             V0ExecutorReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
+            V0VolumesReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
+            V0ExecutionDoneRequest(job_uuid=JOB_UUID).model_dump_json(),
             V0JobFinishedRequest(
                 job_uuid=JOB_UUID,
                 docker_process_stdout="stdout",
@@ -62,8 +66,8 @@ async def test_run_organic_job__success(keypair):
         executor_class=ExecutorClass.always_on__llm__a6000,
         docker_image="mock",
     )
-    stdout, stderr, artifacts, upload_results = await run_organic_job(
-        client, job_details, executor_ready_timeout=2, initial_response_timeout=2
+    stdout, stderr, artifacts, upload_results = await execute_organic_job_on_miner(
+        client, job_details, reservation_time_limit=2, executor_startup_time_limit=2
     )
 
     assert stdout == "stdout"

@@ -44,6 +44,9 @@ class SignedFields(BaseModel):
     use_gpu: bool
     artifacts_dir: str
     on_trusted_miner: bool
+    download_time_limit: int
+    execution_time_limit: int
+    upload_time_limit: int
 
     volumes: list[JsonValue]
     uploads: list[JsonValue]
@@ -62,6 +65,9 @@ class SignedFields(BaseModel):
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
             artifacts_dir=typing.cast(str, data.get("artifacts_dir") or ""),
             on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
+            download_time_limit=typing.cast(int, data.get("download_time_limit", 0)),
+            execution_time_limit=typing.cast(int, data.get("execution_time_limit", 0)),
+            upload_time_limit=typing.cast(int, data.get("upload_time_limit", 0)),
         )
         return signed_fields
 

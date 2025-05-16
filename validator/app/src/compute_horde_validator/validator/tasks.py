@@ -633,7 +633,6 @@ async def run_admin_job_request(job_request_id: int, callback=None):
         miner_client,
         job,
         job_request,
-        total_job_timeout=job_request.timeout,
         notify_callback=callback,
     )
 
@@ -1640,8 +1639,8 @@ async def execute_organic_job_request_on_worker(
         args=(job_request.model_dump(), miner.hotkey),
         expires=timeout,
     )
-    # Note - thread sensitive is essential otherwise the wait will block the sync thread.
-    # If this poses to be a problem, another approach is to  asyncio.sleep then poll for result (in a loop)
+    # Note - thread sensitive is essential, otherwise the wait will block the sync thread.
+    # If this poses to be a problem, another approach is to asyncio.sleep then poll for the result (in a loop)
     await sync_to_async(future_result.get, thread_sensitive=False)(timeout=timeout)
     return await OrganicJob.objects.aget(job_uuid=job_request.uuid)
 

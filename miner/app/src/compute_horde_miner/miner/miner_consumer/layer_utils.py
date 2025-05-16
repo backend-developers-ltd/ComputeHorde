@@ -5,6 +5,7 @@ from typing import Any, TypeVar
 import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.protocol_messages import (
+    V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
@@ -13,6 +14,7 @@ from compute_horde.protocol_messages import (
     V0MachineSpecsRequest,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
+    V0VolumesReadyRequest,
 )
 
 from compute_horde_miner.miner.miner_consumer.base_compute_horde_consumer import (
@@ -122,6 +124,24 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
             {"type": "miner.job_request", **job_request.model_dump()},
         )
 
+    @log_errors_explicitly
+    async def volumes_ready(self, event: dict[str, Any]) -> None:
+        payload = self.validate_event("volumes_ready", V0VolumesReadyRequest, event)
+        if payload:
+            await self._volumes_ready(payload)
+
+    @abc.abstractmethod
+    async def _volumes_ready(self, msg: V0VolumesReadyRequest): ...
+
+    @log_errors_explicitly
+    async def execution_done(self, event: dict[str, Any]) -> None:
+        payload = self.validate_event("execution_done", V0ExecutionDoneRequest, event)
+        if payload:
+            await self._execution_done(payload)
+
+    @abc.abstractmethod
+    async def _execution_done(self, msg: V0ExecutionDoneRequest): ...
+
 
 class ExecutorInterfaceMixin(BaseMixin):
     @classmethod
@@ -130,7 +150,7 @@ class ExecutorInterfaceMixin(BaseMixin):
 
     async def send_executor_ready(self, executor_token: str, msg: V0ExecutorReadyRequest):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
-        msg.executor_token = executor_token
+        msg = msg.model_copy(update={"executor_token": executor_token})
         await self.channel_layer.group_send(
             group_name,
             {"type": "executor.ready", **msg.model_dump()},
@@ -140,7 +160,7 @@ class ExecutorInterfaceMixin(BaseMixin):
         self, executor_token: str, msg: V0ExecutorFailedRequest
     ):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
-        msg.executor_token = executor_token
+        msg = msg.model_copy(update={"executor_token": executor_token})
         await self.channel_layer.group_send(
             group_name,
             {"type": "executor.failed_to_prepare", **msg.model_dump()},
@@ -148,7 +168,7 @@ class ExecutorInterfaceMixin(BaseMixin):
 
     async def send_streaming_job_ready(self, executor_token: str, msg: V0StreamingJobReadyRequest):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
-        msg.executor_token = executor_token
+        msg = msg.model_copy(update={"executor_token": executor_token})
         await self.channel_layer.group_send(
             group_name,
             {"type": "streaming_job.ready", **msg.model_dump()},
@@ -158,10 +178,24 @@ class ExecutorInterfaceMixin(BaseMixin):
         self, executor_token: str, msg: V0StreamingJobNotReadyRequest
     ):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
-        msg.executor_token = executor_token
+        msg = msg.model_copy(update={"executor_token": executor_token})
         await self.channel_layer.group_send(
             group_name,
             {"type": "streaming_job.failed_to_prepare", **msg.model_dump()},
+        )
+
+    async def send_volumes_ready(self, executor_token: str, msg: V0VolumesReadyRequest):
+        group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        await self.channel_layer.group_send(
+            group_name,
+            {"type": "volumes.ready", **msg.model_dump()},
+        )
+
+    async def send_execution_done(self, executor_token: str, msg: V0ExecutionDoneRequest):
+        group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        await self.channel_layer.group_send(
+            group_name,
+            {"type": "execution.done", **msg.model_dump()},
         )
 
     async def send_executor_specs(self, executor_token: str, msg: V0MachineSpecsRequest):

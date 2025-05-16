@@ -4,7 +4,7 @@ import datetime
 import enum
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import cached_property
 
 import bittensor
@@ -26,6 +26,7 @@ from compute_horde.protocol_messages import (
     UnauthorizedError,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
+    V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
@@ -38,21 +39,28 @@ from compute_horde.protocol_messages import (
     V0MachineSpecsRequest,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
+    V0VolumesReadyRequest,
     ValidatorAuthForMiner,
     ValidatorToMinerMessage,
 )
-from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
+from compute_horde.receipts.models import (
+    JobAcceptedReceipt,
+    JobFinishedReceipt,
+    JobStartedReceipt,
+)
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.transport import AbstractTransport, TransportConnectionError, WSTransport
+from compute_horde.transport import (
+    AbstractTransport,
+    TransportConnectionError,
+    WSTransport,
+)
 from compute_horde.utils import MachineSpecs, Timer, sign_blob
 
 logger = logging.getLogger(__name__)
-
-JOB_STARTED_RECEIPT_MIN_TTL = 30
 
 
 class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorToMinerMessage]):
@@ -113,6 +121,16 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         ] = loop.create_future()
         self.streaming_job_ready_or_not_timestamp: int = 0
 
+        self.volumes_ready_future: asyncio.Future[V0VolumesReadyRequest | V0JobFailedRequest] = (
+            loop.create_future()
+        )
+        self.volumes_ready_timestamp: int = 0
+
+        self.execution_done_future: asyncio.Future[V0ExecutionDoneRequest | V0JobFailedRequest] = (
+            loop.create_future()
+        )
+        self.execution_done_timestamp: int = 0
+
         self.miner_finished_or_failed_future: asyncio.Future[
             V0JobFailedRequest | V0JobFinishedRequest
         ] = loop.create_future()
@@ -154,6 +172,12 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
     async def notify_executor_ready(self, msg: V0ExecutorReadyRequest) -> None:
         """This method is called when miner sends executor ready message"""
 
+    async def notify_volumes_ready(self, msg: V0VolumesReadyRequest) -> None:
+        """This method is called when miner sends executor ready message"""
+
+    async def notify_execution_done(self, msg: V0ExecutionDoneRequest) -> None:
+        """This method is called when miner sends executor ready message"""
+
     async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
         try:
             self.miner_manifest.set_result(msg.manifest)
@@ -164,6 +188,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         self.miner_machine_specs = msg.specs
 
     async def handle_message(self, msg: MinerToValidatorMessage) -> None:
+        logger.debug(f"Received message: {msg.message_type}")
         if isinstance(msg, GenericError):
             logger.warning(
                 f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
@@ -202,12 +227,41 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                 self.streaming_job_ready_or_not_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
-        elif isinstance(msg, V0JobFailedRequest | V0JobFinishedRequest):
+        elif isinstance(msg, V0VolumesReadyRequest):
+            try:
+                self.volumes_ready_future.set_result(msg)
+                self.volumes_ready_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
+        elif isinstance(msg, V0ExecutionDoneRequest):
+            try:
+                self.execution_done_future.set_result(msg)
+                self.execution_done_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
+        elif isinstance(msg, V0JobFinishedRequest):
             try:
                 self.miner_finished_or_failed_future.set_result(msg)
                 self.miner_finished_or_failed_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
+        elif isinstance(msg, V0JobFailedRequest):
+            # Consider remaining stages as failed.
+            try:
+                self.volumes_ready_future.set_result(msg)
+                self.volumes_ready_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                pass
+            try:
+                self.execution_done_future.set_result(msg)
+                self.execution_done_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                pass
+            try:
+                self.miner_finished_or_failed_future.set_result(msg)
+                self.miner_finished_or_failed_timestamp = int(time.time())
+            except asyncio.InvalidStateError:
+                pass
         elif isinstance(msg, V0MachineSpecsRequest):
             await self.handle_machine_specs_request(msg)
         else:
@@ -226,7 +280,6 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
     def generate_job_started_receipt_message(
         self,
         executor_class: ExecutorClass,
-        max_timeout: int,
         ttl: int,
     ) -> tuple[JobStartedReceiptPayload, str]:
         receipt_payload = JobStartedReceiptPayload(
@@ -235,7 +288,6 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             validator_hotkey=self.my_hotkey,
             timestamp=datetime.datetime.now(datetime.UTC),
             executor_class=executor_class,
-            max_timeout=max_timeout,
             is_organic=True,
             ttl=ttl,
         )
@@ -324,6 +376,32 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             logger.warning(comment)
             await self.notify_receipt_failure(comment)
 
+    async def send_initial_job_request(
+        self,
+        job_details: "OrganicJobDetails",
+        receipt_payload: JobStartedReceiptPayload,
+        receipt_signature: str,
+    ) -> None:
+        await self.send_model(
+            V0InitialJobRequest(
+                job_uuid=job_details.job_uuid,
+                executor_class=job_details.executor_class,
+                docker_image=job_details.docker_image,
+                volume=job_details.volume,
+                job_started_receipt_payload=receipt_payload,
+                job_started_receipt_signature=receipt_signature,
+                timeout_seconds=job_details.total_job_timeout,
+                executor_timing=V0InitialJobRequest.ExecutorTimingDetails(
+                    allowed_leeway=job_details.job_timing.allowed_leeway,
+                    download_time_limit=job_details.job_timing.download_time_limit,
+                    execution_time_limit=job_details.job_timing.execution_time_limit,
+                    upload_time_limit=job_details.job_timing.upload_time_limit,
+                )
+                if job_details.job_timing is not None
+                else None,
+            ),
+        )
+
     async def send_model(
         self, model: ValidatorToMinerMessage, error_event_callback: ErrorCallback | None = None
     ) -> None:
@@ -341,6 +419,10 @@ class FailureReason(enum.Enum):
     MINER_CONNECTION_FAILED = enum.auto()
     INITIAL_RESPONSE_TIMED_OUT = enum.auto()
     EXECUTOR_READINESS_RESPONSE_TIMED_OUT = enum.auto()
+    VOLUMES_TIMED_OUT = enum.auto()
+    VOLUMES_FAILED = enum.auto()
+    EXECUTION_TIMED_OUT = enum.auto()
+    EXECUTION_FAILED = enum.auto()
     FINAL_RESPONSE_TIMED_OUT = enum.auto()
     JOB_DECLINED = enum.auto()
     EXECUTOR_FAILED = enum.auto()
@@ -370,33 +452,53 @@ class OrganicJobError(Exception):
 
 @dataclass
 class OrganicJobDetails:
+    @dataclass
+    class TimingDetails:
+        allowed_leeway: int
+        download_time_limit: int
+        execution_time_limit: int
+        upload_time_limit: int
+
+        @property
+        def total(self):
+            return sum(asdict(self).values())
+
     job_uuid: str
     executor_class: ExecutorClass
     docker_image: str
+    job_timing: TimingDetails | None = None
     docker_run_options_preset: DockerRunOptionsPreset = "nvidia_all"
     docker_run_cmd: list[str] = field(default_factory=list)
-    total_job_timeout: int = 300
+    total_job_timeout: int = 300  # Deprecated, use job_timing instead.
     volume: Volume | None = None
     output: OutputUpload | None = None
     artifacts_dir: str | None = None
 
 
-async def run_organic_job(
+async def execute_organic_job_on_miner(
     client: OrganicMinerClient,
     job_details: OrganicJobDetails,
-    initial_response_timeout: int = 3,
-    executor_ready_timeout: int = 300,
+    reservation_time_limit: int,
+    executor_startup_time_limit: int,
 ) -> tuple[str, str, dict[str, str], dict[str, str]]:  # stdout, stderr, artifacts, upload_results
     """
     Run an organic job. This is a simpler way to use OrganicMinerClient.
 
     :param client: the organic miner client
     :param job_details: details specific to the job that needs to be run
-    :param initial_response_timeout: timeout for waiting for job acceptance/rejection
-    :param executor_ready_timeout: timeout for waiting for executor readiness
+    :param reservation_time_limit: time for the miner to report reservation success (or decline the job)
+    :param executor_startup_time_limit: time for executor to perform startup checks
     :return: standard out, standard error of the job container, artifacts and a dictionary mapping file names to HTTP upload responses
     """
     assert client.job_uuid == job_details.job_uuid
+
+    timer = Timer()  # Only used for measurement, not used for timeouts.
+
+    executor_spinup_time_limit = EXECUTOR_CLASS[job_details.executor_class].spin_up_time
+    readiness_time_limit = executor_spinup_time_limit + executor_startup_time_limit
+
+    # Note: If this is empty, we're in single-timeout mode.
+    executor_timing = job_details.job_timing
 
     async with contextlib.AsyncExitStack() as exit_stack:
         try:
@@ -404,28 +506,17 @@ async def run_organic_job(
         except TransportConnectionError as exc:
             raise OrganicJobError(FailureReason.MINER_CONNECTION_FAILED) from exc
 
-        job_timer = Timer(timeout=job_details.total_job_timeout)
-
+        ## STAGE: reservation
+        # Miner should reserve an executor and respond with accept/reject quickly.
+        # The receipt should only be good enough for the reservation time.
+        # Miner will receive a "job accepted" receipt with a longer TTL as soon as we get a reservation.
         receipt_payload, receipt_signature = client.generate_job_started_receipt_message(
             executor_class=job_details.executor_class,
-            max_timeout=int(job_timer.time_left()),
-            ttl=max(
-                JOB_STARTED_RECEIPT_MIN_TTL,
-                EXECUTOR_CLASS[job_details.executor_class].spin_up_time or 0,
-            ),
+            ttl=reservation_time_limit,
         )
-        await client.send_model(
-            V0InitialJobRequest(
-                job_uuid=job_details.job_uuid,
-                executor_class=job_details.executor_class,
-                docker_image=job_details.docker_image,
-                timeout_seconds=job_details.total_job_timeout,
-                volume=job_details.volume,
-                job_started_receipt_payload=receipt_payload,
-                job_started_receipt_signature=receipt_signature,
-            ),
-        )
-        logger.debug(f"Sent initial job request for {job_details.job_uuid}")
+
+        await client.send_initial_job_request(job_details, receipt_payload, receipt_signature)
+        logger.debug("Sent initial job request")
         await JobStartedReceipt.from_payload(
             receipt_payload,
             validator_signature=receipt_signature,
@@ -433,9 +524,10 @@ async def run_organic_job(
 
         try:
             try:
+                logger.debug(f"Waiting for initial response for {reservation_time_limit:.2f}s")
                 initial_response = await asyncio.wait_for(
                     client.miner_accepting_or_declining_future,
-                    timeout=min(job_timer.time_left(), initial_response_timeout),
+                    timeout=reservation_time_limit,
                 )
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
@@ -444,15 +536,21 @@ async def run_organic_job(
 
             await client.notify_job_accepted(initial_response)
 
-            await client.send_job_accepted_receipt_message(
-                accepted_timestamp=time.time(),
-                ttl=int(job_timer.time_left()),
-            )
-
+            ## STAGE: Spinup
+            # Validator waits for the executor to start up and report readiness.
+            # This includes executor startup checks.
+            if executor_timing:
+                job_accepted_receipt_ttl = readiness_time_limit + executor_timing.total
+            else:
+                job_accepted_receipt_ttl = readiness_time_limit + job_details.total_job_timeout
             try:
+                await client.send_job_accepted_receipt_message(
+                    accepted_timestamp=time.time(),
+                    ttl=job_accepted_receipt_ttl,
+                )
                 executor_readiness_response = await asyncio.wait_for(
                     client.executor_ready_or_failed_future,
-                    timeout=min(job_timer.time_left(), executor_ready_timeout),
+                    timeout=readiness_time_limit,
                 )
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
@@ -460,6 +558,17 @@ async def run_organic_job(
                 raise OrganicJobError(FailureReason.EXECUTOR_FAILED, executor_readiness_response)
 
             await client.notify_executor_ready(executor_readiness_response)
+
+            if executor_timing is not None:
+                # For fine-grained timeouts, the deadline will be extended at the start of each stage.
+                logger.debug(f"Starting deadline with {executor_timing.allowed_leeway}s leeway")
+                deadline = Timer(executor_timing.allowed_leeway)
+            else:
+                # For single-timeout mode, the deadline is set once here.
+                logger.debug(
+                    f"Starting deadline with {job_details.total_job_timeout}s total timeout"
+                )
+                deadline = Timer(job_details.total_job_timeout)
 
             await client.send_model(
                 V0JobRequest(
@@ -474,17 +583,66 @@ async def run_organic_job(
                 )
             )
 
+            ## STAGE: volume download
             try:
+                if executor_timing:
+                    logger.debug(
+                        f"Extending deadline by download_time_limit: +{executor_timing.download_time_limit}s"
+                    )
+                    deadline.extend_timeout(executor_timing.download_time_limit)
+                logger.debug(
+                    f"Waiting for volume download (time left: {deadline.time_left():.2f}s)"
+                )
+                volumes_ready_response = await asyncio.wait_for(
+                    client.volumes_ready_future,
+                    timeout=deadline.time_left(),
+                )
+                if isinstance(volumes_ready_response, V0JobFailedRequest):
+                    raise OrganicJobError(FailureReason.VOLUMES_FAILED, volumes_ready_response)
+                logger.debug(f"Volume download done with {deadline.time_left():.2f}s left")
+            except TimeoutError as exc:
+                raise OrganicJobError(FailureReason.VOLUMES_TIMED_OUT) from exc
+            await client.notify_volumes_ready(volumes_ready_response)
+
+            ## STAGE: execution
+            try:
+                if executor_timing:
+                    logger.debug(
+                        f"Extending deadline by execution_time_limit: +{executor_timing.execution_time_limit}s"
+                    )
+                    deadline.extend_timeout(executor_timing.execution_time_limit)
+                logger.debug(f"Waiting for execution (time left: {deadline.time_left():.2f}s)")
+                execution_done_response = await asyncio.wait_for(
+                    client.execution_done_future,
+                    timeout=deadline.time_left(),
+                )
+                if isinstance(execution_done_response, V0JobFailedRequest):
+                    raise OrganicJobError(FailureReason.EXECUTION_FAILED, execution_done_response)
+                logger.debug(f"Execution done with {deadline.time_left():.2f}s left")
+            except TimeoutError as exc:
+                raise OrganicJobError(FailureReason.EXECUTION_TIMED_OUT) from exc
+            await client.notify_execution_done(execution_done_response)
+
+            ## STAGE: upload
+            try:
+                if executor_timing:
+                    logger.debug(
+                        f"Extending deadline by upload_time_limit: +{executor_timing.upload_time_limit}s"
+                    )
+                    deadline.extend_timeout(executor_timing.upload_time_limit)
+                logger.debug(f"Waiting for upload (time left: {deadline.time_left():.2f}s)")
                 final_response = await asyncio.wait_for(
                     client.miner_finished_or_failed_future,
-                    timeout=job_timer.time_left(),
+                    timeout=deadline.time_left(),
                 )
                 if isinstance(final_response, V0JobFailedRequest):
                     raise OrganicJobError(FailureReason.JOB_FAILED, final_response)
+                logger.debug(f"Upload done with {deadline.time_left():.2f}s left")
 
+                logger.info(f"Job finished in time with {deadline.time_left():.2f}s left")
                 await client.send_job_finished_receipt_message(
-                    started_timestamp=job_timer.start_time.timestamp(),
-                    time_took_seconds=job_timer.passed_time(),
+                    started_timestamp=timer.start_time.timestamp(),
+                    time_took_seconds=timer.passed_time(),
                     score=0,  # no score for organic jobs (at least right now)
                 )
 
@@ -497,10 +655,11 @@ async def run_organic_job(
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Job failed with {type(e).__name__}: {e}")
             await client.send_job_finished_receipt_message(
-                started_timestamp=job_timer.start_time.timestamp(),
-                time_took_seconds=job_timer.passed_time(),
+                started_timestamp=timer.start_time.timestamp(),
+                time_took_seconds=timer.passed_time(),
                 score=0,
             )
             raise

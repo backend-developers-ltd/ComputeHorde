@@ -116,6 +116,9 @@ def job_spec(apiver_module, compute_horde_client) -> "ComputeHordeJobSpec":
         executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
         job_namespace="SN123.0",
         docker_image=TEST_DOCKER_IMAGE,
+        download_time_limit_sec=1,
+        execution_time_limit_sec=1,
+        upload_time_limit_sec=1,
     )
 
 
@@ -152,6 +155,9 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
             executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
             job_namespace="SN123.0",
             docker_image=TEST_DOCKER_IMAGE,
+            download_time_limit_sec=1,
+            execution_time_limit_sec=1,
+            upload_time_limit_sec=1,
         )
     )
 
@@ -345,6 +351,9 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
                     http_method="POST", url="https://s3.aws.something.com/mybucket/images"
                 ),
             },
+            download_time_limit_sec=1,
+            execution_time_limit_sec=1,
+            upload_time_limit_sec=1,
         )
     )
 
@@ -405,6 +414,9 @@ async def test_create_job__http_error(apiver_module, compute_horde_client, httpx
                 executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
                 job_namespace="SN123.0",
                 docker_image=TEST_DOCKER_IMAGE,
+                download_time_limit_sec=1,
+                execution_time_limit_sec=1,
+                upload_time_limit_sec=1,
             )
         )
 
@@ -419,6 +431,9 @@ async def test_create_job__malformed_response(apiver_module, compute_horde_clien
                 executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
                 job_namespace="SN123.0",
                 docker_image=TEST_DOCKER_IMAGE,
+                download_time_limit_sec=1,
+                execution_time_limit_sec=1,
+                upload_time_limit_sec=1,
             )
         )
 

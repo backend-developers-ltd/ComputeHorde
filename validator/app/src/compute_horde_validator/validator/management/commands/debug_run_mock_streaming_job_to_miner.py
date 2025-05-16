@@ -72,7 +72,6 @@ async def run_streaming_job(options, wait_timeout: int = 300):
 
         receipt_payload, receipt_signature = client.generate_job_started_receipt_message(
             executor_class=job_details.executor_class,
-            max_timeout=int(job_timer.time_left()),
             ttl=30,
         )
 

@@ -66,6 +66,9 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "target_validator_hotkey",
             "on_trusted_miner",
             "upload_results",
+            "download_time_limit",
+            "execution_time_limit",
+            "upload_time_limit",
         )
         read_only_fields = ("created_at",)
 
@@ -107,6 +110,9 @@ class DockerJobSerializer(JobSerializer):
                 "target_validator_hotkey",
                 "artifacts_dir",
                 "on_trusted_miner",
+                "download_time_limit",
+                "execution_time_limit",
+                "upload_time_limit",
             }
         )
 

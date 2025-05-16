@@ -5,10 +5,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
+from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.models import Cycle, Miner, MinerManifest, SyntheticJobBatch
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
@@ -27,10 +28,18 @@ def manifest(miner):
     return MinerManifest.objects.create(
         miner=miner,
         batch=batch,
-        executor_class=DEFAULT_EXECUTOR_CLASS,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=5,
         online_executor_count=5,
     )
+
+
+@pytest.fixture(autouse=True)
+def patch_executor_spinup_time(monkeypatch):
+    with monkeypatch.context() as m:
+        for spec in EXECUTOR_CLASS.values():
+            m.setattr(spec, "spin_up_time", 1)
+        yield
 
 
 class _SimulationTransportWsAdapter:
@@ -69,9 +78,9 @@ async def miner_transports():
     """
 
     transports = [
-        SimulationTransport("miner_01"),
-        SimulationTransport("miner_02"),
-        SimulationTransport("miner_03"),
+        SimulationTransport("miner_connection_1"),
+        SimulationTransport("miner_connection_2"),
+        SimulationTransport("miner_connection_3"),
     ]
 
     transports_iter = iter(transports)
@@ -152,11 +161,14 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
 def job_request():
     return V2JobRequest(
         uuid=str(uuid.uuid4()),
-        executor_class=DEFAULT_EXECUTOR_CLASS,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
         docker_image="doesntmatter",
         args=[],
         env={},
         use_gpu=False,
+        download_time_limit=1,
+        execution_time_limit=1,
+        upload_time_limit=1,
     )
 
 

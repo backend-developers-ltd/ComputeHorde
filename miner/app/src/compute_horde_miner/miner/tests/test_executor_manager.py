@@ -47,7 +47,6 @@ class DummyExecutorManager(BaseExecutorManager):
         self.manifest = manifest
         self.executors = []
         self.runtime_offset = runtime_offset
-        self.EXECUTOR_TIMEOUT_LEEWAY = 0
 
     @asynccontextmanager
     async def set_runtime_offset(self, offset):
@@ -100,6 +99,7 @@ async def dummy_manager():
     "compute_horde_miner.miner.executor_manager._internal.base.ExecutorClassPool.POOL_CLEANUP_PERIOD",
     0.1,
 )
+@patch("compute_horde_miner.miner.executor_manager._internal.base.MAX_EXECUTOR_TIMEOUT", 5)
 async def test_executor_class_pool(dummy_manager):
     # Test reserving executors
     pool = await dummy_manager.get_executor_class_pool(ExecutorClass.always_on__gpu_24gb)

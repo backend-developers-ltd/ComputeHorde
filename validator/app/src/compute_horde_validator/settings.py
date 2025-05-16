@@ -311,24 +311,19 @@ CONSTANCE_CONFIG = {
         "Maximum number of organic jobs each miner can get scores for. Negative value means unlimited.",
         int,
     ),
-    "DYNAMIC_ORGANIC_JOB_TIMEOUT": (
-        300,
-        "Timeout for the run of an organic jobs in seconds",
+    "DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT": (
+        7,
+        "Time for miner to accept or decline an organic job in seconds",
         int,
     ),
-    "DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT": (
-        10,
-        "Timeout for miner to accept or decline an organic job in seconds",
+    "DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT": (
+        5,
+        "Time it takes for the executor to perform its startup stage (security checks, docker image check)",
         int,
     ),
-    "DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT": (
-        300,
-        "Timeout for preparing an executor for an organic job in seconds",
-        int,
-    ),
-    "DYNAMIC_ORGANIC_JOB_MAX_RETRIES": (
-        3,
-        "Maximum retries for organic jobs (Currently ignored)",
+    "DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME": (
+        5,
+        "Additional time granted to the executor for the job-related tasks (download, execute, upload)",
         int,
     ),
     "DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS": (

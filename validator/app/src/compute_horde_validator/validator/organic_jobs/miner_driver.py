@@ -8,7 +8,6 @@ from channels.layers import get_channel_layer
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
 from compute_horde.fv_protocol.validator_requests import (
     JobStatusMetadata,
-    JobStatusType,
     JobStatusUpdate,
     MinerResponse,
 )
@@ -16,10 +15,10 @@ from compute_horde.miner_client.organic import (
     FailureReason,
     OrganicJobDetails,
     OrganicJobError,
-    run_organic_job,
+    execute_organic_job_on_miner,
 )
 from compute_horde.protocol_messages import (
-    V0AcceptJobRequest,
+    MinerToValidatorMessage,
     V0DeclineJobRequest,
     V0JobFailedRequest,
 )
@@ -47,7 +46,7 @@ MINER_CLIENT_CLASS = MinerClient
 
 def status_update_from_job(
     job: OrganicJob,
-    status: JobStatusType,
+    status: JobStatusUpdate.Status,
     message_type: str | None = None,
 ) -> JobStatusUpdate:
     miner_response = MinerResponse(
@@ -137,22 +136,16 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
     )
 
     async def job_status_callback(status_update: JobStatusUpdate):
-        logger.debug("Job status update: %s", status_update)
+        logger.debug("Broadcasting job status update: %s %s", status_update.uuid, status_update)
         await get_channel_layer().send(
             f"job_status_updates__{status_update.uuid}",
             {"type": "job_status_update", "payload": status_update.model_dump()},
         )
 
-    total_job_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_TIMEOUT")
-    initial_response_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT")
-    executor_ready_timeout = await aget_config("DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT")
     await drive_organic_job(
         miner_client,
         job,
         job_request,
-        total_job_timeout=total_job_timeout,
-        initial_response_timeout=initial_response_timeout,
-        executor_ready_timeout=executor_ready_timeout,
         notify_callback=job_status_callback,
     )
 
@@ -163,9 +156,6 @@ async def drive_organic_job(
     miner_client: MinerClient,
     job: OrganicJob,
     job_request: OrganicJobRequest | AdminJobRequest,
-    total_job_timeout: int = 300,
-    initial_response_timeout: int = 3,
-    executor_ready_timeout: int = 300,
     notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] = _dummy_notify_callback,
 ) -> bool:
     """
@@ -181,10 +171,16 @@ async def drive_organic_job(
         data: JsonValue = {"job_uuid": str(job.job_uuid), "miner_hotkey": miner_client.my_hotkey}
         save_event = partial(save_job_execution_event, data=data)
 
-    async def notify_job_accepted(msg: V0AcceptJobRequest) -> None:
-        await notify_callback(status_update_from_job(job, "accepted", msg.message_type))
+    def status_callback(status: JobStatusUpdate.Status):
+        async def relay(msg: MinerToValidatorMessage) -> None:
+            await notify_callback(status_update_from_job(job, status, msg.message_type))
 
-    miner_client.notify_job_accepted = notify_job_accepted  # type: ignore[method-assign]
+        return relay
+
+    miner_client.notify_job_accepted = status_callback(JobStatusUpdate.Status.ACCEPTED)  # type: ignore[method-assign]
+    miner_client.notify_executor_ready = status_callback(JobStatusUpdate.Status.EXECUTOR_READY)  # type: ignore[method-assign]
+    miner_client.notify_volumes_ready = status_callback(JobStatusUpdate.Status.VOLUMES_READY)  # type: ignore[method-assign]
+    miner_client.notify_execution_done = status_callback(JobStatusUpdate.Status.EXECUTION_DONE)  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
 
     artifacts_dir = job_request.artifacts_dir if isinstance(job_request, V2JobRequest) else None
@@ -194,18 +190,28 @@ async def drive_organic_job(
         docker_image=job_request.docker_image,
         docker_run_options_preset="nvidia_all" if job_request.use_gpu else "none",
         docker_run_cmd=job_request.get_args(),
-        total_job_timeout=total_job_timeout,
+        total_job_timeout=job_request.timeout
+        if isinstance(job_request, AdminJobRequest)
+        else OrganicJobDetails.total_job_timeout,
         volume=job_request.volume,
         output=job_request.output_upload,
         artifacts_dir=artifacts_dir,
+        job_timing=OrganicJobDetails.TimingDetails(
+            allowed_leeway=await aget_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME"),
+            download_time_limit=job_request.download_time_limit,
+            execution_time_limit=job_request.execution_time_limit,
+            upload_time_limit=job_request.upload_time_limit,
+        )
+        if isinstance(job_request, V2JobRequest)
+        else None,
     )
 
     try:
-        stdout, stderr, artifacts, upload_results = await run_organic_job(
+        stdout, stderr, artifacts, upload_results = await execute_organic_job_on_miner(
             miner_client,
             job_details,
-            initial_response_timeout=initial_response_timeout,
-            executor_ready_timeout=executor_ready_timeout,
+            reservation_time_limit=await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT"),
+            executor_startup_time_limit=await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
         )
 
         comment = f"Miner {miner_client.miner_name} finished: {stdout=} {stderr=}"
@@ -220,7 +226,9 @@ async def drive_organic_job(
         await save_event(
             subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
         )
-        await notify_callback(status_update_from_job(job, "completed", "V0JobFinishedRequest"))
+        await notify_callback(
+            status_update_from_job(job, JobStatusUpdate.Status.COMPLETED, "V0JobFinishedRequest")
+        )
         return True
 
     except OrganicJobError as exc:
@@ -233,10 +241,10 @@ async def drive_organic_job(
             await save_event(
                 subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR, long_description=comment
             )
-            await notify_callback(status_update_from_job(job, status="failed"))
+            await notify_callback(status_update_from_job(job, status=JobStatusUpdate.Status.FAILED))
 
         elif exc.reason == FailureReason.INITIAL_RESPONSE_TIMED_OUT:
-            comment = f"Miner {miner_client.miner_name} timed out waiting for initial response {job.job_uuid} after {initial_response_timeout} seconds"
+            comment = f"Miner {miner_client.miner_name} timed out waiting for initial response {job.job_uuid}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
@@ -245,7 +253,7 @@ async def drive_organic_job(
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 long_description=comment,
             )
-            await notify_callback(status_update_from_job(job, "failed"))
+            await notify_callback(status_update_from_job(job, JobStatusUpdate.Status.FAILED))
 
         elif (
             exc.reason == FailureReason.JOB_DECLINED
@@ -284,7 +292,7 @@ async def drive_organic_job(
                     subtype=SystemEvent.EventSubType.JOB_EXCUSED,
                     long_description=comment,
                 )
-                await notify_callback(status_update_from_job(job, "rejected"))
+                await notify_callback(status_update_from_job(job, JobStatusUpdate.Status.REJECTED))
             else:
                 comment = (
                     f"Miner failed to excuse job {miner_client.miner_name}: {exc.received_str()}"
@@ -297,7 +305,7 @@ async def drive_organic_job(
                     subtype=SystemEvent.EventSubType.JOB_REJECTED,
                     long_description=comment,
                 )
-                await notify_callback(status_update_from_job(job, "rejected"))
+                await notify_callback(status_update_from_job(job, JobStatusUpdate.Status.REJECTED))
 
         elif exc.reason == FailureReason.JOB_DECLINED:
             comment = f"Miner declined job {miner_client.miner_name}: {exc.received_str()}"
@@ -309,10 +317,10 @@ async def drive_organic_job(
                 subtype=SystemEvent.EventSubType.JOB_REJECTED,
                 long_description=comment,
             )
-            await notify_callback(status_update_from_job(job, "rejected"))
+            await notify_callback(status_update_from_job(job, JobStatusUpdate.Status.REJECTED))
 
         elif exc.reason == FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT:
-            comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid} after {executor_ready_timeout} seconds"
+            comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
@@ -321,12 +329,10 @@ async def drive_organic_job(
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 long_description=comment,
             )
-            await notify_callback(status_update_from_job(job, "failed"))
+            await notify_callback(status_update_from_job(job, JobStatusUpdate.Status.FAILED))
 
         elif exc.reason == FailureReason.STREAMING_JOB_READY_TIMED_OUT:
-            comment = (
-                f"Streaming job {job.job_uuid} not ready after {executor_ready_timeout} seconds"
-            )
+            comment = f"Streaming job {job.job_uuid} readiness timeout"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
@@ -335,7 +341,7 @@ async def drive_organic_job(
                 subtype=SystemEvent.EventSubType.JOB_NOT_STARTED,
                 long_description=comment,
             )
-            await notify_callback(status_update_from_job(job, "failed"))
+            await notify_callback(status_update_from_job(job, JobStatusUpdate.Status.FAILED))
 
         elif exc.reason == FailureReason.EXECUTOR_FAILED:
             comment = (
@@ -349,21 +355,33 @@ async def drive_organic_job(
                 subtype=SystemEvent.EventSubType.JOB_REJECTED,
                 long_description=comment,
             )
-            await notify_callback(status_update_from_job(job, "failed"))
+            await notify_callback(status_update_from_job(job, JobStatusUpdate.Status.FAILED))
 
-        elif exc.reason == FailureReason.FINAL_RESPONSE_TIMED_OUT:
-            comment = f"Miner {miner_client.miner_name} timed out after {total_job_timeout} seconds"
+        elif (
+            exc.reason == FailureReason.VOLUMES_TIMED_OUT
+            or exc.reason == FailureReason.EXECUTION_TIMED_OUT
+            or exc.reason == FailureReason.FINAL_RESPONSE_TIMED_OUT
+            # mypy doesn't understand `elif exc.reason in { ... }`
+        ):
+            comment = f"Miner {miner_client.miner_name} timed out: {exc.reason}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
             logger.warning(comment)
             await save_event(
-                subtype=SystemEvent.EventSubType.JOB_EXECUTION_TIMEOUT, long_description=comment
+                subtype=SystemEvent.EventSubType.ERROR_VALIDATOR_REPORTED_TIMEOUT,
+                long_description=comment,
             )
-            await notify_callback(status_update_from_job(job, "failed"))
+            await notify_callback(status_update_from_job(job, JobStatusUpdate.Status.FAILED))
 
-        elif exc.reason == FailureReason.JOB_FAILED:
-            comment = f"Miner {miner_client.miner_name} failed: {exc.received_str()}"
+        elif (
+            exc.reason == FailureReason.JOB_FAILED
+            or exc.reason == FailureReason.VOLUMES_FAILED
+            or exc.reason == FailureReason.EXECUTION_FAILED
+        ):
+            comment = (
+                f"Miner {miner_client.miner_name} failed with {exc.reason}: {exc.received_str()}"
+            )
             subtype = SystemEvent.EventSubType.FAILURE
             if isinstance(exc.received, V0JobFailedRequest):
                 job.stdout = exc.received.docker_process_stdout
@@ -375,6 +393,12 @@ async def drive_organic_job(
                         pass
                     case V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD:
                         subtype = SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_HUGGINGFACE
+                    case V0JobFailedRequest.ErrorType.SECURITY_CHECK:
+                        subtype = SystemEvent.EventSubType.ERROR_FAILED_SECURITY_CHECK
+                    case V0JobFailedRequest.ErrorType.TIMEOUT:
+                        subtype = SystemEvent.EventSubType.ERROR_EXECUTOR_REPORTED_TIMEOUT
+                    case V0JobFailedRequest.ErrorType.NONZERO_EXIT_CODE:
+                        subtype = SystemEvent.EventSubType.JOB_PROCESS_NONZERO_EXIT_CODE
                     case _:
                         assert_never(exc.received.error_type)
             job.status = OrganicJob.Status.FAILED
@@ -382,7 +406,9 @@ async def drive_organic_job(
             await job.asave()
             logger.info(comment)
             await save_event(subtype=subtype, long_description=comment)
-            await notify_callback(status_update_from_job(job, "failed", "V0JobFailedRequest"))
+            await notify_callback(
+                status_update_from_job(job, JobStatusUpdate.Status.FAILED, "V0JobFailedRequest")
+            )
 
         else:
             assert_never(exc.reason)

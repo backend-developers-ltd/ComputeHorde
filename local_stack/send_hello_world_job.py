@@ -56,6 +56,9 @@ async def main() -> None:
         docker_image="alpine",
         args=["sh", "-c", "echo 'Hello, World!' > /artifacts/stuff"],
         artifacts_dir="/artifacts",
+        download_time_limit_sec=5,
+        execution_time_limit_sec=10,
+        upload_time_limit_sec=5,
     )
 
     if verify_http_output_volumes:
