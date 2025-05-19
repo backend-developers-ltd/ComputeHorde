@@ -15,10 +15,7 @@ import numpy as np
 from bittensor.core.errors import SubstrateRequestException
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.fv_protocol.facilitator_requests import (
-    Signature,
-    V2JobRequest,
-)
+from compute_horde.fv_protocol.facilitator_requests import V0JobCheated, V2JobRequest
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0ExecutionDoneRequest,
@@ -29,6 +26,7 @@ from compute_horde.protocol_messages import (
     ValidatorToMinerMessage,
 )
 from compute_horde.utils import ValidatorInfo
+from compute_horde_core.signature import Signature
 from django.conf import settings
 from pydantic import TypeAdapter
 
@@ -162,6 +160,23 @@ class MockFaillingMinerClient(MockMinerClient):
         )
 
 
+def get_dummy_signature() -> Signature:
+    return Signature(
+        signature_type="bittensor",
+        signatory="5CDapJdKqe6b1kdD7ABZEbNKrRZqhM21m8q3vn1YU22rKK9h",
+        timestamp_ns=1729622861880448856,
+        signature="lnX1rPC+Dnbc6fKPunR35T329IgjJBKHxvA1Y5hpWUl7N7GzlwEnjGHuWcdRfOjfamNNXYnT/gaIUWJxbmwChw==",
+    )
+
+
+def get_dummy_job_cheated_request_v0(uuid: str) -> V0JobCheated:
+    return V0JobCheated(
+        type="job.cheated",
+        job_uuid=uuid,
+        signature=get_dummy_signature(),
+    )
+
+
 def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2JobRequest:
     return V2JobRequest(
         type="job.new",
@@ -195,12 +210,7 @@ def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2Job
                 "url": "http://r2.bucket.com/output.zip",
             },
         },
-        signature=Signature(
-            signature_type="bittensor",
-            signatory="5CDapJdKqe6b1kdD7ABZEbNKrRZqhM21m8q3vn1YU22rKK9h",
-            timestamp_ns=1729622861880448856,
-            signature="lnX1rPC+Dnbc6fKPunR35T329IgjJBKHxvA1Y5hpWUl7N7GzlwEnjGHuWcdRfOjfamNNXYnT/gaIUWJxbmwChw==",
-        ),
+        signature=get_dummy_signature(),
         on_trusted_miner=on_trusted_miner,
         download_time_limit=1,
         execution_time_limit=1,
