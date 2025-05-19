@@ -17,6 +17,7 @@ from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
 )
+from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import MultiVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -33,8 +34,6 @@ from structlog.contextvars import bound_contextvars
 from .schemas import (
     MuliVolumeAllowedVolume,
 )
-
-from compute_horde_core.streaming import StreamingDetails
 
 log = get_logger(__name__)
 
@@ -273,7 +272,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             signature=signature,
             artifacts_dir=self.artifacts_dir or None,
             on_trusted_miner=self.on_trusted_miner,
-            streaming_details=StreamingDetails(public_key=self.streaming_client_cert),
+            streaming_details=StreamingDetails(public_key=self.streaming_client_cert)
+            if self.streaming_client_cert
+            else None,
         )
 
     def send_to_validator(self, payload: dict) -> None:
@@ -293,6 +294,7 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
         ACCEPTED = 1
         COMPLETED = 2
         STREAMING_READY = 3
+
     FINAL_STATUS_VALUES = (
         Status.COMPLETED,
         Status.REJECTED,

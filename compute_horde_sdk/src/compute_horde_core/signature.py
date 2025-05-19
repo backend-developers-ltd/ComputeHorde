@@ -65,7 +65,9 @@ class SignedFields(BaseModel):
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
             artifacts_dir=typing.cast(str, data.get("artifacts_dir") or ""),
             on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
-            streaming_details=StreamingDetails.model_validate(data["streaming_details"]) if "streaming_details" in data else None,
+            streaming_details=StreamingDetails.model_validate(data["streaming_details"])
+            if "streaming_details" in data
+            else None,
         )
         return signed_fields
 

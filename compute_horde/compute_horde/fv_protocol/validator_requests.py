@@ -60,7 +60,7 @@ class JobStatusMetadata(BaseModel, extra="allow"):
 
 
 JobStatusType: TypeAlias = Literal["failed", "rejected", "accepted", "completed", "streaming_ready"]
-# JobStatusType = Literal["failed", "rejected", "accepted", "completed"]
+
 
 class JobStatusUpdate(BaseModel, extra="forbid"):
     """

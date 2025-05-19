@@ -16,13 +16,6 @@ import typing
 import packaging.version
 import pydantic
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde_core.certificate import (
-    check_endpoint,
-    generate_certificate_at,
-    get_docker_container_ip,
-    save_public_key,
-    start_nginx,
-)
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     UnsupportedMessageReceived,
@@ -43,6 +36,13 @@ from compute_horde.protocol_messages import (
 )
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
+from compute_horde_core.certificate import (
+    check_endpoint,
+    generate_certificate_at,
+    get_docker_container_ip,
+    save_public_key,
+    start_nginx,
+)
 from compute_horde_core.output_upload import OutputUploader, OutputUploadFailed
 from compute_horde_core.volume import (
     HuggingfaceVolume,
@@ -197,8 +197,8 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
     async def send_streaming_job_ready(self, certificate: str):
         await self.send_model(
             V0StreamingJobReadyRequest(
-                job_uuid=self.job_uuid, 
-                public_key=certificate, 
+                job_uuid=self.job_uuid,
+                public_key=certificate,
                 port=settings.NGINX_PORT,
             )
         )
@@ -414,7 +414,6 @@ class JobRunner:
         # for streaming job
         self.is_streaming_job: bool = False
         self.executor_certificate: str | None = None
-        # assert self.initial_job_request.streaming_details is not None
         if self.initial_job_request.streaming_details is not None:
             assert self.initial_job_request.streaming_details.executor_ip is not None
             self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(

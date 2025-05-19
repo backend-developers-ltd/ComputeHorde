@@ -13,7 +13,10 @@ import bittensor_wallet
 import httpx
 import pydantic
 import tenacity
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.x509 import Certificate
 
+from compute_horde_core.certificate import generate_certificate, serialize_certificate
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import HttpOutputVolumeResponse
 from compute_horde_core.signature import (
@@ -32,11 +35,6 @@ from .models import (
     InputVolume,
     OutputVolume,
 )
-
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-from cryptography.x509 import Certificate
-from compute_horde_core.certificate import generate_certificate, serialize_certificate
-
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +127,10 @@ class ComputeHordeJobSpec:
 
     streaming: bool = False
     """
-    If true, the job will be streamed.
+    If true, the job will be streamed. The streaming server details
+    (such as address, port, and SSL certificate) will be available
+    in the ComputeHordeJob instance after the `wait_for_streaming()`
+    method returns.
     """
 
 
@@ -181,7 +182,7 @@ class ComputeHordeJob:
                 )
             await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
             await self.refresh_from_facilitator()
-    
+
     async def wait_for_streaming(self, timeout: float | None = None) -> None:
         """
         Wait for the job to be ready for streaming.
@@ -198,8 +199,6 @@ class ComputeHordeJob:
                 )
             if self.status.is_streaming_ready():
                 return
-            # if not self.status.is_in_progress():
-            #     return
             await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
             await self.refresh_from_facilitator()
 
@@ -215,11 +214,13 @@ class ComputeHordeJob:
         return f"<{self.__class__.__qualname__}: {self.uuid!r}>"
 
     @classmethod
-    def _from_response(cls, 
-                       client: "ComputeHordeClient",
-                       response: FacilitatorJobResponse, 
-                       streaming_public_cert: Certificate | None = None,
-                       streaming_private_key: RSAPrivateKey | None = None,) -> Self:
+    def _from_response(
+        cls,
+        client: "ComputeHordeClient",
+        response: FacilitatorJobResponse,
+        streaming_public_cert: Certificate | None = None,
+        streaming_private_key: RSAPrivateKey | None = None,
+    ) -> Self:
         result = None
         if not response.status.is_in_progress():
             # TODO: Handle base64 decode errors
@@ -413,8 +414,7 @@ class ComputeHordeClient:
         :param on_trusted_miner: If true, the job will be run on the sn12 validator's trusted miner.
         :return: A :class:`ComputeHordeJob` class instance representing the created job.
         """
-         
-        
+
         # TODO: make this a pydantic model?
         data: dict[str, pydantic.JsonValue] = {
             "target_validator_hotkey": self.compute_horde_validator_hotkey,
@@ -430,7 +430,7 @@ class ComputeHordeClient:
             self.streaming_public_cert, self.streaming_private_key = generate_certificate("127.0.0.1")
             data["streaming_details"] = {
                 "public_key": serialize_certificate(self.streaming_public_cert).decode("utf-8"),
-            } 
+            }
         if job_spec.input_volumes is not None:
             data["volumes"] = [
                 input_volume.to_compute_horde_volume(mount_path).model_dump()

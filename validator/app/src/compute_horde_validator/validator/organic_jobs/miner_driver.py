@@ -128,7 +128,9 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
         job_description="User job from facilitator",
         block=block,
         on_trusted_miner=on_trusted_miner,
-        streaming_details=job_request.streaming_details.model_dump() if job_request.streaming_details else None,
+        streaming_details=job_request.streaming_details.model_dump()
+        if job_request.streaming_details
+        else None,
     )
 
     miner_client = MINER_CLIENT_CLASS(
@@ -191,7 +193,6 @@ async def drive_organic_job(
     # TODO: remove method assignment above and properly handle notify_* cases
 
     async def notify_streaming_ready(msg: V0StreamingJobReadyRequest) -> None:
-        logger.debug(f"Received streaming ready response {msg}")
         status_update = status_update_from_job(
             job,
             "streaming_ready",
@@ -207,7 +208,6 @@ async def drive_organic_job(
     miner_client.notify_streaming_readiness = notify_streaming_ready  # type: ignore[method-assign]
 
     artifacts_dir = job_request.artifacts_dir if isinstance(job_request, V2JobRequest) else None
-    print(f"job_request: {job_request}")
     job_details = OrganicJobDetails(
         job_uuid=str(job.job_uuid),  # TODO: fix uuid field in AdminJobRequest
         executor_class=ExecutorClass(job_request.executor_class),

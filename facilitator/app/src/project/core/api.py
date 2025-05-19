@@ -72,11 +72,10 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "streaming_server_port",
         )
         read_only_fields = ("created_at",)
-    
+
     def to_internal_value(self, data: dict):
         obj = super().to_internal_value(data)
         try:
-            logger.warning(f"data: {data}")
             obj["streaming_client_cert"] = data["streaming_details"]["public_key"]
             assert isinstance(obj["streaming_client_cert"], str)
         except (KeyError, TypeError, AssertionError):

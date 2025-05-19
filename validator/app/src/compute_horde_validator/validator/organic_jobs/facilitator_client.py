@@ -25,7 +25,6 @@ from compute_horde.fv_protocol.validator_requests import (
     V0MachineSpecsUpdate,
 )
 from compute_horde_core.signature import verify_signature
-from compute_horde_core.streaming import StreamingDetails
 from django.conf import settings
 from pydantic import BaseModel
 
@@ -284,7 +283,6 @@ class FacilitatorClient:
         await asyncio.sleep(0)
 
     async def handle_message(self, raw_msg: str | bytes) -> None:
-        print(f"raw_msg: {raw_msg}")
         """handle message received from facilitator"""
         try:
             response = Response.model_validate_json(raw_msg)

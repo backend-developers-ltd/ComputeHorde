@@ -49,7 +49,6 @@ from compute_horde.receipts.schemas import (
 )
 from compute_horde.transport import AbstractTransport, TransportConnectionError, WSTransport
 from compute_horde.utils import MachineSpecs, Timer, sign_blob
-from compute_horde_core.streaming import StreamingDetails
 
 logger = logging.getLogger(__name__)
 
@@ -393,7 +392,8 @@ async def run_organic_job(
     executor_ready_timeout: int = 300,
 ) -> tuple[str, str, dict[str, str], dict[str, str]]:  # stdout, stderr, artifacts, upload_results
     """
-    Run an organic job. Tjob_detailsanic miner client
+    Run an organic job. This is a simpler way to use OrganicMinerClient.
+    :param client: the organic miner client
     :param job_details: details specific to the job that needs to be run
     :param initial_response_timeout: timeout for waiting for job acceptance/rejection
     :param executor_ready_timeout: timeout for waiting for executor readiness
@@ -489,7 +489,7 @@ async def run_organic_job(
                     raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
                 if isinstance(streaming_response, V0StreamingJobNotReadyRequest):
                     raise OrganicJobError(FailureReason.JOB_DECLINED, streaming_response)
-                
+
                 await client.notify_streaming_readiness(streaming_response)
 
             try:
