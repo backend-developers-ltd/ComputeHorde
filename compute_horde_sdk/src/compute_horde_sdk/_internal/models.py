@@ -22,17 +22,38 @@ class ComputeHordeJobStatus(StrEnum):
     """
 
     SENT = "Sent"
+    RECEIVED = "Received"
     ACCEPTED = "Accepted"
     REJECTED = "Rejected"
+<<<<<<< HEAD
     STREAMING_READY = "Streaming Ready"
+||||||| 428d81b1
+=======
+    EXECUTOR_READY = "Executor Ready"
+    VOLUMES_READY = "Volumes Ready"
+    EXECUTION_DONE = "Execution Done"
+>>>>>>> master
     COMPLETED = "Completed"
     FAILED = "Failed"
+
+    @classmethod
+    def end_states(cls) -> set["ComputeHordeJobStatus"]:
+        """
+        Determines which job statuses mean that the job will not be updated anymore.
+        """
+        return {cls.COMPLETED, cls.FAILED, cls.REJECTED}
 
     def is_in_progress(self) -> bool:
         """
         Check if the job is in progress (has not completed or failed yet).
         """
+<<<<<<< HEAD
         return self in (self.SENT, self.ACCEPTED, self.STREAMING_READY)
+||||||| 428d81b1
+        return self in (self.SENT, self.ACCEPTED)
+=======
+        return self not in ComputeHordeJobStatus.end_states()
+>>>>>>> master
 
     def is_successful(self) -> bool:
         """Check if the job has finished successfully."""

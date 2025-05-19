@@ -30,17 +30,18 @@ EXECUTOR_CLASS = {
         description="always on, generic GPU machine",
         has_gpu=True,
         gpu_vram_gb=24,
-        spin_up_time=0,
+        spin_up_time=3,
     ),
     ExecutorClass.always_on__llm__a6000: ExecutorClassSpec(
         description="always on, NVIDIA RTX A6000 GPU machine for LLM prompts solving",
         has_gpu=True,
         gpu_vram_gb=48,
-        spin_up_time=int(timedelta(minutes=4).total_seconds()),
+        spin_up_time=3,
     ),
 }
 
-
+# This is the upper TTL for executors, after which executor pool kills an executor.
+# TODO: TIMEOUTS - this should depend on the requested job timing instead, but capped at seconds left in current cycle
 MAX_EXECUTOR_TIMEOUT = timedelta(minutes=20).total_seconds()
 
 DEFAULT_EXECUTOR_CLASS = ExecutorClass.spin_up_4min__gpu_24gb

@@ -6,6 +6,6 @@ cd "$THIS_DIR"
 
 cd ../app/src
 
-CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-INFO}
+CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-DEBUG}
 
 celery -A compute_horde_validator beat

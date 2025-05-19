@@ -38,6 +38,15 @@ class Signature(BaseModel, extra="forbid"):
         return base64.b64encode(signature).decode("utf-8")
 
 
+class SignedRequest:
+    signature: Signature | None = None
+
+    @abc.abstractmethod
+    def get_signed_payload(self) -> JsonValue:
+        """Return payload to be signed"""
+        pass
+
+
 class SignedFields(BaseModel):
     executor_class: str
     docker_image: str
@@ -46,6 +55,9 @@ class SignedFields(BaseModel):
     use_gpu: bool
     artifacts_dir: str
     on_trusted_miner: bool
+    download_time_limit: int
+    execution_time_limit: int
+    upload_time_limit: int
     streaming_details: StreamingDetails | None = None
 
     volumes: list[JsonValue]
@@ -65,6 +77,9 @@ class SignedFields(BaseModel):
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
             artifacts_dir=typing.cast(str, data.get("artifacts_dir") or ""),
             on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
+            download_time_limit=typing.cast(int, data.get("download_time_limit", 0)),
+            execution_time_limit=typing.cast(int, data.get("execution_time_limit", 0)),
+            upload_time_limit=typing.cast(int, data.get("upload_time_limit", 0)),
             streaming_details=StreamingDetails.model_validate(data["streaming_details"])
             if "streaming_details" in data
             else None,

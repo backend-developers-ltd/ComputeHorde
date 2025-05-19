@@ -930,7 +930,6 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
         validator_hotkey=ctx.own_keypair.ss58_address,
         timestamp=datetime.now(tz=UTC),
         executor_class=ExecutorClass(job.executor_class),
-        max_timeout=job_timeout_seconds,
         is_organic=False,
         ttl=ttl_clamped,
     )
@@ -2160,7 +2159,6 @@ def _db_persist(ctx: BatchContext) -> None:
                     validator_signature=job.job_started_receipt_signature,
                     timestamp=started_payload.timestamp,
                     executor_class=started_payload.executor_class,
-                    max_timeout=started_payload.max_timeout,
                     is_organic=False,
                     ttl=started_payload.ttl,
                 )

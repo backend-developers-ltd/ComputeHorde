@@ -1,4 +1,5 @@
-from typing import Any, Literal, Self, TypeAlias
+from enum import StrEnum
+from typing import Any, Literal, Self
 
 import bittensor
 from pydantic import BaseModel
@@ -59,17 +60,25 @@ class JobStatusMetadata(BaseModel, extra="allow"):
     streaming_details: StreamingServerDetails | None = None
 
 
-JobStatusType: TypeAlias = Literal["failed", "rejected", "accepted", "completed", "streaming_ready"]
-
-
 class JobStatusUpdate(BaseModel, extra="forbid"):
     """
     Message sent from validator to facilitator in response to NewJobRequest.
     """
 
+    class Status(StrEnum):
+        RECEIVED = "received"
+        ACCEPTED = "accepted"
+        EXECUTOR_READY = "executor_ready"
+        VOLUMES_READY = "volumes_ready"
+        EXECUTION_DONE = "execution_done"
+        COMPLETED = "completed"
+        REJECTED = "rejected"
+        FAILED = "failed"
+        STREAMING_READY = "streaming_ready"
+
     message_type: Literal["V0JobStatusUpdate"] = "V0JobStatusUpdate"
     uuid: str
-    status: JobStatusType
+    status: Status
     metadata: JobStatusMetadata | None = None
 
 

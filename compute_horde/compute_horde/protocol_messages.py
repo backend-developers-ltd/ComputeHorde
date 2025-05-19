@@ -66,11 +66,17 @@ class V0InitialJobRequest(BaseModel):
         public_key: str
         executor_ip: str | None = None  # set by miner before sending to executor
 
+    class ExecutorTimingDetails(BaseModel):
+        allowed_leeway: int
+        download_time_limit: int
+        execution_time_limit: int
+        upload_time_limit: int
+
     message_type: Literal["V0InitialJobRequest"] = "V0InitialJobRequest"
     job_uuid: str
     executor_class: ExecutorClass
     docker_image: str | None = None
-    timeout_seconds: int
+    timeout_seconds: int | None = None  # Deprecated - use executor_timing instead
     volume: Volume | None = None
     job_started_receipt_payload: JobStartedReceiptPayload
     job_started_receipt_signature: str
@@ -78,13 +84,16 @@ class V0InitialJobRequest(BaseModel):
     # this field should be set if the job is a streaming job
     streaming_details: StreamingDetails | None = None
 
+    # This field should be set if the job should use fine-grained timing.
+    # Otherwise, the executor will use `timeout_seconds` as the total time limit.
+    executor_timing: ExecutorTimingDetails | None = None
+
 
 # miner.vc -> validator
 class V0DeclineJobRequest(BaseModel):
     class Reason(enum.Enum):
         NOT_SPECIFIED = "not_specified"
         BUSY = "busy"
-        EXECUTOR_RESERVATION_FAILURE = "executor_reservation_failure"
         EXECUTOR_FAILURE = "executor_failure"
         VALIDATOR_BLACKLISTED = "validator_blacklisted"
 
@@ -138,6 +147,16 @@ class V0StreamingJobReadyRequest(BaseModel):
         return f"{self.job_uuid}:{self.ip}:{self.port}:{self.public_key}"
 
 
+class V0VolumesReadyRequest(BaseModel):
+    message_type: Literal["V0VolumesReadyRequest"] = "V0VolumesReadyRequest"
+    job_uuid: str
+
+
+class V0ExecutionDoneRequest(BaseModel):
+    message_type: Literal["V0ExecutionDoneRequest"] = "V0ExecutionDoneRequest"
+    job_uuid: str
+
+
 # validator -> miner.vc -> miner.ec -> executor
 class V0JobRequest(BaseModel):
     message_type: Literal["V0JobRequest"] = "V0JobRequest"
@@ -155,8 +174,10 @@ class V0JobRequest(BaseModel):
 # executor -> miner.ec -> miner.vc -> validator
 class V0JobFailedRequest(BaseModel):
     class ErrorType(enum.StrEnum):
+        TIMEOUT = "TIMEOUT"
+        SECURITY_CHECK = "SECURITY_CHECK"
         HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
-        # TODO: add uploading errors here?
+        NONZERO_EXIT_CODE = "NONZERO_EXIT_STATUS"
 
     message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
     job_uuid: str
@@ -228,6 +249,8 @@ ExecutorToMinerMessage = Annotated[
     | V0StreamingJobNotReadyRequest
     | V0ExecutorReadyRequest
     | V0StreamingJobReadyRequest
+    | V0VolumesReadyRequest
+    | V0ExecutionDoneRequest
     | V0JobFailedRequest
     | V0JobFinishedRequest
     | V0MachineSpecsRequest,
@@ -245,6 +268,8 @@ MinerToValidatorMessage = Annotated[
     | V0ExecutorReadyRequest
     | V0StreamingJobReadyRequest
     | V0JobFailedRequest
+    | V0VolumesReadyRequest
+    | V0ExecutionDoneRequest
     | V0JobFinishedRequest
     | V0MachineSpecsRequest,
     Field(discriminator="message_type"),

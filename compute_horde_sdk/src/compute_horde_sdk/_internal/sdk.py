@@ -94,6 +94,28 @@ class ComputeHordeJobSpec:
     docker_image: str
     """Docker image of the job, in the form of ``user/image:tag``."""
 
+    download_time_limit_sec: int
+    """
+    Time dedicated to downloading job volumes to the executor machine.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail before starting execution.
+    """
+
+    execution_time_limit_sec: int
+    """
+    Time dedicated to executing the job.
+    Part of the paid cost to run the job.
+    This is only the upper time limit for the execution stage of the job. When this limit is reached, the job will be
+    stopped, but it won't be considered failed - it will proceed to the upload stage anyway.
+    """
+
+    upload_time_limit_sec: int
+    """
+    Time dedicated to uploading the job's output.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail.
+    """
+
     args: Sequence[str] = dataclasses.field(default_factory=list)
     """Positional arguments and flags to run the job with."""
 
@@ -425,6 +447,9 @@ class ComputeHordeClient:
             "use_gpu": True,
             "artifacts_dir": job_spec.artifacts_dir,
             "on_trusted_miner": on_trusted_miner,
+            "download_time_limit": job_spec.download_time_limit_sec,
+            "execution_time_limit": job_spec.execution_time_limit_sec,
+            "upload_time_limit": job_spec.upload_time_limit_sec,
         }
         if job_spec.streaming:
             self.streaming_public_cert, self.streaming_private_key = generate_certificate("127.0.0.1")

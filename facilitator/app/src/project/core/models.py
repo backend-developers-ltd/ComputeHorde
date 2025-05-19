@@ -1,14 +1,12 @@
 from datetime import timedelta
 from math import ceil
 from operator import attrgetter
-from typing import ClassVar
 from uuid import uuid4
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
-    Signature,
     V0JobCheated,
     V2JobRequest,
 )
@@ -18,6 +16,7 @@ from compute_horde_core.output_upload import (
     SingleFileUpload,
 )
 from compute_horde_core.streaming import StreamingDetails
+from compute_horde_core.signature import Signature
 from compute_horde_core.volume import MultiVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -123,8 +122,6 @@ class JobQuerySet(models.QuerySet):
 
 
 class Job(ExportModelOperationsMixin("job"), models.Model):
-    JOB_TIMEOUT: ClassVar = timedelta(minutes=5, seconds=30)
-
     uuid = models.UUIDField(primary_key=True, editable=False, blank=True)
     user = models.ForeignKey("auth.User", on_delete=models.PROTECT, blank=True, null=True, related_name="jobs")
     hotkey = models.CharField(blank=True, help_text="hotkey of job sender if hotkey authentication was used")
@@ -132,6 +129,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     signature = models.JSONField()
     created_at = models.DateTimeField(default=now)
     cheated = models.BooleanField(default=False)
+    download_time_limit = models.IntegerField()
+    execution_time_limit = models.IntegerField()
+    upload_time_limit = models.IntegerField()
 
     executor_class = models.CharField(
         max_length=255, default=DEFAULT_EXECUTOR_CLASS, help_text="executor hardware class"
@@ -196,11 +196,11 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 self.send_to_validator(job_request)
                 JobStatus.objects.create(job=self, status=JobStatus.Status.SENT)
 
-    def report_cheated(self) -> None:
+    def report_cheated(self, signature: Signature) -> None:
         """
         Notify validator of cheated job.
         """
-        payload = V0JobCheated(job_uuid=str(self.uuid)).model_dump()
+        payload = V0JobCheated(job_uuid=str(self.uuid), signature=signature).model_dump()
         log.debug("sending cheated report", payload=payload)
         self.send_to_validator(payload)
 
@@ -248,7 +248,8 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         return self.statuses_ordered[-1]
 
     def is_completed(self) -> bool:
-        return self.status.status in JobStatus.FINAL_STATUS_VALUES or self.created_at < now() - self.JOB_TIMEOUT
+        # TODO: TIMEOUTS - Status updates from validator should include a timeout until next update. Job is failed if timeout is reached.
+        return self.status.status in JobStatus.FINAL_STATUS_VALUES
 
     @property
     def elapsed(self) -> timedelta:
@@ -272,6 +273,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             signature=signature,
             artifacts_dir=self.artifacts_dir or None,
             on_trusted_miner=self.on_trusted_miner,
+            download_time_limit=self.download_time_limit,
+            execution_time_limit=self.execution_time_limit,
+            upload_time_limit=self.upload_time_limit,
             streaming_details=StreamingDetails(public_key=self.streaming_client_cert)
             if self.streaming_client_cert
             else None,
@@ -288,12 +292,17 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     class Status(models.IntegerChoices):
+        # These correspond to JobStatusUpdate.Status
         FAILED = -2
         REJECTED = -1
         SENT = 0
-        ACCEPTED = 1
-        COMPLETED = 2
-        STREAMING_READY = 3
+        RECEIVED = 1
+        ACCEPTED = 2
+        EXECUTOR_READY = 3
+        VOLUMES_READY = 4
+        EXECUTION_DONE = 5
+        COMPLETED = 6
+        STREAMING_READY = 7
 
     FINAL_STATUS_VALUES = (
         Status.COMPLETED,
