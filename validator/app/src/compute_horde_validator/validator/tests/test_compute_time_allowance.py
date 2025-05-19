@@ -155,7 +155,7 @@ async def asetup_db(num_miners: int = 3, num_validators: int = 2):
 
     metagraph = MagicMock(spec=MetagraphSnapshot)
     metagraph.block = 720
-    metagraph.get_total_stake.return_value = 1000.0
+    metagraph.get_total_validator_stake.return_value = 1000.0
     metagraph.get_serving_hotkeys.return_value = miner_hotkeys
     metagraph.hotkeys = miner_hotkeys + validator_hotkeys
     metagraph.stake = [0.0] * len(miner_hotkeys) + [

@@ -9,6 +9,7 @@ from typing import Self
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.subtensor import get_cycle_containing_block
+from compute_horde.utils import MIN_VALIDATOR_STAKE
 from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde_core.volume import Volume, ZipUrlVolume
 from django.conf import settings
@@ -197,12 +198,12 @@ class MetagraphSnapshot(models.Model):
         """
         return self.serving_hotkeys or []
 
-    def get_total_stake(self) -> float:
+    def get_total_validator_stake(self) -> float:
         """
         Get the total stake for all hotkeys.
         :return: The total stake.
         """
-        return sum(self.stake)
+        return sum([s for s in self.stake if s > MIN_VALIDATOR_STAKE])
 
 
 # contains all neurons not only miners

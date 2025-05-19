@@ -1468,7 +1468,7 @@ async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycl
         logger.warning(msg)
         return False
 
-    total_stake = metagraph.get_total_stake()
+    total_stake = metagraph.get_total_validator_stake()
     if total_stake is None or total_stake <= 0.0:
         msg = "Total stake for last_metagraph snapshot is 0 - skipping compute time allowances"
         await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
