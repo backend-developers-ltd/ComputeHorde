@@ -2,6 +2,7 @@ import logging
 import shlex
 import uuid
 from datetime import datetime, timedelta
+from decimal import Decimal
 from enum import IntEnum
 from os import urandom
 from typing import Self
@@ -51,6 +52,7 @@ class SystemEvent(models.Model):
         BURNING_INCENTIVE = "BURNING_INCENTIVE"
         COMPUTE_TIME_ALLOWANCE = "COMPUTE_TIME_ALLOWANCE"
         METAGRAPH_SYNCING = "METAGRAPH_SYNCING"
+        COLLATERAL_SYNCING = "COLLATERAL_SYNCING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -107,6 +109,7 @@ class SystemEvent(models.Model):
         LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED = "LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED"
         APPLIED_BURNING = "APPLIED_BURNING"
         NO_BURNING = "NO_BURNING"
+        GETTING_MINER_COLLATERAL_FAILED = "GETTING_MINER_COLLATERAL_FAILED"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
@@ -218,6 +221,16 @@ class Miner(models.Model):
     address = models.CharField(max_length=255, default="0.0.0.0")
     ip_version = models.IntegerField(default=4)
     port = models.IntegerField(default=0)
+
+    evm_address = models.CharField(max_length=42, null=True)
+
+    # This is a 256-bit integer, which is too big to store in any of postgres's int types.
+    # So we are using the NUMERIC(78) here.
+    collateral_wei = models.DecimalField(
+        max_digits=settings.DECIMAL_PRECISION,
+        decimal_places=0,
+        default=Decimal(0),
+    )
 
     def __str__(self):
         return f"hotkey: {self.hotkey}"
@@ -365,6 +378,7 @@ class OrganicJob(JobBase):
     artifacts = models.JSONField(blank=True, default=dict)
     upload_results = models.JSONField(blank=True, default=dict)
     cheated = models.BooleanField(default=False)
+    slashed = models.BooleanField(default=False)
     block = models.BigIntegerField(
         null=True, help_text="Block number on which this job is scheduled"
     )

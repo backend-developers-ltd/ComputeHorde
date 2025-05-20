@@ -26,6 +26,7 @@ TASK_QUEUE_MAP = {
     "compute_horde_validator.validator.tasks.schedule_synthetic_jobs": "jobs",
     # Organic jobs
     "compute_horde_validator.validator.tasks._execute_organic_job_on_worker": "organic_jobs",
+    "compute_horde_validator.validator.tasks.slash_collateral_task": "organic_jobs",
     # LLM job tasks
     "compute_horde_validator.validator.tasks.llm_prompt_generation": "llm",
     "compute_horde_validator.validator.tasks.llm_prompt_sampling": "llm",

@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from collections.abc import Callable
+from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -18,7 +19,7 @@ from compute_horde_validator.validator.tests.transport import SimulationTranspor
 
 @pytest.fixture
 def miner(miner_keypair):
-    return Miner.objects.create(hotkey=miner_keypair.ss58_address)
+    return Miner.objects.create(hotkey=miner_keypair.ss58_address, collateral_wei=Decimal(10**18))
 
 
 @pytest.fixture(autouse=True)

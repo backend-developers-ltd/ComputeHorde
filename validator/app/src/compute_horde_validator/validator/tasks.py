@@ -6,6 +6,7 @@ import time
 import traceback
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 from functools import cached_property
 from math import ceil, floor
 from typing import Any, Union
@@ -38,6 +39,12 @@ from numpy.typing import NDArray
 from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.collateral import (
+    get_evm_key_associations,
+    get_miner_collateral,
+    get_web3_connection,
+    slash_collateral,
+)
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
@@ -1317,6 +1324,71 @@ def sync_metagraph() -> None:
             new_cycle_start_metagraph, snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START
         )
 
+        hotkeys_to_sync = [n.hotkey for n in new_cycle_start_metagraph.neurons]
+
+        try:
+            sync_collaterals(subtensor, hotkeys_to_sync, current_cycle.start)
+        except Exception as e:
+            msg = f"Error while syncing collaterals: {e}"
+            logger.warning(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.COLLATERAL_SYNCING,
+                subtype=SystemEvent.EventSubType.FAILURE,
+                long_description=msg,
+                data={"block": current_cycle.start},
+            )
+
+
+def sync_collaterals(subtensor: bittensor.subtensor, hotkeys: list[str], block: int) -> None:
+    """
+    Synchronizes miner evm addresses and collateral amounts.
+
+    :param hotkeys: Hotkeys to sync collaterals for.
+    :type hotkeys: Iterable[str]
+    :param block: Block number for querying the collateral contract.
+    :type block: int
+    :return: None
+    """
+    associations = get_evm_key_associations(
+        subtensor=subtensor, netuid=settings.BITTENSOR_NETUID, block=block
+    )
+    miners = Miner.objects.filter(hotkey__in=hotkeys)
+    w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
+
+    to_update = []
+    for miner in miners:
+        if not miner.uid:
+            continue
+
+        evm_address = associations.get(miner.uid)
+        miner.evm_address = evm_address
+        to_update.append(miner)
+
+        if not miner.evm_address:
+            continue
+
+        if settings.COLLATERAL_CONTRACT_ADDRESS:
+            try:
+                collateral = get_miner_collateral(
+                    w3, settings.COLLATERAL_CONTRACT_ADDRESS, miner.evm_address, block
+                )
+                miner.collateral_wei = Decimal(collateral)
+            except Exception as e:
+                msg = f"Error while fetching miner collateral: {e}"
+                logger.warning(msg)
+                SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                    type=SystemEvent.EventType.COLLATERAL_SYNCING,
+                    subtype=SystemEvent.EventSubType.GETTING_MINER_COLLATERAL_FAILED,
+                    long_description=msg,
+                    data={
+                        "block": block,
+                        "miner_hotkey": miner.hotkey,
+                        "evm_address": evm_address,
+                    },
+                )
+
+    Miner.objects.bulk_update(to_update, fields=["evm_address", "collateral"])
+
 
 async def save_compute_time_allowance_event(subtype, msg, data):
     await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
@@ -1892,3 +1964,30 @@ def _execute_organic_job_on_worker(job_request: JsonValue, miner_hotkey: str) ->
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
     miner = Miner.objects.get(hotkey=miner_hotkey)
     async_to_sync(execute_organic_job_request)(request, miner)
+
+
+@app.task
+def slash_collateral_task(job_uuid: str) -> None:
+    with transaction.atomic():
+        job = OrganicJob.objects.select_related("miner").select_for_update().get(job_uuid=job_uuid)
+
+        if job.slashed:
+            logger.info(f"Already slashed for this job {job_uuid}")
+            return
+
+        slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
+        if slash_amount > 0 and job.miner.evm_address:
+            try:
+                w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
+                slash_collateral(
+                    w3=w3,
+                    contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
+                    miner_address=job.miner.evm_address,
+                    amount_wei=slash_amount,
+                    url=f"job {job_uuid} cheated",
+                )
+            except Exception as e:
+                logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
+            else:
+                job.slashed = True
+                job.save()

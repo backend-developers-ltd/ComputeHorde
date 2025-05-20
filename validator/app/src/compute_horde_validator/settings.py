@@ -2,6 +2,7 @@
 Django settings for compute_horde_validator project.
 """
 
+import decimal
 import inspect
 import logging
 import pathlib
@@ -13,6 +14,12 @@ import environ
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from celery.schedules import crontab
 from compute_horde import base  # noqa
+
+# Set decimal precision.
+# We need to be able to represent 256-bit unsigned integers.
+# Calculated from: math.ceil(math.log10(2**256 - 1))
+DECIMAL_PRECISION = 78
+decimal.getcontext().prec = DECIMAL_PRECISION
 
 root = environ.Path(__file__) - 2
 
@@ -399,6 +406,17 @@ CONSTANCE_CONFIG = {
         "How long to wait for Celery to execute the organic job",
         int,
     ),
+    # collateral params
+    "DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI": (
+        10000000000000000,  # 0.01 tao
+        "Minimum collateral amount (in Wei) for a miner to be considered for a job",
+        int,
+    ),
+    "DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI": (
+        5000000000000000,  # 0.005 tao
+        "Amount (in Wei) of collateral to be slashed if a miner cheats on a job",
+        int,
+    ),
 }
 
 # Content Security Policy
@@ -731,6 +749,8 @@ BITTENSOR_WALLET_DIRECTORY = env.path(
 )
 BITTENSOR_WALLET_NAME = env.str("BITTENSOR_WALLET_NAME")
 BITTENSOR_WALLET_HOTKEY_NAME = env.str("BITTENSOR_WALLET_HOTKEY_NAME")
+
+COLLATERAL_CONTRACT_ADDRESS = env("COLLATERAL_CONTRACT_ADDRESS", default=None)
 
 BITTENSOR_SHIELD_CERTIFICATE_PATH = env.path(
     "BITTENSOR_SHIELD_CERTIFICATE_PATH",
