@@ -290,7 +290,7 @@ async def test_facilitator_client__cheated_job():
             miner_address="127.0.0.1",
             miner_address_ip_version=4,
             miner_port=8080,
-            status="smth",
+            status=OrganicJob.Status.COMPLETED,
         )
         assert job.cheated is False
 
