@@ -31,6 +31,7 @@ jobs:
         run: |
           docker pull alpine
           docker pull backenddevelopersltd/compute-horde-executor:v1-latest
+          docker pull backenddevelopersltd/compute-horde-streaming-job-test:v0-latest
       - name: Start all services
         run: local_stack/run_and_await_readiness.sh /tmp/integration_test_logs/
       

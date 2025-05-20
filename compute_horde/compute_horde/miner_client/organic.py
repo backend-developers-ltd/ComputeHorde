@@ -172,8 +172,14 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
     async def notify_executor_ready(self, msg: V0ExecutorReadyRequest) -> None:
         """This method is called when miner sends executor ready message"""
 
-    async def notify_streaming_readiness(self, msg: V0StreamingJobReadyRequest) -> None:
+    async def notify_volumes_ready(self, msg: V0VolumesReadyRequest) -> None:
         """This method is called when miner sends executor ready message"""
+
+    async def notify_execution_done(self, msg: V0ExecutionDoneRequest) -> None:
+        """This method is called when miner sends execution done message"""
+
+    async def notify_streaming_readiness(self, msg: V0StreamingJobReadyRequest) -> None:
+        """This method is called when miner sends streaming ready message"""
 
     async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
         try:
@@ -590,20 +596,6 @@ async def execute_organic_job_on_miner(
                 )
             )
 
-            if job_details.streaming_details:
-                try:
-                    streaming_response = await asyncio.wait_for(
-                        client.streaming_job_ready_or_not_future,
-                        timeout=min(job_timer.time_left(), initial_response_timeout),
-                    )
-                    logger.debug(f"Received streaming response {streaming_response}")
-                except TimeoutError as exc:
-                    raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
-                if isinstance(streaming_response, V0StreamingJobNotReadyRequest):
-                    raise OrganicJobError(FailureReason.JOB_DECLINED, streaming_response)
-
-                await client.notify_streaming_readiness(streaming_response)
-
             try:
                 if executor_timing:
                     logger.debug(
@@ -623,6 +615,20 @@ async def execute_organic_job_on_miner(
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.VOLUMES_TIMED_OUT) from exc
             await client.notify_volumes_ready(volumes_ready_response)
+
+            if job_details.streaming_details:
+                try:
+                    streaming_response = await asyncio.wait_for(
+                        client.streaming_job_ready_or_not_future,
+                        timeout=deadline.time_left(),
+                    )
+                    logger.debug(f"Received streaming response {streaming_response}")
+                except TimeoutError as exc:
+                    raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
+                if isinstance(streaming_response, V0StreamingJobNotReadyRequest):
+                    raise OrganicJobError(FailureReason.JOB_DECLINED, streaming_response)
+
+                await client.notify_streaming_readiness(streaming_response)
 
             ## STAGE: execution
             try:

@@ -40,6 +40,7 @@ from compute_horde.protocol_messages import (
     V0VolumesReadyRequest,
 )
 from compute_horde.transport import AbstractTransport, WSTransport
+from compute_horde.utils import MachineSpecs, Timer
 from compute_horde_core.certificate import (
     check_endpoint,
     generate_certificate_at,
@@ -47,7 +48,6 @@ from compute_horde_core.certificate import (
     save_public_key,
     start_nginx,
 )
-from compute_horde.utils import MachineSpecs, Timer
 from compute_horde_core.output_upload import OutputUploader, OutputUploadFailed
 from compute_horde_core.volume import (
     HuggingfaceVolume,

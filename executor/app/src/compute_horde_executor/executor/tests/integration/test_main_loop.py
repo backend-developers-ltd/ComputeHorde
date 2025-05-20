@@ -13,7 +13,6 @@ from unittest import mock
 from unittest.mock import patch
 
 import httpx
-from compute_horde.certificate import generate_certificate_at
 from compute_horde.protocol_messages import V0InitialJobRequest, V0JobFailedRequest
 from compute_horde.transport import StubTransport
 from compute_horde_core.certificate import generate_certificate_at

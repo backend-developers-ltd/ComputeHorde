@@ -13,7 +13,7 @@ import bittensor
 import httpx
 from cryptography.hazmat.primitives import serialization
 from cryptography.x509 import Certificate
-from cryptography.hazmat.primitives.asymmetric import rsa, dsa, ec
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from compute_horde_sdk._internal.sdk import ComputeHordeJobSpec
 from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass, HTTPOutputVolume
@@ -96,6 +96,9 @@ async def main() -> None:
         args=["python", "./mock_streaming_job.py"],
         artifacts_dir="/artifacts",
         streaming=True,
+        download_time_limit_sec=5,
+        execution_time_limit_sec=15,
+        upload_time_limit_sec=5,
     )
     streaming_job = await compute_horde_client.create_job(compute_horde_streaming_job_spec)
     await streaming_job.wait_for_streaming(timeout=60)

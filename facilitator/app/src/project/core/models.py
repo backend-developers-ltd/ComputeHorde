@@ -15,8 +15,8 @@ from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
 )
-from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.signature import Signature
+from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import MultiVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
