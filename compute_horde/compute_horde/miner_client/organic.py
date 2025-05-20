@@ -402,6 +402,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                 )
                 if job_details.job_timing is not None
                 else None,
+                streaming_details=job_details.streaming_details,
             ),
         )
 
@@ -517,19 +518,8 @@ async def execute_organic_job_on_miner(
             executor_class=job_details.executor_class,
             ttl=reservation_time_limit,
         )
-        await client.send_model(
-            V0InitialJobRequest(
-                job_uuid=job_details.job_uuid,
-                executor_class=job_details.executor_class,
-                docker_image=job_details.docker_image,
-                timeout_seconds=job_details.total_job_timeout,
-                volume=job_details.volume,
-                job_started_receipt_payload=receipt_payload,
-                job_started_receipt_signature=receipt_signature,
-                streaming_details=job_details.streaming_details,
-            ),
-        )
-        logger.debug(f"Sent initial job request for {job_details.job_uuid}")
+        await client.send_initial_job_request(job_details, receipt_payload, receipt_signature)
+        logger.debug("Sent initial job request")
         await JobStartedReceipt.from_payload(
             receipt_payload,
             validator_signature=receipt_signature,
@@ -622,7 +612,6 @@ async def execute_organic_job_on_miner(
                         client.streaming_job_ready_or_not_future,
                         timeout=deadline.time_left(),
                     )
-                    logger.debug(f"Received streaming response {streaming_response}")
                 except TimeoutError as exc:
                     raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
                 if isinstance(streaming_response, V0StreamingJobNotReadyRequest):
