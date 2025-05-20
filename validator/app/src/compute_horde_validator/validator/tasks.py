@@ -1387,7 +1387,7 @@ def sync_collaterals(subtensor: bittensor.subtensor, hotkeys: list[str], block: 
                     },
                 )
 
-    Miner.objects.bulk_update(to_update, fields=["evm_address", "collateral"])
+    Miner.objects.bulk_update(to_update, fields=["evm_address", "collateral_wei"])
 
 
 async def save_compute_time_allowance_event(subtype, msg, data):
