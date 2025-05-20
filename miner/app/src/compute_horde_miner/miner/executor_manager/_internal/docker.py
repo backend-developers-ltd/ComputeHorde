@@ -120,5 +120,5 @@ class DockerExecutorManager(BaseExecutorManager):
     async def get_manifest(self):
         return {settings.DEFAULT_EXECUTOR_CLASS: 1}
 
-    async def get_executor_public_address(self, executor: DockerExecutor) -> str | None:
+    async def get_executor_public_address(self, executor: DockerExecutor) -> str:
         return await get_docker_container_ip(executor.token)

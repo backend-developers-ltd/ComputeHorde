@@ -164,6 +164,7 @@ class ComputeHordeJob:
     :ivar str uuid: The UUID of the job.
     :ivar ComputeHordeJobStatus status: The status of the job.
     :ivar ComputeHordeJobResult | None result: The result of the job, if it has completed.
+    :ivar str | None streaming_server_cert: The PEM-encoded certificate of the streaming server, if available.
     """
 
     def __init__(
@@ -174,7 +175,7 @@ class ComputeHordeJob:
         result: ComputeHordeJobResult | None = None,
         streaming_public_cert: Certificate | None = None,
         streaming_private_key: RSAPrivateKey | None = None,
-        streaming_server_cert: Certificate | None = None,
+        streaming_server_cert: str | None = None,
         streaming_server_address: str | None = None,
         streaming_server_port: int | None = None,
     ):

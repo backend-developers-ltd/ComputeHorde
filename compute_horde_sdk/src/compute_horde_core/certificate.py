@@ -39,7 +39,7 @@ async def get_docker_container_ip(container_name: str, bridge_network: bool = Fa
         raise Exception(f"Failed to get IP of {container_name}")
 
 
-async def check_endpoint(url, timeout) -> bool:
+async def check_endpoint(url: str, timeout: int) -> bool:
     """
     Pings endpoint every second until it returns 200 or timeout is reached.
     """
@@ -62,7 +62,7 @@ async def start_nginx(
     job_network: str,
     container_name: str = "job-nginx",
     timeout: int = 10,
-):
+) -> None:
     nginx_conf_file = dir_path / "nginx.conf"
     nginx_conf_file.write_text(nginx_conf)
 

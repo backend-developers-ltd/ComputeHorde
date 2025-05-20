@@ -191,14 +191,15 @@ async def drive_organic_job(
     async def notify_streaming_ready(msg: V0StreamingJobReadyRequest) -> None:
         status_update = status_update_from_job(
             job,
-            "streaming_ready",
+            JobStatusUpdate.Status.STREAMING_READY,
             msg.message_type,
         )
-        status_update.metadata.streaming_details = StreamingServerDetails(
-            streaming_server_cert=msg.public_key,
-            streaming_server_address=msg.ip,
-            streaming_server_port=msg.port,
-        )
+        if status_update.metadata is not None:
+            status_update.metadata.streaming_details = StreamingServerDetails(
+                streaming_server_cert=msg.public_key,
+                streaming_server_address=msg.ip,
+                streaming_server_port=msg.port,
+            )
         await notify_callback(status_update)
 
     miner_client.notify_streaming_readiness = notify_streaming_ready  # type: ignore[method-assign]
