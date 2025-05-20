@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import json
 import random
@@ -7,7 +8,7 @@ import uuid
 from datetime import timedelta
 from functools import cached_property
 from math import ceil, floor
-from typing import Union
+from typing import Any, Union
 
 import billiard.exceptions
 import bittensor
@@ -24,8 +25,11 @@ from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
-from compute_horde.subtensor import get_cycle_containing_block
-from compute_horde.utils import ValidatorListError, get_validators
+from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.subtensor import TEMPO, get_cycle_containing_block
+from compute_horde.transport.base import TransportConnectionError
+from compute_horde.utils import MIN_VALIDATOR_STAKE, ValidatorListError, get_validators
+from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
 from django.db import transaction
@@ -38,6 +42,7 @@ from compute_horde_validator.validator.cross_validation.prompt_answering import 
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
     Cycle,
     Miner,
     OrganicJob,
@@ -87,6 +92,8 @@ WEIGHT_SETTING_TTL = 60
 WEIGHT_SETTING_HARD_TTL = 65
 WEIGHT_SETTING_ATTEMPTS = 100
 WEIGHT_SETTING_FAILURE_BACKOFF = 5
+
+COMPUTE_TIME_OVERHEAD_SECONDS = 30  # TODO: approximate a realistic value
 
 
 class WeightsRevealError(Exception):
@@ -1309,6 +1316,241 @@ def sync_metagraph() -> None:
         save_metagraph_snapshot(
             new_cycle_start_metagraph, snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START
         )
+
+
+async def save_compute_time_allowance_event(subtype, msg, data):
+    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+        type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
+        subtype=subtype,
+        long_description=msg,
+        data=data,
+    )
+
+
+async def get_single_manifest(
+    client: OrganicMinerClient, timeout: float = 30
+) -> tuple[str, dict[ExecutorClass, int] | None]:
+    """Get manifest from a single miner client"""
+    hotkey = client.miner_hotkey
+    data = {"hotkey": hotkey}
+    try:
+        async with asyncio.timeout(timeout):
+            try:
+                # Connect to the miner - this will trigger the manifest to be sent
+                await client.connect()
+                manifest = await client.miner_manifest
+                return hotkey, manifest
+
+            except TransportConnectionError as exc:
+                msg = f"Error fetching manifest for {hotkey}: {exc}"
+                await save_compute_time_allowance_event(
+                    SystemEvent.EventSubType.MANIFEST_ERROR, msg, data=data
+                )
+                logger.warning(msg)
+                return hotkey, None
+
+    except TimeoutError:
+        msg = f"Timeout fetching manifest for {hotkey}"
+        await save_compute_time_allowance_event(
+            SystemEvent.EventSubType.MANIFEST_TIMEOUT,
+            msg,
+            data,
+        )
+        logger.warning(msg)
+        return hotkey, None
+
+    except Exception as exc:
+        msg = f"Failed to fetch manifest for {hotkey}: {exc}"
+        await save_compute_time_allowance_event(
+            SystemEvent.EventSubType.MANIFEST_ERROR,
+            msg,
+            data,
+        )
+        logger.warning(msg)
+        return hotkey, None
+
+
+async def get_manifests_from_miners(
+    miners: list[Miner],
+    timeout: float = 30,
+) -> dict[str, dict[ExecutorClass, int]]:
+    """
+    Connect to multiple miner clients in parallel and retrieve their manifests.
+
+    Args:
+        miner_clients: List of OrganicMinerClient instances to connect to
+        timeout: Maximum time to wait for manifest retrieval in seconds
+
+    Returns:
+        Dictionary mapping miner hotkeys to their executor manifests
+    """
+
+    miner_clients = [
+        OrganicMinerClient(
+            miner_hotkey=miner.hotkey,
+            miner_address=miner.address,
+            miner_port=miner.port,
+            job_uuid="ignore",
+            my_keypair=get_keypair(),
+        )
+        for miner in miners
+    ]
+
+    try:
+        logger.info(f"Scraping manifests for {len(miner_clients)} miners")
+        tasks = [
+            asyncio.create_task(
+                get_single_manifest(client, timeout), name=f"{client.miner_hotkey}.get_manifest"
+            )
+            for client in miner_clients
+        ]
+        results = await asyncio.gather(*tasks)
+
+        # Process results and build the manifest dictionary
+        result_manifests = {}
+        for hotkey, manifest in results:
+            if manifest is not None:
+                result_manifests[hotkey] = manifest
+
+        return result_manifests
+
+    finally:
+        close_tasks = [
+            asyncio.create_task(client.close(), name=f"{client.miner_hotkey}.close")
+            for client in miner_clients
+        ]
+        await asyncio.gather(*close_tasks, return_exceptions=True)
+
+
+@app.task
+def set_compute_time_allowances() -> None:
+    metagraph = MetagraphSnapshot.get_cycle_start()
+    current_cycle = Cycle.from_block(metagraph.block, netuid=settings.BITTENSOR_NETUID)
+    if current_cycle.set_compute_time_allowance:
+        logger.debug(f"allowances already calculated for cycle {current_cycle}")
+        return
+
+    set_success = False
+    try:
+        current_cycle.set_compute_time_allowance = True
+        current_cycle.save()
+        set_success = async_to_sync(_set_compute_time_allowances)(metagraph, current_cycle)
+
+    except Exception:
+        msg = "Failed to set compute time allowances: {e}"
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
+            subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+            long_description=msg,
+            data={},
+        )
+        logger.warning(msg)
+
+    if not set_success:
+        current_cycle.set_compute_time_allowance = False
+        current_cycle.save()
+
+
+async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycle) -> bool:
+    """
+    Calculate and save allowances for all validator-miner pairs at the beginning of a cycle.
+    """
+
+    data: dict[str, Any] = {
+        "cycle_start": cycle.start,
+        "cycle_stop": cycle.stop,
+    }
+
+    miners_hotkeys = metagraph.get_serving_hotkeys()
+    if len(miners_hotkeys) == 0:
+        msg = "No miners in the last metagraph snapshot - will NOT set compute time allowances"
+        await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
+        logger.warning(msg)
+        return False
+
+    total_stake = metagraph.get_total_validator_stake()
+    if total_stake is None or total_stake <= 0.0:
+        msg = "Total stake for last_metagraph snapshot is 0 - skipping compute time allowances"
+        await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
+        logger.warning(msg)
+        return False
+
+    # compute stake proportion for each validator
+    hotkey_to_stake_proportion = {}
+    validators_hotkeys = []
+    for hotkey, stake in zip(metagraph.hotkeys, metagraph.stake):
+        if stake > MIN_VALIDATOR_STAKE:
+            validators_hotkeys.append(hotkey)
+            hotkey_to_stake_proportion[hotkey] = stake / total_stake
+    logger.debug(f"Validator stake proportion: {hotkey_to_stake_proportion}")
+    data["validator_stake_proportion"] = hotkey_to_stake_proportion
+
+    # Fetch miners and validators from the database
+    miners = [m async for m in Miner.objects.filter(hotkey__in=miners_hotkeys)]
+    validators = [m async for m in Miner.objects.filter(hotkey__in=validators_hotkeys)]
+
+    # Scrape manifests from miners
+    manifests_dict = await get_manifests_from_miners(miners)
+    # logger.debug(f"miners: {miners}, validators: {validators}, manifests: {manifests_dict}")
+    if not manifests_dict:
+        msg = "No manifests fetched - skipping compute time allowances"
+        await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
+        logger.error(msg)
+        return False
+
+    # max compute time for an executor in a full cycle
+    cycle_duration_seconds = (
+        2 * TEMPO * int(settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION.seconds)
+        - COMPUTE_TIME_OVERHEAD_SECONDS
+    )
+
+    # determine compute-time allowances for each validator-miner pair
+    try:
+        allowance_records = []
+        for validator in validators:
+            # calculate allowance for each miner based on their manifest
+            for miner in miners:
+                manifest = manifests_dict.get(miner.hotkey, None)
+                if manifest is None:
+                    continue
+                online_executor_count = 0
+                for _executor, executor_count in manifest.items():
+                    online_executor_count += executor_count
+
+                allowance = (
+                    hotkey_to_stake_proportion[validator.hotkey]
+                    * online_executor_count
+                    * cycle_duration_seconds
+                )
+                allowance_records.append(
+                    ComputeTimeAllowance(
+                        cycle=cycle,
+                        miner=miner,
+                        validator=validator,
+                        initial_allowance=allowance,
+                        remaining_allowance=allowance,
+                    )
+                )
+        await ComputeTimeAllowance.objects.abulk_create(allowance_records)
+        data["total_allowance_records_created"] = len(allowance_records)
+
+        msg = f"Set {len(allowance_records)} compute-time allowances for cycle {cycle}"
+        await save_compute_time_allowance_event(
+            SystemEvent.EventSubType.SUCCESS,
+            msg,
+            data,
+        )
+        logger.info(msg)
+    except Exception as e:
+        msg = f"Error calculating allowances: {e}"
+        await save_compute_time_allowance_event(
+            SystemEvent.EventSubType.GENERIC_ERROR,
+            msg,
+            data,
+        )
+        logger.error(msg)
+        return False
+    return True
 
 
 @app.task
