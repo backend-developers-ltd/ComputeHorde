@@ -8,3 +8,8 @@ This project uses [*towncrier*](https://towncrier.readthedocs.io/) and the chang
 upcoming release can be found in [changelog.d](changelog.d).
 
 <!-- towncrier release notes start -->
+
+## [0.0.6](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.6) - 2025-05-20
+
+
+No significant changes.

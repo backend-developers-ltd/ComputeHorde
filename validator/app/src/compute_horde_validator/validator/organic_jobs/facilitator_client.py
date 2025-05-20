@@ -36,7 +36,10 @@ from compute_horde_validator.validator.models import (
     ValidatorWhitelist,
 )
 from compute_horde_validator.validator.organic_jobs import routing
-from compute_horde_validator.validator.tasks import execute_organic_job_request_on_worker
+from compute_horde_validator.validator.tasks import (
+    execute_organic_job_request_on_worker,
+    slash_collateral_task,
+)
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
@@ -337,6 +340,10 @@ class FacilitatorClient:
             logger.warning(f"Job {job_uuid} already marked as cheated - ignoring")
             return
 
+        if job.status != OrganicJob.Status.COMPLETED:
+            logger.info(f"Job {job_uuid} reported for cheating is not complete yet")
+            return
+
         job.cheated = True
         await job.asave()
 
@@ -353,6 +360,9 @@ class FacilitatorClient:
                 "miner_hotkey": job.miner.hotkey,
             },
         )
+
+        if not job.slashed:
+            slash_collateral_task.delay(str(job.job_uuid))
 
     async def process_job_request(self, job_request: OrganicJobRequest) -> None:
         if isinstance(job_request, V2JobRequest):

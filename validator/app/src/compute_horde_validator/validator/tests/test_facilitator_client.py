@@ -4,6 +4,7 @@ import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
@@ -65,7 +66,10 @@ async def setup_db(n: int = 1):
         cycle=await Cycle.objects.acreate(start=-14, stop=708),
         created_at=now,
     )
-    miners = [await Miner.objects.acreate(hotkey=f"miner_{i}") for i in range(0, n)]
+    miners = [
+        await Miner.objects.acreate(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18))
+        for i in range(0, n)
+    ]
     for i, miner in enumerate(miners):
         await MinerManifest.objects.acreate(
             miner=miner,
@@ -286,7 +290,7 @@ async def test_facilitator_client__cheated_job():
             miner_address="127.0.0.1",
             miner_address_ip_version=4,
             miner_port=8080,
-            status="smth",
+            status=OrganicJob.Status.COMPLETED,
         )
         assert job.cheated is False
 
