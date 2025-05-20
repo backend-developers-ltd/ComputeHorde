@@ -572,11 +572,11 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
-version = "0.0.2"
+version = "0.0.5"
 source = { editable = "../compute_horde_sdk" }
 dependencies = [
     { name = "asgiref", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-    { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "bittensor-wallet", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "huggingface-hub", extra = ["hf-transfer"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -586,12 +586,17 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "asgiref", specifier = ">=3.8.0,<4" },
-    { name = "bittensor", specifier = ">=9.0.0,<9.2" },
+    { name = "bittensor-wallet", specifier = ">=3.0.0,<4" },
+    { name = "build", marker = "extra == 'fallback'" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=0.26.1" },
-    { name = "pydantic", specifier = ">=2.10,<3" },
+    { name = "pydantic", specifier = ">=2.3,<3" },
+    { name = "setuptools", marker = "extra == 'fallback'" },
+    { name = "skypilot", extras = ["runpod"], marker = "extra == 'fallback'", specifier = ">=0.8.1,<0.9.0" },
     { name = "tenacity", specifier = ">=9.0.0,<10.0.0" },
+    { name = "wheel", marker = "extra == 'fallback'" },
 ]
+provides-extras = ["fallback"]
 
 [package.metadata.requires-dev]
 docs = [
@@ -730,14 +735,11 @@ dependencies = [
 
 [[package]]
 name = "django-constance"
-version = "3.1.0"
+version = "4.3.2"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "django-picklefield", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/93/67/f610b34cb8829aa2a2743ea1a25537305c11a544a71f330af178aad1a0b1/django-constance-3.1.0.tar.gz", hash = "sha256:2b96e51de63751ef63f8f92f74e0f6aea30fb6453f3a736c21e1f8b3f6cf0b4f", size = 36806, upload-time = "2023-08-21T21:36:35.453Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c1/08/58100c61c15c0d187d257c0f01277e48fdfdbe96bda60e88ffe043412ecc/django_constance-4.3.2.tar.gz", hash = "sha256:d86e6b6a797157a4b49d0c679f1b7b9c70b1b540f36dfcda5346736997ae51bd", size = 174866, upload-time = "2025-02-06T10:29:34.604Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/13/efb68bd759aab4f8f1de5863f9e63f93fdd532ca6743c41e14a396256f98/django_constance-3.1.0-py3-none-any.whl", hash = "sha256:6242486a346e396d765a9333d17f3101c8613cabc92e0b98dcb70c2a391bc53b", size = 63041, upload-time = "2023-08-21T21:35:43.59Z" },
+    { url = "https://files.pythonhosted.org/packages/14/cd/37312ca0a02905fb3d44649a0bd2ec4ec21b60d967c3ccb9ff9d07db157b/django_constance-4.3.2-py3-none-any.whl", hash = "sha256:cd3e08f4cac457016db550a9244177da39cef8e39f4a56859692306cc8f11dc1", size = 64240, upload-time = "2025-02-06T10:28:53.231Z" },
 ]
 
 [[package]]
@@ -784,18 +786,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8a/f1/318684c9466968bf9a9c221663128206e460c1a67f595055be4b284cde8a/django-extensions-3.2.3.tar.gz", hash = "sha256:44d27919d04e23b3f40231c4ab7af4e61ce832ef46d610cc650d53e68328410a", size = 277216, upload-time = "2023-06-05T17:09:01.447Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/7e/ba12b9660642663f5273141018d2bec0a1cae1711f4f6d1093920e157946/django_extensions-3.2.3-py3-none-any.whl", hash = "sha256:9600b7562f79a92cbf1fde6403c04fee314608fefbb595502e34383ae8203401", size = 229868, upload-time = "2023-06-05T17:08:58.197Z" },
-]
-
-[[package]]
-name = "django-picklefield"
-version = "3.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "django", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9f/37/449e9425a33eed4dfe39baf43cc2643f3d5ecd47dca4545d705b3f5ccc1a/django-picklefield-3.2.tar.gz", hash = "sha256:aa463f5d79d497dbe789f14b45180f00a51d0d670067d0729f352a3941cdfa4d", size = 9520, upload-time = "2024-04-05T02:23:03.965Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/f9/1502538efa2d4cd3a88ff806cdbd08b1c681dd828d05b6dbc8bcb50a8586/django_picklefield-3.2-py3-none-any.whl", hash = "sha256:e9a73539d110f69825d9320db18bcb82e5189ff48dbed41821c026a20497764c", size = 9533, upload-time = "2024-04-05T02:23:01.86Z" },
 ]
 
 [[package]]
@@ -1320,7 +1310,7 @@ requires-dist = [
     { name = "compute-horde-sdk", editable = "../compute_horde_sdk" },
     { name = "django", specifier = "~=4.2.4" },
     { name = "django-business-metrics", git = "https://github.com/reef-technologies/django-business-metrics.git?rev=9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01" },
-    { name = "django-constance", specifier = "==3.1.0" },
+    { name = "django-constance", specifier = "==4.3.2" },
     { name = "django-cors-headers", specifier = "~=4.2.0" },
     { name = "django-debug-toolbar", specifier = "==4.1.0" },
     { name = "django-environ", specifier = "~=0.11.2" },

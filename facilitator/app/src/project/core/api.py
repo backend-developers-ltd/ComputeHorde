@@ -65,6 +65,10 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "artifacts_dir",
             "target_validator_hotkey",
             "on_trusted_miner",
+            "upload_results",
+            "download_time_limit",
+            "execution_time_limit",
+            "upload_time_limit",
         )
         read_only_fields = ("created_at",)
 
@@ -106,6 +110,9 @@ class DockerJobSerializer(JobSerializer):
                 "target_validator_hotkey",
                 "artifacts_dir",
                 "on_trusted_miner",
+                "download_time_limit",
+                "execution_time_limit",
+                "upload_time_limit",
             }
         )
 
@@ -194,10 +201,13 @@ class CheatedJobViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
         job_uuid = json.loads(request.body).get("job_uuid")
         try:
             job = Job.objects.get(uuid=job_uuid)
+            updated = Job.objects.filter(uuid=job_uuid, cheated=False).update(cheated=True)
+            if updated:
+                job.report_cheated(request.signature)
+                return Response(status=status.HTTP_200_OK, data={"message": "Job reported as cheated"})
+            return Response(status=status.HTTP_200_OK, data={"message": "Job already marked as cheated"})
         except Job.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        job.report_cheated()
-        return Response(status=status.HTTP_200_OK)
 
 
 class JobFeedbackViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):

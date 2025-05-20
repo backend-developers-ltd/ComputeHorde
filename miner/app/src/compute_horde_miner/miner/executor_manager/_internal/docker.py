@@ -64,7 +64,7 @@ class DockerExecutorManager(BaseExecutorManager):
         )
 
         nginx_port = executor_port_dispenser.get_port()
-        process_executor = await asyncio.create_subprocess_exec(  # noqa: S607
+        process_executor = await asyncio.create_subprocess_exec(
             "docker",
             "run",
             "--rm",
@@ -86,7 +86,8 @@ class DockerExecutorManager(BaseExecutorManager):
             "python",
             "manage.py",
             "run_executor",
-        )
+            *(await self.get_executor_cmdline_args()),
+        )  # noqa: S607
         return DockerExecutor(process_executor, token)
 
     async def kill_executor(self, executor):

@@ -9,12 +9,13 @@ from datetime import timedelta
 from typing import Any, Self, TypeAlias
 from urllib.parse import urljoin
 
-import bittensor
+import bittensor_wallet
 import httpx
 import pydantic
 import tenacity
 
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.output_upload import HttpOutputVolumeResponse
 from compute_horde_core.signature import (
     BittensorWalletSigner,
     SignatureScope,
@@ -89,6 +90,28 @@ class ComputeHordeJobSpec:
 
     docker_image: str
     """Docker image of the job, in the form of ``user/image:tag``."""
+
+    download_time_limit_sec: int
+    """
+    Time dedicated to downloading job volumes to the executor machine.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail before starting execution.
+    """
+
+    execution_time_limit_sec: int
+    """
+    Time dedicated to executing the job.
+    Part of the paid cost to run the job.
+    This is only the upper time limit for the execution stage of the job. When this limit is reached, the job will be
+    stopped, but it won't be considered failed - it will proceed to the upload stage anyway.
+    """
+
+    upload_time_limit_sec: int
+    """
+    Time dedicated to uploading the job's output.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail.
+    """
 
     args: Sequence[str] = dataclasses.field(default_factory=list)
     """Positional arguments and flags to run the job with."""
@@ -178,6 +201,11 @@ class ComputeHordeJob:
                 stdout=response.stdout,
                 artifacts={path: base64.b64decode(base64_data) for path, base64_data in response.artifacts.items()},
             )
+            for path, raw_data in response.upload_results.items():
+                try:
+                    result.add_upload_result(path, HttpOutputVolumeResponse.parse_raw(raw_data))
+                except Exception:
+                    logger.error(f"Failed to parse upload result for '{path}'", exc_info=True)
         return cls(
             client,
             uuid=response.uuid,
@@ -193,7 +221,7 @@ class ComputeHordeClient:
 
     def __init__(
         self,
-        hotkey: bittensor.Keypair,
+        hotkey: bittensor_wallet.Keypair,
         compute_horde_validator_hotkey: str,
         job_queue: str | None = None,
         facilitator_url: str = DEFAULT_FACILITATOR_URL,
@@ -363,6 +391,9 @@ class ComputeHordeClient:
             "use_gpu": True,
             "artifacts_dir": job_spec.artifacts_dir,
             "on_trusted_miner": on_trusted_miner,
+            "download_time_limit": job_spec.download_time_limit_sec,
+            "execution_time_limit": job_spec.execution_time_limit_sec,
+            "upload_time_limit": job_spec.upload_time_limit_sec,
         }
         if job_spec.input_volumes is not None:
             data["volumes"] = [

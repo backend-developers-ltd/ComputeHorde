@@ -52,6 +52,9 @@ def job_docker(db, user, connected_validator, signature):
         env={"MY_ENV": "my value"},
         use_gpu=True,
         signature=signature.model_dump(),
+        download_time_limit=3,
+        execution_time_limit=3,
+        upload_time_limit=3,
     )
 
 
@@ -66,6 +69,9 @@ def another_user_job_docker(db, another_user, connected_validator, signature):
         env={"MY_ENV": "my value"},
         use_gpu=True,
         signature=signature.model_dump(),
+        download_time_limit=3,
+        execution_time_limit=3,
+        upload_time_limit=3,
     )
 
 
@@ -126,6 +132,9 @@ def test_docker_job_viewset_create(api_client, user, connected_validator, mock_s
         "env": {"MY_ENV": "my value"},
         "use_gpu": True,
         "target_validator_hotkey": connected_validator.ss58_address,
+        "download_time_limit": 1,
+        "execution_time_limit": 1,
+        "upload_time_limit": 1,
     }
     response = api_client.post("/api/v1/job-docker/", data)
     assert response.status_code == 201
@@ -182,7 +191,13 @@ def build_http_headers(headers: dict[str, str]) -> dict[str, str]:
 def test_hotkey_authentication__job_create(
     api_client, wallet, whitelisted_hotkey, connected_validator, mock_signature_from_request
 ):
-    data = {"docker_image": "hello-world", "target_validator_hotkey": connected_validator.ss58_address}
+    data = {
+        "docker_image": "hello-world",
+        "target_validator_hotkey": connected_validator.ss58_address,
+        "download_time_limit": 1,
+        "execution_time_limit": 1,
+        "upload_time_limit": 1,
+    }
     # First call without any authentication must return 401.
     response = api_client.post("/api/v1/job-docker/", data)
     assert response.status_code == 401, response.content
@@ -333,3 +348,26 @@ def test_job_feedback__already_exists(authenticated_api_client, mock_signature_f
         {"detail": ErrorDetail(string="Feedback already exists", code="conflict")},
     )
     assert JobFeedback.objects.get() == job_feedback
+
+
+@pytest.mark.django_db
+def test_cheated_job_viewset(authenticated_api_client, job_docker):
+    # Test marking a job as cheated
+    response = authenticated_api_client.post("/api/v1/cheated-job/", {"job_uuid": str(job_docker.uuid)}, format="json")
+    assert response.status_code == 200
+    assert response.data == {"message": "Job reported as cheated"}
+
+    # Verify the job has been marked as cheated in the database
+    job_docker.refresh_from_db()
+    assert job_docker.cheated is True
+
+    # Test reporting an already cheated job
+    response = authenticated_api_client.post("/api/v1/cheated-job/", {"job_uuid": str(job_docker.uuid)}, format="json")
+    assert response.status_code == 200
+    assert response.data == {"message": "Job already marked as cheated"}
+
+    # Test reporting a non-existing job
+    response = authenticated_api_client.post(
+        "/api/v1/cheated-job/", {"job_uuid": "00000000-0000-0000-0000-000000000000"}, format="json"
+    )
+    assert response.status_code == 404

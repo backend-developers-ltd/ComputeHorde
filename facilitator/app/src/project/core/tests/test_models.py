@@ -46,5 +46,8 @@ def test__job__selecting_validator__success(user, connected_validator, signature
         validator=None,
         target_validator_hotkey=connected_validator.ss58_address,
         signature=signature.model_dump(),
+        download_time_limit=1,
+        execution_time_limit=1,
+        upload_time_limit=1,
     )
     assert job.validator == connected_validator

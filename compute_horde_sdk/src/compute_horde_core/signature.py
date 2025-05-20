@@ -9,7 +9,7 @@ import typing
 from enum import StrEnum
 from typing import ClassVar, Protocol
 
-import bittensor
+import bittensor_wallet
 from pydantic import BaseModel, JsonValue, field_serializer, field_validator
 
 
@@ -36,6 +36,15 @@ class Signature(BaseModel, extra="forbid"):
         return base64.b64encode(signature).decode("utf-8")
 
 
+class SignedRequest:
+    signature: Signature | None = None
+
+    @abc.abstractmethod
+    def get_signed_payload(self) -> JsonValue:
+        """Return payload to be signed"""
+        pass
+
+
 class SignedFields(BaseModel):
     executor_class: str
     docker_image: str
@@ -44,6 +53,9 @@ class SignedFields(BaseModel):
     use_gpu: bool
     artifacts_dir: str
     on_trusted_miner: bool
+    download_time_limit: int
+    execution_time_limit: int
+    upload_time_limit: int
 
     volumes: list[JsonValue]
     uploads: list[JsonValue]
@@ -62,6 +74,9 @@ class SignedFields(BaseModel):
             uploads=typing.cast(list[JsonValue], data.get("uploads", [])),
             artifacts_dir=typing.cast(str, data.get("artifacts_dir") or ""),
             on_trusted_miner=typing.cast(bool, data.get("on_trusted_miner", False)),
+            download_time_limit=typing.cast(int, data.get("download_time_limit", 0)),
+            execution_time_limit=typing.cast(int, data.get("execution_time_limit", 0)),
+            upload_time_limit=typing.cast(int, data.get("upload_time_limit", 0)),
         )
         return signed_fields
 
@@ -217,11 +232,11 @@ class BittensorSignatureScheme:
 
 
 class BittensorWalletSigner(BittensorSignatureScheme, Signer):
-    def __init__(self, wallet: bittensor.wallet | bittensor.Keypair | None = None):
-        if isinstance(wallet, bittensor.Keypair):
+    def __init__(self, wallet: bittensor_wallet.Wallet | bittensor_wallet.Keypair | None = None):
+        if isinstance(wallet, bittensor_wallet.Keypair):
             keypair = wallet
         else:
-            keypair = (wallet or bittensor.wallet()).hotkey
+            keypair = (wallet or bittensor_wallet.Wallet()).hotkey
         self._keypair = keypair
 
     def _sign(self, payload: bytes) -> bytes:
@@ -236,7 +251,7 @@ class BittensorWalletSigner(BittensorSignatureScheme, Signer):
 class BittensorWalletVerifier(BittensorSignatureScheme, Verifier):
     def _verify(self, payload: bytes, signature: Signature) -> None:
         try:
-            keypair = bittensor.Keypair(ss58_address=signature.signatory)
+            keypair = bittensor_wallet.Keypair(ss58_address=signature.signatory)
         except ValueError:
             raise SignatureInvalidException("Invalid signatory for BittensorWalletVerifier")
         try:

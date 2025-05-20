@@ -4,7 +4,7 @@ requires-python = ">=3.11,<3.13"  # bittensor doesn't work on 3.13+
 keywords = []
 license = {text = "MIT"}
 readme = "README.md"
-version = "0.0.2"
+version = "0.0.5"
 authors = [
     {name = "Reef Technologies", email = "opensource@reef.pl"},
 ]
@@ -18,9 +18,9 @@ classifiers = [
 ]
 dependencies = [
     "asgiref>=3.8.0,<4",
-    "pydantic<3,>=2.10",
+    "pydantic<3,>=2.3",
     "httpx>=0.26.0",
-    "bittensor>=9.0.0,<9.2",
+    "bittensor-wallet>=3.0.0,<4",
     "tenacity>=9.0.0,<10.0.0",
     "huggingface-hub[hf_transfer]>=0.26.1",
 ]
@@ -29,8 +29,16 @@ dependencies = [
 "Source" = "https://github.com/backend-developers-ltd/compute-horde-sdk"
 "Issue Tracker" = "https://github.com/backend-developers-ltd/compute-horde-sdk/issues"
 
+[project.optional-dependencies]
+fallback = [
+    "build",
+    "wheel",
+    "setuptools",
+    "skypilot[runpod]>=0.8.1,<0.9.0",
+]
+
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [dependency-groups]
@@ -69,7 +77,6 @@ docs = [
     "sphinx-multiversion>=0.2.4",
     "sphinx-rtd-theme>=3.0.2",
 ]
-
 
 [tool.pytest.ini_options]
 pythonpath = ["."]  # allow for `import tests` in test files
@@ -151,6 +158,8 @@ module = [
     "bittensor",
     "nox",
     "pytest",
+    "runpod",
+    "sky.*",
     "tests.*",
 ]
 ignore_missing_imports = true

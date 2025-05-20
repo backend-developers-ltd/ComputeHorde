@@ -281,11 +281,6 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(minutes=30),
         "options": {"time_limit": 60},
     },
-    "fetch_receipts": {
-        "task": "project.core.tasks.fetch_receipts",
-        "schedule": timedelta(minutes=30),
-        "options": {"time_limit": 30},
-    },
     "refresh_specs_materialized_view": {
         "task": "project.core.tasks.refresh_specs_materialized_view",
         "schedule": timedelta(minutes=60),

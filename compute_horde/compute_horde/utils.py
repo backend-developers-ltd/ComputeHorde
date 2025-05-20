@@ -10,7 +10,7 @@ import pydantic
 from bittensor.core.errors import SubstrateRequestException
 
 BAC_VALIDATOR_SS58_ADDRESS = "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
-MIN_STAKE = 1000
+MIN_VALIDATOR_STAKE = 1000
 VALIDATORS_LIMIT = 24
 
 
@@ -58,7 +58,10 @@ def get_validators(
     neurons = [
         n
         for n in metagraph.neurons
-        if (n.hotkey == BAC_VALIDATOR_SS58_ADDRESS or metagraph.total_stake[n.uid] >= MIN_STAKE)
+        if (
+            n.hotkey == BAC_VALIDATOR_SS58_ADDRESS
+            or metagraph.total_stake[n.uid] >= MIN_VALIDATOR_STAKE
+        )
     ]
     neurons = sorted(
         neurons,
@@ -79,20 +82,29 @@ def json_dumps_default(obj):
 
 
 class Timer:
-    def __init__(self, timeout=None):
+    def __init__(self, timeout: float | None = None) -> None:
         self.start_time = datetime.datetime.now()
         self.timeout = timeout
 
-    def passed_time(self):
+    def set_timeout(self, seconds: float) -> None:
+        self.start_time = datetime.datetime.now()
+        self.timeout = seconds
+
+    def extend_timeout(self, seconds: float) -> None:
+        if self.timeout is None:
+            raise ValueError("timeout was not specified")
+        self.timeout += seconds
+
+    def passed_time(self) -> float:
         return (datetime.datetime.now() - self.start_time).total_seconds()
 
-    def time_left(self):
+    def time_left(self) -> float:
         if self.timeout is None:
             raise ValueError("timeout was not specified")
         return self.timeout - self.passed_time()
 
 
-def sign_blob(kp: bittensor.Keypair, blob: str):
+def sign_blob(kp: bittensor.Keypair, blob: str) -> str:
     """
     Signs a string blob with a bittensor keypair and returns the signature
     """

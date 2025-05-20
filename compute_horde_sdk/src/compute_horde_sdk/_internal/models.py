@@ -3,7 +3,7 @@ import io
 import zipfile
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal, Self
 
@@ -22,16 +22,27 @@ class ComputeHordeJobStatus(StrEnum):
     """
 
     SENT = "Sent"
+    RECEIVED = "Received"
     ACCEPTED = "Accepted"
     REJECTED = "Rejected"
+    EXECUTOR_READY = "Executor Ready"
+    VOLUMES_READY = "Volumes Ready"
+    EXECUTION_DONE = "Execution Done"
     COMPLETED = "Completed"
     FAILED = "Failed"
+
+    @classmethod
+    def end_states(cls) -> set["ComputeHordeJobStatus"]:
+        """
+        Determines which job statuses mean that the job will not be updated anymore.
+        """
+        return {cls.COMPLETED, cls.FAILED, cls.REJECTED}
 
     def is_in_progress(self) -> bool:
         """
         Check if the job is in progress (has not completed or failed yet).
         """
-        return self in (self.SENT, self.ACCEPTED)
+        return self not in ComputeHordeJobStatus.end_states()
 
     def is_successful(self) -> bool:
         """Check if the job has finished successfully."""
@@ -49,6 +60,14 @@ class ComputeHordeJobResult:
 
     artifacts: dict[str, bytes]
     """Artifact file contents, keyed by file path, as :class:`bytes`."""
+
+    upload_results: dict[str, compute_horde_output_upload.HttpOutputVolumeResponse] = field(default_factory=dict)
+    """Service responses for files uploaded to HTTP output volumes, keyed by file name."""
+
+    def add_upload_result(self, path: str, result: compute_horde_output_upload.HttpOutputVolumeResponse) -> None:
+        # Mount point is stripped from the upload path when job is being sent to facilitator. Let's add mount point
+        # back to the artifact file path for consistency.
+        self.upload_results[OUTPUT_MOUNT_PATH_PREFIX + path] = result
 
 
 class FacilitatorJobResponse(pydantic.BaseModel):
@@ -71,6 +90,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # uploads: list = []
     # target_validator_hotkey: str
     artifacts: dict[str, str] = {}
+    upload_results: dict[str, str] = {}
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):

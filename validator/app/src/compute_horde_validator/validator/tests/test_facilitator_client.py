@@ -25,6 +25,7 @@ from django.utils import timezone
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
+    MinerBlacklist,
     MinerManifest,
     OrganicJob,
     SyntheticJobBatch,
@@ -38,6 +39,7 @@ from .helpers import (
     MockFaillingMinerClient,
     MockSubtensor,
     MockSuccessfulMinerClient,
+    get_dummy_job_cheated_request_v0,
     get_dummy_job_request_v2,
     get_keypair,
 )
@@ -49,7 +51,7 @@ DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
 async def async_patch_all():
     with (
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_job_request",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request",
             return_value=True,
         ),
         patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor()),
@@ -106,11 +108,23 @@ class FacilitatorWs:
         await asyncio.wait_for(ws.send(Response(status="success").model_dump_json()), timeout=5)
 
     async def verify_job_status_update(self, ws):
+        # received
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
         # accept or decline
-        response = await asyncio.wait_for(ws.recv(), timeout=5)
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
+        # executor ready
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
+        # volumes downloaded or failed
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
+        # execution done or failed
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
         JobStatusUpdate.model_validate_json(response)
         # finished or failed
-        response = await asyncio.wait_for(ws.recv(), timeout=5)
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
         JobStatusUpdate.model_validate_json(response)
 
     async def serve(self, ws):
@@ -259,6 +273,42 @@ async def test_facilitator_client__job_completed(ws_server_cls):
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")
 
 
+@pytest.mark.asyncio
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+async def test_facilitator_client__cheated_job():
+    await setup_db()
+    facilitator_client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:1233/")
+    job_uuid = str(uuid.uuid4())
+    cheated_job_request = get_dummy_job_cheated_request_v0(job_uuid)
+
+    async with async_patch_all():
+        miner = await Miner.objects.afirst()
+        job = await OrganicJob.objects.acreate(
+            job_uuid=job_uuid,
+            miner=miner,
+            block=1000,
+            miner_address="127.0.0.1",
+            miner_address_ip_version=4,
+            miner_port=8080,
+            status="smth",
+        )
+        assert job.cheated is False
+
+        await facilitator_client.report_miner_cheated_job(cheated_job_request)
+        await job.arefresh_from_db()
+        assert job.cheated is True
+        assert await MinerBlacklist.objects.acount() == 1
+        assert (
+            await MinerBlacklist.objects.aget(miner_id=miner.id)
+        ).reason == MinerBlacklist.BlacklistReason.JOB_CHEATED
+
+        await facilitator_client.report_miner_cheated_job(cheated_job_request)
+        await job.arefresh_from_db()
+        assert job.cheated is True
+        # do not blacklist second time
+        assert await MinerBlacklist.objects.acount() == 1
+
+
 @pytest.mark.override_config(
     DYNAMIC_ORGANIC_JOB_MAX_RETRIES=DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE
 )
@@ -369,4 +419,5 @@ async def test_routing_to_trusted_miner():
             await reap_tasks(task)
 
             if ws_server.facilitator_error:
+                # Failed: Test failed due to: job not completed: PENDING
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")

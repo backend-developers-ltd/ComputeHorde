@@ -113,6 +113,9 @@ def dummy_job_params(settings):
         docker_image="",
         args=["arg1", "value1"],
         env={"ENV1": "VALUE1"},
+        download_time_limit=1,
+        execution_time_limit=1,
+        upload_time_limit=1,
     )
 
 
@@ -156,6 +159,7 @@ def job_status_update(job):
                 docker_process_stderr="some stderr",
                 docker_process_stdout="some stdout",
                 artifacts={},
+                upload_results={},
             ),
         ),
     )

@@ -10,6 +10,7 @@ from typing import Self
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.subtensor import get_cycle_containing_block
+from compute_horde.utils import MIN_VALIDATOR_STAKE
 from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde_core.volume import Volume, ZipUrlVolume
 from django.conf import settings
@@ -49,6 +50,7 @@ class SystemEvent(models.Model):
         LLM_PROMPT_ANSWERING = "LLM_PROMPT_ANSWERING"
         LLM_PROMPT_SAMPLING = "LLM_PROMPT_SAMPLING"
         BURNING_INCENTIVE = "BURNING_INCENTIVE"
+        COMPUTE_TIME_ALLOWANCE = "COMPUTE_TIME_ALLOWANCE"
         METAGRAPH_SYNCING = "METAGRAPH_SYNCING"
         COLLATERAL_SYNCING = "COLLATERAL_SYNCING"
 
@@ -100,6 +102,10 @@ class SystemEvent(models.Model):
         ERROR_UPLOADING_TO_S3 = "ERROR_UPLOADING_TO_S3"
         ERROR_DOWNLOADING_FROM_S3 = "ERROR_DOWNLOADING_FROM_S3"
         ERROR_DOWNLOADING_FROM_HUGGINGFACE = "ERROR_DOWNLOADING_FROM_HUGGINGFACE"
+        ERROR_FAILED_SECURITY_CHECK = "ERROR_DURING_SECURITY_CHECK"
+        ERROR_EXECUTOR_REPORTED_TIMEOUT = "ERROR_EXECUTOR_REPORTED_TIMEOUT"
+        ERROR_VALIDATOR_REPORTED_TIMEOUT = "ERROR_VALIDATOR_REPORTED_TIMEOUT"
+        JOB_PROCESS_NONZERO_EXIT_CODE = "JOB_PROCESS_NONZERO_EXIT_CODE"
         LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED = "LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED"
         APPLIED_BURNING = "APPLIED_BURNING"
         NO_BURNING = "NO_BURNING"
@@ -188,8 +194,23 @@ class MetagraphSnapshot(models.Model):
     async def aget_cycle_start(cls) -> "MetagraphSnapshot":
         return await sync_to_async(cls.get_cycle_start)()
 
+    def get_serving_hotkeys(self) -> list[str]:
+        """
+        Get the list of serving hotkeys.
+        :return: List of serving hotkeys.
+        """
+        return self.serving_hotkeys or []
+
+    def get_total_validator_stake(self) -> float:
+        """
+        Get the total stake for all hotkeys.
+        :return: The total stake.
+        """
+        return sum([s for s in self.stake if s > MIN_VALIDATOR_STAKE])
+
 
 # contains all neurons not only miners
+# TODO: rename to Neuron
 class Miner(models.Model):
     objects = MinerQueryset.as_manager()
 
@@ -246,6 +267,7 @@ class MinerBlacklist(models.Model):
 
 class ValidatorWhitelist(models.Model):
     hotkey = models.CharField(max_length=255, unique=True)
+    # root_consumer = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -255,6 +277,7 @@ class ValidatorWhitelist(models.Model):
 class Cycle(models.Model):
     start = models.BigIntegerField()
     stop = models.BigIntegerField()
+    set_compute_time_allowance = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -353,6 +376,7 @@ class OrganicJob(JobBase):
     error_type = models.TextField(null=True, default=None)
     error_detail = models.TextField(null=True, default=None)
     artifacts = models.JSONField(blank=True, default=dict)
+    upload_results = models.JSONField(blank=True, default=dict)
     cheated = models.BooleanField(default=False)
     slashed = models.BooleanField(default=False)
     block = models.BigIntegerField(
@@ -413,6 +437,37 @@ class AdminJobRequest(models.Model):
 
 def get_random_salt() -> list[int]:
     return list(urandom(8))
+
+
+class ComputeTimeAllowance(models.Model):
+    """
+    Record of executor-seconds allowance for a validator-miner pair.
+    Calculated at the beginning of each cycle.
+    """
+
+    cycle = models.ForeignKey(Cycle, on_delete=models.CASCADE)
+    miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
+    validator = models.ForeignKey(
+        Miner, on_delete=models.CASCADE, related_name="validator_allowances"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    initial_allowance = models.FloatField(
+        default=0.0, help_text="Executor-seconds allocated at the beginning of the cycle"
+    )
+    remaining_allowance = models.FloatField(
+        default=0.0, help_text="Remaining executor-seconds that can be used"
+    )
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=["miner", "validator", "cycle"], name="unique_miner_allowance_per_cycle"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.validator.hotkey} -> {self.miner.hotkey} {self.cycle}: {self.initial_allowance:.2f}s"
 
 
 class Weights(models.Model):

@@ -92,7 +92,6 @@ async def test_receipt_is_saved(
             validator_hotkey=validator_wallet.hotkey.ss58_address,
             timestamp=timezone.now(),
             executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-            max_timeout=60,
             ttl=5,
         )
         job_started_receipt_signature = sign_blob(

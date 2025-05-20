@@ -114,7 +114,6 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str, streaming: bo
                 "validator_hotkey": validator_key,
                 "timestamp": "2020-01-01T00:00:00Z",
                 "executor_class": DEFAULT_EXECUTOR_CLASS,
-                "max_timeout": 60,
                 "is_organic": True,
                 "ttl": 5,
             },
@@ -147,6 +146,11 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str, streaming: bo
                 "docker_run_cmd": [],
                 "docker_run_options_preset": "none",
                 "volume": {"volume_type": "inline", "contents": "nonsense"},
+                "output_upload": {
+                    "output_upload_type": "zip_and_http_post",
+                    "url": "http://localhost/output/upload",
+                    "form_fields": {},
+                },
             }
         )
         if streaming:
@@ -168,6 +172,9 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str, streaming: bo
             "docker_process_stdout": "some stdout",
             "docker_process_stderr": "some stderr",
             "artifacts": {},
+            "upload_results": {
+                "output.zip": '{"headers": {"Content-Length": "123", "ETag": "abc123"}, "body": "response body content"}'
+            },
         }
 
 

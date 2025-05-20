@@ -7,13 +7,14 @@ from compute_horde_miner.miner.executor_manager.executor_port_dispenser import E
 
 @pytest.fixture
 def dispenser():
-    return ExecutorPortDispenser(start_port=8000, end_port=8005)
+    # Note - please use a port range that is unlikely to be used by any other process...
+    return ExecutorPortDispenser(start_port=12500, end_port=12505)
 
 
 def test_get_release_port(dispenser):
     # get_port
     port = dispenser.get_port()
-    assert port in range(8000, 8005)
+    assert port in range(12500, 12505)
     assert port not in dispenser.available_ports
     # release port
     dispenser.release_port(port)

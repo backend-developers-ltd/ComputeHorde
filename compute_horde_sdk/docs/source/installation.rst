@@ -15,4 +15,8 @@ To install **compute-horde-sdk**, run::
 
  pip install compute-horde-sdk
 
+To install **compute-horde-sdk** with :doc:`fallback <fallback>` functionality, run::
+
+ pip install compute-horde-sdk[fallback]
+
 in your Python environment.

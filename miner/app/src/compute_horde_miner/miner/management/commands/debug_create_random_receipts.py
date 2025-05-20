@@ -142,7 +142,6 @@ def _generate_job_started_receipt(
         validator_hotkey=validator_keys.ss58_address,
         timestamp=timezone.now(),
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        max_timeout=123,
         is_organic=random.choice((True, False)),
         ttl=123,
     )
@@ -154,7 +153,6 @@ def _generate_job_started_receipt(
         miner_signature=sign_blob(miner_keys, payload.blob_for_signing()),
         timestamp=payload.timestamp,
         executor_class=payload.executor_class,
-        max_timeout=payload.max_timeout,
         is_organic=payload.is_organic,
         ttl=payload.ttl,
     )
