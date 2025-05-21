@@ -1569,7 +1569,16 @@ def _limit_non_peak_executors_per_class(ctx: BatchContext) -> None:
                 allowed_count = ctx.batch_config.default_executor_limits_for_missed_peak.get(
                     executor_class, 1
                 )
-            ctx.executors[hotkey][executor_class] = min(miner_reported_count, allowed_count)
+            allowed_count = min(miner_reported_count, allowed_count)
+            if allowed_count != miner_reported_count:
+                logger.debug(
+                    "%s non-peak executor class %s has more executors (%s) than the allowed limit (%s), capping at limit",
+                    ctx.names[hotkey],
+                    executor_class,
+                    miner_reported_count,
+                    allowed_count,
+                )
+            ctx.executors[hotkey][executor_class] = allowed_count
 
 
 async def _multi_close_client(ctx: BatchContext) -> None:
