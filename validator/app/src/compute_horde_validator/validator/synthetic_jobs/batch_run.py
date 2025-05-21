@@ -1528,19 +1528,30 @@ async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
 async def _adjust_miner_max_executors_per_class(ctx: BatchContext) -> None:
     max_executors_per_class = await get_miner_max_executors_per_class()
     for hotkey, executors in ctx.executors.items():
-        for executor_class, count in executors.items():
+        for executor_class, miner_reported_count in executors.items():
             if executor_class not in max_executors_per_class:
                 continue
-            if count > max_executors_per_class[executor_class]:
+            allowed_count = max_executors_per_class[executor_class]
+            if miner_reported_count > allowed_count:
                 logger.warning(
-                    "%s manifest for executor class %s has more count (%s) than the max limit (%s), capping at limit",
+                    "%s manifest for executor class %s has more executors (%s) than the max limit (%s), capping at limit",
                     ctx.names[hotkey],
                     executor_class,
-                    count,
-                    max_executors_per_class[executor_class],
+                    miner_reported_count,
+                    allowed_count,
                 )
-                ctx.executors[hotkey][executor_class] = max_executors_per_class[executor_class]
-                # TODO: add a system event?
+                ctx.system_event(
+                    type=SystemEvent.EventType.MINER_EXECUTOR_COUNT_CLIPPED,
+                    subtype=SystemEvent.EventSubType.WARNING,
+                    data={
+                        "allowed_count": allowed_count,
+                        "miner_reported_count": miner_reported_count,
+                    },
+                    description="executor count clipped",
+                    miner_hotkey=hotkey,
+                    func="_adjust_miner_max_executors_per_class",
+                )
+                ctx.executors[hotkey][executor_class] = allowed_count
 
 
 @sync_to_async
@@ -1573,8 +1584,19 @@ def _limit_non_peak_executors_per_class(ctx: BatchContext) -> None:
                 )
             allowed_count = min(miner_reported_count, allowed_count)
             if allowed_count != miner_reported_count:
+                ctx.system_event(
+                    type=SystemEvent.EventType.MINER_EXECUTOR_COUNT_CLIPPED,
+                    subtype=SystemEvent.EventSubType.WARNING,
+                    data={
+                        "allowed_count": allowed_count,
+                        "miner_reported_count": miner_reported_count,
+                    },
+                    description="non-peak executor count clipped",
+                    miner_hotkey=hotkey,
+                    func="_limit_non_peak_executors_per_class",
+                )
                 logger.debug(
-                    "%s non-peak executor class %s has more executors (%s) than the allowed limit (%s), capping at limit",
+                    "%s manifest for executor class %s has more executors (%s) than the allowed limit (%s) for non-peak, capping at limit",
                     ctx.names[hotkey],
                     executor_class,
                     miner_reported_count,
