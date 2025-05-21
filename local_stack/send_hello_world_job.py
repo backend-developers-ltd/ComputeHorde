@@ -178,7 +178,7 @@ async def main() -> None:
     job = await compute_horde_client.create_job(compute_horde_job_spec)
     await job.wait(timeout=10 * 60)
 
-    # # Validate job completion and output.
+    # Validate job completion and output.
     expected_artifacts = {'/artifacts/stuff': b'Hello, World!\n'}
     if job.status != "Completed" or job.result.artifacts != expected_artifacts:
         raise RuntimeError(f"Job failed: status={job.status}, artifacts={job.result.artifacts}")
@@ -196,6 +196,7 @@ async def main() -> None:
             raise RuntimeError("No headers for POST upload")
         if not job.result.upload_results[put_object_path].headers:
             raise RuntimeError("No headers for PUT upload")
+
     logger.info("Success!")
 
 
