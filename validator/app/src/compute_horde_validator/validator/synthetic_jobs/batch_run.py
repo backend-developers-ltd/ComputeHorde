@@ -1564,6 +1564,8 @@ def _limit_non_peak_executors_per_class(ctx: BatchContext) -> None:
                 # Miner was present during peak
                 miner_peak_count = miner_peak_counts.get(executor_class, 0)
                 allowed_count = math.ceil(miner_peak_count * non_peak_ratio)
+                # Always allow at least 1 executor
+                allowed_count = max(allowed_count, 1)
             else:
                 # Miner was not present during peak
                 allowed_count = ctx.batch_config.default_executor_limits_for_missed_peak.get(
