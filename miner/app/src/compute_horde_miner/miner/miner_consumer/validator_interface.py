@@ -143,6 +143,9 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                     f"Give up on job {job.job_uuid} after not receiving payload after 10 minutes"
                 )
             else:
+                logger.debug(
+                    f"Deferring executor ready msg for job {job.job_uuid}: {job.executor_token}"
+                )
                 await self.group_add(job.executor_token)
                 # we don't send anything until we get authorization confirmation
                 self.defer_executor_ready.append(job)
