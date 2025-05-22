@@ -2289,11 +2289,11 @@ async def execute_synthetic_batch_run(
 
             executor_ready_jobs = await _get_executor_ready_jobs(ctx)
 
-            if executor_ready_jobs:
-                any_job_busy = any(
-                    job.decline_reason() == V0DeclineJobRequest.Reason.BUSY for job in ctx.jobs.values()
-                )
+            any_job_busy = any(
+                job.decline_reason() == V0DeclineJobRequest.Reason.BUSY for job in ctx.jobs.values()
+            )
 
+            if executor_ready_jobs:
                 await ctx.checkpoint_system_event("_multi_send_job_request_for_streaming")
                 await _multi_send_job_request_for_streaming(ctx, executor_ready_jobs)
 
