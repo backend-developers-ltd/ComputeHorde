@@ -1258,7 +1258,7 @@ async def _handle_job_accepted(client: MinerClient, ctx: BatchContext, job: Job)
             type=SystemEvent.EventType.RECEIPT_FAILURE,
             subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
             description=repr(exc),
-            func="_send_initial_job_request",
+            func="_handle_job_accepted",
         )
     await job.executor_response_event.wait()
 
@@ -2286,14 +2286,14 @@ async def execute_synthetic_batch_run(
 
             executor_ready_jobs = await _get_executor_ready_jobs(ctx)
 
-            any_job_busy = any(
-                job.decline_reason() == V0DeclineJobRequest.Reason.BUSY for job in ctx.jobs.values()
-            )
-
-            await ctx.checkpoint_system_event("_multi_send_job_request_for_streaming")
-            await _multi_send_job_request_for_streaming(ctx, executor_ready_jobs)
-
             if executor_ready_jobs:
+                any_job_busy = any(
+                    job.decline_reason() == V0DeclineJobRequest.Reason.BUSY for job in ctx.jobs.values()
+                )
+
+                await ctx.checkpoint_system_event("_multi_send_job_request_for_streaming")
+                await _multi_send_job_request_for_streaming(ctx, executor_ready_jobs)
+
                 await ctx.checkpoint_system_event("_trigger_job_execution")
 
                 await _trigger_job_execution(ctx, executor_ready_jobs)
@@ -2309,6 +2309,8 @@ async def execute_synthetic_batch_run(
                 # NOTE: download the answers for llm prompts jobs before scoring
                 await ctx.checkpoint_system_event("_download_llm_prompts_answers")
                 await _download_llm_prompts_answers(ctx)
+            else:
+                logger.warning("No executor ready jobs")
 
             if executor_ready_jobs or any_job_busy:
                 await ctx.checkpoint_system_event("_score_jobs")
