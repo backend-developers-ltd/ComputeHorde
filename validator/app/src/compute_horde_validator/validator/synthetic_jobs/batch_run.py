@@ -319,6 +319,8 @@ class Job:
     average_job_send_time_bonus: timedelta | None = None
 
     def handle_message(self, msg: MinerToValidatorMessage) -> None:
+        logger.debug("%s received from miner: %s", self.name, msg.message_type)
+
         # !!! it is very important to not allow a newer message of a
         #     certain kind to override a previously received message
         #     of the same kind. miners could play games with that.
@@ -1261,6 +1263,7 @@ async def _handle_job_accepted(client: MinerClient, ctx: BatchContext, job: Job)
             func="_handle_job_accepted",
         )
     await job.executor_response_event.wait()
+    logger.info("%s reported executor ready for job %s", job.miner_hotkey, job.uuid)
 
 
 async def _send_job_request(
