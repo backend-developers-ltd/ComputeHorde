@@ -273,6 +273,8 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             )
             return
 
+        logger.debug(f"Received from validator {self.validator_key}: {msg.__class__.__name__}")
+
         if isinstance(msg, ValidatorAuthForMiner):
             await self.handle_authentication(msg)
             return
