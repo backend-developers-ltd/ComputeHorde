@@ -527,6 +527,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         (await current_store()).store([created_receipt.to_receipt()])
 
     async def _executor_ready(self, msg: V0ExecutorReadyRequest):
+        logger.debug(f"_executor_ready for {msg}")
         if self.check_missing_token(msg):
             return
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
