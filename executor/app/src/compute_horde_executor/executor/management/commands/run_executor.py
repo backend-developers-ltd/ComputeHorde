@@ -969,7 +969,9 @@ class Command(BaseCommand):
         return initial_job_request
 
     async def _download_stage(self):
+        logger.debug("Waiting for full payload")
         full_job_request = await self.miner_client.full_payload
+        logger.debug("Full payload received")
         await self.runner.prepare_full(full_job_request)
         await self.runner.unpack_volume()
         await self.miner_client.send_volumes_ready()
