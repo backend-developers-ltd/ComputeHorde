@@ -1041,7 +1041,7 @@ class Command(BaseCommand):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         ) as docker_process:
-            stdout, stderr = docker_process.communicate()
+            stdout, stderr = await docker_process.communicate()
             return_code = docker_process.returncode
 
         if return_code != 0:
