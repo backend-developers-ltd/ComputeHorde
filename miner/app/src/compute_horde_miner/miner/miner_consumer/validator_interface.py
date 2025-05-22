@@ -143,6 +143,9 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                     f"Give up on job {job.job_uuid} after not receiving payload after 10 minutes"
                 )
             else:
+                logger.debug(
+                    f"Deferring executor ready msg for job {job.job_uuid}: {job.executor_token}"
+                )
                 await self.group_add(job.executor_token)
                 # we don't send anything until we get authorization confirmation
                 self.defer_executor_ready.append(job)
@@ -272,6 +275,8 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                 f"Dropping message {msg.__class__.__name__} from unknown validator {self.validator_key}"
             )
             return
+
+        logger.debug(f"Received from validator {self.validator_key}: {msg.__class__.__name__}")
 
         if isinstance(msg, ValidatorAuthForMiner):
             await self.handle_authentication(msg)
@@ -522,6 +527,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         (await current_store()).store([created_receipt.to_receipt()])
 
     async def _executor_ready(self, msg: V0ExecutorReadyRequest):
+        logger.debug(f"_executor_ready for {msg}")
         if self.check_missing_token(msg):
             return
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)
