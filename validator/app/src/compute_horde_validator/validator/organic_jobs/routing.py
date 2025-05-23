@@ -1,19 +1,22 @@
 import logging
-import random
 from datetime import timedelta
 from typing import assert_never
 
+import bittensor
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V2JobRequest,
 )
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import async_synchronized
 from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
+    MetagraphSnapshot,
     Miner,
     MinerBlacklist,
     MinerManifest,
@@ -42,6 +45,14 @@ class MinerIsBlacklisted(JobRoutingException):
     pass
 
 
+class NotEnoughTimeInCycle(JobRoutingException):
+    pass
+
+
+class NoMinerWithEnoughAllowance(JobRoutingException):
+    pass
+
+
 async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
     if settings.DEBUG_MINER_KEY:
         miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
@@ -53,6 +64,9 @@ async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
     assert_never(request)
 
 
+# TODO: check blacklisting.
+#       Are miners of failed jobs blacklisted?
+#       If they are, add a dynamic config to disable this behavior.
 @async_synchronized
 async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     """
@@ -62,6 +76,26 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     if request.on_trusted_miner:
         miner, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
         return miner
+
+    executor_seconds = (
+        request.download_time_limit + request.execution_time_limit + request.upload_time_limit
+    )
+
+    block: int | None = None
+    try:
+        block = (await MetagraphSnapshot.aget_latest()).block
+    except Exception as exc:
+        logger.warning(f"Failed to get latest metagraph snapshot: {exc}")
+        async with bittensor.AsyncSubtensor(network=settings.BITTENSOR_NETWORK) as subtensor:
+            block = await subtensor.get_current_block()
+    assert block is not None, "Failed to get current block from cache or subtensor."
+
+    cycle = get_cycle_containing_block(block, netuid=settings.BITTENSOR_NETUID)
+    time_remaining_in_cycle = (cycle.stop - block) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
+    # TODO: subtract job overhead?
+
+    if time_remaining_in_cycle < timedelta(seconds=executor_seconds):
+        raise NotEnoughTimeInCycle()
 
     executor_class = request.executor_class
 
@@ -80,19 +114,45 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     latest_miner_manifest: dict[str, MinerManifest] = {}
     for manifest in manifests:
         latest_miner_manifest[manifest.miner.hotkey] = manifest
-    manifests = list(latest_miner_manifest.values())
 
     # Discard manifests that explicitly say there are no executors of this type
-    manifests = [manifest for manifest in manifests if manifest.online_executor_count > 0]
+    latest_miner_manifest = {
+        hotkey: manifest
+        for hotkey, manifest in latest_miner_manifest.items()
+        if manifest.online_executor_count > 0
+    }
 
-    if not manifests:
+    if not latest_miner_manifest:
         raise NoMinerForExecutorType()
 
-    random.shuffle(manifests)
+    # filter/sort miners based on available allowance
+    allowance_qs = ComputeTimeAllowance.objects.filter(
+        cycle__start__lte=block,
+        cycle__stop__gt=block,
+        miner__hotkey__in=latest_miner_manifest.keys(),
+        validator__hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address,
+        remaining_allowance__gte=executor_seconds,
+    )
+    allowances = [allowance async for allowance in allowance_qs.all()]
+
+    if not allowances:
+        raise NoMinerWithEnoughAllowance()
+
+    allowances.sort(
+        key=lambda allowance: (
+            # percentage of remaining allowance
+            allowance.remaining_allowance / allowance.initial_allowance,
+            # miner collateral as a tiebreaker
+            allowance.miner.collateral_wei,
+        ),
+        reverse=True,
+    )
+
     minimum_collateral = await aget_config("DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI")
 
-    for manifest in manifests:
-        miner = manifest.miner
+    for allowance in allowances:
+        miner = allowance.miner
+        manifest = latest_miner_manifest[miner.hotkey]
         if settings.COLLATERAL_CONTRACT_ADDRESS and int(miner.collateral_wei) < minimum_collateral:
             continue
 
