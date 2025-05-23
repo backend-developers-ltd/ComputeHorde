@@ -86,9 +86,12 @@ class FallbackJobSpec:
     @classmethod
     def from_job_spec(cls, job_spec: ComputeHordeJobSpec, **kwargs: Any) -> Self:
         if job_spec.executor_class == job_spec.executor_class.__class__.always_on__llm__a6000:
-            accelerators = {"RTXA6000": 1}
+            # accelerators = {"RTXA6000": 1}
+            accelerators = None
         else:
             accelerators = None
+        
+        # TODO: (Piotr) Handle streaming here
 
         return cls(
             run=" ".join(job_spec.args),
