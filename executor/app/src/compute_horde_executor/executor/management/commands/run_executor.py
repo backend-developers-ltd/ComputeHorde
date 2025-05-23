@@ -689,6 +689,11 @@ class JobRunner:
                 except Exception as e:
                     logger.error(f"Failed to stop Nginx: {e}")
 
+            try:
+                await self.clean()
+            except Exception as e:
+                logger.error(f"Failed to clean up: {e}")
+
     async def upload_results(self) -> JobResult:
         assert self.execution_result is not None, "No execution result"
         assert self.full_job_request is not None, (
@@ -763,15 +768,17 @@ class JobRunner:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await process.communicate()
-        if process.returncode == 0:
-            self.temp_dir.rmdir()
-        else:
+        if process.returncode != 0:
             logger.error(
                 f"Failed to clean up {self.temp_dir.as_posix()}/: process exited with return code {process.returncode}\n"
                 "Stdout and stderr:\n"
                 f"{truncate(stdout.decode())}\n"
                 f"{truncate(stderr.decode())}\n"
             )
+        try:
+            shutil.rmtree(self.temp_dir)
+        except Exception as e:
+            logger.error(f"Failed to remove temp dir {self.temp_dir}: {e}")
         if self.is_streaming_job:
             process = await asyncio.create_subprocess_exec(
                 "docker", "network", "rm", self.job_network_name
