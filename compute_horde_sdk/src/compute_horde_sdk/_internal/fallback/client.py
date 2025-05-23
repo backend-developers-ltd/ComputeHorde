@@ -200,6 +200,12 @@ class FallbackClient:
             status=status,
             result=result,
         )
+    
+    async def wait_for_streaming(self, timeout: int = 120) -> None:
+        """
+        Wait for the streaming to start.
+        """
+        pass
 
     async def get_jobs(self) -> list[FallbackJob]:
         """
@@ -240,6 +246,9 @@ class FallbackClient:
                     command=f"pip install --force-reinstall {source}", artifacts_dir=job_spec.artifacts_dir or ""
                 )
             )
+
+            # TODO: (Piotr) If this is a streaming job, we need to setup the streaming server here
+
             setup_sh.chmod(0o755)
 
         return script
