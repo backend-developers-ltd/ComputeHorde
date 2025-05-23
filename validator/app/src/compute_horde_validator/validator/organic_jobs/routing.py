@@ -59,11 +59,14 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     Goes through all miners with recent manifests and online executors of the given executor class.
     Returns a random miner that may have a non-busy executor based on known receipts.
     """
-    if request.on_trusted_miner:
-        miner, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
-        return miner
 
     executor_class = request.executor_class
+    logger.info(f"Picking a miner for job {request.uuid} with executor class {executor_class}")
+
+    if request.on_trusted_miner:
+        logger.debug(f"Using trusted miner for job {request.uuid}")
+        miner, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
+        return miner
 
     manifests_qs = (
         MinerManifest.objects.select_related("miner")
@@ -82,10 +85,16 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         latest_miner_manifest[manifest.miner.hotkey] = manifest
     manifests = list(latest_miner_manifest.values())
 
+    for manifest in manifests:
+        logger.debug(
+            f"Latest {manifest.miner.hotkey} manifest has {manifest.online_executor_count} executors of type {executor_class}"
+        )
+
     # Discard manifests that explicitly say there are no executors of this type
     manifests = [manifest for manifest in manifests if manifest.online_executor_count > 0]
 
     if not manifests:
+        logger.error(f"Failed to find a miner with available executors of type {executor_class}")
         raise NoMinerForExecutorType()
 
     random.shuffle(manifests)
@@ -94,6 +103,9 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     for manifest in manifests:
         miner = manifest.miner
         if settings.COLLATERAL_CONTRACT_ADDRESS and int(miner.collateral_wei) < minimum_collateral:
+            logger.warning(
+                f"Miner {manifest.miner.hotkey} has {int(miner.collateral_wei)} collateral, but required minimum is {minimum_collateral}"
+            )
             continue
 
         preliminary_reservation_jobs: set[str] = {
@@ -125,6 +137,14 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
             preliminary_reservation_jobs | known_started_jobs
         ) - known_finished_jobs
 
+        logger.debug(
+            f"Miner {manifest.miner.hotkey} has "
+            f"{len(preliminary_reservation_jobs)} preliminary reservations, "
+            f"{len(known_started_jobs)} known started, "
+            f"{len(known_finished_jobs)} known finished, "
+            f"{len(maybe_ongoing_jobs)} maybe ongoing jobs"
+        )
+
         if len(maybe_ongoing_jobs) < manifest.online_executor_count:
             reservation_time = await aget_config(
                 "DYNAMIC_ROUTING_PRELIMINARY_RESERVATION_TIME_SECONDS"
@@ -135,8 +155,10 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
                 job_uuid=request.uuid,
                 expires_at=timezone.now() + timedelta(seconds=reservation_time),
             )
+            logger.info(f"Picked miner {manifest.miner.hotkey}")
             return miner
 
+    logger.error("All miners are busy")
     raise AllMinersBusy()
 
 
