@@ -13,7 +13,6 @@ import bittensor
 import httpx
 import pytest
 import pytest_asyncio
-from compute_horde.certificate import generate_certificate_at
 from compute_horde.executor_class import (
     DEFAULT_EXECUTOR_CLASS,
     DEFAULT_LLM_EXECUTOR_CLASS,
@@ -34,6 +33,7 @@ from compute_horde.receipts.schemas import (
     JobStartedReceiptPayload,
 )
 from compute_horde.utils import ValidatorInfo, sign_blob
+from compute_horde_core.certificate import generate_certificate_at
 from compute_horde_core.executor_class import ExecutorClass
 from constance.test import override_config
 from django.utils import timezone

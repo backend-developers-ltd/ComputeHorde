@@ -147,6 +147,38 @@ def test_docker_job_viewset_create(api_client, user, connected_validator, mock_s
     assert job.user == user
 
 
+@pytest.mark.django_db
+def test_docker_job_viewset_create_streaming(api_client, user, connected_validator, mock_signature_from_request):
+    api_client.force_authenticate(user=user)
+    data = {
+        "docker_image": "hello-world",
+        "args": ["my", "args"],
+        "env": {"MY_ENV": "my value"},
+        "use_gpu": True,
+        "target_validator_hotkey": connected_validator.ss58_address,
+        "download_time_limit": 1,
+        "execution_time_limit": 1,
+        "upload_time_limit": 1,
+        "streaming_details": {"public_key": "dummy-client-cert"},
+    }
+    response = api_client.post("/api/v1/job-docker/", data, format="json")
+    assert response.status_code == 201
+    job = Job.objects.first()
+    assert job.docker_image == "hello-world"
+    assert job.streaming_client_cert == "dummy-client-cert"
+
+    job.streaming_server_cert = "dummy-server-cert"
+    job.streaming_server_address = "127.0.0.1"
+    job.streaming_server_port = 12345
+    job.save()
+
+    response = api_client.get(f"/api/v1/jobs/{job.uuid}/")
+    assert response.status_code == 200
+    assert response.data["streaming_server_cert"] == "dummy-server-cert"
+    assert response.data["streaming_server_address"] == "127.0.0.1"
+    assert response.data["streaming_server_port"] == 12345
+
+
 def generate_signed_headers(
     wallet: Wallet,
     url: str,

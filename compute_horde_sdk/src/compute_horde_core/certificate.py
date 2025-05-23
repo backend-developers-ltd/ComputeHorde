@@ -39,7 +39,7 @@ async def get_docker_container_ip(container_name: str, bridge_network: bool = Fa
         raise Exception(f"Failed to get IP of {container_name}")
 
 
-async def check_endpoint(url, timeout) -> bool:
+async def check_endpoint(url: str, timeout: int) -> bool:
     """
     Pings endpoint every second until it returns 200 or timeout is reached.
     """
@@ -62,7 +62,7 @@ async def start_nginx(
     job_network: str,
     container_name: str = "job-nginx",
     timeout: int = 10,
-):
+) -> None:
     nginx_conf_file = dir_path / "nginx.conf"
     nginx_conf_file.write_text(nginx_conf)
 
@@ -89,9 +89,7 @@ async def start_nginx(
     ip = await get_docker_container_ip(container_name)
 
     # connect to internal network for job communication
-    process = await asyncio.create_subprocess_exec(
-        "docker", "network", "connect", job_network, container_name
-    )
+    process = await asyncio.create_subprocess_exec("docker", "network", "connect", job_network, container_name)
     await process.wait()
 
     # wait for nginx to start
@@ -108,17 +106,13 @@ def generate_certificate(alternative_name: str) -> tuple[Certificate, RSAPrivate
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     builder = x509.CertificateBuilder()
-    builder = builder.subject_name(
-        x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
-    )
+    builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")]))
     builder = builder.issuer_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")]))
     builder = builder.not_valid_before(datetime.now(UTC))
     builder = builder.not_valid_after(datetime.now(UTC) + timedelta(days=365))
     builder = builder.serial_number(x509.random_serial_number())
     builder = builder.public_key(private_key.public_key())
-    builder = builder.add_extension(
-        x509.BasicConstraints(ca=False, path_length=None), critical=True
-    )
+    builder = builder.add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
 
     alt_name: x509.GeneralName
     try:
@@ -128,9 +122,7 @@ def generate_certificate(alternative_name: str) -> tuple[Certificate, RSAPrivate
     else:
         alt_name = x509.IPAddress(_ip)
 
-    builder = builder.add_extension(
-        x509.SubjectAlternativeName([x509.DNSName("localhost"), alt_name]), critical=False
-    )
+    builder = builder.add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost"), alt_name]), critical=False)
 
     certificate = builder.sign(private_key=private_key, algorithm=hashes.SHA256())
 

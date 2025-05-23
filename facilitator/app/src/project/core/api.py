@@ -69,8 +69,21 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "download_time_limit",
             "execution_time_limit",
             "upload_time_limit",
+            "streaming_client_cert",
+            "streaming_server_cert",
+            "streaming_server_address",
+            "streaming_server_port",
         )
         read_only_fields = ("created_at",)
+
+    def to_internal_value(self, data: dict):
+        obj = super().to_internal_value(data)
+        try:
+            obj["streaming_client_cert"] = data["streaming_details"]["public_key"]
+            assert isinstance(obj["streaming_client_cert"], str)
+        except (KeyError, TypeError, AssertionError):
+            obj["streaming_client_cert"] = ""
+        return obj
 
     uploads = SmartSchemaField(schema=list[SingleFileUpload], required=False)
     volumes = SmartSchemaField(schema=list[MuliVolumeAllowedVolume], required=False)

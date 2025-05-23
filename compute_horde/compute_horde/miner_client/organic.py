@@ -176,7 +176,10 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         """This method is called when miner sends executor ready message"""
 
     async def notify_execution_done(self, msg: V0ExecutionDoneRequest) -> None:
-        """This method is called when miner sends executor ready message"""
+        """This method is called when miner sends execution done message"""
+
+    async def notify_streaming_readiness(self, msg: V0StreamingJobReadyRequest) -> None:
+        """This method is called when miner sends streaming ready message"""
 
     async def handle_manifest_request(self, msg: V0ExecutorManifestRequest) -> None:
         try:
@@ -399,6 +402,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                 )
                 if job_details.job_timing is not None
                 else None,
+                streaming_details=job_details.streaming_details,
             ),
         )
 
@@ -473,6 +477,7 @@ class OrganicJobDetails:
     volume: Volume | None = None
     output: OutputUpload | None = None
     artifacts_dir: str | None = None
+    streaming_details: V0InitialJobRequest.StreamingDetails | None = None
 
 
 async def execute_organic_job_on_miner(
@@ -483,7 +488,6 @@ async def execute_organic_job_on_miner(
 ) -> tuple[str, str, dict[str, str], dict[str, str]]:  # stdout, stderr, artifacts, upload_results
     """
     Run an organic job. This is a simpler way to use OrganicMinerClient.
-
     :param client: the organic miner client
     :param job_details: details specific to the job that needs to be run
     :param reservation_time_limit: time for the miner to report reservation success (or decline the job)
@@ -514,7 +518,6 @@ async def execute_organic_job_on_miner(
             executor_class=job_details.executor_class,
             ttl=reservation_time_limit,
         )
-
         await client.send_initial_job_request(job_details, receipt_payload, receipt_signature)
         logger.debug("Sent initial job request")
         await JobStartedReceipt.from_payload(
@@ -583,7 +586,6 @@ async def execute_organic_job_on_miner(
                 )
             )
 
-            ## STAGE: volume download
             try:
                 if executor_timing:
                     logger.debug(
@@ -603,6 +605,19 @@ async def execute_organic_job_on_miner(
             except TimeoutError as exc:
                 raise OrganicJobError(FailureReason.VOLUMES_TIMED_OUT) from exc
             await client.notify_volumes_ready(volumes_ready_response)
+
+            if job_details.streaming_details:
+                try:
+                    streaming_response = await asyncio.wait_for(
+                        client.streaming_job_ready_or_not_future,
+                        timeout=deadline.time_left(),
+                    )
+                except TimeoutError as exc:
+                    raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
+                if isinstance(streaming_response, V0StreamingJobNotReadyRequest):
+                    raise OrganicJobError(FailureReason.JOB_DECLINED, streaming_response)
+
+                await client.notify_streaming_readiness(streaming_response)
 
             ## STAGE: execution
             try:

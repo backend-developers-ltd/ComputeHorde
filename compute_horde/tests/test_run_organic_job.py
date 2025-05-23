@@ -16,6 +16,7 @@ from compute_horde.protocol_messages import (
     V0JobFinishedReceiptRequest,
     V0JobFinishedRequest,
     V0JobRequest,
+    V0StreamingJobReadyRequest,
     V0VolumesReadyRequest,
     ValidatorAuthForMiner,
     ValidatorToMinerMessage,
@@ -81,6 +82,58 @@ async def test_run_organic_job__success(keypair):
         V0JobRequest,
         V0JobFinishedReceiptRequest,
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_run_organic_job_streaming__success(keypair):
+    mock_transport = MinerStubTransport(
+        "mock",
+        [
+            V0AcceptJobRequest(job_uuid=JOB_UUID).model_dump_json(),
+            V0ExecutorReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
+            V0VolumesReadyRequest(job_uuid=JOB_UUID).model_dump_json(),
+            V0StreamingJobReadyRequest(
+                job_uuid=JOB_UUID,
+                public_key="dummy-cert",
+                port=12345,
+            ).model_dump_json(),
+            V0ExecutionDoneRequest(job_uuid=JOB_UUID).model_dump_json(),
+            V0JobFinishedRequest(
+                job_uuid=JOB_UUID,
+                docker_process_stdout="streaming-stdout",
+                docker_process_stderr="streaming-stderr",
+                artifacts={},
+            ).model_dump_json(),
+        ],
+    )
+    client = OrganicMinerClient(
+        miner_hotkey="mock",
+        miner_address="0.0.0.0",
+        miner_port=1234,
+        job_uuid=JOB_UUID,
+        my_keypair=keypair,
+        transport=mock_transport,
+    )
+    job_details = OrganicJobDetails(
+        job_uuid=JOB_UUID,
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        docker_image="mock",
+        streaming_details=V0InitialJobRequest.StreamingDetails(public_key="dummy-cert"),
+    )
+    await execute_organic_job_on_miner(
+        client, job_details, reservation_time_limit=2, executor_startup_time_limit=2
+    )
+
+    # Find the initial job request sent by the client
+    initial_job_request = next(
+        (m for m in mock_transport.sent_models if isinstance(m, V0InitialJobRequest)), None
+    )
+    assert initial_job_request is not None, "Initial job request was not sent"
+    assert initial_job_request.streaming_details is not None, (
+        "Streaming details not sent in initial job request"
+    )
+    assert initial_job_request.streaming_details.public_key == "dummy-cert"
 
 
 # TODO:
