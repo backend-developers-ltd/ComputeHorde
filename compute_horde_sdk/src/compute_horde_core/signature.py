@@ -10,9 +10,8 @@ from enum import StrEnum
 from typing import ClassVar, Protocol
 
 import bittensor_wallet
+from compute_horde.protocol_messages import StreamingDetails
 from pydantic import BaseModel, JsonValue, field_serializer, field_validator
-
-from compute_horde_core.streaming import StreamingDetails
 
 
 class SignatureScope(StrEnum):
@@ -58,6 +57,7 @@ class SignedFields(BaseModel):
     download_time_limit: int
     execution_time_limit: int
     upload_time_limit: int
+    streaming_start_time_limit: int
     streaming_details: StreamingDetails | None = None
 
     volumes: list[JsonValue]
@@ -80,6 +80,7 @@ class SignedFields(BaseModel):
             download_time_limit=typing.cast(int, data.get("download_time_limit", 0)),
             execution_time_limit=typing.cast(int, data.get("execution_time_limit", 0)),
             upload_time_limit=typing.cast(int, data.get("upload_time_limit", 0)),
+            streaming_start_time_limit=typing.cast(int, data.get("streaming_start_time_limit", 0)),
             streaming_details=StreamingDetails.model_validate(data["streaming_details"])
             if "streaming_details" in data
             else None,

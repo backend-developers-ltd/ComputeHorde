@@ -54,6 +54,7 @@ def job_docker(db, user, connected_validator, signature):
         signature=signature.model_dump(),
         download_time_limit=3,
         execution_time_limit=3,
+        streaming_start_time_limit=1,
         upload_time_limit=3,
     )
 
@@ -71,6 +72,7 @@ def another_user_job_docker(db, another_user, connected_validator, signature):
         signature=signature.model_dump(),
         download_time_limit=3,
         execution_time_limit=3,
+        streaming_start_time_limit=3,
         upload_time_limit=3,
     )
 
@@ -134,6 +136,7 @@ def test_docker_job_viewset_create(api_client, user, connected_validator, mock_s
         "target_validator_hotkey": connected_validator.ss58_address,
         "download_time_limit": 1,
         "execution_time_limit": 1,
+        "streaming_start_time_limit": 1,
         "upload_time_limit": 1,
     }
     response = api_client.post("/api/v1/job-docker/", data)
@@ -158,6 +161,7 @@ def test_docker_job_viewset_create_streaming(api_client, user, connected_validat
         "target_validator_hotkey": connected_validator.ss58_address,
         "download_time_limit": 1,
         "execution_time_limit": 1,
+        "streaming_start_time_limit": 1,
         "upload_time_limit": 1,
         "streaming_details": {"public_key": "dummy-client-cert"},
     }
@@ -228,6 +232,7 @@ def test_hotkey_authentication__job_create(
         "target_validator_hotkey": connected_validator.ss58_address,
         "download_time_limit": 1,
         "execution_time_limit": 1,
+        "streaming_start_time_limit": 1,
         "upload_time_limit": 1,
     }
     # First call without any authentication must return 401.

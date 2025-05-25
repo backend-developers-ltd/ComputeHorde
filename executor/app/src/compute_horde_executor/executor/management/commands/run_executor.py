@@ -475,6 +475,16 @@ class JobRunner:
         self.nginx_dir_path: pathlib.Path | None = None
         self.executor_certificate: str | None = None
 
+    def generate_streaming_certificate(self, executor_ip: str, public_key: str):
+        """
+        Generate and save the streaming certificate and public key for the executor.
+        """
+        self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(
+            alternative_name=executor_ip,
+        )
+        save_public_key(public_key, self.nginx_dir_path)
+        self.is_streaming_job = True
+
     async def cleanup_potential_old_jobs(self):
         logger.debug("Cleaning up potential old jobs")
         await (
@@ -495,18 +505,9 @@ class JobRunner:
 
     async def prepare_initial(self, initial_job_request: V0InitialJobRequest):
         self.initial_job_request = initial_job_request
-        if initial_job_request.streaming_details is not None:
-            assert initial_job_request.streaming_details.executor_ip is not None
-            self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(
-                alternative_name=initial_job_request.streaming_details.executor_ip
-            )
-            save_public_key(initial_job_request.streaming_details.public_key, self.nginx_dir_path)
-            self.is_streaming_job = True
-
         self.volume_mount_dir.mkdir(exist_ok=True)
         self.output_volume_mount_dir.mkdir(exist_ok=True)
         self.artifacts_mount_dir.mkdir(exist_ok=True)
-
         await self.cleanup_potential_old_jobs()
         await self.pull_initial_job_image()
 
@@ -896,6 +897,13 @@ class Command(BaseCommand):
                         "No timing received: either timeout_seconds or timing_details must be set"
                     )
 
+                if initial_job_request.streaming_details is not None:
+                    assert initial_job_request.streaming_details.executor_ip is not None
+                    self.runner.generate_streaming_certificate(
+                        executor_ip=initial_job_request.streaming_details.executor_ip,
+                        public_key=initial_job_request.streaming_details.public_key,
+                    )
+
                 try:
                     if timing_details:
                         logger.debug(
@@ -918,6 +926,9 @@ class Command(BaseCommand):
                         logger.debug(
                             f"Extending deadline by execution time limit: +{timing_details.execution_time_limit}s"
                         )
+                        timeout_extend = timing_details.execution_time_limit
+                        if self.runner.is_streaming_job:
+                            timeout_extend += timing_details.streaming_start_time_limit
                         deadline.extend_timeout(timing_details.execution_time_limit)
                     async with asyncio.timeout(deadline.time_left()):
                         logger.debug(

@@ -98,6 +98,7 @@ async def main() -> None:
         streaming=True,
         download_time_limit_sec=5,
         execution_time_limit_sec=15,
+        streaming_start_time_limit_sec=5,
         upload_time_limit_sec=5,
     )
     streaming_job = await compute_horde_client.create_job(compute_horde_streaming_job_spec)
@@ -146,6 +147,7 @@ async def main() -> None:
         artifacts_dir="/artifacts",
         download_time_limit_sec=5,
         execution_time_limit_sec=10,
+        streaming_start_time_limit_sec=5,
         upload_time_limit_sec=5,
     )
 

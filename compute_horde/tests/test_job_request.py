@@ -26,6 +26,7 @@ def test_signed_job_roundtrip(signature_wallet):
         download_time_limit=1,
         execution_time_limit=1,
         upload_time_limit=1,
+        streaming_start_time_limit=1,
     )
 
     signer = BittensorWalletSigner(signature_wallet)

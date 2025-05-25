@@ -119,6 +119,7 @@ def job_spec(apiver_module, compute_horde_client) -> "ComputeHordeJobSpec":
         download_time_limit_sec=1,
         execution_time_limit_sec=1,
         upload_time_limit_sec=1,
+        streaming_start_time_limit_sec=1,
     )
 
 
@@ -158,6 +159,7 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
             download_time_limit_sec=1,
             execution_time_limit_sec=1,
             upload_time_limit_sec=1,
+            streaming_start_time_limit_sec=1,
         )
     )
 
@@ -354,6 +356,7 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
             download_time_limit_sec=1,
             execution_time_limit_sec=1,
             upload_time_limit_sec=1,
+            streaming_start_time_limit_sec=1,
         )
     )
 
@@ -417,6 +420,7 @@ async def test_create_job__http_error(apiver_module, compute_horde_client, httpx
                 download_time_limit_sec=1,
                 execution_time_limit_sec=1,
                 upload_time_limit_sec=1,
+                streaming_start_time_limit_sec=1,
             )
         )
 
@@ -434,6 +438,7 @@ async def test_create_job__malformed_response(apiver_module, compute_horde_clien
                 download_time_limit_sec=1,
                 execution_time_limit_sec=1,
                 upload_time_limit_sec=1,
+                streaming_start_time_limit_sec=1,
             )
         )
 
@@ -812,6 +817,7 @@ async def test_create_and_wait_for_streaming_job(
         execution_time_limit_sec=1,
         upload_time_limit_sec=1,
         streaming=True,
+        streaming_start_time_limit_sec=1,
     )
 
     job = await compute_horde_client.create_job(job_spec)

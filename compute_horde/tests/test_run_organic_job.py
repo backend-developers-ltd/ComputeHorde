@@ -8,6 +8,7 @@ from compute_horde.miner_client.organic import (
     execute_organic_job_on_miner,
 )
 from compute_horde.protocol_messages import (
+    StreamingDetails,
     V0AcceptJobRequest,
     V0ExecutionDoneRequest,
     V0ExecutorReadyRequest,
@@ -119,7 +120,7 @@ async def test_run_organic_job_streaming__success(keypair):
         job_uuid=JOB_UUID,
         executor_class=ExecutorClass.always_on__llm__a6000,
         docker_image="mock",
-        streaming_details=V0InitialJobRequest.StreamingDetails(public_key="dummy-cert"),
+        streaming_details=StreamingDetails(public_key="dummy-cert"),
     )
     await execute_organic_job_on_miner(
         client, job_details, reservation_time_limit=2, executor_startup_time_limit=2

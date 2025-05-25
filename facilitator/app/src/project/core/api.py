@@ -68,6 +68,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "upload_results",
             "download_time_limit",
             "execution_time_limit",
+            "streaming_start_time_limit",
             "upload_time_limit",
             "streaming_client_cert",
             "streaming_server_cert",
@@ -125,6 +126,7 @@ class DockerJobSerializer(JobSerializer):
                 "on_trusted_miner",
                 "download_time_limit",
                 "execution_time_limit",
+                "streaming_start_time_limit",
                 "upload_time_limit",
             }
         )

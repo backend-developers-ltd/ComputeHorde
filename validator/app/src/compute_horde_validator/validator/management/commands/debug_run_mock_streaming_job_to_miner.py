@@ -15,6 +15,7 @@ from compute_horde.miner_client.organic import (
     OrganicMinerClient,
 )
 from compute_horde.protocol_messages import (
+    StreamingDetails,
     V0DeclineJobRequest,
     V0ExecutorReadyRequest,
     V0InitialJobRequest,
@@ -85,7 +86,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                 volume=job_details.volume,
                 job_started_receipt_payload=receipt_payload,
                 job_started_receipt_signature=receipt_signature,
-                streaming_details=V0InitialJobRequest.StreamingDetails(public_key=public_key),
+                streaming_details=StreamingDetails(public_key=public_key),
             ),
         )
 

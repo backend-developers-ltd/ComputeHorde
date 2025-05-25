@@ -222,6 +222,7 @@ async def drive_organic_job(
             download_time_limit=job_request.download_time_limit,
             execution_time_limit=job_request.execution_time_limit,
             upload_time_limit=job_request.upload_time_limit,
+            streaming_start_time_limit=job_request.streaming_start_time_limit,
         )
         if isinstance(job_request, V2JobRequest)
         else None,

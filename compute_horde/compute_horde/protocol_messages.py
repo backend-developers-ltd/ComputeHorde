@@ -60,17 +60,19 @@ class V0ExecutorManifestRequest(BaseModel):
         return sum(self.manifest.values())
 
 
+class StreamingDetails(BaseModel):
+    public_key: str
+    executor_ip: str | None = None  # set by miner before sending to executor
+
+
 # validator -> miner.vc -> miner.ec -> executor
 class V0InitialJobRequest(BaseModel):
-    class StreamingDetails(BaseModel):
-        public_key: str
-        executor_ip: str | None = None  # set by miner before sending to executor
-
     class ExecutorTimingDetails(BaseModel):
         allowed_leeway: int
         download_time_limit: int
         execution_time_limit: int
         upload_time_limit: int
+        streaming_start_time_limit: int
 
     message_type: Literal["V0InitialJobRequest"] = "V0InitialJobRequest"
     job_uuid: str

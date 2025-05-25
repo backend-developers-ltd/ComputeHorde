@@ -23,6 +23,7 @@ from compute_horde.miner_client.base import (
 from compute_horde.protocol_messages import (
     GenericError,
     MinerToValidatorMessage,
+    StreamingDetails,
     UnauthorizedError,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
@@ -399,6 +400,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                     download_time_limit=job_details.job_timing.download_time_limit,
                     execution_time_limit=job_details.job_timing.execution_time_limit,
                     upload_time_limit=job_details.job_timing.upload_time_limit,
+                    streaming_start_time_limit=job_details.job_timing.streaming_start_time_limit,
                 )
                 if job_details.job_timing is not None
                 else None,
@@ -432,6 +434,7 @@ class FailureReason(enum.Enum):
     EXECUTOR_FAILED = enum.auto()
     STREAMING_JOB_READY_TIMED_OUT = enum.auto()
     JOB_FAILED = enum.auto()
+    STREAMING_FAILED = enum.auto()
 
 
 class OrganicJobError(Exception):
@@ -462,6 +465,7 @@ class OrganicJobDetails:
         download_time_limit: int
         execution_time_limit: int
         upload_time_limit: int
+        streaming_start_time_limit: int
 
         @property
         def total(self):
@@ -477,7 +481,7 @@ class OrganicJobDetails:
     volume: Volume | None = None
     output: OutputUpload | None = None
     artifacts_dir: str | None = None
-    streaming_details: V0InitialJobRequest.StreamingDetails | None = None
+    streaming_details: StreamingDetails | None = None
 
 
 async def execute_organic_job_on_miner(
@@ -586,6 +590,7 @@ async def execute_organic_job_on_miner(
                 )
             )
 
+            ## Stage: Volume download
             try:
                 if executor_timing:
                     logger.debug(
@@ -606,8 +611,15 @@ async def execute_organic_job_on_miner(
                 raise OrganicJobError(FailureReason.VOLUMES_TIMED_OUT) from exc
             await client.notify_volumes_ready(volumes_ready_response)
 
+            ## Stage: Start streaming
             if job_details.streaming_details:
                 try:
+                    if executor_timing:
+                        logger.debug(
+                            f"Extending deadline by streaming_start_time_limit: +{executor_timing.streaming_start_time_limit}s"
+                        )
+                        deadline.extend_timeout(executor_timing.streaming_start_time_limit)
+                    logger.debug(f"Waiting for streaming (time left: {deadline.time_left():.2f}s)")
                     streaming_response = await asyncio.wait_for(
                         client.streaming_job_ready_or_not_future,
                         timeout=deadline.time_left(),
@@ -615,7 +627,7 @@ async def execute_organic_job_on_miner(
                 except TimeoutError as exc:
                     raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
                 if isinstance(streaming_response, V0StreamingJobNotReadyRequest):
-                    raise OrganicJobError(FailureReason.JOB_DECLINED, streaming_response)
+                    raise OrganicJobError(FailureReason.STREAMING_FAILED, streaming_response)
 
                 await client.notify_streaming_readiness(streaming_response)
 

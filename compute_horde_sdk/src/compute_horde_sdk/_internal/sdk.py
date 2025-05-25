@@ -109,6 +109,13 @@ class ComputeHordeJobSpec:
     stopped, but it won't be considered failed - it will proceed to the upload stage anyway.
     """
 
+    streaming_start_time_limit_sec: int
+    """
+    Time dedicated to starting the streaming server.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail.
+    """
+
     upload_time_limit_sec: int
     """
     Time dedicated to uploading the job's output.
@@ -220,10 +227,10 @@ class ComputeHordeJob:
                     f"Job {self.uuid} did not prepare for streaming within {timeout} seconds,"
                     f" last status: {self.status}"
                 )
-            if self.status.is_streaming_ready():
-                return
             await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
             await self.refresh_from_facilitator()
+            if self.status.is_streaming_ready():
+                return
 
     async def refresh_from_facilitator(self) -> None:
         new_job = await self._client.get_job(self.uuid)
@@ -450,6 +457,7 @@ class ComputeHordeClient:
             "on_trusted_miner": on_trusted_miner,
             "download_time_limit": job_spec.download_time_limit_sec,
             "execution_time_limit": job_spec.execution_time_limit_sec,
+            "streaming_start_time_limit": job_spec.streaming_start_time_limit_sec,
             "upload_time_limit": job_spec.upload_time_limit_sec,
         }
         if job_spec.streaming:
