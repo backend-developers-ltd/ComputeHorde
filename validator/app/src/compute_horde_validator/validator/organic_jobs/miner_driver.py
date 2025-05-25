@@ -435,5 +435,5 @@ async def drive_organic_job(
             )
 
         else:
-            raise AssertionError(f"Unexpected FailureReason: {exc.reason}")
+            assert_never(exc.reason)
         return False
