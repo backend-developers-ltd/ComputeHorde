@@ -6,10 +6,9 @@ import pydantic
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import MultiUpload, OutputUpload
 from compute_horde_core.signature import SignedFields, SignedRequest
+from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import MultiVolume, Volume
 from pydantic import BaseModel, JsonValue
-
-from compute_horde_core.streaming import StreamingDetails
 
 
 class Error(BaseModel, extra="allow"):
