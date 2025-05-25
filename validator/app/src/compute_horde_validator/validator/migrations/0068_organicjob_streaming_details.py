@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('validator', '0067_alter_systemevent_type'),
+        ("validator", "0067_alter_systemevent_type"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='organicjob',
-            name='streaming_details',
+            model_name="organicjob",
+            name="streaming_details",
             field=models.JSONField(default=None, null=True),
         ),
     ]

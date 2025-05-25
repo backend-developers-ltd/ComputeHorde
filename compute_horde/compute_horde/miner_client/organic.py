@@ -10,6 +10,7 @@ from functools import cached_property
 import bittensor
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
+from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
 from pydantic import TypeAdapter
 
@@ -59,7 +60,6 @@ from compute_horde.transport import (
     WSTransport,
 )
 from compute_horde.utils import MachineSpecs, Timer, sign_blob
-from compute_horde_core.streaming import StreamingDetails
 
 logger = logging.getLogger(__name__)
 
