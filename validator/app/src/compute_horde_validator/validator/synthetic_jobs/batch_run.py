@@ -24,7 +24,6 @@ from compute_horde.miner_client.base import (
 from compute_horde.protocol_messages import (
     GenericError,
     MinerToValidatorMessage,
-    StreamingDetails,
     UnauthorizedError,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
@@ -57,6 +56,7 @@ from compute_horde.utils import ValidatorInfo, sign_blob
 from compute_horde_core.certificate import generate_certificate_at
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
+from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
 from django.conf import settings
 from django.core.cache import cache

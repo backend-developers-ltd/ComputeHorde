@@ -10,8 +10,9 @@ from enum import StrEnum
 from typing import ClassVar, Protocol
 
 import bittensor_wallet
-from compute_horde.protocol_messages import StreamingDetails
 from pydantic import BaseModel, JsonValue, field_serializer, field_validator
+
+from compute_horde_core.streaming import StreamingDetails
 
 
 class SignatureScope(StrEnum):

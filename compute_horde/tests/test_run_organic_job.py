@@ -1,5 +1,6 @@
 import pytest
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.streaming import StreamingDetails
 from pydantic import TypeAdapter
 
 from compute_horde.miner_client.organic import (
@@ -8,7 +9,6 @@ from compute_horde.miner_client.organic import (
     execute_organic_job_on_miner,
 )
 from compute_horde.protocol_messages import (
-    StreamingDetails,
     V0AcceptJobRequest,
     V0ExecutionDoneRequest,
     V0ExecutorReadyRequest,

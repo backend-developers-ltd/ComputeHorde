@@ -401,6 +401,7 @@ async def drive_organic_job(
             exc.reason == FailureReason.JOB_FAILED
             or exc.reason == FailureReason.VOLUMES_FAILED
             or exc.reason == FailureReason.EXECUTION_FAILED
+            or exc.reason == FailureReason.STREAMING_FAILED
         ):
             comment = (
                 f"Miner {miner_client.miner_name} failed with {exc.reason}: {exc.received_str()}"
@@ -434,5 +435,5 @@ async def drive_organic_job(
             )
 
         else:
-            assert_never(exc.reason)
+            raise AssertionError(f"Unexpected FailureReason: {exc.reason}")
         return False

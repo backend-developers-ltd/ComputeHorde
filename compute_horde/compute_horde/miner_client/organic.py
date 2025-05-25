@@ -23,7 +23,6 @@ from compute_horde.miner_client.base import (
 from compute_horde.protocol_messages import (
     GenericError,
     MinerToValidatorMessage,
-    StreamingDetails,
     UnauthorizedError,
     V0AcceptJobRequest,
     V0DeclineJobRequest,
@@ -60,6 +59,7 @@ from compute_horde.transport import (
     WSTransport,
 )
 from compute_horde.utils import MachineSpecs, Timer, sign_blob
+from compute_horde_core.streaming import StreamingDetails
 
 logger = logging.getLogger(__name__)
 

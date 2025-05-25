@@ -4,41 +4,53 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0050_merge_20250515_1635'),
+        ("core", "0050_merge_20250515_1635"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='job',
-            name='streaming_client_cert',
-            field=models.TextField(blank=True, default=''),
+            model_name="job",
+            name="streaming_client_cert",
+            field=models.TextField(blank=True, default=""),
         ),
         migrations.AddField(
-            model_name='job',
-            name='streaming_server_address',
-            field=models.TextField(blank=True, default=''),
+            model_name="job",
+            name="streaming_server_address",
+            field=models.TextField(blank=True, default=""),
         ),
         migrations.AddField(
-            model_name='job',
-            name='streaming_server_cert',
-            field=models.TextField(blank=True, default=''),
+            model_name="job",
+            name="streaming_server_cert",
+            field=models.TextField(blank=True, default=""),
         ),
         migrations.AddField(
-            model_name='job',
-            name='streaming_server_port',
+            model_name="job",
+            name="streaming_server_port",
             field=models.IntegerField(blank=True, default=0),
         ),
         migrations.AddField(
-            model_name='job',
-            name='streaming_start_time_limit',
+            model_name="job",
+            name="streaming_start_time_limit",
             field=models.IntegerField(default=0),
             preserve_default=False,
         ),
         migrations.AlterField(
-            model_name='jobstatus',
-            name='status',
-            field=models.SmallIntegerField(choices=[(-2, 'Failed'), (-1, 'Rejected'), (0, 'Sent'), (1, 'Received'), (2, 'Accepted'), (3, 'Executor Ready'), (4, 'Volumes Ready'), (5, 'Execution Done'), (6, 'Completed'), (7, 'Streaming Ready')]),
+            model_name="jobstatus",
+            name="status",
+            field=models.SmallIntegerField(
+                choices=[
+                    (-2, "Failed"),
+                    (-1, "Rejected"),
+                    (0, "Sent"),
+                    (1, "Received"),
+                    (2, "Accepted"),
+                    (3, "Executor Ready"),
+                    (4, "Volumes Ready"),
+                    (5, "Execution Done"),
+                    (6, "Completed"),
+                    (7, "Streaming Ready"),
+                ]
+            ),
         ),
     ]

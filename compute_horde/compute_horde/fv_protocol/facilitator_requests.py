@@ -9,7 +9,7 @@ from compute_horde_core.signature import SignedFields, SignedRequest
 from compute_horde_core.volume import MultiVolume, Volume
 from pydantic import BaseModel, JsonValue
 
-from compute_horde.protocol_messages import StreamingDetails
+from compute_horde_core.streaming import StreamingDetails
 
 
 class Error(BaseModel, extra="allow"):

@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.volume import Volume
+from compute_horde_core.streaming import StreamingDetails
 from pydantic import BaseModel, Field
 
 from compute_horde.base.docker import DockerRunOptionsPreset
@@ -58,11 +59,6 @@ class V0ExecutorManifestRequest(BaseModel):
     @property
     def total_count(self) -> int:
         return sum(self.manifest.values())
-
-
-class StreamingDetails(BaseModel):
-    public_key: str
-    executor_ip: str | None = None  # set by miner before sending to executor
 
 
 # validator -> miner.vc -> miner.ec -> executor

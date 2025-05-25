@@ -15,7 +15,6 @@ from compute_horde.miner_client.organic import (
     OrganicMinerClient,
 )
 from compute_horde.protocol_messages import (
-    StreamingDetails,
     V0DeclineJobRequest,
     V0ExecutorReadyRequest,
     V0InitialJobRequest,
@@ -27,6 +26,7 @@ from compute_horde.transport import TransportConnectionError
 from compute_horde.utils import Timer
 from compute_horde_core.certificate import generate_certificate_at
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.streaming import StreamingDetails
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
