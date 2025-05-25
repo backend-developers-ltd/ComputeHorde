@@ -500,7 +500,6 @@ def test_huggingface_volume_fail_and_retry():
                                 "validator_hotkey": "validator_hotkey",
                                 "timestamp": "2025-01-01T00:00:00+00:00",
                                 "executor_class": "spin_up-4min.gpu-24gb",
-                                "max_timeout": 10,
                                 "is_organic": True,
                                 "ttl": 5,
                             },
