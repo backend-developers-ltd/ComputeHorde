@@ -3,8 +3,8 @@ from typing import Annotated, Literal
 
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
-from compute_horde_core.volume import Volume
 from compute_horde_core.streaming import StreamingDetails
+from compute_horde_core.volume import Volume
 from pydantic import BaseModel, Field
 
 from compute_horde.base.docker import DockerRunOptionsPreset
