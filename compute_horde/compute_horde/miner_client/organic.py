@@ -590,7 +590,7 @@ async def execute_organic_job_on_miner(
                 )
             )
 
-            ## Stage: Volume download
+            ## STAGE: Volume download
             try:
                 if executor_timing:
                     logger.debug(
@@ -611,7 +611,7 @@ async def execute_organic_job_on_miner(
                 raise OrganicJobError(FailureReason.VOLUMES_TIMED_OUT) from exc
             await client.notify_volumes_ready(volumes_ready_response)
 
-            ## Stage: Start streaming
+            ## STAGE: Start streaming
             if job_details.streaming_details:
                 try:
                     if executor_timing:
