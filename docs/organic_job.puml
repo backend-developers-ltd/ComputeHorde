@@ -96,6 +96,9 @@ activate Executor #aae
 rnote right of Executor #aae: Set deadline:\n**leeway**
 activate "Job driver" #aae
 rnote right of "Job driver" #aae: Set deadline:\n**leeway**
+
+Executor -> Executor: Generate streaming server certificate
+
 group Download stage
 rnote right of "Job driver" #aae: Extend deadline:\n**download time limit**
 &rnote right of Executor #aae: Extend deadline:\n**download time limit**
@@ -113,7 +116,9 @@ deactivate "Task/Subprocess"
 end group
 
 group Start streaming stage
-Executor -> Executor: "Generate streaming server certificate and start streaming server"
+rnote right of "Job driver" #aae: Extend deadline:\n**streaming start time limit**
+&rnote right of Executor #aae: Extend deadline:\n**streaming start time limit**
+Executor -> Executor: "Start streaming server"
 "Executor" -> "Job driver": ""V0StreamingJobReady""\n(server address and public certificate)
 &"Job driver" -> Facilitator: ""V0JobStatusUpdate""\n(Streaming ready)
 end group
