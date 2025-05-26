@@ -115,6 +115,7 @@ def dummy_job_params(settings):
         env={"ENV1": "VALUE1"},
         download_time_limit=1,
         execution_time_limit=1,
+        streaming_start_time_limit=1,
         upload_time_limit=1,
     )
 

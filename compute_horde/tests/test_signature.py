@@ -128,6 +128,7 @@ def test_signed_fields__missing_fields():
         "download_time_limit": 1,
         "execution_time_limit": 1,
         "upload_time_limit": 1,
+        "streaming_start_time_limit": 1,
     }
     facilitator_signed_fields = SignedFields.from_facilitator_sdk_json(facilitator_request_json)
 
@@ -143,6 +144,7 @@ def test_signed_fields__missing_fields():
         download_time_limit=1,
         execution_time_limit=1,
         upload_time_limit=1,
+        streaming_start_time_limit=1,
     )
     assert v2_job_request.get_signed_fields() == facilitator_signed_fields
 
@@ -181,6 +183,7 @@ def test_signed_fields__volumes_uploads():
         "download_time_limit": 1,
         "execution_time_limit": 1,
         "upload_time_limit": 1,
+        "streaming_start_time_limit": 1,
     }
     facilitator_signed_fields = SignedFields.from_facilitator_sdk_json(facilitator_request_json)
 
@@ -198,6 +201,7 @@ def test_signed_fields__volumes_uploads():
         download_time_limit=1,
         execution_time_limit=1,
         upload_time_limit=1,
+        streaming_start_time_limit=1,
     )
     assert v2_job_request.get_signed_fields() == facilitator_signed_fields
 

@@ -3,7 +3,7 @@ import logging
 import os
 import subprocess
 
-from compute_horde.certificate import get_docker_container_ip
+from compute_horde_core.certificate import get_docker_container_ip
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
@@ -121,4 +121,5 @@ class DockerExecutorManager(BaseExecutorManager):
         return {settings.DEFAULT_EXECUTOR_CLASS: 1}
 
     async def get_executor_public_address(self, executor: DockerExecutor) -> str | None:
-        return await get_docker_container_ip(executor.token)
+        ip: str = await get_docker_container_ip(executor.token)
+        return ip

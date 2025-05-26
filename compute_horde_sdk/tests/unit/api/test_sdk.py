@@ -119,6 +119,7 @@ def job_spec(apiver_module, compute_horde_client) -> "ComputeHordeJobSpec":
         download_time_limit_sec=1,
         execution_time_limit_sec=1,
         upload_time_limit_sec=1,
+        streaming_start_time_limit_sec=1,
     )
 
 
@@ -158,6 +159,7 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
             download_time_limit_sec=1,
             execution_time_limit_sec=1,
             upload_time_limit_sec=1,
+            streaming_start_time_limit_sec=1,
         )
     )
 
@@ -354,6 +356,7 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
             download_time_limit_sec=1,
             execution_time_limit_sec=1,
             upload_time_limit_sec=1,
+            streaming_start_time_limit_sec=1,
         )
     )
 
@@ -417,6 +420,7 @@ async def test_create_job__http_error(apiver_module, compute_horde_client, httpx
                 download_time_limit_sec=1,
                 execution_time_limit_sec=1,
                 upload_time_limit_sec=1,
+                streaming_start_time_limit_sec=1,
             )
         )
 
@@ -434,6 +438,7 @@ async def test_create_job__malformed_response(apiver_module, compute_horde_clien
                 download_time_limit_sec=1,
                 execution_time_limit_sec=1,
                 upload_time_limit_sec=1,
+                streaming_start_time_limit_sec=1,
             )
         )
 
@@ -759,3 +764,73 @@ async def test_retry_on_token_expire(apiver_module, compute_horde_client, httpx_
     # Validate that the job response is successful.
     assert job.uuid == TEST_JOB_UUID
     assert job.status == "Accepted"
+
+
+@pytest.mark.asyncio
+async def test_create_and_wait_for_streaming_job(
+    apiver_module, compute_horde_client, httpx_mock, keypair, async_sleep_mock
+):
+    streaming_server_address = "127.0.0.1"
+    streaming_server_port = 12345
+    streaming_server_cert = "dummy-server-cert"
+
+    # Mock job creation response (Sent)
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
+        json=get_job_response(
+            uuid=TEST_JOB_UUID,
+            status="Sent",
+            streaming_server_cert=None,
+            streaming_server_address=None,
+            streaming_server_port=None,
+        ),
+    )
+
+    # Mock job status transitions: Sent -> Streaming Ready -> Completed
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(
+            uuid=TEST_JOB_UUID,
+            status="Streaming Ready",
+            streaming_server_cert=streaming_server_cert,
+            streaming_server_address=streaming_server_address,
+            streaming_server_port=streaming_server_port,
+        ),
+    )
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(
+            uuid=TEST_JOB_UUID,
+            status="Completed",
+            streaming_server_cert=streaming_server_cert,
+            streaming_server_address=streaming_server_address,
+            streaming_server_port=streaming_server_port,
+        ),
+    )
+
+    # Create a streaming job spec
+    job_spec = apiver_module.ComputeHordeJobSpec(
+        executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
+        job_namespace="SN123.0",
+        docker_image=TEST_DOCKER_IMAGE,
+        download_time_limit_sec=1,
+        execution_time_limit_sec=1,
+        upload_time_limit_sec=1,
+        streaming=True,
+        streaming_start_time_limit_sec=1,
+    )
+
+    job = await compute_horde_client.create_job(job_spec)
+    assert job.uuid == TEST_JOB_UUID
+    assert job.status == "Sent"
+
+    # Wait for streaming readiness
+    await job.wait_for_streaming(timeout=10)
+    assert job.status == apiver_module.ComputeHordeJobStatus.STREAMING_READY
+    assert job.streaming_server_address == streaming_server_address
+    assert job.streaming_server_port == streaming_server_port
+    assert job.streaming_server_cert == streaming_server_cert
+
+    # Wait for job completion
+    await job.wait(timeout=10)
+    assert job.status == apiver_module.ComputeHordeJobStatus.COMPLETED

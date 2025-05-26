@@ -6,6 +6,7 @@ import pydantic
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import MultiUpload, OutputUpload
 from compute_horde_core.signature import SignedFields, SignedRequest
+from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import MultiVolume, Volume
 from pydantic import BaseModel, JsonValue
 
@@ -62,6 +63,8 @@ class V2JobRequest(SignedRequest, BaseModel, extra="forbid"):
     download_time_limit: int
     execution_time_limit: int
     upload_time_limit: int
+    streaming_start_time_limit: int
+    streaming_details: StreamingDetails | None = None
     # !!! all fields above are included in the signed json payload
 
     def get_args(self):
@@ -100,6 +103,8 @@ class V2JobRequest(SignedRequest, BaseModel, extra="forbid"):
             download_time_limit=self.download_time_limit,
             execution_time_limit=self.execution_time_limit,
             upload_time_limit=self.upload_time_limit,
+            streaming_start_time_limit=self.streaming_start_time_limit,
+            streaming_details=self.streaming_details,
         )
         return signed_fields
 

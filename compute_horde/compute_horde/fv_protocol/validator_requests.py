@@ -48,9 +48,16 @@ class MinerResponse(BaseModel, extra="allow"):
     upload_results: dict[str, str] | None = None
 
 
+class StreamingServerDetails(BaseModel, extra="forbid"):
+    streaming_server_cert: str | None = None
+    streaming_server_address: str | None = None
+    streaming_server_port: int | None = None
+
+
 class JobStatusMetadata(BaseModel, extra="allow"):
     comment: str
     miner_response: MinerResponse | None = None
+    streaming_details: StreamingServerDetails | None = None
 
 
 class JobStatusUpdate(BaseModel, extra="forbid"):
@@ -67,6 +74,7 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
         COMPLETED = "completed"
         REJECTED = "rejected"
         FAILED = "failed"
+        STREAMING_READY = "streaming_ready"
 
     message_type: Literal["V0JobStatusUpdate"] = "V0JobStatusUpdate"
     uuid: str

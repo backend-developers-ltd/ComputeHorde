@@ -25,6 +25,7 @@ class ComputeHordeJobStatus(StrEnum):
     RECEIVED = "Received"
     ACCEPTED = "Accepted"
     REJECTED = "Rejected"
+    STREAMING_READY = "Streaming Ready"
     EXECUTOR_READY = "Executor Ready"
     VOLUMES_READY = "Volumes Ready"
     EXECUTION_DONE = "Execution Done"
@@ -47,6 +48,14 @@ class ComputeHordeJobStatus(StrEnum):
     def is_successful(self) -> bool:
         """Check if the job has finished successfully."""
         return self == self.COMPLETED
+
+    def is_streaming_ready(self) -> bool:
+        """Check if the job is ready for streaming."""
+        return self == self.STREAMING_READY
+
+    def is_failed(self) -> bool:
+        """Check if the job has failed."""
+        return self in (self.FAILED, self.REJECTED)
 
 
 @dataclass
@@ -91,6 +100,9 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # target_validator_hotkey: str
     artifacts: dict[str, str] = {}
     upload_results: dict[str, str] = {}
+    streaming_server_cert: str | None = None
+    streaming_server_address: str | None = None
+    streaming_server_port: int | None = None
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):

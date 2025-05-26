@@ -384,6 +384,7 @@ class OrganicJob(JobBase):
         null=True, help_text="Block number on which this job is scheduled"
     )
     on_trusted_miner = models.BooleanField(default=False)
+    streaming_details = models.JSONField(null=True, default=None)
 
     class Meta:
         indexes = [
