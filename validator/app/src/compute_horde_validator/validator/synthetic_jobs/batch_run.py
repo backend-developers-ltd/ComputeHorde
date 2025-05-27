@@ -1821,16 +1821,33 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
         )
         excuse_ok = accepted_jobs + len(valid_excuse_receipts) >= relevant_executor_count
 
+        for receipt in valid_excuse_receipts:
+            if isinstance(receipt.payload, JobStartedReceiptPayload):
+                valid_until = receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl)
+            else:
+                valid_until = None
+            logger.debug(
+                "Receipt for job %s from validator %s valid until %s",
+                receipt.payload.job_uuid,
+                receipt.payload.validator_hotkey,
+                valid_until,
+            )
+        excuse_detail = (
+            f"executors={relevant_executor_count} "
+            f"accepted_jobs={accepted_jobs} "
+            f"valid_receipts={len(valid_excuse_receipts)}"
+        )
+
         if excuse_ok:
             job.score = ctx.batch_config.excused_synthetic_job_score or 0
             job.excused = True
             job.excused_with = valid_excuse_receipts
             job.comment = "excused (pass)"
-            logger.info("%s %s", job.name, job.comment)
+            logger.info("%s %s %s", job.name, job.comment, excuse_detail)
             return
         else:
             job.comment = "badly excused (fail)"
-            logger.info("%s %s", job.name, job.comment)
+            logger.info("%s %s %s", job.name, job.comment, excuse_detail)
             return
 
     if job.is_declined():
