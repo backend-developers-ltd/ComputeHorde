@@ -229,6 +229,50 @@ class MultiUploadOutputUploader(OutputUploader):
         return {path: result for path, result in responses}
 
 
+class SingleFilePutOutputUploader(OutputUploader):
+    def __init__(self, upload_output: SingleFilePutUpload):
+        super().__init__()
+        self.upload_output = upload_output
+
+    @classmethod
+    def handles_output_type(cls) -> type[OutputUpload]:
+        return SingleFilePutUpload
+
+    async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]:
+        file_path = directory / self.upload_output.relative_path
+        if not file_path.exists():
+            raise OutputUploadFailed(f"File not found: {file_path}")
+        with file_path.open("rb") as fp:
+            response = await upload_put(
+                fp, file_path.stat().st_size, self.upload_output.url, headers=self.upload_output.signed_headers
+            )
+            return {self.upload_output.relative_path: response}
+
+
+class SingleFilePostOutputUploader(OutputUploader):
+    def __init__(self, upload_output: SingleFilePostUpload):
+        super().__init__()
+        self.upload_output = upload_output
+
+    @classmethod
+    def handles_output_type(cls) -> type[OutputUpload]:
+        return SingleFilePostUpload
+
+    async def upload(self, directory: pathlib.Path) -> dict[str, HttpOutputVolumeResponse]:
+        file_path = directory / self.upload_output.relative_path
+        if not file_path.exists():
+            raise OutputUploadFailed(f"File not found: {file_path}")
+        with file_path.open("rb") as fp:
+            response = await upload_post(
+                fp,
+                file_path.name,
+                self.upload_output.url,
+                form_fields=self.upload_output.form_fields,
+                headers=self.upload_output.signed_headers,
+            )
+            return {self.upload_output.relative_path: response}
+
+
 async def make_iterator_async(it: Iterable[Any]) -> AsyncIterable[Any]:
     """
     Make an iterator async.

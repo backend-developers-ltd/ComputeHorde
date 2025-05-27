@@ -461,7 +461,7 @@ class ComputeHordeClient:
             "upload_time_limit": job_spec.upload_time_limit_sec,
         }
         if job_spec.streaming:
-            self.streaming_public_cert, self.streaming_private_key = generate_certificate("127.0.0.1")
+            self.streaming_public_cert, self.streaming_private_key = generate_certificate("asdf")
             data["streaming_details"] = {
                 "public_key": serialize_certificate(self.streaming_public_cert).decode("utf-8"),
             }

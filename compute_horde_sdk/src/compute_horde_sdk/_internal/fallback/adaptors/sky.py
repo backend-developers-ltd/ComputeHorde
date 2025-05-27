@@ -13,6 +13,7 @@ import sky.exceptions
 import sky.sky_logging
 import sky.skylet.constants
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -194,10 +195,40 @@ class SkyJob:
             sky_status = sky.job_status(self.cluster_name, job_ids=[self.job_id]).get(self.job_id)
 
         logger.debug("Job %s status is: %s", self.job_uuid, sky_status)
+        logger.warning(f"Container _job_resource_handle: {self._job_resource_handle}")
         logger.warning(f"Container public IP: {self._job_resource_handle.head_ip}")
         logger.warning(f"Container all external IP: {self._job_resource_handle.external_ips}")
 
         return sky_status
+    
+    def get_job_head_ip(self) -> str | None:
+        if not self.submitted:
+            logger.error("Attempted to get a head IP from a job that is not yet submitted.")
+            raise SkyError("Job not yet submitted")
+
+        return self._job_resource_handle.head_ip
+    
+    def get_job_streaming_port(self) -> int | None:
+        if not self.submitted:
+            logger.error("Attempted to get a streaming port from a job that is not yet submitted.")
+            raise SkyError("Job not yet submitted")
+
+        runner = self._job_resource_handle.get_command_runners()[0]
+        # print("Command runner methods and attributes:", dir(runner))
+        # Use run() to get the environment variable value
+        cmd = 'env'
+        print(runner.port)
+        result = runner.run(cmd, require_outputs=True, source_bashrc=True)
+        # print("Result:", result)
+        # result is a tuple: (returncode, stdout, stderr)
+        if isinstance(result, tuple) and len(result) >= 2:
+            port_str = result[1].strip()
+            try:
+                return int(port_str)
+            except ValueError:
+                logger.error(f"Could not parse port from output: {port_str}")
+                return None
+        return None
 
     def output(self) -> str:
         if not self.submitted:
@@ -227,6 +258,7 @@ class SkyJob:
             head_runner.rsync(f"{source}{os.sep}", str(destination), up=False, stream_logs=False)
         except sky.exceptions.CommandError as e:
             if e.returncode == sky.exceptions.RSYNC_FILE_NOT_FOUND_CODE:
+                logger.warning("Artifacts directory not found: %s", source_dir)
                 return {}
             else:
                 raise
