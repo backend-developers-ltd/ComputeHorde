@@ -380,7 +380,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
             now = msg.job_started_receipt_payload.timestamp
-            receipts = (
+            queryset = (
                 JobStartedReceipt.objects.annotate(
                     valid_until=ExpressionWrapper(
                         F("timestamp") + F("ttl") * timedelta(seconds=1),
@@ -398,12 +398,20 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                     job_uuid=msg.job_uuid,  # UUIDField doesn't support "__ne=..."
                 )
             )
-            logger.info(f"Declining job {msg.job_uuid}: all executors busy")
+            receipts = [receipt async for receipt in queryset]
+            logger.info(
+                f"Declining job {msg.job_uuid}: all executors busy. Sending {len(receipts)} excuse receipts:"
+            )
+            for receipt in receipts:
+                valid_until = receipt.timestamp + timedelta(seconds=receipt.ttl)
+                logger.debug(
+                    f"Receipt for job {receipt.job_uuid} from validator {receipt.validator_hotkey} valid until {valid_until}"
+                )
             await self.send(
                 V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
                     reason=V0DeclineJobRequest.Reason.BUSY,
-                    receipts=[r.to_receipt() async for r in receipts],
+                    receipts=[r.to_receipt() for r in receipts],
                 ).model_dump_json()
             )
 
