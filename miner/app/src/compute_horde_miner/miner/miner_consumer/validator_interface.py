@@ -398,7 +398,14 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                     job_uuid=msg.job_uuid,  # UUIDField doesn't support "__ne=..."
                 )
             )
-            logger.info(f"Declining job {msg.job_uuid}: all executors busy")
+            logger.info(
+                f"Declining job {msg.job_uuid}: all executors busy. Sending {len(receipts)} excuse receipts:"
+            )
+            for receipt in receipts:
+                valid_until = receipt.timestamp + timedelta(seconds=receipt.ttl)
+                logger.debug(
+                    f"Receipt for job {receipt.job_uuid} from validator {receipt.validator_hotkey} valid until {valid_until}"
+                )
             await self.send(
                 V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
