@@ -4,7 +4,7 @@ import os
 from collections import deque
 from typing import Any, Literal
 
-import bittensor
+import bittensor_wallet
 import httpx
 import pydantic
 import tenacity
@@ -89,7 +89,7 @@ class _JobStatusChannelEnvelope(BaseModel):
 class FacilitatorClient:
     HEARTBEAT_PERIOD = 60
 
-    def __init__(self, keypair: bittensor.Keypair, facilitator_uri: str) -> None:
+    def __init__(self, keypair: bittensor_wallet.Keypair, facilitator_uri: str) -> None:
         self.keypair = keypair
         self.ws: websockets.ClientConnection | None = None
         self.facilitator_uri = facilitator_uri

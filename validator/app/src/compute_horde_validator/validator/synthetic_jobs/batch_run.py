@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol, assert_never
 
-import bittensor
+import bittensor_wallet
 import httpx
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
@@ -470,7 +470,7 @@ class BatchContext:
     batch: SyntheticJobBatch
 
     uuid: str
-    own_keypair: bittensor.Keypair
+    own_keypair: bittensor_wallet.Keypair
 
     # validator creds for streaming jobs
     own_public_key: str

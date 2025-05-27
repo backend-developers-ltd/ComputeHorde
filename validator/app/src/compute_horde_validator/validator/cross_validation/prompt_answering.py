@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime
 
-import bittensor
+import bittensor_wallet
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.organic import (
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 MIN_SPIN_UP_TIME = 10
 
 
-def _get_keypair() -> bittensor.Keypair:
+def _get_keypair() -> bittensor_wallet.Keypair:
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
