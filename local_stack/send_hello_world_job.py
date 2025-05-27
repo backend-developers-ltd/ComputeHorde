@@ -147,7 +147,6 @@ async def main() -> None:
         artifacts_dir="/artifacts",
         download_time_limit_sec=5,
         execution_time_limit_sec=10,
-        streaming_start_time_limit_sec=5,
         upload_time_limit_sec=5,
     )
 

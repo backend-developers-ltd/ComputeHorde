@@ -54,6 +54,8 @@ RETRYABLE_HTTP_EXCEPTIONS = (
     # httpx.DecodingError,
 )
 
+DEFAULT_STREAMING_START_TIME_LIMIT_SEC = 5
+
 JobAttemptCallbackType: TypeAlias = (
     Callable[["ComputeHordeJob"], None]
     | Callable[["ComputeHordeJob"], Awaitable[None]]
@@ -109,13 +111,6 @@ class ComputeHordeJobSpec:
     stopped, but it won't be considered failed - it will proceed to the upload stage anyway.
     """
 
-    streaming_start_time_limit_sec: int
-    """
-    Time dedicated to starting the streaming server.
-    Part of the paid cost to run the job.
-    If the limit is reached, the job will fail.
-    """
-
     upload_time_limit_sec: int
     """
     Time dedicated to uploading the job's output.
@@ -160,6 +155,13 @@ class ComputeHordeJobSpec:
     (such as address, port, and SSL certificate) will be available
     in the ComputeHordeJob instance after the `wait_for_streaming()`
     method returns.
+    """
+
+    streaming_start_time_limit_sec: int = DEFAULT_STREAMING_START_TIME_LIMIT_SEC
+    """
+    Time dedicated to starting the streaming server.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail.
     """
 
 
