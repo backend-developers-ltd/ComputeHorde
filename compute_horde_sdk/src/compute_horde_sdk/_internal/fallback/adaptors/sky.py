@@ -194,10 +194,15 @@ class SkyJob:
             sky_status = sky.job_status(self.cluster_name, job_ids=[self.job_id]).get(self.job_id)
 
         logger.debug("Job %s status is: %s", self.job_uuid, sky_status)
-        logger.warning(f"Container public IP: {self._job_resource_handle.head_ip}")
-        logger.warning(f"Container all external IP: {self._job_resource_handle.external_ips}")
 
         return sky_status
+    
+    def get_job_head_ip(self) -> str | None:
+        if not self.submitted:
+            logger.error("Attempted to get a head IP from a job that is not yet submitted.")
+            raise SkyError("Job not yet submitted")
+
+        return self._job_resource_handle.head_ip
 
     def output(self) -> str:
         if not self.submitted:

@@ -7,8 +7,9 @@ from compute_horde_sdk._internal.fallback.client import FallbackClient
 from compute_horde_sdk._internal.fallback.job import FallbackJobSpec
 from compute_horde_sdk._internal.sdk import ComputeHordeJobSpec
 from compute_horde_sdk.v1 import ExecutorClass
-from compute_horde_sdk._internal.models import InlineInputVolume, HTTPOutputVolume
+from compute_horde_sdk._internal.models import InlineInputVolume, HTTPOutputVolume, HTTPInputVolume
 import boto3
+import uuid
 logger = logging.getLogger(__name__)
 
 def get_presigned_urls(bucket: str, post_object_key: str, put_object_key: str, expires_in: int = 3600):
@@ -28,8 +29,8 @@ def get_presigned_urls(bucket: str, post_object_key: str, put_object_key: str, e
 
 async def main():
     bucket_name = "compute-horde-integration-tests"
-    post_object_key = "output_post.txt"
-    put_object_key = "output_put.txt"
+    post_object_key = f"{uuid.uuid4().hex}_output_post.txt"
+    put_object_key = f"{uuid.uuid4().hex}_output_put.txt"
     presigned_post, presigned_put = get_presigned_urls(bucket_name, post_object_key, put_object_key)
 
     logger.info(f"Presigned POST: {presigned_post}")
@@ -41,20 +42,23 @@ async def main():
         docker_image="python:3.11-slim",
         artifacts_dir="/output",
         args=[
-            f"python -c \"with open('/volume/input.txt') as fin, open('/output/{put_object_key}', 'w') as fout: data = fin.read(); fout.write('Read from input: ' + data)\""
+            f"python3 -c \"with open('/volume/input.txt') as fin, open('/output/{put_object_key}', 'w') as fout1, open('/output/{post_object_key}', 'w') as fout2: data = fin.read(); fout1.write('Read from input: ' + data); fout2.write('Read from input: ' + data)\""
         ],
         input_volumes={
             "/volume/": InlineInputVolume.from_file_contents(
                 filename="input.txt",
                 contents=b"This is the input file content.\n"
-            )
+            ),
+            "/volume/data/dataset.json": HTTPInputVolume(
+                url="https://jsonplaceholder.typicode.com/todos/1",
+            ),
         },
         output_volumes={
-            # f"/output/{post_object_key}": HTTPOutputVolume(
-            #     http_method="POST",
-            #     url=presigned_post["url"],
-            #     form_fields=presigned_post["fields"],
-            # ),
+            f"/output/{post_object_key}": HTTPOutputVolume(
+                http_method="POST",
+                url=presigned_post["url"],
+                form_fields=presigned_post["fields"],
+            ),
             f"/output/{put_object_key}": HTTPOutputVolume(
                 http_method="PUT",
                 url=presigned_put,
@@ -63,6 +67,7 @@ async def main():
         download_time_limit_sec=5,
         execution_time_limit_sec=10,
         upload_time_limit_sec=5,
+        streaming_start_time_limit_sec=5,
     )
 
     fallback_job_spec = FallbackJobSpec.from_job_spec(

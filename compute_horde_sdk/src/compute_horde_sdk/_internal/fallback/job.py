@@ -9,6 +9,11 @@ from ..models import ComputeHordeJobResult, ComputeHordeJobStatus, InputVolume, 
 from ..sdk import ComputeHordeJobSpec
 from .exceptions import FallbackJobTimeoutError
 
+import tempfile
+import os
+from cryptography.hazmat.primitives import serialization
+import base64
+
 if TYPE_CHECKING:
     from .client import FallbackClient
 
@@ -83,6 +88,9 @@ class FallbackJobSpec:
     zone: str | None = None
     """Zone to run the job in."""
 
+    streaming: bool = False
+    """Whether to enable streaming."""
+
     @classmethod
     def from_job_spec(cls, job_spec: ComputeHordeJobSpec, **kwargs: Any) -> Self:
         if job_spec.executor_class == job_spec.executor_class.__class__.always_on__llm__a6000:
@@ -90,8 +98,6 @@ class FallbackJobSpec:
             accelerators = None
         else:
             accelerators = None
-        
-        # TODO: (Piotr) Handle streaming here
 
         return cls(
             run=" ".join(job_spec.args),
@@ -101,6 +107,7 @@ class FallbackJobSpec:
             output_volumes=job_spec.output_volumes,
             accelerators=accelerators,
             image_id=f"docker:{job_spec.docker_image}",
+            streaming=job_spec.streaming,
             **kwargs,
         )
 
@@ -131,12 +138,21 @@ class FallbackJob:
         uuid: str,
         status: FallbackJobStatus,
         result: FallbackJobResult | None = None,
+        client_cert: bytes | None = None,
+        private_key: bytes | None = None,
+        streaming_port: int | None = None,
     ):
         self._client = client
         self.uuid = uuid
         self.status = status
         self.result = result
-
+        self.client_cert = client_cert
+        self.private_key = private_key
+        self.streaming_server_certificate = None
+        self.streaming_port = streaming_port
+        self.streaming_server_ip = None
+        self.streaming_server_port = None
+        
     async def wait(self, timeout: float | None = None) -> None:
         """
         Wait for this job to complete or fail.
@@ -153,6 +169,84 @@ class FallbackJob:
                 )
             await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
             await self.refresh()
+
+    async def wait_for_streaming(self, timeout: int = 120) -> None:
+        """
+        Wait for the streaming to start.
+        """
+        if not self.client_cert or not self.private_key:
+            raise ValueError("Client certificate and private key are required for streaming.")
+        start_time = time.monotonic()
+        temp_client_cert = None
+        temp_client_key = None
+        temp_server_cert = None
+        server_cert_path = None
+        try:
+            if self.client_cert:
+                temp_client_cert = tempfile.NamedTemporaryFile(delete=False, suffix='.crt')
+                if isinstance(self.client_cert, bytes):
+                    temp_client_cert.write(self.client_cert)
+                else:
+                    temp_client_cert.write(self.client_cert.public_bytes(serialization.Encoding.PEM))
+                temp_client_cert.close()
+            if self.private_key:
+                temp_client_key = tempfile.NamedTemporaryFile(delete=False, suffix='.key')
+                if isinstance(self.private_key, bytes):
+                    temp_client_key.write(self.private_key)
+                else:
+                    temp_client_key.write(
+                        self.private_key.private_bytes(
+                            encoding=serialization.Encoding.PEM,
+                            format=serialization.PrivateFormat.TraditionalOpenSSL,
+                            encryption_algorithm=serialization.NoEncryption()
+                        )
+                    )
+                temp_client_key.close()
+
+            while True:
+                if timeout is not None and time.monotonic() - start_time > timeout:
+                    raise FallbackJobTimeoutError(
+                        f"Streaming did not start within {timeout} seconds."
+                    )
+                await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
+                await self.refresh()
+                if not self.streaming_server_certificate:
+                    cert = await self._client.get_streaming_server_certificate(self.uuid)
+                    if not cert:
+                        continue
+                    try:
+                        self.streaming_server_certificate = base64.b64decode(cert)
+                    except Exception:
+                        continue
+                    temp_server_cert = tempfile.NamedTemporaryFile(delete=False, suffix='.crt')
+                    temp_server_cert.write(self.streaming_server_certificate)
+                    temp_server_cert.close()
+                    server_cert_path = temp_server_cert.name
+                if not self.streaming_server_ip:
+                    ip = await self._client.get_streaming_server_head_ip(self.uuid)
+                    if not ip:
+                        continue
+                    self.streaming_server_ip = ip
+                if not self.streaming_server_port:
+                    if not server_cert_path or not os.path.exists(server_cert_path):
+                        raise ValueError("Server certificate file path is not set or does not exist.")
+                    port = await self._client.find_streaming_port_by_health_probe(
+                        self.uuid,
+                        temp_client_cert.name,
+                        temp_client_key.name,
+                        server_cert_path
+                    )
+                    if port:
+                        self.streaming_server_port = port
+                if self.streaming_server_certificate and self.streaming_server_ip and self.streaming_server_port:
+                    break
+        finally:
+            if temp_client_cert:
+                os.unlink(temp_client_cert.name)
+            if temp_client_key:
+                os.unlink(temp_client_key.name)
+            if temp_server_cert:
+                os.unlink(temp_server_cert.name)
 
     async def refresh(self) -> None:
         """
