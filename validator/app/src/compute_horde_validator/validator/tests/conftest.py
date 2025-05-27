@@ -3,7 +3,7 @@ import uuid
 from collections.abc import Generator
 from unittest.mock import patch
 
-import bittensor
+import bittensor_wallet
 import pytest
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
@@ -50,7 +50,7 @@ def _patch_celery_job_execution():
 
 @pytest.fixture(scope="session", autouse=True)
 def wallet():
-    wallet = bittensor.wallet(name="test_validator")
+    wallet = bittensor_wallet.Wallet(name="test_validator")
     wallet.regenerate_coldkey(
         mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
         use_password=False,
@@ -66,14 +66,14 @@ def wallet():
 
 @pytest.fixture
 def validator_keypair():
-    return bittensor.Keypair.create_from_mnemonic(
+    return bittensor_wallet.Keypair.create_from_mnemonic(
         "slot excuse valid grief praise rifle spoil auction weasel glove pen share"
     )
 
 
 @pytest.fixture
 def miner_keypair():
-    return bittensor.Keypair.create_from_mnemonic(
+    return bittensor_wallet.Keypair.create_from_mnemonic(
         "almost fatigue race slim picnic mass better clog deal solve already champion"
     )
 
