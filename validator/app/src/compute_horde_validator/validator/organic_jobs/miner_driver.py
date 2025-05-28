@@ -156,12 +156,14 @@ async def drive_organic_job(
     miner_client: MinerClient,
     job: OrganicJob,
     job_request: OrganicJobRequest | AdminJobRequest,
-    notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] = _dummy_notify_callback,
+    notify_callback: Callable[[JobStatusUpdate], Awaitable[None]] | None = None,
 ) -> bool:
     """
     Execute an organic job on a miner client.
     Returns True if the job was successfully executed, False otherwise.
     """
+    if notify_callback is None:
+        notify_callback = _dummy_notify_callback
 
     if job.on_trusted_miner and await aget_config("DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS"):
         # ignore trusted system events
