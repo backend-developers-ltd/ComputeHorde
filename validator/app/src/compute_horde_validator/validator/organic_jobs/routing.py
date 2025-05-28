@@ -64,9 +64,6 @@ async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
     assert_never(request)
 
 
-# TODO: check blacklisting.
-#       Are miners of failed jobs blacklisted?
-#       If they are, add a dynamic config to disable this behavior.
 @async_synchronized
 async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     """
@@ -126,7 +123,7 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         raise NoMinerForExecutorType()
 
     # filter/sort miners based on available allowance
-    allowance_qs = ComputeTimeAllowance.objects.filter(
+    allowance_qs = ComputeTimeAllowance.objects.select_related("miner").filter(
         cycle__start__lte=block,
         cycle__stop__gt=block,
         miner__hotkey__in=latest_miner_manifest.keys(),

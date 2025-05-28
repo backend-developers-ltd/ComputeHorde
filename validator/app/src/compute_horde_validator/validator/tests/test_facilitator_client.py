@@ -20,10 +20,13 @@ from compute_horde.fv_protocol.validator_requests import (
     V0AuthenticationRequest,
     V0MachineSpecsUpdate,
 )
+from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
     Cycle,
+    MetagraphSnapshot,
     Miner,
     MinerBlacklist,
     MinerManifest,
@@ -61,15 +64,17 @@ async def async_patch_all():
 
 async def setup_db(n: int = 1):
     now = timezone.now()
+    cycle = await Cycle.objects.acreate(start=-14, stop=708)
     batch = await SyntheticJobBatch.objects.acreate(
         block=1,
-        cycle=await Cycle.objects.acreate(start=-14, stop=708),
+        cycle=cycle,
         created_at=now,
     )
     miners = [
         await Miner.objects.acreate(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18))
         for i in range(0, n)
     ]
+    validator = await Miner.objects.acreate(hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address)
     for i, miner in enumerate(miners):
         await MinerManifest.objects.acreate(
             miner=miner,
@@ -78,6 +83,23 @@ async def setup_db(n: int = 1):
             executor_class=DEFAULT_EXECUTOR_CLASS,
             online_executor_count=5,
         )
+        await ComputeTimeAllowance.objects.acreate(
+            cycle=cycle,
+            miner=miner,
+            validator=validator,
+            initial_allowance=1e10,
+            remaining_allowance=1e10,
+        )
+    await MetagraphSnapshot.objects.acreate(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=1,
+        alpha_stake=[],
+        tao_stake=[],
+        stake=[],
+        uids=[],
+        hotkeys=[],
+        serving_hotkeys=[],
+    )
 
 
 async def reap_tasks(*tasks: asyncio.Task):

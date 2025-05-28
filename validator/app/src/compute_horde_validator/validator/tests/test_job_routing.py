@@ -15,7 +15,9 @@ from freezegun import freeze_time
 
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
     Cycle,
+    MetagraphSnapshot,
     Miner,
     MinerBlacklist,
     MinerManifest,
@@ -42,13 +44,22 @@ pytestmark = [
 
 
 @pytest.fixture(autouse=True)
-def setup_db():
+def miners():
+    return [
+        Miner.objects.create(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18)) for i in range(5)
+    ]
+
+
+@pytest.fixture(autouse=True)
+def validator(settings):
+    return Miner.objects.create(hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address)
+
+
+@pytest.fixture(autouse=True)
+def setup_db(miners, validator):
     now = timezone.now()
     cycle = Cycle.objects.create(start=1, stop=2)
     batch = SyntheticJobBatch.objects.create(block=1, created_at=now, cycle=cycle)
-    miners = [
-        Miner.objects.create(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18)) for i in range(5)
-    ]
     for i, miner in enumerate(miners):
         MinerManifest.objects.create(
             miner=miner,
@@ -57,6 +68,24 @@ def setup_db():
             executor_class=DEFAULT_EXECUTOR_CLASS,
             executor_count=5,
             online_executor_count=5,
+        )
+    MetagraphSnapshot.objects.create(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=1,
+        alpha_stake=[2000] + [0] * len(miners),
+        tao_stake=[2000] + [0] * len(miners),
+        stake=[2000] + [0] * len(miners),
+        uids=list(range(len(miners) + 1)),
+        hotkeys=[validator.hotkey] + [m.hotkey for m in miners],
+        serving_hotkeys=["miner_0", "miner_1"],
+    )
+    for miner in miners:
+        ComputeTimeAllowance.objects.create(
+            cycle=cycle,
+            miner=miner,
+            validator=validator,
+            initial_allowance=1e10,
+            remaining_allowance=1e10,
         )
 
 
@@ -196,9 +225,9 @@ async def test_preliminary_reservation__minimum_collateral():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_preliminary_reservation__lifted_by_receipt():
-    miner = await Miner.objects.afirst()
-    await Miner.objects.exclude(id=miner.id).adelete()
+async def test_preliminary_reservation__lifted_by_receipt(miners, validator):
+    miner = miners[0]
+    await Miner.objects.exclude(id__in=[miner.id, validator.id]).adelete()
     await MinerManifest.objects.aupdate(executor_count=1, online_executor_count=1)
     job_request_1 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
     job_request_2 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
@@ -227,9 +256,9 @@ async def test_preliminary_reservation__lifted_by_receipt():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_preliminary_reservation__lifted_after_timeout():
-    miner = await Miner.objects.afirst()
-    await Miner.objects.exclude(id=miner.id).adelete()
+async def test_preliminary_reservation__lifted_after_timeout(miners, validator):
+    miner = miners[0]
+    await Miner.objects.exclude(id__in=[miner.id, validator.id]).adelete()
     await MinerManifest.objects.aupdate(executor_count=1, online_executor_count=1)
     job_request_1 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
     job_request_2 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
