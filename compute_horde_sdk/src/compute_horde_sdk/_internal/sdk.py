@@ -258,6 +258,7 @@ class ComputeHordeJob:
             # TODO: Handle base64 decode errors
             result = ComputeHordeJobResult(
                 stdout=response.stdout,
+                stderr=response.stderr,
                 artifacts={path: base64.b64decode(base64_data) for path, base64_data in response.artifacts.items()},
             )
             for path, raw_data in response.upload_results.items():
