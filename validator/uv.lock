@@ -696,7 +696,7 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
-version = "0.0.7"
+version = "0.0.8"
 source = { editable = "../compute_horde_sdk" }
 dependencies = [
     { name = "asgiref", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
