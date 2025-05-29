@@ -25,12 +25,14 @@ from compute_horde.protocol_messages import (
 from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
+from django.db.models import F
 from pydantic import JsonValue
 
 from compute_horde_validator.validator import job_excuses
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
+    ComputeTimeAllowance,
     MetagraphSnapshot,
     Miner,
     OrganicJob,
@@ -179,7 +181,27 @@ async def drive_organic_job(
 
         return relay
 
-    miner_client.notify_job_accepted = status_callback(JobStatusUpdate.Status.ACCEPTED)  # type: ignore[method-assign]
+    async def job_accepted_callback(msg: MinerToValidatorMessage) -> None:
+        await status_callback(JobStatusUpdate.Status.ACCEPTED)(msg)
+
+        if isinstance(job_request, V2JobRequest):
+            executor_seconds = (
+                job_request.download_time_limit
+                + job_request.execution_time_limit
+                + job_request.upload_time_limit
+            )
+            rows_updated = await ComputeTimeAllowance.objects.filter(
+                cycle__start__lte=job.block,
+                cycle__stop__gt=job.block,
+                miner_id=job.miner_id,
+                validator__hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address,
+            ).aupdate(remaining_allowance=F("remaining_allowance") - executor_seconds)
+            if rows_updated:
+                logger.info("Updated miner allowance for job %s", job.job_uuid)
+            else:
+                logger.warning("Could not update miner allowance for job %s", job.job_uuid)
+
+    miner_client.notify_job_accepted = job_accepted_callback  # type: ignore[method-assign]
     miner_client.notify_executor_ready = status_callback(JobStatusUpdate.Status.EXECUTOR_READY)  # type: ignore[method-assign]
     miner_client.notify_volumes_ready = status_callback(JobStatusUpdate.Status.VOLUMES_READY)  # type: ignore[method-assign]
     miner_client.notify_execution_done = status_callback(JobStatusUpdate.Status.EXECUTION_DONE)  # type: ignore[method-assign]
