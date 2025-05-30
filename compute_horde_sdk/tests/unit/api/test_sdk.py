@@ -46,6 +46,7 @@ def get_job_response(uuid: str = TEST_JOB_UUID, status: str = "Accepted", **kwar
         "output_download_url": "",
         "tag": "",
         "stdout": "",
+        "stderr": "",
         "volumes": [],
         "uploads": [],
         "target_validator_hotkey": "abcd1234",

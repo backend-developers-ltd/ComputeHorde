@@ -111,11 +111,11 @@ class TestFallbackJob:
             mock_client,
             uuid=FAKE_UUID,
             status=FallbackJobStatus.FAILED,
-            result=FallbackJobResult(stdout="test", artifacts={"test": b"test"}),
+            result=FallbackJobResult(stdout="test", stderr="error", artifacts={"test": b"test"}),
         )
         job = FallbackJob(mock_client, uuid=FAKE_UUID, status=FallbackJobStatus.SENT)
 
         await job.refresh()
 
         assert job.status == FallbackJobStatus.FAILED
-        assert job.result == FallbackJobResult(stdout="test", artifacts={"test": b"test"})
+        assert job.result == FallbackJobResult(stdout="test", stderr="error", artifacts={"test": b"test"})

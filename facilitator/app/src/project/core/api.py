@@ -59,6 +59,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "use_gpu",
             "tag",
             "stdout",
+            "stderr",
             "volumes",
             "uploads",
             "artifacts",
@@ -92,6 +93,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
     status = serializers.SerializerMethodField()
     last_update = serializers.SerializerMethodField()
     stdout = serializers.SerializerMethodField()
+    stderr = serializers.SerializerMethodField()
 
     def get_status(self, obj):
         return obj.status.get_status_display()
@@ -100,6 +102,12 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
         meta = obj.status.meta
         if meta and meta.miner_response:
             return meta.miner_response.docker_process_stdout
+        return ""
+
+    def get_stderr(self, obj):
+        meta = obj.status.meta
+        if meta and meta.miner_response:
+            return meta.miner_response.docker_process_stderr
         return ""
 
     def get_last_update(self, obj):
