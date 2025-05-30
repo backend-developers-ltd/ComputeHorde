@@ -22,7 +22,6 @@ activate Facilitator
 |||
 ...
 
-
 -> Facilitator: Create job\n(HTTP)
 Facilitator -> "Facilitator connection": ""V2JobRequest""
 activate "Facilitator connection"
@@ -97,6 +96,9 @@ activate Executor #aae
 rnote right of Executor #aae: Set deadline:\n**leeway**
 activate "Job driver" #aae
 rnote right of "Job driver" #aae: Set deadline:\n**leeway**
+
+Executor -> Executor: Generate streaming server certificate
+
 group Download stage
 rnote right of "Job driver" #aae: Extend deadline:\n**download time limit**
 &rnote right of Executor #aae: Extend deadline:\n**download time limit**
@@ -113,6 +115,13 @@ deactivate "Task/Subprocess"
 &"Job driver" -> Facilitator: ""V0JobStatusUpdate""\n(Volumes ready)
 end group
 
+group Start streaming stage
+rnote right of "Job driver" #aae: Extend deadline:\n**streaming start time limit**
+&rnote right of Executor #aae: Extend deadline:\n**streaming start time limit**
+Executor -> Executor: "Start streaming server"
+"Executor" -> "Job driver": ""V0StreamingJobReady""\n(server address and public certificate)
+&"Job driver" -> Facilitator: ""V0JobStatusUpdate""\n(Streaming ready)
+end group
 
 rnote right of "Job driver" #aae: Extend deadline:\n**execution time limit**
 &rnote right of Executor #aae: Extend deadline:\n**execution time limit**
@@ -121,6 +130,10 @@ group Execution stage
 Executor --> "Task/Subprocess": docker run
 activate "Task/Subprocess"
 "Task/Subprocess" -> "Task/Subprocess": Actual work
+loop streaming - until client terminates the job or timeout occurs
+"Task/Subprocess"<-: Requests are signed using **client certificate**
+"Task/Subprocess"->: Responses are signed using **job certificate**
+end
 "Task/Subprocess" -> Executor: stdout, stderr
 deactivate "Task/Subprocess"
 

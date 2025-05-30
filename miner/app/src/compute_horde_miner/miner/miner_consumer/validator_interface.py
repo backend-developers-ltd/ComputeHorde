@@ -143,6 +143,9 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                     f"Give up on job {job.job_uuid} after not receiving payload after 10 minutes"
                 )
             else:
+                logger.debug(
+                    f"Deferring executor ready msg for job {job.job_uuid}: {job.executor_token}"
+                )
                 await self.group_add(job.executor_token)
                 # we don't send anything until we get authorization confirmation
                 self.defer_executor_ready.append(job)
@@ -273,6 +276,8 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             )
             return
 
+        logger.debug(f"Received from validator {self.validator_key}: {msg.__class__.__name__}")
+
         if isinstance(msg, ValidatorAuthForMiner):
             await self.handle_authentication(msg)
             return
@@ -375,7 +380,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
             now = msg.job_started_receipt_payload.timestamp
-            receipts = (
+            queryset = (
                 JobStartedReceipt.objects.annotate(
                     valid_until=ExpressionWrapper(
                         F("timestamp") + F("ttl") * timedelta(seconds=1),
@@ -393,12 +398,20 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                     job_uuid=msg.job_uuid,  # UUIDField doesn't support "__ne=..."
                 )
             )
-            logger.info(f"Declining job {msg.job_uuid}: all executors busy")
+            receipts = [receipt async for receipt in queryset]
+            logger.info(
+                f"Declining job {msg.job_uuid}: all executors busy. Sending {len(receipts)} excuse receipts:"
+            )
+            for receipt in receipts:
+                valid_until = receipt.timestamp + timedelta(seconds=receipt.ttl)
+                logger.debug(
+                    f"Receipt for job {receipt.job_uuid} from validator {receipt.validator_hotkey} valid until {valid_until}"
+                )
             await self.send(
                 V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
                     reason=V0DeclineJobRequest.Reason.BUSY,
-                    receipts=[r.to_receipt() async for r in receipts],
+                    receipts=[r.to_receipt() for r in receipts],
                 ).model_dump_json()
             )
 
@@ -522,6 +535,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         (await current_store()).store([created_receipt.to_receipt()])
 
     async def _executor_ready(self, msg: V0ExecutorReadyRequest):
+        logger.debug(f"_executor_ready for {msg}")
         if self.check_missing_token(msg):
             return
         job = await AcceptedJob.objects.aget(executor_token=msg.executor_token)

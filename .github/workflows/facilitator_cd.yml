@@ -1,4 +1,4 @@
-name: Deploy Facilitator to AWS on push to certain branches
+name: "CD: facilitator (all)"
 
 on:
   push:

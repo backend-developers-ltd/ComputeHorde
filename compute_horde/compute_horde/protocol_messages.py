@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
+from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
 from pydantic import BaseModel, Field
 
@@ -62,15 +63,12 @@ class V0ExecutorManifestRequest(BaseModel):
 
 # validator -> miner.vc -> miner.ec -> executor
 class V0InitialJobRequest(BaseModel):
-    class StreamingDetails(BaseModel):
-        public_key: str
-        executor_ip: str | None = None  # set by miner before sending to executor
-
     class ExecutorTimingDetails(BaseModel):
         allowed_leeway: int
         download_time_limit: int
         execution_time_limit: int
         upload_time_limit: int
+        streaming_start_time_limit: int
 
     message_type: Literal["V0InitialJobRequest"] = "V0InitialJobRequest"
     job_uuid: str

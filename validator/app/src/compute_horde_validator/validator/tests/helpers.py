@@ -214,6 +214,7 @@ def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2Job
         on_trusted_miner=on_trusted_miner,
         download_time_limit=1,
         execution_time_limit=1,
+        streaming_start_time_limit=1,
         upload_time_limit=1,
     )
 

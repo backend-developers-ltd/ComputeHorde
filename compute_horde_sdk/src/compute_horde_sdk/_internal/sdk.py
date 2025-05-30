@@ -13,7 +13,10 @@ import bittensor_wallet
 import httpx
 import pydantic
 import tenacity
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.x509 import Certificate
 
+from compute_horde_core.certificate import generate_certificate, serialize_certificate
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import HttpOutputVolumeResponse
 from compute_horde_core.signature import (
@@ -50,6 +53,8 @@ RETRYABLE_HTTP_EXCEPTIONS = (
     httpx.ConnectError,
     # httpx.DecodingError,
 )
+
+DEFAULT_STREAMING_START_TIME_LIMIT_SEC = 5
 
 JobAttemptCallbackType: TypeAlias = (
     Callable[["ComputeHordeJob"], None]
@@ -144,6 +149,21 @@ class ComputeHordeJobSpec:
     For now, output volume paths must start with ``/output/``.
     """
 
+    streaming: bool = False
+    """
+    If true, the job will be streamed. The streaming server details
+    (such as address, port, and SSL certificate) will be available
+    in the ComputeHordeJob instance after the `wait_for_streaming()`
+    method returns.
+    """
+
+    streaming_start_time_limit_sec: int = DEFAULT_STREAMING_START_TIME_LIMIT_SEC
+    """
+    Time dedicated to starting the streaming server.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail.
+    """
+
 
 class ComputeHordeJob:
     """
@@ -153,6 +173,7 @@ class ComputeHordeJob:
     :ivar str uuid: The UUID of the job.
     :ivar ComputeHordeJobStatus status: The status of the job.
     :ivar ComputeHordeJobResult | None result: The result of the job, if it has completed.
+    :ivar str | None streaming_server_cert: The PEM-encoded certificate of the streaming server, if available.
     """
 
     def __init__(
@@ -161,11 +182,21 @@ class ComputeHordeJob:
         uuid: str,
         status: ComputeHordeJobStatus,
         result: ComputeHordeJobResult | None = None,
+        streaming_public_cert: Certificate | None = None,
+        streaming_private_key: RSAPrivateKey | None = None,
+        streaming_server_cert: str | None = None,
+        streaming_server_address: str | None = None,
+        streaming_server_port: int | None = None,
     ):
         self._client = client
         self.uuid = uuid
         self.status = status
         self.result = result
+        self.streaming_public_cert = streaming_public_cert
+        self.streaming_private_key = streaming_private_key
+        self.streaming_server_cert = streaming_server_cert
+        self.streaming_server_address = streaming_server_address
+        self.streaming_server_port = streaming_server_port
 
     async def wait(self, timeout: float | None = None) -> None:
         """
@@ -184,16 +215,44 @@ class ComputeHordeJob:
             await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
             await self.refresh_from_facilitator()
 
+    async def wait_for_streaming(self, timeout: float | None = None) -> None:
+        """
+        Wait for the job to be ready for streaming.
+
+        :param timeout: Maximum number of seconds to wait for.
+        :raises ComputeHordeJobTimeoutError: If the job does not prepare for streaming within ``timeout`` seconds.
+        """
+        start_time = time.monotonic()
+        while True:
+            if timeout is not None and time.monotonic() - start_time > timeout:
+                raise ComputeHordeJobTimeoutError(
+                    f"Job {self.uuid} did not prepare for streaming within {timeout} seconds,"
+                    f" last status: {self.status}"
+                )
+            await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
+            await self.refresh_from_facilitator()
+            if self.status.is_streaming_ready():
+                return
+
     async def refresh_from_facilitator(self) -> None:
         new_job = await self._client.get_job(self.uuid)
         self.status = new_job.status
         self.result = new_job.result
+        self.streaming_server_cert = new_job.streaming_server_cert
+        self.streaming_server_address = new_job.streaming_server_address
+        self.streaming_server_port = new_job.streaming_server_port
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__qualname__}: {self.uuid!r}>"
 
     @classmethod
-    def _from_response(cls, client: "ComputeHordeClient", response: FacilitatorJobResponse) -> Self:
+    def _from_response(
+        cls,
+        client: "ComputeHordeClient",
+        response: FacilitatorJobResponse,
+        streaming_public_cert: Certificate | None = None,
+        streaming_private_key: RSAPrivateKey | None = None,
+    ) -> Self:
         result = None
         if not response.status.is_in_progress():
             # TODO: Handle base64 decode errors
@@ -211,6 +270,11 @@ class ComputeHordeJob:
             uuid=response.uuid,
             status=response.status,
             result=result,
+            streaming_public_cert=streaming_public_cert,
+            streaming_private_key=streaming_private_key,
+            streaming_server_cert=response.streaming_server_cert,
+            streaming_server_address=response.streaming_server_address,
+            streaming_server_port=response.streaming_server_port,
         )
 
 
@@ -243,6 +307,8 @@ class ComputeHordeClient:
         self._signer = BittensorWalletSigner(hotkey)
         self._token_lock = asyncio.Lock()
         self._token: str | None = None
+        self.streaming_public_cert: Certificate | None = None
+        self.streaming_private_key: RSAPrivateKey | None = None
 
     async def authenticate(self) -> None:
         nonce_url = urljoin(self.facilitator_url, "auth/nonce")
@@ -393,8 +459,14 @@ class ComputeHordeClient:
             "on_trusted_miner": on_trusted_miner,
             "download_time_limit": job_spec.download_time_limit_sec,
             "execution_time_limit": job_spec.execution_time_limit_sec,
+            "streaming_start_time_limit": job_spec.streaming_start_time_limit_sec,
             "upload_time_limit": job_spec.upload_time_limit_sec,
         }
+        if job_spec.streaming:
+            self.streaming_public_cert, self.streaming_private_key = generate_certificate("127.0.0.1")
+            data["streaming_details"] = {
+                "public_key": serialize_certificate(self.streaming_public_cert).decode("utf-8"),
+            }
         if job_spec.input_volumes is not None:
             data["volumes"] = [
                 input_volume.to_compute_horde_volume(mount_path).model_dump()
@@ -417,7 +489,7 @@ class ComputeHordeClient:
         except pydantic.ValidationError as e:
             raise ComputeHordeError("ComputeHorde returned malformed response") from e
 
-        job = ComputeHordeJob._from_response(self, job_response)
+        job = ComputeHordeJob._from_response(self, job_response, self.streaming_public_cert, self.streaming_private_key)
         logger.debug("Created job with UUID=%s", job.uuid)
 
         return job
@@ -487,7 +559,6 @@ class ComputeHordeClient:
         logger.debug("Fetching job with UUID=%s", job_uuid)
 
         response = await self._make_request("GET", f"/api/v1/jobs/{job_uuid}/")
-
         try:
             job_response = FacilitatorJobResponse.model_validate_json(response)
         except pydantic.ValidationError as e:

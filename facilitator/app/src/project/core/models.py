@@ -16,6 +16,7 @@ from compute_horde_core.output_upload import (
     SingleFileUpload,
 )
 from compute_horde_core.signature import Signature
+from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import MultiVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -130,6 +131,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     cheated = models.BooleanField(default=False)
     download_time_limit = models.IntegerField()
     execution_time_limit = models.IntegerField()
+    streaming_start_time_limit = models.IntegerField()
     upload_time_limit = models.IntegerField()
 
     executor_class = models.CharField(
@@ -155,6 +157,11 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     upload_results = models.JSONField(blank=True, default=dict)
 
     tag = models.CharField(max_length=255, blank=True, default="", help_text="may be used to group jobs")
+
+    streaming_client_cert = models.TextField(blank=True, default="")
+    streaming_server_cert = models.TextField(blank=True, default="")
+    streaming_server_address = models.TextField(blank=True, default="")
+    streaming_server_port = models.IntegerField(blank=True, default=0)
 
     objects = JobQuerySet.as_manager()
 
@@ -269,7 +276,11 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             on_trusted_miner=self.on_trusted_miner,
             download_time_limit=self.download_time_limit,
             execution_time_limit=self.execution_time_limit,
+            streaming_start_time_limit=self.streaming_start_time_limit,
             upload_time_limit=self.upload_time_limit,
+            streaming_details=StreamingDetails(public_key=self.streaming_client_cert)
+            if self.streaming_client_cert
+            else None,
         )
 
     def send_to_validator(self, payload: dict) -> None:
@@ -293,6 +304,7 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
         VOLUMES_READY = 4
         EXECUTION_DONE = 5
         COMPLETED = 6
+        STREAMING_READY = 7
 
     FINAL_STATUS_VALUES = (
         Status.COMPLETED,

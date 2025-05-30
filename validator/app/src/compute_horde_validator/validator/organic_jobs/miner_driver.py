@@ -10,6 +10,7 @@ from compute_horde.fv_protocol.validator_requests import (
     JobStatusMetadata,
     JobStatusUpdate,
     MinerResponse,
+    StreamingServerDetails,
 )
 from compute_horde.miner_client.organic import (
     FailureReason,
@@ -21,6 +22,7 @@ from compute_horde.protocol_messages import (
     MinerToValidatorMessage,
     V0DeclineJobRequest,
     V0JobFailedRequest,
+    V0StreamingJobReadyRequest,
 )
 from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde_core.executor_class import ExecutorClass
@@ -127,6 +129,9 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
         job_description="User job from facilitator",
         block=block,
         on_trusted_miner=on_trusted_miner,
+        streaming_details=job_request.streaming_details.model_dump()
+        if job_request.streaming_details
+        else None,
     )
 
     miner_client = MINER_CLIENT_CLASS(
@@ -207,6 +212,22 @@ async def drive_organic_job(
     miner_client.notify_execution_done = status_callback(JobStatusUpdate.Status.EXECUTION_DONE)  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
 
+    async def notify_streaming_ready(msg: V0StreamingJobReadyRequest) -> None:
+        status_update = status_update_from_job(
+            job,
+            JobStatusUpdate.Status.STREAMING_READY,
+            msg.message_type,
+        )
+        if status_update.metadata is not None:
+            status_update.metadata.streaming_details = StreamingServerDetails(
+                streaming_server_cert=msg.public_key,
+                streaming_server_address=msg.ip,
+                streaming_server_port=msg.port,
+            )
+        await notify_callback(status_update)
+
+    miner_client.notify_streaming_readiness = notify_streaming_ready  # type: ignore[method-assign]
+
     artifacts_dir = job_request.artifacts_dir if isinstance(job_request, V2JobRequest) else None
     job_details = OrganicJobDetails(
         job_uuid=str(job.job_uuid),  # TODO: fix uuid field in AdminJobRequest
@@ -225,9 +246,11 @@ async def drive_organic_job(
             download_time_limit=job_request.download_time_limit,
             execution_time_limit=job_request.execution_time_limit,
             upload_time_limit=job_request.upload_time_limit,
+            streaming_start_time_limit=job_request.streaming_start_time_limit,
         )
         if isinstance(job_request, V2JobRequest)
         else None,
+        streaming_details=job.streaming_details,
     )
 
     try:
@@ -402,6 +425,7 @@ async def drive_organic_job(
             exc.reason == FailureReason.JOB_FAILED
             or exc.reason == FailureReason.VOLUMES_FAILED
             or exc.reason == FailureReason.EXECUTION_FAILED
+            or exc.reason == FailureReason.STREAMING_FAILED
         ):
             comment = (
                 f"Miner {miner_client.miner_name} failed with {exc.reason}: {exc.received_str()}"

@@ -36,7 +36,7 @@ EXECUTOR_CLASS = {
         description="always on, NVIDIA RTX A6000 GPU machine for LLM prompts solving",
         has_gpu=True,
         gpu_vram_gb=48,
-        spin_up_time=3,
+        spin_up_time=30,  # FIXME: temporary value for debugging
     ),
 }
 

@@ -20,13 +20,6 @@ import packaging.version
 import pydantic
 from asgiref.sync import async_to_sync
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.certificate import (
-    check_endpoint,
-    generate_certificate_at,
-    get_docker_container_ip,
-    save_public_key,
-    start_nginx,
-)
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     UnsupportedMessageReceived,
@@ -48,6 +41,13 @@ from compute_horde.protocol_messages import (
 )
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs, Timer
+from compute_horde_core.certificate import (
+    check_endpoint,
+    generate_certificate_at,
+    get_docker_container_ip,
+    save_public_key,
+    start_nginx,
+)
 from compute_horde_core.output_upload import OutputUploader, OutputUploadFailed
 from compute_horde_core.volume import (
     HuggingfaceVolume,
@@ -260,7 +260,9 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
     async def send_streaming_job_ready(self, certificate: str):
         await self.send_model(
             V0StreamingJobReadyRequest(
-                job_uuid=self.job_uuid, public_key=certificate, port=settings.NGINX_PORT
+                job_uuid=self.job_uuid,
+                public_key=certificate,
+                port=settings.NGINX_PORT,
             )
         )
 
@@ -473,6 +475,16 @@ class JobRunner:
         self.nginx_dir_path: pathlib.Path | None = None
         self.executor_certificate: str | None = None
 
+    def generate_streaming_certificate(self, executor_ip: str, public_key: str):
+        """
+        Generate and save the streaming certificate and public key for the executor.
+        """
+        self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(
+            alternative_name=executor_ip,
+        )
+        save_public_key(public_key, self.nginx_dir_path)
+        self.is_streaming_job = True
+
     async def cleanup_potential_old_jobs(self):
         logger.debug("Cleaning up potential old jobs")
         await (
@@ -493,18 +505,9 @@ class JobRunner:
 
     async def prepare_initial(self, initial_job_request: V0InitialJobRequest):
         self.initial_job_request = initial_job_request
-        if initial_job_request.streaming_details is not None:
-            assert initial_job_request.streaming_details.executor_ip is not None
-            self.nginx_dir_path, self.executor_certificate, _ = generate_certificate_at(
-                alternative_name=initial_job_request.streaming_details.executor_ip
-            )
-            save_public_key(initial_job_request.streaming_details.public_key, self.nginx_dir_path)
-            self.is_streaming_job = True
-
         self.volume_mount_dir.mkdir(exist_ok=True)
         self.output_volume_mount_dir.mkdir(exist_ok=True)
         self.artifacts_mount_dir.mkdir(exist_ok=True)
-
         await self.cleanup_potential_old_jobs()
         await self.pull_initial_job_image()
 
@@ -763,20 +766,17 @@ class JobRunner:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await process.communicate()
-        if process.returncode == 0:
-            self.temp_dir.rmdir()
-        else:
+        if process.returncode != 0:
             logger.error(
                 f"Failed to clean up {self.temp_dir.as_posix()}/: process exited with return code {process.returncode}\n"
                 "Stdout and stderr:\n"
                 f"{truncate(stdout.decode())}\n"
                 f"{truncate(stderr.decode())}\n"
             )
-        if self.is_streaming_job:
-            process = await asyncio.create_subprocess_exec(
-                "docker", "network", "rm", self.job_network_name
-            )
-            await process.wait()
+        try:
+            shutil.rmtree(self.temp_dir)
+        except Exception as e:
+            logger.error(f"Failed to remove temp dir {self.temp_dir}: {e}")
 
     async def _unpack_volume(self, volume: Volume | None):
         assert str(self.volume_mount_dir) not in {"~", "/"}
@@ -894,6 +894,13 @@ class Command(BaseCommand):
                         "No timing received: either timeout_seconds or timing_details must be set"
                     )
 
+                if initial_job_request.streaming_details is not None:
+                    assert initial_job_request.streaming_details.executor_ip is not None
+                    self.runner.generate_streaming_certificate(
+                        executor_ip=initial_job_request.streaming_details.executor_ip,
+                        public_key=initial_job_request.streaming_details.public_key,
+                    )
+
                 try:
                     if timing_details:
                         logger.debug(
@@ -916,6 +923,9 @@ class Command(BaseCommand):
                         logger.debug(
                             f"Extending deadline by execution time limit: +{timing_details.execution_time_limit}s"
                         )
+                        timeout_extend = timing_details.execution_time_limit
+                        if self.runner.is_streaming_job:
+                            timeout_extend += timing_details.streaming_start_time_limit
                         deadline.extend_timeout(timing_details.execution_time_limit)
                     async with asyncio.timeout(deadline.time_left()):
                         logger.debug(
@@ -960,6 +970,12 @@ class Command(BaseCommand):
                 await self.miner_client.send_job_error(JobError(f"Unexpected error: {e}"))
                 raise
 
+            finally:
+                try:
+                    await self.runner.clean()
+                except Exception as e:
+                    logger.error(f"Job cleanup failed: {e}")
+
     async def _startup_stage(self) -> V0InitialJobRequest:
         self.specs = get_machine_specs()
         await self.run_security_checks_or_fail()
@@ -969,7 +985,9 @@ class Command(BaseCommand):
         return initial_job_request
 
     async def _download_stage(self):
+        logger.debug("Waiting for full payload")
         full_job_request = await self.miner_client.full_payload
+        logger.debug("Full payload received")
         await self.runner.prepare_full(full_job_request)
         await self.runner.unpack_volume()
         await self.miner_client.send_volumes_ready()

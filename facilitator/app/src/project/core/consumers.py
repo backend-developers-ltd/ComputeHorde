@@ -208,6 +208,13 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                     if (upload_results := miner_response.upload_results) is not None:
                         job.upload_results = upload_results
                     await job.asave()
+                elif status == JobStatus.Status.STREAMING_READY:
+                    if (streaming_details := message.metadata.streaming_details) is not None:
+                        log.warning(f"streaming_details: {streaming_details}")
+                        job.streaming_server_cert = streaming_details.streaming_server_cert
+                        job.streaming_server_address = streaming_details.streaming_server_address
+                        job.streaming_server_port = streaming_details.streaming_server_port
+                        await job.asave()
 
             except IntegrityError as exc:
                 log.debug("job status update failed", exc=exc)
