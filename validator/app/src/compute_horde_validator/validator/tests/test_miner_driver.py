@@ -16,7 +16,7 @@ from compute_horde.protocol_messages import (
     V0VolumesReadyRequest,
 )
 
-from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.models import ComputeTimeAllowance, Cycle, Miner
 from compute_horde_validator.validator.organic_jobs.facilitator_client import OrganicJob
 from compute_horde_validator.validator.organic_jobs.miner_driver import drive_organic_job
 
@@ -148,11 +148,22 @@ async def test_miner_driver(
     dummy_job_factory,
     expected_job_accepted_receipt,
     expected_job_finished_receipt,
+    settings,
 ):
     miner, _ = await Miner.objects.aget_or_create(hotkey="miner_client")
+    validator, _ = await Miner.objects.aget_or_create(
+        hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address
+    )
     job_uuid = str(uuid.uuid4())
     job_request = dummy_job_factory(job_uuid)
-
+    cycle = await Cycle.objects.acreate(start=0, stop=100)
+    allowance = await ComputeTimeAllowance.objects.acreate(
+        cycle=cycle,
+        miner=miner,
+        validator=validator,
+        initial_allowance=100,
+        remaining_allowance=100,
+    )
     job = await OrganicJob.objects.acreate(
         job_uuid=job_uuid,
         miner=miner,
@@ -215,3 +226,14 @@ async def test_miner_driver(
         assert miner_client._query_sent_models(condition, V0JobAcceptedReceiptRequest)
     if expected_job_finished_receipt:
         assert miner_client._query_sent_models(condition, V0JobFinishedReceiptRequest)
+
+    executor_seconds = (
+        job_request.download_time_limit
+        + job_request.execution_time_limit
+        + job_request.upload_time_limit
+    )
+    await allowance.arefresh_from_db()
+    if "accepted" in expected_job_status_updates:
+        assert allowance.remaining_allowance == pytest.approx(100 - executor_seconds)
+    else:
+        assert allowance.remaining_allowance == pytest.approx(100)

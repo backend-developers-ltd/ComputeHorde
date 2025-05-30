@@ -12,7 +12,14 @@ from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass
 
-from compute_horde_validator.validator.models import Cycle, Miner, MinerManifest, SyntheticJobBatch
+from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
+    Cycle,
+    MetagraphSnapshot,
+    Miner,
+    MinerManifest,
+    SyntheticJobBatch,
+)
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
@@ -22,9 +29,18 @@ def miner(miner_keypair):
     return Miner.objects.create(hotkey=miner_keypair.ss58_address, collateral_wei=Decimal(10**18))
 
 
+@pytest.fixture
+def validator(settings):
+    return Miner.objects.create(hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address)
+
+
+@pytest.fixture
+def cycle():
+    return Cycle.objects.create(start=1, stop=2)
+
+
 @pytest.fixture(autouse=True)
-def manifest(miner):
-    cycle = Cycle.objects.create(start=1, stop=2)
+def manifest(miner, cycle):
     batch = SyntheticJobBatch.objects.create(block=5, cycle=cycle)
     return MinerManifest.objects.create(
         miner=miner,
@@ -32,6 +48,33 @@ def manifest(miner):
         executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=5,
         online_executor_count=5,
+    )
+
+
+@pytest.fixture(autouse=True)
+def compute_time_allowance(cycle, miner, validator):
+    return ComputeTimeAllowance.objects.create(
+        cycle=cycle,
+        miner=miner,
+        validator=validator,
+        initial_allowance=1e10,
+        remaining_allowance=1e10,
+    )
+
+
+# NOTE: Currently this is here to make sure job routing can read current block.
+#       Other fields are not used now.
+@pytest.fixture(autouse=True)
+def metagraph_snapshot(cycle):
+    return MetagraphSnapshot.objects.create(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=cycle.start,
+        alpha_stake=[],
+        tao_stake=[],
+        stake=[],
+        uids=[],
+        hotkeys=[],
+        serving_hotkeys=[],
     )
 
 

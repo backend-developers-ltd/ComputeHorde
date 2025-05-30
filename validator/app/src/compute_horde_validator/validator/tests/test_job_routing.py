@@ -1,6 +1,7 @@
 import uuid
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
@@ -15,7 +16,9 @@ from freezegun import freeze_time
 
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
     Cycle,
+    MetagraphSnapshot,
     Miner,
     MinerBlacklist,
     MinerManifest,
@@ -43,13 +46,22 @@ pytestmark = [
 
 
 @pytest.fixture(autouse=True)
-def setup_db():
+def miners():
+    return [
+        Miner.objects.create(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18)) for i in range(5)
+    ]
+
+
+@pytest.fixture(autouse=True)
+def validator(settings):
+    return Miner.objects.create(hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address)
+
+
+@pytest.fixture(autouse=True)
+def setup_db(miners, validator):
     now = timezone.now()
     cycle = Cycle.objects.create(start=1, stop=2)
     batch = SyntheticJobBatch.objects.create(block=1, created_at=now, cycle=cycle)
-    miners = [
-        Miner.objects.create(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18)) for i in range(5)
-    ]
     for i, miner in enumerate(miners):
         MinerManifest.objects.create(
             miner=miner,
@@ -58,6 +70,24 @@ def setup_db():
             executor_class=DEFAULT_EXECUTOR_CLASS,
             executor_count=5,
             online_executor_count=5,
+        )
+    MetagraphSnapshot.objects.create(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=1,
+        alpha_stake=[2000] + [0] * len(miners),
+        tao_stake=[2000] + [0] * len(miners),
+        stake=[2000] + [0] * len(miners),
+        uids=list(range(len(miners) + 1)),
+        hotkeys=[validator.hotkey] + [m.hotkey for m in miners],
+        serving_hotkeys=["miner_0", "miner_1"],
+    )
+    for miner in miners:
+        ComputeTimeAllowance.objects.create(
+            cycle=cycle,
+            miner=miner,
+            validator=validator,
+            initial_allowance=100,
+            remaining_allowance=100,
         )
 
 
@@ -197,9 +227,9 @@ async def test_preliminary_reservation__minimum_collateral():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_preliminary_reservation__lifted_by_receipt():
-    miner = await Miner.objects.afirst()
-    await Miner.objects.exclude(id=miner.id).adelete()
+async def test_preliminary_reservation__lifted_by_receipt(miners, validator):
+    miner = miners[0]
+    await Miner.objects.exclude(id__in=[miner.id, validator.id]).adelete()
     await MinerManifest.objects.aupdate(executor_count=1, online_executor_count=1)
     job_request_1 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
     job_request_2 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
@@ -228,9 +258,9 @@ async def test_preliminary_reservation__lifted_by_receipt():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_preliminary_reservation__lifted_after_timeout():
-    miner = await Miner.objects.afirst()
-    await Miner.objects.exclude(id=miner.id).adelete()
+async def test_preliminary_reservation__lifted_after_timeout(miners, validator):
+    miner = miners[0]
+    await Miner.objects.exclude(id__in=[miner.id, validator.id]).adelete()
     await MinerManifest.objects.aupdate(executor_count=1, online_executor_count=1)
     job_request_1 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
     job_request_2 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
@@ -248,3 +278,61 @@ async def test_preliminary_reservation__lifted_after_timeout():
         # The same miner should be immediately pickable
         picked_miner = await routing.pick_miner_for_job_request(job_request_2)
         assert picked_miner == miner
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__no_allowance_in_db():
+    await ComputeTimeAllowance.objects.all().adelete()
+    with pytest.raises(routing.NoMinerWithEnoughAllowance):
+        await routing.pick_miner_for_job_request(JOB_REQUEST)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__no_miner_with_enough_allowance():
+    with pytest.raises(routing.NoMinerWithEnoughAllowance):
+        job_request = JOB_REQUEST.__replace__(execution_time_limit=101)
+        await routing.pick_miner_for_job_request(job_request)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__miner_with_more_allowance_percentage_is_chosen(miners):
+    await ComputeTimeAllowance.objects.all().aupdate(remaining_allowance=0)
+
+    await ComputeTimeAllowance.objects.filter(miner=miners[0]).aupdate(remaining_allowance=75)
+    await ComputeTimeAllowance.objects.filter(miner=miners[1]).aupdate(remaining_allowance=80)
+
+    chosen_miner = await routing.pick_miner_for_job_request(JOB_REQUEST)
+    assert chosen_miner == miners[1]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__collateral_tiebreak_on_equal_allowance_percentage(miners):
+    await ComputeTimeAllowance.objects.all().aupdate(remaining_allowance=0)
+
+    miner1 = miners[0]
+    miner2 = miners[1]
+    await ComputeTimeAllowance.objects.filter(miner=miner1).aupdate(remaining_allowance=30)
+    await ComputeTimeAllowance.objects.filter(miner=miner2).aupdate(remaining_allowance=30)
+    miner1.collateral_wei = Decimal(int(0.1 * 10**18))
+    miner2.collateral_wei = Decimal(int(0.2 * 10**18))
+    await miner1.asave()
+    await miner2.asave()
+
+    chosen_miner = await routing.pick_miner_for_job_request(JOB_REQUEST)
+    assert chosen_miner == miner2
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_job__use_subtensor_for_block_on_cache_miss(miners):
+    await MetagraphSnapshot.objects.all().adelete()
+
+    with patch(
+        "compute_horde_validator.validator.organic_jobs.routing.bittensor.AsyncSubtensor"
+    ) as mocked_subtensor:
+        mocked_subtensor.return_value.__aenter__.return_value.get_current_block.return_value = 1
+        await routing.pick_miner_for_job_request(JOB_REQUEST)

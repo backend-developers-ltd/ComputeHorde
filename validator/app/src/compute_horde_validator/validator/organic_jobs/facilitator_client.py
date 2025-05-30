@@ -425,6 +425,39 @@ class FacilitatorClient:
                 )
             )
             return
+        except routing.NotEnoughTimeInCycle:
+            msg = f"Requested job cannot complete in current cycle: {job_request.uuid}"
+            logger.info(f"Rejecting job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status=JobStatusUpdate.Status.REJECTED,
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
+        except routing.NoMinerWithEnoughAllowance:
+            msg = f"No miner available with enough allowance: {job_request.uuid}"
+            logger.info(f"Rejecting job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status=JobStatusUpdate.Status.REJECTED,
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
+        except Exception:
+            msg = f"Unknown error occurred during selecting miner: {job_request.uuid}"
+            logger.exception(f"Failing job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status=JobStatusUpdate.Status.FAILED,
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
 
         try:
             logger.info(f"Submitting job {job_request.uuid} to worker")
