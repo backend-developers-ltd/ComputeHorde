@@ -37,7 +37,6 @@ from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTE
 
 from .helpers import (
     MockFaillingMinerClient,
-    MockSubtensor,
     MockSuccessfulMinerClient,
     get_dummy_job_cheated_request_v0,
     get_dummy_job_request_v2,
@@ -54,7 +53,7 @@ async def async_patch_all():
             "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request",
             return_value=True,
         ),
-        patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor()),
+        patch("turbobt.Bittensor"),
     ):
         yield
 

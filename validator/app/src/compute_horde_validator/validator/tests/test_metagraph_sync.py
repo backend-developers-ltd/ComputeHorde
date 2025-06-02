@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -9,26 +9,26 @@ from compute_horde_validator.validator.models import (
 )
 from compute_horde_validator.validator.tasks import sync_metagraph
 
-from .helpers import MockShieldMetagraph
-
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_metagraph_sync__success():
+def test_metagraph_sync__success(bittensor):
     assert SystemEvent.objects.count() == 0
     assert Miner.objects.count() == 0
 
+    neurons = bittensor.subnet.return_value.list_neurons.return_value
     n = 5
     override_block = 1099
-    with (
-        patch("bittensor.subtensor"),
-        patch(
-            "compute_horde_validator.validator.tasks.ShieldMetagraph",
-            lambda *a, block, **kw: MockShieldMetagraph(
-                None, None, num_neurons=n, block_num=(override_block if block is None else block)
+
+    bittensor.block.side_effect = lambda block_number: MagicMock(
+        **{
+            "__aenter__.return_value": MagicMock(
+                number=block_number or override_block,
             ),
-        ),
-    ):
-        sync_metagraph()
+        }
+    )
+    bittensor.subnet.return_value.list_neurons.return_value = neurons[:n]
+
+    sync_metagraph()
 
     snapshot = MetagraphSnapshot.get_latest()
     assert snapshot.block == override_block
@@ -59,16 +59,17 @@ def test_metagraph_sync__success():
     # check extra miner gets created
     n = 6
     override_block = 1100
-    with (
-        patch("bittensor.subtensor"),
-        patch(
-            "compute_horde_validator.validator.tasks.ShieldMetagraph",
-            lambda *a, block, **kw: MockShieldMetagraph(
-                None, None, num_neurons=n, block_num=(override_block if block is None else block)
+
+    bittensor.block.side_effect = lambda block_number: MagicMock(
+        **{
+            "__aenter__.return_value": MagicMock(
+                number=block_number or override_block,
             ),
-        ),
-    ):
-        sync_metagraph()
+        }
+    )
+    bittensor.subnet.return_value.list_neurons.return_value = neurons[:n]
+
+    sync_metagraph()
 
     assert Miner.objects.count() == n
     assert Miner.objects.get(hotkey=f"hotkey_{n - 1}") is not None
@@ -90,16 +91,16 @@ def test_metagraph_sync__success():
 
     # check metagraph syncing lagging warns
     override_block = 1431
-    with (
-        patch("bittensor.subtensor"),
-        patch(
-            "compute_horde_validator.validator.tasks.ShieldMetagraph",
-            lambda *a, block, **kw: MockShieldMetagraph(
-                None, None, num_neurons=n, block_num=(override_block if block is None else block)
+
+    bittensor.block.side_effect = lambda block_number: MagicMock(
+        **{
+            "__aenter__.return_value": MagicMock(
+                number=block_number or override_block,
             ),
-        ),
-    ):
-        sync_metagraph()
+        }
+    )
+
+    sync_metagraph()
 
     event = SystemEvent.objects.get(
         type=SystemEvent.EventType.METAGRAPH_SYNCING,
@@ -123,16 +124,12 @@ def test_metagraph_sync__success():
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_metagraph_sync__fetch_error():
+def test_metagraph_sync__fetch_error(bittensor):
     assert SystemEvent.objects.count() == 0, "No system events should be created before task"
 
-    with (
-        patch("bittensor.subtensor"),
-        patch(
-            "compute_horde_validator.validator.tasks.ShieldMetagraph", side_effect=Exception("Nope")
-        ),
-    ):
-        sync_metagraph()
+    bittensor.subnet.return_value.list_neurons.side_effect = Exception("Nope")
+
+    sync_metagraph()
 
     event = SystemEvent.objects.get(
         type=SystemEvent.EventType.METAGRAPH_SYNCING,

@@ -1,10 +1,12 @@
+import ipaddress
 import logging
 import uuid
 from collections.abc import Generator
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, Mock, create_autospec, patch
 
 import bittensor_wallet
 import pytest
+import turbobt
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
 from pytest_mock import MockerFixture
@@ -118,6 +120,7 @@ def small_spin_up_times(monkeypatch):
     monkeypatch.setattr(EXECUTOR_CLASS[ExecutorClass.spin_up_4min__gpu_24gb], "spin_up_time", 4)
 
 
+# TODO type
 @pytest.fixture
 def validators():
     return [MockNeuron(hotkey=f"mock_validator_hotkey_{i}", uid=i) for i in range(11)]
@@ -146,3 +149,69 @@ def run_uuid():
 #         raise ValueError(
 #             "\n" + "\n".join(f"{task.get_name()}: {task.get_coro()}" for task in tasks)
 #         )
+
+
+@pytest.fixture
+def bittensor(mocker, validators):
+    mocked = create_autospec(
+        turbobt.Bittensor(),
+    )
+    mocked.__aenter__.return_value = mocked
+    mocked.block.return_value = MagicMock(
+        number=1,
+        hash="0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464",
+    )
+    mocked.blocks.head.return_value = MagicMock(
+        number=1,
+        hash="0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464",
+    )
+    mocked.blocks.__getitem__.return_value.get = AsyncMock(
+        number=1,
+        hash="0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464",
+    )
+    mocked.subnet.return_value.get_hyperparameters = AsyncMock(
+        return_value={
+            "min_allowed_weights": 0,
+            "max_weights_limit": 65535,
+        },
+    )
+    mocked.subnet.return_value.get_neuron = AsyncMock(
+        return_value=None,
+    )
+    mocked.subnet.return_value.get_state = AsyncMock(
+        return_value={
+            "alpha_stake": [1000.0 * (i + 1) for i in range(10)],
+            "tao_stake": [1.0 * (i + 1) for i in range(10)],
+            "stake": [1001.0 * (i + 1) for i in range(10)],
+            "total_stake": [1001.0 * (i + 1) for i in range(10)],
+        },
+    )
+    mocked.subnet.return_value.neurons.__getitem__.return_value.get_certificate = AsyncMock()
+    mocked.subnet.return_value.list_neurons = AsyncMock(
+        return_value=[
+            MagicMock(
+                hotkey=f"hotkey_{i}",
+                uid=i,
+                axon_info=Mock(
+                    ip=ipaddress.IPv4Address("127.0.0.1"),
+                    port=9999,
+                ),
+            )
+            for i in range(10)
+        ],
+    )
+    mocked.subnet.return_value.list_validators = AsyncMock(
+        return_value=validators,
+    )
+    mocked.subnet.return_value.weights.commit_v3 = AsyncMock()
+
+    mocker.patch(
+        "turbobt.Bittensor",
+        return_value=mocked,
+    )
+    mocker.patch(
+        "compute_horde_validator.validator.tasks.ShieldedBittensor",
+        return_value=mocked,
+    )
+
+    return mocked

@@ -769,6 +769,7 @@ def BITTENSOR_SHIELD_METAGRAPH_OPTIONS() -> ShieldMetagraphOptions:
     return ShieldMetagraphOptions(
         disable_uploading_certificate=BITTENSOR_SHIELD_DISABLE_UPLOADING_CERTIFICATE,
         certificate_path=str(BITTENSOR_SHIELD_CERTIFICATE_PATH),
+        replace_ip_address_for_axon=False,
     )
 
 
