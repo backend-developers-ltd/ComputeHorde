@@ -61,7 +61,6 @@ pushd "{workdir}" > /dev/null
 popd > /dev/null
 
 output_uploads=(output_upload-*.json)
-echo "Output upload files: ${{output_uploads[@]}}" >&2
 if (( ${{#output_uploads[@]}} )); then
   python3 -m compute_horde_core.output_upload ${{output_uploads[@]}} --dir /output > ./ch-output_upload.log 2>&1
 fi
@@ -87,9 +86,6 @@ streaming_setup() {
   PUBLIC_IP=$(curl -s https://api.ipify.org)
   echo "Public IP: $PUBLIC_IP"
 
-  # Log current date/time
-  echo "Current date: $(date -u)"
-
   # Create OpenSSL config
   cat > /etc/nginx/ssl/openssl-san.cnf <<EOF
 [req]
@@ -112,10 +108,6 @@ EOF
     -out /etc/nginx/ssl/certificate.pem \
     -config /etc/nginx/ssl/openssl-san.cnf \
     -extensions v3_req
-
-  # Log the generated certificate's validity
-  echo "Certificate validity:"
-  openssl x509 -in /etc/nginx/ssl/certificate.pem -noout -startdate -enddate
 
   cp /etc/nginx/ssl/certificate.pem /streaming_server_data/certificate.pem
 
@@ -359,8 +351,16 @@ class FallbackClient:
         ip = job.get_job_head_ip()
         logger.debug("Streaming server head IP: %s", ip)
         return ip
+    
+    async def get_job_ssh_ports(self, job_uuid: str) -> list[int] | None:
+        """
+        Retrieve the SSH ports of the job.
+        """
+        job = self._jobs[job_uuid]
+        ssh_ports = job.get_job_ssh_ports()
+        return ssh_ports
 
-    async def find_streaming_port_by_health_probe(
+    async def find_streaming_port(
         self,
         job_uuid: str,
         client_cert_path: str,
@@ -370,49 +370,47 @@ class FallbackClient:
         timeout: int = 2
     ) -> int | None:
         """
-        Scan ports above the SSH port to find the streaming port by probing /health with SSL.
+        Scan ports above the SSH port to find the streaming port by probing /health.
         Returns the port if found, else None.
+
+        For some reason SkyPilot does not provide all the ports in the job resource handle when using RunPod as a backend.
+        So we need to scan the ports above the base SSH port to find the streaming port.
         """
-        job = self._jobs[job_uuid]
-        # Get head_ip and stable_ssh_ports from the job resource handle directly
-        resource_handle = job._job_resource_handle
-        head_ip = resource_handle.head_ip
-        ssh_ports = resource_handle.stable_ssh_ports
+        head_ip = await self.get_streaming_server_head_ip(job_uuid)
+        ssh_ports = await self.get_job_ssh_ports(job_uuid)
 
         if not head_ip or not ssh_ports:
             logger.error("Could not get head_ip or stable_ssh_ports for job %s", job_uuid)
             return None
 
-        ssh_port = ssh_ports[0] if isinstance(ssh_ports, (list, tuple)) and ssh_ports else None
-        if not ssh_port:
-            logger.error("No SSH port found for job %s", job_uuid)
-            return None
-
-        start_port = int(ssh_port)
-        end_port = start_port + max_ports_to_scan
-
-        for port in range(start_port, end_port):
-            url = f"https://{head_ip}:{port}/health"
-            try:
-                response = requests.get(
-                    url,
-                    cert=(client_cert_path, client_key_path),
-                    verify=server_cert_path,
-                    timeout=timeout,
-                    headers={
-                        "Cache-Control": "no-cache",
-                        "Pragma": "no-cache"
-                    }
-                )
-                if response.status_code == 200 and response.text.strip() == '{"status":"Healthy"}':
-                    logger.info(f"Found streaming port: {port}")
-                    return port
-            except requests.exceptions.SSLError as e:
-                logger.error("SSLError: %s", e)
-                continue
-            except requests.exceptions.RequestException as e:
-                logger.error("RequestException: %s", e)
-                continue
+        # Create the set of scanned ports upfront
+        scanned_ports = set()
+        for ssh_port in ssh_ports:
+            for port in range(ssh_port, ssh_port + max_ports_to_scan + 1):
+                if port in scanned_ports:
+                    continue
+                scanned_ports.add(port)
+                url = f"https://{head_ip}:{port}/health"
+                try:
+                    response = requests.get(
+                        url,
+                        cert=(client_cert_path, client_key_path),
+                        verify=server_cert_path,
+                        timeout=timeout,
+                        headers={
+                            "Cache-Control": "no-cache",
+                            "Pragma": "no-cache"
+                        }
+                    )
+                    if response.status_code == 200 and response.text.strip() == '{"status":"Healthy"}':
+                        logger.info(f"Found streaming port: {port}")
+                        return port
+                except requests.exceptions.SSLError as e:
+                    logger.error("SSLError: %s", e)
+                    continue
+                except requests.exceptions.RequestException as e:
+                    logger.error("RequestException: %s", e)
+                    continue
         logger.error("Streaming port not found in scanned range for job %s", job_uuid)
         return None
 

@@ -230,7 +230,7 @@ class FallbackJob:
                 if not self.streaming_server_port:
                     if not server_cert_path or not os.path.exists(server_cert_path):
                         raise ValueError("Server certificate file path is not set or does not exist.")
-                    port = await self._client.find_streaming_port_by_health_probe(
+                    port = await self._client.find_streaming_port(
                         self.uuid,
                         temp_client_cert.name,
                         temp_client_key.name,

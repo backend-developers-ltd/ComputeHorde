@@ -7,14 +7,13 @@ box "Pod (Job Container)" #LightBlue
 end box
 
 Client -> "Fallback Client": Request streaming job
+"Fallback Client" -> "Fallback Client": Generate client certificate
 
 "Fallback Client" -> Process: Request process creation
 activate Process
 Process -> Process: Start job container\nInstall NGINX
+"Fallback Client" -> Process: Upload client certificate (InlineInputVolume)
 Process -> "Fallback Client": Container is ready
-
-"Fallback Client" -> "Fallback Client": Generate client certificate
-"Fallback Client" -> Process: Upload client certificate (rsync)
 
 Process -> "Proxy Server": Generate server certificate\nStart proxy server (requires client cert)
 activate "Proxy Server"

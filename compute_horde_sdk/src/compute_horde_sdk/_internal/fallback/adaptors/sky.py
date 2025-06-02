@@ -198,11 +198,18 @@ class SkyJob:
         return sky_status
     
     def get_job_head_ip(self) -> str | None:
-        if not self.submitted:
+        if not self.submitted or self._job_resource_handle is None:
             logger.error("Attempted to get a head IP from a job that is not yet submitted.")
             raise SkyError("Job not yet submitted")
 
         return self._job_resource_handle.head_ip
+    
+    def get_job_ssh_ports(self) -> list[int] | None:
+        if not self.submitted or self._job_resource_handle is None:
+            logger.error("Attempted to get a head IP from a job that is not yet submitted.")
+            raise SkyError("Job not yet submitted")
+
+        return self._job_resource_handle.stable_ssh_ports
 
     def output(self) -> str:
         if not self.submitted:

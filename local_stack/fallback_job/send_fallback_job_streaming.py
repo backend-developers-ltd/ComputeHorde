@@ -5,7 +5,6 @@ import asyncio
 import os
 import tempfile
 from cryptography.hazmat.primitives import serialization
-import base64
 import requests
 import time
 from compute_horde_sdk._internal.fallback.client import FallbackClient
@@ -17,9 +16,14 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from compute_horde_sdk._internal.sdk import ComputeHordeJobSpec
 from compute_horde_sdk.v1 import ExecutorClass
+from typing import Tuple, Callable
+
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def create_streaming_https_client(job, client):
+
+def create_streaming_https_client(job: 'FallbackJob') -> Tuple[requests.Session, Callable[[], None]]:
     """
     Prepares a requests.Session configured for HTTPS with client cert, key, and server cert verification.
     Returns (session, cleanup_fn).
@@ -31,9 +35,6 @@ def create_streaming_https_client(job, client):
     else:
         temp_client_cert.write(job.client_cert.public_bytes(serialization.Encoding.PEM))
     temp_client_cert.close()
-    logger.warning(f"Client certificate written to: {temp_client_cert.name}")
-    with open(temp_client_cert.name, 'rb') as f:
-        logger.warning(f"Client certificate contents:\n{f.read().decode(errors='replace')}")
 
     # Write client key
     temp_client_key = tempfile.NamedTemporaryFile(delete=False, suffix='.key')
@@ -48,23 +49,16 @@ def create_streaming_https_client(job, client):
             )
         )
     temp_client_key.close()
-    logger.warning(f"Client private key written to: {temp_client_key.name}")
-    with open(temp_client_key.name, 'rb') as f:
-        logger.warning(f"Client private key contents:\n{f.read().decode(errors='replace')}")
 
     # Download server cert
     print(f"[Fallback] Streaming server certificate: {job.streaming_server_certificate}")
     temp_server_cert = tempfile.NamedTemporaryFile(delete=False, suffix='.crt')
     temp_server_cert.write(job.streaming_server_certificate)
     temp_server_cert.close()
-    logger.warning(f"Server certificate written to: {temp_server_cert.name}")
-    with open(temp_server_cert.name, 'rb') as f:
-        logger.warning(f"Server certificate contents:\n{f.read().decode(errors='replace')}")
 
     session = requests.Session()
     session.cert = (temp_client_cert.name, temp_client_key.name)
     session.verify = temp_server_cert.name
-    logger.warning(f"Session cert: {session.cert}, verify: {session.verify}")
 
     def cleanup():
         os.unlink(temp_client_cert.name)
@@ -107,25 +101,24 @@ async def main():
 
     # Use from_job_spec to create the fallback job spec
     fallback_job_spec = FallbackJobSpec.from_job_spec(
-        compute_horde_job_spec, work_dir="/")
+        compute_horde_job_spec, 
+        work_dir="/"
+    )
 
-    cloud = "runpod"
-    print(f"[Fallback] Submitting job to fallback cloud: {cloud}")
-    client = FallbackClient(cloud=cloud)
+    client = FallbackClient(cloud="runpod")
     job = await client.create_job(fallback_job_spec)
     await job.wait_for_streaming(timeout=120)
 
-    session, cleanup = create_streaming_https_client(job, client)
+    session, cleanup = create_streaming_https_client(job)
     ip = job.streaming_server_ip
     port = job.streaming_server_port
     url = f"https://{ip}:{port}/terminate"
-    print(f"[Fallback] Attempting to terminate server at {url}")
+    logger.info(f"[Fallback] Attempting to terminate server at {url}")
 
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
             resp = session.post(url, timeout=5)
-            print(f"[Fallback] Terminate response: {resp.status_code} {resp.text}")
             if resp.status_code == 200:
                 break
         except Exception as e:
@@ -138,10 +131,7 @@ async def main():
     cleanup()
 
     await job.wait(timeout=60)
-    print(f"[Fallback] Job status: {job.status}")
-    print(f"[Fallback] Job output:\n{job.result.stdout}")
-    if job.result.artifacts:
-        print(f"[Fallback] Artifacts: {job.result.artifacts}")
+    logger.info("Success!")
 
 if __name__ == "__main__":
     asyncio.run(main()) 

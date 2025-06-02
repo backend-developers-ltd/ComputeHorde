@@ -10,7 +10,12 @@ from compute_horde_sdk.v1 import ExecutorClass
 from compute_horde_sdk._internal.models import InlineInputVolume, HTTPOutputVolume, HTTPInputVolume
 import boto3
 import uuid
+
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+INPUT_FILE_CONTENT = b"This is the input file content.\n"
 
 def get_presigned_urls(bucket: str, post_object_key: str, put_object_key: str, expires_in: int = 3600):
     """
@@ -47,7 +52,7 @@ async def main():
         input_volumes={
             "/volume/": InlineInputVolume.from_file_contents(
                 filename="input.txt",
-                contents=b"This is the input file content.\n"
+                contents=INPUT_FILE_CONTENT
             ),
             "/volume/data/dataset.json": HTTPInputVolume(
                 url="https://jsonplaceholder.typicode.com/todos/1",
@@ -82,6 +87,21 @@ async def main():
     print(f"[Fallback] Job output:\n{job.result.stdout}")
     if job.result.artifacts:
         print(f"[Fallback] Artifacts: {job.result.artifacts}")
+        # Verification step
+        expected_content = b"Read from input: " + INPUT_FILE_CONTENT
+        for path, content in job.result.artifacts.items():
+            import base64
+            if isinstance(content, bytes):
+                # If content is base64-encoded, decode it
+                try:
+                    decoded = base64.b64decode(content)
+                except Exception:
+                    decoded = content
+            else:
+                decoded = content.encode() if isinstance(content, str) else content
+            if decoded != expected_content:
+                raise RuntimeError("Artifact verification failed: one or more artifacts do not match the expected content.")
+    logger.info("Success!")
 
 if __name__ == "__main__":
     asyncio.run(main()) 
