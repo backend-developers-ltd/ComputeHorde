@@ -1,7 +1,8 @@
 import logging
 import sys
 
-import bittensor
+import turbobt
+from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -20,8 +21,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         try:
-            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-            current_block = subtensor.get_current_block()
+            current_block = async_to_sync(self._get_block_number)()
             cycle = Cycle.from_block(current_block, settings.BITTENSOR_NETUID)
             batch = SyntheticJobBatch.objects.create(
                 block=current_block,
@@ -36,3 +36,8 @@ class Command(BaseCommand):
             sys.exit(1)
         except Exception:
             logger.warning("command failed with exception", exc_info=True)
+
+    async def _get_block_number(self):
+        async with turbobt.Bittensor(settings.BITTENSOR_NETWORK) as bittensor:
+            block = await bittensor.blocks.head()
+            return block.number
