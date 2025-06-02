@@ -129,21 +129,6 @@ async def miners(miner_hotkeys: list[str]):
     return objs
 
 
-@pytest.fixture
-def miner_axon_infos(miner_hotkeys: str):
-    return [
-        bittensor.AxonInfo(
-            version=4,
-            ip="ignore",
-            ip_type=4,
-            port=9999,
-            hotkey=hotkey,
-            coldkey=hotkey,
-        )
-        for hotkey in miner_hotkeys
-    ]
-
-
 @pytest_asyncio.fixture
 async def transports(miner_hotkeys: str):
     return [SimulationTransport(hotkey) for hotkey in miner_hotkeys]
