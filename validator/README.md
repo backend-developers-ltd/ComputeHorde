@@ -160,3 +160,20 @@ If your buckets are not in the default AWS region, add also:
 ```
 AWS_DEFAULT_REGION=BUCKETS_REGION
 ```
+
+
+# Using the Collateral Smart Contract (Optional)
+
+Validators can optionally deploy a **collateral smart contract** to filter miners based on **trust expressed through deposited funds**.
+
+Once deployed:
+
+- Your validator will **automatically begin using the contract** to prefer miners who have deposited collateral.
+- This enables a **slashing mechanism** for incorrect organic job results, increasing the reliability of ComputeHorde’s compute pool.
+
+To set it up, follow the 
+[deployment instructions in the Collateral Contract repository](https://github.com/bactensor/collateral-contracts#recommended-validator-integration-guide-as-used-by-computehorde). 
+Once deployed, no additional configuration is needed — the validator detects and uses the contract automatically.
+
+> **Note:** This feature is optional but recommended if your validator sends organic jobs to untrusted miners.
+
