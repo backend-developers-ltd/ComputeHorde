@@ -154,11 +154,13 @@ Want to maximize earnings? Stake collateral with validators, preload Docker imag
   The Trusted Miner shares the same code as a regular miner, but is configured differently:
   - It is not registered in the metagraph.
   - It only accepts tasks from the associated validator.
+- Optionally integrates with a **collateral smart contract** to filter miners by deposited funds, enabling slashing for incorrect organic results and improving task reliability.
 - [See validator's README for more details](validator/README.md)
 
 ### **Miner**
 - Accepts job requests from validators.
 - Manages executors to perform tasks and sends results back to validators.
+- Can **deposit collateral** to become eligible for extra paid organic jobs from validators.
 - [See miner's README for more details](miner/README.md)
 
 ### **Executor**
