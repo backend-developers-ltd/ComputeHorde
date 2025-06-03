@@ -592,9 +592,9 @@ def do_set_weights(
         subnet = bittensor.subnet(netuid)
 
         try:
-            reveal_round = async_to_sync(subnet.weights.commit_v3)(
+            reveal_round = async_to_sync(subnet.weights.commit)(
                 dict(zip(uids, weights)),
-                # version_key=version_key,
+                version_key=version_key,
             )
         except Exception:
             is_success = False

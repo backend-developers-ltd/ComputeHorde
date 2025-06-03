@@ -277,15 +277,16 @@ def test_set_scores__set_weight_success(
         # reconcile weights set with expected ones, disregarding rounding errors:
         # (the very precise comparisons can be found in the weight committing tests and commit-reveal is the one used
         # in production anyway
-        assert bittensor.subnet.return_value.weights.commit_v3.called
+        assert bittensor.subnet.return_value.weights.commit.called
         expected_weights_set = _normalize_weights(expected_weights_set)
         for uid, w in expected_weights_set.items():
-            actual_w = bittensor.subnet.return_value.weights.commit_v3.call_args.args[0].get(uid)
+            actual_w = bittensor.subnet.return_value.weights.commit.call_args.args[0].get(uid)
             if actual_w is not None and ((w - actual_w) / w < 0.001):
                 expected_weights_set[uid] = actual_w
 
-        bittensor.subnet.return_value.weights.commit_v3.assert_called_with(
+        bittensor.subnet.return_value.weights.commit.assert_called_with(
             expected_weights_set,
+            version_key=2,
         )
 
         check_system_events(
@@ -301,7 +302,7 @@ def test_set_scores__set_weight_success(
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight_failure(settings, bittensor):
     bittensor.blocks.head.return_value.number = 723
-    bittensor.subnet.return_value.weights.commit_v3.side_effect = Exception
+    bittensor.subnet.return_value.weights.commit.side_effect = Exception
 
     setup_db()
     set_scores()
@@ -323,7 +324,7 @@ def test_set_scores__set_weight_failure(settings, bittensor):
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight_eventual_success(settings, bittensor):
     bittensor.blocks.head.return_value.number = 723
-    bittensor.subnet.return_value.weights.commit_v3.side_effect = (
+    bittensor.subnet.return_value.weights.commit.side_effect = (
         Exception,
         Exception,
         None,
@@ -350,7 +351,7 @@ def test_set_scores__set_weight_eventual_success(settings, bittensor):
 @patch_constance({"DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": False})
 def test_set_scores__set_weight__exception(settings, bittensor):
     bittensor.blocks.head.return_value.number = 723
-    bittensor.subnet.return_value.weights.commit_v3.side_effect = Exception
+    bittensor.subnet.return_value.weights.commit.side_effect = Exception
 
     setup_db()
     set_scores()
