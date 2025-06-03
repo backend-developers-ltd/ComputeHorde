@@ -28,26 +28,27 @@ paving the way for Bittensor to scale beyond its current limitations to support 
   This removes the 256 miner (UID) limit and significantly scales the potentially available computing power.
 
 - **Hardware Classes**  
-  ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance.   
-  Currently, **A6000** is the supported class, with **A100** coming next.  
+  ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance.
+  Currently, **A6000** is the supported class, with **A100** coming next.
   The end goal is to eventually support all GPU types/configurations required by validators across Bittensor subnets.
 
 - **Developer SDK for Easy Integration**  
-  A Python SDK is available to help **subnet owners and validators** run jobs on ComputeHorde.  
+  A Python SDK is available to help **subnet owners and validators** run jobs on ComputeHorde.
   See [ComputeHorde SDK README](compute_horde_sdk/README.md#readme) for installation and usage examples.
 
 - **Collateral-Based Trust for Organic Jobs**  
-  Validators can now **require miners to deposit collateral** to be eligible for organic jobs. This increases reliability by enabling slashing of dishonest miners, improving trust in cross-subnet compute.  
+  Validators can now **require miners to deposit collateral** to be eligible for organic jobs.
+  This increases reliability by enabling slashing of dishonest miners, improving trust in cross-subnet compute.
   Validators automatically begin using the feature upon deploying the
-  [collateral contract](https://github.com/bactensor/collateral-contracts#recommended-validator-integration-guide-as-used-by-computehorde).  
+  [collateral contract](https://github.com/bactensor/collateral-contracts#recommended-validator-integration-guide-as-used-by-computehorde).
   Miners interested in organic jobs can deposit collateral by following the
-  [miner guide](https://github.com/bactensor/collateral-contracts#recommended-miner-integration-guide-as-used-by-computehorde).  
+  [miner guide](https://github.com/bactensor/collateral-contracts#recommended-miner-integration-guide-as-used-by-computehorde).
 
 - **Built-in DDoS Shield for Miners**  
-  Miners can now protect themselves from denial-of-service attacks by activating the **optional DDoS shield**.  
-  This tool reduces vulnerability and ensures stable mining performance.  
+  Miners can now protect themselves from denial-of-service attacks by activating the **optional DDoS shield**.
+  This tool reduces vulnerability and ensures stable mining performance.
   Validators are already compatible.
-  Just run the Docker image from the [DDoS Shield repository](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side).  
+  Just run the Docker image from the [DDoS Shield repository](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side).
 
 
 ## Bittensor Context
