@@ -102,10 +102,11 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     time_remaining_in_cycle = (cycle.stop - block) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
 
     time_required = (
-        executor_seconds
+        await aget_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME")
         + await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT")
         + await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT")
         + EXECUTOR_CLASS[executor_class].spin_up_time
+        + executor_seconds
     )
 
     if time_remaining_in_cycle < timedelta(seconds=time_required):
