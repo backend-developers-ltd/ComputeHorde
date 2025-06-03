@@ -120,7 +120,6 @@ def small_spin_up_times(monkeypatch):
     monkeypatch.setattr(EXECUTOR_CLASS[ExecutorClass.spin_up_4min__gpu_24gb], "spin_up_time", 4)
 
 
-# TODO type
 @pytest.fixture
 def validators():
     return [MockNeuron(hotkey=f"mock_validator_hotkey_{i}", uid=i) for i in range(11)]
