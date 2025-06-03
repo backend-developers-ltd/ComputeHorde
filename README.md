@@ -124,6 +124,23 @@ This encourages **variance**, which is essential for preventing [weight-copying]
 - Each **hardware class** in ComputeHorde has a **configurable weight**.  
 - These weights influence the miner’s final score, prioritizing certain hardware types based on network demand.
 
+## Returning Miners — What’s New
+
+If you're a returning miner, here's what's new in ComputeHorde:
+
+- **🛡️ DDoS Shield Available:** Miners can now protect themselves against network attacks by running an optional shield. 
+  Just run the Docker container from the [DDoS Shield repo](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side). Validators are already compatible.
+  
+- **💰 Collateral for Organic Jobs:** Validators may now require miners to deposit collateral. Doing so increases trust and lets you access additionally paid **organic jobs**. 
+  If you don't deposit, you can still do synthetic jobs as before.
+  - [Miner deposit instructions](https://github.com/bactensor/collateral-contracts#recommended-miner-integration-guide-as-used-by-computehorde)
+
+- **🐳 Smarter Preloading of Docker Images:** A global `DYNAMIC_PRELOAD_DOCKER_JOB_IMAGES` parameter lists Docker images likely to be used across jobs. 
+  Miners can preload select images to reduce latency and GPU usage.
+
+Want to maximize earnings? Stake collateral with validators, preload Docker images wisely, and enable the DDoS shield.
+
+
 ## Components
 
 ### **Facilitator**
