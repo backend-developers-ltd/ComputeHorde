@@ -3,6 +3,7 @@ from datetime import timedelta
 from typing import assert_never
 
 import bittensor
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V2JobRequest,
@@ -94,9 +95,15 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
 
     cycle = get_cycle_containing_block(block, netuid=settings.BITTENSOR_NETUID)
     time_remaining_in_cycle = (cycle.stop - block) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
-    # TODO: subtract job overhead?
 
-    if time_remaining_in_cycle < timedelta(seconds=executor_seconds):
+    time_required = (
+        executor_seconds
+        + await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT")
+        + await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT")
+        + EXECUTOR_CLASS[executor_class].spin_up_time
+    )
+
+    if time_remaining_in_cycle < timedelta(seconds=time_required):
         raise NotEnoughTimeInCycle()
 
     manifests_qs = (
