@@ -40,7 +40,7 @@ dependencies = [
     "hexbytes>=1.3.0",
     "web3>=7.11.0",
     "requests>=2.32.3",
-    "turbobt~=0.0.6",
+    "turbobt~=0.0.7",
 ]
 
 [tool.uv.sources]

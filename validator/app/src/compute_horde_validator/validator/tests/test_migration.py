@@ -11,7 +11,7 @@ def test__migration__not_serving__should_not_set_scores(mocker: MockerFixture, b
 
     set_scores()
 
-    assert not bittensor.subnet.return_value.weights.commit_v3.called
+    assert not bittensor.subnet.return_value.weights.commit.called
     assert subtensor_mock.call_count == 0
     assert len(subtensor_mock.method_calls) == 0
 

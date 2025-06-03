@@ -204,7 +204,7 @@ def bittensor(mocker, validators):
     mocked.subnet.return_value.list_validators = AsyncMock(
         return_value=validators,
     )
-    mocked.subnet.return_value.weights.commit_v3 = AsyncMock()
+    mocked.subnet.return_value.weights.commit = AsyncMock()
 
     mocker.patch(
         "turbobt.Bittensor",
