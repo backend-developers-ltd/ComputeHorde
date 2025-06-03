@@ -182,6 +182,8 @@ Want to maximize earnings? Stake collateral with validators, preload Docker imag
 ### Encouraging Actual Mining
 - Synthetic tasks are designed to run only on specific hardware (e.g., A6000 GPUs), ensuring miners deliver the advertised compute power.
 - Scoring system incentivizing for completing organic tasks.
+- Validators can require miners to deposit collateral to access organic jobs, creating economic pressure to behave honestly.
+- An optional DDoS shield is available for miners to stay reliably online and resilient against attacks.
 
 ## Development goals
 
