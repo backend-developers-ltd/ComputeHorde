@@ -72,7 +72,8 @@ async def test_miner_can_be_selected_after_finishing_job(
     execute_scenario,
 ):
     # we will re-select the same miner as soon as it "finishes" its first job
-    assert await Miner.objects.acount() == 1
+    assert await Miner.objects.acount() == 2
+    # 1 miner + self validator (Miner tables holds both miners and validators now, should be renamed)
 
     # Job 1
     await faci_transport.add_message(job_request, send_before=0)

@@ -1572,7 +1572,7 @@ async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycl
 
     # max compute time for an executor in a full cycle
     cycle_duration_seconds = (
-        2 * TEMPO * int(settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION.seconds)
+        2 * TEMPO * int(settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION.total_seconds())
         - COMPUTE_TIME_OVERHEAD_SECONDS
     )
 
