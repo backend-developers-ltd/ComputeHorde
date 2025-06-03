@@ -195,7 +195,9 @@ def bittensor(mocker, validators):
                 axon_info=Mock(
                     ip=ipaddress.IPv4Address("127.0.0.1"),
                     port=9999,
+                    spec=turbobt.neuron.AxonInfo,
                 ),
+                spec=turbobt.Neuron,
             )
             for i in range(10)
         ],
