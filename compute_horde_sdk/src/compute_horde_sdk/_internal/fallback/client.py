@@ -2,9 +2,16 @@ import asyncio
 import logging
 import pathlib
 import tempfile
+import textwrap
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from typing import TYPE_CHECKING, Any, TypeAlias
+
+import requests
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+
+from compute_horde_core.certificate import generate_certificate, serialize_certificate
+from compute_horde_sdk._internal.models import InlineInputVolume
 
 from .adaptors.utils import lazy_import_adaptor
 from .exceptions import FallbackNotFoundError
@@ -49,13 +56,89 @@ volumes=(volume-*.json)
 if (( ${{#volumes[@]}} )); then
   python3 -m compute_horde_core.volume ${{volumes[@]}} --dir /volume > ./ch-volume.log 2>&1
 fi
+
 pushd "{workdir}" > /dev/null
+{streaming_setup}
 {command}
 popd > /dev/null
+
 output_uploads=(output_upload-*.json)
 if (( ${{#output_uploads[@]}} )); then
   python3 -m compute_horde_core.output_upload ${{output_uploads[@]}} --dir /output > ./ch-output_upload.log 2>&1
 fi
+"""
+
+STREAMING_SETUP_BASH_TEMPLATE = """
+rm -rf /streaming_server_data
+rm -rf /etc/nginx/ssl
+mkdir -p /streaming_server_data
+
+streaming_setup() {
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get install -y nginx openssl
+  elif command -v apk >/dev/null 2>&1; then
+    apk add --no-cache nginx openssl
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y nginx openssl
+  fi
+  mkdir -p /etc/nginx/ssl
+  cp /volume/client.crt /etc/nginx/ssl/client.crt
+
+  # Get public IP
+  PUBLIC_IP=$(curl -s https://api.ipify.org)
+  echo "Public IP: $PUBLIC_IP"
+
+  # Create OpenSSL config
+  cat > /etc/nginx/ssl/openssl-san.cnf <<EOF
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+CN = $PUBLIC_IP
+
+[v3_req]
+subjectAltName = @alt_names
+
+[alt_names]
+IP.1 = $PUBLIC_IP
+EOF
+
+  openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/nginx/ssl/private_key.pem \
+    -out /etc/nginx/ssl/certificate.pem \
+    -config /etc/nginx/ssl/openssl-san.cnf \
+    -extensions v3_req
+
+  cp /etc/nginx/ssl/certificate.pem /streaming_server_data/certificate.pem
+
+  cat > /etc/nginx/nginx.conf <<'EOF'
+user  root;
+events {}
+http {
+  server {
+    listen %(streaming_port)s ssl;
+    ssl_certificate /etc/nginx/ssl/certificate.pem;
+    ssl_certificate_key /etc/nginx/ssl/private_key.pem;
+    ssl_client_certificate /etc/nginx/ssl/client.crt;
+    ssl_verify_client on;
+    location / {
+      proxy_pass http://localhost:80;
+    }
+    location /health {
+      access_log off;
+      add_header 'Content-Type' 'application/json';
+      return 200 '{"status":"Healthy"}';
+    }
+  }
+}
+EOF
+
+  nginx -g 'daemon off;' &
+}
+
+streaming_setup > /streaming_server_data/streaming_setup.log 2>&1
 """
 
 
@@ -90,9 +173,49 @@ class FallbackClient:
         logger.info("Running fallback job...")
         logger.debug("Fallback job spec: %s", job_spec)
 
+        # If streaming, generate client cert and add as input volume
+        client_cert: bytes | None = None
+        private_key: RSAPrivateKey | bytes | None = None
+        streaming_port: str | None = None
+
+        def _find_available_port(used_ports: list[int] | None, start: int = 40000) -> str:
+            port = start
+            used_ports_set = set(used_ports or [])
+            while port in used_ports_set:
+                port += 1
+            return str(port)
+
+        if job_spec.streaming:
+            normalized_ports: list[str] = []
+            if isinstance(job_spec.ports, int):
+                normalized_ports = [str(job_spec.ports)]
+            elif isinstance(job_spec.ports, str):
+                normalized_ports = [job_spec.ports]
+            elif isinstance(job_spec.ports, (list, tuple)):
+                normalized_ports = [str(p) for p in job_spec.ports]
+            elif job_spec.ports is None:
+                normalized_ports = []
+            # Select a streaming port not already in use
+            streaming_port = _find_available_port([int(p) for p in normalized_ports if p.isdigit()])
+            if not normalized_ports:
+                normalized_ports = [streaming_port]
+            elif streaming_port not in normalized_ports:
+                normalized_ports.append(streaming_port)
+            job_spec.ports = normalized_ports
+            # Generate client certificate and private key
+            cert, key = generate_certificate("localhost")
+            cert_bytes = serialize_certificate(cert)
+            if job_spec.input_volumes is None or not isinstance(job_spec.input_volumes, dict):
+                job_spec.input_volumes = {}
+            job_spec.input_volumes["/volume/"] = InlineInputVolume.from_file_contents(
+                filename="client.crt", contents=cert_bytes
+            )
+            client_cert = cert_bytes
+            private_key = key
+
         workdir = self._prepare_workdir()
         setup = self._prepare_setup(workdir, job_spec)
-        run = self._prepare_run(workdir, job_spec)
+        run = self._prepare_run(workdir, job_spec, streaming_port)
 
         sky_job: SkyJobType = sky.SkyJob(
             cloud=self.cloud,
@@ -118,6 +241,9 @@ class FallbackClient:
             self,
             uuid=sky_job.job_uuid,
             status=FallbackJobStatus.SENT,
+            client_cert=client_cert,
+            private_key=private_key,
+            streaming_port=streaming_port,
         )
         logger.info("The job has been submitted: %s", job)
 
@@ -218,6 +344,86 @@ class FallbackClient:
         for job_uuid in self._jobs.keys():
             yield await self.get_job(job_uuid)
 
+    async def get_streaming_server_certificate(self, job_uuid: str) -> bytes:
+        """
+        Retrieve the streaming server certificate for a job.
+        """
+        job = self._jobs[job_uuid]
+        path = "/streaming_server_data"
+        server_data = job.download(path, max_size=self.MAX_ARTIFACT_SIZE)
+        certificate = server_data.get("/streaming_server_data/certificate.pem")
+        if certificate is None:
+            raise RuntimeError("Streaming server certificate not found.")
+        return certificate
+
+    async def get_streaming_server_head_ip(self, job_uuid: str) -> str | None:
+        """
+        Retrieve the head IP of the streaming server for a streaming_portjob.
+        """
+        job = self._jobs[job_uuid]
+        ip = job.get_job_head_ip()
+        logger.debug("Streaming server head IP: %s", ip)
+        return ip
+
+    async def get_job_ssh_ports(self, job_uuid: str) -> list[int] | None:
+        """
+        Retrieve the SSH ports of the job.
+        """
+        job = self._jobs[job_uuid]
+        ssh_ports = job.get_job_ssh_ports()
+        return ssh_ports
+
+    async def find_streaming_port(
+        self,
+        job_uuid: str,
+        client_cert_path: str,
+        client_key_path: str,
+        server_cert_path: str,
+        max_ports_to_scan: int = 10,
+        timeout: int = 2,
+    ) -> int | None:
+        """
+        Scan ports above the SSH port to find the streaming port by probing /health.
+        Returns the port if found, else None.
+
+        For some reason SkyPilot does not provide all the ports in the job resource handle when using RunPod as a
+        backend. So we need to scan the ports above the base SSH port to find the streaming port.
+        """
+        head_ip = await self.get_streaming_server_head_ip(job_uuid)
+        ssh_ports = await self.get_job_ssh_ports(job_uuid)
+
+        if not head_ip or not ssh_ports:
+            logger.error("Could not get head_ip or stable_ssh_ports for job %s", job_uuid)
+            return None
+
+        # Create the set of scanned ports upfront
+        scanned_ports = set()
+        for ssh_port in ssh_ports:
+            for port in range(ssh_port, ssh_port + max_ports_to_scan + 1):
+                if port in scanned_ports:
+                    continue
+                scanned_ports.add(port)
+                url = f"https://{head_ip}:{port}/health"
+                try:
+                    response = requests.get(
+                        url,
+                        cert=(client_cert_path, client_key_path),
+                        verify=server_cert_path,
+                        timeout=timeout,
+                        headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
+                    )
+                    if response.status_code == 200 and response.text.strip() == '{"status":"Healthy"}':
+                        logger.info(f"Found streaming port: {port}")
+                        return port
+                except requests.exceptions.SSLError as e:
+                    logger.error("SSLError: %s", e)
+                    continue
+                except requests.exceptions.RequestException as e:
+                    logger.error("RequestException: %s", e)
+                    continue
+        logger.error("Streaming port not found in scanned range for job %s", job_uuid)
+        return None
+
     @classmethod
     def _prepare_workdir(cls) -> pathlib.Path:
         workdir = pathlib.Path(tempfile.mkdtemp(prefix="ch-"))
@@ -245,7 +451,7 @@ class FallbackClient:
         return script
 
     @classmethod
-    def _prepare_run(cls, workdir: pathlib.Path, job_spec: FallbackJobSpec) -> str:
+    def _prepare_run(cls, workdir: pathlib.Path, job_spec: FallbackJobSpec, streaming_port: str | None) -> str:
         script = "./run.sh"
         with change_dir(workdir):
             if job_spec.input_volumes is not None:
@@ -254,7 +460,6 @@ class FallbackClient:
                     volume_json.write_text(
                         job_spec.input_volumes[input_volume].to_compute_horde_volume(input_volume).json()
                     )
-
             if job_spec.output_volumes is not None:
                 for index, output_volume in enumerate(job_spec.output_volumes):
                     output_upload_json = pathlib.Path(f"./output_upload-{index}.json")
@@ -263,9 +468,18 @@ class FallbackClient:
                     )
 
             run_sh = pathlib.Path(script)
-            run_sh.write_text(_RUN_TMPL.format(command=job_spec.run, workdir=job_spec.work_dir))
+            main_command = job_spec.run
+            streaming_setup = ""
+            if job_spec.streaming:
+                streaming_setup = textwrap.dedent(STREAMING_SETUP_BASH_TEMPLATE) % {
+                    "streaming_port": streaming_port,
+                    "workdir": job_spec.work_dir,
+                }
+            run_script = _RUN_TMPL.format(
+                command=main_command, workdir=job_spec.work_dir, streaming_setup=streaming_setup
+            )
+            run_sh.write_text(run_script)
             run_sh.chmod(0o755)
-
         return script
 
     def _get_status(self, job: "SkyJobType") -> FallbackJobStatus:
