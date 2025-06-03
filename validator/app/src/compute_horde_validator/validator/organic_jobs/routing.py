@@ -69,7 +69,12 @@ async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
 async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     """
     Goes through all miners with recent manifests and online executors of the given executor class.
-    Returns a random miner that may have a non-busy executor based on known receipts.
+    Filters miners based on compute time allowance and minimum collateral requirements.
+    Creates a preliminary reservation for the selected miner and returns the miner with:
+    - Highest percentage of remaining allowance
+    - Highest collateral as a tiebreaker
+    - Available executors (less ongoing jobs than online executor count)
+    - Sufficient remaining time in the current cycle
     """
 
     executor_class = request.executor_class
