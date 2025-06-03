@@ -131,8 +131,7 @@ To check active collateral contracts and deposit to them, follow the instruction
 
 You can now protect your miner from denial-of-service attacks using a **dedicated DDoS Shield**.
 
-- This tool is deployed as a simple Docker container and integrates seamlessly with your existing miner setup.
-- While not required, enabling the shield is recommended for public-facing miners.
+This tool is deployed as a simple Docker container and integrates seamlessly with your existing miner setup.
 
 See the [DDoS Shield repository](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side) for setup instructions.
 
