@@ -536,6 +536,7 @@ dependencies = [
     { name = "more-itertools", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "requests", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "rich", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 
@@ -550,6 +551,7 @@ requires-dist = [
     { name = "more-itertools", specifier = ">=10.2.0" },
     { name = "pydantic", specifier = ">=2.3,<3" },
     { name = "requests", specifier = ">=2.32.2" },
+    { name = "rich", specifier = "~=13.9.4" },
     { name = "websockets", specifier = ">=14.0,<15.0" },
 ]
 
