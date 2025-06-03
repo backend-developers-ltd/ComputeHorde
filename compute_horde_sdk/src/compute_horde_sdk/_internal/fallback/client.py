@@ -296,4 +296,4 @@ class FallbackClient:
         else:
             artifacts = {}
 
-        return FallbackJobResult(stdout=stdout, artifacts=artifacts)
+        return FallbackJobResult(stdout=stdout, stderr="", artifacts=artifacts)

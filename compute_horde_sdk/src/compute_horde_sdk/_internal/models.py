@@ -67,6 +67,9 @@ class ComputeHordeJobResult:
     stdout: str
     """Job standard output."""
 
+    stderr: str
+    """Job standard error output."""
+
     artifacts: dict[str, bytes]
     """Artifact file contents, keyed by file path, as :class:`bytes`."""
 
@@ -95,6 +98,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # output_download_url: str
     # tag: str
     stdout: str
+    stderr: str
     # volumes: list = []
     # uploads: list = []
     # target_validator_hotkey: str
