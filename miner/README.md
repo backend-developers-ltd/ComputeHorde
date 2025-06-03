@@ -113,6 +113,32 @@ make it executable (`chmod +x preload-job-images.sh`), then run `crontab -e` and
 
 This is configured to run it every hour; you can see the logs in `<path>/<to>/scripts/preload-job-images.log`.
 
+
+## 💰 Collateral Deposits for Organic Jobs
+
+Some validators may require miners to **deposit collateral** to be eligible for organic jobs.
+
+- This collateral expresses **trust via staked funds** — if you deliver incorrect results, the validator can **slash your collateral**.
+- Validators using this mechanism will **prioritize miners who have deposited** when assigning organic tasks.
+- You can still receive synthetic jobs without depositing, but organic jobs offer additional incentives.
+
+To check active collateral contracts and deposit to them, follow the instructions in the
+[collateral contract repository (miner section)](https://github.com/bactensor/collateral-contracts#recommended-miner-integration-guide-as-used-by-computehorde).
+
+> **Tip:** Depositing collateral is optional, but recommended if you want to access more lucrative workloads.
+
+## 🛡️ Optional DDoS Shield
+
+You can now protect your miner from denial-of-service attacks using a **dedicated DDoS Shield**.
+
+- This tool is deployed as a simple Docker container and integrates seamlessly with your existing miner setup.
+- While not required, enabling the shield is recommended for public-facing miners.
+
+See the [DDoS Shield repository](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side) for setup instructions.
+
+> **Note:** Validators are already compatible with shielded miners.
+
+
 ## Early Access Features - Preprod Images
 
 Some features are released early and can be used before the official release for the entire subnet. To use these features, you need to set up `v0-preprod` images. Currently, this is only available for miners.
