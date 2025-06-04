@@ -28,13 +28,26 @@ paving the way for Bittensor to scale beyond its current limitations to support 
   This removes the 256 miner (UID) limit and significantly scales the potentially available computing power.
 
 - **Hardware Classes**  
-  ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance. 
+  ComputeHorde introduces hardware classes to create a free market for GPU resources, balancing cost-effectiveness with performance.
   Currently, **A6000** is the supported class, with **A100** coming next.
   The end goal is to eventually support all GPU types/configurations required by validators across Bittensor subnets.
 
 - **Developer SDK for Easy Integration**  
-  A Python SDK is available to help **subnet owners and validators** run jobs on ComputeHorde.  
+  A Python SDK is available to help **subnet owners and validators** run jobs on ComputeHorde. 
   See [ComputeHorde SDK README](compute_horde_sdk/README.md#readme) for installation and usage examples.
+
+- **Collateral-Based Trust for Organic Jobs**  
+  Validators can now **require miners to deposit collateral** to be eligible for organic jobs.
+  This increases reliability by enabling slashing of dishonest miners, improving trust in cross-subnet compute.
+  - Validators automatically begin using the feature upon deploying the
+  [collateral contract](https://github.com/bactensor/collateral-contracts#recommended-validator-integration-guide-as-used-by-computehorde).
+  - Miners interested in organic jobs can deposit collateral by following the
+  [miner guide](https://github.com/bactensor/collateral-contracts#recommended-miner-integration-guide-as-used-by-computehorde).
+
+- **Built-in DDoS Shield for Miners**  
+  Miners can now protect themselves from denial-of-service attacks by activating the **optional DDoS shield**.
+  This tool reduces vulnerability and ensures stable mining performance.
+  - Just run the Docker image from the [DDoS Shield repository](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side).
 
 
 ## Bittensor Context
@@ -110,6 +123,23 @@ This encourages **variance**, which is essential for preventing [weight-copying]
 - Each **hardware class** in ComputeHorde has a **configurable weight**.  
 - These weights influence the miner’s final score, prioritizing certain hardware types based on network demand.
 
+## Returning Miners — What’s New
+
+If you're a returning miner, here's what's new in ComputeHorde:
+
+- **🛡️ DDoS Shield Available:** Miners can now protect themselves against network attacks by running an optional shield. 
+  Just run the Docker container from the [DDoS Shield repo](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side). 
+  
+- **💰 Collateral for Organic Jobs:** Validators may now require miners to deposit collateral. Doing so increases trust and lets you access additionally paid **organic jobs**. 
+  If you don't deposit, you can still do synthetic jobs as before.
+  - [Miner deposit instructions](https://github.com/bactensor/collateral-contracts#recommended-miner-integration-guide-as-used-by-computehorde)
+
+- **🐳 Smarter Preloading of Docker Images:** A global `DYNAMIC_PRELOAD_DOCKER_JOB_IMAGES` parameter lists Docker images likely to be used across jobs. 
+  Miners can preload select images to reduce latency and GPU usage. [More details](miner#preloading-job-images).
+
+Want to maximize earnings? Stake collateral with validators, preload Docker images wisely, and enable the DDoS shield.
+
+
 ## Components
 
 ### **Facilitator**
@@ -123,11 +153,13 @@ This encourages **variance**, which is essential for preventing [weight-copying]
   The Trusted Miner shares the same code as a regular miner, but is configured differently:
   - It is not registered in the metagraph.
   - It only accepts tasks from the associated validator.
+- Optionally integrates with a **collateral smart contract** to filter miners by deposited funds, enabling slashing for incorrect organic results and improving task reliability.
 - [See validator's README for more details](validator/README.md)
 
 ### **Miner**
 - Accepts job requests from validators.
 - Manages executors to perform tasks and sends results back to validators.
+- Can **deposit collateral** to become eligible for extra paid organic jobs from validators.
 - [See miner's README for more details](miner/README.md)
 
 ### **Executor**
@@ -149,6 +181,8 @@ This encourages **variance**, which is essential for preventing [weight-copying]
 ### Encouraging Actual Mining
 - Synthetic tasks are designed to run only on specific hardware (e.g., A6000 GPUs), ensuring miners deliver the advertised compute power.
 - Scoring system incentivizing for completing organic tasks.
+- Validators can require miners to deposit collateral to access organic jobs, creating economic pressure to behave honestly.
+- An optional DDoS shield is available for miners to stay reliably online and resilient against attacks.
 
 ## Development goals
 
