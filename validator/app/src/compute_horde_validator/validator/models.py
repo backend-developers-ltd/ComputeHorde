@@ -469,7 +469,7 @@ class ComputeTimeAllowance(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.validator.hotkey} -> {self.miner.hotkey} {self.cycle}: {self.initial_allowance:.2f}s"
+        return f"{self.validator.hotkey} -> {self.miner.hotkey} {self.cycle}: initial={self.initial_allowance:.2f}s remaining={self.remaining_allowance:.2f}s"
 
 
 class Weights(models.Model):
