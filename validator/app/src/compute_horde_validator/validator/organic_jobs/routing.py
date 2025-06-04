@@ -110,6 +110,7 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     )
 
     if time_remaining_in_cycle < timedelta(seconds=time_required):
+        logger.debug(f"NotEnoughTimeInCycle: {time_remaining_in_cycle=} {time_required=}")
         raise NotEnoughTimeInCycle()
 
     manifests_qs = (
