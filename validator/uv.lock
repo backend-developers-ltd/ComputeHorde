@@ -2562,7 +2562,7 @@ wheels = [
 
 [[package]]
 name = "turbobt"
-version = "0.0.7"
+version = "0.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bittensor-commit-reveal", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2572,9 +2572,9 @@ dependencies = [
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "xxhash", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/8b/e6dc5edf71232ae5fa2779b32d98dd6a5c442639b9d26b89fb8b6151b0b4/turbobt-0.0.7.tar.gz", hash = "sha256:fc82ff855271c2a6f5edf8098ccc5739d55e195fde375b801b35a6be363b840f", size = 115124, upload-time = "2025-06-03T09:04:18.355Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f6/4b/68c1f66b1d505f227b8295ccbba5424eca143c6f6322962e33d20ac9c508/turbobt-0.0.8.tar.gz", hash = "sha256:6d6746745dcee10ac577009422443dbfc4365b2a7dab511b1eacce7b124d7a2e", size = 115135, upload-time = "2025-06-03T12:13:45.346Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/50/96/79caccdbecb2dcbcaec09c59a534434e47d9e36efbf4e38783be86b034bb/turbobt-0.0.7-py3-none-any.whl", hash = "sha256:1839e983569423f66665865957128494103ea4013337349f2968f1c7467863c8", size = 37297, upload-time = "2025-06-03T09:04:16.513Z" },
+    { url = "https://files.pythonhosted.org/packages/52/51/d3cd44c3e8cd620b7bc6550b5f8436e6198c1b2ceca9c8f10fc811b45c12/turbobt-0.0.8-py3-none-any.whl", hash = "sha256:116572c9dd1814a3f4745a5aee24d819467999db5e46e0ba4a8f21ae7eae93fc", size = 37307, upload-time = "2025-06-03T12:13:43.347Z" },
 ]
 
 [[package]]
@@ -2816,7 +2816,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "sentry-sdk", specifier = "==1.29.2" },
     { name = "tenacity", specifier = ">=8.2.3" },
-    { name = "turbobt", specifier = "~=0.0.7" },
+    { name = "turbobt", specifier = "~=0.0.8" },
     { name = "uvloop", specifier = ">=0.19.0" },
     { name = "web3", specifier = ">=7.11.0" },
     { name = "websockets", specifier = ">=14.0,<15.0" },
