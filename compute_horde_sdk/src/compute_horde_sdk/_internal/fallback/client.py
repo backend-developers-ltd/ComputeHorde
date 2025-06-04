@@ -344,17 +344,14 @@ class FallbackClient:
         for job_uuid in self._jobs.keys():
             yield await self.get_job(job_uuid)
 
-    async def get_streaming_server_certificate(self, job_uuid: str) -> bytes:
+    async def get_streaming_server_certificate(self, job_uuid: str) -> bytes | None:
         """
         Retrieve the streaming server certificate for a job.
         """
         job = self._jobs[job_uuid]
         path = "/streaming_server_data"
         server_data = job.download(path, max_size=self.MAX_ARTIFACT_SIZE)
-        certificate = server_data.get("/streaming_server_data/certificate.pem")
-        if certificate is None:
-            raise RuntimeError("Streaming server certificate not found.")
-        return certificate
+        return server_data.get("/streaming_server_data/certificate.pem")
 
     async def get_streaming_server_head_ip(self, job_uuid: str) -> str | None:
         """
