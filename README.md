@@ -47,7 +47,6 @@ paving the way for Bittensor to scale beyond its current limitations to support 
 - **Built-in DDoS Shield for Miners**  
   Miners can now protect themselves from denial-of-service attacks by activating the **optional DDoS shield**.
   This tool reduces vulnerability and ensures stable mining performance.
-  Validators are already compatible.
   - Just run the Docker image from the [DDoS Shield repository](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side).
 
 
@@ -129,7 +128,7 @@ This encourages **variance**, which is essential for preventing [weight-copying]
 If you're a returning miner, here's what's new in ComputeHorde:
 
 - **🛡️ DDoS Shield Available:** Miners can now protect themselves against network attacks by running an optional shield. 
-  Just run the Docker container from the [DDoS Shield repo](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side). Validators are already compatible.
+  Just run the Docker container from the [DDoS Shield repo](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side). 
   
 - **💰 Collateral for Organic Jobs:** Validators may now require miners to deposit collateral. Doing so increases trust and lets you access additionally paid **organic jobs**. 
   If you don't deposit, you can still do synthetic jobs as before.

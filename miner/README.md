@@ -135,8 +135,6 @@ This tool is deployed as a simple Docker container and integrates seamlessly wit
 
 See the [DDoS Shield repository](https://github.com/bactensor/bt-ddos-shield#running-shield-on-server-miner-side) for setup instructions.
 
-> **Note:** Validators are already compatible with shielded miners.
-
 
 ## Early Access Features - Preprod Images
 
