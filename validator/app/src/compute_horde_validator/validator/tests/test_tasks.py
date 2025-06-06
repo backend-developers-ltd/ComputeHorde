@@ -1,3 +1,5 @@
+import itertools
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
@@ -27,11 +29,8 @@ from compute_horde_validator.validator.tasks import (
 )
 
 from .helpers import (
-    MockMetagraph,
     MockMinerClient,
-    MockSubtensor,
     check_system_events,
-    neurons_to_validator_infos,
 )
 
 
@@ -40,9 +39,8 @@ def _get_cycle(block: int) -> Cycle:
 
 
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_trigger_run_admin_job__should_trigger_job():
+def test_trigger_run_admin_job__should_trigger_job(bittensor):
     miner = Miner.objects.create(hotkey="miner_client_1")
     OrganicJob.objects.all().delete()
     job_request = AdminJobRequest.objects.create(
@@ -148,22 +146,8 @@ def test__calculate_job_start_block():
     assert calculate_job_start_block(cycle=range(100, 201), offset=10, total=3, index_=2) == 170
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__schedule_validation_run__not_in_validators(validators):
-    with patch(
-        "compute_horde_validator.validator.tasks.get_validators",
-        lambda *args, **kwargs: neurons_to_validator_infos(validators),
-    ):
-        assert SyntheticJobBatch.objects.count() == 0
-        with pytest.raises(ScheduleError):
-            schedule_synthetic_jobs()
-        assert SyntheticJobBatch.objects.count() == 0
-
-
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor(override_block_number=1200))
-@pytest.mark.django_db(databases=["default", "default_alias"])
-def test__schedule_validation_run__unable_to_fetch_metagraph(validators):
+def test__schedule_validation_run__not_in_validators(bittensor):
     assert SyntheticJobBatch.objects.count() == 0
     with pytest.raises(ScheduleError):
         schedule_synthetic_jobs()
@@ -171,134 +155,114 @@ def test__schedule_validation_run__unable_to_fetch_metagraph(validators):
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__schedule_validation_run__simple(validators_with_this_hotkey):
-    with patch(
-        "bittensor.subtensor",
-        lambda *args, **kwargs: MockSubtensor(
-            override_block_number=140,
-            mocked_metagraph=lambda *a, **kw: MockMetagraph(
-                neurons=validators_with_this_hotkey, num_neurons=None
-            ),
-        ),
-    ):
-        assert SyntheticJobBatch.objects.count() == 0
+def test__schedule_validation_run__unable_to_fetch_metagraph(bittensor):
+    bittensor.blocks.head.return_value.number = 1200
+
+    assert SyntheticJobBatch.objects.count() == 0
+    with pytest.raises(ScheduleError):
         schedule_synthetic_jobs()
-        assert SyntheticJobBatch.objects.count() == 1
-
-        schedule = SyntheticJobBatch.objects.last()
-        assert schedule.block == 390
+    assert SyntheticJobBatch.objects.count() == 0
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test__schedule_validation_run__concurrent(validators_with_this_hotkey):
-    with patch(
-        "compute_horde_validator.validator.tasks.get_validators",
-        lambda *args, **kwargs: neurons_to_validator_infos(validators_with_this_hotkey),
-    ):
-        assert SyntheticJobBatch.objects.count() == 0
-        num_threads = 10
-        with ThreadPoolExecutor(max_workers=num_threads) as pool:
-            pool.map(lambda _: schedule_synthetic_jobs(), range(num_threads))
+def test__schedule_validation_run__simple(bittensor, validators_with_this_hotkey):
+    bittensor.blocks.__getitem__.return_value.get.return_value.hash = (
+        "0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464"
+    )
+    bittensor.blocks.head.return_value.number = 140
+    bittensor.subnet.return_value.list_validators.return_value = sorted(
+        validators_with_this_hotkey,
+        key=lambda validator: validator.stake,
+        reverse=True,
+    )
 
-        assert SyntheticJobBatch.objects.count() == 1
+    assert SyntheticJobBatch.objects.count() == 0
+    schedule_synthetic_jobs()
+    assert SyntheticJobBatch.objects.count() == 1
+
+    schedule = SyntheticJobBatch.objects.last()
+    assert schedule.block == 390
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+def test__schedule_validation_run__concurrent(bittensor, validators_with_this_hotkey):
+    bittensor.blocks.__getitem__.return_value.get.return_value.hash = (
+        "0xed0050a68f7027abdf10a5e4bd7951c00d886ddbb83bed5b3236ed642082b464"
+    )
+    bittensor.blocks.head.return_value.number = 140
+    bittensor.subnet.return_value.list_validators.return_value = validators_with_this_hotkey
+
+    assert SyntheticJobBatch.objects.count() == 0
+    num_threads = 10
+    with ThreadPoolExecutor(max_workers=num_threads) as pool:
+        pool.map(lambda _: schedule_synthetic_jobs(), range(num_threads))
+
+    assert SyntheticJobBatch.objects.count() == 1
+
+
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__schedule_validation_run__already_scheduled(validators_with_this_hotkey):
-    from bittensor import subtensor
-
-    current_block = subtensor().get_current_block()
-    assert current_block == 1000
+def test__schedule_validation_run__already_scheduled(bittensor, validators_with_this_hotkey):
+    current_block = 1000
 
     SyntheticJobBatch.objects.create(block=current_block + 20, cycle=_get_cycle(current_block + 20))
-    with patch(
-        "compute_horde_validator.validator.tasks.get_validators",
-        lambda *args, **kwargs: neurons_to_validator_infos(validators_with_this_hotkey),
-    ):
-        schedule_synthetic_jobs()
-        assert SyntheticJobBatch.objects.count() == 1
+
+    bittensor.blocks.head.return_value.number = current_block
+    bittensor.subnet.return_value.neurons.validators.return_value = validators_with_this_hotkey
+
+    schedule_synthetic_jobs()
+    assert SyntheticJobBatch.objects.count() == 1
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs")
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__run_synthetic_jobs__not_serving():
+def test__run_synthetic_jobs__not_serving(_run_synthetic_jobs, bittensor):
     from constance import config
 
     config.SERVING = False
 
     run_synthetic_jobs()
 
-    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
-
     assert _run_synthetic_jobs.apply_async.call_count == 0
 
 
-@patch(
-    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
-    lambda *args, **kwargs: MockSubtensor(),
-)
-@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs")
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__run_synthetic_jobs__not_scheduled():
+def test__run_synthetic_jobs__not_scheduled(_run_synthetic_jobs, bittensor):
     run_synthetic_jobs()
 
-    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
-
     assert _run_synthetic_jobs.apply_async.call_count == 0
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch(
-    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
-    lambda *args, **kwargs: MockSubtensor(),
-)
-@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs")
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__run_synthetic_jobs__debug_dont_stagger_validators__true(settings):
+def test__run_synthetic_jobs__debug_dont_stagger_validators__true(
+    _run_synthetic_jobs, settings, bittensor
+):
     settings.DEBUG_DONT_STAGGER_VALIDATORS = True
     settings.CELERY_TASK_ALWAYS_EAGER = True
 
     run_synthetic_jobs()
 
-    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
-
     assert _run_synthetic_jobs.apply_async.call_count == 1
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch(
-    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
-    lambda *args, **kwargs: MockSubtensor(),
-)
-@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs")
 @pytest.mark.django_db(databases=["default", "default_alias"])
-def test__run_synthetic_jobs__debug_dont_stagger_validators__false(settings):
+def test__run_synthetic_jobs__debug_dont_stagger_validators__false(
+    _run_synthetic_jobs, settings, bittensor
+):
     settings.DEBUG_DONT_STAGGER_VALIDATORS = False
     settings.CELERY_TASK_ALWAYS_EAGER = True
 
-    from bittensor import subtensor
+    current_block = 1
 
-    current_block = subtensor().get_current_block()
     SyntheticJobBatch.objects.create(block=current_block + 50, cycle=_get_cycle(current_block + 50))
 
     run_synthetic_jobs()
 
-    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
-
     assert _run_synthetic_jobs.apply_async.call_count == 0
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch(
-    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
-    lambda *args, **kwargs: MockSubtensor(
-        increase_block_number_with_each_call=True,
-        override_block_number=100,
-    ),
-)
 @pytest.mark.django_db(databases=["default", "default_alias"])
 @pytest.mark.parametrize(
     ("trigger_block", "expected_logs", "expected_runs", "increase", "system_event"),
@@ -353,93 +317,84 @@ def test__run_synthetic_jobs__debug_dont_stagger_validators__false(settings):
 )
 @patch("time.sleep", MagicMock())
 def test__run_synthetic_jobs__different_timings(
-    settings, caplog, trigger_block, expected_logs, expected_runs, increase, system_event
+    bittensor, settings, caplog, trigger_block, expected_logs, expected_runs, increase, system_event
 ):
-    with patch(
-        "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
-        lambda *args, **kwargs: MockSubtensor(
-            increase_block_number_with_each_call=increase,
-            override_block_number=100,
-        ),
-    ):
-        settings.CELERY_TASK_ALWAYS_EAGER = True
+    bittensor.blocks.head.side_effect = (
+        MagicMock(
+            number=i,
+        )
+        for i in itertools.count(100, increase)
+    )
 
-        SyntheticJobBatch.objects.create(block=trigger_block, cycle=_get_cycle(trigger_block))
-
-        with patch(
-            "compute_horde_validator.validator.tasks._run_synthetic_jobs"
-        ) as _run_synthetic_jobs:
-            run_synthetic_jobs(wait_in_advance_blocks=3)
-
-        assert (
-            len([r for r in caplog.records if "Waiting for block " in r.message]) == expected_logs
-        ), str([r.message for r in caplog.records])
-
-        if system_event:
-            check_system_events(*system_event)
-        else:
-            assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
-
-        assert _run_synthetic_jobs.apply_async.call_count == expected_runs
-
-
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch(
-    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
-    lambda *args, **kwargs: MockSubtensor(),
-)
-@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
-@pytest.mark.django_db(databases=["default", "default_alias"])
-def test__run_synthetic_jobs__many_scheduled_runs(settings):
     settings.CELERY_TASK_ALWAYS_EAGER = True
 
-    from bittensor import subtensor
+    SyntheticJobBatch.objects.create(block=trigger_block, cycle=_get_cycle(trigger_block))
 
-    current_block = subtensor().get_current_block()
+    with patch(
+        "compute_horde_validator.validator.tasks._run_synthetic_jobs"
+    ) as _run_synthetic_jobs:
+        run_synthetic_jobs(wait_in_advance_blocks=3)
+
+    assert len([r for r in caplog.records if "Waiting for block " in r.message]) == expected_logs, (
+        str([r.message for r in caplog.records])
+    )
+
+    if system_event:
+        check_system_events(*system_event)
+    else:
+        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
+
+    assert _run_synthetic_jobs.apply_async.call_count == expected_runs
+
+
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs")
+@pytest.mark.django_db(databases=["default", "default_alias"])
+def test__run_synthetic_jobs__many_scheduled_runs(_run_synthetic_jobs, settings, bittensor):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+
+    init_time = time.monotonic()
+
+    bittensor.blocks.head.side_effect = lambda *args, **kwargs: MagicMock(
+        number=1000 + int(time.monotonic() - init_time),
+    )
+
+    current_block = 1000 + int(time.monotonic() - init_time)
+
     SyntheticJobBatch.objects.create(block=current_block + 1, cycle=_get_cycle(current_block + 1))
     SyntheticJobBatch.objects.create(block=current_block + 2, cycle=_get_cycle(current_block + 2))
     SyntheticJobBatch.objects.create(block=current_block + 3, cycle=_get_cycle(current_block + 3))
 
     run_synthetic_jobs(wait_in_advance_blocks=5, poll_interval=timedelta(seconds=1))
 
-    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
-
     assert _run_synthetic_jobs.apply_async.call_count == 1
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch(
-    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
-    lambda *args, **kwargs: MockSubtensor(),
-)
-@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
+@patch("compute_horde_validator.validator.tasks._run_synthetic_jobs")
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test__run_synthetic_jobs__concurrent(settings):
+def test__run_synthetic_jobs__concurrent(_run_synthetic_jobs, settings, bittensor):
     settings.CELERY_TASK_ALWAYS_EAGER = True
+    current_block = 1
 
-    from bittensor import subtensor
+    bittensor.blocks.head.side_effect = (
+        MagicMock(
+            number=i,
+        )
+        for i in itertools.count(current_block)
+    )
 
-    current_block = subtensor().get_current_block()
     SyntheticJobBatch.objects.create(block=current_block + 1, cycle=_get_cycle(current_block + 1))
 
     num_threads = 10
     with ThreadPoolExecutor(max_workers=num_threads) as pool:
         pool.map(lambda _: run_synthetic_jobs(wait_in_advance_blocks=3), range(num_threads))
 
-    from compute_horde_validator.validator.tasks import _run_synthetic_jobs
-
     assert _run_synthetic_jobs.apply_async.call_count == 1
     assert SyntheticJobBatch.objects.last().started_at is not None
 
 
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
-@patch(
-    "compute_horde_validator.validator.tasks._get_subtensor_for_setting_scores",
-    lambda *args, **kwargs: MockSubtensor(),
-)
 @patch("compute_horde_validator.validator.tasks._run_synthetic_jobs", MagicMock())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test__check_missed_synthetic_jobs(settings):
+def test__check_missed_synthetic_jobs(settings, bittensor):
     settings.CELERY_TASK_ALWAYS_EAGER = True
 
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
@@ -447,9 +402,15 @@ def test__check_missed_synthetic_jobs(settings):
     check_missed_synthetic_jobs()
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
-    from bittensor import subtensor
+    current_block = 1
 
-    current_block = subtensor().get_current_block()
+    bittensor.blocks.head.side_effect = (
+        MagicMock(
+            number=i,
+        )
+        for i in itertools.count(current_block)
+    )
+
     SyntheticJobBatch.objects.create(block=current_block + 10, cycle=_get_cycle(current_block + 10))
     SyntheticJobBatch.objects.create(
         block=current_block - 10,

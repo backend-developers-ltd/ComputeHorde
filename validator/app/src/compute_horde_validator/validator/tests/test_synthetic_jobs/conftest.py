@@ -1,6 +1,5 @@
 import uuid
 
-import bittensor
 import pytest
 import pytest_asyncio
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, DEFAULT_LLM_EXECUTOR_CLASS
@@ -35,25 +34,6 @@ from .mock_generator import MockSyntheticJobGeneratorFactory
 @pytest.fixture
 def miner_hotkey():
     return "miner_hotkey"
-
-
-@pytest.fixture
-def miner_axon_info(miner_hotkey: str):
-    return bittensor.AxonInfo(
-        version=4,
-        ip="ignore",
-        ip_type=4,
-        port=9999,
-        hotkey=miner_hotkey,
-        coldkey=miner_hotkey,
-    )
-
-
-@pytest.fixture
-def axon_dict(miner_hotkey: str, miner_axon_info: bittensor.AxonInfo):
-    return {
-        miner_hotkey: miner_axon_info,
-    }
 
 
 @pytest_asyncio.fixture

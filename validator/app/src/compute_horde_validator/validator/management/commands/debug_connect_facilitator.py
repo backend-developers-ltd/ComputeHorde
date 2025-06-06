@@ -1,4 +1,4 @@
-import bittensor
+import bittensor_wallet
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -9,7 +9,7 @@ from compute_horde_validator.validator.organic_jobs.facilitator_client import Fa
 class DebugFacilitatorClient(FacilitatorClient):
     def __init__(
         self,
-        keypair: bittensor.Keypair,
+        keypair: bittensor_wallet.Keypair,
         facilitator_uri: str,
         miner_hotkey: str,
         miner_address: str,

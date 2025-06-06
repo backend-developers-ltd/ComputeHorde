@@ -1,7 +1,7 @@
 import os
 import pathlib
 
-import bittensor
+import bittensor_wallet
 
 os.environ.update(
     {
@@ -26,10 +26,10 @@ COLLATERAL_CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000"
 STATS_COLLECTOR_URL = "http://fakehost:8000"
 
 
-def BITTENSOR_WALLET() -> bittensor.wallet:  # type: ignore
+def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:  # type: ignore
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
         raise RuntimeError("Wallet not configured")
-    wallet = bittensor.wallet(
+    wallet = bittensor_wallet.Wallet(
         name=BITTENSOR_WALLET_NAME,
         hotkey=BITTENSOR_WALLET_HOTKEY_NAME,
         path=str(BITTENSOR_WALLET_DIRECTORY),

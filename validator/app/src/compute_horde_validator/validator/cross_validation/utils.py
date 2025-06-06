@@ -1,6 +1,6 @@
 import logging
 
-import bittensor
+import bittensor_wallet
 from asgiref.sync import sync_to_async
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
@@ -18,7 +18,7 @@ class TrustedMinerClient(OrganicMinerClient):
         miner_address: str,
         miner_port: int,
         job_uuid: str,
-        my_keypair: bittensor.Keypair,
+        my_keypair: bittensor_wallet.Keypair,
         transport: AbstractTransport | None = None,
     ) -> None:
         super().__init__(

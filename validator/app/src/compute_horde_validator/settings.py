@@ -9,7 +9,7 @@ import pathlib
 from datetime import timedelta
 from functools import wraps
 
-import bittensor
+import bittensor_wallet
 import environ
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from celery.schedules import crontab
@@ -769,6 +769,7 @@ def BITTENSOR_SHIELD_METAGRAPH_OPTIONS() -> ShieldMetagraphOptions:
     return ShieldMetagraphOptions(
         disable_uploading_certificate=BITTENSOR_SHIELD_DISABLE_UPLOADING_CERTIFICATE,
         certificate_path=str(BITTENSOR_SHIELD_CERTIFICATE_PATH),
+        replace_ip_address_for_axon=False,
     )
 
 
@@ -821,10 +822,10 @@ PROMPT_JOB_GENERATOR = env.str(
 )
 
 
-def BITTENSOR_WALLET() -> bittensor.wallet:
+def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
         raise RuntimeError("Wallet not configured")
-    wallet = bittensor.wallet(
+    wallet = bittensor_wallet.Wallet(
         name=BITTENSOR_WALLET_NAME,
         hotkey=BITTENSOR_WALLET_HOTKEY_NAME,
         path=str(BITTENSOR_WALLET_DIRECTORY),
