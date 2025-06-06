@@ -1,21 +1,17 @@
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
 import asyncio
 import os
 import tempfile
-from cryptography.hazmat.primitives import serialization
 import requests
 import time
+from cryptography.hazmat.primitives import serialization
 from compute_horde_sdk._internal.fallback.client import FallbackClient
 from compute_horde_sdk._internal.fallback.job import FallbackJobSpec
-from compute_horde_sdk._internal.models import InlineInputVolume
-from cryptography import x509
-from cryptography.x509.oid import NameOID
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from compute_horde_sdk._internal.sdk import ComputeHordeJobSpec
 from compute_horde_sdk.v1 import ExecutorClass
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import serialization
+import logging
 from typing import Tuple, Callable
 
 
@@ -66,9 +62,8 @@ def create_streaming_https_client(job: 'FallbackJob') -> Tuple[requests.Session,
     return session, cleanup
 
 async def main():
-    # Build ComputeHordeJobSpec first
     compute_horde_job_spec = ComputeHordeJobSpec(
-        executor_class=ExecutorClass.always_on__llm__a6000,
+        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
         job_namespace="SN123.0",
         docker_image="python:3.11-slim",
         args=[
@@ -103,7 +98,7 @@ async def main():
         work_dir="/"
     )
 
-    client = FallbackClient(cloud="runpod")
+    client = FallbackClient(cloud="runpod", idle_minutes=1)
     job = await client.create_job(fallback_job_spec)
     await job.wait_for_streaming(timeout=120)
 
