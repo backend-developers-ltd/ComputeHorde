@@ -1,0 +1,56 @@
+name: Run integration tests with fallback client
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+env:
+  PYTHON_DEFAULT_VERSION: "3.11"
+
+jobs:
+  test:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test_type: [streaming, regular]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          cache: "pip"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.6.x"
+          enable-cache: true
+
+      - name: configure runpod
+        working-directory: ./local_stack
+        run: uv run runpod config ${{ env.RUNPOD_API_KEY }}
+        env:
+          RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
+
+      - name: run sky check
+        working-directory: ./local_stack
+        run: uv run sky check
+
+      - name: test ${{ matrix.test_type }} job
+        working-directory: ./local_stack
+        run: |
+          if [ "${{ matrix.test_type }}" = "regular" ]; then
+            uv run ./fallback_job/send_fallback_job.py
+          else
+            uv run ./fallback_job/send_fallback_job_streaming.py
+          fi
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
+          RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
