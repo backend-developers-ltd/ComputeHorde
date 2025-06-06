@@ -59,6 +59,17 @@ services:
 With the `.env` and `docker-compose.yml` already in place, you can start the miner with `docker-compose up -d`.
 Test if it is running properly with `docker-compose ps`.
 
+## Admin panel
+
+Your miner exposes an admin panel that allows you to check its health. To access it, use the same address and port as 
+the ones you expose in your axon. For example, type `http://198.66.65.12.13:8000` in your browser. To log in you need 
+to set up an admin password, either in .env or manually.
+
+## Creating an admin user manually (not using DEFAULT_ADMIN_PASSWORD in .env)
+
+Run `docker-compose exec miner-runner docker-compose exec app python manage.py createsuperuser` and follow 
+the instructions.
+
 ## How it works
 
 The `backenddevelopersltd/compute-horde-miner-runner` docker image contains a `docker-compose.yml` file with all the necessary services to run a miner.
