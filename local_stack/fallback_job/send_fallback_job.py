@@ -1,15 +1,14 @@
 import logging
-logging.basicConfig(level=logging.DEBUG)
 
 import asyncio
-import os
+import base64
+import boto3
+import uuid
 from compute_horde_sdk._internal.fallback.client import FallbackClient
 from compute_horde_sdk._internal.fallback.job import FallbackJobSpec
 from compute_horde_sdk._internal.sdk import ComputeHordeJobSpec
 from compute_horde_sdk.v1 import ExecutorClass
 from compute_horde_sdk._internal.models import InlineInputVolume, HTTPOutputVolume, HTTPInputVolume
-import boto3
-import uuid
 
 
 logging.basicConfig(level=logging.INFO)
@@ -42,7 +41,7 @@ async def main():
     logger.info(f"Presigned PUT URL: {presigned_put}")  
 
     compute_horde_job_spec = ComputeHordeJobSpec(
-        executor_class=ExecutorClass.always_on__llm__a6000,
+        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
         job_namespace="SN123.0",
         docker_image="python:3.11-slim",
         artifacts_dir="/output",
@@ -82,10 +81,9 @@ async def main():
 
     fallback_job_spec = FallbackJobSpec.from_job_spec(
         compute_horde_job_spec, 
-        work_dir="/output", 
-        region="us")
+        work_dir="/output")
 
-    client = FallbackClient(cloud="runpod")
+    client = FallbackClient(cloud="runpod", idle_minutes=1)
     job = await client.create_job(fallback_job_spec)
     await job.wait(timeout=120)
     print(f"[Fallback] Job status: {job.status}")
@@ -94,16 +92,11 @@ async def main():
         print(f"[Fallback] Artifacts: {job.result.artifacts}")
         # Verification step
         expected_content = b"Read from input: " + INPUT_FILE_CONTENT
-        for path, content in job.result.artifacts.items():
-            import base64
-            if isinstance(content, bytes):
-                # If content is base64-encoded, decode it
-                try:
-                    decoded = base64.b64decode(content)
-                except Exception:
-                    decoded = content
-            else:
-                decoded = content.encode() if isinstance(content, str) else content
+        for _, content in job.result.artifacts.items():
+            try:
+                decoded = base64.b64decode(content)
+            except Exception:
+                decoded = content
             if decoded != expected_content:
                 raise RuntimeError(
                     "Artifact verification failed: one or more artifacts do not match the expected content."
