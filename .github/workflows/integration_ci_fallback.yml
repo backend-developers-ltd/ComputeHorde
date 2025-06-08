@@ -5,6 +5,9 @@ on:
     branches: [master, main]
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   PYTHON_DEFAULT_VERSION: "3.11"
 
