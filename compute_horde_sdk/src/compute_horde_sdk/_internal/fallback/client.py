@@ -124,7 +124,7 @@ http {
     ssl_client_certificate /etc/nginx/ssl/client.crt;
     ssl_verify_client on;
     location / {
-      proxy_pass http://localhost:80;
+      proxy_pass http://localhost:%(proxy_pass_port)s;
     }
     location /health {
       access_log off;
@@ -462,6 +462,7 @@ class FallbackClient:
             if job_spec.streaming:
                 streaming_setup = textwrap.dedent(STREAMING_SETUP_BASH_TEMPLATE) % {
                     "streaming_port": streaming_port,
+                    "proxy_pass_port": job_spec.proxy_pass_port,
                     "workdir": job_spec.work_dir,
                 }
             run_script = _RUN_TMPL.format(

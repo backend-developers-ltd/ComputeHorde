@@ -92,6 +92,14 @@ class FallbackJobSpec:
     streaming: bool = False
     """Whether to enable streaming."""
 
+    proxy_pass_port: int = 80
+    """
+    Port to proxy pass to for streaming jobs.
+
+    This is the internal port on which the job's server runs inside the Docker container.
+    The streaming server will proxy incoming requests to this port.
+    """
+
     @classmethod
     def from_job_spec(cls, job_spec: ComputeHordeJobSpec, **kwargs: Any) -> Self:
         if job_spec.executor_class == job_spec.executor_class.__class__.always_on__llm__a6000:
@@ -141,6 +149,7 @@ class FallbackJob:
         client_cert: bytes | None = None,
         private_key: RSAPrivateKey | bytes | None = None,
         streaming_port: str | None = None,
+        proxy_pass_port: int = 80,
     ):
         self._client = client
         self.uuid = uuid
@@ -152,6 +161,7 @@ class FallbackJob:
         self.streaming_port = streaming_port
         self.streaming_server_ip: str | None = None
         self.streaming_server_port: str | None = None
+        self.proxy_pass_port = proxy_pass_port
 
     async def wait(self, timeout: float | None = None) -> None:
         """
