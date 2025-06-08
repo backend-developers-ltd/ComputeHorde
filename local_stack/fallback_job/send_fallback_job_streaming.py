@@ -15,7 +15,7 @@ import logging
 from typing import Tuple, Callable
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
