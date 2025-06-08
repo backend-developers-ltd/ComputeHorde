@@ -104,4 +104,4 @@ async def main():
     logger.info("Success!")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

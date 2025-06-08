@@ -69,6 +69,7 @@ async def main():
         args=[
             # Write the FastAPI server to app.py and run it
             (
+                "env &&"
                 "pip install --no-cache-dir fastapi uvicorn && "
                 "echo 'from fastapi import FastAPI\n"
                 "import os, signal, threading\n"
@@ -80,7 +81,7 @@ async def main():
                 "    def shutdown(): os.kill(os.getpid(), signal.SIGINT)\n"
                 "    threading.Thread(target=shutdown).start()\n"
                 "    return {\"message\": \"Server is shutting down.\"}' > app.py && "
-                "uvicorn app:app --host 127.0.0.1 --port 80"
+                "uvicorn app:app --host 127.0.0.1 --port 8081"
             )
         ],
         output_volumes=None,
@@ -95,7 +96,8 @@ async def main():
     # Use from_job_spec to create the fallback job spec
     fallback_job_spec = FallbackJobSpec.from_job_spec(
         compute_horde_job_spec, 
-        work_dir="/"
+        work_dir="/",
+        proxy_pass_port=8081
     )
 
     client = FallbackClient(cloud="runpod", idle_minutes=1)
@@ -127,4 +129,4 @@ async def main():
     logger.info("Success!")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
