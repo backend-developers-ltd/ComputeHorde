@@ -13,6 +13,8 @@ import sky.exceptions
 import sky.sky_logging
 import sky.skylet.constants
 
+from .cloud import CloudAdapterFactory
+
 logger = logging.getLogger(__name__)
 
 
@@ -137,6 +139,7 @@ class SkyJob:
 
         self._job_id: int | None = None
         self._job_resource_handle: sky.backends.CloudVmRayResourceHandle | None = None
+        self._cloud_adapter = CloudAdapterFactory.create_adapter(str(cloud))
 
     @property
     def submitted(self) -> bool:
@@ -183,6 +186,12 @@ class SkyJob:
                 stream_logs=False,
             )
 
+        if self._cloud_adapter is not None and self._job_resource_handle:
+            try:
+                self._cloud_adapter.set_job_resource_handle(self._job_resource_handle)
+            except Exception as e:
+                logger.warning("Failed to initialize cloud adapter: %s", e)
+
         logger.info("Job submitted successfully with UUID: %s", self.job_uuid)
 
     def status(self) -> sky.JobStatus:
@@ -203,15 +212,14 @@ class SkyJob:
             raise SkyError("Job not yet submitted")
         return str(self._job_resource_handle.head_ip) if self._job_resource_handle.head_ip is not None else None
 
-    def get_job_ssh_ports(self) -> list[int] | None:
+    def get_job_ssh_port(self, internal_port: str) -> int | None:
         if not self.submitted or self._job_resource_handle is None:
-            logger.error("Attempted to get a head IP from a job that is not yet submitted.")
+            logger.error("Attempted to get SSH port from a job that is not yet submitted.")
             raise SkyError("Job not yet submitted")
 
-        ports = self._job_resource_handle.stable_ssh_ports
-        if ports is None:
-            return None
-        return list(ports)
+        if self._cloud_adapter is not None:
+            return self._cloud_adapter.get_ssh_port(internal_port)
+        return None
 
     def output(self) -> str:
         if not self.submitted:
