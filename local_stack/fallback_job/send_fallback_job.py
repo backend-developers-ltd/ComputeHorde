@@ -11,7 +11,7 @@ from compute_horde_sdk.v1 import ExecutorClass
 from compute_horde_sdk._internal.models import InlineInputVolume, HTTPOutputVolume, HTTPInputVolume
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 INPUT_FILE_CONTENT = b"This is the input file content.\n"
