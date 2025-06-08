@@ -168,4 +168,4 @@ class TestCloudAdapterFactory:
     def test_create_adapter_unsupported(self):
         """Test creating adapter for unsupported cloud."""
         adapter = CloudAdapterFactory.create_adapter("unsupported")
-        assert adapter is None 
+        assert adapter is None
