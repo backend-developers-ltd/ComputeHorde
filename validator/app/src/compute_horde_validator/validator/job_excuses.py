@@ -24,6 +24,7 @@ async def filter_valid_excuse_receipts(
     active_validators: list[ValidatorInfo] | None = None,
 ) -> list[Receipt]:
     if not receipts_to_check:
+        logger.debug("No receipts to check")
         return []
 
     if active_validators is None:
@@ -54,21 +55,34 @@ async def filter_valid_excuse_receipts(
 
     valid_receipts: list[Receipt] = []
     for receipt in receipts_to_check:
-        if (
-            isinstance(receipt.payload, JobStartedReceiptPayload)
-            and (receipt.payload.is_organic if declined_job_is_synthetic else True)
-            and receipt.payload.miner_hotkey == miner_hotkey
-            and receipt.payload.job_uuid != declined_job_uuid
-            and receipt.payload.validator_hotkey in allowed_validators
-            and receipt.payload.job_uuid not in seen_receipts
-            and receipt.payload.executor_class == declined_job_executor_class
-            and receipt.payload.timestamp < check_time
-            and check_time
-            < receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
-            and receipt.verify_validator_signature(throw=False)
-        ):
-            seen_receipts.add(receipt.payload.job_uuid)
-            valid_receipts.append(receipt)
+        validation_failures = []
+        if not isinstance(receipt.payload, JobStartedReceiptPayload):
+            validation_failures.append("not a JobStartedReceiptPayload")
+        if not (receipt.payload.is_organic if declined_job_is_synthetic else True):
+            validation_failures.append("is_organic check failed")
+        if receipt.payload.miner_hotkey != miner_hotkey:
+            validation_failures.append("miner_hotkey mismatch")
+        if receipt.payload.job_uuid == declined_job_uuid:
+            validation_failures.append("same job_uuid")
+        if receipt.payload.validator_hotkey not in allowed_validators:
+            validation_failures.append("validator not allowed")
+        if receipt.payload.executor_class != declined_job_executor_class:
+            validation_failures.append("executor_class mismatch")
+        if receipt.payload.timestamp >= check_time:
+            validation_failures.append("timestamp too new")
+        if check_time >= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway:
+            validation_failures.append("receipt expired")
+        if not receipt.verify_validator_signature(throw=False):
+            validation_failures.append("validator signature invalid")
+
+        if validation_failures:
+            logger.error(
+                f"Receipt {receipt.payload.job_uuid} failed validation: {', '.join(validation_failures)}"
+            )
+            continue
+
+        seen_receipts.add(receipt.payload.job_uuid)
+        valid_receipts.append(receipt)
 
     return valid_receipts
 
