@@ -3,7 +3,8 @@ name: "CD: facilitator (all)"
 on:
   push:
     branches:
-      - 'deploy-facilitator-*'
+    - 'deploy-facilitator-staging'
+    - 'deploy-facilitator-prod'
 
 jobs:
   deploy:

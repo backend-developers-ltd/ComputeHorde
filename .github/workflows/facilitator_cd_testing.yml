@@ -25,11 +25,14 @@ jobs:
           fetch-depth: 0
       - name: poor man's deploy
         run: |
-          # Create a temporary deploy key file in the workspace
-          mkdir -p $GITHUB_WORKSPACE/.deploy
-          echo "${{ secrets.FACITLITATOR_TESTING_DEPLOY_SSH_KEY }}" > $GITHUB_WORKSPACE/.deploy/deploy_key
-          chmod 600 $GITHUB_WORKSPACE/.deploy/deploy_key
+          DEPLOY_KEY_FILE=$(mktemp)
+          echo "${{ secrets.FACILITATOR_TESTING_DEPLOY_SSH_KEY }}" > "$DEPLOY_KEY_FILE"
+          chmod 600 "$DEPLOY_KEY_FILE"
 
-          GIT_SSH_COMMAND="ssh -i $GITHUB_WORKSPACE/.deploy/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-          git remote add deploy ${{ secrets.FACITLITATOR_TESTING_DEPLOY_POORMANS_URL }}
-          git push deploy HEAD:master -f
+          git remote add deploy ${{ vars.FACILITATOR_TESTING_DEPLOY_POORMANS_URL }}
+          GIT_SSH_COMMAND="ssh -i $DEPLOY_KEY_FILE -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            git push deploy HEAD:master -f
+          
+          export TAG=deployed-facilitator-testing-`date -u +"%Y-%m-%dT%H.%M.%S"`
+          git tag $TAG
+          git push origin $TAG
