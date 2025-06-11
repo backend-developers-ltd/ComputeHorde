@@ -9,6 +9,11 @@ import bittensor
 import pydantic
 from bittensor.core.errors import SubstrateRequestException
 
+try:
+    import turbobt
+except ImportError:
+    turbobt = None
+
 BAC_VALIDATOR_SS58_ADDRESS = "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
 MIN_VALIDATOR_STAKE = 1000
 VALIDATORS_LIMIT = 24
@@ -72,6 +77,40 @@ def get_validators(
         ValidatorInfo(uid=n.uid, hotkey=n.hotkey, stake=float(metagraph.total_stake[n.uid]))
         for n in neurons[:VALIDATORS_LIMIT]
     ]
+
+
+async def turbobt_get_validators(
+    bittensor: "turbobt.Bittensor",
+    netuid=12,
+    block: int | None = None,
+) -> list["turbobt.Neuron"]:
+    """
+    Validators are top 64 neurons in terms of stake, only taking into account those that have at least 1000
+    and forcibly including BAC_VALIDATOR_SS58_ADDRESS.
+    The result is sorted.
+    """
+    if turbobt is None:
+        raise ImportError("turbobt")
+
+    subnet = bittensor.subnet(netuid)
+
+    async with bittensor.blocks[block]:
+        validators: list[turbobt.Neuron] = await subnet.list_validators()
+        validators.sort(
+            key=lambda validator: (
+                validator.hotkey == BAC_VALIDATOR_SS58_ADDRESS,
+                validator.stake,
+            ),
+            reverse=True,
+        )
+
+        if not validators or validators[0].hotkey != BAC_VALIDATOR_SS58_ADDRESS:
+            validator = await subnet.get_neuron(BAC_VALIDATOR_SS58_ADDRESS)
+
+            if validator:
+                validators.insert(0, validator)
+
+        return validators
 
 
 def json_dumps_default(obj):

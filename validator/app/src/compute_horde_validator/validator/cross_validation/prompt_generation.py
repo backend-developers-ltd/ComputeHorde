@@ -2,7 +2,7 @@ import logging
 import uuid
 from collections.abc import Callable, Iterable
 
-import bittensor
+import bittensor_wallet
 from compute_horde.miner_client.organic import (
     OrganicJobError,
     execute_organic_job_on_miner,
@@ -137,5 +137,5 @@ async def _persist_series_list(
     return await PromptSeries.objects.abulk_create(objs)
 
 
-def _get_keypair() -> bittensor.Keypair:
+def _get_keypair() -> bittensor_wallet.Keypair:
     return settings.BITTENSOR_WALLET().get_hotkey()
