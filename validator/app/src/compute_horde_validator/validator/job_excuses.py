@@ -58,6 +58,7 @@ async def filter_valid_excuse_receipts(
         validation_failures = []
         if not isinstance(receipt.payload, JobStartedReceiptPayload):
             validation_failures.append("not a JobStartedReceiptPayload")
+            continue
         if not (receipt.payload.is_organic if declined_job_is_synthetic else True):
             validation_failures.append("is_organic check failed")
         if receipt.payload.miner_hotkey != miner_hotkey:
@@ -70,7 +71,10 @@ async def filter_valid_excuse_receipts(
             validation_failures.append("executor_class mismatch")
         if receipt.payload.timestamp >= check_time:
             validation_failures.append("timestamp too new")
-        if check_time >= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway:
+        if (
+            check_time
+            >= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
+        ):
             validation_failures.append("receipt expired")
         if not receipt.verify_validator_signature(throw=False):
             validation_failures.append("validator signature invalid")
