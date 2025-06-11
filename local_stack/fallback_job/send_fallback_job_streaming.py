@@ -54,7 +54,6 @@ async def main():
         }
     )
 
-    # Use from_job_spec to create the fallback job spec
     fallback_job_spec = FallbackJobSpec.from_job_spec(
         compute_horde_job_spec, 
         work_dir="/"
