@@ -1,0 +1,35 @@
+name: "CD: facilitator (all)"
+
+on:
+  push:
+    branches:
+      - 'deploy-facilitator-testing'
+
+jobs:
+  deploy:
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./facilitator
+    steps:
+      - id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PEM }}
+          owner: ${{ github.repository_owner }}
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: poor man's deploy
+        run: |
+          # Create a temporary deploy key file in the workspace
+          mkdir -p $GITHUB_WORKSPACE/.deploy
+          echo "${{ secrets.FACITLITATOR_TESTING_DEPLOY_SSH_KEY }}" > $GITHUB_WORKSPACE/.deploy/deploy_key
+          chmod 600 $GITHUB_WORKSPACE/.deploy/deploy_key
+
+          GIT_SSH_COMMAND="ssh -i $GITHUB_WORKSPACE/.deploy/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          git remote add deploy ${{ secrets.FACITLITATOR_TESTING_DEPLOY_POORMANS_URL }}
+          git push deploy HEAD:master -f
