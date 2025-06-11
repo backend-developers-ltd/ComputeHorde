@@ -104,13 +104,7 @@ async def turbobt_get_validators(
             reverse=True,
         )
 
-        try:
-            next(
-                validator
-                for validator in validators
-                if validator.hotkey == BAC_VALIDATOR_SS58_ADDRESS
-            )
-        except StopIteration:
+        if not validators or validators[0].hotkey != BAC_VALIDATOR_SS58_ADDRESS:
             validator = await subnet.get_neuron(BAC_VALIDATOR_SS58_ADDRESS)
 
             if validator:
