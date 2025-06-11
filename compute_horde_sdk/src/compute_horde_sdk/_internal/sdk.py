@@ -472,7 +472,6 @@ class ComputeHordeClient:
                 input_volume.to_compute_horde_volume(mount_path).model_dump()
                 for mount_path, input_volume in job_spec.input_volumes.items()
             ]
-
         if job_spec.output_volumes is not None:
             data["uploads"] = [
                 output_volume.to_compute_horde_output_upload(mount_path).model_dump()

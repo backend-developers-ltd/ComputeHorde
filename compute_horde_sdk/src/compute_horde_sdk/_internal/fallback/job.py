@@ -1,15 +1,11 @@
 import asyncio
-import base64
-import os
-import tempfile
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import IO, TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+import httpx
 
 from ..models import ComputeHordeJobResult, ComputeHordeJobStatus, InputVolume, OutputVolume
 from ..sdk import ComputeHordeJobSpec
@@ -92,14 +88,6 @@ class FallbackJobSpec:
     streaming: bool = False
     """Whether to enable streaming."""
 
-    proxy_pass_port: int = 80
-    """
-    Port to proxy pass to for streaming jobs.
-
-    This is the internal port on which the job's server runs inside the Docker container.
-    The streaming server will proxy incoming requests to this port.
-    """
-
     @classmethod
     def from_job_spec(cls, job_spec: ComputeHordeJobSpec, **kwargs: Any) -> Self:
         if job_spec.executor_class == job_spec.executor_class.__class__.always_on__llm__a6000:
@@ -146,22 +134,13 @@ class FallbackJob:
         uuid: str,
         status: FallbackJobStatus,
         result: FallbackJobResult | None = None,
-        client_cert: bytes | None = None,
-        private_key: RSAPrivateKey | bytes | None = None,
-        streaming_port: str | None = None,
-        proxy_pass_port: int = 80,
     ):
         self._client = client
         self.uuid = uuid
         self.status = status
         self.result = result
-        self.client_cert = client_cert
-        self.private_key = private_key
-        self.streaming_server_certificate: bytes | None = None
-        self.streaming_port = streaming_port
-        self.streaming_server_ip: str | None = None
-        self.streaming_server_port: str | None = None
-        self.proxy_pass_port = proxy_pass_port
+        self.streaming_server_address = "127.0.0.1"
+        self.streaming_server_port: int | None = None
 
     async def wait(self, timeout: float | None = None) -> None:
         """
@@ -183,81 +162,25 @@ class FallbackJob:
     async def wait_for_streaming(self, timeout: int = 120) -> None:
         """
         Wait for the streaming to start.
-        """
-        if not self.client_cert or not self.private_key:
-            raise ValueError("Client certificate and private key are required for streaming.")
-        start_time = time.monotonic()
-        temp_client_cert: IO[bytes] | None = None
-        temp_client_key: IO[bytes] | None = None
-        temp_server_cert: IO[bytes] | None = None
-        server_cert_path = None
-        try:
-            if self.client_cert:
-                temp_client_cert = tempfile.NamedTemporaryFile(delete=False, suffix=".crt")
-                if isinstance(self.client_cert, bytes):
-                    temp_client_cert.write(self.client_cert)
-                else:
-                    temp_client_cert.write(self.client_cert.public_bytes(serialization.Encoding.PEM))
-                temp_client_cert.close()
-            if self.private_key:
-                temp_client_key = tempfile.NamedTemporaryFile(delete=False, suffix=".key")
-                if isinstance(self.private_key, bytes):
-                    temp_client_key.write(self.private_key)
-                else:
-                    temp_client_key.write(
-                        self.private_key.private_bytes(
-                            encoding=serialization.Encoding.PEM,
-                            format=serialization.PrivateFormat.TraditionalOpenSSL,
-                            encryption_algorithm=serialization.NoEncryption(),
-                        )
-                    )
-                temp_client_key.close()
 
-            while True:
-                if timeout is not None and time.monotonic() - start_time > timeout:
-                    raise FallbackJobTimeoutError(f"Streaming did not start within {timeout} seconds.")
-                await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
-                await self.refresh()
-                if not self.streaming_server_certificate:
-                    cert = await self._client.get_streaming_server_certificate(self.uuid)
-                    if not cert:
-                        continue
-                    try:
-                        if cert is not None:
-                            self.streaming_server_certificate = base64.b64decode(cert)
-                    except Exception:
-                        continue
-                    temp_server_cert = tempfile.NamedTemporaryFile(delete=False, suffix=".crt")
-                    if self.streaming_server_certificate is not None:
-                        temp_server_cert.write(self.streaming_server_certificate)
-                    temp_server_cert.close()
-                    server_cert_path = temp_server_cert.name
-                if not self.streaming_server_ip:
-                    ip = await self._client.get_streaming_server_head_ip(self.uuid)
-                    if not ip:
-                        continue
-                    if ip is not None:
-                        self.streaming_server_ip = ip
-                if not self.streaming_server_port:
-                    if not server_cert_path or not os.path.exists(server_cert_path):
-                        raise ValueError("Server certificate file path is not set or does not exist.")
-                    port = await self._client.find_streaming_port(
-                        self.uuid,
-                        temp_client_cert.name if temp_client_cert is not None else "",
-                        temp_client_key.name if temp_client_key is not None else "",
-                        server_cert_path if server_cert_path else "",
-                    )
-                    if port is not None:
-                        self.streaming_server_port = str(port)
-                if self.streaming_server_certificate and self.streaming_server_ip and self.streaming_server_port:
-                    break
-        finally:
-            if temp_client_cert is not None:
-                os.unlink(temp_client_cert.name)
-            if temp_client_key is not None:
-                os.unlink(temp_client_key.name)
-            if temp_server_cert is not None:
-                os.unlink(temp_server_cert.name)
+        :param timeout: Maximum number of seconds to wait for streaming to start.
+        :raises FallbackJobTimeoutError: If streaming does not start within timeout seconds.
+        """
+        start_time = time.time()
+        url = f"http://{self.streaming_server_address}:{self.streaming_server_port}/health"
+
+        with httpx.Client() as client:
+            while time.time() - start_time < timeout:
+                try:
+                    resp = client.get(url)
+                    if resp.status_code == 200:
+                        client.close()
+                        return
+                except Exception:
+                    pass
+                await asyncio.sleep(1)
+
+        raise FallbackJobTimeoutError(f"Streaming did not start within {timeout} seconds")
 
     async def refresh(self) -> None:
         """

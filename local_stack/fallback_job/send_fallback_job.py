@@ -83,12 +83,11 @@ async def main():
         compute_horde_job_spec, 
         work_dir="/output")
 
-    client = FallbackClient(cloud="runpod", idle_minutes=1)
-    job = await client.create_job(fallback_job_spec)
-    await job.wait(timeout=120)
-    print(f"[Fallback] Job status: {job.status}")
-    print(f"[Fallback] Job output:\n{job.result.stdout}")
-    if job.result.artifacts:
+    with FallbackClient(cloud="runpod", idle_minutes=1) as fallback_client:
+        job = await fallback_client.create_job(fallback_job_spec)
+        await job.wait(timeout=120)
+        print(f"[Fallback] Job status: {job.status}")
+        print(f"[Fallback] Job output:\n{job.result.stdout}")
         print(f"[Fallback] Artifacts: {job.result.artifacts}")
         # Verification step
         expected_content = b"Read from input: " + INPUT_FILE_CONTENT

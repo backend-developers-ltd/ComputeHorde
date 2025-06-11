@@ -1,65 +1,34 @@
 import asyncio
-import os
-import tempfile
-import requests
-import time
-from cryptography.hazmat.primitives import serialization
-from compute_horde_sdk._internal.fallback.client import FallbackClient
-from compute_horde_sdk._internal.fallback.job import FallbackJobSpec
-from compute_horde_sdk._internal.sdk import ComputeHordeJobSpec
-from compute_horde_sdk.v1 import ExecutorClass
-from cryptography import x509
-from cryptography.x509.oid import NameOID
-from cryptography.hazmat.primitives import serialization
+import httpx
 import logging
-from typing import Tuple, Callable
+from compute_horde_sdk.v1.fallback import FallbackClient, FallbackJobSpec
+from compute_horde_sdk.v1 import ComputeHordeJobSpec, ExecutorClass, InlineInputVolume
 
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def create_streaming_https_client(job: 'FallbackJob') -> Tuple[requests.Session, Callable[[], None]]:
-    """
-    Prepares a requests.Session configured for HTTPS with client cert, key, and server cert verification.
-    Returns (session, cleanup_fn).
-    """
-    # Write client cert
-    temp_client_cert = tempfile.NamedTemporaryFile(delete=False, suffix='.crt')
-    if isinstance(job.client_cert, bytes):
-        temp_client_cert.write(job.client_cert)
-    else:
-        temp_client_cert.write(job.client_cert.public_bytes(serialization.Encoding.PEM))
-    temp_client_cert.close()
+STREAMING_SERVER_CODE = """from fastapi import FastAPI
+import os, signal, threading
 
-    # Write client key
-    temp_client_key = tempfile.NamedTemporaryFile(delete=False, suffix='.key')
-    if isinstance(job.private_key, bytes):
-        temp_client_key.write(job.private_key)
-    else:
-        temp_client_key.write(
-            job.private_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption()
-            )
-        )
-    temp_client_key.close()
+app = FastAPI()
 
-    temp_server_cert = tempfile.NamedTemporaryFile(delete=False, suffix='.crt')
-    temp_server_cert.write(job.streaming_server_certificate)
-    temp_server_cert.close()
+@app.get("/message")
+def root(): 
+    return {"message": "Some message."}
 
-    session = requests.Session()
-    session.cert = (temp_client_cert.name, temp_client_key.name)
-    session.verify = temp_server_cert.name
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
 
-    def cleanup():
-        os.unlink(temp_client_cert.name)
-        os.unlink(temp_client_key.name)
-        os.unlink(temp_server_cert.name)
-
-    return session, cleanup
+@app.post("/terminate")
+def terminate():
+    def shutdown(): 
+        os.kill(os.getpid(), signal.SIGINT)
+    threading.Thread(target=shutdown).start()
+    return {"message": "Server is shutting down."}
+"""
 
 async def main():
     compute_horde_job_spec = ComputeHordeJobSpec(
@@ -67,22 +36,8 @@ async def main():
         job_namespace="SN123.0",
         docker_image="python:3.11-slim",
         args=[
-            # Write the FastAPI server to app.py and run it
-            (
-                "env &&"
-                "pip install --no-cache-dir fastapi uvicorn && "
-                "echo 'from fastapi import FastAPI\n"
-                "import os, signal, threading\n"
-                "app = FastAPI()\n"
-                "@app.get(\"/\")\n"
-                "def root(): return {\"message\": \"Server is running.\"}\n"
-                "@app.post(\"/terminate\")\n"
-                "def terminate():\n"
-                "    def shutdown(): os.kill(os.getpid(), signal.SIGINT)\n"
-                "    threading.Thread(target=shutdown).start()\n"
-                "    return {\"message\": \"Server is shutting down.\"}' > app.py && "
-                "uvicorn app:app --host 127.0.0.1 --port 8081"
-            )
+            "pip install --no-cache-dir fastapi uvicorn && "
+            "cd /volume && uvicorn app:app --host 127.0.0.1 --port 8000"
         ],
         output_volumes=None,
         artifacts_dir="/output",
@@ -91,41 +46,49 @@ async def main():
         upload_time_limit_sec=5,
         streaming=True,
         streaming_start_time_limit_sec=10,
+        input_volumes={
+            "/volume/": InlineInputVolume.from_file_contents(
+                "app.py",
+                STREAMING_SERVER_CODE.encode('utf-8')
+            )
+        }
     )
 
     # Use from_job_spec to create the fallback job spec
     fallback_job_spec = FallbackJobSpec.from_job_spec(
         compute_horde_job_spec, 
-        work_dir="/",
-        proxy_pass_port=8081
+        work_dir="/"
     )
 
-    client = FallbackClient(cloud="runpod", idle_minutes=1)
-    job = await client.create_job(fallback_job_spec)
-    await job.wait_for_streaming(timeout=120)
+    with FallbackClient(cloud="runpod", idle_minutes=1) as fallback_client:
+        job = await fallback_client.create_job(fallback_job_spec)
+        await job.wait_for_streaming(timeout=120)
 
-    session, cleanup = create_streaming_https_client(job)
-    ip = job.streaming_server_ip
-    port = job.streaming_server_port
-    url = f"https://{ip}:{port}/terminate"
-    logger.info(f"[Fallback] Attempting to terminate server at {url}")
+        url = f"http://{job.streaming_server_address}:{job.streaming_server_port}"
 
-    max_retries = 5
-    for attempt in range(1, max_retries + 1):
-        try:
-            resp = session.post(url, timeout=5)
+        with httpx.Client(timeout=5.0) as client:
+            message_url = f"{url}/message"
+            logger.info(f"[Fallback] Testing /message endpoint at {message_url}")
+            resp = client.get(message_url)
             if resp.status_code == 200:
-                break
-        except Exception as e:
-            print(f"[Fallback] Error calling /terminate (attempt {attempt}): {e}")
-        backoff = 2 ** attempt
-        print(f"[Fallback] Retrying in {backoff} seconds...")
-        time.sleep(backoff)
-    else:
-        print(f"[Fallback] Failed to terminate server after {max_retries} attempts.")
-    cleanup()
+                data = resp.json()
+                if data.get("message") == "Some message.":
+                    logger.info("[Fallback] Successfully verified /message endpoint")
+                else:
+                    logger.error(f"[Fallback] Unexpected message content: {data}")
+            else:
+                logger.error(f"[Fallback] Failed to get /message: {resp.status_code}")
 
-    await job.wait(timeout=60)
+            # Terminate the server
+            terminate_url = f"{url}/terminate"
+            logger.info(f"[Fallback] Attempting to terminate server at {terminate_url}")
+            resp = client.post(terminate_url)
+            if resp.status_code == 200:
+                logger.info("[Fallback] Server terminated successfully")
+            else:
+                logger.error(f"[Fallback] Failed to terminate server: {resp.status_code}")
+
+        await job.wait(timeout=60)
     logger.info("Success!")
 
 if __name__ == "__main__":
