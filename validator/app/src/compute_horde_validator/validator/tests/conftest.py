@@ -50,6 +50,19 @@ def _patch_celery_job_execution():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _patch_collateral_contract_address(mocker: MockerFixture):
+    names = [
+        "get_collateral_contract_address",
+        "get_collateral_contract_address_async",
+    ]
+    for name in names:
+        mocker.patch(
+            f"compute_horde_validator.validator.collateral.{name}",
+            return_value="0x7b89cb9B1D5B6A9F2296072885019D8Bfecc704A",
+        )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def wallet():
     wallet = bittensor_wallet.Wallet(name="test_validator")
