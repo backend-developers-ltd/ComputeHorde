@@ -74,9 +74,9 @@ async def main():
                 if data.get("message") == "Some message.":
                     logger.info("[Fallback] Successfully verified /message endpoint")
                 else:
-                    logger.error(f"[Fallback] Unexpected message content: {data}")
+                    raise RuntimeError(f"[Fallback] Unexpected message content: {data}")
             else:
-                logger.error(f"[Fallback] Failed to get /message: {resp.status_code}")
+                raise RuntimeError(f"[Fallback] Failed to get /message: {resp.status_code}")
 
             # Terminate the server
             terminate_url = f"{url}/terminate"
@@ -85,7 +85,7 @@ async def main():
             if resp.status_code == 200:
                 logger.info("[Fallback] Server terminated successfully")
             else:
-                logger.error(f"[Fallback] Failed to terminate server: {resp.status_code}")
+                raise RuntimeError(f"[Fallback] Failed to terminate server: {resp.status_code}")
 
         await job.wait(timeout=60)
     logger.info("Success!")
