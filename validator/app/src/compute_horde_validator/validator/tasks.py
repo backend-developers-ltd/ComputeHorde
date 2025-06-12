@@ -42,12 +42,7 @@ from numpy.typing import NDArray
 from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator.collateral import (
-    get_evm_key_associations,
-    get_miner_collateral,
-    get_web3_connection,
-    slash_collateral,
-)
+from compute_horde_validator.validator import collateral
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
@@ -1415,13 +1410,14 @@ def sync_collaterals(
     :type block: int
     :return: None
     """
-    associations = async_to_sync(get_evm_key_associations)(
+    associations = async_to_sync(collateral.get_evm_key_associations)(
         subtensor=bittensor.subtensor,
         netuid=settings.BITTENSOR_NETUID,
         block_hash=block.hash,
     )
     miners = Miner.objects.filter(hotkey__in=hotkeys)
-    w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
+    w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
+    contract_address = collateral.get_collateral_contract_address()
 
     to_update = []
     for miner in miners:
@@ -1435,12 +1431,12 @@ def sync_collaterals(
         if not miner.evm_address:
             continue
 
-        if settings.COLLATERAL_CONTRACT_ADDRESS:
+        if contract_address:
             try:
-                collateral = get_miner_collateral(
-                    w3, settings.COLLATERAL_CONTRACT_ADDRESS, miner.evm_address, block.number
+                collateral_wei = collateral.get_miner_collateral(
+                    w3, contract_address, miner.evm_address, block.number
                 )
-                miner.collateral_wei = Decimal(collateral)
+                miner.collateral_wei = Decimal(collateral_wei)
             except Exception as e:
                 msg = f"Error while fetching miner collateral: {e}"
                 logger.warning(msg)
@@ -2043,13 +2039,14 @@ def slash_collateral_task(job_uuid: str) -> None:
             logger.info(f"Already slashed for this job {job_uuid}")
             return
 
+        contract_address = collateral.get_collateral_contract_address()
         slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
-        if slash_amount > 0 and job.miner.evm_address:
+        if contract_address and slash_amount > 0 and job.miner.evm_address:
             try:
-                w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
-                slash_collateral(
+                w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
+                collateral.slash_collateral(
                     w3=w3,
-                    contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
+                    contract_address=contract_address,
                     miner_address=job.miner.evm_address,
                     amount_wei=slash_amount,
                     url=f"job {job_uuid} cheated",
