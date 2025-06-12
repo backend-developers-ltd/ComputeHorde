@@ -8,6 +8,9 @@ from typing import Any
 import bittensor.utils
 import requests
 import turbobt
+from asgiref.sync import sync_to_async
+from bittensor.core.chain_data.utils import decode_metadata
+from bittensor.core.extrinsics.serving import get_metadata
 from django.conf import settings
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -29,6 +32,28 @@ def get_private_key() -> str | None:
         return private_key
     except (FileNotFoundError, KeyError, json.JSONDecodeError):
         return None
+
+
+@functools.cache
+def get_collateral_contract_address() -> str | None:
+    with bittensor.Subtensor(network=settings.BITTENSOR_NETWORK) as subtensor:
+        hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address
+
+        # using internals of subtensor.get_commitment() to avoid fetching metagraph
+        metadata = get_metadata(subtensor, netuid=settings.BITTENSOR_NETUID, hotkey=hotkey)
+        try:
+            raw_commitment = decode_metadata(metadata)
+            data = json.loads(raw_commitment)
+            contract_address: str = data["contract"]["address"]
+            return contract_address
+        except (TypeError, KeyError, json.JSONDecodeError):
+            return None
+
+
+get_collateral_contract_address_async = sync_to_async(
+    get_collateral_contract_address,
+    thread_sensitive=False,
+)
 
 
 @functools.cache
