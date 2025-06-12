@@ -268,23 +268,26 @@ class FallbackClient:
     async def create_ssh_tunnel(self, job_uuid: str, local_port: int) -> None:
         """
         Create an SSH tunnel to the job's streaming port.
-        
+
         :param job_uuid: The UUID of the job to tunnel to
         :param local_port: The local port to forward to
         """
         job = self._jobs[job_uuid]
         head_ip = job.get_job_head_ip()
         ssh_port = await self.get_job_streaming_port(job_uuid)
-        
+
         if not ssh_port:
             raise FallbackNotFoundError(f"Could not get SSH port for job {job_uuid}")
 
         tunnel_cmd = [
             "ssh",
             "-N",
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
-            "-i", str(pathlib.Path.home() / ".ssh" / "sky-key"),
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+            "-i",
+            str(pathlib.Path.home() / ".ssh" / "sky-key"),
             "-L",
             f"{local_port}:localhost:8000",
             f"root@{head_ip}",
