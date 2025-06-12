@@ -13,11 +13,8 @@ env:
 
 jobs:
   test:
-    timeout-minutes: 10
+    timeout-minutes: 20
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        test_type: [streaming, regular]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -45,14 +42,17 @@ jobs:
         working-directory: ./local_stack
         run: uv run sky check
 
-      - name: test ${{ matrix.test_type }} job
+      - name: test regular job
         working-directory: ./local_stack
-        run: |
-          if [ "${{ matrix.test_type }}" = "regular" ]; then
-            uv run ./fallback_job/send_fallback_job.py
-          else
-            uv run ./fallback_job/send_fallback_job_streaming.py
-          fi
+        run: uv run ./fallback_job/send_fallback_job.py
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
+          RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
+
+      - name: test streaming job
+        working-directory: ./local_stack
+        run: uv run ./fallback_job/send_fallback_job_streaming.py
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
