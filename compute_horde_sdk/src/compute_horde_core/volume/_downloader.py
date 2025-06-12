@@ -246,7 +246,7 @@ async def download_get(
         if bytes_received > 0:
             headers["Range"] = f"bytes={bytes_received}-"
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             async with client.stream("GET", url, headers=headers) as response:
                 if response.status_code == 416:  # Requested Range Not Satisfiable
                     # Server doesn't support resume, start from the beginning
