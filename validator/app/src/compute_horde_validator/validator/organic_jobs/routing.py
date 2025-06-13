@@ -1,4 +1,5 @@
 import logging
+import math
 from datetime import timedelta
 from typing import assert_never
 
@@ -110,7 +111,9 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         )
 
         if seconds_remaining_in_cycle < seconds_required_in_cycle:
-            logger.debug(f"NotEnoughTimeInCycle: {seconds_remaining_in_cycle=} {seconds_required_in_cycle=}")
+            logger.debug(
+                f"NotEnoughTimeInCycle: {seconds_remaining_in_cycle=} {seconds_required_in_cycle=}"
+            )
             raise NotEnoughTimeInCycle()
 
     manifests_qs = (
@@ -283,5 +286,7 @@ async def blacklist_miner(
 
 def get_seconds_remaining_in_current_cycle(current_block: int) -> int:
     cycle = get_cycle_containing_block(current_block, netuid=settings.BITTENSOR_NETUID)
-    time_remaining_in_cycle = (cycle.stop - current_block) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
-    return time_remaining_in_cycle.total_seconds()
+    time_remaining_in_cycle = (
+        cycle.stop - current_block
+    ) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
+    return math.floor(time_remaining_in_cycle.total_seconds())
