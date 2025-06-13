@@ -2,7 +2,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-import bittensor
+import bittensor_wallet
 import httpx
 import pytest
 
@@ -46,6 +46,7 @@ def get_job_response(uuid: str = TEST_JOB_UUID, status: str = "Accepted", **kwar
         "output_download_url": "",
         "tag": "",
         "stdout": "",
+        "stderr": "",
         "volumes": [],
         "uploads": [],
         "target_validator_hotkey": "abcd1234",
@@ -80,21 +81,34 @@ def assert_signature(request: httpx.Request):
         raise SignatureInvalidException(f"Invalid signature scope: {signature}")
 
 
+def setup_successful_authentication(httpx_mock):
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/auth/nonce",
+        json={"nonce": "test_nonce"},
+    )
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/auth/login",
+        json={"token": "test_token"},
+    )
+
+
 @pytest.fixture
 def keypair():
-    return bittensor.Keypair.create_from_mnemonic(
+    return bittensor_wallet.Keypair.create_from_mnemonic(
         "slot excuse valid grief praise rifle spoil auction weasel glove pen share"
     )
 
 
 @pytest.fixture
 def compute_horde_client(keypair, apiver_module) -> "ComputeHordeClient":
-    return apiver_module.ComputeHordeClient(
+    client = apiver_module.ComputeHordeClient(
         hotkey=keypair,
         compute_horde_validator_hotkey="abcdef",
         job_queue="sn123",
         facilitator_url=TEST_FACILITATOR_URL,
     )
+    client._token = "test_jwt_token"
+    return client
 
 
 @pytest.fixture
@@ -103,6 +117,10 @@ def job_spec(apiver_module, compute_horde_client) -> "ComputeHordeJobSpec":
         executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
         job_namespace="SN123.0",
         docker_image=TEST_DOCKER_IMAGE,
+        download_time_limit_sec=1,
+        execution_time_limit_sec=1,
+        upload_time_limit_sec=1,
+        streaming_start_time_limit_sec=1,
     )
 
 
@@ -132,11 +150,17 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
         facilitator_url=TEST_FACILITATOR_URL,
     )
 
+    client._token = "test_jwt_token"
+
     job = await client.create_job(
         apiver_module.ComputeHordeJobSpec(
             executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
             job_namespace="SN123.0",
             docker_image=TEST_DOCKER_IMAGE,
+            download_time_limit_sec=1,
+            execution_time_limit_sec=1,
+            upload_time_limit_sec=1,
+            streaming_start_time_limit_sec=1,
         )
     )
 
@@ -330,6 +354,10 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
                     http_method="POST", url="https://s3.aws.something.com/mybucket/images"
                 ),
             },
+            download_time_limit_sec=1,
+            execution_time_limit_sec=1,
+            upload_time_limit_sec=1,
+            streaming_start_time_limit_sec=1,
         )
     )
 
@@ -350,6 +378,7 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
             "repo_type": None,
             "revision": None,
             "allow_patterns": None,
+            "token": None,
         },
         {
             "volume_type": "inline",
@@ -389,6 +418,10 @@ async def test_create_job__http_error(apiver_module, compute_horde_client, httpx
                 executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
                 job_namespace="SN123.0",
                 docker_image=TEST_DOCKER_IMAGE,
+                download_time_limit_sec=1,
+                execution_time_limit_sec=1,
+                upload_time_limit_sec=1,
+                streaming_start_time_limit_sec=1,
             )
         )
 
@@ -403,6 +436,10 @@ async def test_create_job__malformed_response(apiver_module, compute_horde_clien
                 executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
                 job_namespace="SN123.0",
                 docker_image=TEST_DOCKER_IMAGE,
+                download_time_limit_sec=1,
+                execution_time_limit_sec=1,
+                upload_time_limit_sec=1,
+                streaming_start_time_limit_sec=1,
             )
         )
 
@@ -663,3 +700,138 @@ async def test_run_until_complete__timeout(
 
     with pytest.raises(apiver_module.ComputeHordeJobTimeoutError):
         await compute_horde_client.run_until_complete(job_spec, timeout=timeout)
+
+
+@pytest.mark.asyncio
+async def test_lazy_authentication_flow(apiver_module, compute_horde_client, httpx_mock):
+    """
+    Test that authentication is performed lazily on the first request.
+    """
+
+    # Ensure the client is not authenticated
+    compute_horde_client._token = None
+
+    setup_successful_authentication(httpx_mock)
+
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"),
+    )
+
+    job = await compute_horde_client.get_job(TEST_JOB_UUID)
+
+    assert compute_horde_client._token == "test_token"
+    requests = httpx_mock.get_requests()
+    job_request = requests[-1]
+    assert "Authorization" in job_request.headers
+    assert job_request.headers["Authorization"] == "Bearer test_token"
+    assert job.uuid == TEST_JOB_UUID
+    assert job.status == "Accepted"
+
+
+@pytest.mark.asyncio
+async def test_retry_on_token_expire(apiver_module, compute_horde_client, httpx_mock):
+    """
+    Test that when a request returns a 401 "Token expired",
+    the client re-authenticates and then retries request.
+    """
+    compute_horde_client._token = "expired_token"
+
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/", status_code=401, text="Token expired"
+    )
+
+    setup_successful_authentication(httpx_mock)
+
+    # Retry: successful response for the retried job request.
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"),
+    )
+
+    job = await compute_horde_client.get_job(TEST_JOB_UUID)
+
+    # Verify that the client's token was updated.
+    assert compute_horde_client._token == "test_token"
+
+    # Ensure that the final job request used the new token.
+    requests = httpx_mock.get_requests()
+    job_requests = [r for r in requests if r.url == f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/"]
+    # We expect two job requests: the initial (failed) one and the retried successful one.
+    assert len(job_requests) == 2
+    final_job_request = job_requests[-1]
+    assert final_job_request.headers.get("Authorization") == "Bearer test_token"
+
+    # Validate that the job response is successful.
+    assert job.uuid == TEST_JOB_UUID
+    assert job.status == "Accepted"
+
+
+@pytest.mark.asyncio
+async def test_create_and_wait_for_streaming_job(
+    apiver_module, compute_horde_client, httpx_mock, keypair, async_sleep_mock
+):
+    streaming_server_address = "127.0.0.1"
+    streaming_server_port = 12345
+    streaming_server_cert = "dummy-server-cert"
+
+    # Mock job creation response (Sent)
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
+        json=get_job_response(
+            uuid=TEST_JOB_UUID,
+            status="Sent",
+            streaming_server_cert=None,
+            streaming_server_address=None,
+            streaming_server_port=None,
+        ),
+    )
+
+    # Mock job status transitions: Sent -> Streaming Ready -> Completed
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(
+            uuid=TEST_JOB_UUID,
+            status="Streaming Ready",
+            streaming_server_cert=streaming_server_cert,
+            streaming_server_address=streaming_server_address,
+            streaming_server_port=streaming_server_port,
+        ),
+    )
+    httpx_mock.add_response(
+        url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
+        json=get_job_response(
+            uuid=TEST_JOB_UUID,
+            status="Completed",
+            streaming_server_cert=streaming_server_cert,
+            streaming_server_address=streaming_server_address,
+            streaming_server_port=streaming_server_port,
+        ),
+    )
+
+    # Create a streaming job spec
+    job_spec = apiver_module.ComputeHordeJobSpec(
+        executor_class=apiver_module.ExecutorClass.spin_up_4min__gpu_24gb,
+        job_namespace="SN123.0",
+        docker_image=TEST_DOCKER_IMAGE,
+        download_time_limit_sec=1,
+        execution_time_limit_sec=1,
+        upload_time_limit_sec=1,
+        streaming=True,
+        streaming_start_time_limit_sec=1,
+    )
+
+    job = await compute_horde_client.create_job(job_spec)
+    assert job.uuid == TEST_JOB_UUID
+    assert job.status == "Sent"
+
+    # Wait for streaming readiness
+    await job.wait_for_streaming(timeout=10)
+    assert job.status == apiver_module.ComputeHordeJobStatus.STREAMING_READY
+    assert job.streaming_server_address == streaming_server_address
+    assert job.streaming_server_port == streaming_server_port
+    assert job.streaming_server_cert == streaming_server_cert
+
+    # Wait for job completion
+    await job.wait(timeout=10)
+    assert job.status == apiver_module.ComputeHordeJobStatus.COMPLETED

@@ -39,9 +39,11 @@ class AbstractMinerClient(Generic[FromMinerType, ToMinerType], metaclass=abc.ABC
         ...
 
     async def connect(self) -> None:
+        logger.debug(f"Connecting to miner {self.miner_name} at {self.miner_url()}")
         await self.transport.start()
         if self.read_messages_task is None or self.read_messages_task.done():
             self.read_messages_task = asyncio.create_task(self.read_messages())
+        logger.debug(f"Connected to miner {self.miner_name} at {self.miner_url()}")
 
     async def __aenter__(self):
         await self.connect()
@@ -51,6 +53,7 @@ class AbstractMinerClient(Generic[FromMinerType, ToMinerType], metaclass=abc.ABC
         await self.close()
 
     async def close(self) -> None:
+        logger.debug(f"Closing connection to miner {self.miner_name} at {self.miner_url()}")
         for deferred_send_task in self.deferred_send_tasks:
             if not deferred_send_task.done():
                 deferred_send_task.cancel()
@@ -71,10 +74,12 @@ class AbstractMinerClient(Generic[FromMinerType, ToMinerType], metaclass=abc.ABC
                 logger.debug("Exception raised on task cancel: %r", ex)
 
         await self.transport.stop()
+        logger.debug(f"Closed connection to miner {self.miner_name} at {self.miner_url()}")
 
     async def send_model(
         self, model: ToMinerType, error_event_callback: ErrorCallback | None = None
     ) -> None:
+        logger.debug(f"Sending model {model} to miner {self.miner_name}")
         await self.send(model.model_dump_json(), error_event_callback)
 
     async def send(

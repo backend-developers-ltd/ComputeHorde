@@ -3,7 +3,7 @@ import io
 import zipfile
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal, Self
 
@@ -22,20 +22,40 @@ class ComputeHordeJobStatus(StrEnum):
     """
 
     SENT = "Sent"
+    RECEIVED = "Received"
     ACCEPTED = "Accepted"
     REJECTED = "Rejected"
+    STREAMING_READY = "Streaming Ready"
+    EXECUTOR_READY = "Executor Ready"
+    VOLUMES_READY = "Volumes Ready"
+    EXECUTION_DONE = "Execution Done"
     COMPLETED = "Completed"
     FAILED = "Failed"
+
+    @classmethod
+    def end_states(cls) -> set["ComputeHordeJobStatus"]:
+        """
+        Determines which job statuses mean that the job will not be updated anymore.
+        """
+        return {cls.COMPLETED, cls.FAILED, cls.REJECTED}
 
     def is_in_progress(self) -> bool:
         """
         Check if the job is in progress (has not completed or failed yet).
         """
-        return self in (self.SENT, self.ACCEPTED)
+        return self not in ComputeHordeJobStatus.end_states()
 
     def is_successful(self) -> bool:
         """Check if the job has finished successfully."""
         return self == self.COMPLETED
+
+    def is_streaming_ready(self) -> bool:
+        """Check if the job is ready for streaming."""
+        return self == self.STREAMING_READY
+
+    def is_failed(self) -> bool:
+        """Check if the job has failed."""
+        return self in (self.FAILED, self.REJECTED)
 
 
 @dataclass
@@ -47,8 +67,19 @@ class ComputeHordeJobResult:
     stdout: str
     """Job standard output."""
 
+    stderr: str
+    """Job standard error output."""
+
     artifacts: dict[str, bytes]
     """Artifact file contents, keyed by file path, as :class:`bytes`."""
+
+    upload_results: dict[str, compute_horde_output_upload.HttpOutputVolumeResponse] = field(default_factory=dict)
+    """Service responses for files uploaded to HTTP output volumes, keyed by file name."""
+
+    def add_upload_result(self, path: str, result: compute_horde_output_upload.HttpOutputVolumeResponse) -> None:
+        # Mount point is stripped from the upload path when job is being sent to facilitator. Let's add mount point
+        # back to the artifact file path for consistency.
+        self.upload_results[OUTPUT_MOUNT_PATH_PREFIX + path] = result
 
 
 class FacilitatorJobResponse(pydantic.BaseModel):
@@ -67,10 +98,15 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # output_download_url: str
     # tag: str
     stdout: str
+    stderr: str
     # volumes: list = []
     # uploads: list = []
     # target_validator_hotkey: str
     artifacts: dict[str, str] = {}
+    upload_results: dict[str, str] = {}
+    streaming_server_cert: str | None = None
+    streaming_server_address: str | None = None
+    streaming_server_port: int | None = None
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):

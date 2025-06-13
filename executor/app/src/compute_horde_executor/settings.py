@@ -274,6 +274,11 @@ LOGGING = {
             "level": "WARNING",
             "propagate": True,
         },
+        "websockets.client": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
+        },
     },
 }
 

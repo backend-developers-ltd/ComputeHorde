@@ -12,11 +12,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol, assert_never
 
-import bittensor
+import bittensor_wallet
 import httpx
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
-from compute_horde.certificate import generate_certificate_at
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.executor_class import LLM_EXECUTOR_CLASSES
 from compute_horde.miner_client.base import (
@@ -54,9 +53,11 @@ from compute_horde.receipts.schemas import (
 from compute_horde.subtensor import get_peak_cycle
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.transport.base import TransportConnectionError
-from compute_horde.utils import sign_blob
+from compute_horde.utils import ValidatorInfo, sign_blob
+from compute_horde_core.certificate import generate_certificate_at
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
+from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
 from django.conf import settings
 from django.core.cache import cache
@@ -318,6 +319,8 @@ class Job:
     average_job_send_time_bonus: timedelta | None = None
 
     def handle_message(self, msg: MinerToValidatorMessage) -> None:
+        logger.debug("%s received from miner: %s", self.name, msg.message_type)
+
         # !!! it is very important to not allow a newer message of a
         #     certain kind to override a previously received message
         #     of the same kind. miners could play games with that.
@@ -456,7 +459,8 @@ class Job:
             declined_job_executor_class=self.executor_class,
             declined_job_is_synthetic=True,
             miner_hotkey=self.miner_hotkey,
-            allowed_validators=self.ctx.allowed_validators_for_excuse,
+            minimum_validator_stake_for_excuse=self.ctx.batch_config.minimum_validator_stake_for_excuse,
+            active_validators=self.ctx.active_validators,
         )
 
 
@@ -465,7 +469,7 @@ class BatchContext:
     batch: SyntheticJobBatch
 
     uuid: str
-    own_keypair: bittensor.Keypair
+    own_keypair: bittensor_wallet.Keypair
 
     # validator creds for streaming jobs
     own_public_key: str
@@ -495,8 +499,8 @@ class BatchContext:
     # job.uuid as key
     jobs: dict[str, Job]
 
-    # list of validator hotkeys for which busy excuses are considered valid
-    allowed_validators_for_excuse: set[str]
+    # list of validators for which busy excuses are considered valid, if they have enough stake
+    active_validators: list[ValidatorInfo]
 
     # telemetry
 
@@ -812,6 +816,7 @@ class BatchConfig:
         self.excused_synthetic_job_score: float | None = None
         self.non_peak_cycle_executor_min_ratio: float = 1.0
         self.default_executor_limits_for_missed_peak: dict[ExecutorClass, int] = {}
+        self.minimum_validator_stake_for_excuse: float = 0.0
 
     async def populate(self):
         self.event_limits = await get_system_event_limits()
@@ -825,11 +830,14 @@ class BatchConfig:
         self.default_executor_limits_for_missed_peak = (
             await get_default_executor_limits_for_missed_peak()
         )
+        self.minimum_validator_stake_for_excuse = await aget_config(
+            "DYNAMIC_MINIMUM_VALIDATOR_STAKE_FOR_EXCUSE"
+        )
 
 
 async def _init_context(
     serving_miners: list[Miner],
-    active_validators: list[str],
+    active_validators: list[ValidatorInfo],
     batch_id: int,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> BatchContext:
@@ -844,10 +852,6 @@ async def _init_context(
     # TODO move somewhere else - gen a certificate per batch or not?
     # Generate validator certificate
     dir_path, public_key, certs = generate_certificate_at()
-
-    allowed_validators = set(active_validators)
-    # Vali should probably trust itself in any case.
-    allowed_validators.add(own_keypair.ss58_address)
 
     ctx = BatchContext(
         batch=batch,
@@ -867,7 +871,7 @@ async def _init_context(
         manifest_events={},
         job_uuids=[],
         jobs={},
-        allowed_validators_for_excuse=allowed_validators,
+        active_validators=active_validators,
         events=[],
         event_count=0,
         event_limits_usage=defaultdict(int),
@@ -931,7 +935,6 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
         validator_hotkey=ctx.own_keypair.ss58_address,
         timestamp=datetime.now(tz=UTC),
         executor_class=ExecutorClass(job.executor_class),
-        max_timeout=job_timeout_seconds,
         is_organic=False,
         ttl=ttl_clamped,
     )
@@ -1220,9 +1223,7 @@ async def _send_initial_job_request(
             job_started_receipt_signature=job.job_started_receipt_signature,
         )
         if job.executor_class in streaming_classes:
-            request.streaming_details = V0InitialJobRequest.StreamingDetails(
-                public_key=ctx.own_public_key
-            )
+            request.streaming_details = StreamingDetails(public_key=ctx.own_public_key)
         request_json = request.model_dump_json()
 
     finally:
@@ -1275,9 +1276,10 @@ async def _handle_job_accepted(client: MinerClient, ctx: BatchContext, job: Job)
             type=SystemEvent.EventType.RECEIPT_FAILURE,
             subtype=SystemEvent.EventSubType.RECEIPT_SEND_ERROR,
             description=repr(exc),
-            func="_send_initial_job_request",
+            func="_handle_job_accepted",
         )
     await job.executor_response_event.wait()
+    logger.info("%s reported executor ready for job %s", job.miner_hotkey, job.uuid)
 
 
 async def _send_job_request(
@@ -1545,19 +1547,30 @@ async def _multi_get_miner_manifest(ctx: BatchContext) -> None:
 async def _adjust_miner_max_executors_per_class(ctx: BatchContext) -> None:
     max_executors_per_class = await get_miner_max_executors_per_class()
     for hotkey, executors in ctx.executors.items():
-        for executor_class, count in executors.items():
+        for executor_class, miner_reported_count in executors.items():
             if executor_class not in max_executors_per_class:
                 continue
-            if count > max_executors_per_class[executor_class]:
+            allowed_count = max_executors_per_class[executor_class]
+            if miner_reported_count > allowed_count:
                 logger.warning(
-                    "%s manifest for executor class %s has more count (%s) than the max limit (%s), capping at limit",
+                    "%s manifest for executor class %s has more executors (%s) than the max limit (%s), capping at limit",
                     ctx.names[hotkey],
                     executor_class,
-                    count,
-                    max_executors_per_class[executor_class],
+                    miner_reported_count,
+                    allowed_count,
                 )
-                ctx.executors[hotkey][executor_class] = max_executors_per_class[executor_class]
-                # TODO: add a system event?
+                ctx.system_event(
+                    type=SystemEvent.EventType.MINER_EXECUTOR_COUNT_CLIPPED,
+                    subtype=SystemEvent.EventSubType.WARNING,
+                    data={
+                        "allowed_count": allowed_count,
+                        "miner_reported_count": miner_reported_count,
+                    },
+                    description="executor count clipped",
+                    miner_hotkey=hotkey,
+                    func="_adjust_miner_max_executors_per_class",
+                )
+                ctx.executors[hotkey][executor_class] = allowed_count
 
 
 @sync_to_async
@@ -1573,18 +1586,40 @@ def _limit_non_peak_executors_per_class(ctx: BatchContext) -> None:
     ).first()
 
     peak_counts = get_executor_counts(peak_batch)
+    non_peak_ratio = ctx.batch_config.non_peak_cycle_executor_min_ratio
     for hotkey, executors in ctx.executors.items():
         miner_peak_counts = peak_counts.get(hotkey, {})
-        for executor_class, count in executors.items():
+        for executor_class, miner_reported_count in executors.items():
             if executor_class in miner_peak_counts:
-                peak_count = miner_peak_counts.get(executor_class, 0)
-                max_count = math.ceil(
-                    peak_count * ctx.batch_config.non_peak_cycle_executor_min_ratio
-                )
-                allowed_count = min(max_count, count)
+                # Miner was present during peak
+                miner_peak_count = miner_peak_counts.get(executor_class, 0)
+                allowed_count = math.ceil(miner_peak_count * non_peak_ratio)
+                # Always allow at least 1 executor
+                allowed_count = max(allowed_count, 1)
             else:
+                # Miner was not present during peak
                 allowed_count = ctx.batch_config.default_executor_limits_for_missed_peak.get(
-                    executor_class, 0
+                    executor_class, 1
+                )
+            allowed_count = min(miner_reported_count, allowed_count)
+            if allowed_count != miner_reported_count:
+                ctx.system_event(
+                    type=SystemEvent.EventType.MINER_EXECUTOR_COUNT_CLIPPED,
+                    subtype=SystemEvent.EventSubType.WARNING,
+                    data={
+                        "allowed_count": allowed_count,
+                        "miner_reported_count": miner_reported_count,
+                    },
+                    description="non-peak executor count clipped",
+                    miner_hotkey=hotkey,
+                    func="_limit_non_peak_executors_per_class",
+                )
+                logger.debug(
+                    "%s manifest for executor class %s has more executors (%s) than the allowed limit (%s) for non-peak, capping at limit",
+                    ctx.names[hotkey],
+                    executor_class,
+                    miner_reported_count,
+                    allowed_count,
                 )
             ctx.executors[hotkey][executor_class] = allowed_count
 
@@ -1803,16 +1838,33 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
         )
         excuse_ok = accepted_jobs + len(valid_excuse_receipts) >= relevant_executor_count
 
+        for receipt in valid_excuse_receipts:
+            if isinstance(receipt.payload, JobStartedReceiptPayload):
+                valid_until = receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl)
+            else:
+                valid_until = None
+            logger.debug(
+                "Receipt for job %s from validator %s valid until %s",
+                receipt.payload.job_uuid,
+                receipt.payload.validator_hotkey,
+                valid_until,
+            )
+        excuse_detail = (
+            f"executors={relevant_executor_count} "
+            f"accepted_jobs={accepted_jobs} "
+            f"valid_receipts={len(valid_excuse_receipts)}"
+        )
+
         if excuse_ok:
             job.score = ctx.batch_config.excused_synthetic_job_score or 0
             job.excused = True
             job.excused_with = valid_excuse_receipts
             job.comment = "excused (pass)"
-            logger.info("%s %s", job.name, job.comment)
+            logger.info("%s %s %s", job.name, job.comment, excuse_detail)
             return
         else:
             job.comment = "badly excused (fail)"
-            logger.info("%s %s", job.name, job.comment)
+            logger.info("%s %s %s", job.name, job.comment, excuse_detail)
             return
 
     if job.is_declined():
@@ -2177,7 +2229,6 @@ def _db_persist(ctx: BatchContext) -> None:
                     validator_signature=job.job_started_receipt_signature,
                     timestamp=started_payload.timestamp,
                     executor_class=started_payload.executor_class,
-                    max_timeout=started_payload.max_timeout,
                     is_organic=False,
                     ttl=started_payload.ttl,
                 )
@@ -2229,7 +2280,7 @@ def shuffled(list_: list[Any]) -> list[Any]:
 
 async def execute_synthetic_batch_run(
     serving_miners: list[Miner],
-    active_validators: list[str],
+    active_validators: list[ValidatorInfo],
     batch_id: int,
     create_miner_client: _MinerClientFactoryProtocol | None = None,
 ) -> None:
@@ -2275,10 +2326,10 @@ async def execute_synthetic_batch_run(
                 job.decline_reason() == V0DeclineJobRequest.Reason.BUSY for job in ctx.jobs.values()
             )
 
-            await ctx.checkpoint_system_event("_multi_send_job_request_for_streaming")
-            await _multi_send_job_request_for_streaming(ctx, executor_ready_jobs)
-
             if executor_ready_jobs:
+                await ctx.checkpoint_system_event("_multi_send_job_request_for_streaming")
+                await _multi_send_job_request_for_streaming(ctx, executor_ready_jobs)
+
                 await ctx.checkpoint_system_event("_trigger_job_execution")
 
                 await _trigger_job_execution(ctx, executor_ready_jobs)
@@ -2294,6 +2345,8 @@ async def execute_synthetic_batch_run(
                 # NOTE: download the answers for llm prompts jobs before scoring
                 await ctx.checkpoint_system_event("_download_llm_prompts_answers")
                 await _download_llm_prompts_answers(ctx)
+            else:
+                logger.warning("No executor ready jobs")
 
             if executor_ready_jobs or any_job_busy:
                 await ctx.checkpoint_system_event("_score_jobs")

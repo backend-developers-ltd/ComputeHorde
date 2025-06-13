@@ -1,21 +1,23 @@
 import logging
-import random
 from datetime import timedelta
 from typing import assert_never
 
+import bittensor
+from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
-    V0JobRequest,
-    V1JobRequest,
     V2JobRequest,
 )
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
+from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import async_synchronized
 from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
+    MetagraphSnapshot,
     Miner,
     MinerBlacklist,
     MinerManifest,
@@ -44,13 +46,18 @@ class MinerIsBlacklisted(JobRoutingException):
     pass
 
 
+class NotEnoughTimeInCycle(JobRoutingException):
+    pass
+
+
+class NoMinerWithEnoughAllowance(JobRoutingException):
+    pass
+
+
 async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
     if settings.DEBUG_MINER_KEY:
         miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
         return miner
-
-    if isinstance(request, V0JobRequest | V1JobRequest):
-        return await pick_miner_for_job_v0_v1(request)
 
     if isinstance(request, V2JobRequest):
         return await pick_miner_for_job_v2(request)
@@ -62,13 +69,49 @@ async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
 async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     """
     Goes through all miners with recent manifests and online executors of the given executor class.
-    Returns a random miner that may have a non-busy executor based on known receipts.
+    Filters miners based on compute time allowance and minimum collateral requirements.
+    Creates a preliminary reservation for the selected miner and returns the miner with:
+    - Highest percentage of remaining allowance
+    - Highest collateral as a tiebreaker
+    - Available executors (less ongoing jobs than online executor count)
+    - Sufficient remaining time in the current cycle
     """
+
+    executor_class = request.executor_class
+    logger.info(f"Picking a miner for job {request.uuid} with executor class {executor_class}")
+
     if request.on_trusted_miner:
+        logger.debug(f"Using trusted miner for job {request.uuid}")
         miner, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
         return miner
 
-    executor_class = request.executor_class
+    executor_seconds = (
+        request.download_time_limit + request.execution_time_limit + request.upload_time_limit
+    )
+
+    block: int | None = None
+    try:
+        block = (await MetagraphSnapshot.aget_latest()).block
+    except Exception as exc:
+        logger.warning(f"Failed to get latest metagraph snapshot: {exc}")
+        async with bittensor.AsyncSubtensor(network=settings.BITTENSOR_NETWORK) as subtensor:
+            block = await subtensor.get_current_block()
+    assert block is not None, "Failed to get current block from cache or subtensor."
+
+    cycle = get_cycle_containing_block(block, netuid=settings.BITTENSOR_NETUID)
+    time_remaining_in_cycle = (cycle.stop - block) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
+
+    time_required = (
+        await aget_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME")
+        + await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT")
+        + await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT")
+        + EXECUTOR_CLASS[executor_class].spin_up_time
+        + executor_seconds
+    )
+
+    if time_remaining_in_cycle < timedelta(seconds=time_required):
+        logger.debug(f"NotEnoughTimeInCycle: {time_remaining_in_cycle=} {time_required=}")
+        raise NotEnoughTimeInCycle()
 
     manifests_qs = (
         MinerManifest.objects.select_related("miner")
@@ -85,18 +128,56 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     latest_miner_manifest: dict[str, MinerManifest] = {}
     for manifest in manifests:
         latest_miner_manifest[manifest.miner.hotkey] = manifest
-    manifests = list(latest_miner_manifest.values())
+
+    for manifest in latest_miner_manifest.values():
+        logger.debug(
+            f"Latest {manifest.miner.hotkey} manifest has {manifest.online_executor_count} executors of type {executor_class}"
+        )
 
     # Discard manifests that explicitly say there are no executors of this type
-    manifests = [manifest for manifest in manifests if manifest.online_executor_count > 0]
+    latest_miner_manifest = {
+        hotkey: manifest
+        for hotkey, manifest in latest_miner_manifest.items()
+        if manifest.online_executor_count > 0
+    }
 
-    if not manifests:
+    if not latest_miner_manifest:
+        logger.error(f"Failed to find a miner with available executors of type {executor_class}")
         raise NoMinerForExecutorType()
 
-    random.shuffle(manifests)
+    # filter/sort miners based on available allowance
+    allowance_qs = ComputeTimeAllowance.objects.select_related("miner").filter(
+        cycle__start__lte=block,
+        cycle__stop__gt=block,
+        miner__hotkey__in=latest_miner_manifest.keys(),
+        validator__hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address,
+        remaining_allowance__gte=executor_seconds,
+    )
+    allowances = [allowance async for allowance in allowance_qs.all()]
 
-    for manifest in manifests:
-        miner = manifest.miner
+    if not allowances:
+        raise NoMinerWithEnoughAllowance()
+
+    allowances.sort(
+        key=lambda allowance: (
+            # percentage of remaining allowance
+            allowance.remaining_allowance / allowance.initial_allowance,
+            # miner collateral as a tiebreaker
+            allowance.miner.collateral_wei,
+        ),
+        reverse=True,
+    )
+
+    minimum_collateral = await aget_config("DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI")
+
+    for allowance in allowances:
+        miner = allowance.miner
+        manifest = latest_miner_manifest[miner.hotkey]
+        if settings.COLLATERAL_CONTRACT_ADDRESS and int(miner.collateral_wei) < minimum_collateral:
+            logger.warning(
+                f"Miner {manifest.miner.hotkey} has {int(miner.collateral_wei)} collateral, but required minimum is {minimum_collateral}"
+            )
+            continue
 
         preliminary_reservation_jobs: set[str] = {
             str(job_uuid)
@@ -127,6 +208,14 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
             preliminary_reservation_jobs | known_started_jobs
         ) - known_finished_jobs
 
+        logger.debug(
+            f"Miner {manifest.miner.hotkey} has "
+            f"{len(preliminary_reservation_jobs)} preliminary reservations, "
+            f"{len(known_started_jobs)} known started, "
+            f"{len(known_finished_jobs)} known finished, "
+            f"{len(maybe_ongoing_jobs)} maybe ongoing jobs"
+        )
+
         if len(maybe_ongoing_jobs) < manifest.online_executor_count:
             reservation_time = await aget_config(
                 "DYNAMIC_ROUTING_PRELIMINARY_RESERVATION_TIME_SECONDS"
@@ -137,21 +226,11 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
                 job_uuid=request.uuid,
                 expires_at=timezone.now() + timedelta(seconds=reservation_time),
             )
+            logger.info(f"Picked miner {manifest.miner.hotkey}")
             return miner
 
+    logger.error("All miners are busy")
     raise AllMinersBusy()
-
-
-async def pick_miner_for_job_v0_v1(request: V0JobRequest | V1JobRequest) -> Miner:
-    """
-    V0 and V1 requests contain miner selected by facilitator - so just return that.
-    """
-    if await MinerBlacklist.objects.active().filter(miner__hotkey=request.miner_hotkey).aexists():
-        raise MinerIsBlacklisted()
-
-    miner, _ = await Miner.objects.aget_or_create(hotkey=request.miner_hotkey)
-
-    return miner
 
 
 async def report_miner_failed_job(job: OrganicJob) -> None:

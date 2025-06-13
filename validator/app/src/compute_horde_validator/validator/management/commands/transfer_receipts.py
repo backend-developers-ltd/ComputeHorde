@@ -4,10 +4,8 @@ import time
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta
-from typing import cast
 
 import aiohttp
-import bittensor
 from asgiref.sync import async_to_sync
 from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
 from compute_horde.receipts.transfer import (
@@ -21,6 +19,7 @@ from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
 
 from compute_horde_validator.validator.dynamic_config import aget_config
+from compute_horde_validator.validator.models import MetagraphSnapshot, Miner
 
 logger = logging.getLogger(__name__)
 
@@ -36,33 +35,33 @@ class Command(BaseCommand):
         super().__init__(*args, **kwargs)
 
         self.m_receipts = Counter(
-            "receipts",
+            "receipttransfer_receipts_total",
             documentation="Number of transferred receipts",
         )
         self.m_miners = Gauge(
-            "miners",
+            "receipttransfer_miners",
             documentation="Number of miners to transfer from",
         )
         self.m_successful_transfers = Counter(
-            "successful_transfers",
+            "receipttransfer_successful_transfers_total",
             documentation="Number of transfers that didn't explicitly fail. (this includes 404s though)",
         )
         self.m_line_errors = Counter(
-            "line_errors",
+            "receipttransfer_line_errors_total",
             labelnames=["exc_type"],
             documentation="Number of invalid lines in received pages",
         )
         self.m_transfer_errors = Counter(
-            "transfer_errors",
+            "receipttransfer_transfer_errors_total",
             labelnames=["exc_type"],
             documentation="Number of completely failed page transfers",
         )
         self.m_transfer_duration = Histogram(
-            "transfer_duration",
+            "receipttransfer_transfer_duration",
             documentation="Total time to transfer latest page deltas from all miners",
         )
         self.m_catchup_pages_left = Gauge(
-            "catchup_pages_left",
+            "receipttransfer_catchup_pages_left",
             documentation="Pages waiting for catch-up",
         )
 
@@ -117,21 +116,14 @@ class Command(BaseCommand):
                 return debug_miners
 
         else:
-            # 3rd, if no specific miners were specified, get from metagraph.
-            logger.info("Will fetch receipts from metagraph miners")
-            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
+            # 3rd, if no specific miners were specified, get from metagraph snapshot.
+            logger.info("Will fetch receipts from metagraph snapshot miners")
 
             async def miners():
-                metagraph = subtensor.metagraph(netuid=settings.BITTENSOR_NETUID)
-                return [
-                    (
-                        cast(str, neuron.hotkey),
-                        cast(str, neuron.axon_info.ip),
-                        cast(int, neuron.axon_info.port),
-                    )
-                    for neuron in metagraph.neurons
-                    if neuron.axon_info.is_serving
-                ]
+                snapshot = await MetagraphSnapshot.aget_latest()
+                serving_hotkeys = snapshot.serving_hotkeys
+                serving_miners = [m async for m in Miner.objects.filter(hotkey__in=serving_hotkeys)]
+                return [(m.hotkey, m.address, m.port) for m in serving_miners]
 
         # IMPORTANT: This encompasses at least the current and the previous cycle.
         cutoff = timezone.now() - timedelta(hours=5)

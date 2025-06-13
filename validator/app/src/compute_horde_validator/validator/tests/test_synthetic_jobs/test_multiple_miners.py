@@ -9,11 +9,10 @@ from datetime import timedelta
 from typing import Any, Literal, assert_never
 from unittest.mock import patch
 
-import bittensor
+import bittensor_wallet
 import httpx
 import pytest
 import pytest_asyncio
-from compute_horde.certificate import generate_certificate_at
 from compute_horde.executor_class import (
     DEFAULT_EXECUTOR_CLASS,
     DEFAULT_LLM_EXECUTOR_CLASS,
@@ -33,7 +32,8 @@ from compute_horde.receipts.schemas import (
     JobFinishedReceiptPayload,
     JobStartedReceiptPayload,
 )
-from compute_horde.utils import sign_blob
+from compute_horde.utils import ValidatorInfo, sign_blob
+from compute_horde_core.certificate import generate_certificate_at
 from compute_horde_core.executor_class import ExecutorClass
 from constance.test import override_config
 from django.utils import timezone
@@ -75,7 +75,7 @@ MOCK_EXCUSED_SCORE = 1.337
 
 @pytest.fixture
 def num_miners():
-    return 8
+    return 9
 
 
 @pytest.fixture
@@ -85,29 +85,40 @@ def job_uuids(num_miners: int):
 
 @pytest.fixture
 def miner_wallets(num_miners: int):
-    return [bittensor.Keypair.create_from_seed(bytes([*range(31), i])) for i in range(num_miners)]
-
-
-@pytest.fixture
-def miner_hotkeys(miner_wallets: list[bittensor.Keypair]):
-    return [k.ss58_address for k in miner_wallets]
-
-
-@pytest.fixture
-def active_valis() -> list[bittensor.Keypair]:
     return [
-        bittensor.Keypair.create_from_seed(b"a" * 32),
-        bittensor.Keypair.create_from_seed(b"b" * 32),
-        bittensor.Keypair.create_from_seed(b"c" * 32),
+        bittensor_wallet.Keypair.create_from_seed((random.randbytes(31) + bytes([i])).hex())
+        for i in range(num_miners)
     ]
 
 
 @pytest.fixture
-def inactive_valis() -> list[bittensor.Keypair]:
+def miner_hotkeys(miner_wallets: list[bittensor_wallet.Keypair]):
+    return [k.ss58_address for k in miner_wallets]
+
+
+@pytest.fixture
+def active_validator_keypairs() -> list[bittensor_wallet.Keypair]:
     return [
-        bittensor.Keypair.create_from_seed(b"d" * 32),
-        bittensor.Keypair.create_from_seed(b"e" * 32),
-        bittensor.Keypair.create_from_seed(b"f" * 32),
+        bittensor_wallet.Keypair.create_from_seed("a" * 64),
+        bittensor_wallet.Keypair.create_from_seed("b" * 64),
+        bittensor_wallet.Keypair.create_from_seed("c" * 64),
+    ]
+
+
+@pytest.fixture
+def inactive_validator_keypairs() -> list[bittensor_wallet.Keypair]:
+    return [
+        bittensor_wallet.Keypair.create_from_seed("d" * 64),
+        bittensor_wallet.Keypair.create_from_seed("e" * 64),
+        bittensor_wallet.Keypair.create_from_seed("f" * 64),
+    ]
+
+
+@pytest.fixture
+def active_validator_infos(active_validator_keypairs) -> list[ValidatorInfo]:
+    return [
+        ValidatorInfo(uid=i, hotkey=keypair.ss58_address, stake=20_000 * i)
+        for i, keypair in enumerate(active_validator_keypairs)
     ]
 
 
@@ -116,21 +127,6 @@ async def miners(miner_hotkeys: list[str]):
     objs = [Miner(hotkey=hotkey) for hotkey in miner_hotkeys]
     await Miner.objects.abulk_create(objs)
     return objs
-
-
-@pytest.fixture
-def miner_axon_infos(miner_hotkeys: str):
-    return [
-        bittensor.AxonInfo(
-            version=4,
-            ip="ignore",
-            ip_type=4,
-            port=9999,
-            hotkey=hotkey,
-            coldkey=hotkey,
-        )
-        for hotkey in miner_hotkeys
-    ]
 
 
 @pytest_asyncio.fixture
@@ -379,6 +375,17 @@ async def test_some_streaming_succeed(
             8,
             miners[7].id,
             prompts[7],
+            "all_good",
+            "all_good",
+            SyntheticJob.Status.COMPLETED,
+            MOCK_SCORE,
+        ),
+        MinerBehaviour(
+            transports[8],
+            job_uuids[8],
+            9,
+            miners[8].id,
+            prompts[8],
             "all_good",
             "all_good",
             SyntheticJob.Status.COMPLETED,
@@ -646,9 +653,9 @@ async def flow_5(
     transports: list[SimulationTransport],
     manifest_message: str,
     job_uuids: list[uuid.UUID],
-    active_valis: list[bittensor.Keypair],
-    inactive_valis: list[bittensor.Keypair],
-    miner_wallets: list[bittensor.Keypair],
+    active_validator_keypairs: list[bittensor_wallet.Keypair],
+    inactive_validator_keypairs: list[bittensor_wallet.Keypair],
+    miner_wallets: list[bittensor_wallet.Keypair],
 ):
     """
     Job declined - busy, bad excuses provided.
@@ -665,7 +672,7 @@ async def flow_5(
         job_uuid=str(job_uuid),
         reason=V0DeclineJobRequest.Reason.BUSY,
         receipts=_build_invalid_excuse_receipts(
-            active_valis[0], miner_wallet, inactive_valis[0], job_uuid
+            active_validator_keypairs[0], miner_wallet, inactive_validator_keypairs[0], job_uuid
         ),
     ).model_dump_json()
     await transport.add_message(decline_message, send_before=1)
@@ -676,9 +683,9 @@ async def flow_6(
     transports: list[SimulationTransport],
     manifest_message: str,
     job_uuids: list[uuid.UUID],
-    active_valis: list[bittensor.Keypair],
-    inactive_valis: list[bittensor.Keypair],
-    miner_wallets: list[bittensor.Keypair],
+    active_validator_keypairs: list[bittensor_wallet.Keypair],
+    inactive_validator_keypairs: list[bittensor_wallet.Keypair],
+    miner_wallets: list[bittensor_wallet.Keypair],
 ):
     """
     Job declined - busy, good excuse.
@@ -694,10 +701,9 @@ async def flow_6(
     excuse = JobStartedReceiptPayload(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=miner_wallet.ss58_address,
-        validator_hotkey=active_valis[0].ss58_address,
+        validator_hotkey=active_validator_keypairs[2].ss58_address,  # 2 has enough stake
         timestamp=timezone.now() - timedelta(seconds=10),
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        max_timeout=123,
         is_organic=True,
         ttl=60,
     )
@@ -709,7 +715,7 @@ async def flow_6(
         receipts=[
             Receipt(
                 payload=excuse,
-                validator_signature=sign_blob(active_valis[0], excuse_blob),
+                validator_signature=sign_blob(active_validator_keypairs[2], excuse_blob),
                 miner_signature=sign_blob(miner_wallet, excuse_blob),
             )
         ],
@@ -718,7 +724,52 @@ async def flow_6(
 
 
 @pytest_asyncio.fixture
-async def flow_7():
+async def flow_7(
+    transports: list[SimulationTransport],
+    manifest_message: str,
+    job_uuids: list[uuid.UUID],
+    active_validator_keypairs: list[bittensor_wallet.Keypair],
+    inactive_validator_keypairs: list[bittensor_wallet.Keypair],
+    miner_wallets: list[bittensor_wallet.Keypair],
+):
+    """
+    Job declined - busy, bad excuse - excusing receipt was generated by a validator with low stake
+    """
+
+    index = 7
+    transport = transports[index]
+    job_uuid = job_uuids[index]
+    miner_wallet = miner_wallets[index]
+
+    await transport.add_message(manifest_message, send_before=1)
+
+    excuse = JobStartedReceiptPayload(
+        job_uuid=str(uuid.uuid4()),
+        miner_hotkey=miner_wallet.ss58_address,
+        validator_hotkey=active_validator_keypairs[0].ss58_address,  # 0 doesn't have enough stake
+        timestamp=timezone.now() - timedelta(seconds=10),
+        executor_class=DEFAULT_EXECUTOR_CLASS,
+        is_organic=True,
+        ttl=60,
+    )
+    excuse_blob = excuse.blob_for_signing()
+
+    decline_message = V0DeclineJobRequest(
+        job_uuid=str(job_uuid),
+        reason=V0DeclineJobRequest.Reason.BUSY,
+        receipts=[
+            Receipt(
+                payload=excuse,
+                validator_signature=sign_blob(active_validator_keypairs[0], excuse_blob),
+                miner_signature=sign_blob(miner_wallet, excuse_blob),
+            )
+        ],
+    ).model_dump_json()
+    await transport.add_message(decline_message, send_before=1)
+
+
+@pytest_asyncio.fixture
+async def flow_8():
     """
     No manifest. Fixture just for indication
     """
@@ -748,7 +799,8 @@ async def test_complex(
     flow_5,
     flow_6,
     flow_7,
-    active_valis: list[bittensor.Keypair],
+    flow_8,
+    active_validator_infos: list[ValidatorInfo],
 ):
     for transport, miner in zip(transports, miners):
         assert transport.name == miner.hotkey
@@ -760,17 +812,17 @@ async def test_complex(
     await asyncio.wait_for(
         execute_synthetic_batch_run(
             miners,
-            [v.ss58_address for v in active_valis],
+            active_validator_infos,
             batch.id,
             create_miner_client=create_simulation_miner_client,
         ),
         timeout=2,
     )
 
-    assert await SyntheticJob.objects.acount() == 7
+    assert await SyntheticJob.objects.acount() == 8
     assert (
         await SystemEvent.objects.exclude(type=SystemEvent.EventType.VALIDATOR_TELEMETRY).acount()
-        == 8
+        == 9
     )
 
     await check_synthetic_job(job_uuids[0], miners[0].pk, SyntheticJob.Status.COMPLETED, 1)
@@ -892,7 +944,23 @@ async def test_complex(
         data__miner_hotkey=miners[6].hotkey,
         data__job_uuid=str(job_uuids[6]),
     )
-    assert excused_event.data["excused_by"] == [active_valis[0].ss58_address]
+    assert excused_event.data["excused_by"] == [active_validator_infos[2].hotkey]
+
+    await check_synthetic_job(job_uuids[7], miners[7].pk, SyntheticJob.Status.FAILED, NOT_SCORED)
+    await check_miner_job_system_events(
+        [
+            (
+                SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                SystemEvent.EventSubType.JOB_REJECTED,
+            ),
+            (
+                SystemEvent.EventType.VALIDATOR_TELEMETRY,
+                SystemEvent.EventSubType.SYNTHETIC_JOB,
+            ),
+        ],
+        miners[7].hotkey,
+        job_uuids[7],
+    )
 
     # Check batch telemetry counts
     telemetry = await SystemEvent.objects.aget(
@@ -900,8 +968,8 @@ async def test_complex(
         subtype=SystemEvent.EventSubType.SYNTHETIC_BATCH,
     )
     assert telemetry.data["counts"]["jobs"] == {
-        "total": 7,
-        "failed": 5,
+        "total": 8,
+        "failed": 6,
         "correct": 1,
         "excused": 1,
         "incorrect": 0,
@@ -923,9 +991,9 @@ async def test_complex(
 
 
 def _build_invalid_excuse_receipts(
-    validator: bittensor.Keypair,
-    miner: bittensor.Keypair,
-    bad_validator: bittensor.Keypair,
+    validator: bittensor_wallet.Keypair,
+    miner: bittensor_wallet.Keypair,
+    bad_validator: bittensor_wallet.Keypair,
     job: uuid.UUID,
 ) -> list[Receipt]:
     good_payload = JobStartedReceiptPayload(
@@ -934,7 +1002,6 @@ def _build_invalid_excuse_receipts(
         validator_hotkey=validator.ss58_address,
         timestamp=timezone.now(),
         executor_class=DEFAULT_EXECUTOR_CLASS,
-        max_timeout=123,
         is_organic=True,
         ttl=60,
     )
@@ -961,7 +1028,7 @@ def _build_invalid_excuse_receipts(
 
     non_organic = good_payload.__replace__(is_organic=False)
     other_miner = good_payload.__replace__(
-        miner_hotkey=bittensor.Keypair.create_from_seed(b"7" * 32).ss58_address
+        miner_hotkey=bittensor_wallet.Keypair.create_from_seed("7" * 64).ss58_address
     )
     same_job = good_payload.__replace__(job_uuid=str(job))
     bad_executor_class = good_payload.__replace__(

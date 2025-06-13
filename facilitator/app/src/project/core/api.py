@@ -16,11 +16,10 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from structlog import get_logger
 
-from .authentication import HotkeyAuthentication
+from .authentication import JWTAuthentication
 from .middleware.signature_middleware import require_signature
 from .models import Job, JobCreationDisabledError, JobFeedback
 from .schemas import MuliVolumeAllowedVolume
-from .utils import safe_config
 
 logger = get_logger(__name__)
 
@@ -55,27 +54,38 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "last_update",
             "status",
             "docker_image",
-            "raw_script",
             "args",
             "env",
             "use_gpu",
-            "hf_repo_id",
-            "hf_revision",
-            "input_url",
-            "output_download_url",
             "tag",
             "stdout",
+            "stderr",
             "volumes",
             "uploads",
             "artifacts",
             "artifacts_dir",
             "target_validator_hotkey",
             "on_trusted_miner",
+            "upload_results",
+            "download_time_limit",
+            "execution_time_limit",
+            "streaming_start_time_limit",
+            "upload_time_limit",
+            "streaming_client_cert",
+            "streaming_server_cert",
+            "streaming_server_address",
+            "streaming_server_port",
         )
-        read_only_fields = (
-            "created_at",
-            "output_download_url",
-        )
+        read_only_fields = ("created_at",)
+
+    def to_internal_value(self, data: dict):
+        obj = super().to_internal_value(data)
+        try:
+            obj["streaming_client_cert"] = data["streaming_details"]["public_key"]
+            assert isinstance(obj["streaming_client_cert"], str)
+        except (KeyError, TypeError, AssertionError):
+            obj["streaming_client_cert"] = ""
+        return obj
 
     uploads = SmartSchemaField(schema=list[SingleFileUpload], required=False)
     volumes = SmartSchemaField(schema=list[MuliVolumeAllowedVolume], required=False)
@@ -83,6 +93,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
     status = serializers.SerializerMethodField()
     last_update = serializers.SerializerMethodField()
     stdout = serializers.SerializerMethodField()
+    stderr = serializers.SerializerMethodField()
 
     def get_status(self, obj):
         return obj.status.get_status_display()
@@ -93,31 +104,17 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             return meta.miner_response.docker_process_stdout
         return ""
 
+    def get_stderr(self, obj):
+        meta = obj.status.meta
+        if meta and meta.miner_response:
+            return meta.miner_response.docker_process_stderr
+        return ""
+
     def get_last_update(self, obj):
         return obj.status.created_at
 
 
-class DynamicJobFields:
-    def get_fields(self):
-        fields = super().get_fields()
-        # Check the Constance config value
-        if safe_config.JOB_REQUEST_VERSION == 0:
-            fields.pop("uploads", None)
-            fields.pop("volumes", None)
-        return fields
-
-
-class RawJobSerializer(DynamicJobFields, JobSerializer):
-    class Meta:
-        model = Job
-        fields = JobSerializer.Meta.fields
-        read_only_fields = tuple(
-            set(JobSerializer.Meta.fields)
-            - {"raw_script", "input_url", "hf_repo_id", "hf_revision", "tag", "volumes", "uploads"}
-        )
-
-
-class DockerJobSerializer(DynamicJobFields, JobSerializer):
+class DockerJobSerializer(JobSerializer):
     class Meta:
         model = Job
         fields = JobSerializer.Meta.fields
@@ -129,15 +126,16 @@ class DockerJobSerializer(DynamicJobFields, JobSerializer):
                 "args",
                 "env",
                 "use_gpu",
-                "input_url",
-                "hf_repo_id",
-                "hf_revision",
                 "tag",
                 "volumes",
                 "uploads",
                 "target_validator_hotkey",
                 "artifacts_dir",
                 "on_trusted_miner",
+                "download_time_limit",
+                "execution_time_limit",
+                "streaming_start_time_limit",
+                "upload_time_limit",
             }
         )
 
@@ -161,7 +159,7 @@ class BaseCreateJobViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
     permission_classes = (IsAuthenticated | RequestHasHotkey,)
 
     def get_authenticators(self) -> list[BaseAuthentication]:
-        return super().get_authenticators() + [HotkeyAuthentication()]
+        return super().get_authenticators() + [JWTAuthentication()]
 
     def perform_create(self, serializer):
         try:
@@ -205,7 +203,7 @@ class JobViewSet(mixins.RetrieveModelMixin, mixins.ListModelMixin, viewsets.Gene
     def get_authenticators(self) -> list[BaseAuthentication]:
         authenticators = super().get_authenticators()
         if self.detail:
-            authenticators.append(HotkeyAuthentication())
+            authenticators.append(JWTAuthentication())
         return authenticators
 
     def get_queryset(self) -> QuerySet:
@@ -214,10 +212,6 @@ class JobViewSet(mixins.RetrieveModelMixin, mixins.ListModelMixin, viewsets.Gene
         else:
             params = {"user": self.request.user}
         return self.queryset.filter(**params)
-
-
-class RawJobViewset(BaseCreateJobViewSet):
-    serializer_class = RawJobSerializer
 
 
 class DockerJobViewset(BaseCreateJobViewSet):
@@ -230,10 +224,13 @@ class CheatedJobViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
         job_uuid = json.loads(request.body).get("job_uuid")
         try:
             job = Job.objects.get(uuid=job_uuid)
+            updated = Job.objects.filter(uuid=job_uuid, cheated=False).update(cheated=True)
+            if updated:
+                job.report_cheated(request.signature)
+                return Response(status=status.HTTP_200_OK, data={"message": "Job reported as cheated"})
+            return Response(status=status.HTTP_200_OK, data={"message": "Job already marked as cheated"})
         except Job.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        job.report_cheated()
-        return Response(status=status.HTTP_200_OK)
 
 
 class JobFeedbackViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
@@ -274,17 +271,8 @@ class JobFeedbackViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, vie
         return self.create(request, *args, **kwargs)
 
 
-class APIRootView(routers.DefaultRouter.APIRootView):
-    description = "api-root"
-
-
-class APIRouter(routers.DefaultRouter):
-    APIRootView = APIRootView
-
-
-router = APIRouter()
+router = routers.SimpleRouter()
 router.register(r"jobs", JobViewSet)
 router.register(r"job-docker", DockerJobViewset, basename="job_docker")
-router.register(r"job-raw", RawJobViewset, basename="job_raw")
 router.register(r"jobs/(?P<job_uuid>[^/.]+)/feedback", JobFeedbackViewSet, basename="job_feedback")
 router.register(r"cheated-job", CheatedJobViewSet, basename="cheated_job")

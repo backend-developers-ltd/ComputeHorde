@@ -10,7 +10,6 @@ from compute_horde_validator.validator.models import AdminJobRequest, Miner, Org
 
 from .helpers import (
     MockMinerClient,
-    MockSubtensor,
     MockSuccessfulMinerClient,
     check_system_events,
     throw_error,
@@ -20,9 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockSuccessfulMinerClient)
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_debug_run_organic_job_command__job_completed():
+def test_debug_run_organic_job_command__job_completed(bittensor):
     # random miner to be picked
     Miner.objects.create(hotkey="miner_client")
 
@@ -48,9 +46,8 @@ def test_debug_run_organic_job_command__job_completed():
 
 
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockMinerClient)
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_debug_run_organic_job_command__job_timeout():
+def test_debug_run_organic_job_command__job_timeout(bittensor):
     # random miner to be picked
     Miner.objects.create(hotkey="miner_client")
 
@@ -80,9 +77,8 @@ def test_debug_run_organic_job_command__job_timeout():
 
 @patch("compute_horde_validator.validator.tasks.get_keypair", throw_error)
 @patch("compute_horde_validator.validator.tasks.MinerClient", MockSuccessfulMinerClient)
-@patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor())
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_debug_run_organic_job_command__job_created_but_not_triggered():
+def test_debug_run_organic_job_command__job_created_but_not_triggered(bittensor):
     Miner.objects.create(hotkey="miner_client")
 
     with redirect_stdout(io.StringIO()) as buf:

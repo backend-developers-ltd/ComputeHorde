@@ -4,18 +4,16 @@ from django.contrib import admin, messages
 from django.contrib.admin import register
 from django.db.models import QuerySet
 from django.http.request import HttpRequest
-from django.utils.safestring import mark_safe
 
 from .models import (
     GPU,
     Channel,
+    HotkeyWhitelist,
     Job,
     JobFeedback,
     JobStatus,
     Miner,
     MinerVersion,
-    SignatureInfo,
-    UserPreferences,
     Validator,
 )
 
@@ -109,42 +107,6 @@ class MinerVersionAdmin(admin.ModelAdmin):
     ordering = ("-created_at",)
 
 
-@register(UserPreferences)
-class UserPreferencesAdmin(admin.ModelAdmin):
-    list_display = (
-        "pk",
-        "user",
-        "get_validators_display",
-        "get_miners_display",
-        "exclusive",
-    )
-    search_fields = (
-        "user__username",
-        "user__email",
-        "validators__ss58_address",
-        "miners__ss58_address",
-    )
-    autocomplete_fields = (
-        "user",
-        "validators",
-        "miners",
-    )
-    ordering = ("user__username",)
-
-    def get_queryset(self, request: HttpRequest) -> QuerySet[UserPreferences]:
-        return super().get_queryset(request).select_related("user").prefetch_related("validators", "miners")
-
-    @admin.display(description="Validators")
-    @mark_safe
-    def get_validators_display(self, obj: UserPreferences) -> str:
-        return "<ul>" + "".join(f"<li>{validator.ss58_address}</li>" for validator in obj.validators.all()) + "</ul>"
-
-    @admin.display(description="Miners")
-    @mark_safe
-    def get_miners_display(self, obj: UserPreferences) -> str:
-        return "<ul>" + "".join(f"<li>{miner.ss58_address}</li>" for miner in obj.miners.all()) + "</ul>"
-
-
 @register(JobStatus)
 class JobStatusAdmin(admin.ModelAdmin):
     list_display = (
@@ -161,9 +123,6 @@ class JobStatusAdmin(admin.ModelAdmin):
         "job__user__username",
         "job__user__email",
         "job__docker_image",
-        "job__input_url",
-        "job__output_upload_url",
-        "job__output_download_url",
     )
     autocomplete_fields = ("job",)
     ordering = ("-created_at",)
@@ -186,19 +145,13 @@ class JobAdminForm(forms.ModelForm):
         fields = [
             "user",
             "validator",
-            "miner",
             "created_at",
             "executor_class",
             "docker_image",
-            "raw_script",
             "args",
             "env",
             "use_gpu",
-            "input_url",
-            "output_download_url_expires_at",
             "tag",
-            "output_upload_url",
-            "output_download_url",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -227,18 +180,11 @@ class JobAdmin(admin.ModelAdmin):
         "user__username",
         "user__email",
         "docker_image",
-        "input_url",
-        "output_upload_url",
-        "output_download_url",
     )
     ordering = ("-created_at",)
     autocomplete_fields = (
         "user",
         "validator",
-    )
-    readonly_fields = (
-        "output_upload_url",
-        "output_download_url",
     )
     inlines = [JobStatusInline]
 
@@ -251,8 +197,6 @@ class JobAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         try:
             super().save_model(request, obj, form, change)
-        except Miner.DoesNotExist:
-            self.message_user(request, "No active miners available", level=messages.ERROR)
         except Validator.DoesNotExist:
             self.message_user(request, "No active validators available", level=messages.ERROR)
 
@@ -269,23 +213,17 @@ class JobFeedbackAdmin(admin.ModelAdmin):
         "created_at",
         "result_correctness",
         "expected_duration",
-        "signature_info__signature_type",
     )
     search_fields = ("=job__uuid", "^user__username")
     list_filter = ("created_at", "result_correctness")
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        queryset = queryset.select_related("job", "user", "signature_info")
+        queryset = queryset.select_related("job", "user")
         return queryset
 
-    def signature_info__signature_type(self, obj):
-        return obj.signature_info.signature_type
 
-
-# TODO: deprecate
-@admin.register(SignatureInfo)
-class SignatureInfoAdmin(admin.ModelAdmin):
-    list_display = ("timestamp_ns", "signature_type", "signatory", "signed_payload")
-    search_fields = ("=signature_type", "^signatory")
-    list_filter = ("signature_type",)
+@register(HotkeyWhitelist)
+class HotkeyWhitelistAdmin(admin.ModelAdmin):
+    list_display = ("ss58_address",)
+    search_fields = ("ss58_address",)

@@ -53,10 +53,11 @@ async def test_receipt_is_saved(
     stored_receipts = []
     receipt_store_factory.return_value.store = lambda rs: stored_receipts.extend(rs)
 
-    executor.executor_manager.get_manifest = AsyncMock(return_value={})
-    executor.executor_manager.reserve_executor_class = AsyncMock()
-    executor.executor_manager.get_executor_public_address = AsyncMock()
-    executor.executor_manager.wait_for_executor_reservation = AsyncMock()
+    executor.executor_manager = AsyncMock()
+    executor.executor_manager.get_manifest.return_value = {}
+    executor.executor_manager.reserve_executor_class.return_value = None
+    executor.executor_manager.get_executor_public_address.return_value = None
+    executor.executor_manager.wait_for_executor_reservation.return_value = None
 
     settings.DEBUG_TURN_AUTHENTICATION_OFF = True
     settings.BITTENSOR_WALLET = lambda: miner_wallet
@@ -92,7 +93,6 @@ async def test_receipt_is_saved(
             validator_hotkey=validator_wallet.hotkey.ss58_address,
             timestamp=timezone.now(),
             executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-            max_timeout=60,
             ttl=5,
         )
         job_started_receipt_signature = sign_blob(

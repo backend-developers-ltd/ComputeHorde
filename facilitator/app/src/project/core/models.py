@@ -1,50 +1,38 @@
-from collections.abc import Callable
-from contextlib import suppress
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from math import ceil
 from operator import attrgetter
-from typing import ClassVar
 from uuid import uuid4
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
-    OrganicJobRequest,
-    Signature,
     V0JobCheated,
-    V0JobRequest,
-    V1JobRequest,
     V2JobRequest,
 )
+from compute_horde.fv_protocol.validator_requests import JobStatusMetadata
 from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
-    ZipAndHttpPutUpload,
 )
-from compute_horde_core.volume import (
-    HuggingfaceVolume,
-    MultiVolume,
-    ZipUrlVolume,
-)
+from compute_horde_core.signature import Signature
+from compute_horde_core.streaming import StreamingDetails
+from compute_horde_core.volume import MultiVolume
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
-from django.db.models import CheckConstraint, F, Max, OuterRef, Prefetch, Q, QuerySet, Subquery, UniqueConstraint
+from django.db.models import CheckConstraint, Max, Prefetch, Q, QuerySet, UniqueConstraint
 from django.urls import reverse
 from django.utils.timezone import now
 from django_prometheus.models import ExportModelOperationsMixin
 from django_pydantic_field import SchemaField
 from structlog import get_logger
 from structlog.contextvars import bound_contextvars
-from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
 
 from .schemas import (
-    JobStatusMetadata,
     MuliVolumeAllowedVolume,
 )
-from .utils import create_signed_download_url, create_signed_upload_url, safe_config
 
 log = get_logger(__name__)
 
@@ -59,37 +47,6 @@ class JobNotFinishedError(Exception):
 
 class JobCreationDisabledError(Exception):
     pass
-
-
-# TODO: deprecate this model
-class SignatureInfo(models.Model):
-    """
-    Model for storing signed requests issued through Facilitator SDK.
-    """
-
-    signature_type = models.CharField(max_length=255, db_comment="type of the signature (e.g. 'bittensor')")
-    signatory = models.CharField(
-        max_length=1000, db_comment="identity of the signer (e.g. sa58 address if signature_type == bittensor"
-    )
-    timestamp_ns = models.BigIntegerField(
-        db_comment="UNIX timestamp in nanoseconds; required for signature verification"
-    )
-    signature = models.BinaryField(db_comment="signature of the payload")
-
-    signed_payload = models.JSONField(db_comment="raw payload that was signed")
-
-    # timestamp_ns is part of an incoming request,
-    # we need created_at to track row insertion time for cleanup etc.
-    created_at = models.DateTimeField(default=now)
-
-    @classmethod
-    def from_signature(cls, user, signature):
-        return cls.objects.create(
-            user=user,
-            timestamp_ns=signature.timestamp_ns,
-            signature=signature.signature,
-            signed_payload=signature.signed_payload,
-        )
 
 
 class AbstractNodeQuerySet(models.QuerySet):
@@ -134,30 +91,6 @@ class MinerVersion(models.Model):
         ]
 
 
-class UserPreferences(models.Model):
-    user = models.OneToOneField("auth.User", on_delete=models.CASCADE, related_name="preferences")
-    validators = models.ManyToManyField(
-        Validator,
-        blank=True,
-        related_name="preferred_by_users",
-        help_text="validators which will be prioritized for this user; if none of them are present, \
-                   other validators will be used",
-    )
-    miners = models.ManyToManyField(
-        Miner,
-        blank=True,
-        related_name="preferred_by_users",
-        help_text="miners which will be prioritized for this user; if none of them are present, \
-                   other miners will be used",
-    )
-    exclusive = models.BooleanField(
-        default=False, help_text="If set only preference miners/validators are used. Error rised if unavailable."
-    )
-
-    def __str__(self) -> str:
-        return f"Preferences for {self.user.username}"
-
-
 class Channel(models.Model):
     """
     This is a simple model to remember Validator-channel association.
@@ -189,27 +122,23 @@ class JobQuerySet(models.QuerySet):
 
 
 class Job(ExportModelOperationsMixin("job"), models.Model):
-    JOB_TIMEOUT: ClassVar = timedelta(minutes=5, seconds=30)
-
     uuid = models.UUIDField(primary_key=True, editable=False, blank=True)
     user = models.ForeignKey("auth.User", on_delete=models.PROTECT, blank=True, null=True, related_name="jobs")
     hotkey = models.CharField(blank=True, help_text="hotkey of job sender if hotkey authentication was used")
     validator = models.ForeignKey(Validator, blank=True, on_delete=models.PROTECT, related_name="jobs")
-    miner = models.ForeignKey(Miner, blank=True, null=True, on_delete=models.PROTECT, related_name="jobs")
-    signature_info = models.ForeignKey(
-        SignatureInfo, blank=True, default=None, null=True, on_delete=models.PROTECT, related_name="jobs"
-    )
-    signature = models.JSONField(blank=True, default=None, null=True)
+    signature = models.JSONField()
     created_at = models.DateTimeField(default=now)
     cheated = models.BooleanField(default=False)
+    download_time_limit = models.IntegerField()
+    execution_time_limit = models.IntegerField()
+    streaming_start_time_limit = models.IntegerField()
+    upload_time_limit = models.IntegerField()
 
     executor_class = models.CharField(
         max_length=255, default=DEFAULT_EXECUTOR_CLASS, help_text="executor hardware class"
     )
     docker_image = models.CharField(max_length=255, blank=True, help_text="docker image for job execution")
 
-    # TODO: remove raw_script field. Support for running raw_script jobs has been removed.
-    raw_script = models.TextField(blank=True, help_text="raw script to be executed")
     args = ArrayField(
         models.TextField(),
         default=list,
@@ -219,25 +148,20 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
     )
     env = models.JSONField(blank=True, default=dict, help_text="environment variables for the job")
     use_gpu = models.BooleanField(default=False, help_text="Whether to use GPU for the job")
-    input_url = models.URLField(blank=True, help_text="URL to the input data source", max_length=1000)
-    hf_repo_id = models.CharField(max_length=255, blank=True, default="", help_text="Huggingface model repo id")
-    hf_revision = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        help_text="Huggingface model revision id: branch name / tag / commit hash",
-    )
-    output_upload_url = models.TextField(blank=True, help_text="URL for uploading output")
-    output_download_url = models.TextField(blank=True, help_text="URL for retrieving output")
-    output_download_url_expires_at = models.DateTimeField(blank=True)
-    target_validator_hotkey = models.TextField(blank=True, default=None, null=True, help_text="target validator")
+    target_validator_hotkey = models.TextField(help_text="target validator")
     volumes = SchemaField(schema=list[MuliVolumeAllowedVolume], blank=True, default=list)
     uploads = SchemaField(schema=list[SingleFileUpload], blank=True, default=list)
     artifacts_dir = models.CharField(max_length=255, blank=True, help_text="image mount directory for artifacts")
     artifacts = models.JSONField(blank=True, default=dict)
     on_trusted_miner = models.BooleanField(default=False)
+    upload_results = models.JSONField(blank=True, default=dict)
 
     tag = models.CharField(max_length=255, blank=True, default="", help_text="may be used to group jobs")
+
+    streaming_client_cert = models.TextField(blank=True, default="")
+    streaming_server_cert = models.TextField(blank=True, default="")
+    streaming_server_address = models.TextField(blank=True, default="")
+    streaming_server_port = models.IntegerField(blank=True, default=0)
 
     objects = JobQuerySet.as_manager()
 
@@ -246,10 +170,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             CheckConstraint(
                 check=Q(user__isnull=True) & ~Q(hotkey="") | Q(user__isnull=False) & Q(hotkey=""),
                 name="user_or_hotkey",
-            ),
-            CheckConstraint(
-                check=Q(docker_image="") & ~Q(raw_script="") | ~Q(docker_image="") & Q(raw_script=""),
-                name="docker_image_or_raw_script",
             ),
         ]
         indexes = [
@@ -266,33 +186,22 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         is_new = self.pk is None
 
         self.uuid = self.uuid or uuid4()
-        self.output_upload_url = self.output_upload_url or create_signed_upload_url(self.filename)
-        if self.is_download_url_expired():
-            self.reset_download_url()
 
         # if there is no validator selected -> we need a transaction for locking
         # active validators during selection process
         with transaction.atomic(), bound_contextvars(job=self):
             self.validator = getattr(self, "validator", None) or self.select_validator()
-            if self.target_validator_hotkey is None:
-                if not safe_config.ENABLE_ORGANIC_JOBS:
-                    raise JobCreationDisabledError()
-                self.miner = getattr(self, "miner", None) or self.select_miner()
-            else:
-                self.miner = None
             super().save(*args, **kwargs)
             if is_new:
-                job_request = self.as_job_request().dict()
+                job_request = self.as_job_request().model_dump()
                 self.send_to_validator(job_request)
                 JobStatus.objects.create(job=self, status=JobStatus.Status.SENT)
 
-    def report_cheated(self) -> None:
+    def report_cheated(self, signature: Signature) -> None:
         """
-        Mark the job as cheated and notify the validator.
+        Notify validator of cheated job.
         """
-        self.cheated = True
-        self.save()
-        payload = V0JobCheated(job_uuid=str(self.uuid)).dict()
+        payload = V0JobCheated(job_uuid=str(self.uuid), signature=signature).model_dump()
         log.debug("sending cheated report", payload=payload)
         self.send_to_validator(payload)
 
@@ -312,116 +221,13 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         )
         log.debug("connected validators", validator_ids=validator_ids)
 
-        if self.target_validator_hotkey is not None:
-            if self.signature is None:
-                raise ValueError("Request must be signed when target_validator_hotkey is set")
-            validator = Validator.objects.filter(ss58_address=self.target_validator_hotkey).first()
-            if validator and validator.id in validator_ids:
-                log.debug("selected (targeted) validator", validator=validator)
-                return validator
-            raise Validator.DoesNotExist
-
-        # use user's preferences to select specific validators
-        with suppress(UserPreferences.DoesNotExist):
-            if not self.user:
-                raise UserPreferences.DoesNotExist
-
-            exclusive_preference = self.user.preferences.exclusive
-            if preferred_validator_ids := set(self.user.preferences.validators.values_list("id", flat=True)):
-                # we either select one of preferred validators, but if none of them is available - select any
-                log.debug("preferred validators", user=self.user, preferred_validators=preferred_validator_ids)
-                available_preferred_validator_ids = validator_ids & preferred_validator_ids
-                if available_preferred_validator_ids or exclusive_preference:
-                    validator_ids = available_preferred_validator_ids
-
-        log.debug("choosing from validators", validator_ids=validator_ids)
-        debug_validator = Validator.objects.filter(
-            ss58_address="5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE"
-        ).first()
-        if debug_validator and debug_validator.id in validator_ids:
-            return debug_validator
-        try:
-            validator = (
-                Validator.objects.filter(
-                    pk__in=validator_ids,
-                )
-                .with_last_job_time()
-                .order_by(F("last_job_time").asc(nulls_first=True))
-            )[0]
-        except IndexError as exc:
-            raise Validator.DoesNotExist from exc
-
-        log.debug("selected validator", validator=validator)
-        return validator
-
-    def select_miner(self) -> Miner:
-        """
-        Select a miner for the job.
-
-        Currently, the one with the least number of jobs being executed is selected.
-        This method is expected to be called from within a transaction.
-        """
-
-        last_jobs_subquery = Subquery(
-            Job.objects.filter(miner=OuterRef("miner_id")).order_by("-created_at").values_list("pk", flat=True)[:10]
-        )
-        miners = (
-            Miner.objects.select_for_update()
-            .filter(is_active=True)
-            .prefetch_related(
-                Prefetch(
-                    "jobs",
-                    queryset=(
-                        Job.objects.filter(pk__in=last_jobs_subquery)
-                        .order_by("-created_at")
-                        .prefetch_related(Prefetch("statuses", queryset=JobStatus.objects.order_by("-created_at")))
-                    ),
-                )
-            )
-        )
-
-        # select miners which don't have active jobs
-        miners = [miner for miner in miners if all(job.is_completed() for job in miner.jobs.all())]
-
-        # use user's preferences to select specific miners
-        with suppress(UserPreferences.DoesNotExist):
-            if not self.user:
-                raise UserPreferences.DoesNotExist
-
-            exclusive_preference = self.user.preferences.exclusive
-            if preferred_miners := self.user.preferences.miners.all():
-                # we either select one of preferred miners, but if none of them is available - select any
-                available_preferred_miners = [miner for miner in miners if miner in preferred_miners]
-                if available_preferred_miners or exclusive_preference:
-                    miners = available_preferred_miners
-
-        if not miners:
-            raise Miner.DoesNotExist
-
-        for miner in miners:
-            if miner.ss58_address == "5HBVrFGy6oYhhh71m9fFGYD7zbKyAeHnWN8i8s9fJTBMCtEE":
-                return miner
-        # sort miners by last job time
-        miners.sort(
-            key=lambda miner: jobs[0].created_at if (jobs := miner.jobs.all()) else datetime.min.replace(tzinfo=UTC)
-        )
-        return miners[0]
-
-    def is_download_url_expired(self) -> bool:
-        return (
-            not self.output_download_url
-            or not self.output_download_url_expires_at
-            or now() > self.output_download_url_expires_at
-        )
-
-    def reset_download_url(self) -> None:
-        self.output_download_url = create_signed_download_url(self.filename)
-        self.output_download_url_expires_at = now() + settings.DOWNLOAD_PRESIGNED_URL_LIFETIME
-
-    def clean(self, *args, **kwargs) -> None:
-        if (self.docker_image == "") == (self.raw_script == ""):
-            raise MutuallyExclusiveFieldsError("Either docker_image or raw_script should be provided, but not both")
-        return super().clean(*args, **kwargs)
+        if self.signature is None:
+            raise ValueError("Request must be signed when target_validator_hotkey is set")
+        validator = Validator.objects.filter(ss58_address=self.target_validator_hotkey).first()
+        if validator and validator.id in validator_ids:
+            log.debug("selected (targeted) validator", validator=validator)
+            return validator
+        raise Validator.DoesNotExist
 
     @property
     def sender(self) -> str:
@@ -443,7 +249,8 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         return self.statuses_ordered[-1]
 
     def is_completed(self) -> bool:
-        return self.status.status in JobStatus.FINAL_STATUS_VALUES or self.created_at < now() - self.JOB_TIMEOUT
+        # TODO: TIMEOUTS - Status updates from validator should include a timeout until next update. Job is failed if timeout is reached.
+        return self.status.status in JobStatus.FINAL_STATUS_VALUES
 
     @property
     def elapsed(self) -> timedelta:
@@ -451,81 +258,30 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         statuses = self.statuses_ordered
         return statuses[-1].created_at - statuses[0].created_at
 
-    def as_job_request(self) -> OrganicJobRequest:
-        if safe_config.JOB_REQUEST_VERSION == 0:
-            if self.uploads or self.volumes:
-                raise ValueError("upload and volumes are not supported in version 0 of job protocol")
-            return V0JobRequest(
-                uuid=str(self.uuid),
-                miner_hotkey=self.miner.ss58_address,
-                executor_class=self.executor_class,
-                docker_image=self.docker_image,
-                args=self.args,
-                env=self.env,
-                use_gpu=self.use_gpu,
-                input_url=self.input_url,
-                output_url=self.output_upload_url,
-            )
-        else:
-            if self.input_url or self.volumes or self.hf_repo_id:
-                subvolumes = []
-                if self.input_url:
-                    subvolumes.append(
-                        ZipUrlVolume(
-                            contents=self.input_url,
-                            relative_path="",
-                        )
-                    )
-                if self.hf_repo_id:
-                    subvolumes.append(
-                        HuggingfaceVolume(
-                            repo_id=self.hf_repo_id,
-                            revision=self.hf_revision,
-                            relative_path="",
-                        )
-                    )
-                subvolumes.extend(self.volumes)
-                volume = MultiVolume(volumes=subvolumes)
-            else:
-                volume = None
-            if self.output_upload_url or self.uploads:
-                output_upload = MultiUpload(
-                    uploads=self.uploads,
-                    system_output=ZipAndHttpPutUpload(url=self.output_upload_url) if self.output_upload_url else None,
-                )
-            else:
-                output_upload = None
-            if self.signature is not None:
-                assert self.miner is None
-
-                signature = Signature.model_validate(self.signature)
-
-                return V2JobRequest(
-                    uuid=str(self.uuid),
-                    executor_class=self.executor_class,
-                    docker_image=self.docker_image,
-                    args=self.args,
-                    env=self.env,
-                    use_gpu=self.use_gpu,
-                    volume=volume,
-                    output_upload=output_upload,
-                    signature=signature,
-                    artifacts_dir=self.artifacts_dir or None,
-                    on_trusted_miner=self.on_trusted_miner,
-                )
-            else:
-                assert self.miner is not None
-                return V1JobRequest(
-                    uuid=str(self.uuid),
-                    miner_hotkey=self.miner.ss58_address,
-                    executor_class=self.executor_class,
-                    docker_image=self.docker_image,
-                    args=self.args,
-                    env=self.env,
-                    use_gpu=self.use_gpu,
-                    volume=volume,
-                    output_upload=output_upload,
-                )
+    def as_job_request(self) -> V2JobRequest:
+        volume = MultiVolume(volumes=self.volumes) if self.volumes else None
+        output_upload = MultiUpload(uploads=self.uploads, system_output=None) if self.uploads else None
+        signature = Signature.model_validate(self.signature)
+        return V2JobRequest(
+            uuid=str(self.uuid),
+            executor_class=self.executor_class,
+            docker_image=self.docker_image,
+            args=self.args,
+            env=self.env,
+            use_gpu=self.use_gpu,
+            volume=volume,
+            output_upload=output_upload,
+            signature=signature,
+            artifacts_dir=self.artifacts_dir or None,
+            on_trusted_miner=self.on_trusted_miner,
+            download_time_limit=self.download_time_limit,
+            execution_time_limit=self.execution_time_limit,
+            streaming_start_time_limit=self.streaming_start_time_limit,
+            upload_time_limit=self.upload_time_limit,
+            streaming_details=StreamingDetails(public_key=self.streaming_client_cert)
+            if self.streaming_client_cert
+            else None,
+        )
 
     def send_to_validator(self, payload: dict) -> None:
         channels_names = Channel.objects.filter(validator=self.validator).values_list("name", flat=True)
@@ -535,29 +291,20 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         for channel_name in channels_names:
             send(channel_name, payload)
 
-    @retry(
-        stop=stop_after_delay(JOB_TIMEOUT),
-        wait=wait_fixed(3),
-        retry=retry_if_exception_type(JobNotFinishedError),
-        reraise=True,
-    )
-    def wait_completed(self: str, on_check: Callable = lambda job: None) -> "JobStatus.Status":
-        job = self.__class__.objects.prefetch_related("statuses").get(uuid=self.uuid)
-        on_check(job)
-        if job.is_completed():
-            return job.status
-
-        log.debug("Still waiting for results from job %s", self.uuid)
-        raise JobNotFinishedError
-
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     class Status(models.IntegerChoices):
+        # These correspond to JobStatusUpdate.Status
         FAILED = -2
         REJECTED = -1
         SENT = 0
-        ACCEPTED = 1
-        COMPLETED = 2
+        RECEIVED = 1
+        ACCEPTED = 2
+        EXECUTOR_READY = 3
+        VOLUMES_READY = 4
+        EXECUTION_DONE = 5
+        COMPLETED = 6
+        STREAMING_READY = 7
 
     FINAL_STATUS_VALUES = (
         Status.COMPLETED,
@@ -582,7 +329,7 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     @property
     def meta(self) -> JobStatusMetadata | None:
         if self.metadata:
-            return JobStatusMetadata.parse_obj(self.metadata)
+            return JobStatusMetadata.model_validate(self.metadata)
 
 
 class JobFeedback(models.Model):
@@ -596,7 +343,6 @@ class JobFeedback(models.Model):
 
     result_correctness = models.FloatField(default=1, help_text="<0-1> where 1 means 100% correct")
     expected_duration = models.FloatField(blank=True, null=True, help_text="Expected duration of the job in seconds")
-    signature_info = models.ForeignKey(SignatureInfo, on_delete=models.CASCADE, null=True)
     signature = models.JSONField(blank=True, null=True)
 
     def __str__(self) -> str:
@@ -756,6 +502,16 @@ class GpuSpecs(ExportModelOperationsMixin("gpu_specs"), models.Model):
                 name="unique_gpu_specs",
             ),
         ]
+
+
+class HotkeyWhitelist(models.Model):
+    ss58_address = models.CharField(max_length=255, unique=True)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True, related_name="hotkey_user"
+    )
+
+    def __str__(self) -> str:
+        return self.ss58_address
 
 
 # TO BE DEPRECATED

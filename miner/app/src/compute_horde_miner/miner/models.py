@@ -60,6 +60,7 @@ class AcceptedJob(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     executor_address = models.TextField(null=True)
     artifacts = models.JSONField(encoder=EnumEncoder, null=True)
+    upload_results = models.JSONField(null=True)
 
     def __str__(self):
         return (

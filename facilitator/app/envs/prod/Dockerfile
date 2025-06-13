@@ -35,10 +35,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
   uv sync --frozen --no-dev --no-editable
 
 RUN echo "Additional packages: $(echo "$ADDITIONAL_PACKAGES" | sed "s/\$GITHUB_TOKEN/$GITHUB_TOKEN/g")"
-RUN [ -n "$ADDITIONAL_PACKAGES" ] && \
-  echo "$ADDITIONAL_PACKAGES" | sed "s/\$GITHUB_TOKEN/$GITHUB_TOKEN/g" > additional-packages.txt
-RUN --mount=type=cache,target=/root/.cache/uv \
-  uv pip install -r additional-packages.txt
+RUN --mount=type=cache,target=/root/.cache/uv if [ -n "$ADDITIONAL_PACKAGES" ]; then \
+  echo "$ADDITIONAL_PACKAGES" | sed "s/\$GITHUB_TOKEN/$GITHUB_TOKEN/g" > additional-packages.txt ; \
+    uv pip install -r additional-packages.txt; \
+    fi
 
 RUN ENV=prod ENV_FILL_MISSING_VALUES=1 SECRET_KEY=dummy uv run --no-sync python3 manage.py collectstatic --no-input --clear
 

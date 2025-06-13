@@ -1,36 +1,89 @@
 import asyncio
 import uuid
 from collections.abc import Callable
+from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.fv_protocol import facilitator_requests
+from compute_horde.executor_class import EXECUTOR_CLASS
+from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.transport import AbstractTransport
+from compute_horde_core.executor_class import ExecutorClass
 
-from compute_horde_validator.validator.models import Cycle, Miner, MinerManifest, SyntheticJobBatch
+from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
+    Cycle,
+    MetagraphSnapshot,
+    Miner,
+    MinerManifest,
+    SyntheticJobBatch,
+)
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 
 @pytest.fixture
 def miner(miner_keypair):
-    return Miner.objects.create(hotkey=miner_keypair.ss58_address)
+    return Miner.objects.create(hotkey=miner_keypair.ss58_address, collateral_wei=Decimal(10**18))
+
+
+@pytest.fixture
+def validator(settings):
+    return Miner.objects.create(hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address)
+
+
+@pytest.fixture
+def cycle():
+    return Cycle.objects.create(start=1, stop=2)
 
 
 @pytest.fixture(autouse=True)
-def manifest(miner):
-    cycle = Cycle.objects.create(start=1, stop=2)
+def manifest(miner, cycle):
     batch = SyntheticJobBatch.objects.create(block=5, cycle=cycle)
     return MinerManifest.objects.create(
         miner=miner,
         batch=batch,
-        executor_class=DEFAULT_EXECUTOR_CLASS,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=5,
         online_executor_count=5,
     )
+
+
+@pytest.fixture(autouse=True)
+def compute_time_allowance(cycle, miner, validator):
+    return ComputeTimeAllowance.objects.create(
+        cycle=cycle,
+        miner=miner,
+        validator=validator,
+        initial_allowance=1e10,
+        remaining_allowance=1e10,
+    )
+
+
+# NOTE: Currently this is here to make sure job routing can read current block.
+#       Other fields are not used now.
+@pytest.fixture(autouse=True)
+def metagraph_snapshot(cycle):
+    return MetagraphSnapshot.objects.create(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=cycle.start,
+        alpha_stake=[],
+        tao_stake=[],
+        stake=[],
+        uids=[],
+        hotkeys=[],
+        serving_hotkeys=[],
+    )
+
+
+@pytest.fixture(autouse=True)
+def patch_executor_spinup_time(monkeypatch):
+    with monkeypatch.context() as m:
+        for spec in EXECUTOR_CLASS.values():
+            m.setattr(spec, "spin_up_time", 1)
+        yield
 
 
 class _SimulationTransportWsAdapter:
@@ -69,9 +122,9 @@ async def miner_transports():
     """
 
     transports = [
-        SimulationTransport("miner_01"),
-        SimulationTransport("miner_02"),
-        SimulationTransport("miner_03"),
+        SimulationTransport("miner_connection_1"),
+        SimulationTransport("miner_connection_2"),
+        SimulationTransport("miner_connection_3"),
     ]
 
     transports_iter = iter(transports)
@@ -141,7 +194,7 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
         patch.object(FacilitatorClient, "heartbeat", AsyncMock()),
         patch.object(FacilitatorClient, "wait_for_specs", AsyncMock()),
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_job_request",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request",
             AsyncMock(),
         ),
     ):
@@ -150,13 +203,17 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
 
 @pytest.fixture()
 def job_request():
-    return facilitator_requests.V2JobRequest(
+    return V2JobRequest(
         uuid=str(uuid.uuid4()),
-        executor_class=DEFAULT_EXECUTOR_CLASS,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
         docker_image="doesntmatter",
         args=[],
         env={},
         use_gpu=False,
+        download_time_limit=1,
+        execution_time_limit=1,
+        streaming_start_time_limit=1,
+        upload_time_limit=1,
     )
 
 

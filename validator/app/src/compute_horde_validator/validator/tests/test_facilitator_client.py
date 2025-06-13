@@ -4,6 +4,7 @@ import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
@@ -15,14 +16,19 @@ from compute_horde.fv_protocol.facilitator_requests import (
     Response,
 )
 from compute_horde.fv_protocol.validator_requests import (
+    JobStatusUpdate,
     V0AuthenticationRequest,
     V0MachineSpecsUpdate,
 )
+from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
     Cycle,
+    MetagraphSnapshot,
     Miner,
+    MinerBlacklist,
     MinerManifest,
     OrganicJob,
     SyntheticJobBatch,
@@ -30,16 +36,12 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.organic_jobs.facilitator_client import (
     FacilitatorClient,
 )
-from compute_horde_validator.validator.organic_jobs.miner_driver import JobStatusUpdate
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
 
 from .helpers import (
     MockFaillingMinerClient,
-    MockMetagraph,
-    MockSubtensor,
     MockSuccessfulMinerClient,
-    get_dummy_job_request_v0,
-    get_dummy_job_request_v1,
+    get_dummy_job_cheated_request_v0,
     get_dummy_job_request_v2,
     get_keypair,
 )
@@ -51,23 +53,27 @@ DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
 async def async_patch_all():
     with (
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_job_request",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request",
             return_value=True,
         ),
-        patch("bittensor.subtensor", lambda *args, **kwargs: MockSubtensor()),
-        patch("bittensor.metagraph", lambda *args, **kwargs: MockMetagraph()),
+        patch("turbobt.Bittensor"),
     ):
         yield
 
 
 async def setup_db(n: int = 1):
     now = timezone.now()
+    cycle = await Cycle.objects.acreate(start=-14, stop=708)
     batch = await SyntheticJobBatch.objects.acreate(
         block=1,
-        cycle=await Cycle.objects.acreate(start=-14, stop=708),
+        cycle=cycle,
         created_at=now,
     )
-    miners = [await Miner.objects.acreate(hotkey=f"miner_{i}") for i in range(0, n)]
+    miners = [
+        await Miner.objects.acreate(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18))
+        for i in range(0, n)
+    ]
+    validator = await Miner.objects.acreate(hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address)
     for i, miner in enumerate(miners):
         await MinerManifest.objects.acreate(
             miner=miner,
@@ -76,6 +82,23 @@ async def setup_db(n: int = 1):
             executor_class=DEFAULT_EXECUTOR_CLASS,
             online_executor_count=5,
         )
+        await ComputeTimeAllowance.objects.acreate(
+            cycle=cycle,
+            miner=miner,
+            validator=validator,
+            initial_allowance=1e10,
+            remaining_allowance=1e10,
+        )
+    await MetagraphSnapshot.objects.acreate(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=1,
+        alpha_stake=[],
+        tao_stake=[],
+        stake=[],
+        uids=[],
+        hotkeys=[],
+        serving_hotkeys=[],
+    )
 
 
 async def reap_tasks(*tasks: asyncio.Task):
@@ -98,7 +121,7 @@ class FacilitatorWs:
             await self.condition.wait()
 
     def get_dummy_job(self, job_uuid) -> OrganicJobRequest:
-        return get_dummy_job_request_v0(job_uuid)
+        return get_dummy_job_request_v2(job_uuid)
 
     async def verify_auth(self, ws):
         response = await asyncio.wait_for(ws.recv(), timeout=5)
@@ -106,11 +129,23 @@ class FacilitatorWs:
         await asyncio.wait_for(ws.send(Response(status="success").model_dump_json()), timeout=5)
 
     async def verify_job_status_update(self, ws):
+        # received
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
         # accept or decline
-        response = await asyncio.wait_for(ws.recv(), timeout=5)
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
+        # executor ready
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
+        # volumes downloaded or failed
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
+        JobStatusUpdate.model_validate_json(response)
+        # execution done or failed
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
         JobStatusUpdate.model_validate_json(response)
         # finished or failed
-        response = await asyncio.wait_for(ws.recv(), timeout=5)
+        response = await asyncio.wait_for(ws.recv(), timeout=1)
         JobStatusUpdate.model_validate_json(response)
 
     async def serve(self, ws):
@@ -137,21 +172,6 @@ class FacilitatorWs:
         finally:
             async with self.condition:
                 self.condition.notify()
-
-
-class FacilitatorJobStatusUpdatesWsV0(FacilitatorWs):
-    def get_dummy_job(self, job_uuid) -> OrganicJobRequest:
-        return get_dummy_job_request_v0(job_uuid)
-
-
-class FacilitatorJobStatusUpdatesWsV1(FacilitatorWs):
-    def get_dummy_job(self, job_uuid):
-        return get_dummy_job_request_v1(job_uuid)
-
-
-class FacilitatorJobStatusUpdatesWsV2(FacilitatorWs):
-    def get_dummy_job(self, job_uuid):
-        return get_dummy_job_request_v2(job_uuid)
 
 
 class FacilitatorJobOnTrustedMiner(FacilitatorWs):
@@ -214,7 +234,7 @@ class FacilitatorBadMessageWs(FacilitatorWs):
             self.condition.notify()
 
 
-class FacilitatorJobStatusUpdatesWsV2Retries(FacilitatorJobStatusUpdatesWsV2):
+class FacilitatorJobStatusUpdatesWsV2Retries(FacilitatorWs):
     async def serve(self, ws):
         try:
             await self.verify_auth(ws)
@@ -247,9 +267,7 @@ class FacilitatorJobStatusUpdatesWsV2Retries(FacilitatorJobStatusUpdatesWsV2):
 @pytest.mark.parametrize(
     "ws_server_cls",
     [
-        FacilitatorJobStatusUpdatesWsV0,
-        FacilitatorJobStatusUpdatesWsV1,
-        FacilitatorJobStatusUpdatesWsV2,
+        FacilitatorWs,
         FacilitatorBadMessageWs,
     ],
 )
@@ -274,6 +292,42 @@ async def test_facilitator_client__job_completed(ws_server_cls):
 
             if ws_server.facilitator_error:
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
+async def test_facilitator_client__cheated_job():
+    await setup_db()
+    facilitator_client = FacilitatorClient(get_keypair(), "ws://127.0.0.1:1233/")
+    job_uuid = str(uuid.uuid4())
+    cheated_job_request = get_dummy_job_cheated_request_v0(job_uuid)
+
+    async with async_patch_all():
+        miner = await Miner.objects.afirst()
+        job = await OrganicJob.objects.acreate(
+            job_uuid=job_uuid,
+            miner=miner,
+            block=1000,
+            miner_address="127.0.0.1",
+            miner_address_ip_version=4,
+            miner_port=8080,
+            status=OrganicJob.Status.COMPLETED,
+        )
+        assert job.cheated is False
+
+        await facilitator_client.report_miner_cheated_job(cheated_job_request)
+        await job.arefresh_from_db()
+        assert job.cheated is True
+        assert await MinerBlacklist.objects.acount() == 1
+        assert (
+            await MinerBlacklist.objects.aget(miner_id=miner.id)
+        ).reason == MinerBlacklist.BlacklistReason.JOB_CHEATED
+
+        await facilitator_client.report_miner_cheated_job(cheated_job_request)
+        await job.arefresh_from_db()
+        assert job.cheated is True
+        # do not blacklist second time
+        assert await MinerBlacklist.objects.acount() == 1
 
 
 @pytest.mark.override_config(
@@ -386,4 +440,5 @@ async def test_routing_to_trusted_miner():
             await reap_tasks(task)
 
             if ws_server.facilitator_error:
+                # Failed: Test failed due to: job not completed: PENDING
                 pytest.fail(f"Test failed due to: {ws_server.facilitator_error}")

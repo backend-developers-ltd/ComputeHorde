@@ -28,7 +28,6 @@ def random_receipt(
         timestamp=timezone.now(),
         receipt_type=ReceiptType.JobStartedReceipt,
         executor_class=ExecutorClass.always_on__gpu_24gb,
-        max_timeout=100,
         ttl=100,
         is_organic=False,
     )
@@ -41,4 +40,4 @@ def random_receipt(
 
 
 def random_keypair() -> Keypair:
-    return Keypair.create_from_seed(bytes(random.randint(0, 255) for _ in range(32)))
+    return Keypair.create_from_seed(random.randbytes(32).hex())

@@ -2,6 +2,7 @@ import logging
 import shlex
 import uuid
 from datetime import datetime, timedelta
+from decimal import Decimal
 from enum import IntEnum
 from os import urandom
 from typing import Self
@@ -11,6 +12,7 @@ from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde.subtensor import get_cycle_containing_block
+from compute_horde.utils import MIN_VALIDATOR_STAKE
 from compute_horde_core.output_upload import OutputUpload, ZipAndHttpPutUpload
 from compute_horde_core.volume import Volume, ZipUrlVolume
 from django.conf import settings
@@ -37,6 +39,7 @@ class SystemEvent(models.Model):
         MINER_ORGANIC_JOB_SUCCESS = "MINER_ORGANIC_JOB_SUCCESS"
         MINER_SYNTHETIC_JOB_SUCCESS = "MINER_SYNTHETIC_JOB_SUCCESS"
         MINER_SYNTHETIC_JOB_FAILURE = "MINER_SYNTHETIC_JOB_FAILURE"
+        MINER_EXECUTOR_COUNT_CLIPPED = "MINER_EXECUTOR_COUNT_CLIPPED"
         RECEIPT_FAILURE = "RECEIPT_FAILURE"
         FACILITATOR_CLIENT_ERROR = "FACILITATOR_CLIENT_ERROR"
         VALIDATOR_MINERS_REFRESH = "VALIDATOR_MINERS_REFRESH"
@@ -50,7 +53,9 @@ class SystemEvent(models.Model):
         LLM_PROMPT_ANSWERING = "LLM_PROMPT_ANSWERING"
         LLM_PROMPT_SAMPLING = "LLM_PROMPT_SAMPLING"
         BURNING_INCENTIVE = "BURNING_INCENTIVE"
+        COMPUTE_TIME_ALLOWANCE = "COMPUTE_TIME_ALLOWANCE"
         METAGRAPH_SYNCING = "METAGRAPH_SYNCING"
+        COLLATERAL_SYNCING = "COLLATERAL_SYNCING"
 
     class EventSubType(models.TextChoices):
         SUCCESS = "SUCCESS"
@@ -100,9 +105,14 @@ class SystemEvent(models.Model):
         ERROR_UPLOADING_TO_S3 = "ERROR_UPLOADING_TO_S3"
         ERROR_DOWNLOADING_FROM_S3 = "ERROR_DOWNLOADING_FROM_S3"
         ERROR_DOWNLOADING_FROM_HUGGINGFACE = "ERROR_DOWNLOADING_FROM_HUGGINGFACE"
+        ERROR_FAILED_SECURITY_CHECK = "ERROR_DURING_SECURITY_CHECK"
+        ERROR_EXECUTOR_REPORTED_TIMEOUT = "ERROR_EXECUTOR_REPORTED_TIMEOUT"
+        ERROR_VALIDATOR_REPORTED_TIMEOUT = "ERROR_VALIDATOR_REPORTED_TIMEOUT"
+        JOB_PROCESS_NONZERO_EXIT_CODE = "JOB_PROCESS_NONZERO_EXIT_CODE"
         LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED = "LLM_PROMPT_ANSWERS_DOWNLOAD_WORKER_FAILED"
         APPLIED_BURNING = "APPLIED_BURNING"
         NO_BURNING = "NO_BURNING"
+        GETTING_MINER_COLLATERAL_FAILED = "GETTING_MINER_COLLATERAL_FAILED"
 
     type = models.CharField(max_length=255, choices=EventType.choices)
     subtype = models.CharField(max_length=255, choices=EventSubType.choices)
@@ -187,8 +197,23 @@ class MetagraphSnapshot(models.Model):
     async def aget_cycle_start(cls) -> "MetagraphSnapshot":
         return await sync_to_async(cls.get_cycle_start)()
 
+    def get_serving_hotkeys(self) -> list[str]:
+        """
+        Get the list of serving hotkeys.
+        :return: List of serving hotkeys.
+        """
+        return self.serving_hotkeys or []
+
+    def get_total_validator_stake(self) -> float:
+        """
+        Get the total stake for all hotkeys.
+        :return: The total stake.
+        """
+        return sum([s for s in self.stake if s > MIN_VALIDATOR_STAKE])
+
 
 # contains all neurons not only miners
+# TODO: rename to Neuron
 class Miner(models.Model):
     objects = MinerQueryset.as_manager()
 
@@ -199,6 +224,16 @@ class Miner(models.Model):
     address = models.CharField(max_length=255, default="0.0.0.0")
     ip_version = models.IntegerField(default=4)
     port = models.IntegerField(default=0)
+
+    evm_address = models.CharField(max_length=42, null=True)
+
+    # This is a 256-bit integer, which is too big to store in any of postgres's int types.
+    # So we are using the NUMERIC(78) here.
+    collateral_wei = models.DecimalField(
+        max_digits=settings.DECIMAL_PRECISION,
+        decimal_places=0,
+        default=Decimal(0),
+    )
 
     def __str__(self):
         return f"hotkey: {self.hotkey}"
@@ -235,6 +270,7 @@ class MinerBlacklist(models.Model):
 
 class ValidatorWhitelist(models.Model):
     hotkey = models.CharField(max_length=255, unique=True)
+    # root_consumer = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -244,6 +280,7 @@ class ValidatorWhitelist(models.Model):
 class Cycle(models.Model):
     start = models.BigIntegerField()
     stop = models.BigIntegerField()
+    set_compute_time_allowance = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -342,11 +379,14 @@ class OrganicJob(JobBase):
     error_type = models.TextField(null=True, default=None)
     error_detail = models.TextField(null=True, default=None)
     artifacts = models.JSONField(blank=True, default=dict)
+    upload_results = models.JSONField(blank=True, default=dict)
     cheated = models.BooleanField(default=False)
+    slashed = models.BooleanField(default=False)
     block = models.BigIntegerField(
         null=True, help_text="Block number on which this job is scheduled"
     )
     on_trusted_miner = models.BooleanField(default=False)
+    streaming_details = models.JSONField(null=True, default=None)
 
     class Meta:
         indexes = [
@@ -401,6 +441,37 @@ class AdminJobRequest(models.Model):
 
 def get_random_salt() -> list[int]:
     return list(urandom(8))
+
+
+class ComputeTimeAllowance(models.Model):
+    """
+    Record of executor-seconds allowance for a validator-miner pair.
+    Calculated at the beginning of each cycle.
+    """
+
+    cycle = models.ForeignKey(Cycle, on_delete=models.CASCADE)
+    miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
+    validator = models.ForeignKey(
+        Miner, on_delete=models.CASCADE, related_name="validator_allowances"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    initial_allowance = models.FloatField(
+        default=0.0, help_text="Executor-seconds allocated at the beginning of the cycle"
+    )
+    remaining_allowance = models.FloatField(
+        default=0.0, help_text="Remaining executor-seconds that can be used"
+    )
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=["miner", "validator", "cycle"], name="unique_miner_allowance_per_cycle"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.validator.hotkey} -> {self.miner.hotkey} {self.cycle}: initial={self.initial_allowance:.2f}s remaining={self.remaining_allowance:.2f}s"
 
 
 class Weights(models.Model):

@@ -1,4 +1,5 @@
-from datetime import timedelta
+import base64
+import time
 from importlib import import_module
 
 import pytest
@@ -7,15 +8,18 @@ import responses
 from bittensor import Keypair
 from bittensor_wallet import Wallet
 from channels.testing import WebsocketCommunicator
-from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest
+from compute_horde.fv_protocol.validator_requests import (
+    JobStatusMetadata,
+    JobStatusUpdate,
+    MinerResponse,
+    V0AuthenticationRequest,
+)
+from compute_horde_core.signature import Signature
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.utils.timezone import now
-from freezegun import freeze_time
 
 from ...asgi import application
-from ..models import Channel, Job, JobStatus, Miner, Validator
-from ..schemas import JobStatusMetadata, JobStatusUpdate, MinerResponse
+from ..models import Channel, Job, Validator
 
 for package in settings.ADDITIONAL_APPS:
     module = import_module(f"{package}.tests.conftest")
@@ -89,42 +93,40 @@ def connected_validator(db, validator):
 
 
 @pytest.fixture
-def miner(db, keypair):
-    return Miner.objects.create(ss58_address=keypair.ss58_address, is_active=True)
-
-
-@pytest.fixture
-def miners(db):
-    return Miner.objects.bulk_create([Miner(ss58_address=f"miner{i}", is_active=True) for i in range(10)])
-
-
-@pytest.fixture
 def user(db):
     return User.objects.create(username="testuser", email="test@localhost")
+
+
+@pytest.fixture
+def signature():
+    return Signature(
+        signature_type="dummy_signature_type",
+        signatory="dummy_signatory",
+        timestamp_ns=time.time_ns(),
+        signature=base64.b64encode(b"dummy_signature"),
+    )
 
 
 @pytest.fixture
 def dummy_job_params(settings):
     return dict(
         docker_image="",
-        raw_script="import this",
         args=["arg1", "value1"],
         env={"ENV1": "VALUE1"},
-        input_url="http://localhost/input",
-        hf_repo_id="http://localhost/hf",
-        hf_revision="123456",
-        output_upload_url="http://localhost/output/upload",
-        output_download_url="http://localhost/output/download",
-        output_download_url_expires_at=now() + settings.DOWNLOAD_PRESIGNED_URL_LIFETIME,
+        download_time_limit=1,
+        execution_time_limit=1,
+        streaming_start_time_limit=1,
+        upload_time_limit=1,
     )
 
 
 @pytest.fixture
-def job(db, user, validator, miner, dummy_job_params):
+def job(db, user, validator, signature, dummy_job_params):
     return Job.objects.create(
         user=user,
         validator=validator,
-        miner=miner,
+        target_validator_hotkey=validator.ss58_address,
+        signature=signature.model_dump(),
         **dummy_job_params,
     )
 
@@ -158,88 +160,10 @@ def job_status_update(job):
                 docker_process_stderr="some stderr",
                 docker_process_stdout="some stdout",
                 artifacts={},
+                upload_results={},
             ),
         ),
     )
-
-
-@pytest.fixture
-def inactive_miner(db):
-    return Miner.objects.create(ss58_address="inactive-miner", is_active=False)
-
-
-@pytest_asyncio.fixture
-async def active_miner_with_executing_job(db, user, validator, dummy_job_params):
-    miner = await Miner.objects.acreate(ss58_address="miner-with-active-job", is_active=True)
-
-    # add some old completed jobs
-    with freeze_time(now() - timedelta(hours=1)):
-        for _ in range(20):
-            job = await Job.objects.acreate(
-                user=user,
-                validator=validator,
-                miner=miner,
-                **dummy_job_params,
-            )
-            await JobStatus.objects.acreate(job=job, status=JobStatus.Status.ACCEPTED)
-            await JobStatus.objects.acreate(job=job, status=JobStatus.Status.COMPLETED)
-
-    job = await Job.objects.acreate(user=user, validator=validator, miner=miner, **dummy_job_params)
-    await JobStatus.objects.acreate(job=job, status=JobStatus.Status.ACCEPTED)
-
-    return miner
-
-
-@pytest_asyncio.fixture
-async def miner_with_recently_completed_jobs(db, user, validator, dummy_job_params):
-    miner = await Miner.objects.acreate(ss58_address="miner-with-recently-completed-jobs", is_active=True)
-
-    for _ in range(20):
-        job = await Job.objects.acreate(
-            user=user,
-            validator=validator,
-            miner=miner,
-            **dummy_job_params,
-        )
-        await JobStatus.objects.acreate(job=job, status=JobStatus.Status.ACCEPTED)
-        await JobStatus.objects.acreate(job=job, status=JobStatus.Status.COMPLETED)
-
-    return miner
-
-
-@pytest_asyncio.fixture
-async def miner_with_old_completed_jobs(db, user, validator, dummy_job_params):
-    miner = await Miner.objects.acreate(ss58_address="miner-with-old-completed-jobs", is_active=True)
-
-    with freeze_time(now() - timedelta(hours=1)):
-        for _ in range(20):
-            job = await Job.objects.acreate(
-                user=user,
-                validator=validator,
-                miner=miner,
-                **dummy_job_params,
-            )
-            await JobStatus.objects.acreate(job=job, status=JobStatus.Status.ACCEPTED)
-            await JobStatus.objects.acreate(job=job, status=JobStatus.Status.COMPLETED)
-
-    return miner
-
-
-@pytest_asyncio.fixture
-async def miner_with_old_active_jobs(db, user, validator, dummy_job_params):
-    miner = await Miner.objects.acreate(ss58_address="miner-with-old-active-jobs", is_active=True)
-
-    with freeze_time(now() - timedelta(hours=1)):
-        for _ in range(20):
-            job = await Job.objects.acreate(
-                user=user,
-                validator=validator,
-                miner=miner,
-                **dummy_job_params,
-            )
-            await JobStatus.objects.acreate(job=job, status=JobStatus.Status.ACCEPTED)
-
-    return miner
 
 
 @pytest.fixture

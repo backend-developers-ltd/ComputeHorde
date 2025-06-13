@@ -1,31 +1,35 @@
+import asyncio
 import contextlib
+import functools
 import json
 import random
 import time
 import traceback
 import uuid
+from collections.abc import Callable
 from datetime import timedelta
+from decimal import Decimal
 from functools import cached_property
 from math import ceil, floor
-from typing import Union
+from typing import Any, ParamSpec, TypeVar, Union
 
 import billiard.exceptions
 import bittensor
 import celery.exceptions
 import numpy as np
 import requests
+import turbobt
+import turbobt.substrate.exceptions
 from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.core.errors import SubstrateRequestException
-from bittensor.core.metagraph import Metagraph, NonTorchMetagraph
-from bittensor.utils.weight_utils import process_weights_for_netuid
+from bittensor.utils.weight_utils import process_weights
+from bt_ddos_shield.turbobt import ShieldedBittensor
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde.dynamic_config import sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
-from compute_horde.subtensor import get_cycle_containing_block
-from compute_horde.utils import ValidatorListError, get_validators
 from compute_horde_validator.validator.generation_profile import (
     PromptGenerationProfile,
     EXECUTOR_TO_PROMPT_GENERATION_PROFILE,
@@ -39,10 +43,17 @@ from numpy.typing import NDArray
 from pydantic import JsonValue, TypeAdapter
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.collateral import (
+    get_evm_key_associations,
+    get_miner_collateral,
+    get_web3_connection,
+    slash_collateral,
+)
 from compute_horde_validator.validator.cross_validation.prompt_answering import answer_prompts
 from compute_horde_validator.validator.cross_validation.prompt_generation import generate_prompts
 from compute_horde_validator.validator.locks import Locked, LockType, get_advisory_lock
 from compute_horde_validator.validator.models import (
+    ComputeTimeAllowance,
     Cycle,
     Miner,
     OrganicJob,
@@ -93,6 +104,11 @@ WEIGHT_SETTING_HARD_TTL = 65
 WEIGHT_SETTING_ATTEMPTS = 100
 WEIGHT_SETTING_FAILURE_BACKOFF = 5
 
+COMPUTE_TIME_OVERHEAD_SECONDS = 30  # TODO: approximate a realistic value
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
 
 class WeightsRevealError(Exception):
     pass
@@ -102,7 +118,29 @@ class ScheduleError(Exception):
     pass
 
 
-def when_to_run(subtensor_: bittensor.subtensor, current_cycle) -> int:
+def bittensor_client(func: Callable[P, R]) -> Callable[..., R]:
+    @async_to_sync
+    async def synced_bittensor(*args, bittensor=None, **kwargs):
+        async with ShieldedBittensor(
+            settings.BITTENSOR_NETWORK,
+            ddos_shield_netuid=settings.BITTENSOR_NETUID,
+            ddos_shield_options=settings.BITTENSOR_SHIELD_METAGRAPH_OPTIONS(),
+            wallet=settings.BITTENSOR_WALLET(),
+        ) as bittensor:
+            return await sync_to_async(func)(*args, bittensor=bittensor, **kwargs)
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return synced_bittensor(*args, **kwargs)
+
+    return wrapper
+
+
+async def when_to_run(
+    bittensor: turbobt.Bittensor,
+    current_cycle: range,
+    block_finalization_number: int,
+) -> int:
     """
     Select block when to run validation for a given validator.
     Validators needs to run their jobs temporarily separated from others.
@@ -111,12 +149,12 @@ def when_to_run(subtensor_: bittensor.subtensor, current_cycle) -> int:
     """
 
     try:
-        validators = get_validators(
+        validators = await turbobt_get_validators(
+            bittensor,
             netuid=settings.BITTENSOR_NETUID,
-            network=settings.BITTENSOR_NETWORK,
             block=current_cycle.start,
         )
-    except ValidatorListError as ex:
+    except Exception as ex:
         raise ScheduleError() from ex
 
     ordered_hotkeys = [vali.hotkey for vali in validators]
@@ -127,27 +165,27 @@ def when_to_run(subtensor_: bittensor.subtensor, current_cycle) -> int:
         )
 
     try:
-        seed = subtensor_.get_block_hash(
-            current_cycle.start - config.DYNAMIC_BLOCK_FINALIZATION_NUMBER
-        )
+        block_number = current_cycle.start - block_finalization_number
+        block = await bittensor.blocks[block_number].get()
+        seed = block.hash
     except Exception as ex:
         raise ScheduleError("Could not get seed hash") from ex
 
     random.Random(seed).shuffle(ordered_hotkeys)
     index_ = ordered_hotkeys.index(this_hotkey)
-    block = calculate_job_start_block(
+    start_block = calculate_job_start_block(
         cycle=current_cycle,
         offset=settings.SYNTHETIC_JOBS_RUN_OFFSET,
         total=len(validators),
         index_=ordered_hotkeys.index(this_hotkey),
     )
 
-    SystemEvent.objects.create(
+    await SystemEvent.objects.acreate(
         type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOB_SCHEDULED,
         subtype=SystemEvent.EventSubType.SUCCESS,
-        data={"seed": seed, "index": index_, "block": block},
+        data={"seed": seed, "index": index_, "block": start_block},
     )
-    return block
+    return start_block
 
 
 def calculate_job_start_block(cycle: range, total: int, index_: int, offset: int = 0) -> int:
@@ -244,7 +282,8 @@ class CommitRevealInterval:
 
 
 @app.task
-def schedule_synthetic_jobs() -> None:
+@bittensor_client
+def schedule_synthetic_jobs(bittensor: turbobt.Bittensor) -> None:
     """
     For current cycle, decide when miners' validation should happen.
     Result is a SyntheticJobBatch object in the database.
@@ -256,10 +295,9 @@ def schedule_synthetic_jobs() -> None:
             logger.debug("Another thread already scheduling validation")
             return
 
-        subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-        current_block = subtensor_.get_current_block()
+        current_block = async_to_sync(bittensor.blocks.head)()
         current_cycle = get_cycle_containing_block(
-            block=current_block, netuid=settings.BITTENSOR_NETUID
+            block=current_block.number, netuid=settings.BITTENSOR_NETUID
         )
 
         batch_in_current_cycle = (
@@ -277,7 +315,11 @@ def schedule_synthetic_jobs() -> None:
             )
             return
 
-        next_run_block = when_to_run(subtensor_, current_cycle)
+        next_run_block = async_to_sync(when_to_run)(
+            bittensor,
+            current_cycle,
+            config.DYNAMIC_BLOCK_FINALIZATION_NUMBER,
+        )
 
         cycle, _ = Cycle.objects.get_or_create(start=current_cycle.start, stop=current_cycle.stop)
         batch = SyntheticJobBatch.objects.create(
@@ -305,7 +347,9 @@ def _run_synthetic_jobs(synthetic_jobs_batch_id: int) -> None:
 
 
 @app.task()
+@bittensor_client
 def run_synthetic_jobs(
+    bittensor: turbobt.Bittensor,
     wait_in_advance_blocks: int | None = None,
     poll_interval: timedelta | None = None,
 ) -> None:
@@ -322,13 +366,12 @@ def run_synthetic_jobs(
         logger.warning("Not running synthetic jobs, SERVING is disabled in constance config")
         return
 
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor_.get_current_block()
+    current_block = async_to_sync(bittensor.blocks.head)()
 
     if settings.DEBUG_DONT_STAGGER_VALIDATORS:
         batch = SyntheticJobBatch.objects.create(
-            block=current_block,
-            cycle=Cycle.from_block(current_block, settings.BITTENSOR_NETUID),
+            block=current_block.number,
+            cycle=Cycle.from_block(current_block.number, settings.BITTENSOR_NETUID),
         )
         _run_synthetic_jobs.apply_async(kwargs={"synthetic_jobs_batch_id": batch.id})
         return
@@ -344,15 +387,18 @@ def run_synthetic_jobs(
         ongoing_synthetic_job_batches = list(
             SyntheticJobBatch.objects.select_for_update(skip_locked=True)
             .filter(
-                block__gte=current_block
+                block__gte=current_block.number
                 - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
-                block__lte=current_block + wait_in_advance_blocks,
+                block__lte=current_block.number + wait_in_advance_blocks,
                 started_at__isnull=True,
             )
             .order_by("block")
         )
         if not ongoing_synthetic_job_batches:
-            logger.debug("No ongoing scheduled synthetic jobs, current block is %s", current_block)
+            logger.debug(
+                "No ongoing scheduled synthetic jobs, current block is %s",
+                current_block.number,
+            )
             return
 
         if len(ongoing_synthetic_job_batches) > 1:
@@ -363,13 +409,13 @@ def run_synthetic_jobs(
 
         batch = ongoing_synthetic_job_batches[0]
         target_block = batch.block
-        blocks_to_wait = target_block - current_block
+        blocks_to_wait = target_block - current_block.number
         if blocks_to_wait < 0:
             logger.info(
                 "Overslept a batch run, but still within acceptable margin, batch_id: %s, should_run_at_block: %s, current_block: %s",
                 batch.id,
                 batch.block,
-                current_block,
+                current_block.number,
             )
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
                 type=SystemEvent.EventType.VALIDATOR_OVERSLEPT_SCHEDULED_JOB_WARNING,
@@ -379,7 +425,7 @@ def run_synthetic_jobs(
                     "batch_id": batch.id,
                     "batch_created_at": str(batch.created_at),
                     "should_run_at_block": batch.block,
-                    "current_block": current_block,
+                    "current_block": current_block.number,
                 },
             )
         elif blocks_to_wait == 0:
@@ -397,13 +443,15 @@ def run_synthetic_jobs(
                     / poll_interval
                 )
             ):
-                current_block = subtensor_.get_current_block()
-                if current_block >= target_block:
+                current_block = async_to_sync(bittensor.blocks.head)()
+
+                if current_block.number >= target_block:
                     break
+
                 logger.debug(
                     "Waiting for block %s, current block is %s, sleeping for %s",
                     target_block,
-                    current_block,
+                    current_block.number,
                     poll_interval,
                 )
                 time.sleep(poll_interval.total_seconds())
@@ -411,7 +459,7 @@ def run_synthetic_jobs(
                 logger.error(
                     "Failed to wait for target block %s, current block is %s",
                     target_block,
-                    current_block,
+                    current_block.number,
                 )
                 SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
                     type=SystemEvent.EventType.VALIDATOR_SYNTHETIC_JOBS_FAILURE,
@@ -421,7 +469,7 @@ def run_synthetic_jobs(
                         "batch_id": batch.id,
                         "batch_created_at": str(batch.created_at),
                         "should_run_at_block": batch.block,
-                        "current_block": current_block,
+                        "current_block": current_block.number,
                     },
                 )
                 return
@@ -433,16 +481,17 @@ def run_synthetic_jobs(
 
 
 @app.task()
-def check_missed_synthetic_jobs() -> None:
+@bittensor_client
+def check_missed_synthetic_jobs(bittensor: turbobt.Bittensor) -> None:
     """
     Check if there are any synthetic jobs that were scheduled to run, but didn't.
     """
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor_.get_current_block()
+    current_block = async_to_sync(bittensor.blocks.head)()
 
     with transaction.atomic():
         past_job_batches = SyntheticJobBatch.objects.select_for_update(skip_locked=True).filter(
-            block__lt=current_block - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
+            block__lt=current_block.number
+            - config.DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS,
             started_at__isnull=True,
             is_missed=False,
         )
@@ -455,7 +504,7 @@ def check_missed_synthetic_jobs() -> None:
                     "batch_id": batch.id,
                     "created_at": str(batch.created_at),
                     "block": batch.block,
-                    "current_block": current_block,
+                    "current_block": current_block.number,
                     "current_time": str(now()),
                 },
             )
@@ -468,6 +517,7 @@ def _normalize_weights_for_committing(weights: list[float], max_: int):
 
 
 @app.task()
+@bittensor_client
 def do_set_weights(
     netuid: int,
     uids: list[int],
@@ -475,18 +525,19 @@ def do_set_weights(
     wait_for_inclusion: bool,
     wait_for_finalization: bool,
     version_key: int,
+    bittensor: turbobt.Bittensor,
 ) -> tuple[bool, str]:
     """
     Set weights. To be used in other celery tasks in order to facilitate a timeout,
      since the multiprocessing version of this doesn't work in celery.
     """
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor_.get_current_block()
-
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
     max_weight = config.DYNAMIC_MAX_WEIGHT
 
     def _commit_weights() -> tuple[bool, str]:
+        subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
+        current_block = subtensor_.get_current_block()
+
         normalized_weights = _normalize_weights_for_committing(weights, max_weight)
         weights_in_db = Weights(
             uids=uids,
@@ -540,20 +591,20 @@ def do_set_weights(
         return is_success, message
 
     def _set_weights() -> tuple[bool, str]:
+        subnet = bittensor.subnet(netuid)
+
         try:
-            is_success, message = subtensor_.set_weights(
-                wallet=settings.BITTENSOR_WALLET(),
-                netuid=netuid,
-                uids=uids,
-                weights=weights,
+            reveal_round = async_to_sync(subnet.weights.commit)(
+                dict(zip(uids, weights)),
                 version_key=version_key,
-                wait_for_inclusion=wait_for_inclusion,
-                wait_for_finalization=wait_for_finalization,
-                max_retries=2,
             )
         except Exception:
             is_success = False
             message = traceback.format_exc()
+        else:
+            is_success = True
+            message = f"reveal_round:{reveal_round}"
+
         if is_success:
             logger.info("Successfully set weights!!!")
             save_weight_setting_event(
@@ -593,16 +644,8 @@ async def run_admin_job_request(job_request_id: int, callback=None):
     try:
         miner = job_request.miner
 
-        # FIXME: The following code blocks the event loop.
-        #        This function is run from either a management command (a new process),
-        #        or from django admin for debugging (infrequent).
-        #        So the blocking loop should not be a big problem.
-        #        Hopefully.
-        try:
-            subtensor_ = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-            current_block = subtensor_.get_current_block()
-        except Exception:
-            raise
+        async with turbobt.Bittensor(settings.BITTENSOR_NETWORK) as bittensor:
+            current_block = await bittensor.blocks.head()
 
         job = await OrganicJob.objects.acreate(
             job_uuid=str(job_request.uuid),
@@ -612,7 +655,7 @@ async def run_admin_job_request(job_request_id: int, callback=None):
             miner_port=miner.port,
             executor_class=job_request.executor_class,
             job_description="Validator Job from Admin Panel",
-            block=current_block,
+            block=current_block.number,
         )
 
         my_keypair = get_keypair()
@@ -638,7 +681,6 @@ async def run_admin_job_request(job_request_id: int, callback=None):
         miner_client,
         job,
         job_request,
-        total_job_timeout=job_request.timeout,
         notify_callback=callback,
     )
 
@@ -680,30 +722,25 @@ def save_weight_revealing_failure(subtype: str, long_description: str, data: Jso
 
 
 @contextlib.contextmanager
-def save_event_on_error(subtype):
+def save_event_on_error(subtype, exception_class=Exception):
     try:
         yield
-    except Exception:
+    except exception_class:
         save_weight_setting_failure(subtype, traceback.format_exc(), {})
         raise
 
 
-def get_subtensor(network):
+def _get_subtensor_for_setting_scores(network):
     with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
         return bittensor.subtensor(network=network)
 
 
-def get_metagraph(subtensor, netuid):
-    with save_event_on_error(SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR):
-        return subtensor.metagraph(netuid=netuid)
-
-
 def normalize_batch_scores(
     hotkey_scores: dict[str, float],
-    subtensor,
-    metagraph,
+    neurons: list[turbobt.Neuron],
+    min_allowed_weights: int,
+    max_weight_limit: int,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
-    neurons = metagraph.neurons
     hotkey_to_uid = {n.hotkey: n.uid for n in neurons}
     score_per_uid = {}
 
@@ -724,12 +761,12 @@ def normalize_batch_scores(
         uids[ind] = n.uid
         weights[ind] = score_per_uid.get(n.uid, 0)
 
-    uids, weights = process_weights_for_netuid(
+    uids, weights = process_weights(
         uids,
         weights,
-        settings.BITTENSOR_NETUID,
-        subtensor,
-        metagraph,
+        len(neurons),
+        min_allowed_weights,
+        max_weight_limit,
     )
 
     return uids, weights
@@ -738,15 +775,19 @@ def normalize_batch_scores(
 def apply_dancing_burners(
     uids: Union["torch.Tensor", NDArray[np.int64]],
     weights: Union["torch.FloatTensor", NDArray[np.float32]],
-    subtensor,
-    metagraph: NonTorchMetagraph,
+    neurons: list[turbobt.Neuron],
     cycle_block_start: int,
+    min_allowed_weights: int,
+    max_weight_limit: int,
 ) -> tuple["torch.Tensor", "torch.FloatTensor"] | tuple[NDArray[np.int64], NDArray[np.float32]]:
     burner_hotkeys = config.DYNAMIC_BURN_TARGET_SS58ADDRESSES.split(",")
     burn_rate = config.DYNAMIC_BURN_RATE
     burn_partition = config.DYNAMIC_BURN_PARTITION
 
-    registered_burner_hotkeys = sorted([h for h in burner_hotkeys if h in metagraph.hotkeys])
+    hotkey_to_uid = {neuron.hotkey: neuron.uid for neuron in neurons}
+    registered_burner_hotkeys = sorted(
+        [hotkey for hotkey in burner_hotkeys if hotkey in hotkey_to_uid]
+    )
     se_data = {
         "registered_burner_hotkeys": registered_burner_hotkeys,
         "burner_hotkeys": burner_hotkeys,
@@ -797,7 +838,6 @@ def apply_dancing_burners(
 
     weights = weights * (1 - burn_rate)
 
-    hotkey_to_uid = {n.hotkey: n.uid for n in metagraph.neurons}
     for hotkey, weight in weight_adjustment.items():
         uid = hotkey_to_uid[hotkey]
         if uid not in uids:
@@ -807,35 +847,39 @@ def apply_dancing_burners(
             index = np.where(uids == uid)[0]
             weights[index] = weights[index] + weight
 
-    uids, weights = process_weights_for_netuid(
+    uids, weights = process_weights(
         uids,
         weights,
-        settings.BITTENSOR_NETUID,
-        subtensor,
-        metagraph,
+        len(neurons),
+        min_allowed_weights,
+        max_weight_limit,
     )
 
     return uids, weights
 
 
 @app.task
-def set_scores():
+@save_event_on_error(
+    SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
+    turbobt.substrate.exceptions.SubstrateException,
+)
+@bittensor_client
+def set_scores(bittensor: turbobt.Bittensor):
     if not config.SERVING:
         logger.warning("Not setting scores, SERVING is disabled in constance config")
         return
 
     commit_reveal_weights_enabled = config.DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED
 
-    subtensor = get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor.get_current_block()
+    current_block = async_to_sync(bittensor.blocks.head)()
 
     if commit_reveal_weights_enabled:
-        interval = CommitRevealInterval(current_block)
+        interval = CommitRevealInterval(current_block.number)
 
-        if current_block not in interval.commit_window:
+        if current_block.number not in interval.commit_window:
             logger.debug(
                 "Outside of commit window, skipping, current block: %s, window: %s",
-                current_block,
+                current_block.number,
                 interval.commit_window,
             )
             return
@@ -848,14 +892,17 @@ def set_scores():
                 logger.debug("Another thread already setting weights")
                 return
 
-            metagraph = get_metagraph(subtensor, netuid=settings.BITTENSOR_NETUID)
+            subnet = bittensor.subnet(settings.BITTENSOR_NETUID)
+            hyperparameters = async_to_sync(subnet.get_hyperparameters)(current_block.hash)
+            neurons = async_to_sync(subnet.list_neurons)(current_block.hash)
+
             batches = list(
                 SyntheticJobBatch.objects.select_related("cycle")
                 .filter(
                     scored=False,
                     should_be_scored=True,
                     started_at__gte=now() - timedelta(days=1),
-                    cycle__stop__lt=current_block,
+                    cycle__stop__lt=current_block.number,
                 )
                 .order_by("started_at")
             )
@@ -876,10 +923,20 @@ def set_scores():
 
             hotkey_scores = score_batches(batches)
 
-            uids, weights = normalize_batch_scores(hotkey_scores, subtensor, metagraph)
+            uids, weights = normalize_batch_scores(
+                hotkey_scores,
+                neurons,
+                min_allowed_weights=hyperparameters["min_allowed_weights"],
+                max_weight_limit=hyperparameters["max_weights_limit"],
+            )
 
             uids, weights = apply_dancing_burners(
-                uids, weights, subtensor, metagraph, batches[-1].cycle.start
+                uids,
+                weights,
+                neurons,
+                batches[-1].cycle.start,
+                min_allowed_weights=hyperparameters["min_allowed_weights"],
+                max_weight_limit=hyperparameters["max_weights_limit"],
             )
 
             for batch in batches:
@@ -950,7 +1007,7 @@ def reveal_scores() -> None:
         logger.debug("No weights to reveal")
         return
 
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor_.get_current_block()
     interval = CommitRevealInterval(current_block)
     if current_block not in interval.reveal_window:
@@ -1063,7 +1120,7 @@ def do_reveal_weights(weights_id: int) -> tuple[bool, str]:
         return True, "nothing_to_do"
 
     wallet = settings.BITTENSOR_WALLET()
-    subtensor_ = get_subtensor(network=settings.BITTENSOR_NETWORK)
+    subtensor_ = _get_subtensor_for_setting_scores(network=settings.BITTENSOR_NETWORK)
     try:
         is_success, message = subtensor_.reveal_weights(
             wallet=wallet,
@@ -1157,68 +1214,71 @@ def send_events_to_facilitator():
             logger.error(f"Failed to send system events to facilitator: {response}")
 
 
-def fetch_metagraph(subtensor: bittensor.subtensor, block=None):
+async def _get_metagraph_for_sync(bittensor: turbobt.Bittensor, block_number=None):
     try:
         start_ts = time.time()
-        metagraph = subtensor.metagraph(
-            netuid=settings.BITTENSOR_NETUID,
-            block=block,
-            lite=True,
-        )
+        subnet = bittensor.subnet(settings.BITTENSOR_NETUID)
+
+        async with bittensor.block(block_number) as block:
+            neurons, subnet_state = await asyncio.gather(subnet.list_neurons(), subnet.get_state())
+
         duration = time.time() - start_ts
-        msg = f"Metagraph fetched: {metagraph} in {duration:.2f} seconds"
+        msg = f"Metagraph fetched: {len(neurons)} neurons @ block {block.number} in {duration:.2f} seconds"
         logger.info(msg)
-        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
             type=SystemEvent.EventType.METAGRAPH_SYNCING,
             subtype=SystemEvent.EventSubType.SUCCESS,
             long_description=msg,
             data={"duration": duration},
         )
-        return metagraph
+        return neurons, subnet_state, block
     except Exception as e:
-        msg = f"Failed to fetch metagraph: {e}"
+        msg = f"Failed to fetch neurons: {e}"
         logger.warning(msg)
-        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+        await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
             type=SystemEvent.EventType.METAGRAPH_SYNCING,
             subtype=SystemEvent.EventSubType.SUBTENSOR_CONNECTIVITY_ERROR,
             long_description=msg,
             data={},
         )
-    return None
+    return None, None, None
 
 
 def save_metagraph_snapshot(
-    metagraph: Metagraph,
+    neurons: list[turbobt.Neuron],
+    subnet_state: turbobt.subnet.SubnetState,
+    block: turbobt.Block,
     snapshot_type: MetagraphSnapshot.SnapshotType = MetagraphSnapshot.SnapshotType.LATEST,
 ) -> None:
     MetagraphSnapshot.objects.update_or_create(
         id=snapshot_type,  # current metagraph snapshot
         defaults={
-            "block": metagraph.block.item(),
+            "block": block.number,
             "updated_at": now(),
-            "alpha_stake": metagraph.alpha_stake.tolist(),
-            "tao_stake": metagraph.tao_stake.tolist(),
-            "stake": metagraph.stake.tolist(),
-            "uids": [n.uid for n in metagraph.neurons],
-            "hotkeys": [n.hotkey for n in metagraph.neurons],
+            "alpha_stake": subnet_state["alpha_stake"],
+            "tao_stake": subnet_state["tao_stake"],
+            "stake": subnet_state["total_stake"],
+            "uids": [neuron.uid for neuron in neurons],
+            "hotkeys": [neuron.hotkey for neuron in neurons],
             "serving_hotkeys": [
-                n.hotkey for n in metagraph.neurons if n.axon_info and n.axon_info.is_serving
+                neuron.hotkey
+                for neuron in neurons
+                if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
             ],
         },
     )
 
 
 @app.task
-def sync_metagraph() -> None:
-    subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-    metagraph = fetch_metagraph(subtensor)
-    if metagraph is None:
+@bittensor_client
+def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
+    neurons, subnet_state, block = async_to_sync(_get_metagraph_for_sync)(bittensor)
+
+    if not block:
         return
 
-    block = metagraph.block.item()
-
     # save current cycle start metagraph snapshot
-    current_cycle = get_cycle_containing_block(block=block, netuid=settings.BITTENSOR_NETUID)
+    current_cycle = get_cycle_containing_block(block=block.number, netuid=settings.BITTENSOR_NETUID)
 
     # check metagraph sync lag
     previous_block = None
@@ -1228,7 +1288,7 @@ def sync_metagraph() -> None:
             previous_block = previous_metagraph.block
     except Exception as e:
         logger.warning(f"Failed to fetch previous metagraph snapshot block: {e}")
-    blocks_diff = block - previous_block if previous_block else None
+    blocks_diff = block.number - previous_block if previous_block else None
     if blocks_diff is not None and blocks_diff != 1:
         if blocks_diff == 0:
             return
@@ -1242,14 +1302,14 @@ def sync_metagraph() -> None:
                 data={
                     "blocks_diff": blocks_diff,
                     "previous_block": previous_block,
-                    "block": block,
+                    "block": block.number,
                 },
             )
 
-    save_metagraph_snapshot(metagraph)
+    save_metagraph_snapshot(neurons, subnet_state, block)
 
     # sync neurons
-    current_hotkeys = [n.hotkey for n in metagraph.neurons]
+    current_hotkeys = [neuron.hotkey for neuron in neurons]
     miners = list(Miner.objects.filter(hotkey__in=current_hotkeys).all())
     existing_hotkeys = {m.hotkey for m in miners}
     new_hotkeys = set(current_hotkeys) - existing_hotkeys
@@ -1261,7 +1321,9 @@ def sync_metagraph() -> None:
     # update axon info of neurons
     miners_to_update = []
     hotkey_to_neuron = {
-        n.hotkey: n for n in metagraph.neurons if n.axon_info and n.axon_info.is_serving
+        neuron.hotkey: neuron
+        for neuron in neurons
+        if neuron.axon_info and str(neuron.axon_info.ip) != "0.0.0.0"
     }
     for miner in miners:
         neuron = hotkey_to_neuron.get(miner.hotkey)
@@ -1270,21 +1332,30 @@ def sync_metagraph() -> None:
             and neuron.axon_info
             and (
                 miner.uid != neuron.uid
-                or miner.address != neuron.axon_info.ip
+                or miner.address
+                != getattr(
+                    neuron.axon_info,
+                    "shield_address",
+                    str(neuron.axon_info.ip),
+                )
                 or miner.port != neuron.axon_info.port
-                or miner.ip_version != neuron.axon_info.ip_type
+                or miner.ip_version != neuron.axon_info.ip.version
             )
         ):
             miner.uid = neuron.uid
-            miner.address = neuron.axon_info.ip
+            miner.address = getattr(
+                neuron.axon_info,
+                "shield_address",
+                str(neuron.axon_info.ip),
+            )
             miner.port = neuron.axon_info.port
-            miner.ip_version = neuron.axon_info.ip_type
+            miner.ip_version = neuron.axon_info.ip.version
             miners_to_update.append(miner)
     Miner.objects.bulk_update(miners_to_update, fields=["uid", "address", "port", "ip_version"])
     logger.info(f"Updated axon infos for {len(miners_to_update)} miners")
 
     data = {
-        "block": block,
+        "block": block.number,
         "new_neurons": len(new_hotkeys),
         "updated_axon_infos": len(miners_to_update),
     }
@@ -1301,10 +1372,326 @@ def sync_metagraph() -> None:
     except Exception as e:
         logger.warning(f"Failed to fetch cycle start metagraph snapshot: {e}")
     if cycle_start_metagraph is None or cycle_start_metagraph.block != current_cycle.start:
-        new_cycle_start_metagraph = fetch_metagraph(subtensor, block=current_cycle.start)
-        save_metagraph_snapshot(
-            new_cycle_start_metagraph, snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START
+        neurons, subnet_state, block = async_to_sync(_get_metagraph_for_sync)(
+            bittensor,
+            block_number=current_cycle.start,
         )
+
+        if not block:
+            return
+
+        save_metagraph_snapshot(
+            neurons,
+            subnet_state,
+            block,
+            snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START,
+        )
+
+        hotkeys_to_sync = [neuron.hotkey for neuron in neurons]
+
+        try:
+            sync_collaterals(bittensor, hotkeys_to_sync, block)
+        except Exception as e:
+            msg = f"Error while syncing collaterals: {e}"
+            logger.warning(msg)
+            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                type=SystemEvent.EventType.COLLATERAL_SYNCING,
+                subtype=SystemEvent.EventSubType.FAILURE,
+                long_description=msg,
+                data={"block": current_cycle.start},
+            )
+
+
+def sync_collaterals(
+    bittensor: turbobt.Bittensor,
+    hotkeys: list[str],
+    block: turbobt.Block,
+) -> None:
+    """
+    Synchronizes miner evm addresses and collateral amounts.
+
+    :param hotkeys: Hotkeys to sync collaterals for.
+    :type hotkeys: Iterable[str]
+    :param block: Block number for querying the collateral contract.
+    :type block: int
+    :return: None
+    """
+    associations = async_to_sync(get_evm_key_associations)(
+        subtensor=bittensor.subtensor,
+        netuid=settings.BITTENSOR_NETUID,
+        block_hash=block.hash,
+    )
+    miners = Miner.objects.filter(hotkey__in=hotkeys)
+    w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
+
+    to_update = []
+    for miner in miners:
+        if not miner.uid:
+            continue
+
+        evm_address = associations.get(miner.uid)
+        miner.evm_address = evm_address
+        to_update.append(miner)
+
+        if not miner.evm_address:
+            continue
+
+        if settings.COLLATERAL_CONTRACT_ADDRESS:
+            try:
+                collateral = get_miner_collateral(
+                    w3, settings.COLLATERAL_CONTRACT_ADDRESS, miner.evm_address, block.number
+                )
+                miner.collateral_wei = Decimal(collateral)
+            except Exception as e:
+                msg = f"Error while fetching miner collateral: {e}"
+                logger.warning(msg)
+                SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+                    type=SystemEvent.EventType.COLLATERAL_SYNCING,
+                    subtype=SystemEvent.EventSubType.GETTING_MINER_COLLATERAL_FAILED,
+                    long_description=msg,
+                    data={
+                        "block": block.number,
+                        "miner_hotkey": miner.hotkey,
+                        "evm_address": evm_address,
+                    },
+                )
+
+    Miner.objects.bulk_update(to_update, fields=["evm_address", "collateral_wei"])
+
+
+async def save_compute_time_allowance_event(subtype, msg, data):
+    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
+        type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
+        subtype=subtype,
+        long_description=msg,
+        data=data,
+    )
+
+
+async def get_single_manifest(
+    client: OrganicMinerClient, timeout: float = 30
+) -> tuple[str, dict[ExecutorClass, int] | None]:
+    """Get manifest from a single miner client"""
+    hotkey = client.miner_hotkey
+    data = {"hotkey": hotkey}
+    try:
+        async with asyncio.timeout(timeout):
+            try:
+                # Connect to the miner - this will trigger the manifest to be sent
+                await client.connect()
+                manifest = await client.miner_manifest
+                return hotkey, manifest
+
+            except TransportConnectionError as exc:
+                msg = f"Error fetching manifest for {hotkey}: {exc}"
+                await save_compute_time_allowance_event(
+                    SystemEvent.EventSubType.MANIFEST_ERROR, msg, data=data
+                )
+                logger.warning(msg)
+                return hotkey, None
+
+    except TimeoutError:
+        msg = f"Timeout fetching manifest for {hotkey}"
+        await save_compute_time_allowance_event(
+            SystemEvent.EventSubType.MANIFEST_TIMEOUT,
+            msg,
+            data,
+        )
+        logger.warning(msg)
+        return hotkey, None
+
+    except Exception as exc:
+        msg = f"Failed to fetch manifest for {hotkey}: {exc}"
+        await save_compute_time_allowance_event(
+            SystemEvent.EventSubType.MANIFEST_ERROR,
+            msg,
+            data,
+        )
+        logger.warning(msg)
+        return hotkey, None
+
+
+async def get_manifests_from_miners(
+    miners: list[Miner],
+    timeout: float = 30,
+) -> dict[str, dict[ExecutorClass, int]]:
+    """
+    Connect to multiple miner clients in parallel and retrieve their manifests.
+
+    Args:
+        miner_clients: List of OrganicMinerClient instances to connect to
+        timeout: Maximum time to wait for manifest retrieval in seconds
+
+    Returns:
+        Dictionary mapping miner hotkeys to their executor manifests
+    """
+
+    miner_clients = [
+        OrganicMinerClient(
+            miner_hotkey=miner.hotkey,
+            miner_address=miner.address,
+            miner_port=miner.port,
+            job_uuid="ignore",
+            my_keypair=get_keypair(),
+        )
+        for miner in miners
+    ]
+
+    try:
+        logger.info(f"Scraping manifests for {len(miner_clients)} miners")
+        tasks = [
+            asyncio.create_task(
+                get_single_manifest(client, timeout), name=f"{client.miner_hotkey}.get_manifest"
+            )
+            for client in miner_clients
+        ]
+        results = await asyncio.gather(*tasks)
+
+        # Process results and build the manifest dictionary
+        result_manifests = {}
+        for hotkey, manifest in results:
+            if manifest is not None:
+                result_manifests[hotkey] = manifest
+
+        return result_manifests
+
+    finally:
+        close_tasks = [
+            asyncio.create_task(client.close(), name=f"{client.miner_hotkey}.close")
+            for client in miner_clients
+        ]
+        await asyncio.gather(*close_tasks, return_exceptions=True)
+
+
+@app.task
+def set_compute_time_allowances() -> None:
+    metagraph = MetagraphSnapshot.get_cycle_start()
+    current_cycle = Cycle.from_block(metagraph.block, netuid=settings.BITTENSOR_NETUID)
+    if current_cycle.set_compute_time_allowance:
+        logger.debug(f"allowances already calculated for cycle {current_cycle}")
+        return
+
+    set_success = False
+    try:
+        current_cycle.set_compute_time_allowance = True
+        current_cycle.save()
+        set_success = async_to_sync(_set_compute_time_allowances)(metagraph, current_cycle)
+
+    except Exception:
+        msg = "Failed to set compute time allowances: {e}"
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
+            subtype=SystemEvent.EventSubType.GENERIC_ERROR,
+            long_description=msg,
+            data={},
+        )
+        logger.warning(msg)
+
+    if not set_success:
+        current_cycle.set_compute_time_allowance = False
+        current_cycle.save()
+
+
+async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycle) -> bool:
+    """
+    Calculate and save allowances for all validator-miner pairs at the beginning of a cycle.
+    """
+
+    data: dict[str, Any] = {
+        "cycle_start": cycle.start,
+        "cycle_stop": cycle.stop,
+    }
+
+    miners_hotkeys = metagraph.get_serving_hotkeys()
+    if len(miners_hotkeys) == 0:
+        msg = "No miners in the last metagraph snapshot - will NOT set compute time allowances"
+        await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
+        logger.warning(msg)
+        return False
+
+    total_stake = metagraph.get_total_validator_stake()
+    if total_stake is None or total_stake <= 0.0:
+        msg = "Total stake for last_metagraph snapshot is 0 - skipping compute time allowances"
+        await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
+        logger.warning(msg)
+        return False
+
+    # compute stake proportion for each validator
+    hotkey_to_stake_proportion = {}
+    validators_hotkeys = []
+    for hotkey, stake in zip(metagraph.hotkeys, metagraph.stake):
+        if stake > MIN_VALIDATOR_STAKE:
+            validators_hotkeys.append(hotkey)
+            hotkey_to_stake_proportion[hotkey] = stake / total_stake
+    logger.debug(f"Validator stake proportion: {hotkey_to_stake_proportion}")
+    data["validator_stake_proportion"] = hotkey_to_stake_proportion
+
+    # Fetch miners and validators from the database
+    miners = [m async for m in Miner.objects.filter(hotkey__in=miners_hotkeys)]
+    validators = [m async for m in Miner.objects.filter(hotkey__in=validators_hotkeys)]
+
+    # Scrape manifests from miners
+    manifests_dict = await get_manifests_from_miners(miners)
+    # logger.debug(f"miners: {miners}, validators: {validators}, manifests: {manifests_dict}")
+    if not manifests_dict:
+        msg = "No manifests fetched - skipping compute time allowances"
+        await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
+        logger.error(msg)
+        return False
+
+    # max compute time for an executor in a full cycle
+    cycle_duration_seconds = (
+        2 * TEMPO * int(settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION.total_seconds())
+        - COMPUTE_TIME_OVERHEAD_SECONDS
+    )
+
+    # determine compute-time allowances for each validator-miner pair
+    try:
+        allowance_records = []
+        for validator in validators:
+            # calculate allowance for each miner based on their manifest
+            for miner in miners:
+                manifest = manifests_dict.get(miner.hotkey, None)
+                if manifest is None:
+                    continue
+                online_executor_count = 0
+                for _executor, executor_count in manifest.items():
+                    online_executor_count += executor_count
+
+                allowance = (
+                    hotkey_to_stake_proportion[validator.hotkey]
+                    * online_executor_count
+                    * cycle_duration_seconds
+                )
+                allowance_records.append(
+                    ComputeTimeAllowance(
+                        cycle=cycle,
+                        miner=miner,
+                        validator=validator,
+                        initial_allowance=allowance,
+                        remaining_allowance=allowance,
+                    )
+                )
+        await ComputeTimeAllowance.objects.abulk_create(allowance_records)
+        data["total_allowance_records_created"] = len(allowance_records)
+
+        msg = f"Set {len(allowance_records)} compute-time allowances for cycle {cycle}"
+        await save_compute_time_allowance_event(
+            SystemEvent.EventSubType.SUCCESS,
+            msg,
+            data,
+        )
+        logger.info(msg)
+    except Exception as e:
+        msg = f"Error calculating allowances: {e}"
+        await save_compute_time_allowance_event(
+            SystemEvent.EventSubType.GENERIC_ERROR,
+            msg,
+            data,
+        )
+        logger.error(msg)
+        return False
+    return True
 
 
 @app.task
@@ -1702,12 +2089,13 @@ def evict_old_data():
 async def execute_organic_job_request_on_worker(
     job_request: OrganicJobRequest, miner: Miner
 ) -> OrganicJob:
-    future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
-        args=(job_request.model_dump(), miner.hotkey)
-    )
     timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
-    # Note - thread sensitive is essential otherwise the wait will block the sync thread.
-    # If this poses to be a problem, another approach is to  asyncio.sleep then poll for result (in a loop)
+    future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
+        args=(job_request.model_dump(), miner.hotkey),
+        expires=timeout,
+    )
+    # Note - thread sensitive is essential, otherwise the wait will block the sync thread.
+    # If this poses to be a problem, another approach is to asyncio.sleep then poll for the result (in a loop)
     await sync_to_async(future_result.get, thread_sensitive=False)(timeout=timeout)
     return await OrganicJob.objects.aget(job_uuid=job_request.uuid)
 
@@ -1717,3 +2105,30 @@ def _execute_organic_job_on_worker(job_request: JsonValue, miner_hotkey: str) ->
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
     miner = Miner.objects.get(hotkey=miner_hotkey)
     async_to_sync(execute_organic_job_request)(request, miner)
+
+
+@app.task
+def slash_collateral_task(job_uuid: str) -> None:
+    with transaction.atomic():
+        job = OrganicJob.objects.select_related("miner").select_for_update().get(job_uuid=job_uuid)
+
+        if job.slashed:
+            logger.info(f"Already slashed for this job {job_uuid}")
+            return
+
+        slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
+        if slash_amount > 0 and job.miner.evm_address:
+            try:
+                w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
+                slash_collateral(
+                    w3=w3,
+                    contract_address=settings.COLLATERAL_CONTRACT_ADDRESS,
+                    miner_address=job.miner.evm_address,
+                    amount_wei=slash_amount,
+                    url=f"job {job_uuid} cheated",
+                )
+            except Exception as e:
+                logger.error(f"Failed to slash collateral for job {job_uuid}: {e}")
+            else:
+                job.slashed = True
+                job.save()

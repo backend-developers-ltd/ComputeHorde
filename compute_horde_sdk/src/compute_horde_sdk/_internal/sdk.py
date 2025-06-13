@@ -9,12 +9,16 @@ from datetime import timedelta
 from typing import Any, Self, TypeAlias
 from urllib.parse import urljoin
 
-import bittensor
+import bittensor_wallet
 import httpx
 import pydantic
 import tenacity
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.x509 import Certificate
 
+from compute_horde_core.certificate import generate_certificate, serialize_certificate
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_core.output_upload import HttpOutputVolumeResponse
 from compute_horde_core.signature import (
     BittensorWalletSigner,
     SignatureScope,
@@ -49,6 +53,8 @@ RETRYABLE_HTTP_EXCEPTIONS = (
     httpx.ConnectError,
     # httpx.DecodingError,
 )
+
+DEFAULT_STREAMING_START_TIME_LIMIT_SEC = 5
 
 JobAttemptCallbackType: TypeAlias = (
     Callable[["ComputeHordeJob"], None]
@@ -90,6 +96,28 @@ class ComputeHordeJobSpec:
     docker_image: str
     """Docker image of the job, in the form of ``user/image:tag``."""
 
+    download_time_limit_sec: int
+    """
+    Time dedicated to downloading job volumes to the executor machine.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail before starting execution.
+    """
+
+    execution_time_limit_sec: int
+    """
+    Time dedicated to executing the job.
+    Part of the paid cost to run the job.
+    This is only the upper time limit for the execution stage of the job. When this limit is reached, the job will be
+    stopped, but it won't be considered failed - it will proceed to the upload stage anyway.
+    """
+
+    upload_time_limit_sec: int
+    """
+    Time dedicated to uploading the job's output.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail.
+    """
+
     args: Sequence[str] = dataclasses.field(default_factory=list)
     """Positional arguments and flags to run the job with."""
 
@@ -121,6 +149,21 @@ class ComputeHordeJobSpec:
     For now, output volume paths must start with ``/output/``.
     """
 
+    streaming: bool = False
+    """
+    If true, the job will be streamed. The streaming server details
+    (such as address, port, and SSL certificate) will be available
+    in the ComputeHordeJob instance after the `wait_for_streaming()`
+    method returns.
+    """
+
+    streaming_start_time_limit_sec: int = DEFAULT_STREAMING_START_TIME_LIMIT_SEC
+    """
+    Time dedicated to starting the streaming server.
+    Part of the paid cost to run the job.
+    If the limit is reached, the job will fail.
+    """
+
 
 class ComputeHordeJob:
     """
@@ -130,6 +173,7 @@ class ComputeHordeJob:
     :ivar str uuid: The UUID of the job.
     :ivar ComputeHordeJobStatus status: The status of the job.
     :ivar ComputeHordeJobResult | None result: The result of the job, if it has completed.
+    :ivar str | None streaming_server_cert: The PEM-encoded certificate of the streaming server, if available.
     """
 
     def __init__(
@@ -138,11 +182,21 @@ class ComputeHordeJob:
         uuid: str,
         status: ComputeHordeJobStatus,
         result: ComputeHordeJobResult | None = None,
+        streaming_public_cert: Certificate | None = None,
+        streaming_private_key: RSAPrivateKey | None = None,
+        streaming_server_cert: str | None = None,
+        streaming_server_address: str | None = None,
+        streaming_server_port: int | None = None,
     ):
         self._client = client
         self.uuid = uuid
         self.status = status
         self.result = result
+        self.streaming_public_cert = streaming_public_cert
+        self.streaming_private_key = streaming_private_key
+        self.streaming_server_cert = streaming_server_cert
+        self.streaming_server_address = streaming_server_address
+        self.streaming_server_port = streaming_server_port
 
     async def wait(self, timeout: float | None = None) -> None:
         """
@@ -161,28 +215,67 @@ class ComputeHordeJob:
             await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
             await self.refresh_from_facilitator()
 
+    async def wait_for_streaming(self, timeout: float | None = None) -> None:
+        """
+        Wait for the job to be ready for streaming.
+
+        :param timeout: Maximum number of seconds to wait for.
+        :raises ComputeHordeJobTimeoutError: If the job does not prepare for streaming within ``timeout`` seconds.
+        """
+        start_time = time.monotonic()
+        while True:
+            if timeout is not None and time.monotonic() - start_time > timeout:
+                raise ComputeHordeJobTimeoutError(
+                    f"Job {self.uuid} did not prepare for streaming within {timeout} seconds,"
+                    f" last status: {self.status}"
+                )
+            await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
+            await self.refresh_from_facilitator()
+            if self.status.is_streaming_ready():
+                return
+
     async def refresh_from_facilitator(self) -> None:
         new_job = await self._client.get_job(self.uuid)
         self.status = new_job.status
         self.result = new_job.result
+        self.streaming_server_cert = new_job.streaming_server_cert
+        self.streaming_server_address = new_job.streaming_server_address
+        self.streaming_server_port = new_job.streaming_server_port
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__qualname__}: {self.uuid!r}>"
 
     @classmethod
-    def _from_response(cls, client: "ComputeHordeClient", response: FacilitatorJobResponse) -> Self:
+    def _from_response(
+        cls,
+        client: "ComputeHordeClient",
+        response: FacilitatorJobResponse,
+        streaming_public_cert: Certificate | None = None,
+        streaming_private_key: RSAPrivateKey | None = None,
+    ) -> Self:
         result = None
         if not response.status.is_in_progress():
             # TODO: Handle base64 decode errors
             result = ComputeHordeJobResult(
                 stdout=response.stdout,
+                stderr=response.stderr,
                 artifacts={path: base64.b64decode(base64_data) for path, base64_data in response.artifacts.items()},
             )
+            for path, raw_data in response.upload_results.items():
+                try:
+                    result.add_upload_result(path, HttpOutputVolumeResponse.parse_raw(raw_data))
+                except Exception:
+                    logger.error(f"Failed to parse upload result for '{path}'", exc_info=True)
         return cls(
             client,
             uuid=response.uuid,
             status=response.status,
             result=result,
+            streaming_public_cert=streaming_public_cert,
+            streaming_private_key=streaming_private_key,
+            streaming_server_cert=response.streaming_server_cert,
+            streaming_server_address=response.streaming_server_address,
+            streaming_server_port=response.streaming_server_port,
         )
 
 
@@ -193,7 +286,7 @@ class ComputeHordeClient:
 
     def __init__(
         self,
-        hotkey: bittensor.Keypair,
+        hotkey: bittensor_wallet.Keypair,
         compute_horde_validator_hotkey: str,
         job_queue: str | None = None,
         facilitator_url: str = DEFAULT_FACILITATOR_URL,
@@ -213,6 +306,49 @@ class ComputeHordeClient:
         self.facilitator_url = facilitator_url
         self._client = httpx.AsyncClient(base_url=self.facilitator_url, follow_redirects=True)
         self._signer = BittensorWalletSigner(hotkey)
+        self._token_lock = asyncio.Lock()
+        self._token: str | None = None
+        self.streaming_public_cert: Certificate | None = None
+        self.streaming_private_key: RSAPrivateKey | None = None
+
+    async def authenticate(self) -> None:
+        nonce_url = urljoin(self.facilitator_url, "auth/nonce")
+        try:
+            response = await self._client.get(nonce_url)
+            response.raise_for_status()
+        except (httpx.HTTPError, httpx.HTTPStatusError) as e:
+            raise ComputeHordeError(f"Nonce request failed: {e}") from e
+
+        try:
+            data = response.json()
+            nonce = data.get("nonce")
+        except Exception as e:
+            raise ComputeHordeError("Failed to parse nonce response") from e
+
+        if not nonce:
+            raise ComputeHordeError("Failed to obtain nonce from facilitator")
+
+        signature = self.hotkey.sign(nonce.encode("utf-8")).hex()
+
+        login_url = urljoin(self.facilitator_url, "auth/login")
+        payload = {"hotkey": self.hotkey.ss58_address, "signature": signature, "nonce": nonce}
+
+        try:
+            login_response = await self._client.post(login_url, json=payload)
+            login_response.raise_for_status()
+        except (httpx.HTTPError, httpx.HTTPStatusError) as e:
+            raise ComputeHordeError(f"Login request failed: {e}") from e
+
+        try:
+            data = login_response.json()
+            token = data.get("token")
+        except Exception as e:
+            raise ComputeHordeError("Failed to parse login response") from e
+
+        if not token:
+            raise ComputeHordeError("Failed to obtain JWT token from facilitator")
+        self._token = token
+        logger.info("Authenticated successfully")
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception(_retryable_exception),
@@ -232,31 +368,44 @@ class ComputeHordeClient:
         """
         :return: Response content as string.
         """
-        auth_headers = self._get_authentication_headers(method, urljoin(self.facilitator_url, url))
-        request = self._client.build_request(
-            method=method,
-            url=url,
-            json=json,
-            params=params,
-            headers={**headers, **auth_headers} if headers else auth_headers,
-        )
-        logger.debug("%s %s", method, request.url)
-        try:
-            response = await self._client.send(request)
-        except httpx.HTTPError as e:
-            raise ComputeHordeError(f"ComputeHorde request failed: {e}") from e
+        # If we receive a 401 token expired error, we will re-authenticate and immediately retry the failed request.
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            async with self._token_lock:
+                if not self._token:
+                    await self.authenticate()
+                auth_headers = self._get_authentication_headers()
 
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            logger.error("Response status=%d: %s", e.response.status_code, e.response.text)
-            if e.response.status_code == 404:
-                raise ComputeHordeNotFoundError(f"Resource under {request.url} not found") from e
-            raise ComputeHordeError(
-                f"ComputeHorde responded with status code {e.response.status_code} and text {response.text}"
-            ) from e
+            request = self._client.build_request(
+                method=method,
+                url=url,
+                json=json,
+                params=params,
+                headers={**headers, **auth_headers} if headers else auth_headers,
+            )
+            logger.debug("%s %s", method, request.url)
+            try:
+                response = await self._client.send(request)
+            except httpx.HTTPError as e:
+                raise ComputeHordeError(f"ComputeHorde request failed: {e}") from e
 
-        return response.text
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                logger.error("Response status=%d: %s", e.response.status_code, e.response.text)
+                if e.response.status_code == 401 and "Token expired" in e.response.text and attempt == 0:
+                    async with self._token_lock:
+                        self._token = None
+                    logger.info("Token expired, re-authenticating")
+                    continue
+                if e.response.status_code == 404:
+                    raise ComputeHordeNotFoundError(f"Resource under {request.url} not found") from e
+                raise ComputeHordeError(
+                    f"ComputeHorde responded with status code {e.response.status_code} and text {response.text}"
+                ) from e
+
+            return response.text
+        raise ComputeHordeError("ComputeHorde request failed after re-authentication.")
 
     def _get_signature_headers(self, data: dict[str, pydantic.JsonValue]) -> dict[str, str]:
         signed_fields = SignedFields.from_facilitator_sdk_json(data)
@@ -268,26 +417,14 @@ class ComputeHordeClient:
         signature = self._signer.sign(payload=payload)
         return signature_to_headers(signature, SignatureScope.FullRequest)
 
-    def _get_authentication_headers(
-        self,
-        method: str,
-        url: str,
-    ) -> dict[str, str]:
-        headers = {
+    def _get_authentication_headers(self) -> dict[str, str]:
+        if not self._token:
+            raise ComputeHordeError("Not authenticated")
+        return {
+            "Authorization": f"Bearer {self._token}",
             "Realm": "mainnet",
             "SubnetID": "12",
-            "Nonce": str(time.time()),
-            "Hotkey": self.hotkey.ss58_address,
         }
-
-        headers_str = json.dumps(headers, sort_keys=True)
-
-        data_to_sign = f"{method}{url}{headers_str}".encode()
-
-        signature = self.hotkey.sign(data_to_sign).hex()
-        headers["Signature"] = signature
-
-        return headers
 
     async def report_cheated_job(self, job_uuid: str) -> str:
         """
@@ -321,13 +458,21 @@ class ComputeHordeClient:
             "use_gpu": True,
             "artifacts_dir": job_spec.artifacts_dir,
             "on_trusted_miner": on_trusted_miner,
+            "download_time_limit": job_spec.download_time_limit_sec,
+            "execution_time_limit": job_spec.execution_time_limit_sec,
+            "streaming_start_time_limit": job_spec.streaming_start_time_limit_sec,
+            "upload_time_limit": job_spec.upload_time_limit_sec,
         }
+        if job_spec.streaming:
+            self.streaming_public_cert, self.streaming_private_key = generate_certificate("127.0.0.1")
+            data["streaming_details"] = {
+                "public_key": serialize_certificate(self.streaming_public_cert).decode("utf-8"),
+            }
         if job_spec.input_volumes is not None:
             data["volumes"] = [
                 input_volume.to_compute_horde_volume(mount_path).model_dump()
                 for mount_path, input_volume in job_spec.input_volumes.items()
             ]
-
         if job_spec.output_volumes is not None:
             data["uploads"] = [
                 output_volume.to_compute_horde_output_upload(mount_path).model_dump()
@@ -344,7 +489,7 @@ class ComputeHordeClient:
         except pydantic.ValidationError as e:
             raise ComputeHordeError("ComputeHorde returned malformed response") from e
 
-        job = ComputeHordeJob._from_response(self, job_response)
+        job = ComputeHordeJob._from_response(self, job_response, self.streaming_public_cert, self.streaming_private_key)
         logger.debug("Created job with UUID=%s", job.uuid)
 
         return job
@@ -414,7 +559,6 @@ class ComputeHordeClient:
         logger.debug("Fetching job with UUID=%s", job_uuid)
 
         response = await self._make_request("GET", f"/api/v1/jobs/{job_uuid}/")
-
         try:
             job_response = FacilitatorJobResponse.model_validate_json(response)
         except pydantic.ValidationError as e:

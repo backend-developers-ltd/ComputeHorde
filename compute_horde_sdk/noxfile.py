@@ -16,7 +16,6 @@ ROOT = Path(".")
 MAIN_BRANCH_NAME = "master"
 PYTHON_VERSIONS = ["3.11", "3.12"]
 PYTHON_VERSION = ["3.11"]
-BITTENSOR_VERSION = os.environ.get("BITTENSOR_VERSION")
 
 nox.options.default_venv_backend = "uv"
 nox.options.stop_on_first_error = True
@@ -33,6 +32,7 @@ def install(session: nox.Session, *args):
         "uv",
         "sync",
         "--locked",
+        "--all-extras",
         *groups,
         env={"UV_PROJECT_ENVIRONMENT": uv_env},
     )

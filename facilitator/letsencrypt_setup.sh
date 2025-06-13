@@ -19,4 +19,4 @@ docker run -it --rm \
       deliverous/certbot \
       certonly \
       --standalone --preferred-challenges http\
-      -d "$NGINX_HOST" -d "www.$NGINX_HOST"
+      -d "$NGINX_HOST"

@@ -2,16 +2,24 @@
 Django settings for compute_horde_validator project.
 """
 
+import decimal
 import inspect
 import logging
 import pathlib
 from datetime import timedelta
 from functools import wraps
 
-import bittensor
+import bittensor_wallet
 import environ
+from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from celery.schedules import crontab
 from compute_horde import base  # noqa
+
+# Set decimal precision.
+# We need to be able to represent 256-bit unsigned integers.
+# Calculated from: math.ceil(math.log10(2**256 - 1))
+DECIMAL_PRECISION = 78
+decimal.getcontext().prec = DECIMAL_PRECISION
 
 root = environ.Path(__file__) - 2
 
@@ -284,6 +292,11 @@ CONSTANCE_CONFIG = {
         "Score for each properly excused synthetic job",
         float,
     ),
+    "DYNAMIC_MINIMUM_VALIDATOR_STAKE_FOR_EXCUSE": (
+        30_000.0,
+        "The minimum effective stake that a validator must have for its job to properly excuse other jobs (denominated in alpha)",
+        float,
+    ),
     "DYNAMIC_ORGANIC_JOB_SCORE": (
         1.0,
         "Score of each successful organic job",
@@ -294,24 +307,19 @@ CONSTANCE_CONFIG = {
         "Maximum number of organic jobs each miner can get scores for. Negative value means unlimited.",
         int,
     ),
-    "DYNAMIC_ORGANIC_JOB_TIMEOUT": (
-        300,
-        "Timeout for the run of an organic jobs in seconds",
+    "DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT": (
+        7,
+        "Time for miner to accept or decline an organic job in seconds",
         int,
     ),
-    "DYNAMIC_ORGANIC_JOB_INITIAL_RESPONSE_TIMEOUT": (
-        10,
-        "Timeout for miner to accept or decline an organic job in seconds",
+    "DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT": (
+        5,
+        "Time it takes for the executor to perform its startup stage (security checks, docker image check)",
         int,
     ),
-    "DYNAMIC_ORGANIC_JOB_EXECUTOR_READY_TIMEOUT": (
-        300,
-        "Timeout for preparing an executor for an organic job in seconds",
-        int,
-    ),
-    "DYNAMIC_ORGANIC_JOB_MAX_RETRIES": (
-        3,
-        "Maximum retries for organic jobs (Currently ignored)",
+    "DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME": (
+        5,
+        "Additional time granted to the executor for the job-related tasks (download, execute, upload)",
         int,
     ),
     "DYNAMIC_DISABLE_TRUSTED_ORGANIC_JOB_EVENTS": (
@@ -385,6 +393,17 @@ CONSTANCE_CONFIG = {
     "ORGANIC_JOB_CELERY_WAIT_TIMEOUT": (
         600,
         "How long to wait for Celery to execute the organic job",
+        int,
+    ),
+    # collateral params
+    "DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI": (
+        10000000000000000,  # 0.01 tao
+        "Minimum collateral amount (in Wei) for a miner to be considered for a job",
+        int,
+    ),
+    "DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI": (
+        5000000000000000,  # 0.005 tao
+        "Amount (in Wei) of collateral to be slashed if a miner cheats on a job",
         int,
     ),
 }
@@ -614,6 +633,13 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(days=1).total_seconds(),
         },
     },
+    "set_compute_time_allowances": {
+        "task": "compute_horde_validator.validator.tasks.set_compute_time_allowances",
+        "schedule": timedelta(minutes=1),
+        "options": {
+            "expires": timedelta(minutes=1).total_seconds(),
+        },
+    },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
@@ -712,6 +738,30 @@ BITTENSOR_WALLET_DIRECTORY = env.path(
 )
 BITTENSOR_WALLET_NAME = env.str("BITTENSOR_WALLET_NAME")
 BITTENSOR_WALLET_HOTKEY_NAME = env.str("BITTENSOR_WALLET_HOTKEY_NAME")
+
+COLLATERAL_CONTRACT_ADDRESS = env("COLLATERAL_CONTRACT_ADDRESS", default=None)
+
+BITTENSOR_SHIELD_CERTIFICATE_PATH = env.path(
+    "BITTENSOR_SHIELD_CERTIFICATE_PATH",
+    default=BITTENSOR_WALLET_DIRECTORY.path(
+        BITTENSOR_WALLET_NAME, "shield", BITTENSOR_WALLET_HOTKEY_NAME, "validator_cert.pem"
+    ),
+)
+BITTENSOR_SHIELD_DISABLE_UPLOADING_CERTIFICATE = env.bool(
+    "BITTENSOR_SHIELD_DISABLE_UPLOADING_CERTIFICATE",
+    default=False,
+)
+
+
+def BITTENSOR_SHIELD_METAGRAPH_OPTIONS() -> ShieldMetagraphOptions:
+    pathlib.Path(BITTENSOR_SHIELD_CERTIFICATE_PATH).parent.mkdir(parents=True, exist_ok=True)
+    return ShieldMetagraphOptions(
+        disable_uploading_certificate=BITTENSOR_SHIELD_DISABLE_UPLOADING_CERTIFICATE,
+        certificate_path=str(BITTENSOR_SHIELD_CERTIFICATE_PATH),
+        replace_ip_address_for_axon=False,
+    )
+
+
 SYNTHETIC_JOB_GENERATOR_FACTORY = env.str(
     "SYNTHETIC_JOB_GENERATOR_FACTORY",
     default="compute_horde_validator.validator.synthetic_jobs.generator.factory:DefaultSyntheticJobGeneratorFactory",
@@ -761,10 +811,10 @@ PROMPT_JOB_GENERATOR = env.str(
 )
 
 
-def BITTENSOR_WALLET() -> bittensor.wallet:
+def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
         raise RuntimeError("Wallet not configured")
-    wallet = bittensor.wallet(
+    wallet = bittensor_wallet.Wallet(
         name=BITTENSOR_WALLET_NAME,
         hotkey=BITTENSOR_WALLET_HOTKEY_NAME,
         path=str(BITTENSOR_WALLET_DIRECTORY),

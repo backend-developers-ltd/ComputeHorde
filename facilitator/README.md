@@ -6,7 +6,7 @@ Compute Horde app facilitating interaction between end users and Validators.
 
 * connect to ws at `/ws/v0/`
 * send `V0AuthenticationRequest` once (and wait for `Response`)
-* wait for incoming `V0JobRequest` (no need to reply)
+* wait for incoming `V2JobRequest` (no need to reply)
 * send `JobStatusUpdate` when there is new info about some specific job (and wait for `Response`)
 
 > Multiple connections may be authenticated, each of them will receive same new jobs.
@@ -20,7 +20,7 @@ sequenceDiagram
     validator->>facilitator: V0AuthenticationRequest
     facilitator->>validator: Response
 
-    facilitator->>validator: <br/><br/>V0JobRequest
+    facilitator->>validator: <br/><br/>V2JobRequest
 
     validator->>facilitator: <br/><br/>JobStatusUpdate
     facilitator->>validator: Response
@@ -87,20 +87,20 @@ Use `ssh-keygen` to generate a key pair for the server, then add read-only acces
 # remote server
 mkdir -p ~/repos
 cd ~/repos
-git init --bare --initial-branch=master facilitator.git
+git init --bare --initial-branch=master ComputeHorde.git
 
 mkdir -p ~/domains/facilitator
 ```
 
 ```sh
 # locally
-git remote add production root@<server>:~/repos/facilitator.git
+git remote add production root@<server>:~/repos/ComputeHorde.git
 git push production master
 ```
 
 ```sh
 # remote server
-cd ~/repos/facilitator.git
+cd ~/repos/ComputeHorde.git
 
 cat <<'EOT' > hooks/post-receive
 #!/bin/bash
@@ -110,10 +110,10 @@ export REPO=facilitator
 while read oldrev newrev ref
 do
     if [[ $ref =~ .*/master$ ]]; then
-        export GIT_DIR="$ROOT/repos/$REPO.git/"
-        export GIT_WORK_TREE="$ROOT/domains/$REPO/"
+        export GIT_DIR="$ROOT/repos/ComputeHorde.git/"
+        export GIT_WORK_TREE="$ROOT/domains/facilitator/"
         git checkout -f master
-        cd $GIT_WORK_TREE
+        cd $GIT_WORK_TREE/facilitator
         ./deploy.sh
     else
         echo "Doing nothing: only the master branch may be deployed on this server."

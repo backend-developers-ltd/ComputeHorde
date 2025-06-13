@@ -14,19 +14,18 @@ import constance
 import numpy as np
 from bittensor.core.errors import SubstrateRequestException
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.fv_protocol.facilitator_requests import (
-    Signature,
-    V0JobRequest,
-    V1JobRequest,
-    V2JobRequest,
-)
+from compute_horde.fv_protocol.facilitator_requests import V0JobCheated, V2JobRequest
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
+    V0ExecutionDoneRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
+    V0VolumesReadyRequest,
     ValidatorToMinerMessage,
 )
+from compute_horde.utils import ValidatorInfo
+from compute_horde_core.signature import Signature
 from django.conf import settings
 from pydantic import TypeAdapter
 
@@ -129,6 +128,8 @@ class MockSuccessfulMinerClient(MockMinerClient):
         self.executor_ready_or_failed_future.set_result(
             V0ExecutorReadyRequest(job_uuid=self.job_uuid)
         )
+        self.volumes_ready_future.set_result(V0VolumesReadyRequest(job_uuid=self.job_uuid))
+        self.execution_done_future.set_result(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
         self.miner_finished_or_failed_future.set_result(
             V0JobFinishedRequest(
                 job_uuid=self.job_uuid,
@@ -158,65 +159,20 @@ class MockFaillingMinerClient(MockMinerClient):
         )
 
 
-def get_dummy_job_request_v0(uuid: str) -> V0JobRequest:
-    return V0JobRequest(
-        type="job.new",
-        uuid=uuid,
-        miner_hotkey="miner_hotkey",
-        executor_class=DEFAULT_EXECUTOR_CLASS,
-        docker_image="nvidia",
-        args=[],
-        env={},
-        use_gpu=False,
-        input_url="fake.com/input",
-        output_url="fake.com/output",
+def get_dummy_signature() -> Signature:
+    return Signature(
+        signature_type="bittensor",
+        signatory="5CDapJdKqe6b1kdD7ABZEbNKrRZqhM21m8q3vn1YU22rKK9h",
+        timestamp_ns=1729622861880448856,
+        signature="lnX1rPC+Dnbc6fKPunR35T329IgjJBKHxvA1Y5hpWUl7N7GzlwEnjGHuWcdRfOjfamNNXYnT/gaIUWJxbmwChw==",
     )
 
 
-def get_dummy_job_request_v1(uuid: str) -> V1JobRequest:
-    return V1JobRequest(
-        type="job.new",
-        uuid=uuid,
-        miner_hotkey="miner_hotkey",
-        executor_class=DEFAULT_EXECUTOR_CLASS,
-        docker_image="nvidia",
-        args=[],
-        env={},
-        use_gpu=False,
-        volume={
-            "volume_type": "multi_volume",
-            "volumes": [
-                {
-                    "volume_type": "single_file",
-                    "url": "fake.com/input.txt",
-                    "relative_path": "input.txt",
-                },
-                {
-                    "volume_type": "zip_url",
-                    "contents": "fake.com/input.zip",
-                    "relative_path": "zip/",
-                },
-            ],
-        },
-        output_upload={
-            "output_upload_type": "multi_upload",
-            "uploads": [
-                {
-                    "output_upload_type": "single_file_post",
-                    "url": "https://s3.bucket.com/output1.txt",
-                    "relative_path": "output1.txt",
-                },
-                {
-                    "output_upload_type": "single_file_put",
-                    "url": "https://s3.bucket.com/output2.zip",
-                    "relative_path": "zip/output2.zip",
-                },
-            ],
-            "system_output": {
-                "output_upload_type": "zip_and_http_put",
-                "url": "http://r2.bucket.com/output.zip",
-            },
-        },
+def get_dummy_job_cheated_request_v0(uuid: str) -> V0JobCheated:
+    return V0JobCheated(
+        type="job.cheated",
+        job_uuid=uuid,
+        signature=get_dummy_signature(),
     )
 
 
@@ -253,13 +209,12 @@ def get_dummy_job_request_v2(uuid: str, on_trusted_miner: bool = False) -> V2Job
                 "url": "http://r2.bucket.com/output.zip",
             },
         },
-        signature=Signature(
-            signature_type="bittensor",
-            signatory="5CDapJdKqe6b1kdD7ABZEbNKrRZqhM21m8q3vn1YU22rKK9h",
-            timestamp_ns=1729622861880448856,
-            signature="lnX1rPC+Dnbc6fKPunR35T329IgjJBKHxvA1Y5hpWUl7N7GzlwEnjGHuWcdRfOjfamNNXYnT/gaIUWJxbmwChw==",
-        ),
+        signature=get_dummy_signature(),
         on_trusted_miner=on_trusted_miner,
+        download_time_limit=1,
+        execution_time_limit=1,
+        streaming_start_time_limit=1,
+        upload_time_limit=1,
     )
 
 
@@ -373,6 +328,13 @@ class MockNeuron:
         self.uid = uid
         self.stake = bittensor.Balance((uid + 1) * 1001.0)
         self.axon_info = axon_info
+
+
+def neurons_to_validator_infos(neurons: list[MockNeuron]) -> list[ValidatorInfo]:
+    return [
+        ValidatorInfo(uid=neuron.uid, hotkey=neuron.hotkey, stake=neuron.stake.tao)
+        for neuron in neurons
+    ]
 
 
 class MockBlock:

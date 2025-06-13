@@ -4,7 +4,7 @@ import os
 from collections import deque
 from typing import Any, Literal
 
-import bittensor
+import bittensor_wallet
 import httpx
 import pydantic
 import tenacity
@@ -18,11 +18,13 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V2JobRequest,
 )
 from compute_horde.fv_protocol.validator_requests import (
+    JobStatusMetadata,
+    JobStatusUpdate,
     V0AuthenticationRequest,
     V0Heartbeat,
     V0MachineSpecsUpdate,
 )
-from compute_horde_core.signature import verify_signature
+from compute_horde_core.signature import SignedRequest, verify_signature
 from django.conf import settings
 from pydantic import BaseModel
 
@@ -34,24 +36,23 @@ from compute_horde_validator.validator.models import (
     ValidatorWhitelist,
 )
 from compute_horde_validator.validator.organic_jobs import routing
-from compute_horde_validator.validator.organic_jobs.miner_driver import (
-    JobStatusMetadata,
-    JobStatusUpdate,
+from compute_horde_validator.validator.tasks import (
+    execute_organic_job_request_on_worker,
+    slash_collateral_task,
 )
-from compute_horde_validator.validator.tasks import execute_organic_job_request_on_worker
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL
 
 logger = logging.getLogger(__name__)
 
 
-async def verify_job_request(job_request: V2JobRequest) -> None:
+async def verify_request(job_request: SignedRequest) -> None:
     # check if signer is in validator whitelist
     if job_request.signature is None:
         raise ValueError("Signature is None")
 
     signature = job_request.signature
     signer = signature.signatory
-    signed_fields = job_request.get_signed_fields()
+    signed_payload = job_request.get_signed_payload()
 
     my_keypair = settings.BITTENSOR_WALLET().get_hotkey()
     if signer != my_keypair.ss58_address:
@@ -60,7 +61,7 @@ async def verify_job_request(job_request: V2JobRequest) -> None:
             raise ValueError(f"Signatory {signer} is not in validator whitelist")
 
     # verify signed payload
-    verify_signature(signed_fields.model_dump_json(), signature)
+    verify_signature(signed_payload, signature)
 
 
 class AuthenticationError(Exception):
@@ -88,7 +89,7 @@ class _JobStatusChannelEnvelope(BaseModel):
 class FacilitatorClient:
     HEARTBEAT_PERIOD = 60
 
-    def __init__(self, keypair: bittensor.Keypair, facilitator_uri: str) -> None:
+    def __init__(self, keypair: bittensor_wallet.Keypair, facilitator_uri: str) -> None:
         self.keypair = keypair
         self.ws: websockets.ClientConnection | None = None
         self.facilitator_uri = facilitator_uri
@@ -151,6 +152,7 @@ class FacilitatorClient:
         try:
             async for ws in self.connect():
                 try:
+                    logger.info("connected to facilitator")
                     await self.handle_connection(ws)
                 except websockets.ConnectionClosed as exc:
                     self.ws = None
@@ -255,21 +257,26 @@ class FacilitatorClient:
 
     async def handle_job_status_updates(self, job_uuid: str):
         """
-        Route job status updates for given job back to the Facilitator.
+        Relay job status updates for given job back to the Facilitator.
         Loop until a terminal status is received.
         """
         # see compute_horde_validator.validator.organic_jobs.miner_driver.JobStatusUpdate status field
         terminal_states = {"failed", "rejected", "completed"}
 
-        while True:
-            msg = await get_channel_layer().receive(f"job_status_updates__{job_uuid}")
-            try:
-                envelope = _JobStatusChannelEnvelope.model_validate(msg)
-                await self.send_model(envelope.payload)
-                if envelope.payload.status in terminal_states:
-                    return
-            except pydantic.ValidationError as exc:
-                logger.warning("Received malformed job status update: %s", exc)
+        logger.debug(f"Listening for job status updates for job {job_uuid}")
+        try:
+            while True:
+                msg = await get_channel_layer().receive(f"job_status_updates__{job_uuid}")
+                try:
+                    envelope = _JobStatusChannelEnvelope.model_validate(msg)
+                    task = asyncio.create_task(self.send_model(envelope.payload))
+                    await self.tasks_to_reap.put(task)
+                    if envelope.payload.status in terminal_states:
+                        return
+                except pydantic.ValidationError as exc:
+                    logger.warning("Received malformed job status update: %s", exc)
+        finally:
+            logger.debug(f"Finished listening for job status updates for job {job_uuid}")
 
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(7),
@@ -311,16 +318,30 @@ class FacilitatorClient:
         except pydantic.ValidationError as exc:
             logger.debug("could not parse raw message as V0JobCheated: %s", exc)
         else:
-            await self.report_miner_cheated_job(cheated_job_report.job_uuid)
+            await self.report_miner_cheated_job(cheated_job_report)
             return
 
         logger.error("unsupported message received from facilitator: %s", raw_msg)
 
-    async def report_miner_cheated_job(self, job_uuid: str) -> None:
+    async def report_miner_cheated_job(self, cheated_job_request: V0JobCheated) -> None:
+        try:
+            await verify_request(cheated_job_request)
+        except Exception as e:
+            logger.warning(f"Failed to verify signed payload: {e} - will ignore")
+            return
+        job_uuid = cheated_job_request.job_uuid
         try:
             job = await OrganicJob.objects.prefetch_related("miner").aget(job_uuid=job_uuid)
         except OrganicJob.DoesNotExist:
             logger.error(f"Job {job_uuid} reported for cheating does not exist")
+            return
+
+        if job.cheated:
+            logger.warning(f"Job {job_uuid} already marked as cheated - ignoring")
+            return
+
+        if job.status != OrganicJob.Status.COMPLETED:
+            logger.info(f"Job {job_uuid} reported for cheating is not complete yet")
             return
 
         job.cheated = True
@@ -328,7 +349,7 @@ class FacilitatorClient:
 
         blacklist_time = await aget_config("DYNAMIC_JOB_CHEATED_BLACKLIST_TIME_SECONDS")
         await routing.blacklist_miner(
-            job, MinerBlacklist.BlacklistReason.JOB_FAILED, blacklist_time
+            job, MinerBlacklist.BlacklistReason.JOB_CHEATED, blacklist_time
         )
         await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
             type=SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
@@ -340,22 +361,33 @@ class FacilitatorClient:
             },
         )
 
+        if not job.slashed:
+            slash_collateral_task.delay(str(job.job_uuid))
+
     async def process_job_request(self, job_request: OrganicJobRequest) -> None:
         if isinstance(job_request, V2JobRequest):
             logger.debug(f"Received signed job request: {job_request}")
             try:
-                await verify_job_request(job_request)
+                await verify_request(job_request)
             except Exception as e:
                 msg = f"Failed to verify signed payload: {e} - will not run job"
                 logger.warning(msg)
                 await self.send_model(
                     JobStatusUpdate(
                         uuid=job_request.uuid,
-                        status="failed",
+                        status=JobStatusUpdate.Status.FAILED,
                         metadata=JobStatusMetadata(comment=msg),
                     )
                 )
                 return
+
+        await self.send_model(
+            JobStatusUpdate(
+                uuid=job_request.uuid,
+                status=JobStatusUpdate.Status.RECEIVED,
+                metadata=JobStatusMetadata(comment=""),
+            )
+        )
 
         try:
             miner = await routing.pick_miner_for_job_request(job_request)
@@ -366,7 +398,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status="rejected",
+                    status=JobStatusUpdate.Status.REJECTED,
                     metadata=JobStatusMetadata(comment=msg),
                 )
             )
@@ -377,7 +409,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status="rejected",
+                    status=JobStatusUpdate.Status.REJECTED,
                     metadata=JobStatusMetadata(comment=msg),
                 )
             )
@@ -388,7 +420,40 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status="failed",
+                    status=JobStatusUpdate.Status.FAILED,
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
+        except routing.NotEnoughTimeInCycle:
+            msg = f"Requested job cannot complete in current cycle: {job_request.uuid}"
+            logger.info(f"Rejecting job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status=JobStatusUpdate.Status.REJECTED,
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
+        except routing.NoMinerWithEnoughAllowance:
+            msg = f"No miner available with enough allowance: {job_request.uuid}"
+            logger.info(f"Rejecting job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status=JobStatusUpdate.Status.REJECTED,
+                    metadata=JobStatusMetadata(comment=msg),
+                )
+            )
+            return
+        except Exception:
+            msg = f"Unknown error occurred during selecting miner: {job_request.uuid}"
+            logger.exception(f"Failing job: {msg}")
+            await self.send_model(
+                JobStatusUpdate(
+                    uuid=job_request.uuid,
+                    status=JobStatusUpdate.Status.FAILED,
                     metadata=JobStatusMetadata(comment=msg),
                 )
             )
@@ -409,7 +474,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status="failed",
+                    status=JobStatusUpdate.Status.FAILED,
                     metadata=JobStatusMetadata(comment=msg),
                 )
             )

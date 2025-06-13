@@ -1,12 +1,11 @@
 import base64
 import uuid
 
-from compute_horde_core.signature import BittensorWalletSigner, BittensorWalletVerifier
-from compute_horde_core.signature import Signature as RawSignature
+from compute_horde_core.signature import BittensorWalletSigner, BittensorWalletVerifier, Signature
 from compute_horde_core.volume import VolumeType, ZipUrlVolume
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.fv_protocol.facilitator_requests import Signature, V2JobRequest
+from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 
 
 def test_signed_job_roundtrip(signature_wallet):
@@ -24,6 +23,10 @@ def test_signed_job_roundtrip(signature_wallet):
         use_gpu=False,
         volume=volume,
         output_upload=None,
+        download_time_limit=1,
+        execution_time_limit=1,
+        upload_time_limit=1,
+        streaming_start_time_limit=1,
     )
 
     signer = BittensorWalletSigner(signature_wallet)
@@ -41,7 +44,7 @@ def test_signed_job_roundtrip(signature_wallet):
     deserialized_job = V2JobRequest.model_validate_json(job_json)
 
     assert deserialized_job.signature is not None
-    deserialized_raw_signature = RawSignature(
+    deserialized_raw_signature = Signature(
         signature_type=deserialized_job.signature.signature_type,
         signatory=deserialized_job.signature.signatory,
         timestamp_ns=deserialized_job.signature.timestamp_ns,

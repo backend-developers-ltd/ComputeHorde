@@ -7,7 +7,12 @@ from typing import Annotated, ClassVar, Union
 import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.fv_protocol.facilitator_requests import Error, Response
-from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest, V0Heartbeat, V0MachineSpecsUpdate
+from compute_horde.fv_protocol.validator_requests import (
+    JobStatusUpdate,
+    V0AuthenticationRequest,
+    V0Heartbeat,
+    V0MachineSpecsUpdate,
+)
 from django.conf import settings
 from django.db import IntegrityError
 from django.utils.timezone import now
@@ -15,7 +20,6 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from structlog.contextvars import bound_contextvars
 
 from .models import Channel, Job, JobStatus, Validator
-from .schemas import JobStatusUpdate
 from .specs import save_machine_specs
 
 log = structlog.get_logger(__name__)
@@ -198,10 +202,19 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                 if (
                     status == JobStatus.Status.COMPLETED
                     and (miner_response := message.metadata.miner_response) is not None
-                    and (artifacts := miner_response.artifacts) is not None
                 ):
-                    job.artifacts = artifacts
+                    if (artifacts := miner_response.artifacts) is not None:
+                        job.artifacts = artifacts
+                    if (upload_results := miner_response.upload_results) is not None:
+                        job.upload_results = upload_results
                     await job.asave()
+                elif status == JobStatus.Status.STREAMING_READY:
+                    if (streaming_details := message.metadata.streaming_details) is not None:
+                        log.warning(f"streaming_details: {streaming_details}")
+                        job.streaming_server_cert = streaming_details.streaming_server_cert
+                        job.streaming_server_address = streaming_details.streaming_server_address
+                        job.streaming_server_port = streaming_details.streaming_server_port
+                        await job.asave()
 
             except IntegrityError as exc:
                 log.debug("job status update failed", exc=exc)
@@ -233,7 +246,7 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
         await Channel.objects.filter(name=self.channel_name).aupdate(last_heartbeat=now())
 
     async def job_new(self, payload: dict) -> None:
-        """Receive V0JobRequest from backend and forward it to validator via WS"""
+        """Receive V2JobRequest from backend and forward it to validator via WS"""
         await self.send(text_data=json.dumps(payload))
 
     async def job_cheated(self, payload: dict) -> None:

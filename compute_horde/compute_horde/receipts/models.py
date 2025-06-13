@@ -58,7 +58,6 @@ class JobStartedReceiptQuerySet(models.QuerySet["JobStartedReceipt"]):
 
 class JobStartedReceipt(AbstractReceipt):
     executor_class = models.CharField(max_length=255, default=DEFAULT_EXECUTOR_CLASS)
-    max_timeout = models.IntegerField()
     is_organic = models.BooleanField()
     ttl = models.IntegerField()
 
@@ -75,7 +74,6 @@ class JobStartedReceipt(AbstractReceipt):
                 validator_hotkey=self.validator_hotkey,
                 timestamp=self.timestamp,
                 executor_class=ExecutorClass(self.executor_class),
-                max_timeout=self.max_timeout,
                 is_organic=self.is_organic,
                 ttl=self.ttl,
             ),
@@ -110,7 +108,6 @@ class JobStartedReceipt(AbstractReceipt):
             miner_signature=miner_signature,
             timestamp=payload.timestamp,
             executor_class=payload.executor_class,
-            max_timeout=payload.max_timeout,
             is_organic=payload.is_organic,
             ttl=payload.ttl,
         )

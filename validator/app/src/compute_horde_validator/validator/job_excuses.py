@@ -1,14 +1,14 @@
 import logging
 from datetime import datetime, timedelta
 
-from asgiref.sync import sync_to_async
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
-from compute_horde.utils import get_validators
+from compute_horde.utils import BAC_VALIDATOR_SS58_ADDRESS, ValidatorInfo
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
-from compute_horde_validator.validator.models import MinerManifest
+from compute_horde_validator.validator.models import MetagraphSnapshot, MinerManifest
+from compute_horde_validator.validator.synthetic_jobs.utils import get_validator_infos
 
 logger = logging.getLogger(__name__)
 
@@ -20,20 +20,29 @@ async def filter_valid_excuse_receipts(
     declined_job_executor_class: ExecutorClass,
     declined_job_is_synthetic: bool,
     miner_hotkey: str,
-    allowed_validators: set[str] | None = None,
+    minimum_validator_stake_for_excuse: float,
+    active_validators: list[ValidatorInfo] | None = None,
 ) -> list[Receipt]:
     if not receipts_to_check:
+        logger.debug("No receipts to check")
         return []
 
-    if allowed_validators is None:
-        allowed_validators = {
-            neuron.hotkey
-            for neuron in await sync_to_async(get_validators)(
-                netuid=settings.BITTENSOR_NETUID,
-                network=settings.BITTENSOR_NETWORK,
-            )
-        }
-        allowed_validators.add(settings.BITTENSOR_WALLET().get_hotkey().ss58_address)
+    if active_validators is None:
+        metagraph = await MetagraphSnapshot.aget_latest()
+        active_validators = get_validator_infos(metagraph)
+
+    allowed_validators = {
+        validator_info.hotkey
+        for validator_info in active_validators
+        if (
+            validator_info.stake >= minimum_validator_stake_for_excuse
+            or validator_info.hotkey == BAC_VALIDATOR_SS58_ADDRESS
+        )
+    }
+    # Note: valid jobs by BAC validator are always excused (for easier testing subnet of development)
+
+    # Vali should probably trust itself in any case.
+    allowed_validators.add(settings.BITTENSOR_WALLET().get_hotkey().ss58_address)
 
     # We need time leeway so that if the miner receives multiple jobs in a short time, a slight
     # time difference caused by clock desync and network latencies doesn't cause the miner to lose
@@ -46,21 +55,38 @@ async def filter_valid_excuse_receipts(
 
     valid_receipts: list[Receipt] = []
     for receipt in receipts_to_check:
+        validation_failures = []
+        if not isinstance(receipt.payload, JobStartedReceiptPayload):
+            validation_failures.append("not a JobStartedReceiptPayload")
+            continue
+        if not (receipt.payload.is_organic if declined_job_is_synthetic else True):
+            validation_failures.append("is_organic check failed")
+        if receipt.payload.miner_hotkey != miner_hotkey:
+            validation_failures.append("miner_hotkey mismatch")
+        if receipt.payload.job_uuid == declined_job_uuid:
+            validation_failures.append("same job_uuid")
+        if receipt.payload.validator_hotkey not in allowed_validators:
+            validation_failures.append("validator not allowed")
+        if receipt.payload.executor_class != declined_job_executor_class:
+            validation_failures.append("executor_class mismatch")
+        if receipt.payload.timestamp >= check_time:
+            validation_failures.append("timestamp too new")
         if (
-            isinstance(receipt.payload, JobStartedReceiptPayload)
-            and (receipt.payload.is_organic if declined_job_is_synthetic else True)
-            and receipt.payload.miner_hotkey == miner_hotkey
-            and receipt.payload.job_uuid != declined_job_uuid
-            and receipt.payload.validator_hotkey in allowed_validators
-            and receipt.payload.job_uuid not in seen_receipts
-            and receipt.payload.executor_class == declined_job_executor_class
-            and receipt.payload.timestamp < check_time
-            and check_time
-            < receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
-            and receipt.verify_validator_signature(throw=False)
+            check_time
+            >= receipt.payload.timestamp + timedelta(seconds=receipt.payload.ttl) + leeway
         ):
-            seen_receipts.add(receipt.payload.job_uuid)
-            valid_receipts.append(receipt)
+            validation_failures.append("receipt expired")
+        if not receipt.verify_validator_signature(throw=False):
+            validation_failures.append("validator signature invalid")
+
+        if validation_failures:
+            logger.error(
+                f"Receipt {receipt.payload.job_uuid} failed validation: {', '.join(validation_failures)}"
+            )
+            continue
+
+        seen_receipts.add(receipt.payload.job_uuid)
+        valid_receipts.append(receipt)
 
     return valid_receipts
 

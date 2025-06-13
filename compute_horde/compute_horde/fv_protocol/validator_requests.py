@@ -1,3 +1,4 @@
+from enum import StrEnum
 from typing import Any, Literal, Self
 
 import bittensor
@@ -36,6 +37,49 @@ class V0AuthenticationRequest(BaseModel, extra="forbid"):
         # make mypy happy
         address: str = bittensor.Keypair(public_key=self.public_key, ss58_format=42).ss58_address
         return address
+
+
+class MinerResponse(BaseModel, extra="allow"):
+    job_uuid: str
+    message_type: str | None
+    docker_process_stderr: str
+    docker_process_stdout: str
+    artifacts: dict[str, str] | None = None
+    upload_results: dict[str, str] | None = None
+
+
+class StreamingServerDetails(BaseModel, extra="forbid"):
+    streaming_server_cert: str | None = None
+    streaming_server_address: str | None = None
+    streaming_server_port: int | None = None
+
+
+class JobStatusMetadata(BaseModel, extra="allow"):
+    comment: str
+    miner_response: MinerResponse | None = None
+    streaming_details: StreamingServerDetails | None = None
+
+
+class JobStatusUpdate(BaseModel, extra="forbid"):
+    """
+    Message sent from validator to facilitator in response to NewJobRequest.
+    """
+
+    class Status(StrEnum):
+        RECEIVED = "received"
+        ACCEPTED = "accepted"
+        EXECUTOR_READY = "executor_ready"
+        VOLUMES_READY = "volumes_ready"
+        EXECUTION_DONE = "execution_done"
+        COMPLETED = "completed"
+        REJECTED = "rejected"
+        FAILED = "failed"
+        STREAMING_READY = "streaming_ready"
+
+    message_type: Literal["V0JobStatusUpdate"] = "V0JobStatusUpdate"
+    uuid: str
+    status: Status
+    metadata: JobStatusMetadata | None = None
 
 
 class V0MachineSpecsUpdate(BaseModel, extra="forbid"):
