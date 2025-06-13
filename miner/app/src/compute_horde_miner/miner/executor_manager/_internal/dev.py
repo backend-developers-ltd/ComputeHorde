@@ -20,6 +20,7 @@ executor_dir = this_dir / ".." / ".." / ".." / ".." / ".." / ".." / ".." / "exec
 
 class DevExecutorManager(BaseExecutorManager):
     async def start_new_executor(self, token, executor_class, timeout):
+        logger.debug(f"Starting new executor process: {token=}")
         nginx_port = executor_port_dispenser.get_port()
 
         return subprocess.Popen(
