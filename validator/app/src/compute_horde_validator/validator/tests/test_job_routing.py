@@ -336,3 +336,25 @@ async def test_pick_miner_for_job__use_subtensor_for_block_on_cache_miss(miners)
     ) as mocked_subtensor:
         mocked_subtensor.return_value.__aenter__.return_value.get_current_block.return_value = 1
         await routing.pick_miner_for_job_request(JOB_REQUEST)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.override_config(DYNAMIC_ALLOW_CROSS_CYCLE_ORGANIC_JOBS=True)
+@patch('compute_horde_validator.validator.organic_jobs.routing.get_seconds_remaining_in_current_cycle')
+@pytest.mark.asyncio
+async def test_cross_cycle_job__allowed_when_enabled(mock_get_seconds_remaining):
+    mock_get_seconds_remaining.return_value = 5
+    long_job = JOB_REQUEST.__replace__(execution_time_limit=90)
+    miner = await routing.pick_miner_for_job_request(long_job)
+    assert miner is not None
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.override_config(DYNAMIC_ALLOW_CROSS_CYCLE_ORGANIC_JOBS=False)
+@patch('compute_horde_validator.validator.organic_jobs.routing.get_seconds_remaining_in_current_cycle')
+@pytest.mark.asyncio
+async def test_cross_cycle_job__disallowed_when_disabled(mock_get_seconds_remaining):
+    mock_get_seconds_remaining.return_value = 5
+    long_job = JOB_REQUEST.__replace__(execution_time_limit=90)
+    with pytest.raises(routing.NotEnoughTimeInCycle):
+        await routing.pick_miner_for_job_request(long_job)
