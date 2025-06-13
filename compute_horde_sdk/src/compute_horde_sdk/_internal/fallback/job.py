@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Self
 
+import httpx
+
 from ..models import ComputeHordeJobResult, ComputeHordeJobStatus, InputVolume, OutputVolume
 from ..sdk import ComputeHordeJobSpec
 from .exceptions import FallbackJobTimeoutError
@@ -83,6 +85,9 @@ class FallbackJobSpec:
     zone: str | None = None
     """Zone to run the job in."""
 
+    streaming: bool = False
+    """Whether to enable streaming."""
+
     @classmethod
     def from_job_spec(cls, job_spec: ComputeHordeJobSpec, **kwargs: Any) -> Self:
         if job_spec.executor_class == job_spec.executor_class.__class__.always_on__llm__a6000:
@@ -98,6 +103,7 @@ class FallbackJobSpec:
             output_volumes=job_spec.output_volumes,
             accelerators=accelerators,
             image_id=f"docker:{job_spec.docker_image}",
+            streaming=job_spec.streaming,
             **kwargs,
         )
 
@@ -133,6 +139,8 @@ class FallbackJob:
         self.uuid = uuid
         self.status = status
         self.result = result
+        self.streaming_server_address = "127.0.0.1"
+        self.streaming_server_port: int | None = None
 
     async def wait(self, timeout: float | None = None) -> None:
         """
@@ -150,6 +158,29 @@ class FallbackJob:
                 )
             await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
             await self.refresh()
+
+    async def wait_for_streaming(self, timeout: int = 120) -> None:
+        """
+        Wait for the streaming to start.
+
+        :param timeout: Maximum number of seconds to wait for streaming to start.
+        :raises FallbackJobTimeoutError: If streaming does not start within timeout seconds.
+        """
+        start_time = time.time()
+        url = f"http://{self.streaming_server_address}:{self.streaming_server_port}/health"
+
+        with httpx.Client() as client:
+            while time.time() - start_time < timeout:
+                try:
+                    resp = client.get(url)
+                    if resp.status_code == 200:
+                        client.close()
+                        return
+                except Exception:
+                    pass
+                await asyncio.sleep(1)
+
+        raise FallbackJobTimeoutError(f"Streaming did not start within {timeout} seconds")
 
     async def refresh(self) -> None:
         """

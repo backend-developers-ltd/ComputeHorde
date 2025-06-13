@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import pathlib
+import socket
+import subprocess
 import tempfile
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
@@ -78,6 +80,21 @@ class FallbackClient:
         self.idle_minutes = idle_minutes
 
         self._jobs: dict[str, SkyJobType] = {}
+        self.streaming_port: str | None = None
+        self._active_tunnels: dict[str, subprocess.Popen[bytes]] = {}
+
+    def __enter__(self) -> "FallbackClient":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        # Kill all active tunnels
+        for job_uuid, tunnel in self._active_tunnels.items():
+            try:
+                tunnel.terminate()
+                tunnel.wait(timeout=5)
+            except Exception as e:
+                logger.warning(f"Failed to kill tunnel for job {job_uuid}: {e}")
+        self._active_tunnels.clear()
 
     async def create_job(self, job_spec: FallbackJobSpec) -> FallbackJob:
         """
@@ -120,6 +137,29 @@ class FallbackClient:
             status=FallbackJobStatus.SENT,
         )
         logger.info("The job has been submitted: %s", job)
+
+        if job_spec.streaming:
+            logger.info("Opening streaming tunnel...")
+
+            def is_port_available(port: int) -> bool:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                try:
+                    sock.bind(("localhost", port))
+                    sock.close()
+                    return True
+                except OSError:
+                    return False
+
+            for port in range(8000, 9000):
+                if is_port_available(port):
+                    job.streaming_server_port = port
+                    break
+
+            if job.streaming_server_port is None:
+                raise FallbackNotFoundError(f"Could not find available port for job {job.uuid}")
+
+            await self.create_ssh_tunnel(job.uuid, job.streaming_server_port)
+            logger.info(f"Created SSH tunnel for job {job.uuid}")
 
         return job
 
@@ -218,6 +258,51 @@ class FallbackClient:
         for job_uuid in self._jobs.keys():
             yield await self.get_job(job_uuid)
 
+    async def get_job_streaming_port(self, job_uuid: str) -> int | None:
+        """
+        Retrieve the SSH port of the job for streaming.
+        """
+        job = self._jobs[job_uuid]
+        return job.get_job_ssh_port()
+
+    async def create_ssh_tunnel(self, job_uuid: str, local_port: int) -> None:
+        """
+        Create an SSH tunnel to the job's streaming port.
+
+        :param job_uuid: The UUID of the job to tunnel to
+        :param local_port: The local port to forward to
+        """
+        job = self._jobs[job_uuid]
+        head_ip = job.get_job_head_ip()
+        ssh_port = await self.get_job_streaming_port(job_uuid)
+
+        if not ssh_port:
+            raise FallbackNotFoundError(f"Could not get SSH port for job {job_uuid}")
+
+        tunnel_cmd = [
+            "ssh",
+            "-N",
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+            "-i",
+            str(pathlib.Path.home() / ".ssh" / "sky-key"),
+            "-L",
+            f"127.0.0.1:{local_port}:localhost:8000",
+            f"root@{head_ip}",
+            "-p",
+            str(ssh_port),
+        ]
+
+        try:
+            tunnel = subprocess.Popen(tunnel_cmd)
+            self._active_tunnels[job_uuid] = tunnel
+            logger.info(f"Created SSH tunnel from localhost:{local_port} to {head_ip}:{self.streaming_port}")
+        except Exception as e:
+            logger.error(f"Failed to create SSH tunnel: {e}")
+            raise
+
     @classmethod
     def _prepare_workdir(cls) -> pathlib.Path:
         workdir = pathlib.Path(tempfile.mkdtemp(prefix="ch-"))
@@ -254,7 +339,6 @@ class FallbackClient:
                     volume_json.write_text(
                         job_spec.input_volumes[input_volume].to_compute_horde_volume(input_volume).json()
                     )
-
             if job_spec.output_volumes is not None:
                 for index, output_volume in enumerate(job_spec.output_volumes):
                     output_upload_json = pathlib.Path(f"./output_upload-{index}.json")

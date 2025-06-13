@@ -1,0 +1,65 @@
+name: Run integration tests with fallback client
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_DEFAULT_VERSION: "3.11"
+  AWS_DEFAULT_REGION: "us-east-1"
+  S3_BUCKET_NAME: "compute-horde-integration-tests"
+
+jobs:
+  test:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          cache: "pip"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.6.x"
+          enable-cache: true
+
+      - name: configure runpod
+        working-directory: ./local_stack
+        run: uv run runpod config ${{ env.RUNPOD_API_KEY }}
+        env:
+          RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
+
+      - name: run sky check
+        working-directory: ./local_stack
+        run: uv run sky check
+
+      - name: test regular job
+        working-directory: ./local_stack
+        run: uv run ./fallback_job/send_fallback_job.py
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+          S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
+          RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
+
+      - name: test streaming job
+        working-directory: ./local_stack
+        run: uv run ./fallback_job/send_fallback_job_streaming.py
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+          S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
+          RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
