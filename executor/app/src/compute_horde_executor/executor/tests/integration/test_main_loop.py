@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import io
 import json
@@ -19,11 +18,11 @@ from compute_horde_core.certificate import generate_certificate_at
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
 
+from compute_horde_executor.executor.job_runner import JobRunner
 from compute_horde_executor.executor.management.commands.run_executor import (
     Command,
-    JobRunner,
-    MinerClient,
 )
+from compute_horde_executor.executor.miner_client import MinerClient
 
 payload = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
 
@@ -78,40 +77,6 @@ class CommandTested(Command):
         transport = StubTransport("test", messages)
         self.MINER_CLIENT_CLASS = partial(MinerClient, transport=transport)
         super().__init__(*args, **kwargs)
-
-    async def run_nvidia_toolkit_version_check_or_fail(self):
-        is_toolkit_installed = None
-
-        try:
-            process = await asyncio.create_subprocess_exec(
-                "nvidia-container-toolkit",
-                "--version",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-        except OSError:
-            is_toolkit_installed = False
-
-        if is_toolkit_installed is None:
-            try:
-                stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
-            except TimeoutError:
-                process.kill()
-                is_toolkit_installed = False
-
-        if is_toolkit_installed is None and process.returncode != 0:
-            is_toolkit_installed = False
-
-        if is_toolkit_installed is None:
-            is_toolkit_installed = True
-
-        if is_toolkit_installed:
-            return await super().run_nvidia_toolkit_version_check_or_fail()
-        else:
-            logger.warning(
-                "NVIDIA Container Toolkit not installed - skipping safe toolkit version check in tests"
-            )
-            return True
 
 
 def test_main_loop_basic():
