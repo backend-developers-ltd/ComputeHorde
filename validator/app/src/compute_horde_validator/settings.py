@@ -244,7 +244,7 @@ CONSTANCE_CONFIG = {
         int,
     ),
     # llama params
-    "DYNAMIC_MAX_PROMPT_SERIES": (
+    "DYNAMIC_MAX_PROMPT_SERIES_PER_EXECUTOR_CLASS": (
         3500,
         "Maximum number of prompt series upon which the prompt generator will not be triggered",
         int,
@@ -254,20 +254,9 @@ CONSTANCE_CONFIG = {
         "how many prompt samples to generate (should be larger than how many prompts series we use per synthetic run)",
         int,
     ),
-    "DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD": (
-        240,
-        "how many prompts to answer in a single workload",
-        int,
-    ),
-    # prompt generation params
     "DYNAMIC_PROMPTS_SERIES_IN_A_SINGLE_GENERATION": (
         25,
         "Number of batches that prompt generator will process in a single go",
-        int,
-    ),
-    "DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES": (
-        240,
-        "Number of prompts to generate in a single series",
         int,
     ),
     # prompts answering params
