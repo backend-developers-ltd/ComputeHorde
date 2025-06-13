@@ -39,7 +39,7 @@ def get_presigned_urls(bucket: str, post_object_key: str, put_object_key: str, e
     """
     Generate presigned POST and PUT URLs for the given S3 bucket and object keys.
     """
-    s3_client = boto3.client('s3')
+    s3_client = boto3.client('s3', region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
     presigned_post = s3_client.generate_presigned_post(Bucket=bucket, Key=post_object_key, ExpiresIn=expires_in)
     presigned_put = s3_client.generate_presigned_url(
         "put_object",
@@ -151,7 +151,7 @@ async def main() -> None:
     )
 
     if verify_http_output_volumes:
-        bucket_name = "compute-horde-integration-tests"
+        bucket_name = os.environ.get("S3_BUCKET_NAME", "compute-horde-integration-tests")
         available_characters = string.ascii_letters + string.digits
         filename = "".join(random.choices(available_characters, k=32))
         post_object_key = f"{filename}_post.txt"

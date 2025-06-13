@@ -289,7 +289,7 @@ class FallbackClient:
             "-i",
             str(pathlib.Path.home() / ".ssh" / "sky-key"),
             "-L",
-            f"{local_port}:localhost:8000",
+            f"127.0.0.1:{local_port}:localhost:8000",
             f"root@{head_ip}",
             "-p",
             str(ssh_port),

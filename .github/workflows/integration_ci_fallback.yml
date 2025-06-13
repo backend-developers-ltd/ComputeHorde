@@ -10,6 +10,8 @@ permissions:
 
 env:
   PYTHON_DEFAULT_VERSION: "3.11"
+  AWS_DEFAULT_REGION: "us-east-1"
+  S3_BUCKET_NAME: "compute-horde-integration-tests"
 
 jobs:
   test:
@@ -48,6 +50,8 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+          S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
           RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
 
       - name: test streaming job
@@ -56,4 +60,6 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+          S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
           RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}

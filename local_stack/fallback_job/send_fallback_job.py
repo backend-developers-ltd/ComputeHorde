@@ -1,5 +1,5 @@
 import logging
-
+import os
 import asyncio
 import base64
 import boto3
@@ -32,7 +32,7 @@ def get_presigned_urls(bucket: str, post_object_key: str, put_object_key: str, e
     return presigned_post, presigned_put
 
 async def main():
-    bucket_name = "compute-horde-integration-tests"
+    bucket_name = os.environ.get("S3_BUCKET_NAME", "compute-horde-integration-tests")
     post_object_key = f"{uuid.uuid4().hex}_output_post.txt"
     put_object_key = f"{uuid.uuid4().hex}_output_put.txt"
     presigned_post, presigned_put = get_presigned_urls(bucket_name, post_object_key, put_object_key)
@@ -91,6 +91,8 @@ async def main():
         print(f"[Fallback] Artifacts: {job.result.artifacts}")
         # Verification step
         expected_content = b"Read from input: " + INPUT_FILE_CONTENT
+        if not len(job.result.artifacts) == 2:
+            raise RuntimeError("Expected to find 2 artifacts, but found %d", len(job.result.artifacts))
         for _, content in job.result.artifacts.items():
             try:
                 decoded = base64.b64decode(content)
