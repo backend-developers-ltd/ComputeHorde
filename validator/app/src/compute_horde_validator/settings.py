@@ -408,14 +408,19 @@ CONSTANCE_CONFIG = {
     ),
     # collateral params
     "DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI": (
-        10000000000000000,  # 0.01 tao
+        10_000_000_000_000_000,  # 0.01 tao
         "Minimum collateral amount (in Wei) for a miner to be considered for a job",
         int,
     ),
     "DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI": (
-        5000000000000000,  # 0.005 tao
+        5_000_000_000_000_000,  # 0.005 tao
         "Amount (in Wei) of collateral to be slashed if a miner cheats on a job",
         int,
+    ),
+    "DYNAMIC_ALLOW_CROSS_CYCLE_ORGANIC_JOBS": (
+        True,
+        "Whether organic jobs can be scheduled to run for longer than the current cycle",
+        bool,
     ),
 }
 
