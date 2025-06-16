@@ -3,7 +3,8 @@ name: "CD: miner (staging)"
 on:
   push:
     branches:
-      - 'deploy-miner-staging'
+      - master
+      - COM-633
 
 env:
   BUILD_DIRECTORY: "miner"

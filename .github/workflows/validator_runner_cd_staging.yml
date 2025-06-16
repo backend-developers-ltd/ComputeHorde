@@ -3,7 +3,8 @@ name: "CD: validator runner (staging)"
 on:
   push:
     branches:
-      - 'deploy-validator-runner-staging'
+      - master
+      - COM-633
 
 env:
   BUILD_DIRECTORY: "validator/envs/runner"

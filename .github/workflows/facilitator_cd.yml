@@ -3,8 +3,9 @@ name: "CD: facilitator (all)"
 on:
   push:
     branches:
-    - 'deploy-facilitator-staging'
+    - 'master'
     - 'deploy-facilitator-prod'
+    - 'COM-633'
 
 jobs:
   deploy:
@@ -26,14 +27,24 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: deploy to aws
+      - name: Set deployment environment
+        id: set-env
         run: |
-          set -e
-          export ENVIRONMENT=${GITHUB_REF_NAME:19}
-          export GITHUB_TOKEN="${{ steps.app_token.outputs.token }}"
-          export ADDITIONAL_PACKAGES="${{ vars.ADDITIONAL_PACKAGES }}"
-          export HTTP_ASGI_APPLICATION_PATH="${{ vars.HTTP_ASGI_APPLICATION_PATH }}"
-          ./deploy-to-aws.sh $ENVIRONMENT
-          export TAG=deployed-facilitator-${ENVIRONMENT}-`date -u +"%Y-%m-%dT%H.%M.%S"`
-          git tag $TAG
-          git push origin $TAG
+          if [[ "${GITHUB_REF}" == "refs/heads/master" ]] || [[ "${GITHUB_REF}" == "refs/heads/COM-633" ]]; then
+            echo "env=staging" >> $GITHUB_OUTPUT
+          elif [[ "${GITHUB_REF}" == "refs/heads/deploy-facilitator-prod" ]]; then
+            echo "env=prod" >> $GITHUB_OUTPUT
+          else
+            echo "Unknown branch: ${GITHUB_REF}"
+            exit 1
+          fi
+      - name: Deploy to AWS
+        run: ./deploy-to-aws.sh ${{ steps.set-env.outputs.env }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      - name: Create deployment tag
+        run: |
+          git tag "deployed-facilitator-${{ steps.set-env.outputs.env }}-$(date +%Y%m%d-%H%M%S)"
+          git push origin "deployed-facilitator-${{ steps.set-env.outputs.env }}-$(date +%Y%m%d-%H%M%S)"

@@ -3,7 +3,8 @@ name: "CD: executor (staging)"
 on:
   push:
     branches:
-      - 'deploy-executor-staging'
+      - master
+      - COM-633
 
 env:
   BUILD_DIRECTORY: "executor"
