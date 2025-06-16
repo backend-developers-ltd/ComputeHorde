@@ -39,12 +39,14 @@ jobs:
             exit 1
           fi
       - name: Deploy to AWS
-        run: ./deploy-to-aws.sh ${{ steps.set-env.outputs.env }}
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-      - name: Create deployment tag
         run: |
-          git tag "deployed-facilitator-${{ steps.set-env.outputs.env }}-$(date +%Y%m%d-%H%M%S)"
-          git push origin "deployed-facilitator-${{ steps.set-env.outputs.env }}-$(date +%Y%m%d-%H%M%S)"
+          set -e
+          export ENVIRONMENT=${{ steps.set-env.outputs.env }}
+          export GITHUB_TOKEN="${{ steps.app_token.outputs.token }}"
+          export ADDITIONAL_PACKAGES="${{ vars.ADDITIONAL_PACKAGES }}"
+          export HTTP_ASGI_APPLICATION_PATH="${{ vars.HTTP_ASGI_APPLICATION_PATH }}"
+          ./deploy-to-aws.sh $ENVIRONMENT
+          export TAG=deployed-facilitator-${ENVIRONMENT}-`date -u +"%Y-%m-%dT%H.%M.%S"`
+          git tag $TAG
+          git push origin $TAG
+

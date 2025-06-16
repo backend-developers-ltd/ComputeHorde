@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - COM-633
 
 env:
   BUILD_DIRECTORY: "validator/envs/runner"
