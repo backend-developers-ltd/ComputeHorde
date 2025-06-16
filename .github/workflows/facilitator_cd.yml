@@ -5,7 +5,6 @@ on:
     branches:
     - 'master'
     - 'deploy-facilitator-prod'
-    - 'COM-633'
 
 jobs:
   deploy:
@@ -30,7 +29,7 @@ jobs:
       - name: Set deployment environment
         id: set-env
         run: |
-          if [[ "${GITHUB_REF}" == "refs/heads/master" ]] || [[ "${GITHUB_REF}" == "refs/heads/COM-633" ]]; then
+          if [[ "${GITHUB_REF}" == "refs/heads/master" ]]; then
             echo "env=staging" >> $GITHUB_OUTPUT
           elif [[ "${GITHUB_REF}" == "refs/heads/deploy-facilitator-prod" ]]; then
             echo "env=prod" >> $GITHUB_OUTPUT
