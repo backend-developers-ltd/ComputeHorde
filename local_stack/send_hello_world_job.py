@@ -89,6 +89,11 @@ def create_mt_client_with_tempfiles(
 
 
 async def main() -> None:
+    # Pull required Docker images
+    os.system("docker pull alpine")
+    os.system("docker pull backenddevelopersltd/compute-horde-executor:v1-latest")
+    os.system("docker pull backenddevelopersltd/compute-horde-streaming-job-test:v0-latest")
+
     compute_horde_streaming_job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
