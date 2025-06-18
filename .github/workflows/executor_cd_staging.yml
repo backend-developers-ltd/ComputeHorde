@@ -3,6 +3,7 @@ name: "CD: executor (staging)"
 on:
   push:
     branches:
+      - 'deploy-executor-staging'
       - master
 
 env:

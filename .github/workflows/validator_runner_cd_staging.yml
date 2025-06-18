@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - 'deploy-validator-runner-staging'
 
 env:
   BUILD_DIRECTORY: "validator/envs/runner"
