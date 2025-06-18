@@ -3,6 +3,7 @@ name: "CD: validator runner (staging)"
 on:
   push:
     branches:
+      - master
       - 'deploy-validator-runner-staging'
 
 env:

@@ -3,6 +3,7 @@ name: "CD: miner (staging)"
 on:
   push:
     branches:
+      - master
       - 'deploy-miner-staging'
 
 env:
