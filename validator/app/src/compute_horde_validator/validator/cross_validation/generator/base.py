@@ -6,6 +6,7 @@ from compute_horde.miner_client.organic import OrganicJobDetails
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.volume import Volume
+from compute_horde_validator.validator.generation_profile import PromptGenerationProfile, PROMPT_GENERATION_PROFILES
 
 
 class BasePromptJobGenerator(abc.ABC):
@@ -13,12 +14,12 @@ class BasePromptJobGenerator(abc.ABC):
         self,
         _uuid: uuid.UUID,
         *,
-        num_prompts_per_batch: int,
+        profile: PromptGenerationProfile,
         batch_uuids: list[uuid.UUID],
         upload_urls: list[str],
     ) -> None:
         self._uuid = _uuid
-        self.num_prompts_per_batch = num_prompts_per_batch
+        self.profile = profile
         self.batch_uuids = batch_uuids
         self.upload_urls = upload_urls
 
@@ -33,6 +34,10 @@ class BasePromptJobGenerator(abc.ABC):
 
     @abc.abstractmethod
     def executor_class(self) -> ExecutorClass: ...
+    """
+        This is the executor class to run the generation job.
+        It need not be related to the actual generation profile
+    """
 
     def docker_run_options_preset(self) -> DockerRunOptionsPreset:
         return "nvidia_all"
@@ -45,6 +50,9 @@ class BasePromptJobGenerator(abc.ABC):
 
     def output(self) -> OutputUpload | None:
         return None
+
+    def num_prompts_per_batch(self) -> int:
+        return PROMPT_GENERATION_PROFILES[self.profile].num_prompts
 
     def get_job_details(self) -> OrganicJobDetails:
         return OrganicJobDetails(
