@@ -1,4 +1,4 @@
-from enum import StrEnum
+from compute_horde_core.compatibility import StrEnum
 
 
 class ExecutorClass(StrEnum):

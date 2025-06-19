@@ -2,7 +2,7 @@ import asyncio
 import ipaddress
 import logging
 import tempfile
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import aiohttp
@@ -12,6 +12,14 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID
+
+try:
+    from datetime import UTC
+except ImportError:
+    # Backward compatible with python 3.10
+    from datetime import timezone
+
+    UTC = timezone.utc  # noqa: UP017
 
 logger = logging.getLogger(__name__)
 

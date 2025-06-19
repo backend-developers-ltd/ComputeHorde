@@ -4,13 +4,19 @@ import zipfile
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import StrEnum
-from typing import Literal, Self
+from typing import Literal
 
 import pydantic
 
 from compute_horde_core import output_upload as compute_horde_output_upload
 from compute_horde_core import volume as compute_horde_volume
+from compute_horde_core.compatibility import StrEnum
+
+try:
+    from typing import Self
+except ImportError:
+    # Backward compatible with python 3.10
+    from typing_extensions import Self  # noqa: UP035
 
 VOLUME_MOUNT_PATH_PREFIX = "/volume/"
 OUTPUT_MOUNT_PATH_PREFIX = "/output/"
