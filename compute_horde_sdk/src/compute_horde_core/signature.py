@@ -6,12 +6,12 @@ import json
 import re
 import time
 import typing
-from enum import StrEnum
 from typing import ClassVar, Protocol
 
 import bittensor_wallet
 from pydantic import BaseModel, JsonValue, field_serializer, field_validator
 
+from compute_horde_core.compatibility import StrEnum
 from compute_horde_core.streaming import StreamingDetails
 
 
