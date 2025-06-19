@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 import bittensor_wallet
@@ -667,7 +667,7 @@ async def test_run_until_complete__attempts__infinite(compute_horde_client, job_
     def stop_callback(job):
         jobs.append(jobs)
         # stop after running for a while
-        if datetime.now(UTC) - INITIAL_FROZEN_TIME > timedelta(minutes=10):
+        if datetime.now(timezone.utc) - INITIAL_FROZEN_TIME > timedelta(minutes=10):  # noqa: UP017
             raise Stop
 
     with pytest.raises(Stop):

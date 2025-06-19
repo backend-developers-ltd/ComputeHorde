@@ -14,7 +14,7 @@ CI = os.environ.get("CI") is not None
 
 ROOT = Path(".")
 MAIN_BRANCH_NAME = "master"
-PYTHON_VERSIONS = ["3.11", "3.12"]
+PYTHON_VERSIONS = ["3.10", "3.11", "3.12"]
 PYTHON_VERSION = ["3.11"]
 
 nox.options.default_venv_backend = "uv"
