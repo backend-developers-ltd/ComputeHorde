@@ -355,7 +355,7 @@ wheels = [
 
 [[package]]
 name = "bt-ddos-shield-client"
-version = "0.2.2"
+version = "0.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bittensor", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -367,9 +367,9 @@ dependencies = [
     { name = "route53", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "sqlalchemy", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/03/5c/fff4f323cd4b029893c6a8e53766baed9e3fbf96555584e0fde0cb017cb4/bt_ddos_shield_client-0.2.2.tar.gz", hash = "sha256:177e2eca8c9b0c3a362087de51796cc5ed3fc0c7ed1e144d0dc2f83bab06b02f", size = 49426, upload-time = "2025-06-03T16:05:17.075Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5e/f8/fe5dd8560c43100784d056901767ac97ae8fc24019433e392bded0d5c3fd/bt_ddos_shield_client-0.2.3.tar.gz", hash = "sha256:dd65361b0a22b3f52abdf46bf9ced3d712f77cf8fc60e9b5aac6f64ef3021027", size = 49449, upload-time = "2025-06-19T15:55:16.44Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d4/a1/686612d71049b288449c849ec1c2a6fefca0c006bc652a462f9c4d3f8ed6/bt_ddos_shield_client-0.2.2-py3-none-any.whl", hash = "sha256:6a96c79132271a453d54f924dc675702eb11e538b71ab4eeab7c39e4d228dc41", size = 41592, upload-time = "2025-06-03T16:05:15.791Z" },
+    { url = "https://files.pythonhosted.org/packages/69/ff/52364e546281a976aa4ecc7bb0005c20eb45b9cd4a0f48788ef68b342279/bt_ddos_shield_client-0.2.3-py3-none-any.whl", hash = "sha256:ac068cbc3c8f37bcbbc604ba006662664e7099f70b7340a904cb5164056e0cf5", size = 41598, upload-time = "2025-06-19T15:55:14.354Z" },
 ]
 
 [[package]]
@@ -2784,7 +2784,7 @@ type-check = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.35.11" },
-    { name = "bt-ddos-shield-client", specifier = "~=0.2.2" },
+    { name = "bt-ddos-shield-client", specifier = "~=0.2.3" },
     { name = "celery", specifier = "~=5.3.1" },
     { name = "channels", extras = ["daphne"], specifier = "==4.*" },
     { name = "channels-redis", specifier = "==4.2.0" },
