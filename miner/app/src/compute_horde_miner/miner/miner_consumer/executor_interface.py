@@ -164,6 +164,3 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
                 docker_process_stderr="",
             )
             await self.send_executor_failed(self.executor_token, failure_msg)
-            logger.info(
-                f"Sent immediate failure notification for job {self._maybe_job.job_uuid} due to executor disconnect"
-            )
