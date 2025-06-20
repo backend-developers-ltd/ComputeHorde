@@ -8,6 +8,7 @@ from typing import Any
 import bittensor.utils
 import requests
 import turbobt
+from asgiref.sync import async_to_sync
 from django.conf import settings
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -29,6 +30,34 @@ def get_private_key() -> str | None:
         return private_key
     except (FileNotFoundError, KeyError, json.JSONDecodeError):
         return None
+
+
+_cached_contract_address: str | None = None
+
+
+async def get_collateral_contract_address_async() -> str | None:
+    # async functions can't have functools.cache :(
+    global _cached_contract_address
+    if _cached_contract_address:
+        return _cached_contract_address
+
+    hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address
+
+    async with turbobt.Bittensor(settings.BITTENSOR_NETWORK) as bt_client:
+        subnet = bt_client.subnet(settings.BITTENSOR_NETUID)
+        raw_commitment = await subnet.commitments.get(hotkey)
+        if not raw_commitment:
+            return None
+
+        try:
+            data = json.loads(raw_commitment)
+            _cached_contract_address = data["contract"]["address"]
+            return _cached_contract_address
+        except (TypeError, KeyError, json.JSONDecodeError):
+            return None
+
+
+get_collateral_contract_address = async_to_sync(get_collateral_contract_address_async)
 
 
 @functools.cache
