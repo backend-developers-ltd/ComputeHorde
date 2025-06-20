@@ -40,7 +40,7 @@ class PrometheusHealthProbeAnalyzer(ProbeAnalyzer):
         self.severity_counter = Counter(
             "health_severity",
             "Status of the network's health",
-            ["severity"]
+            ["level"]
         )
         self.launch_timestamp_gauge = Gauge(
             "health_severity_probe_launch_timestamp",
@@ -48,5 +48,5 @@ class PrometheusHealthProbeAnalyzer(ProbeAnalyzer):
         )
 
     async def translate_results(self, results: HealthProbeResults) -> None:
-        self.severity_counter.labels(severity=results.severity).inc()
+        self.severity_counter.labels(level=results.severity).inc()
         self.launch_timestamp_gauge.set(results.start_time.timestamp())

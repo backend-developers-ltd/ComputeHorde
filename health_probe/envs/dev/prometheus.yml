@@ -13,3 +13,7 @@ scrape_configs:
       - targets: ['health_probe:8080']
         labels:
           instance: 'dev'
+
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+

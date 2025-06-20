@@ -20,5 +20,6 @@ services:
     image: prom/prometheus
     volumes:
       - ${PWD}/envs/dev/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ${PWD}/envs/dev/rules:/etc/prometheus/rules
     ports:
       - 9090:9090
