@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping, Sequence
 from datetime import timedelta
-from typing import Any, Self, TypeAlias
+from typing import Any, TypeAlias
 from urllib.parse import urljoin
 
 import bittensor_wallet
@@ -35,6 +35,12 @@ from .models import (
     InputVolume,
     OutputVolume,
 )
+
+try:
+    from typing import Self
+except ImportError:
+    # Backward compatible with python 3.10
+    from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 

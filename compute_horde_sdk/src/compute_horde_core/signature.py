@@ -6,13 +6,22 @@ import json
 import re
 import time
 import typing
-from enum import StrEnum
 from typing import ClassVar, Protocol
 
 import bittensor_wallet
 from pydantic import BaseModel, JsonValue, field_serializer, field_validator
 
 from compute_horde_core.streaming import StreamingDetails
+
+try:
+    from enum import StrEnum
+except ImportError:
+    # Backward compatible with python 3.10
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        def __str__(self):
+            return str(self.value)
 
 
 class SignatureScope(StrEnum):

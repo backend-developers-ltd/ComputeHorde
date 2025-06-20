@@ -3,7 +3,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -13,6 +13,12 @@ from .exceptions import FallbackJobTimeoutError
 
 if TYPE_CHECKING:
     from .client import FallbackClient
+
+try:
+    from typing import Self
+except ImportError:
+    # Backward compatible with python 3.10
+    from typing_extensions import Self
 
 
 JOB_REFRESH_INTERVAL = timedelta(seconds=3)
