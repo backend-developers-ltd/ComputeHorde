@@ -33,12 +33,3 @@ groups:
             The subnet is constantly failing organic tasks!
             Health probe's organic tasks failed for {{ $value }} times in last 10 minutes.
             instance='{{ $labels.instance }}' client='{{ $labels.client }}' client_server_group='{{ $labels.client_server_group }}'
-      - alert: HealthProbeDown
-        expr: changes(health_severity_probe_launch_timestamp[7m]) == 0
-        labels:
-          severity: critical
-        annotations:
-          description: |
-            Health probe is down!
-            Health probe did not launch since 7 minutes.
-            instance='{{ $labels.instance }}' client='{{ $labels.client }}' client_server_group='{{ $labels.client_server_group }}'
