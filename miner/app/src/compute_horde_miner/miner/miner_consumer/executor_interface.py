@@ -137,4 +137,33 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
         await self.send(msg.model_dump_json())
 
     async def disconnect(self, close_code) -> None:
-        logger.info(f"Executor {self.executor_token} disconnected")
+        logger.info(f"Executor {self.executor_token} disconnected with code {close_code}")
+
+        # Check if we have a job and it's still running.
+        if self._maybe_job and self._maybe_job.status in [
+            AcceptedJob.Status.WAITING_FOR_PAYLOAD,
+            AcceptedJob.Status.RUNNING,
+            AcceptedJob.Status.WAITING_FOR_EXECUTOR,
+        ]:
+            logger.warning(
+                f"Executor {self.executor_token} disconnected while job {self._maybe_job.job_uuid} was running."
+            )
+
+            self._maybe_job.status = AcceptedJob.Status.FAILED
+            self._maybe_job.error_type = "EXECUTOR_DISCONNECTED"
+            self._maybe_job.error_detail = (
+                f"Executor disconnected while job was running (code: {close_code})"
+            )
+            await self._maybe_job.asave()
+
+            failure_msg = V0JobFailedRequest(
+                job_uuid=str(self._maybe_job.job_uuid),
+                error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
+                error_detail=self._maybe_job.error_detail,
+                docker_process_stdout="",
+                docker_process_stderr="",
+            )
+            await self.send_executor_failed(self.executor_token, failure_msg)
+            logger.info(
+                f"Sent immediate failure notification for job {self._maybe_job.job_uuid} due to executor disconnect"
+            )
