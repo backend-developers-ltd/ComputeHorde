@@ -171,6 +171,38 @@ async def main():
 asyncio.run(main())
 ```
 
+### 📤 Uploading Output to S3 or R2 (Presigned URLs)
+
+ComputeHorde lets you store output files externally using **HTTP PUT or POST uploads** to any S3-compatible service (e.g., AWS S3, Cloudflare R2).
+
+> ⚠️ The SDK **does not** generate presigned URLs for you.
+
+Instead, you must:
+1. Generate presigned POST/PUT URLs using your own code or SDK.
+2. Pass them into `output_volumes` using `HTTPOutputVolume`.
+
+#### Example:
+
+```python
+from compute_horde_sdk.v1 import HTTPOutputVolume
+
+job_spec.output_volumes = {
+    "/output/image.png": HTTPOutputVolume(
+        http_method="PUT",
+        url="https://<your-s3-or-r2-presigned-url>",
+    )
+}
+```
+
+You can also include POST form fields using the `form_fields` dict parameter.
+
+#### ✅ Full Example in the Repo
+
+See [`send_hello_world_job.py`](https://github.com/backend-developers-ltd/ComputeHorde/blob/master/local_stack/send_hello_world_job.py) for a working test that:
+- Generates POST and PUT presigned URLs using `boto3`
+- Submits a job
+- Verifies file upload succeeded
+
 ### 3. **Cross-Validation**
 
 To ensure fairness and detect potential cheating, **cross-validation** should be performed on **1-2% of submitted jobs**. 
