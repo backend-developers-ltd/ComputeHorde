@@ -70,6 +70,31 @@ class FallbackClient:
     MAX_ARTIFACT_SIZE = 1_000_000
 
     def __init__(self, cloud: str, idle_minutes: int = 15, **kwargs: Any) -> None:
+        """
+        Initializes a FallbackClient that can execute jobs using a SkyPilot-managed cloud backend.
+
+        Parameters:
+            cloud (str): The name of the cloud backend to use (e.g. "runpod").
+                         This value is passed directly to SkyPilot. We currently only test
+                         with "runpod", but you are welcome to try the other providers too.
+
+            idle_minutes (int): How many minutes the fallback instance can remain idle before being shut down.
+                                Defaults to 15 minutes.
+
+            **kwargs: Additional keyword arguments forwarded to the SkyPilot `SkyCloud` constructor.
+
+        Raises:
+            ModuleNotFoundError: If the `fallback` extra is not installed.
+
+        Note:
+            You must install the fallback extra with:
+
+                pip install compute-horde-sdk[fallback]
+
+            For more information on available cloud backends and config, see the
+            SkyPilot documentation: https://skypilot.co/docs/cloud-setup/overview/
+        """
+
         try:
             self.cloud: SkyCloudType = sky.SkyCloud(cloud, **kwargs)
         except ModuleNotFoundError:
