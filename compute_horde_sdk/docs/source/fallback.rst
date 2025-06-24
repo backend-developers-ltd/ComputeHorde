@@ -61,7 +61,7 @@ If you want to run your job on Runpod in case of any error:
             fallback_client = FallbackClient("runpod", api_key=environ.get("RUNPOD_API_KEY"))
 
             # Define your fallback job base on the ComputeHorde spec
-            fallback_spec = FallbackJobSpec.from_job_spec(spec, work_dir="/app", region="US")
+            fallback_spec = FallbackJobSpec.from_job_spec(job_spec, work_dir="/app", region="US")
 
             # Run the fallback job
             job = await fallback_client.run_until_complete(fallback_spec)
