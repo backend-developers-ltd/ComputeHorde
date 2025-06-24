@@ -217,7 +217,6 @@ class HTTPOutputVolume(pydantic.BaseModel):
     - For **POST** uploads, also include any required form fields using the `form_fields` dictionary.
 
     Examples:
-
     PUT upload:
         HTTPOutputVolume(
             http_method="PUT",
@@ -239,6 +238,7 @@ class HTTPOutputVolume(pydantic.BaseModel):
     Note:
         The SDK does **not** generate presigned URLs for you. Use tools like `boto3`, or your S3 provider’s SDK
         to generate the required `url` and optional `form_fields`.
+
     """
 
     http_method: Literal["POST", "PUT"]
