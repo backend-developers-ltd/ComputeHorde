@@ -70,3 +70,13 @@ If you want to run your job on Runpod in case of any error:
 
 
     asyncio.run(main())
+
+.. note::
+
+    The ``cloud`` argument passed to ``FallbackClient`` is forwarded to SkyPilot. Valid values include:
+    ``"runpod"``, ``"aws"``, ``"gcp"``, and others supported by SkyPilot.
+
+    We officially support ``"runpod"``, but you're welcome to try other providers.
+    If you do, let us know how it goes!
+
+    See the `SkyPilot Cloud Setup Docs <https://skypilot.co/docs/cloud-setup/overview/>`_ for details.
