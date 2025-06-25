@@ -73,26 +73,21 @@ class FallbackClient:
         """
         Initializes a FallbackClient that can execute jobs using a SkyPilot-managed cloud backend.
 
-        Parameters:
-            cloud (str): The name of the cloud backend to use (e.g. "runpod").
-                         This value is passed directly to SkyPilot. We currently only test
-                         with "runpod", but you are welcome to try the other providers too.
+        :param cloud: The name of the cloud backend to use (e.g. "runpod").
+            This value is passed directly to SkyPilot. We currently only test
+            with "runpod", but you are welcome to try the other providers too.
 
-            idle_minutes (int): How many minutes the fallback instance can remain idle before being shut down.
-                                Defaults to 15 minutes.
+        :param idle_minutes: Number of minutes the fallback instance can remain idle before being shut down.
+            Defaults to 15 minutes.
 
-            **kwargs: Additional keyword arguments forwarded to the SkyPilot `SkyCloud` constructor.
+        :param kwargs: Additional arguments forwarded to the SkyPilot cloud environment setup.
 
-        Raises:
-            ModuleNotFoundError: If the `fallback` extra is not installed.
+        :raises ModuleNotFoundError: If the ``fallback`` extra is not installed.
 
-        Note:
+        .. note::
             You must install the fallback extra with:
 
                 pip install compute-horde-sdk[fallback]
-
-            For more information on available cloud backends and config, see the
-            SkyPilot documentation: https://skypilot.co/docs/cloud-setup/overview/
         """
 
         try:
