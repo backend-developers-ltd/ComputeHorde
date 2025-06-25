@@ -88,6 +88,9 @@ class FallbackClient:
             You must install the fallback extra with:
 
                 pip install compute-horde-sdk[fallback]
+
+            For details on available cloud environments, see:
+            https://docs.skypilot.co/en/v0.8.1/overview.html#cloud-vms
         """
 
         try:
