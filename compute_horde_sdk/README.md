@@ -236,6 +236,17 @@ async for job in client.iter_jobs():
 
 If `job.status` is `"Completed"`, the `job.result` should be available.
 
+## 🛠️ Fallback to RunPod or Other Clouds
+
+If ComputeHorde is temporarily unavailable, you can run your jobs on a fallback cloud provider like [RunPod](https://www.runpod.io/) using [SkyPilot](https://skypilot.co/).
+
+The SDK includes an optional `FallbackClient` that mirrors the standard `ComputeHordeClient` interface.
+
+> 📦 Install with extras:
+> `pip install compute-horde-sdk[fallback]`
+
+See the [Fallback docs](https://sdk.computehorde.io/master/fallback.html) for usage examples and limitations.
+
 ## Versioning
 
 This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
