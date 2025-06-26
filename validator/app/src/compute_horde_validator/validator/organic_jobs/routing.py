@@ -15,6 +15,7 @@ from compute_horde.utils import async_synchronized
 from django.conf import settings
 from django.utils import timezone
 
+from compute_horde_validator.validator import collateral
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
@@ -172,11 +173,12 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     )
 
     minimum_collateral = await aget_config("DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI")
+    contract_address = await collateral.get_collateral_contract_address_async()
 
     for allowance in allowances:
         miner = allowance.miner
         manifest = latest_miner_manifest[miner.hotkey]
-        if settings.COLLATERAL_CONTRACT_ADDRESS and int(miner.collateral_wei) < minimum_collateral:
+        if contract_address and int(miner.collateral_wei) < minimum_collateral:
             logger.warning(
                 f"Miner {manifest.miner.hotkey} has {int(miner.collateral_wei)} collateral, but required minimum is {minimum_collateral}"
             )
