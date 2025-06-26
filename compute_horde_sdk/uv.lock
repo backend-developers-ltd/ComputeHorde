@@ -477,8 +477,10 @@ name = "compute-horde-sdk"
 version = "0.0.9"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp", extra = ["speedups"] },
     { name = "asgiref" },
     { name = "bittensor-wallet" },
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "huggingface-hub", extra = ["hf-transfer"] },
     { name = "pydantic" },
@@ -532,9 +534,11 @@ type-check = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", extras = ["speedups"], specifier = ">=3.10.11" },
     { name = "asgiref", specifier = ">=3.8.0,<4" },
     { name = "bittensor-wallet", specifier = ">=3.0.0,<4" },
     { name = "build", marker = "extra == 'fallback'" },
+    { name = "cryptography", specifier = ">=43.0.3" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=0.26.1" },
     { name = "pydantic", specifier = ">=2.3,<3" },
