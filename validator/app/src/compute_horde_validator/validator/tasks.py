@@ -1287,7 +1287,7 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
         if blocks_diff == 0:
             return
         else:
-            msg = f"Metagraph is {blocks_diff} blocks lagging - previous: {previous_block}, current: {block}"
+            msg = f"Metagraph is {blocks_diff} blocks lagging - previous: {previous_block}, current: {block.number}"
             logger.warning(msg)
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
                 type=SystemEvent.EventType.METAGRAPH_SYNCING,
