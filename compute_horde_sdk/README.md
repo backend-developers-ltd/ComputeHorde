@@ -171,6 +171,38 @@ async def main():
 asyncio.run(main())
 ```
 
+### 📤 Uploading Output to S3 or R2 (Presigned URLs)
+
+ComputeHorde lets you store output files externally using **HTTP PUT or POST uploads** to any S3-compatible service (e.g., AWS S3, Cloudflare R2).
+
+> ⚠️ The SDK **does not** generate presigned URLs for you.
+
+Instead, you must:
+1. Generate presigned POST/PUT URLs using your own code or SDK.
+2. Pass them into `output_volumes` using `HTTPOutputVolume`.
+
+#### Example:
+
+```python
+from compute_horde_sdk.v1 import HTTPOutputVolume
+
+job_spec.output_volumes = {
+    "/output/image.png": HTTPOutputVolume(
+        http_method="PUT",
+        url="https://<your-s3-or-r2-presigned-url>",
+    )
+}
+```
+
+You can also include POST form fields using the `form_fields` dict parameter.
+
+#### ✅ Full Example in the Repo
+
+See [`send_hello_world_job.py`](https://github.com/backend-developers-ltd/ComputeHorde/blob/master/local_stack/send_hello_world_job.py) for a working test that:
+- Generates POST and PUT presigned URLs using `boto3`
+- Submits a job
+- Verifies file upload succeeded
+
 ### 3. **Cross-Validation**
 
 To ensure fairness and detect potential cheating, **cross-validation** should be performed on **1-2% of submitted jobs**. 
@@ -203,6 +235,17 @@ async for job in client.iter_jobs():
 ```
 
 If `job.status` is `"Completed"`, the `job.result` should be available.
+
+## 🛠️ Fallback to RunPod or Other Clouds
+
+If ComputeHorde is temporarily unavailable, you can run your jobs on a fallback cloud provider like [RunPod](https://www.runpod.io/) using [SkyPilot](https://skypilot.co/).
+
+The SDK includes an optional `FallbackClient` that mirrors the standard `ComputeHordeClient` interface.
+
+> 📦 Install with extras:
+> `pip install compute-horde-sdk[fallback]`
+
+See the [Fallback docs](https://sdk.computehorde.io/master/fallback.html) for usage examples and limitations.
 
 ## Versioning
 

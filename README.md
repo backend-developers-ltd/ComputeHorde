@@ -73,6 +73,7 @@ The SDK allows you to:
 - Perform **cross-validation** to verify result integrity and protect against malicious miners.
 - **Reduce infrastructure costs** by eliminating the need for physical GPUs.
 - **Accelerate validation** by leveraging ComputeHorde’s ready-to-go GPU pool.
+- **Fallback to other clouds** like [RunPod](https://www.runpod.io/) via SkyPilot if ComputeHorde is temporarily unavailable.
 
 ## Scoring Mechanism
 
