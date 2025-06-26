@@ -11,6 +11,8 @@ from ..base import BasePromptJobGenerator
 
 
 class PromptJobGenerator(BasePromptJobGenerator):
+    EXTRA_PROMPTS_TO_ACCOUNT_FOR_SOME_INVALID_ONES = 10
+
     def generator_version(self) -> int:
         return 0
 
@@ -21,6 +23,9 @@ class PromptJobGenerator(BasePromptJobGenerator):
         return f"backenddevelopersltd/compute-horde-prompt-gen-{settings.PROMPT_GENERATION_MODEL}:v0-latest"
 
     def executor_class(self) -> ExecutorClass:
+        # Currently we don't care on which executor we generate the prompts
+        # However, if we wanted we could pick one of the executor classes that's should be used for solving
+        # the prompts according to the generation profile
         return ExecutorClass.always_on__llm__a6000
 
     def docker_run_cmd(self) -> list[str]:
@@ -28,11 +33,12 @@ class PromptJobGenerator(BasePromptJobGenerator):
             "--quantize",
             "--model_name",
             settings.PROMPT_GENERATION_MODEL,
-            "--batch_size=250",  # on A6000 we want 240 prompts generated in single file, but not all results are valid
+            "--batch_size",
+            str(self.num_prompts_per_batch() + PromptJobGenerator.EXTRA_PROMPTS_TO_ACCOUNT_FOR_SOME_INVALID_ONES),
             "--num_return_sequences=1",
             "--max_new_tokens=40",  # 40 new tokens is enough for reasonable length prompt - 30 caused too much cut off prompts
             "--number_of_prompts_per_batch",
-            str(self.num_prompts_per_batch),
+            str(self.num_prompts_per_batch()),
             "--uuids",
             str(",".join(map(str, self.batch_uuids))),
         ]
