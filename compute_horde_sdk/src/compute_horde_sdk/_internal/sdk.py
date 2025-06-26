@@ -3,6 +3,7 @@ import base64
 import dataclasses
 import json
 import logging
+import sys
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping, Sequence
 from datetime import timedelta
@@ -36,10 +37,9 @@ from .models import (
     OutputVolume,
 )
 
-try:
+if sys.version_info >= (3, 11):  # noqa: UP036
     from typing import Self
-except ImportError:
-    # Backward compatible with python 3.10
+else:
     from typing_extensions import Self  # noqa: UP035
 
 logger = logging.getLogger(__name__)

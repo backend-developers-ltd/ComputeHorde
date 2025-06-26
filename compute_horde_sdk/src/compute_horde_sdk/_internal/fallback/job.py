@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -14,10 +15,9 @@ from .exceptions import FallbackJobTimeoutError
 if TYPE_CHECKING:
     from .client import FallbackClient
 
-try:
+if sys.version_info >= (3, 11):  # noqa: UP036
     from typing import Self
-except ImportError:
-    # Backward compatible with python 3.10
+else:
     from typing_extensions import Self  # noqa: UP035
 
 

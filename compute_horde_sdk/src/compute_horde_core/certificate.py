@@ -1,6 +1,7 @@
 import asyncio
 import ipaddress
 import logging
+import sys
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -13,10 +14,9 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID
 
-try:
+if sys.version_info >= (3, 11):  # noqa: UP036
     from datetime import UTC
-except ImportError:
-    # Backward compatible with python 3.10
+else:
     from datetime import timezone
 
     UTC = timezone.utc  # noqa: UP017

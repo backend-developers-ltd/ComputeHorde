@@ -1,5 +1,6 @@
 import base64
 import io
+import sys
 import zipfile
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
@@ -10,12 +11,12 @@ import pydantic
 
 from compute_horde_core import output_upload as compute_horde_output_upload
 from compute_horde_core import volume as compute_horde_volume
-from compute_horde_core.compatibility import StrEnum
 
-try:
+if sys.version_info >= (3, 11):  # noqa: UP036
+    from enum import StrEnum
     from typing import Self
-except ImportError:
-    # Backward compatible with python 3.10
+else:
+    from backports.strenum import StrEnum  # noqa: UP035
     from typing_extensions import Self  # noqa: UP035
 
 VOLUME_MOUNT_PATH_PREFIX = "/volume/"
