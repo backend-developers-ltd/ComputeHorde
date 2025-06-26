@@ -2562,7 +2562,7 @@ wheels = [
 
 [[package]]
 name = "turbobt"
-version = "0.0.8"
+version = "0.0.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bittensor-commit-reveal", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2572,9 +2572,9 @@ dependencies = [
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "xxhash", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f6/4b/68c1f66b1d505f227b8295ccbba5424eca143c6f6322962e33d20ac9c508/turbobt-0.0.8.tar.gz", hash = "sha256:6d6746745dcee10ac577009422443dbfc4365b2a7dab511b1eacce7b124d7a2e", size = 115135, upload-time = "2025-06-03T12:13:45.346Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/61/82/8604a021e92e4b7e4ddf0ddb4698af331c77da098094f6c100da6255a2ad/turbobt-0.0.8.1.tar.gz", hash = "sha256:cb16ed27da261c112064613a162b65ca34686c68a36785b70b27f5021e25b09a", size = 123550, upload-time = "2025-06-19T09:28:27.255Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/51/d3cd44c3e8cd620b7bc6550b5f8436e6198c1b2ceca9c8f10fc811b45c12/turbobt-0.0.8-py3-none-any.whl", hash = "sha256:116572c9dd1814a3f4745a5aee24d819467999db5e46e0ba4a8f21ae7eae93fc", size = 37307, upload-time = "2025-06-03T12:13:43.347Z" },
+    { url = "https://files.pythonhosted.org/packages/82/ed/17b87b13d0f7fd64aac81d27f05f55bf7172d989235a0740cab2656e9a86/turbobt-0.0.8.1-py3-none-any.whl", hash = "sha256:7e5f5cf335d8ec5804cddc16d1856ba0f27c3e2da495e6c6039f4d311c334e7c", size = 49766, upload-time = "2025-06-19T09:28:23.47Z" },
 ]
 
 [[package]]

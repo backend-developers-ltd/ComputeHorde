@@ -208,7 +208,38 @@ InputVolume = InlineInputVolume | HuggingfaceInputVolume | HTTPInputVolume
 
 
 class HTTPOutputVolume(pydantic.BaseModel):
-    """Volume for uploading files to the Internet via HTTP."""
+    """
+    Volume for uploading files to the Internet via HTTP.
+
+    Supports both HTTP PUT and POST uploads.
+
+    - For **PUT** uploads, provide the full presigned URL using the `url` parameter.
+    - For **POST** uploads, also include any required form fields using the `form_fields` dictionary.
+
+    Examples:
+    PUT upload:
+        HTTPOutputVolume(
+            http_method="PUT",
+            url="https://<your-presigned-url>"
+        )
+
+    POST upload:
+        HTTPOutputVolume(
+            http_method="POST",
+            url="https://<your-presigned-post-url>",
+            form_fields={
+                "key": "example.txt",
+                "policy": "<base64-policy>",
+                "signature": "<signature>",
+                "AWSAccessKeyId": "<access-key-id>"
+            }
+        )
+
+    Note:
+        The SDK does **not** generate presigned URLs for you. Use tools like `boto3`, or your S3 provider’s SDK
+        to generate the required `url` and optional `form_fields`.
+
+    """
 
     http_method: Literal["POST", "PUT"]
     """HTTP method to use, can be POST or PUT."""

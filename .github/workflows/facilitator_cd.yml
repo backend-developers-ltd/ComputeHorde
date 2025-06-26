@@ -3,6 +3,7 @@ name: "CD: facilitator (all)"
 on:
   push:
     branches:
+    - 'master'
     - 'deploy-facilitator-staging'
     - 'deploy-facilitator-prod'
 
@@ -26,10 +27,21 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: deploy to aws
+      - name: Set deployment environment
+        id: set-env
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/master" ]] || [[ "${GITHUB_REF}" == "refs/heads/deploy-facilitator-staging" ]]; then
+            echo "env=staging" >> $GITHUB_OUTPUT
+          elif [[ "${GITHUB_REF}" == "refs/heads/deploy-facilitator-prod" ]]; then
+            echo "env=prod" >> $GITHUB_OUTPUT
+          else
+            echo "Unknown branch: ${GITHUB_REF}"
+            exit 1
+          fi
+      - name: Deploy to AWS
         run: |
           set -e
-          export ENVIRONMENT=${GITHUB_REF_NAME:19}
+          export ENVIRONMENT=${{ steps.set-env.outputs.env }}
           export GITHUB_TOKEN="${{ steps.app_token.outputs.token }}"
           export ADDITIONAL_PACKAGES="${{ vars.ADDITIONAL_PACKAGES }}"
           export HTTP_ASGI_APPLICATION_PATH="${{ vars.HTTP_ASGI_APPLICATION_PATH }}"
@@ -37,3 +49,4 @@ jobs:
           export TAG=deployed-facilitator-${ENVIRONMENT}-`date -u +"%Y-%m-%dT%H.%M.%S"`
           git tag $TAG
           git push origin $TAG
+

@@ -1,4 +1,5 @@
 import logging
+import math
 from datetime import timedelta
 from typing import assert_never
 
@@ -99,20 +100,22 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
             block = await subtensor.get_current_block()
     assert block is not None, "Failed to get current block from cache or subtensor."
 
-    cycle = get_cycle_containing_block(block, netuid=settings.BITTENSOR_NETUID)
-    time_remaining_in_cycle = (cycle.stop - block) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
+    if not await aget_config("DYNAMIC_ALLOW_CROSS_CYCLE_ORGANIC_JOBS"):
+        seconds_remaining_in_cycle = get_seconds_remaining_in_current_cycle(block)
 
-    time_required = (
-        await aget_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME")
-        + await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT")
-        + await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT")
-        + EXECUTOR_CLASS[executor_class].spin_up_time
-        + executor_seconds
-    )
+        seconds_required_in_cycle = (
+            await aget_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME")
+            + await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT")
+            + await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT")
+            + EXECUTOR_CLASS[executor_class].spin_up_time
+            + executor_seconds
+        )
 
-    if time_remaining_in_cycle < timedelta(seconds=time_required):
-        logger.debug(f"NotEnoughTimeInCycle: {time_remaining_in_cycle=} {time_required=}")
-        raise NotEnoughTimeInCycle()
+        if seconds_remaining_in_cycle < seconds_required_in_cycle:
+            logger.debug(
+                f"NotEnoughTimeInCycle: {seconds_remaining_in_cycle=} {seconds_required_in_cycle=}"
+            )
+            raise NotEnoughTimeInCycle()
 
     manifests_qs = (
         MinerManifest.objects.select_related("miner")
@@ -281,3 +284,11 @@ async def blacklist_miner(
             "end_ts": blacklist_until.isoformat(),
         },
     )
+
+
+def get_seconds_remaining_in_current_cycle(current_block: int) -> int:
+    cycle = get_cycle_containing_block(current_block, netuid=settings.BITTENSOR_NETUID)
+    time_remaining_in_cycle = (
+        cycle.stop - current_block
+    ) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
+    return math.floor(time_remaining_in_cycle.total_seconds())

@@ -121,6 +121,12 @@ This example demonstrates how to submit a job with additional parameters, includ
 
     asyncio.run(main())
 
+.. note::
+
+    To upload job outputs to S3-compatible storage (e.g., AWS S3, Cloudflare R2),
+    you must generate a presigned URL yourself and pass it to ``HTTPOutputVolume``.
+    See the `send_hello_world_job.py <https://github.com/backend-developers-ltd/ComputeHorde/blob/master/local_stack/send_hello_world_job.py>`_
+    example in the GitHub repo for a full working test.
 
 Managing ComputeHorde Jobs
 --------------------------
