@@ -1,0 +1,15 @@
+[project]
+name = "health-probe"
+version = "0.1.0"
+description = "Health probe for testing subnet's health by running an organic task."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "bittensor>=9.7.0",
+    "compute-horde-sdk",
+    "django-environ>=0.12.0",
+    "prometheus-client>=0.22.1",
+]
+
+[tool.uv.sources]
+compute-horde-sdk = { path = "../compute_horde_sdk" }
