@@ -3,10 +3,11 @@ import base64
 import dataclasses
 import json
 import logging
+import sys
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping, Sequence
 from datetime import timedelta
-from typing import Any, Self, TypeAlias
+from typing import Any, TypeAlias
 from urllib.parse import urljoin
 
 import bittensor_wallet
@@ -35,6 +36,11 @@ from .models import (
     InputVolume,
     OutputVolume,
 )
+
+if sys.version_info >= (3, 11):  # noqa: UP036
+    from typing import Self
+else:
+    from typing_extensions import Self  # noqa: UP035
 
 logger = logging.getLogger(__name__)
 

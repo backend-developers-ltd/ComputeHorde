@@ -4,15 +4,20 @@ import datetime
 import hashlib
 import json
 import re
+import sys
 import time
 import typing
-from enum import StrEnum
 from typing import ClassVar, Protocol
 
 import bittensor_wallet
 from pydantic import BaseModel, JsonValue, field_serializer, field_validator
 
 from compute_horde_core.streaming import StreamingDetails
+
+if sys.version_info >= (3, 11):  # noqa: UP036
+    from enum import StrEnum
+else:
+    from backports.strenum import StrEnum  # noqa: UP035
 
 
 class SignatureScope(StrEnum):

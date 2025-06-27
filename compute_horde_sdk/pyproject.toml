@@ -1,6 +1,6 @@
 [project]
 name = "compute-horde-sdk"
-requires-python = ">=3.11,<3.13"  # bittensor doesn't work on 3.13+
+requires-python = ">=3.10,<3.13"  # bittensor doesn't work on 3.13+
 keywords = []
 license = {text = "MIT"}
 readme = "README.md"
@@ -13,6 +13,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
@@ -23,6 +24,8 @@ dependencies = [
     "bittensor-wallet>=3.0.0,<4",
     "tenacity>=9.0.0,<10.0.0",
     "huggingface-hub[hf_transfer]>=0.26.1",
+    "async-timeout>=4.0,<5.0; python_version < '3.11'",
+    "backports.strenum; python_version < '3.11'"
 ]
 
 [project.urls]
@@ -73,7 +76,7 @@ test = [
     "pytest-httpx>=0.35.0",
 ]
 docs = [
-    "sphinx>=8.2.3",
+    "sphinx>=8.1.0",
     "sphinx-multiversion>=0.2.4",
     "sphinx-rtd-theme>=3.0.2",
 ]

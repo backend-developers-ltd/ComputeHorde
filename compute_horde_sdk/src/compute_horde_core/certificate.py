@@ -1,8 +1,9 @@
 import asyncio
 import ipaddress
 import logging
+import sys
 import tempfile
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import aiohttp
@@ -12,6 +13,13 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID
+
+if sys.version_info >= (3, 11):  # noqa: UP036
+    from datetime import UTC
+else:
+    from datetime import timezone
+
+    UTC = timezone.utc  # noqa: UP017
 
 logger = logging.getLogger(__name__)
 

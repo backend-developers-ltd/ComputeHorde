@@ -1,4 +1,9 @@
-from enum import StrEnum
+import sys
+
+if sys.version_info >= (3, 11):  # noqa: UP036
+    from enum import StrEnum
+else:
+    from backports.strenum import StrEnum  # noqa: UP035
 
 
 class ExecutorClass(StrEnum):

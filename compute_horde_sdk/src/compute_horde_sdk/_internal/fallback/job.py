@@ -1,9 +1,10 @@
 import asyncio
+import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -13,6 +14,11 @@ from .exceptions import FallbackJobTimeoutError
 
 if TYPE_CHECKING:
     from .client import FallbackClient
+
+if sys.version_info >= (3, 11):  # noqa: UP036
+    from typing import Self
+else:
+    from typing_extensions import Self  # noqa: UP035
 
 
 JOB_REFRESH_INTERVAL = timedelta(seconds=3)
