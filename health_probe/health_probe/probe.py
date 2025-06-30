@@ -74,8 +74,6 @@ class HealthProbe(Probe):
             ) from exc
         except ComputeHordeError as exc:
             raise HealthProbeFailedJobCreation() from exc
-        except Exception as exc:
-            raise HealthProbeFailedJobCreation("Probe encountered unknown exception during job creation.") from exc
 
     async def _await_job(self, job: ComputeHordeJob, timeout: float) -> None:
         logger.info(f"Waiting {timeout} seconds for the job with uuid: '{job.uuid}'.")
@@ -85,8 +83,6 @@ class HealthProbe(Probe):
             raise HealthProbeFailedJobExecution("Execution of the probe's job timed out.") from exc
         except ComputeHordeError as exc:
             raise HealthProbeFailedJobExecution() from exc
-        except Exception as exc:
-            raise HealthProbeFailedJobExecution("Probe encountered unknown exception during job execution.") from exc
 
     async def _verify_job_results(self, job: ComputeHordeJob) -> None:
         match job.status:
@@ -103,4 +99,7 @@ class HealthProbe(Probe):
         except HealthProbeFailed as exc:
             logger.warning("The probe has failed.", exc_info=True)
             severity = exc.severity
+        except Exception:
+            logger.exception("The probe encountered an unexpected exception.")
+            severity = HealthSeverity.UNHEALTHY
         return HealthProbeResults(start_time=start_time, end_time=datetime.now(), severity=severity)
