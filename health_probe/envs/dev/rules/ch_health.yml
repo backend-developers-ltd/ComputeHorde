@@ -1,0 +1,35 @@
+groups:
+  - name: Compute Horde Health Probe
+    # Health probe (by default) is firing an organic task every 5 minutes after a success of the previous task,
+    # or 2 minutes after a failure.
+    rules:
+      - alert: SubnetBusyWarning
+        expr: changes(health_severity_total{level="1"}[10m]) >= 3
+        keep_firing_for: 20m
+        labels:
+          severity: warning
+        annotations:
+          description: |
+            The subnet is getting busy!
+            Health probe could not schedule an organic task to the subnet for {{ $value }} times in last 10 minutes.
+            instance='{{ $labels.instance }}' client='{{ $labels.client }}' client_server_group='{{ $labels.client_server_group }}'
+      - alert: SubnetBusyCritical
+        expr: changes(health_severity_total{level="1"}[30m]) >= 8
+        keep_firing_for: 20m
+        labels:
+          severity: critical
+        annotations:
+          description: |
+            The subnet is constantly busy!
+            Health probe could not schedule an organic task to the subnet for {{ $value }} times in last 30 minutes.
+            instance='{{ $labels.instance }}' client='{{ $labels.client }}' client_server_group='{{ $labels.client_server_group }}'
+      - alert: SubnetBroken
+        expr: changes(health_severity_total{level="2"}[10m]) >= 3
+        keep_firing_for: 20m
+        labels:
+          severity: critical
+        annotations:
+          description: |
+            The subnet is constantly failing organic tasks!
+            Health probe's organic tasks failed for {{ $value }} times in last 10 minutes.
+            instance='{{ $labels.instance }}' client='{{ $labels.client }}' client_server_group='{{ $labels.client_server_group }}'

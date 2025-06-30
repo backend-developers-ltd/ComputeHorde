@@ -1,0 +1,25 @@
+version: '3.7'
+
+services:
+  health_probe:
+    image: backenddevelopersltd/compute-horde-health-probe:v0-latest
+    environment:
+      - ENV=${ENV}
+      - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
+      - BITTENSOR_WALLET_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
+      - BITTENSOR_WALLET_PATH=${BITTENSOR_WALLET_PATH}
+      - FACILITATOR_URL=${FACILITATOR_URL}
+      - METRICS_SERVER_PORT=${METRICS_SERVER_PORT}
+    volumes:
+      - ${PWD}/wallets:/root/src/wallets
+    ports:
+      - 8080:8080
+
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ${PWD}/envs/dev/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ${PWD}/envs/dev/rules:/etc/prometheus/rules
+    ports:
+      - 9090:9090
