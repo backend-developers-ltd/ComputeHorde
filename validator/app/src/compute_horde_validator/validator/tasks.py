@@ -81,7 +81,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 
 from . import eviction
 from .dynamic_config import aget_config
-from .models import AdminJobRequest, MetagraphSnapshot
+from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
 from .scoring import score_batches
 
 if False:
@@ -1626,8 +1626,7 @@ async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycl
     miners = [m async for m in Miner.objects.filter(hotkey__in=miners_hotkeys)]
     validators = [m async for m in Miner.objects.filter(hotkey__in=validators_hotkeys)]
 
-    # Scrape manifests from miners
-    manifests_dict = await get_manifests_from_miners(miners)
+    manifests_dict = await _get_latest_manifests(miners)
     # logger.debug(f"miners: {miners}, validators: {validators}, manifests: {manifests_dict}")
     if not manifests_dict:
         msg = "No manifests fetched - skipping compute time allowances"
@@ -2057,3 +2056,111 @@ def slash_collateral_task(job_uuid: str) -> None:
             else:
                 job.slashed = True
                 job.save()
+
+
+async def _get_latest_manifests(miners: list[Miner]) -> dict[str, dict[ExecutorClass, int]]:
+    """
+    Get manifests from periodic polling data stored in MinerManifest table.
+    """
+    manifests_dict = {}
+
+    for miner in miners:
+        latest_manifests = [
+            m
+            async for m in MinerManifest.objects.filter(miner=miner).order_by(
+                "executor_class", "-created_at"
+            )
+        ]
+
+        if latest_manifests:
+            manifest = {}
+            seen_classes = set()
+            for manifest_record in latest_manifests:
+                if manifest_record.executor_class not in seen_classes:
+                    executor_class = ExecutorClass(manifest_record.executor_class)
+                    manifest[executor_class] = manifest_record.online_executor_count
+                    seen_classes.add(manifest_record.executor_class)
+
+            if manifest:
+                manifests_dict[miner.hotkey] = manifest
+
+    return manifests_dict
+
+
+@app.task
+def poll_miner_manifests() -> None:
+    """
+    Poll all miners for their manifests and update the MinerManifest table.
+    This runs independently of synthetic job batches.
+    """
+    async_to_sync(_poll_miner_manifests)()
+
+
+async def _poll_miner_manifests() -> None:
+    """
+    Poll miners connected to this validator for their manifests and update the database.
+    """
+    try:
+        metagraph = await MetagraphSnapshot.objects.aget(id=MetagraphSnapshot.SnapshotType.LATEST)
+        serving_hotkeys = metagraph.get_serving_hotkeys()
+
+        if not serving_hotkeys:
+            logger.info("No serving miners in metagraph, skipping manifest polling")
+            return
+
+        miners = [m async for m in Miner.objects.filter(hotkey__in=serving_hotkeys)]
+
+        if not miners:
+            logger.info("No serving miners found in database, skipping manifest polling")
+            return
+
+        logger.info(f"Polling manifests from {len(miners)} serving miners")
+
+    except MetagraphSnapshot.DoesNotExist:
+        logger.warning("No metagraph snapshot found, skipping manifest polling")
+        return
+
+    manifests_dict = await get_manifests_from_miners(miners, timeout=30)
+
+    manifest_records = []
+
+    for miner in miners:
+        manifest = manifests_dict.get(miner.hotkey, {})
+
+        if manifest:
+            for executor_class, executor_count in manifest.items():
+                manifest_records.append(
+                    MinerManifest(
+                        miner=miner,
+                        batch=None,
+                        executor_class=executor_class,
+                        executor_count=executor_count,
+                        online_executor_count=executor_count,
+                    )
+                )
+            logger.debug(f"Stored manifest for {miner.hotkey}: {manifest}")
+        else:
+            last_manifests = [
+                m
+                async for m in MinerManifest.objects.filter(
+                    miner=miner,
+                ).order_by("-created_at")
+            ]
+
+            if last_manifests:
+                for last_manifest in last_manifests:
+                    manifest_records.append(
+                        MinerManifest(
+                            miner=miner,
+                            batch=None,
+                            executor_class=last_manifest.executor_class,
+                            executor_count=last_manifest.executor_count,
+                            online_executor_count=0,
+                        )
+                    )
+            logger.warning(f"No manifest received from {miner.hotkey}, marked as offline")
+
+    if manifest_records:
+        await MinerManifest.objects.abulk_create(manifest_records)
+        logger.info(f"Stored {len(manifest_records)} manifests")
+    logger.info(f"Manifest polling complete: {len(manifest_records)} manifests stored")
