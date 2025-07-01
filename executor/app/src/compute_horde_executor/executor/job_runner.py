@@ -439,7 +439,7 @@ class JobRunner:
         except Exception as e:
             logger.error(f"Failed to remove temp dir {self.temp_dir}: {e}")
 
-    async def _unpack_volume(self, volume: Volume | None):
+    async def unpack_volume(self):
         assert str(self.volume_mount_dir) not in {"~", "/"}
         for path in self.volume_mount_dir.glob("*"):
             if path.is_file():
@@ -447,6 +447,7 @@ class JobRunner:
             elif path.is_dir():
                 shutil.rmtree(path)
 
+        volume = await self.get_job_volume()
         if volume is not None:
             # TODO(mlech): Refactor this to not treat `HuggingfaceVolume` with a special care
             volume_downloader = VolumeDownloader.for_volume(volume)
@@ -489,6 +490,3 @@ class JobRunner:
             raise JobError("Received multiple volumes")
 
         return initial_volume or late_volume
-
-    async def unpack_volume(self):
-        await self._unpack_volume(await self.get_job_volume())
