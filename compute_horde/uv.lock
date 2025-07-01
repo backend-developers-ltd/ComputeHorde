@@ -488,7 +488,7 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
-version = "0.0.9"
+version = "0.0.10"
 source = { editable = "../compute_horde_sdk" }
 dependencies = [
     { name = "asgiref" },
