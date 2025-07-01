@@ -545,11 +545,12 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
-version = "0.0.9"
+version = "0.0.11"
 source = { editable = "../compute_horde_sdk" }
 dependencies = [
     { name = "asgiref", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "bittensor-wallet", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "cryptography", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "huggingface-hub", extra = ["hf-transfer"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -563,6 +564,7 @@ requires-dist = [
     { name = "backports-strenum", marker = "python_full_version < '3.11'" },
     { name = "bittensor-wallet", specifier = ">=3.0.0,<4" },
     { name = "build", marker = "extra == 'fallback'" },
+    { name = "cryptography", specifier = ">=42.0.8" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=0.26.1" },
     { name = "pydantic", specifier = ">=2.3,<3" },
