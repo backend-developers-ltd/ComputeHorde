@@ -195,11 +195,9 @@ class MinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorToMinerM
             return
 
         if isinstance(msg, V0ExecutorManifestRequest):
-            if self.ctx.manifests[self.miner_hotkey] is None:
-                self.ctx.manifests[self.miner_hotkey] = msg.manifest
-                self.ctx.manifest_events[self.miner_hotkey].set()
-            else:
-                logger.warning("%s duplicate message: %s", self.miner_name, msg.message_type)
+            # No longer handling manifest requests during synthetic jobs
+            # Manifests are now managed by periodic polling
+            logger.debug("%s received manifest request (ignored during synthetic jobs): %s", self.miner_name, msg.message_type)
             return
 
         job_uuid = getattr(msg, "job_uuid", None)
@@ -491,7 +489,6 @@ class BatchContext:
 
     # TODO: now `manifests` and `executors` have similar shape due to the protocol change. Do we still need both?
     manifests: dict[str, dict[ExecutorClass, int] | None]
-    manifest_events: dict[str, asyncio.Event]
 
     # randomized, but order preserving list of job.uuid
     # used to go from indices returned by asyncio.gather() back to job.uuid
@@ -887,7 +884,6 @@ async def _init_context(
         ctx.job_generators[hotkey] = {}
         ctx.online_executor_count[hotkey] = defaultdict(int)
         ctx.manifests[hotkey] = None
-        ctx.manifest_events[hotkey] = asyncio.Event()
 
     return ctx
 
@@ -2163,20 +2159,9 @@ def _db_persist_critical(ctx: BatchContext) -> None:
 def _db_persist(ctx: BatchContext) -> None:
     start_time = time.time()
 
-    miner_manifests: list[MinerManifest] = []
-    for miner in ctx.miners.values():
-        for executor_class, count in ctx.executors[miner.hotkey].items():
-            online_executor_count = ctx.online_executor_count[miner.hotkey].get(executor_class, 0)
-            miner_manifests.append(
-                MinerManifest(
-                    miner=miner,
-                    batch=ctx.batch,
-                    executor_class=executor_class,
-                    executor_count=count,
-                    online_executor_count=online_executor_count,
-                )
-            )
-    MinerManifest.objects.bulk_create(miner_manifests)
+    # No longer creating MinerManifest records during synthetic job batches
+    # Manifests are now managed by the periodic polling task
+    logger.info("Skipping miner manifest creation - manifests are now managed by periodic polling")
 
     # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {

@@ -656,6 +656,13 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(minutes=1).total_seconds(),
         },
     },
+    "poll_miner_manifests": {
+        "task": "compute_horde_validator.validator.tasks.poll_miner_manifests",
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
+    },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
