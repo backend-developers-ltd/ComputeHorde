@@ -155,17 +155,24 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         cycle__stop__gt=block,
         miner__hotkey__in=latest_miner_manifest.keys(),
         validator__hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address,
-        remaining_allowance__gte=executor_seconds,
     )
+    if await aget_config("DYNAMIC_CHECK_ALLOWANCE_WHILE_ROUTING"):
+        allowance_qs = allowance_qs.filter(remaining_allowance__gt=executor_seconds)
+    else:
+        logger.warning("Allowance check disabled with dynamic config.")
+
     allowances = [allowance async for allowance in allowance_qs.all()]
 
     if not allowances:
         raise NoMinerWithEnoughAllowance()
 
+    # prefer miners with more allowance
     allowances.sort(
         key=lambda allowance: (
             # percentage of remaining allowance
-            allowance.remaining_allowance / allowance.initial_allowance,
+            (allowance.remaining_allowance / allowance.initial_allowance)
+            if allowance.initial_allowance
+            else 0.0,
             # miner collateral as a tiebreaker
             allowance.miner.collateral_wei,
         ),
