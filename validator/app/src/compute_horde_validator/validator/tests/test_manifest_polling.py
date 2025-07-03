@@ -11,7 +11,6 @@ from compute_horde_validator.validator.models import (
     MetagraphSnapshot,
     Miner,
     MinerManifest,
-    SyntheticJobBatch,
 )
 from compute_horde_validator.validator.tasks import (
     _get_latest_manifests,
@@ -34,34 +33,57 @@ def common_test_setup():
 async def test_get_latest_manifests_returns_latest_per_executor_class():
     """Test that _get_latest_manifests returns the latest manifest for each executor class."""
     miner = await Miner.objects.acreate(hotkey="test_miner")
-    cycle = await Cycle.objects.acreate(start=50, stop=250)
-    batch1 = await SyntheticJobBatch.objects.acreate(block=100, cycle=cycle)
-    batch2 = await SyntheticJobBatch.objects.acreate(block=200, cycle=cycle)
 
-    await MinerManifest.objects.abulk_create(
-        [
-            MinerManifest(
-                miner=miner,
-                batch=batch1,
-                executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-                executor_count=5,
-                online_executor_count=3,
-            ),
-            MinerManifest(
-                miner=miner,
-                batch=batch2,
-                executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-                executor_count=5,
-                online_executor_count=4,
-            ),
-            MinerManifest(
-                miner=miner,
-                batch=batch1,
-                executor_class=ExecutorClass.always_on__gpu_24gb,
-                executor_count=3,
-                online_executor_count=2,
-            ),
-        ]
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+        executor_count=5,
+        online_executor_count=3,
+    )
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+        executor_count=5,
+        online_executor_count=4,
+    )
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+        executor_count=6,
+        online_executor_count=2,
+    )
+
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
+        executor_count=3,
+        online_executor_count=2,
+    )
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
+        executor_count=1,
+        online_executor_count=0,
+    )
+
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        executor_count=2,
+        online_executor_count=1,
+    )
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.always_on__llm__a6000,
+        executor_count=3,
+        online_executor_count=5,
     )
 
     manifests_dict = await _get_latest_manifests([miner])
@@ -69,9 +91,119 @@ async def test_get_latest_manifests_returns_latest_per_executor_class():
     assert miner.hotkey in manifests_dict
     manifest = manifests_dict[miner.hotkey]
 
-    # Should return the latest manifest for each executor class
-    assert manifest[ExecutorClass.spin_up_4min__gpu_24gb] == 4  # Latest value
-    assert manifest[ExecutorClass.always_on__gpu_24gb] == 2
+    assert manifest[ExecutorClass.spin_up_4min__gpu_24gb] == 2
+    assert manifest[ExecutorClass.always_on__gpu_24gb] == 0
+    assert manifest[ExecutorClass.always_on__llm__a6000] == 5
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_get_latest_manifests_multiple_miners():
+    """Test that _get_latest_manifests works correctly with multiple miners."""
+    miner1 = await Miner.objects.acreate(hotkey="test_miner_1")
+    miner2 = await Miner.objects.acreate(hotkey="test_miner_2")
+
+    await MinerManifest.objects.acreate(
+        miner=miner1,
+        batch=None,
+        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+        executor_count=3,
+        online_executor_count=2,
+    )
+
+    await MinerManifest.objects.acreate(
+        miner=miner2,
+        batch=None,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
+        executor_count=2,
+        online_executor_count=1,
+    )
+
+    await MinerManifest.objects.acreate(
+        miner=miner1,
+        batch=None,
+        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+        executor_count=3,
+        online_executor_count=3,
+    )
+
+    await MinerManifest.objects.acreate(
+        miner=miner2,
+        batch=None,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
+        executor_count=2,
+        online_executor_count=2,
+    )
+
+    manifests_dict = await _get_latest_manifests([miner1, miner2])
+
+    assert len(manifests_dict) == 2
+    assert "test_miner_1" in manifests_dict
+    assert "test_miner_2" in manifests_dict
+
+    # Check miner1's latest manifests
+    miner1_manifest = manifests_dict["test_miner_1"]
+    assert miner1_manifest[ExecutorClass.spin_up_4min__gpu_24gb] == 3
+
+    # Check miner2's latest manifests
+    miner2_manifest = manifests_dict["test_miner_2"]
+    assert miner2_manifest[ExecutorClass.always_on__gpu_24gb] == 2
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_get_latest_manifests_no_miners():
+    """Test that _get_latest_manifests handles empty miner list correctly."""
+    manifests_dict = await _get_latest_manifests([])
+    assert manifests_dict == {}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_get_latest_manifests_miner_without_manifests():
+    """Test that _get_latest_manifests handles miners without any manifests."""
+    miner = await Miner.objects.acreate(hotkey="test_miner_no_manifests")
+
+    manifests_dict = await _get_latest_manifests([miner])
+    assert manifests_dict == {}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_get_latest_manifests():
+    """Test that _get_latest_manifests handles manifests with different timestamps."""
+    miner = await Miner.objects.acreate(hotkey="test_miner_different_time")
+
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+        executor_count=3,
+        online_executor_count=2,
+    )
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
+        executor_count=2,
+        online_executor_count=1,
+    )
+
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+        executor_count=4,
+        online_executor_count=5,
+    )
+
+    manifests_dict = await _get_latest_manifests([miner])
+
+    assert miner.hotkey in manifests_dict
+    manifest = manifests_dict[miner.hotkey]
+
+    assert manifest[ExecutorClass.spin_up_4min__gpu_24gb] == 5
+    assert manifest[ExecutorClass.always_on__gpu_24gb] == 1
 
 
 @pytest.mark.django_db(transaction=True)
@@ -136,7 +268,7 @@ async def test_compute_time_allowances_use_polled_manifests():
 
     with (
         patch("compute_horde_validator.validator.tasks.COMPUTE_TIME_OVERHEAD_SECONDS", 0),
-        patch("compute_horde_validator.validator.tasks.MIN_VALIDATOR_STAKE", 1),  # Lower for test
+        patch("compute_horde_validator.validator.tasks.MIN_VALIDATOR_STAKE", 1),
         patch_constance({"BITTENSOR_NETUID": 1}),
         patch_constance({"BITTENSOR_APPROXIMATE_BLOCK_DURATION": timedelta(seconds=12)}),
     ):
