@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.protocol_messages import V0InitialJobRequest, V0JobFailedRequest, V0JobRequest
+from compute_horde.protocol_messages import V0InitialJobRequest, V0JobRequest
 from compute_horde_core.certificate import (
     check_endpoint,
     generate_certificate_at,
@@ -25,7 +25,6 @@ from compute_horde_core.volume import (
     HuggingfaceVolume,
     Volume,
     VolumeDownloader,
-    VolumeDownloadFailed,
 )
 from django.conf import settings
 
@@ -439,7 +438,7 @@ class JobRunner:
         except Exception as e:
             logger.error(f"Failed to remove temp dir {self.temp_dir}: {e}")
 
-    async def _unpack_volume(self, volume: Volume | None):
+    async def download_volume(self):
         assert str(self.volume_mount_dir) not in {"~", "/"}
         for path in self.volume_mount_dir.glob("*"):
             if path.is_file():
@@ -447,6 +446,7 @@ class JobRunner:
             elif path.is_dir():
                 shutil.rmtree(path)
 
+        volume = await self.get_job_volume()
         if volume is not None:
             # TODO(mlech): Refactor this to not treat `HuggingfaceVolume` with a special care
             volume_downloader = VolumeDownloader.for_volume(volume)
@@ -454,20 +454,7 @@ class JobRunner:
             if volume_downloader.handles_volume_type() is HuggingfaceVolume:
                 if volume.token is None:
                     volume.token = settings.HF_ACCESS_TOKEN
-                try:
-                    await volume_downloader.download(self.volume_mount_dir)
-                except VolumeDownloadFailed as exc:
-                    logger.error(f"Failed to download model from Hugging Face: {exc}")
-                    raise JobError(
-                        str(exc),
-                        V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD,
-                        exc.error_detail,
-                    ) from exc
-            else:
-                try:
-                    await volume_downloader.download(self.volume_mount_dir)
-                except VolumeDownloadFailed as exc:
-                    raise JobError(str(exc)) from exc
+            await volume_downloader.download(self.volume_mount_dir)
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()
@@ -489,6 +476,3 @@ class JobRunner:
             raise JobError("Received multiple volumes")
 
         return initial_volume or late_volume
-
-    async def unpack_volume(self):
-        await self._unpack_volume(await self.get_job_volume())
