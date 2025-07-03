@@ -22,6 +22,7 @@ import turbobt
 import turbobt.substrate.exceptions
 from asgiref.sync import async_to_sync, sync_to_async
 from bittensor.core.errors import SubstrateRequestException
+from bittensor.utils import u16_normalized_float
 from bittensor.utils.weight_utils import process_weights
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from celery import shared_task
@@ -760,7 +761,7 @@ def normalize_batch_scores(
         weights,
         len(neurons),
         min_allowed_weights,
-        max_weight_limit,
+        u16_normalized_float(max_weight_limit),
     )
 
     return uids, weights
@@ -846,7 +847,7 @@ def apply_dancing_burners(
         weights,
         len(neurons),
         min_allowed_weights,
-        max_weight_limit,
+        u16_normalized_float(max_weight_limit),
     )
 
     return uids, weights
@@ -1287,7 +1288,7 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
         if blocks_diff == 0:
             return
         else:
-            msg = f"Metagraph is {blocks_diff} blocks lagging - previous: {previous_block}, current: {block}"
+            msg = f"Metagraph is {blocks_diff} blocks lagging - previous: {previous_block}, current: {block.number}"
             logger.warning(msg)
             SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
                 type=SystemEvent.EventType.METAGRAPH_SYNCING,

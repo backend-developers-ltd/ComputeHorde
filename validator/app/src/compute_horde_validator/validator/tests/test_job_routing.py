@@ -298,6 +298,27 @@ async def test_pick_miner_for_job__no_miner_with_enough_allowance():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+@pytest.mark.override_config(DYNAMIC_CHECK_ALLOWANCE_WHILE_ROUTING=True)
+@pytest.mark.xfail(raises=routing.NoMinerWithEnoughAllowance)
+async def test_pick_miner_for_job__respects_allowance_check_feature_flag__enabled():
+    await ComputeTimeAllowance.objects.all().aupdate(remaining_allowance=0)
+    job_request = JOB_REQUEST.__replace__(execution_time_limit=101)
+    miner = await routing.pick_miner_for_job_request(job_request)
+    assert miner, "No miner was picked"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+@pytest.mark.override_config(DYNAMIC_CHECK_ALLOWANCE_WHILE_ROUTING=False)
+async def test_pick_miner_for_job__respects_allowance_check_feature_flag__disabled():
+    await ComputeTimeAllowance.objects.all().aupdate(remaining_allowance=0)
+    job_request = JOB_REQUEST.__replace__(execution_time_limit=101)
+    miner = await routing.pick_miner_for_job_request(job_request)
+    assert miner, "No miner was picked"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 async def test_pick_miner_for_job__miner_with_more_allowance_percentage_is_chosen(miners):
     await ComputeTimeAllowance.objects.all().aupdate(remaining_allowance=0)
 

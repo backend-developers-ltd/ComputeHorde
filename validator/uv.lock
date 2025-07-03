@@ -687,11 +687,13 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
-version = "0.0.9"
+version = "0.0.11"
 source = { editable = "../compute_horde_sdk" }
 dependencies = [
+    { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "asgiref", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "bittensor-wallet", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "cryptography", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "huggingface-hub", extra = ["hf-transfer"], marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -700,11 +702,13 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.12.0" },
     { name = "asgiref", specifier = ">=3.8.0,<4" },
     { name = "async-timeout", marker = "python_full_version < '3.11'", specifier = ">=4.0,<5.0" },
     { name = "backports-strenum", marker = "python_full_version < '3.11'" },
     { name = "bittensor-wallet", specifier = ">=3.0.0,<4" },
     { name = "build", marker = "extra == 'fallback'" },
+    { name = "cryptography", specifier = ">=42.0.8" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "huggingface-hub", extras = ["hf-transfer"], specifier = ">=0.26.1" },
     { name = "pydantic", specifier = ">=2.3,<3" },
@@ -2565,7 +2569,7 @@ wheels = [
 
 [[package]]
 name = "turbobt"
-version = "0.0.8.1"
+version = "0.0.8.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bittensor-commit-reveal", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2575,9 +2579,9 @@ dependencies = [
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "xxhash", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/61/82/8604a021e92e4b7e4ddf0ddb4698af331c77da098094f6c100da6255a2ad/turbobt-0.0.8.1.tar.gz", hash = "sha256:cb16ed27da261c112064613a162b65ca34686c68a36785b70b27f5021e25b09a", size = 123550, upload-time = "2025-06-19T09:28:27.255Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/5b/73401457fdf15e34ebdb0a8a6f43f1800372ec040b2b85e2ad585fb25d75/turbobt-0.0.8.2.tar.gz", hash = "sha256:917b9972be2c6b0134c0b0cb4b4599945a1da81515bb75529a7ef79e55d9acaf", size = 123479, upload-time = "2025-07-02T06:22:53.742Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/ed/17b87b13d0f7fd64aac81d27f05f55bf7172d989235a0740cab2656e9a86/turbobt-0.0.8.1-py3-none-any.whl", hash = "sha256:7e5f5cf335d8ec5804cddc16d1856ba0f27c3e2da495e6c6039f4d311c334e7c", size = 49766, upload-time = "2025-06-19T09:28:23.47Z" },
+    { url = "https://files.pythonhosted.org/packages/19/46/d63bb266ceda8c949b3aca01b149983181e883b7fabff4c7e93b75ac0caf/turbobt-0.0.8.2-py3-none-any.whl", hash = "sha256:732b0d755ad7b0d6b74192e16c9703294cf47552cb446da171212bc609c9ee59", size = 49688, upload-time = "2025-07-02T06:22:50.972Z" },
 ]
 
 [[package]]

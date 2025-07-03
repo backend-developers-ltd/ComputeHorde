@@ -422,6 +422,12 @@ CONSTANCE_CONFIG = {
         "Whether organic jobs can be scheduled to run for longer than the current cycle",
         bool,
     ),
+    "DYNAMIC_CHECK_ALLOWANCE_WHILE_ROUTING": (
+        True,
+        "Whether to check for remaining allowance while picking a miner for an organic job. "
+        "In both cases allowance will still be deducted.",
+        bool,
+    ),
 }
 
 # Content Security Policy
