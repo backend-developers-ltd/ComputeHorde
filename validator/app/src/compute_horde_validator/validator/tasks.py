@@ -2074,12 +2074,9 @@ async def _get_latest_manifests(miners: list[Miner]) -> dict[str, dict[ExecutorC
 
         if latest_manifests:
             manifest = {}
-            seen_classes = set()
             for manifest_record in latest_manifests:
-                if manifest_record.executor_class not in seen_classes:
-                    executor_class = ExecutorClass(manifest_record.executor_class)
-                    manifest[executor_class] = manifest_record.online_executor_count
-                    seen_classes.add(manifest_record.executor_class)
+                executor_class = ExecutorClass(manifest_record.executor_class)
+                manifest[executor_class] = manifest_record.online_executor_count
 
             if manifest:
                 manifests_dict[miner.hotkey] = manifest
