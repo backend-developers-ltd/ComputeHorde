@@ -42,6 +42,37 @@ class AcceptedJob(models.Model):
         FAILED = "FAILED"
         REJECTED = "REJECTED"
 
+        @classmethod
+        def end_states(cls) -> set["AcceptedJob.Status"]:
+            """
+            Determines which job statuses mean that the job will not be updated anymore.
+            """
+            return {cls.FINISHED, cls.FAILED, cls.REJECTED}
+
+        def is_in_progress(self) -> bool:
+            """
+            Check if the job is in progress (has not completed or failed yet).
+            """
+            return self not in AcceptedJob.Status.end_states()
+
+        def is_successful(self) -> bool:
+            """Check if the job has finished successfully."""
+            return self == self.FINISHED
+
+        def is_failed(self) -> bool:
+            """Check if the job has failed."""
+            return self in (self.FAILED, self.REJECTED)
+
+        def is_active(self) -> bool:
+            """
+            Check if the job is in an active state.
+            """
+            return self in {
+                self.WAITING_FOR_EXECUTOR,
+                self.WAITING_FOR_PAYLOAD,
+                self.RUNNING,
+            }
+
     validator = models.ForeignKey(Validator, on_delete=models.CASCADE)
     job_uuid = models.UUIDField()
     executor_token = models.CharField(max_length=73)

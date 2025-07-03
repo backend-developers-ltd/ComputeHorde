@@ -44,7 +44,7 @@ async def test_disconnect_sends_failure_notification_for_active_statuses(status)
     failure_msg = call_args[0][1]
     assert isinstance(failure_msg, V0JobFailedRequest)
     assert failure_msg.job_uuid == "test-job-uuid"
-    assert failure_msg.error_type == V0JobFailedRequest.ErrorType.TIMEOUT
+    assert failure_msg.error_type == V0JobFailedRequest.ErrorType.EXECUTOR_DISCONNECTED
     assert failure_msg.error_detail == error_detail
     assert failure_msg.docker_process_stdout == ""
     assert failure_msg.docker_process_stderr == ""
