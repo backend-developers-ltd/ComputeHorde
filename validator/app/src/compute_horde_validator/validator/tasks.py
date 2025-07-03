@@ -2067,16 +2067,17 @@ async def _get_latest_manifests(miners: list[Miner]) -> dict[str, dict[ExecutorC
     for miner in miners:
         latest_manifests = [
             m
-            async for m in MinerManifest.objects.filter(miner=miner).order_by(
-                "executor_class", "-created_at"
-            )
+            async for m in MinerManifest.objects.filter(miner=miner)
+            .values("executor_class", "online_executor_count")
+            .distinct("executor_class")
+            .order_by("executor_class", "-created_at")
         ]
 
         if latest_manifests:
             manifest = {}
             for manifest_record in latest_manifests:
-                executor_class = ExecutorClass(manifest_record.executor_class)
-                manifest[executor_class] = manifest_record.online_executor_count
+                executor_class = ExecutorClass(manifest_record["executor_class"])
+                manifest[executor_class] = manifest_record["online_executor_count"]
 
             if manifest:
                 manifests_dict[miner.hotkey] = manifest
