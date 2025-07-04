@@ -2162,10 +2162,6 @@ def _db_persist_critical(ctx: BatchContext) -> None:
 def _db_persist(ctx: BatchContext) -> None:
     start_time = time.time()
 
-    # No longer creating MinerManifest records during synthetic job batches
-    # Manifests are now managed by the periodic polling task
-    logger.info("Skipping miner manifest creation - manifests are now managed by periodic polling")
-
     # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {
         str(synthetic_job.job_uuid): synthetic_job
