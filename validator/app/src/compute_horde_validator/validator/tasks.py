@@ -2062,25 +2062,30 @@ async def _get_latest_manifests(miners: list[Miner]) -> dict[str, dict[ExecutorC
     """
     Get manifests from periodic polling data stored in MinerManifest table.
     """
-    manifests_dict = {}
+    if not miners:
+        return {}
 
-    for miner in miners:
-        latest_manifests = [
-            m
-            async for m in MinerManifest.objects.filter(miner=miner)
-            .values("executor_class", "online_executor_count")
-            .distinct("executor_class")
-            .order_by("executor_class", "-created_at")
-        ]
+    miner_hotkeys = [miner.hotkey for miner in miners]
 
-        if latest_manifests:
-            manifest = {}
-            for manifest_record in latest_manifests:
-                executor_class = ExecutorClass(manifest_record["executor_class"])
-                manifest[executor_class] = manifest_record["online_executor_count"]
+    latest_manifests = [
+        m
+        async for m in MinerManifest.objects.filter(miner__hotkey__in=miner_hotkeys)
+        .distinct("miner__hotkey", "executor_class")
+        .order_by("miner__hotkey", "executor_class", "-created_at")
+        .values("miner__hotkey", "executor_class", "online_executor_count")
+    ]
 
-            if manifest:
-                manifests_dict[miner.hotkey] = manifest
+    manifests_dict: dict[str, dict[ExecutorClass, int]] = {}
+
+    for manifest_record in latest_manifests:
+        hotkey = manifest_record["miner__hotkey"]
+        executor_class = ExecutorClass(manifest_record["executor_class"])
+        online_count = manifest_record["online_executor_count"]
+
+        if hotkey not in manifests_dict:
+            manifests_dict[hotkey] = {}
+
+        manifests_dict[hotkey][executor_class] = online_count
 
     return manifests_dict
 
