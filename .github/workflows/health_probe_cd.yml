@@ -9,7 +9,7 @@ on:
 env:
   BUILD_DIRECTORY: "health_probe"
   TAG_VERSION: "v0-latest"
-  DOCKER_REPO_NAME: "backenddevelopersltd/ch-health-probe"
+  DOCKER_REPO_NAME: "backenddevelopersltd/compute-horde-health-probe"
   DIST_VERSION_PREFIX: "health-probe"
 
 jobs:
