@@ -29,7 +29,7 @@ async def main():
     )
     compute_horde_client = ComputeHordeClient(
         hotkey=wallet.hotkey,
-        compute_horde_validator_hotkey=wallet.hotkey.ss58_address,
+        compute_horde_validator_hotkey=settings.VALIDATOR_HOTKEY,
         facilitator_url=settings.FACILITATOR_URL,
     )
     config = ProbeConfig(
