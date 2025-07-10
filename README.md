@@ -416,4 +416,3 @@ To start all the core services locally and be able to schedule jobs that don't r
 etc.) go to run [screen](local_stack/run_in_screen.sh). Once all the tabs look like ready, execute
 [hello_world](local_stack/send_hello_world_job.py). This setup does not require (currently) a subtensor, is 
 self-contained and should run on anything that has a CPU, RAM and an operating system. And docker.
-
