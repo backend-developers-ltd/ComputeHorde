@@ -1,8 +1,12 @@
 import logging
+from contextlib import asynccontextmanager
 from datetime import timedelta
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.models import (
@@ -16,10 +20,98 @@ from compute_horde_validator.validator.tasks import (
     _get_latest_manifests,
     _poll_miner_manifests,
     _set_compute_time_allowances,
+    get_manifests_from_miners,
 )
 from compute_horde_validator.validator.tests.helpers import patch_constance
+from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 logger = logging.getLogger(__name__)
+
+
+async def create_test_miners_with_transport(
+    miner_configs: list[dict[str, Any]],
+) -> tuple[list[Miner], dict[str, SimulationTransport]]:
+    """
+    Create test miners with transport setup.
+
+    Args:
+        miner_configs: List of dicts with keys:
+            - hotkey: str - miner hotkey
+            - address: str - miner address
+            - port: int - miner port
+            - manifest: dict - manifest data
+            - job_uuid: str - job UUID for manifest request
+
+    Returns:
+        tuple: (list of Miner objects, dict mapping hotkey to SimulationTransport)
+    """
+    miners = []
+    transport_map = {}
+
+    for config in miner_configs:
+        miner = await Miner.objects.acreate(
+            hotkey=config["hotkey"], address=config["address"], port=config["port"]
+        )
+        miners.append(miner)
+
+        transport = SimulationTransport(f"sim_{config['hotkey']}")
+
+        manifest_request = V0ExecutorManifestRequest(
+            job_uuid=config["job_uuid"], manifest=config["manifest"]
+        )
+
+        await transport.add_message(manifest_request, send_before=1)
+
+        transport_map[config["hotkey"]] = transport
+
+    return miners, transport_map
+
+
+def create_mock_init_function(transport_map: dict[str, SimulationTransport]):
+    """Create a mock init function for OrganicMinerClient."""
+    original_init = OrganicMinerClient.__init__
+
+    def mock_init(
+        self, miner_hotkey, miner_address, miner_port, job_uuid, my_keypair, transport=None
+    ):
+        simulation_transport = transport_map.get(miner_hotkey)
+        original_init(
+            self,
+            miner_hotkey,
+            miner_address,
+            miner_port,
+            job_uuid,
+            my_keypair,
+            transport=simulation_transport,
+        )
+
+    return mock_init
+
+
+@asynccontextmanager
+async def mock_organic_miner_client(transport_map: dict[str, SimulationTransport]):
+    """Context manager for mocking OrganicMinerClient with transport map."""
+    mock_init = create_mock_init_function(transport_map)
+    with patch.object(OrganicMinerClient, "__init__", mock_init):
+        yield
+
+
+def assert_manifest_contains(manifest: dict, expected_items: dict[ExecutorClass, int]):
+    """Assert that a manifest contains the expected executor class counts."""
+    for executor_class, expected_count in expected_items.items():
+        assert manifest[executor_class] == expected_count, (
+            f"Expected {executor_class} to have count {expected_count}, got {manifest.get(executor_class)}"
+        )
+
+
+async def setup_single_miner_transport(
+    miner: Miner, manifest: dict[ExecutorClass, int], job_uuid: str
+) -> dict[str, SimulationTransport]:
+    """Set up transport for a single miner with a specific manifest."""
+    transport = SimulationTransport(f"sim_{miner.hotkey}")
+    manifest_request = V0ExecutorManifestRequest(job_uuid=job_uuid, manifest=manifest)
+    await transport.add_message(manifest_request, send_before=1)
+    return {miner.hotkey: transport}
 
 
 @pytest.fixture(autouse=True)
@@ -285,3 +377,161 @@ async def test_compute_time_allowances_use_polled_manifests():
         assert allowance_miner == miner
         assert allowance_validator == validator
         assert allowance_cycle == cycle
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_get_manifests_from_miners_with_mocked_transport():
+    """
+    Test get_manifests_from_miners by mocking the transport.
+    """
+    miner_configs = [
+        {
+            "hotkey": "test_miner_1",
+            "address": "192.168.1.1",
+            "port": 8080,
+            "manifest": {
+                ExecutorClass.always_on__gpu_24gb: 2,
+                ExecutorClass.spin_up_4min__gpu_24gb: 1,
+            },
+            "job_uuid": "123",
+        },
+        {
+            "hotkey": "test_miner_2",
+            "address": "192.168.1.2",
+            "port": 8080,
+            "manifest": {
+                ExecutorClass.always_on__llm__a6000: 3,
+                ExecutorClass.always_on__gpu_24gb: 1,
+            },
+            "job_uuid": "456",
+        },
+        {
+            "hotkey": "test_miner_3",
+            "address": "192.168.1.3",
+            "port": 8080,
+            "manifest": {
+                ExecutorClass.spin_up_4min__gpu_24gb: 2,
+            },
+            "job_uuid": "789",
+        },
+    ]
+
+    miners, transport_map = await create_test_miners_with_transport(miner_configs)
+
+    async with mock_organic_miner_client(transport_map):
+        manifests_dict = await get_manifests_from_miners(miners, timeout=5)
+
+    assert len(manifests_dict) == 3
+    assert "test_miner_1" in manifests_dict
+    assert "test_miner_2" in manifests_dict
+    assert "test_miner_3" in manifests_dict
+
+    assert_manifest_contains(
+        manifests_dict["test_miner_1"],
+        {ExecutorClass.always_on__gpu_24gb: 2, ExecutorClass.spin_up_4min__gpu_24gb: 1},
+    )
+    assert_manifest_contains(
+        manifests_dict["test_miner_2"],
+        {ExecutorClass.always_on__llm__a6000: 3, ExecutorClass.always_on__gpu_24gb: 1},
+    )
+    assert_manifest_contains(
+        manifests_dict["test_miner_3"], {ExecutorClass.spin_up_4min__gpu_24gb: 2}
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_get_manifests_from_miners_with_partial_failures():
+    """
+    Test get_manifests_from_miners with some miners failing to respond.
+    """
+    miner_configs = [
+        {
+            "hotkey": "test_miner_1",
+            "address": "192.168.1.1",
+            "port": 8080,
+            "manifest": {
+                ExecutorClass.always_on__gpu_24gb: 2,
+            },
+            "job_uuid": "123",
+        },
+        {
+            "hotkey": "test_miner_2",
+            "address": "192.168.1.2",
+            "port": 8080,
+            "manifest": {},  # Empty manifest - will fail
+            "job_uuid": "456",
+        },
+        {
+            "hotkey": "test_miner_3",
+            "address": "192.168.1.3",
+            "port": 8080,
+            "manifest": {},  # Empty manifest - will fail
+            "job_uuid": "789",
+        },
+    ]
+
+    miners, transport_map = await create_test_miners_with_transport(miner_configs)
+
+    transport_map.pop("test_miner_2", None)
+    transport_map.pop("test_miner_3", None)
+
+    async with mock_organic_miner_client(transport_map):
+        manifests_dict = await get_manifests_from_miners(miners, timeout=5)
+
+    assert len(manifests_dict) == 1
+    assert "test_miner_1" in manifests_dict
+    assert "test_miner_2" not in manifests_dict
+    assert "test_miner_3" not in manifests_dict
+
+    assert_manifest_contains(manifests_dict["test_miner_1"], {ExecutorClass.always_on__gpu_24gb: 2})
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_get_manifests_from_miners_multiple_calls():
+    """
+    Test that multiple calls to get_manifests_from_miners fetch the latest manifest from the miner each time.
+    """
+    miner = await Miner.objects.acreate(hotkey="test_miner_1", address="192.168.1.1", port=8080)
+
+    manifest_v1 = {
+        ExecutorClass.always_on__gpu_24gb: 1,
+    }
+    manifest_v2 = {
+        ExecutorClass.always_on__gpu_24gb: 2,
+        ExecutorClass.spin_up_4min__gpu_24gb: 3,
+    }
+    manifest_v3 = {
+        ExecutorClass.always_on__gpu_24gb: 5,
+        ExecutorClass.spin_up_4min__gpu_24gb: 7,
+        ExecutorClass.always_on__llm__a6000: 2,
+    }
+
+    transport_map = await setup_single_miner_transport(miner, manifest_v1, "123")
+    async with mock_organic_miner_client(transport_map):
+        manifests_dict = await get_manifests_from_miners([miner], timeout=5)
+        assert_manifest_contains(
+            manifests_dict["test_miner_1"], {ExecutorClass.always_on__gpu_24gb: 1}
+        )
+
+    transport_map = await setup_single_miner_transport(miner, manifest_v2, "456")
+    async with mock_organic_miner_client(transport_map):
+        manifests_dict = await get_manifests_from_miners([miner], timeout=5)
+        assert_manifest_contains(
+            manifests_dict["test_miner_1"],
+            {ExecutorClass.always_on__gpu_24gb: 2, ExecutorClass.spin_up_4min__gpu_24gb: 3},
+        )
+
+    transport_map = await setup_single_miner_transport(miner, manifest_v3, "789")
+    async with mock_organic_miner_client(transport_map):
+        manifests_dict = await get_manifests_from_miners([miner], timeout=5)
+        assert_manifest_contains(
+            manifests_dict["test_miner_1"],
+            {
+                ExecutorClass.always_on__gpu_24gb: 5,
+                ExecutorClass.spin_up_4min__gpu_24gb: 7,
+                ExecutorClass.always_on__llm__a6000: 2,
+            },
+        )
