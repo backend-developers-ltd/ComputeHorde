@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Any, Dict, List, Tuple, TypedDict
+from typing import TypedDict
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -30,29 +30,19 @@ logger = logging.getLogger(__name__)
 
 class MinerConfig(TypedDict):
     """Configuration for creating a test miner with transport."""
+
     hotkey: str
     address: str
     port: int
-    manifest: Dict[ExecutorClass, int]
+    manifest: dict[ExecutorClass, int]
     job_uuid: str
 
 
 async def create_test_miners_with_transport(
-    miner_configs: List[MinerConfig],
-) -> Tuple[List[Miner], Dict[str, SimulationTransport]]:
+    miner_configs: list[MinerConfig],
+) -> tuple[list[Miner], dict[str, SimulationTransport]]:
     """
     Create test miners with transport setup.
-
-    Args:
-        miner_configs: List of dicts with keys:
-            - hotkey: str - miner hotkey
-            - address: str - miner address
-            - port: int - miner port
-            - manifest: dict - manifest data
-            - job_uuid: str - job UUID for manifest request
-
-    Returns:
-        tuple: (list of Miner objects, dict mapping hotkey to SimulationTransport)
     """
     miners = []
     transport_map = {}
