@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Any
+from typing import Any, Dict, List, Tuple, TypedDict
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,9 +28,18 @@ from compute_horde_validator.validator.tests.transport import SimulationTranspor
 logger = logging.getLogger(__name__)
 
 
+class MinerConfig(TypedDict):
+    """Configuration for creating a test miner with transport."""
+    hotkey: str
+    address: str
+    port: int
+    manifest: Dict[ExecutorClass, int]
+    job_uuid: str
+
+
 async def create_test_miners_with_transport(
-    miner_configs: list[dict[str, Any]],
-) -> tuple[list[Miner], dict[str, SimulationTransport]]:
+    miner_configs: List[MinerConfig],
+) -> Tuple[List[Miner], Dict[str, SimulationTransport]]:
     """
     Create test miners with transport setup.
 
