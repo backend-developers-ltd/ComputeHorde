@@ -1,8 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
-from datetime import timedelta
 from typing import TypedDict
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from compute_horde.miner_client.organic import OrganicMinerClient
@@ -10,8 +9,6 @@ from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.models import (
-    ComputeTimeAllowance,
-    Cycle,
     MetagraphSnapshot,
     Miner,
     MinerManifest,
@@ -19,7 +16,6 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.tasks import (
     _get_latest_manifests,
     _poll_miner_manifests,
-    _set_compute_time_allowances,
     get_manifests_from_miners,
 )
 from compute_horde_validator.validator.tests.helpers import patch_constance
@@ -121,266 +117,7 @@ def common_test_setup():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_get_latest_manifests_returns_latest_per_executor_class():
-    """Test that _get_latest_manifests returns the latest manifest for each executor class."""
-    miner = await Miner.objects.acreate(hotkey="test_miner")
-
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-        executor_count=5,
-        online_executor_count=3,
-    )
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-        executor_count=5,
-        online_executor_count=4,
-    )
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-        executor_count=6,
-        online_executor_count=2,
-    )
-
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.always_on__gpu_24gb,
-        executor_count=3,
-        online_executor_count=2,
-    )
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.always_on__gpu_24gb,
-        executor_count=1,
-        online_executor_count=0,
-    )
-
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.always_on__llm__a6000,
-        executor_count=2,
-        online_executor_count=1,
-    )
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.always_on__llm__a6000,
-        executor_count=3,
-        online_executor_count=5,
-    )
-
-    manifests_dict = await _get_latest_manifests([miner])
-
-    assert miner.hotkey in manifests_dict
-    manifest = manifests_dict[miner.hotkey]
-
-    assert manifest[ExecutorClass.spin_up_4min__gpu_24gb] == 2
-    assert manifest[ExecutorClass.always_on__gpu_24gb] == 0
-    assert manifest[ExecutorClass.always_on__llm__a6000] == 5
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_get_latest_manifests_multiple_miners():
-    """Test that _get_latest_manifests works correctly with multiple miners."""
-    miner1 = await Miner.objects.acreate(hotkey="test_miner_1")
-    miner2 = await Miner.objects.acreate(hotkey="test_miner_2")
-
-    await MinerManifest.objects.acreate(
-        miner=miner1,
-        batch=None,
-        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-        executor_count=3,
-        online_executor_count=2,
-    )
-
-    await MinerManifest.objects.acreate(
-        miner=miner2,
-        batch=None,
-        executor_class=ExecutorClass.always_on__gpu_24gb,
-        executor_count=2,
-        online_executor_count=1,
-    )
-
-    await MinerManifest.objects.acreate(
-        miner=miner1,
-        batch=None,
-        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-        executor_count=3,
-        online_executor_count=3,
-    )
-
-    await MinerManifest.objects.acreate(
-        miner=miner2,
-        batch=None,
-        executor_class=ExecutorClass.always_on__gpu_24gb,
-        executor_count=2,
-        online_executor_count=2,
-    )
-
-    manifests_dict = await _get_latest_manifests([miner1, miner2])
-
-    assert len(manifests_dict) == 2
-    assert "test_miner_1" in manifests_dict
-    assert "test_miner_2" in manifests_dict
-
-    # Check miner1's latest manifests
-    miner1_manifest = manifests_dict["test_miner_1"]
-    assert miner1_manifest[ExecutorClass.spin_up_4min__gpu_24gb] == 3
-
-    # Check miner2's latest manifests
-    miner2_manifest = manifests_dict["test_miner_2"]
-    assert miner2_manifest[ExecutorClass.always_on__gpu_24gb] == 2
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_get_latest_manifests_no_miners():
-    """Test that _get_latest_manifests handles empty miner list correctly."""
-    manifests_dict = await _get_latest_manifests([])
-    assert manifests_dict == {}
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_get_latest_manifests_miner_without_manifests():
-    """Test that _get_latest_manifests handles miners without any manifests."""
-    miner = await Miner.objects.acreate(hotkey="test_miner_no_manifests")
-
-    manifests_dict = await _get_latest_manifests([miner])
-    assert manifests_dict == {}
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_get_latest_manifests():
-    """Test that _get_latest_manifests handles manifests with different timestamps."""
-    miner = await Miner.objects.acreate(hotkey="test_miner_different_time")
-
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-        executor_count=3,
-        online_executor_count=2,
-    )
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.always_on__gpu_24gb,
-        executor_count=2,
-        online_executor_count=1,
-    )
-
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-        executor_count=4,
-        online_executor_count=5,
-    )
-
-    manifests_dict = await _get_latest_manifests([miner])
-
-    assert miner.hotkey in manifests_dict
-    manifest = manifests_dict[miner.hotkey]
-
-    assert manifest[ExecutorClass.spin_up_4min__gpu_24gb] == 5
-    assert manifest[ExecutorClass.always_on__gpu_24gb] == 1
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_poll_miner_manifests_creates_periodic_manifests():
-    """Test that manifest polling creates periodic manifests (batch=None) from miner data."""
-    miner = await Miner.objects.acreate(hotkey="test_miner")
-
-    await MetagraphSnapshot.objects.acreate(
-        id=MetagraphSnapshot.SnapshotType.LATEST,
-        block=100,
-        alpha_stake=[100.0],
-        tao_stake=[100.0],
-        stake=[100.0],
-        uids=[1],
-        hotkeys=["test_miner"],
-        serving_hotkeys=["test_miner"],
-    )
-
-    mock_manifests = {
-        "test_miner": {
-            ExecutorClass.spin_up_4min__gpu_24gb: 3,
-            ExecutorClass.always_on__gpu_24gb: 2,
-        }
-    }
-
-    with patch(
-        "compute_horde_validator.validator.tasks.get_manifests_from_miners",
-        return_value=mock_manifests,
-    ):
-        await _poll_miner_manifests()
-
-    manifests = [m async for m in MinerManifest.objects.filter(miner=miner, batch__isnull=True)]
-    assert len(manifests) == 2
-
-    manifest_dict = {m.executor_class: m.online_executor_count for m in manifests}
-    assert manifest_dict[str(ExecutorClass.spin_up_4min__gpu_24gb)] == 3
-    assert manifest_dict[str(ExecutorClass.always_on__gpu_24gb)] == 2
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_compute_time_allowances_use_polled_manifests():
-    """Test that compute time allowances use manifests from polling instead of direct miner requests."""
-    cycle = await Cycle.objects.acreate(start=100, stop=200)
-    miner = await Miner.objects.acreate(hotkey="test_miner")
-    validator = await Miner.objects.acreate(hotkey="test_validator")
-
-    await MinerManifest.objects.acreate(
-        miner=miner,
-        batch=None,
-        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
-        executor_count=5,
-        online_executor_count=3,
-    )
-
-    metagraph = MagicMock()
-    metagraph.get_total_validator_stake.return_value = 1000.0
-    metagraph.get_serving_hotkeys.return_value = ["test_miner"]
-    metagraph.hotkeys = ["test_miner", "test_validator"]
-    metagraph.stake = [0.0, 1000.0]
-
-    with (
-        patch("compute_horde_validator.validator.tasks.COMPUTE_TIME_OVERHEAD_SECONDS", 0),
-        patch("compute_horde_validator.validator.tasks.MIN_VALIDATOR_STAKE", 1),
-        patch_constance({"BITTENSOR_NETUID": 1}),
-        patch_constance({"BITTENSOR_APPROXIMATE_BLOCK_DURATION": timedelta(seconds=12)}),
-    ):
-        is_set = await _set_compute_time_allowances(metagraph, cycle)
-        assert is_set is True
-
-        allowances = [cta async for cta in ComputeTimeAllowance.objects.all()]
-        assert len(allowances) == 1
-
-        allowance = allowances[0]
-        allowance_miner = await Miner.objects.aget(pk=allowance.miner_id)
-        allowance_validator = await Miner.objects.aget(pk=allowance.validator_id)
-        allowance_cycle = await Cycle.objects.aget(pk=allowance.cycle_id)
-        assert allowance_miner == miner
-        assert allowance_validator == validator
-        assert allowance_cycle == cycle
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_get_manifests_from_miners_with_mocked_transport():
+async def test_get_manifests_from_miners():
     """
     Test get_manifests_from_miners by mocking the transport.
     """
@@ -441,59 +178,69 @@ async def test_get_manifests_from_miners_with_mocked_transport():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_get_manifests_from_miners_with_partial_failures():
+async def test_poll_miner_manifests_with_partial_failures():
     """
-    Test get_manifests_from_miners with some miners failing to respond.
+    Test _poll_miner_manifests with some miners failing to respond.
     """
-    miner_configs = [
-        {
-            "hotkey": "test_miner_1",
-            "address": "192.168.1.1",
-            "port": 8080,
-            "manifest": {
-                ExecutorClass.always_on__gpu_24gb: 2,
-            },
-            "job_uuid": "123",
-        },
-        {
-            "hotkey": "test_miner_2",
-            "address": "192.168.1.2",
-            "port": 8080,
-            "manifest": {},
-            "job_uuid": "456",
-        },
-        {
-            "hotkey": "test_miner_3",
-            "address": "192.168.1.3",
-            "port": 8080,
-            "manifest": {},
-            "job_uuid": "789",
-        },
-    ]
+    miner1 = await Miner.objects.acreate(hotkey="test_miner_1", address="192.168.1.1", port=8080)
+    miner2 = await Miner.objects.acreate(hotkey="test_miner_2", address="192.168.1.2", port=8080)
+    miner3 = await Miner.objects.acreate(hotkey="test_miner_3", address="192.168.1.3", port=8080)
 
-    miners, transport_map = await create_test_miners_with_transport(miner_configs)
+    await MetagraphSnapshot.objects.acreate(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=100,
+        alpha_stake=[100.0, 100.0, 100.0],
+        tao_stake=[100.0, 100.0, 100.0],
+        stake=[100.0, 100.0, 100.0],
+        uids=[1, 2, 3],
+        hotkeys=["test_miner_1", "test_miner_2", "test_miner_3"],
+        serving_hotkeys=["test_miner_1", "test_miner_2", "test_miner_3"],
+    )
 
-    transport_map.pop("test_miner_2", None)
-    transport_map.pop("test_miner_3", None)
+    transport_map = {}
+
+    transport1 = SimulationTransport("sim_test_miner_1")
+    manifest1 = V0ExecutorManifestRequest(
+        job_uuid="job_1",
+        manifest={
+            ExecutorClass.always_on__gpu_24gb: 2,
+        },
+    )
+    await transport1.add_message(manifest1, send_before=1)
+    transport_map["test_miner_1"] = transport1
 
     async with mock_organic_miner_client(transport_map):
-        manifests_dict = await get_manifests_from_miners(miners, timeout=5)
+        await _poll_miner_manifests()
+
+    manifests_dict = await _get_latest_manifests([miner1, miner2, miner3])
 
     assert len(manifests_dict) == 1
     assert "test_miner_1" in manifests_dict
     assert "test_miner_2" not in manifests_dict
     assert "test_miner_3" not in manifests_dict
 
-    assert_manifest_contains(manifests_dict["test_miner_1"], {ExecutorClass.always_on__gpu_24gb: 2})
+    miner1_manifest = manifests_dict["test_miner_1"]
+    assert miner1_manifest[ExecutorClass.always_on__gpu_24gb] == 2
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_get_manifests_from_miners_multiple_calls():
+async def test_poll_miner_manifests_multiple_calls():
     """
-    Test that multiple calls to get_manifests_from_miners fetch the latest manifest from the miner each time.
+    Test that multiple calls fetch the latest manifest from the miner each time.
     """
     miner = await Miner.objects.acreate(hotkey="test_miner_1", address="192.168.1.1", port=8080)
+
+    await MetagraphSnapshot.objects.acreate(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=100,
+        alpha_stake=[100.0],
+        tao_stake=[100.0],
+        stake=[100.0],
+        uids=[1],
+        hotkeys=["test_miner_1"],
+        serving_hotkeys=["test_miner_1"],
+    )
 
     manifest_v1 = {
         ExecutorClass.always_on__gpu_24gb: 1,
@@ -510,27 +257,95 @@ async def test_get_manifests_from_miners_multiple_calls():
 
     transport_map = await setup_single_miner_transport(miner, manifest_v1, "123")
     async with mock_organic_miner_client(transport_map):
-        manifests_dict = await get_manifests_from_miners([miner], timeout=5)
-        assert_manifest_contains(
-            manifests_dict["test_miner_1"], {ExecutorClass.always_on__gpu_24gb: 1}
-        )
+        await _poll_miner_manifests()
+
+    manifests_dict = await _get_latest_manifests([miner])
+    assert_manifest_contains(manifests_dict["test_miner_1"], {ExecutorClass.always_on__gpu_24gb: 1})
 
     transport_map = await setup_single_miner_transport(miner, manifest_v2, "456")
     async with mock_organic_miner_client(transport_map):
-        manifests_dict = await get_manifests_from_miners([miner], timeout=5)
-        assert_manifest_contains(
-            manifests_dict["test_miner_1"],
-            {ExecutorClass.always_on__gpu_24gb: 2, ExecutorClass.spin_up_4min__gpu_24gb: 3},
-        )
+        await _poll_miner_manifests()
+
+    manifests_dict = await _get_latest_manifests([miner])
+    assert_manifest_contains(
+        manifests_dict["test_miner_1"],
+        {ExecutorClass.always_on__gpu_24gb: 2, ExecutorClass.spin_up_4min__gpu_24gb: 3},
+    )
 
     transport_map = await setup_single_miner_transport(miner, manifest_v3, "789")
     async with mock_organic_miner_client(transport_map):
-        manifests_dict = await get_manifests_from_miners([miner], timeout=5)
-        assert_manifest_contains(
-            manifests_dict["test_miner_1"],
-            {
-                ExecutorClass.always_on__gpu_24gb: 5,
-                ExecutorClass.spin_up_4min__gpu_24gb: 7,
-                ExecutorClass.always_on__llm__a6000: 2,
-            },
-        )
+        await _poll_miner_manifests()
+
+    manifests_dict = await _get_latest_manifests([miner])
+    assert_manifest_contains(
+        manifests_dict["test_miner_1"],
+        {
+            ExecutorClass.always_on__gpu_24gb: 5,
+            ExecutorClass.spin_up_4min__gpu_24gb: 7,
+            ExecutorClass.always_on__llm__a6000: 2,
+        },
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_poll_miner_manifests_with_partial_transport_failures():
+    """
+    Test _poll_miner_manifests when some miners don't respond via transport.
+    """
+    miner1 = await Miner.objects.acreate(hotkey="test_miner_1", address="192.168.1.1", port=8080)
+    miner2 = await Miner.objects.acreate(hotkey="test_miner_2", address="192.168.1.2", port=8080)
+
+    await MinerManifest.objects.acreate(
+        miner=miner2,
+        batch=None,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
+        executor_count=3,
+        online_executor_count=2,
+    )
+    await MinerManifest.objects.acreate(
+        miner=miner2,
+        batch=None,
+        executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+        executor_count=1,
+        online_executor_count=1,
+    )
+
+    await MetagraphSnapshot.objects.acreate(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=100,
+        alpha_stake=[100.0, 100.0],
+        tao_stake=[100.0, 100.0],
+        stake=[100.0, 100.0],
+        uids=[1, 2],
+        hotkeys=["test_miner_1", "test_miner_2"],
+        serving_hotkeys=["test_miner_1", "test_miner_2"],
+    )
+
+    transport_map = {}
+
+    transport1 = SimulationTransport("sim_test_miner_1")
+    manifest1 = V0ExecutorManifestRequest(
+        job_uuid="job_1",
+        manifest={
+            ExecutorClass.always_on__gpu_24gb: 2,
+        },
+    )
+    await transport1.add_message(manifest1, send_before=1)
+    transport_map["test_miner_1"] = transport1
+
+    async with mock_organic_miner_client(transport_map):
+        await _poll_miner_manifests()
+
+    manifests_dict = await _get_latest_manifests([miner1, miner2])
+
+    assert len(manifests_dict) == 2
+    assert "test_miner_1" in manifests_dict
+    assert "test_miner_2" in manifests_dict
+
+    miner1_manifest = manifests_dict["test_miner_1"]
+    assert miner1_manifest[ExecutorClass.always_on__gpu_24gb] == 2
+
+    miner2_manifest = manifests_dict["test_miner_2"]
+    assert miner2_manifest[ExecutorClass.always_on__gpu_24gb] == 0
+    assert miner2_manifest[ExecutorClass.spin_up_4min__gpu_24gb] == 0
