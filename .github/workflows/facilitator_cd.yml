@@ -3,15 +3,15 @@ name: "CD: facilitator (all)"
 on:
   push:
     branches:
-    - 'master'
-    - 'deploy-facilitator-staging'
-    - 'deploy-facilitator-prod'
+      - "master"
+      - "deploy-facilitator-staging"
+      - "deploy-facilitator-prod"
 
 jobs:
   deploy:
     env:
-      AWS_ACCESS_KEY_ID:  ${{ secrets.DEPLOYMENT_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY:  ${{ secrets.DEPLOYMENT_AWS_SECRET_ACCESS_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.DEPLOYMENT_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.DEPLOYMENT_AWS_SECRET_ACCESS_KEY }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: ubuntu-latest
     defaults:
@@ -43,10 +43,8 @@ jobs:
           set -e
           export ENVIRONMENT=${{ steps.set-env.outputs.env }}
           export GITHUB_TOKEN="${{ steps.app_token.outputs.token }}"
-          export ADDITIONAL_PACKAGES="${{ vars.ADDITIONAL_PACKAGES }}"
           export HTTP_ASGI_APPLICATION_PATH="${{ vars.HTTP_ASGI_APPLICATION_PATH }}"
           ./deploy-to-aws.sh $ENVIRONMENT
           export TAG=deployed-facilitator-${ENVIRONMENT}-`date -u +"%Y-%m-%dT%H.%M.%S"`
           git tag $TAG
           git push origin $TAG
-

@@ -1,9 +1,7 @@
-import importlib
 import logging
 from datetime import timedelta
 
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
-from django.conf import settings
 from django.utils.timezone import now
 
 from project.core.models import (
@@ -30,7 +28,6 @@ def evict_all() -> None:
     evict_jobs()
     evict_miner_versions()
     evict_machine_specs()
-    evict_from_additional_apps()
 
 
 def evict_receipts() -> None:
@@ -75,20 +72,3 @@ def evict_machine_specs() -> None:
 
     # TODO: check if it is ok to drop RawSpecsSnapshot altogether
     RawSpecsSnapshot.objects.filter(measured_at__lt=cutoff).delete()
-
-
-def evict_from_additional_apps():
-    """
-    Evict old data from additional apps.
-
-    Additional apps can implement their own eviction the following way:
-        - Add a module `eviction` at the root of the app
-        - In the `eviction` module add a function:
-            def evict(retention_period: timedelta = _DEFAULT) -> None: ...
-    """
-    for app in settings.ADDITIONAL_APPS:
-        try:
-            mod = importlib.import_module(f"{app}.eviction")
-            mod.evict()
-        except (ImportError, AttributeError):
-            pass

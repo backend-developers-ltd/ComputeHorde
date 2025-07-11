@@ -2,7 +2,6 @@ from typing import NamedTuple
 
 import pytest
 from asgiref.sync import sync_to_async
-from constance import config
 
 from ..models import Channel, Validator
 from ..tasks import sync_metagraph
@@ -15,14 +14,38 @@ class MockedAxonInfo(NamedTuple):
 
 
 class MockedNeuron(NamedTuple):
+    uid: int
     hotkey: str
     axon_info: MockedAxonInfo
     stake: float
 
 
+class MockedMetagraph:
+    def __init__(self, neurons):
+        self.neurons = neurons
+        self.total_stake = [n.stake for n in neurons]
+
+
+class MockedSubtensor:
+    def __init__(self, metagraph: MockedMetagraph):
+        self._metagraph = metagraph
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        pass
+
+    def metagraph(self, *args, **kwargs):
+        return self._metagraph
+
+
 validator_params = dict(
     axon_info=MockedAxonInfo(is_serving=False),
-    stake=1.0,
+    stake=1000.0,
 )
 
 miner_params = dict(
@@ -44,19 +67,20 @@ def test__sync_metagraph__activation(monkeypatch):
         ]
     )
 
-    class MockedMetagraph:
-        def __init__(self, *args, **kwargs):
-            self.neurons = [
-                MockedNeuron(hotkey="remains_active", **validator_params),
-                MockedNeuron(hotkey="is_deactivated", **miner_params),
-                MockedNeuron(hotkey="remains_inactive", **miner_params),
-                MockedNeuron(hotkey="is_activated", **validator_params),
-                MockedNeuron(hotkey="new_validator", **validator_params),
-                MockedNeuron(hotkey="new_miner", **miner_params),
-            ]
+    metagraph = MockedMetagraph(
+        neurons=[
+            MockedNeuron(uid=0, hotkey="remains_active", **validator_params),
+            MockedNeuron(uid=1, hotkey="is_deactivated", **miner_params),
+            MockedNeuron(uid=2, hotkey="remains_inactive", **miner_params),
+            MockedNeuron(uid=3, hotkey="is_activated", **validator_params),
+            MockedNeuron(uid=4, hotkey="new_validator", **validator_params),
+            MockedNeuron(uid=5, hotkey="new_miner", **miner_params),
+        ]
+    )
+    subtensor = MockedSubtensor(metagraph=metagraph)
 
     with monkeypatch.context() as mp:
-        mp.setattr(bittensor, "metagraph", MockedMetagraph)
+        mp.setattr(bittensor, "subtensor", subtensor)
         sync_metagraph()
 
     validators = Validator.objects.order_by("id").values_list("ss58_address", "is_active")
@@ -68,121 +92,6 @@ def test__sync_metagraph__activation(monkeypatch):
             dict(ss58_address="remains_inactive", is_active=False),
             dict(ss58_address="is_activated", is_active=True),
             dict(ss58_address="new_validator", is_active=True),
-        ]
-    ]
-
-
-@pytest.mark.django_db(transaction=True)
-def test__sync_metagraph__limit__no_our_validator(monkeypatch):
-    """When there is validator limit"""
-
-    import bittensor
-
-    class MockedMetagraph:
-        def __init__(self, *args, **kwargs):
-            self.neurons = [MockedNeuron(hotkey=str(i), **(validator_params | {"stake": 10 * i})) for i in range(1, 33)]
-
-    config.VALIDATORS_LIMIT = 4
-
-    with monkeypatch.context() as mp:
-        mp.setattr(bittensor, "metagraph", MockedMetagraph)
-        sync_metagraph()
-
-    validators = Validator.objects.order_by("ss58_address").values_list("ss58_address")
-    assert list(validators) == [
-        tuple(d.values())
-        for d in [
-            dict(ss58_address="29"),
-            dict(ss58_address="30"),
-            dict(ss58_address="31"),
-            dict(ss58_address="32"),
-        ]
-    ]
-
-
-@pytest.mark.django_db(transaction=True)
-def test__sync_metagraph__limit_and_our_validator__wrong(monkeypatch):
-    """When there is validator limit and ours is not in validators list"""
-
-    import bittensor
-
-    class MockedMetagraph:
-        def __init__(self, *args, **kwargs):
-            self.neurons = [MockedNeuron(hotkey=str(i), **(validator_params | {"stake": 10 * i})) for i in range(1, 33)]
-
-    config.VALIDATORS_LIMIT = 4
-    config.OUR_VALIDATOR_SS58_ADDRESS = "99"
-
-    with monkeypatch.context() as mp:
-        mp.setattr(bittensor, "metagraph", MockedMetagraph)
-        sync_metagraph()
-
-    validators = Validator.objects.order_by("ss58_address").values_list("ss58_address")
-    assert list(validators) == [
-        tuple(d.values())
-        for d in [
-            dict(ss58_address="29"),
-            dict(ss58_address="30"),
-            dict(ss58_address="31"),
-            dict(ss58_address="32"),
-        ]
-    ]
-
-
-@pytest.mark.django_db(transaction=True)
-def test__sync_metagraph__limit_and_our_validator__inside_limit(monkeypatch):
-    """When there is validator limit and ours is one of best validators"""
-
-    import bittensor
-
-    class MockedMetagraph:
-        def __init__(self, *args, **kwargs):
-            self.neurons = [MockedNeuron(hotkey=str(i), **(validator_params | {"stake": 10 * i})) for i in range(1, 33)]
-
-    config.VALIDATORS_LIMIT = 4
-    config.OUR_VALIDATOR_SS58_ADDRESS = "30"
-
-    with monkeypatch.context() as mp:
-        mp.setattr(bittensor, "metagraph", MockedMetagraph)
-        sync_metagraph()
-
-    validators = Validator.objects.order_by("ss58_address").values_list("ss58_address")
-    assert list(validators) == [
-        tuple(d.values())
-        for d in [
-            dict(ss58_address="29"),
-            dict(ss58_address="30"),
-            dict(ss58_address="31"),
-            dict(ss58_address="32"),
-        ]
-    ]
-
-
-@pytest.mark.django_db(transaction=True)
-def test__sync_metagraph__limit_and_our_validator__outside_limit(monkeypatch):
-    """When there is validator limit and ours is not one of best validators"""
-
-    import bittensor
-
-    class MockedMetagraph:
-        def __init__(self, *args, **kwargs):
-            self.neurons = [MockedNeuron(hotkey=str(i), **(validator_params | {"stake": 10 * i})) for i in range(1, 33)]
-
-    config.VALIDATORS_LIMIT = 4
-    config.OUR_VALIDATOR_SS58_ADDRESS = "25"
-
-    with monkeypatch.context() as mp:
-        mp.setattr(bittensor, "metagraph", MockedMetagraph)
-        sync_metagraph()
-
-    validators = Validator.objects.order_by("ss58_address").values_list("ss58_address")
-    assert list(validators) == [
-        tuple(d.values())
-        for d in [
-            dict(ss58_address="25"),
-            dict(ss58_address="30"),
-            dict(ss58_address="31"),
-            dict(ss58_address="32"),
         ]
     ]
 
@@ -203,14 +112,11 @@ async def test__websocket__disconnect_validator_if_become_inactive(
     await communicator.receive_json_from()
     assert await Channel.objects.filter(validator=validator).aexists()
 
-    class MockedMetagraph:
-        def __init__(self, *args, **kwargs):
-            self.neurons = [
-                MockedNeuron(hotkey=validator.ss58_address, **miner_params),
-            ]
+    metagraph = MockedMetagraph(neurons=[MockedNeuron(uid=0, hotkey=validator.ss58_address, **miner_params)])
+    subtensor = MockedSubtensor(metagraph=metagraph)
 
     with monkeypatch.context() as mp:
-        mp.setattr(bittensor, "metagraph", MockedMetagraph)
+        mp.setattr(bittensor, "subtensor", subtensor)
         await sync_to_async(sync_metagraph)()
 
     assert (await communicator.receive_output())["type"] == "websocket.close"

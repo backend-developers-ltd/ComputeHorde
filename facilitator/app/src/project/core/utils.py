@@ -1,16 +1,11 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING
 
 import wandb
 from asgiref.sync import AsyncToSync, SyncToAsync
 from constance import config
 from django.conf import settings
 from structlog import get_logger
-
-if TYPE_CHECKING:
-    from bittensor.chain_data import NeuronInfo
-
 
 log = get_logger(__name__)
 
@@ -83,14 +78,6 @@ class SafeConfig:
 
 
 safe_config = SafeConfig()
-
-
-def is_validator(neuron: "NeuronInfo") -> bool:
-    if our_validator_address := safe_config.OUR_VALIDATOR_SS58_ADDRESS:
-        if neuron.hotkey == our_validator_address:
-            return True
-
-    return neuron.stake > 0
 
 
 def fetch_compute_subnet_hardware() -> dict:
