@@ -2,6 +2,16 @@
 
 <!-- towncrier release notes start -->
 
+## [0.0.25](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.25) - 2025-07-09
+
+
+### Fixed
+
+Fixed a bug in `compute_horde.validators.tasks.fetch_validators` where non-default
+`settings.COMPUTE_HORDE_VALIDATOR_KEY_FIELD` and `settings.COMPUTE_HORDE_VALIDATOR_ACTIVE_FIELD`
+values caused a crash.
+
+
 ## [0.0.24](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.24) - 2025-02-24
 
 

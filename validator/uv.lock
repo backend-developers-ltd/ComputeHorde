@@ -627,7 +627,7 @@ wheels = [
 
 [[package]]
 name = "compute-horde"
-version = "0.0.24"
+version = "0.0.25"
 source = { editable = "../compute_horde" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2569,7 +2569,7 @@ wheels = [
 
 [[package]]
 name = "turbobt"
-version = "0.0.8.2"
+version = "0.0.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bittensor-commit-reveal", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -2579,9 +2579,9 @@ dependencies = [
     { name = "websockets", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "xxhash", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0a/5b/73401457fdf15e34ebdb0a8a6f43f1800372ec040b2b85e2ad585fb25d75/turbobt-0.0.8.2.tar.gz", hash = "sha256:917b9972be2c6b0134c0b0cb4b4599945a1da81515bb75529a7ef79e55d9acaf", size = 123479, upload-time = "2025-07-02T06:22:53.742Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cd/24/3bb57d4ee50bfe6613ba53c548c9ff784ad212cbc542d82e3d665f96f7a5/turbobt-0.0.10.tar.gz", hash = "sha256:04b578fce7af08501d95f70927b02b056796c8915b147693d4813ebbe45e2663", size = 126615, upload-time = "2025-07-10T07:34:52.092Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/46/d63bb266ceda8c949b3aca01b149983181e883b7fabff4c7e93b75ac0caf/turbobt-0.0.8.2-py3-none-any.whl", hash = "sha256:732b0d755ad7b0d6b74192e16c9703294cf47552cb446da171212bc609c9ee59", size = 49688, upload-time = "2025-07-02T06:22:50.972Z" },
+    { url = "https://files.pythonhosted.org/packages/df/f6/203093accdc9308028bc099be92a8a767f300b47fca69377b6a067a5a2db/turbobt-0.0.10-py3-none-any.whl", hash = "sha256:94cca92f85bd7d2b08d553023759dba6552c741de99ae587a320ae6bb22b3735", size = 53285, upload-time = "2025-07-10T07:34:48.986Z" },
 ]
 
 [[package]]
@@ -2825,7 +2825,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "sentry-sdk", specifier = "==1.29.2" },
     { name = "tenacity", specifier = ">=8.2.3" },
-    { name = "turbobt", specifier = "~=0.0.8" },
+    { name = "turbobt", specifier = "~=0.0.10" },
     { name = "uvloop", specifier = ">=0.19.0" },
     { name = "web3", specifier = ">=7.11.0" },
     { name = "websockets", specifier = ">=14.0,<15.0" },

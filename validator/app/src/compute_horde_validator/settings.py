@@ -799,7 +799,7 @@ FACILITATOR_URI = env.str(
 DEBUG_CONNECT_FACILITATOR_WEBHOOK = env.str("DEBUG_CONNECT_FACILITATOR_WEBHOOK", default=None)
 DEBUG_USE_MOCK_BLOCK_NUMBER = env.bool("DEBUG_USE_MOCK_BLOCK_NUMBER", default=False)
 STATS_COLLECTOR_URL = env.str(
-    "STATS_COLLECTOR_URL", default="https://facilitator.computehorde.io/stats_collector/v0/"
+    "STATS_COLLECTOR_URL", default="https://stats-collector.computehorde.io/stats_collector/v0/"
 )
 # if you need to hit a particular miner, without fetching their key, address or port from the blockchain
 DEBUG_MINER_KEY = env.str("DEBUG_MINER_KEY", default="")
