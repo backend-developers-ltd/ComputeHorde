@@ -17,7 +17,6 @@ DOCKER_BUILDKIT=1 docker build \
   -t project/app \
   --build-context compute-horde-sdk=../compute_horde_sdk \
   --build-context compute-horde=../compute_horde \
-  --build-arg ADDITIONAL_PACKAGES="" \
   --build-arg GITHUB_TOKEN="justplainwrong" \
   --build-arg HTTP_ASGI_APPLICATION_PATH="django.core.asgi.get_asgi_application" \
   --label build_date_utc="$DATE_UTC" \

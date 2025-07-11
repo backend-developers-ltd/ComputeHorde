@@ -97,7 +97,7 @@ def sync_validators(active_validators_keys: list[str]) -> None:
     num_created = Validator.objects.bulk_create(
         [Validator(ss58_address=ss58_address, is_active=True) for ss58_address in to_create]
     )
-    log.debug("validators created", num_created=num_created)
+    log.debug("validators created", num_created=len(num_created))
 
 
 @app.task
@@ -114,7 +114,7 @@ def sync_miners(active_miners_keys: list[str]) -> None:
     num_created = Miner.objects.bulk_create(
         [Miner(ss58_address=ss58_address, is_active=True) for ss58_address in to_create]
     )
-    log.debug("miners created", num_created=num_created)
+    log.debug("miners created", num_created=len(num_created))
 
 
 @app.task
