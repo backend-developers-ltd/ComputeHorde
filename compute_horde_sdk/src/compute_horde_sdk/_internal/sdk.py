@@ -49,6 +49,8 @@ JOB_REFRESH_INTERVAL = timedelta(seconds=3)
 DEFAULT_FACILITATOR_URL = "https://facilitator.computehorde.io/"
 DEFAULT_MAX_JOB_RUN_ATTEMPTS = 3
 HTTP_RETRY_MAX_ATTEMPTS = 5
+HTTP_RETRY_MIN_WAIT_SECONDS = 0.2
+HTTP_RETRY_MAX_WAIT_SECONDS = 5
 RETRYABLE_HTTP_EXCEPTIONS = (
     httpx.ConnectTimeout,
     httpx.PoolTimeout,
@@ -359,7 +361,7 @@ class ComputeHordeClient:
     @tenacity.retry(
         retry=tenacity.retry_if_exception(_retryable_exception),
         stop=tenacity.stop_after_attempt(HTTP_RETRY_MAX_ATTEMPTS),
-        wait=tenacity.wait_exponential_jitter(initial=0.2),
+        wait=tenacity.wait_exponential_jitter(initial=HTTP_RETRY_MIN_WAIT_SECONDS, max=HTTP_RETRY_MAX_WAIT_SECONDS),
         reraise=True,
     )
     async def _make_request(
