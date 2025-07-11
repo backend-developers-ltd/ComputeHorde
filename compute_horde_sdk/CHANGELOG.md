@@ -9,6 +9,12 @@ upcoming release can be found in [changelog.d](changelog.d).
 
 <!-- towncrier release notes start -->
 
+## [0.0.12](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.12) - 2025-07-11
+
+### Fixed
+
+Added exponential backoff to request retries.
+
 ## [0.0.11](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.11) - 2025-07-01
 
 ## [0.0.10](https://github.com/backend-developers-ltd/compute-horde-sdk/releases/tag/v0.0.10) - 2025-07-01

@@ -530,7 +530,7 @@ wheels = [
 
 [[package]]
 name = "compute-horde"
-version = "0.0.24"
+version = "0.0.25"
 source = { editable = "../compute_horde" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -590,7 +590,7 @@ type-check = [
 
 [[package]]
 name = "compute-horde-sdk"
-version = "0.0.11"
+version = "0.0.12"
 source = { editable = "../compute_horde_sdk" }
 dependencies = [
     { name = "aiohttp", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
