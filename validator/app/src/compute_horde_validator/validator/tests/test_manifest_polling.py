@@ -459,14 +459,14 @@ async def test_get_manifests_from_miners_with_partial_failures():
             "hotkey": "test_miner_2",
             "address": "192.168.1.2",
             "port": 8080,
-            "manifest": {},  # Empty manifest - will fail
+            "manifest": {},
             "job_uuid": "456",
         },
         {
             "hotkey": "test_miner_3",
             "address": "192.168.1.3",
             "port": 8080,
-            "manifest": {},  # Empty manifest - will fail
+            "manifest": {},
             "job_uuid": "789",
         },
     ]
