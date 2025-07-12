@@ -3,6 +3,7 @@ from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
@@ -141,17 +142,27 @@ async def asetup_db(num_miners: int = 3, num_validators: int = 2):
     miners = await Miner.objects.abulk_create(
         [Miner(hotkey=hotkey) for hotkey in miner_hotkeys + validator_hotkeys]
     )
-    await MinerManifest.objects.abulk_create(
-        [
-            MinerManifest(
-                miner=miner,
-                batch=batch,
-                executor_class="gpu.will_be_ignored",
-                online_executor_count=0,
-            )
-            for miner in miners
-        ]
-    )
+    # Create manifests for each miner
+    manifest_objects = []
+    for i, miner in enumerate(miners):
+        manifest_objects.extend(
+            [
+                MinerManifest(
+                    miner=miner,
+                    batch=batch,
+                    executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
+                    online_executor_count=(i + 1) * 5,
+                ),
+                MinerManifest(
+                    miner=miner,
+                    batch=batch,
+                    executor_class=ExecutorClass.always_on__llm__a6000,
+                    online_executor_count=i * 5,
+                ),
+            ]
+        )
+
+    await MinerManifest.objects.abulk_create(manifest_objects)
 
     metagraph = MagicMock(spec=MetagraphSnapshot)
     metagraph.block = 720
@@ -225,7 +236,7 @@ async def test_set_compute_time_allowances_failure_no_serving_hotkeys():
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
 async def test_set_compute_time_allowances_failure_no_manifests():
-    cycle, metagraph = await asetup_db()
+    cycle, metagraph = await asetup_db(num_miners=0)
 
     is_set = await _set_compute_time_allowances(metagraph, cycle)
     assert is_set is False

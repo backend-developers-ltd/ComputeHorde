@@ -75,7 +75,6 @@ from compute_horde_validator.validator.dynamic_config import (
 )
 from compute_horde_validator.validator.models import (
     Miner,
-    MinerManifest,
     PromptSample,
     PromptSeries,
     SyntheticJob,
@@ -2162,21 +2161,6 @@ def _db_persist_critical(ctx: BatchContext) -> None:
 @sync_to_async
 def _db_persist(ctx: BatchContext) -> None:
     start_time = time.time()
-
-    miner_manifests: list[MinerManifest] = []
-    for miner in ctx.miners.values():
-        for executor_class, count in ctx.executors[miner.hotkey].items():
-            online_executor_count = ctx.online_executor_count[miner.hotkey].get(executor_class, 0)
-            miner_manifests.append(
-                MinerManifest(
-                    miner=miner,
-                    batch=ctx.batch,
-                    executor_class=executor_class,
-                    executor_count=count,
-                    online_executor_count=online_executor_count,
-                )
-            )
-    MinerManifest.objects.bulk_create(miner_manifests)
 
     # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {
