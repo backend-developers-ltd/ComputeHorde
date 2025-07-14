@@ -5,10 +5,10 @@ import pathlib
 from dataclasses import dataclass
 from typing import Any
 
-import bittensor.utils
 import requests
 import turbobt
 from asgiref.sync import async_to_sync
+from compute_horde.smart_contracts.utils import get_contract_abi
 from django.conf import settings
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -63,18 +63,7 @@ get_collateral_contract_address = async_to_sync(get_collateral_contract_address_
 @functools.cache
 def get_collateral_abi() -> Any:
     """Retrieve the ABI definition for the collateral smart contract."""
-    path = pathlib.Path(__file__).parent / "collateral_abi.json"
-    abi = json.loads(path.read_text())
-    return abi
-
-
-def get_web3_connection(network: str) -> Web3:
-    """Connects to a Web3 provider using the provided network."""
-    _, rpc_url = bittensor.utils.determine_chain_endpoint_and_network(network)
-    w3 = Web3(Web3.LegacyWebSocketProvider(rpc_url))
-    if not w3.is_connected():
-        raise ConnectionError(f"Failed to connect to RPC node at {rpc_url}")
-    return w3
+    return get_contract_abi("collateral_abi.json")
 
 
 def get_miner_collateral(

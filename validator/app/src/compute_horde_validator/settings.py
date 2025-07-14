@@ -142,6 +142,11 @@ CONSTANCE_CONFIG = {
         "Whether this validator is serving jobs and setting weights",
         bool,
     ),
+    "FETCH_DYNAMIC_CONFIG_FROM_CONTRACT": (
+        False,
+        "Whether to fetch dynamic config from the smart contract",
+        bool,
+    ),
     "DYNAMIC_MANIFEST_SCORE_MULTIPLIER": (
         1.05,
         "The bonus rate for miners changing their horde size",
@@ -820,6 +825,7 @@ DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
 )
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
+DYNAMIC_CONFIG_MAP_SMART_CONTRACT_ADDRESS = env.str("DYNAMIC_CONFIG_MAP_SMART_CONTRACT_ADDRESS")
 
 # synthetic jobs are evenly distributed through the cycle, however
 # we start them from some offset because scheduling takes some time
