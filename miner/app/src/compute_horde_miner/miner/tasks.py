@@ -2,8 +2,9 @@ import datetime
 
 from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
-from compute_horde.dynamic_config import sync_dynamic_config
+from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
+from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
 from compute_horde.utils import get_validators
 from constance import config
 from django.conf import settings
@@ -67,6 +68,15 @@ def evict_old_data():
 
 @app.task
 def fetch_dynamic_config() -> None:
+    if settings.USE_CONTRACT_CONFIG:
+        dynamic_configs = get_dynamic_config_types_from_settings()
+        fetch_dynamic_configs_from_contract(
+            dynamic_configs,
+            settings.CONFIG_CONTRACT_ADDRESS,
+            namespace=config,
+        )
+        return
+
     # if same key exists in both places, common config wins
     sync_dynamic_config(
         config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/miner-config-{settings.DYNAMIC_CONFIG_ENV}.json",
