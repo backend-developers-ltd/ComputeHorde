@@ -247,6 +247,90 @@ The SDK includes an optional `FallbackClient` that mirrors the standard `Compute
 
 See the [Fallback docs](https://sdk.computehorde.io/master/fallback.html) for usage examples and limitations.
 
+## 🔧 Custom Volume Managers
+
+By default, executors download all input volumes before running a job. Miners can implement their own volume manager to handle volume preparation more efficiently (e.g., caching, custom storage strategies).
+
+### How It Works
+
+When an executor has a volume manager configured, it delegates volume preparation to the volume manager instead of downloading volumes directly:
+
+1. Executor sends volume specifications to volume manager
+2. Volume manager returns Docker mount options
+3. Executor uses those mounts when running the job container
+4. Executor notifies volume manager when job completes
+
+### Configuration
+
+Set the volume manager address as an environment variable:
+
+```bash
+export COMPUTE_HORDE_VOLUME_MANAGER_ADDRESS="http://localhost:8080"
+```
+
+Add custom headers for authentication:
+
+```bash
+export COMPUTE_HORDE_VOLUME_MANAGER_HEADER_Authorization="Bearer your-token"
+export COMPUTE_HORDE_VOLUME_MANAGER_HEADER_X-Custom-Header="custom-value"
+```
+
+### Volume Manager API
+
+Your volume manager must implement these endpoints:
+
+#### `POST /prepare_volume`
+
+**Request:**
+```json
+{
+  "job_uuid": "7b522daa-e807-4094-8d96-99b9a863f960",
+  "volume": {
+    "volume_type": "huggingface_volume",
+    "repo_id": "example/model",
+    "revision": "main",
+    "relative_path": "models",
+    "usage_type": "reusable"
+  },
+  "job_metadata": {
+    "image": "example/image:latest",
+    "consumer_key": "executor_class",
+    "namespace": "SN7b522da"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "mounts": [
+    {
+      "type": "bind",
+      "source": "/host/path/to/cached/model",
+      "target": "/volume/models"
+    }
+  ]
+}
+```
+
+#### `POST /job_finished`
+
+**Request:**
+```json
+{
+  "job_uuid": "7b522daa-e807-4094-8d96-99b9a863f960"
+}
+```
+
+**Response:** `200 OK` (no body required)
+
+### Volume Usage Hints
+
+The `usage_type` field helps volume managers optimize storage:
+
+- `single_use`: Volume is used once and can be cleaned up immediately
+- `reusable`: Volume may be used multiple times (cache aggressively)
+
 ## Versioning
 
 This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
