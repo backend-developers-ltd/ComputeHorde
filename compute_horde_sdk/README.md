@@ -293,9 +293,20 @@ Your volume manager must implement these endpoints:
     "usage_type": "reusable"
   },
   "job_metadata": {
-    "image": "example/image:latest",
-    "consumer_key": "executor_class",
-    "namespace": "SN7b522da"
+    "message_type": "V0JobRequest",
+    "job_uuid": "7b522daa-e807-4094-8d96-99b9a863f960",
+    "executor_class": "always_on__llm__a6000",
+    "docker_image": "example/image:latest",
+    "raw_script": null,
+    "docker_run_options_preset": "nvidia_all",
+    "docker_run_cmd": ["python", "main.py"],
+    "volume": null,
+    "output_upload": {
+      "output_upload_type": "single_file_put",
+      "relative_path": "results.json",
+      "url": "https://s3.example.com/results.json"
+    },
+    "artifacts_dir": "/artifacts"
   }
 }
 ```
