@@ -8,3 +8,11 @@ from ._downloader import (
     ZipUrlVolumeDownloader,
 )
 from ._models import *
+from ._manager import (
+    VolumeManagerClient,
+    VolumeManagerError,
+    VolumeManagerResponse,
+    VolumeManagerMount,
+    get_volume_manager_headers,
+    create_volume_manager_client,
+)

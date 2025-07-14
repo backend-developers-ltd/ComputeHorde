@@ -31,6 +31,13 @@ from django.conf import settings
 
 from compute_horde_executor.executor.miner_client import ExecutionResult, JobError, JobResult
 from compute_horde_executor.executor.utils import temporary_process
+from compute_horde_core.volume import (
+    create_volume_manager_client,
+    VolumeManagerClient,
+    VolumeManagerError,
+    VolumeManagerMount,
+    get_volume_manager_headers,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +142,15 @@ class JobRunner:
         self.is_streaming_job: bool = False
         self.nginx_dir_path: pathlib.Path | None = None
         self.executor_certificate: str | None = None
+
+        # Volume manager client (if configured)
+        self.volume_manager_client: VolumeManagerClient | None = None
+        if settings.VOLUME_MANAGER_ADDRESS:
+            headers = get_volume_manager_headers()
+            self.volume_manager_client = create_volume_manager_client(settings.VOLUME_MANAGER_ADDRESS, headers)
+        
+        # Track volume manager mounts for cleanup
+        self.volume_manager_mounts: list[VolumeManagerMount] = []
 
     def generate_streaming_certificate(self, executor_ip: str, public_key: str):
         """
@@ -242,6 +258,17 @@ class JobRunner:
                 f"{self.artifacts_mount_dir.as_posix()}/:{self.full_job_request.artifacts_dir}",
             ]
 
+        # Build volume mount flags
+        volume_flags = []
+        if self.volume_manager_mounts:
+            # Use volume manager mounts
+            for mount in self.volume_manager_mounts:
+                volume_flags.extend(["-v", f"{mount.source}:{mount.target}"])
+                logger.debug(f"Adding volume manager mount: {mount.source}:{mount.target}")
+        else:
+            # Use default volume mount
+            volume_flags = ["-v", f"{self.volume_mount_dir.as_posix()}/:/volume/"]
+
         self.cmd = [
             "docker",
             "run",
@@ -251,8 +278,7 @@ class JobRunner:
             "--rm",
             "--network",
             job_network,
-            "-v",
-            f"{self.volume_mount_dir.as_posix()}/:/volume/",
+            *volume_flags,
             "-v",
             f"{self.output_volume_mount_dir.as_posix()}/:/output/",
             "-v",
@@ -411,6 +437,10 @@ class JobRunner:
         )
 
     async def clean(self):
+        # Notify volume manager if configured
+        if self.volume_manager_client and self.initial_job_request:
+            await self._notify_volume_manager_job_finished()
+
         # remove input/output directories with docker, to deal with funky file permissions
         root_for_remove = pathlib.Path("/temp_dir/")
         process = await asyncio.create_subprocess_exec(
@@ -439,7 +469,25 @@ class JobRunner:
         except Exception as e:
             logger.error(f"Failed to remove temp dir {self.temp_dir}: {e}")
 
+    async def _notify_volume_manager_job_finished(self):
+        """Notify the volume manager that the job has finished."""
+        assert self.volume_manager_client is not None
+        assert self.initial_job_request is not None
+
+        job_uuid = self.initial_job_request.job_uuid
+        try:
+            logger.debug(f"Notifying Volume Manager that job {job_uuid} has finished")
+            await self.volume_manager_client.job_finished(job_uuid)
+        except Exception as e:
+            # Log the error but don't fail the job cleanup
+            logger.warning(f"Failed to notify Volume Manager of job completion: {e}")
+
     async def _unpack_volume(self, volume: Volume | None):
+        """
+        Handle volume preparation. If volume manager is configured, delegate to it.
+        Otherwise, use the traditional download approach.
+        """
+        # Clear the volume mount directory
         assert str(self.volume_mount_dir) not in {"~", "/"}
         for path in self.volume_mount_dir.glob("*"):
             if path.is_file():
@@ -448,31 +496,73 @@ class JobRunner:
                 shutil.rmtree(path)
 
         if volume is not None:
-            # TODO(mlech): Refactor this to not treat `HuggingfaceVolume` with a special care
-            volume_downloader = VolumeDownloader.for_volume(volume)
-            volume_downloader.max_size_bytes = settings.VOLUME_MAX_SIZE_BYTES
-            if volume_downloader.handles_volume_type() is HuggingfaceVolume:
-                if volume.token is None:
-                    volume.token = settings.HF_ACCESS_TOKEN
-                try:
-                    await volume_downloader.download(self.volume_mount_dir)
-                except VolumeDownloadFailed as exc:
-                    logger.error(f"Failed to download model from Hugging Face: {exc}")
-                    raise JobError(
-                        str(exc),
-                        V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD,
-                        exc.error_detail,
-                    ) from exc
+            # Check if volume manager is configured
+            if self.volume_manager_client:
+                await self._prepare_volume_with_manager(volume)
             else:
-                try:
-                    await volume_downloader.download(self.volume_mount_dir)
-                except VolumeDownloadFailed as exc:
-                    raise JobError(str(exc)) from exc
+                await self._download_volume_directly(volume)
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()
         )
         assert 0 == await chmod_proc.wait()
+
+    async def _prepare_volume_with_manager(self, volume: Volume):
+        """Use volume manager to prepare the volume."""
+        assert self.initial_job_request is not None
+        assert self.full_job_request is not None
+        assert self.volume_manager_client is not None
+
+        job_uuid = self.initial_job_request.job_uuid
+        
+        # Prepare job metadata
+        job_metadata = {
+            "image": self.full_job_request.docker_image,
+            "consumer_key": self.initial_job_request.executor_class,  # Using executor_class as consumer_key
+            "namespace": "SN" + job_uuid[:8]  # Create a namespace from job UUID
+        }
+
+        try:
+            logger.debug(f"Requesting volume preparation from Volume Manager for job {job_uuid}")
+            response = await self.volume_manager_client.prepare_volume(
+                job_uuid=job_uuid,
+                volume=volume,
+                job_metadata=job_metadata
+            )
+            
+            # Store the mounts for later use in Docker command
+            self.volume_manager_mounts = response.mounts
+            logger.debug(f"Volume Manager provided {len(response.mounts)} mounts")
+            
+        except VolumeManagerError as exc:
+            logger.warning(f"Volume Manager failed to prepare volume: {exc}")
+            logger.info("Falling back to direct volume download")
+            
+            # Fallback to direct download
+            await self._download_volume_directly(volume)
+
+    async def _download_volume_directly(self, volume: Volume):
+        """Traditional volume download approach."""
+        # TODO(mlech): Refactor this to not treat `HuggingfaceVolume` with a special care
+        volume_downloader = VolumeDownloader.for_volume(volume)
+        volume_downloader.max_size_bytes = settings.VOLUME_MAX_SIZE_BYTES
+        if volume_downloader.handles_volume_type() is HuggingfaceVolume:
+            if volume.token is None:
+                volume.token = settings.HF_ACCESS_TOKEN
+            try:
+                await volume_downloader.download(self.volume_mount_dir)
+            except VolumeDownloadFailed as exc:
+                logger.error(f"Failed to download model from Hugging Face: {exc}")
+                raise JobError(
+                    str(exc),
+                    V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD,
+                    exc.error_detail,
+                ) from exc
+        else:
+            try:
+                await volume_downloader.download(self.volume_mount_dir)
+            except VolumeDownloadFailed as exc:
+                raise JobError(str(exc)) from exc
 
     async def get_job_volume(self) -> Volume | None:
         assert self.full_job_request is not None, (

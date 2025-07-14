@@ -21,6 +21,15 @@ class VolumeType(str, enum.Enum):
         return str.__str__(self)
 
 
+class VolumeUsageType(str, enum.Enum):
+    """Hint for volume managers about expected usage patterns."""
+    single_use = "single_use"  # Volume is expected to be used just once
+    reusable = "reusable"      # Volume is expected to be used many times
+    
+    def __str__(self) -> str:
+        return str.__str__(self)
+
+
 class HuggingfaceVolume(pydantic.BaseModel):
     volume_type: Literal[VolumeType.huggingface_volume] = VolumeType.huggingface_volume
     repo_id: str
@@ -32,6 +41,7 @@ class HuggingfaceVolume(pydantic.BaseModel):
     # If provided, only files matching at least one pattern are downloaded.
     allow_patterns: str | list[str] | None = None
     token: str | None = None
+    usage_type: VolumeUsageType | None = None
 
     def is_safe(self) -> bool:
         return True
@@ -41,6 +51,7 @@ class InlineVolume(pydantic.BaseModel):
     volume_type: Literal[VolumeType.inline] = VolumeType.inline
     contents: str = pydantic.Field(repr=False)
     relative_path: str | None = None
+    usage_type: VolumeUsageType | None = None
 
     def is_safe(self) -> bool:
         return True
@@ -50,6 +61,7 @@ class ZipUrlVolume(pydantic.BaseModel):
     volume_type: Literal[VolumeType.zip_url] = VolumeType.zip_url
     contents: str  # backwards compatibility - this is the URL
     relative_path: str | None = Field(default=None)
+    usage_type: VolumeUsageType | None = None
 
     def is_safe(self) -> bool:
         domain = urlparse(self.contents).netloc
@@ -62,6 +74,7 @@ class SingleFileVolume(pydantic.BaseModel):
     volume_type: Literal[VolumeType.single_file] = VolumeType.single_file
     url: str
     relative_path: str
+    usage_type: VolumeUsageType | None = None
 
     def is_safe(self) -> bool:
         domain = urlparse(self.url).netloc
