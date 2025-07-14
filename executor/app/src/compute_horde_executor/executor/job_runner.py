@@ -516,11 +516,7 @@ class JobRunner:
         job_uuid = self.initial_job_request.job_uuid
         
         # Prepare job metadata
-        job_metadata = {
-            "image": self.full_job_request.docker_image,
-            "consumer_key": self.initial_job_request.executor_class,  # Using executor_class as consumer_key
-            "namespace": "SN" + job_uuid[:8]  # Create a namespace from job UUID
-        }
+        job_metadata = self.full_job_request.model_dump()
 
         try:
             logger.debug(f"Requesting volume preparation from Volume Manager for job {job_uuid}")
