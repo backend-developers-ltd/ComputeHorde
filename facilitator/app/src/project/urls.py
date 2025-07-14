@@ -13,8 +13,6 @@ urlpatterns = [
     path("business-metrics", metrics_manager.view, name="prometheus-business-metrics"),
 ]
 
-urlpatterns += [path("", include(f"{app}.urls")) for app in settings.ADDITIONAL_APPS]
-
 
 if settings.DEBUG_TOOLBAR:
     urlpatterns += [

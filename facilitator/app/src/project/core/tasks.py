@@ -6,11 +6,10 @@ import structlog
 from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
 from channels.layers import get_channel_layer
-from constance import config
+from compute_horde.utils import get_validators
 from django.conf import settings
 from django.db import connection
 from django.utils.timezone import now
-from more_itertools import one, partition
 from pydantic import BaseModel, ValidationError, parse_obj_as
 from requests import RequestException
 
@@ -29,7 +28,7 @@ from .models import (
 from .models import MinerVersion as MinerVersionDTO
 from .schemas import ForceDisconnect, HardwareSpec
 from .specs import normalize_gpu_name
-from .utils import fetch_compute_subnet_hardware, is_validator
+from .utils import fetch_compute_subnet_hardware
 
 log = structlog.wrap_logger(get_task_logger(__name__))
 
@@ -38,33 +37,14 @@ RECEIPTS_CUTOFF_TOLERANCE = timedelta(minutes=30)
 
 @app.task
 def sync_metagraph() -> None:
-    """Fetch list of current validators from the network and store them in the database"""
+    """Fetch current validators and miners from the network and store them in the database"""
     import bittensor
 
-    metagraph = bittensor.metagraph(netuid=settings.BITTENSOR_NETUID, network=settings.BITTENSOR_NETWORK)
-    _, validators = partition(is_validator, metagraph.neurons)
+    with bittensor.subtensor(network=settings.BITTENSOR_NETWORK) as subtensor:
+        metagraph = subtensor.metagraph(netuid=settings.BITTENSOR_NETUID)
+        validators = get_validators(metagraph=metagraph)
 
-    validators = list(validators)
-
-    our_validator = None
-    if our_validator_address := config.OUR_VALIDATOR_SS58_ADDRESS:
-        try:
-            our_validator = one(
-                validator for validator in validators if validator.hotkey == config.OUR_VALIDATOR_SS58_ADDRESS
-            )
-        except ValueError:
-            log.error("our validator not found", our_validator=our_validator_address)
-
-    if limit := config.VALIDATORS_LIMIT:
-        validators.sort(key=lambda validator: validator.stake, reverse=True)
-        validators = validators[:limit]
-        if our_validator and our_validator not in validators:
-            try:
-                validators[limit - 1] = our_validator
-            except IndexError:
-                validators.append(our_validator)
-
-    sync_validators.delay([validator.hotkey for validator in validators])
+    sync_validators.delay([v.hotkey for v in validators])
     sync_miners.delay([neuron.hotkey for neuron in metagraph.neurons if neuron.axon_info.is_serving])
 
 
@@ -97,7 +77,7 @@ def sync_validators(active_validators_keys: list[str]) -> None:
     num_created = Validator.objects.bulk_create(
         [Validator(ss58_address=ss58_address, is_active=True) for ss58_address in to_create]
     )
-    log.debug("validators created", num_created=num_created)
+    log.debug("validators created", num_created=len(num_created))
 
 
 @app.task
@@ -114,7 +94,7 @@ def sync_miners(active_miners_keys: list[str]) -> None:
     num_created = Miner.objects.bulk_create(
         [Miner(ss58_address=ss58_address, is_active=True) for ss58_address in to_create]
     )
-    log.debug("miners created", num_created=num_created)
+    log.debug("miners created", num_created=len(num_created))
 
 
 @app.task
