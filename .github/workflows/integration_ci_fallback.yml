@@ -34,6 +34,14 @@ jobs:
           version: "0.6.x"
           enable-cache: true
 
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.RUNPOD_TEST_PRIVATE_KEY }}" > ~/.ssh/sky-key
+          chmod 600 ~/.ssh/sky-key
+          echo "${{ secrets.RUNPOD_TEST_PUBLIC_KEY }}" > ~/.ssh/sky-key.pub
+          chmod 644 ~/.ssh/sky-key.pub
+
       - name: configure runpod
         working-directory: ./local_stack
         run: uv run runpod config ${{ env.RUNPOD_API_KEY }}
