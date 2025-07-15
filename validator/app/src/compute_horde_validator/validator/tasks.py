@@ -2147,7 +2147,9 @@ async def _poll_miner_manifests() -> None:
                 m
                 async for m in MinerManifest.objects.filter(
                     miner=miner,
-                ).order_by("-created_at")
+                )
+                .distinct("executor_class")
+                .order_by("executor_class", "-created_at")
             ]
 
             if last_manifests:
