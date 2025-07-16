@@ -31,140 +31,128 @@ class JobDriver:
         self.miner_client = miner_client
         self.startup_time_limit = startup_time_limit
         self.specs: MachineSpecs | None = None
+        self.deadline = Timer()
+        self.current_stage = "pre-startup"
+
+    @property
+    def time_left(self) -> float:
+        return self.deadline.time_left()
 
     async def execute(self):
-        async with self.miner_client:  # TODO: Can this hang?
+        try:
+            await self._do_execute()
+
+        except TimeoutError:
+            logger.warning(f"Job timed out during {self.current_stage} stage")
+            await self.miner_client.send_job_error(
+                JobError(
+                    f"Timed out during {self.current_stage} stage",
+                    error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
+                )
+            )
+
+        except JobError as e:
+            logger.warning(f"Job error: {e}")
+            await self.miner_client.send_job_error(e)
+
+        except BaseException as e:
+            logger.error(f"Unexpected error: {e}")
+            await self.miner_client.send_job_error(JobError(f"Unexpected error: {e}"))
+            raise
+
+        finally:
             try:
-                try:
-                    # This limit should be enough to receive the initial job request, which contains further timing
-                    # details.
-                    async with asyncio.timeout(self.startup_time_limit):
-                        logger.debug("Entering startup stage")
-                        initial_job_request = await self._startup_stage()
-                        timing_details = initial_job_request.executor_timing
-                except TimeoutError as e:
-                    raise JobError(
-                        "Timed out during startup stage",
-                        error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
-                    ) from e
+                await self.runner.clean()
+            except Exception as e:
+                logger.error(f"Job cleanup failed: {e}")
 
-                deadline = Timer()
-                if timing_details:
-                    # Initialize the deadline with leeway; it will be extended before each stage down the line
-                    logger.debug(
-                        f"Initializing deadline with leeway: {timing_details.allowed_leeway}s"
+    async def _do_execute(self):
+        async with self.miner_client:  # TODO: Can this hang?
+            # This limit should be enough to receive the initial job request, which contains further timing details.
+            self._set_deadline(self.startup_time_limit, "startup time limit")
+            async with asyncio.timeout(self.time_left):
+                initial_job_request = await self._startup_stage()
+                timing_details = initial_job_request.executor_timing
+
+            if timing_details:
+                # With timing details, re-initialize the deadline with leeway
+                # It will be extended before each stage down the line
+                self._set_deadline(timing_details.allowed_leeway, "allowed leeway")
+            elif initial_job_request.timeout_seconds is not None:
+                # For single-timeout, this is the full timeout for the whole job
+                self._set_deadline(initial_job_request.timeout_seconds, "single-timeout mode")
+            else:
+                raise JobError(
+                    "No timing received: either timeout_seconds or timing_details must be set"
+                )
+
+            # Download stage
+            if timing_details:
+                self._extend_deadline(timing_details.download_time_limit, "download time limit")
+            async with asyncio.timeout(self.time_left):
+                await self._download_stage()
+
+            # Execution stage
+            if timing_details:
+                self._extend_deadline(timing_details.execution_time_limit, "execution time limit")
+                if self.runner.is_streaming_job:
+                    self._extend_deadline(
+                        timing_details.streaming_start_time_limit, "streaming start time limit"
                     )
-                    deadline.set_timeout(timing_details.allowed_leeway)
-                elif initial_job_request.timeout_seconds is not None:
-                    # For single-timeout, initialize with the full timeout for the whole job
-                    logger.debug(
-                        f"Initializing deadline with deprecated total timeout: {initial_job_request.timeout_seconds}s"
-                    )
-                    deadline.set_timeout(initial_job_request.timeout_seconds)
-                else:
-                    raise JobError(
-                        "No timing received: either timeout_seconds or timing_details must be set"
-                    )
+            async with asyncio.timeout(self.time_left):
+                await self._execution_stage()
 
-                if initial_job_request.streaming_details is not None:
-                    assert initial_job_request.streaming_details.executor_ip is not None
-                    self.runner.generate_streaming_certificate(
-                        executor_ip=initial_job_request.streaming_details.executor_ip,
-                        public_key=initial_job_request.streaming_details.public_key,
-                    )
+            # Upload stage
+            if timing_details:
+                self._extend_deadline(timing_details.upload_time_limit, "upload time limit")
+            async with asyncio.timeout(self.time_left):
+                await self._upload_stage()
 
-                try:
-                    if timing_details:
-                        logger.debug(
-                            f"Extending deadline by download time limit: +{timing_details.allowed_leeway}s"
-                        )
-                        deadline.extend_timeout(timing_details.download_time_limit)
-                    async with asyncio.timeout(deadline.time_left()):
-                        logger.debug(
-                            f"Entering download stage; Time left: {deadline.time_left():.2f}s"
-                        )
-                        await self._download_stage()
-                except TimeoutError as e:
-                    raise JobError(
-                        "Timed out during download stage",
-                        error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
-                    ) from e
+        logger.debug(f"Finished with {self.time_left:.2f}s time left")
 
-                try:
-                    if timing_details:
-                        logger.debug(
-                            f"Extending deadline by execution time limit: +{timing_details.execution_time_limit}s"
-                        )
-                        timeout_extend = timing_details.execution_time_limit
-                        if self.runner.is_streaming_job:
-                            timeout_extend += timing_details.streaming_start_time_limit
-                        deadline.extend_timeout(timing_details.execution_time_limit)
-                    async with asyncio.timeout(deadline.time_left()):
-                        logger.debug(
-                            f"Entering execution stage; Time left: {deadline.time_left():.2f}s"
-                        )
-                        await self._execution_stage()
-                except TimeoutError as e:
-                    # Note - this timeout should never really fire.
-                    # The job subprocess itself has an `execution_time_limit` timeout,
-                    # and considering there is most likely some accumulated leeway,
-                    # it should always either finish or time out by itself.
-                    raise JobError(
-                        "Timed out during execution stage",
-                        error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
-                    ) from e
+    def _set_deadline(self, seconds: float, reason: str):
+        self.deadline.set_timeout(seconds)
+        logger.debug(f"Setting deadline to {seconds}s: {reason}")
 
-                try:
-                    if timing_details:
-                        logger.debug(
-                            f"Extending deadline by upload time limit: +{timing_details.upload_time_limit}s"
-                        )
-                        deadline.extend_timeout(timing_details.upload_time_limit)
-                    async with asyncio.timeout(deadline.time_left()):
-                        logger.debug(
-                            f"Entering upload stage; Time left: {deadline.time_left():.2f}s"
-                        )
-                        await self._upload_stage()
-                except TimeoutError as e:
-                    raise JobError(
-                        "Timed out during upload stage",
-                        error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
-                    ) from e
+    def _extend_deadline(self, seconds: float, reason: str):
+        self.deadline.extend_timeout(seconds)
+        logger.debug(
+            f"Extending deadline by +{seconds:.2f}s to {self.deadline.time_left():.2f}s: {reason}"
+        )
 
-                logger.debug(f"Finished with {deadline.time_left():.2f}s time left")
-
-            except JobError as e:
-                logger.warning(f"Job error: {e}")
-                await self.miner_client.send_job_error(e)
-
-            except BaseException as e:
-                logger.error(f"Unexpected error: {e}")
-                await self.miner_client.send_job_error(JobError(f"Unexpected error: {e}"))
-                raise
-
-            finally:
-                try:
-                    await self.runner.clean()
-                except Exception as e:
-                    logger.error(f"Job cleanup failed: {e}")
+    def _enter_stage(self, stage: str):
+        self.current_stage = stage
+        logger.debug(f"Entering stage {stage} with {self.deadline.time_left():.2f}s time left")
 
     async def _startup_stage(self) -> V0InitialJobRequest:
+        self._enter_stage("startup")
+
         self.specs = get_machine_specs()
         await self.run_security_checks_or_fail()
         initial_job_request = await self.miner_client.initial_msg
         await self.runner.prepare_initial(initial_job_request)
         await self.miner_client.send_executor_ready()
+        if initial_job_request.streaming_details is not None:
+            assert initial_job_request.streaming_details.executor_ip is not None
+            self.runner.generate_streaming_certificate(
+                executor_ip=initial_job_request.streaming_details.executor_ip,
+                public_key=initial_job_request.streaming_details.public_key,
+            )
         return initial_job_request
 
     async def _download_stage(self):
+        self._enter_stage("download")
+
         logger.debug("Waiting for full payload")
         full_job_request = await self.miner_client.full_payload
         logger.debug("Full payload received")
         await self.runner.prepare_full(full_job_request)
-        await self.runner.unpack_volume()
+        await self.runner.download_volume()
         await self.miner_client.send_volumes_ready()
 
     async def _execution_stage(self):
+        self._enter_stage("execution")
+
         async with self.runner.start_job():
             if self.runner.is_streaming_job:
                 assert self.runner.executor_certificate is not None, (
@@ -175,6 +163,8 @@ class JobDriver:
         await self.miner_client.send_execution_done()
 
     async def _upload_stage(self):
+        self._enter_stage("upload")
+
         job_result = await self.runner.upload_results()
         job_result.specs = self.specs
         await self.miner_client.send_result(job_result)
