@@ -40,7 +40,7 @@ dependencies = [
     "hexbytes>=1.3.0",
     "web3>=7.11.0",
     "requests>=2.32.3",
-    "turbobt~=0.0.10",
+    "turbobt~=0.0.11",
     "aiohttp>=3.12.0",
 ]
 
