@@ -20,19 +20,27 @@ from compute_horde.utils import MachineSpecs
 # miner.ec = Miner's executor consumer
 # miner.vc = Miner's validator consumer
 
+
 class JobParticipantType(enum.Enum):
     EXECUTOR = "executor"
     MINER = "miner"
     VALIDATOR = "validator"
     FACILITATOR = "facilitator"
     SDK = "sdk"
-    
+
+
 class JobExecutionStage(enum.Enum):
     UNKNOWN = "unknown"
-    SUBMISSION = "submission"
-    ROUTING = "routing"
-    RESERVATION = "reservation"
-    EXECUTOR_SPINUP = "executor_spinup"
+    # ↓ Facilitator
+    SUBMISSION = "submission"  # Everything before the job is accepted: faci contacting vali, vali deciding whether to accept the job, ...
+    # ↓ Validator
+    ROUTING = "routing"  # After vali accepts job, before miner is contacted
+    # ↓ Miner
+    RESERVATION = "reservation"  # vali-miner initial contact and negotiation
+    EXECUTOR_SPINUP = (
+        "executor_spinup"  # miner designating an executor and waiting for it to contact it
+    )
+    # ↓ Executor
     EXECUTOR_STARTUP = "executor_startup"
     STREAMING_STARTUP = "streaming_startup"
     VOLUME_DOWNLOAD = "volume_download"
@@ -40,7 +48,11 @@ class JobExecutionStage(enum.Enum):
     RESULT_UPLOAD = "result_upload"
     CLOSURE = "closure"
 
-JobTiming: TypeAlias = dict[JobExecutionStage, float] # TODO(error propagation): define this struct?
+
+JobTiming: TypeAlias = dict[
+    JobExecutionStage, float
+]  # TODO(error propagation): define this struct?
+
 
 # executor <-> miner.ec <-> miner.vc <-> validator
 class GenericError(BaseModel):
@@ -199,6 +211,7 @@ class V0JobFailedRequest(BaseModel):
     For rejections, use V0DeclineJobRequest.
     For errors in the job execution caused by other factors, use V0JobGeneralFailureRequest.
     """
+
     class ErrorType(enum.StrEnum):
         UNKNOWN = "unknown"
         UPLOAD_FAILED = "upload_failed"
@@ -226,6 +239,7 @@ class V0JobGeneralFailureRequest(BaseModel):
     For rejections, use V0DeclineJobRequest.
     For errors and timeouts in the job execution caused by the job / job timing, use V0JobFailedRequest.
     """
+
     class ErrorType(enum.StrEnum):
         UNCAUGHT_EXCEPTION = "uncaught_exception"
         STREAMING_SETUP_FAILED = "streaming_setup_failed"
