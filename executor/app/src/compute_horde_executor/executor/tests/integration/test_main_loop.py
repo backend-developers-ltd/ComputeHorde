@@ -83,7 +83,7 @@ def get_file_from_request(request):
 @patch("compute_horde_executor.executor.job_driver.JobDriver.run_security_checks_or_fail")
 def mock_gpu_checks(cve_check, nvidia_toolkit_check, security_check, settings):
     # Ensure DEBUG_NO_GPU_MODE is set to True for all tests
-    settings.DEBUG_NO_GPU_MODE = True
+    # settings.DEBUG_NO_GPU_MODE = True
     yield
 
 
