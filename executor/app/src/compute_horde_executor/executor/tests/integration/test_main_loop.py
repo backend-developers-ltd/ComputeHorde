@@ -1738,12 +1738,12 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     assert request2.method == "GET"
 
 
-def test_artifacts():     
+def test_artifacts():
     try:
         # Temporarily disable logging
         original_level = logging.getLogger().level
         logging.getLogger().setLevel(logging.CRITICAL)
-        
+
         original_JobRunner_prepare = JobRunner.prepare_initial
 
         async def patch_JobRunner_prepare_initial(
