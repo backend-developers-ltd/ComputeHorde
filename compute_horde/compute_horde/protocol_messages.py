@@ -1,5 +1,5 @@
 import enum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypeAlias
 
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
@@ -20,6 +20,27 @@ from compute_horde.utils import MachineSpecs
 # miner.ec = Miner's executor consumer
 # miner.vc = Miner's validator consumer
 
+class JobParticipantType(enum.Enum):
+    EXECUTOR = "executor"
+    MINER = "miner"
+    VALIDATOR = "validator"
+    FACILITATOR = "facilitator"
+    SDK = "sdk"
+    
+class JobExecutionStage(enum.Enum):
+    UNKNOWN = "unknown"
+    SUBMISSION = "submission"
+    ROUTING = "routing"
+    RESERVATION = "reservation"
+    EXECUTOR_SPINUP = "executor_spinup"
+    EXECUTOR_STARTUP = "executor_startup"
+    STREAMING_STARTUP = "streaming_startup"
+    VOLUME_DOWNLOAD = "volume_download"
+    EXECUTION = "execution"
+    RESULT_UPLOAD = "result_upload"
+    CLOSURE = "closure"
+
+JobTiming: TypeAlias = dict[JobExecutionStage, float] # TODO(error propagation): define this struct?
 
 # executor <-> miner.ec <-> miner.vc <-> validator
 class GenericError(BaseModel):
@@ -169,22 +190,58 @@ class V0JobRequest(BaseModel):
     artifacts_dir: str | None = None
 
 
-# executor -> miner.ec -> miner.vc -> validator
+# executor -> miner.ec -> miner.vc -> validator -> facilitator -> SDK
 class V0JobFailedRequest(BaseModel):
+    """
+    Means that the job itself was bad in some way - the job code is faulty, input data is bad,
+    download/upload URLs don't work, or the job exceeded the expected time limits at any stage.
+    Ideally, this failure should be reproducible on a trusted machine.
+    For rejections, use V0DeclineJobRequest.
+    For errors in the job execution caused by other factors, use V0JobGeneralFailureRequest.
+    """
     class ErrorType(enum.StrEnum):
-        TIMEOUT = "TIMEOUT"
-        SECURITY_CHECK = "SECURITY_CHECK"
-        HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
-        NONZERO_EXIT_CODE = "NONZERO_EXIT_STATUS"
+        UNKNOWN = "unknown"
+        UPLOAD_FAILED = "upload_failed"
+        DOWNLOAD_FAILED = "download_failed"
+        EXECUTION_FAILED = "execution_failed"
+        NONZERO_EXIT_STATUS = "nonzero_exit_status"
+        TIMED_OUT = "timed_out"
 
     message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
     job_uuid: str
-    docker_process_exit_status: int | None = None
-    docker_process_stdout: str
-    docker_process_stderr: str
-    error_type: ErrorType | None = None
+    error_type: ErrorType = ErrorType.UNKNOWN
+    error_stage: JobExecutionStage = JobExecutionStage.UNKNOWN
     error_detail: str | None = None
-    timeout: bool = False
+    docker_process_exit_status: int | None = None
+    docker_process_stdout: str | None = None
+    docker_process_stderr: str | None = None
+    job_timing: JobTiming | None = None
+
+
+class V0JobGeneralFailureRequest(BaseModel):
+    """
+    Something went wrong during the handling of the job that it outside the responsibility of the job issuer.
+    This can be an actual bug in the code, some temporary network issue, misconfiguration of some node in the network,
+    some timeout not related to the job timing.
+    For rejections, use V0DeclineJobRequest.
+    For errors and timeouts in the job execution caused by the job / job timing, use V0JobFailedRequest.
+    """
+    class ErrorType(enum.StrEnum):
+        UNCAUGHT_EXCEPTION = "uncaught_exception"
+        STREAMING_SETUP_FAILED = "streaming_setup_failed"
+        JOB_IMAGE_MISSING = "job_image_missing"
+        SECURITY_CHECK_FAILED = "security_check_failed"
+        UPSTREAM_CONNECTION_ERROR = "upstream_connection_error"
+        # TODO(error propagation): define more of this when going through job execution code in executor
+
+    message_type: Literal["V0JobGeneralFailureRequest"] = "V0JobGeneralFailureRequest"
+    job_uuid: str
+    reported_by: JobParticipantType
+    error_stage: JobExecutionStage
+    error_type: ErrorType
+    error_exception_class: str
+    error_detail: str | None = None
+    error_context: dict[str, str] | None
 
 
 # executor -> miner.ec -> miner.vc -> validator
