@@ -3,6 +3,7 @@ import os
 os.environ.update(
     {
         "DEBUG_TOOLBAR": "False",
+        "DEBUG_NO_GPU_MODE": "true",
     }
 )
 
