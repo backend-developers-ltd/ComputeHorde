@@ -163,7 +163,7 @@ def test_main_loop_basic():
             ]
         )
     )
-    command.handle()
+    command.handle(startup_time_limit=10)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -244,7 +244,7 @@ def test_main_loop_streaming_job():
             ]
         )
     )
-    command.handle()
+    command.handle(startup_time_limit=10)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -333,7 +333,7 @@ def test_huggingface_volume():
         )
 
         # Act
-        command.handle()
+        command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -417,7 +417,7 @@ def test_huggingface_volume_failure():
         )
 
         # Act
-        command.handle()
+        command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -502,7 +502,7 @@ def test_huggingface_volume_fail_and_retry():
         )
 
         # Act
-        command.handle()
+        command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -601,7 +601,7 @@ def test_huggingface_volume_dataset():
         )
 
         # Act
-        command.handle()
+        command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -684,7 +684,7 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
             ]
         )
     )
-    command.handle()
+    command.handle(startup_time_limit=10)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -761,7 +761,7 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
             ]
         )
     )
-    command.handle()
+    command.handle(startup_time_limit=10)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -835,7 +835,7 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
             ]
         )
     )
-    command.handle()
+    command.handle(startup_time_limit=10)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -922,7 +922,7 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
             ]
         )
     )
-    command.handle()
+    command.handle(startup_time_limit=10)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -998,7 +998,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1091,7 +1091,7 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1181,7 +1181,7 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1266,7 +1266,7 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1350,7 +1350,7 @@ def test_raw_script_job():
             ]
         )
     )
-    command.handle()
+    command.handle(startup_time_limit=10)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -1468,7 +1468,7 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
     )
 
     # Act
-    command.handle()
+    command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1583,7 +1583,7 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1689,7 +1689,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    command.handle(startup_time_limit=10)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1811,7 +1811,7 @@ def test_artifacts():
         )
 
         # Act
-        command.handle()
+        command.handle(startup_time_limit=10)
 
     all_bytes = b"".join(bytes([i]) for i in range(256))
 
