@@ -265,14 +265,14 @@ When an executor has a volume manager configured, it delegates volume preparatio
 Set the volume manager address as an environment variable:
 
 ```bash
-export COMPUTE_HORDE_VOLUME_MANAGER_ADDRESS="http://localhost:8080"
+export VOLUME_MANAGER_ADDRESS="http://localhost:8080"
 ```
 
 Add custom headers for authentication:
 
 ```bash
-export COMPUTE_HORDE_VOLUME_MANAGER_HEADER_Authorization="Bearer your-token"
-export COMPUTE_HORDE_VOLUME_MANAGER_HEADER_X-Custom-Header="custom-value"
+export VOLUME_MANAGER_HEADER_Authorization="Bearer your-token"
+export VOLUME_MANAGER_HEADER_X-Custom-Header="custom-value"
 ```
 
 ### Volume Manager API

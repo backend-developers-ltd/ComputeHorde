@@ -297,7 +297,7 @@ OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES = env.int(
 )  # 2GB
 
 # Volume Manager Configuration
-VOLUME_MANAGER_ADDRESS = env.str("COMPUTE_HORDE_VOLUME_MANAGER_ADDRESS", default=None)
+VOLUME_MANAGER_ADDRESS = env.str("VOLUME_MANAGER_ADDRESS", default=None)
 
 # Sentry
 if SENTRY_DSN := env("SENTRY_DSN", default=""):

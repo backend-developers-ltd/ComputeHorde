@@ -531,7 +531,7 @@ class JobRunner:
             logger.debug(f"Volume Manager provided {len(response.mounts)} mounts")
             
         except VolumeManagerError as exc:
-            logger.warning(f"Volume Manager failed to prepare volume: {exc}")
+            logger.warning(f"Volume Manager failed to prepare volume for job {job_uuid}: {exc}")
             logger.info("Falling back to direct volume download")
             
             # Fallback to direct download
