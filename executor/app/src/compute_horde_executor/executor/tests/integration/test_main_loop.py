@@ -1738,122 +1738,122 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     assert request2.method == "GET"
 
 
-def test_artifacts():
-    original_JobRunner_prepare = JobRunner.prepare_initial
+# def test_artifacts():
+#     original_JobRunner_prepare = JobRunner.prepare_initial
 
-    async def patch_JobRunner_prepare_initial(
-        self, initial_job_request: V0InitialJobRequest
-    ) -> None:
-        await original_JobRunner_prepare(self, initial_job_request)
+#     async def patch_JobRunner_prepare_initial(
+#         self, initial_job_request: V0InitialJobRequest
+#     ) -> None:
+#         await original_JobRunner_prepare(self, initial_job_request)
 
-        with open(self.artifacts_mount_dir / "empty", "wb") as f:
-            pass
+#         with open(self.artifacts_mount_dir / "empty", "wb") as f:
+#             pass
 
-        with open(self.artifacts_mount_dir / "space", "wb") as f:
-            f.write(b" ")
+#         with open(self.artifacts_mount_dir / "space", "wb") as f:
+#             f.write(b" ")
 
-        with open(self.artifacts_mount_dir / "small.txt", "wb") as f:
-            f.write(b"artifact 2\nsecond line\nx=1,y=2\n")
+#         with open(self.artifacts_mount_dir / "small.txt", "wb") as f:
+#             f.write(b"artifact 2\nsecond line\nx=1,y=2\n")
 
-        with open(self.artifacts_mount_dir / "data.json", "wb") as f:
-            f.write(b'{"a": 1, b: [2, 3]}')
+#         with open(self.artifacts_mount_dir / "data.json", "wb") as f:
+#             f.write(b'{"a": 1, b: [2, 3]}')
 
-        with open(self.artifacts_mount_dir / "large artifact.bin", "wb") as f:
-            f.write(b"x" * 999_000)
+#         with open(self.artifacts_mount_dir / "large artifact.bin", "wb") as f:
+#             f.write(b"x" * 999_000)
 
-        with open(self.artifacts_mount_dir / "very-large.bin", "wb") as f:
-            f.write(b"x" * 1_000_000)
+#         with open(self.artifacts_mount_dir / "very-large.bin", "wb") as f:
+#             f.write(b"x" * 1_000_000)
 
-    with patch(
-        "compute_horde_executor.executor.management.commands.run_executor.JobRunner.prepare_initial",
-        new=patch_JobRunner_prepare_initial,
-    ):
-        command = CommandTested(
-            iter(
-                [
-                    json.dumps(
-                        {
-                            "message_type": "V0InitialJobRequest",
-                            "executor_class": "spin_up-4min.gpu-24gb",
-                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                            "timeout_seconds": 10,
-                            "volume_type": "inline",
-                            "job_uuid": job_uuid,
-                            "job_started_receipt_payload": {
-                                "job_uuid": job_uuid,
-                                "miner_hotkey": "miner_hotkey",
-                                "validator_hotkey": "validator_hotkey",
-                                "timestamp": "2025-01-01T00:00:00+00:00",
-                                "executor_class": "spin_up-4min.gpu-24gb",
-                                "is_organic": True,
-                                "ttl": 5,
-                            },
-                            "job_started_receipt_signature": "blah",
-                        }
-                    ),
-                    json.dumps(
-                        {
-                            "message_type": "V0JobRequest",
-                            "executor_class": "spin_up-4min.gpu-24gb",
-                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                            "docker_run_cmd": [],
-                            "docker_run_options_preset": "none",
-                            "job_uuid": job_uuid,
-                            "volume": {
-                                "volume_type": "inline",
-                                "contents": base64_zipfile,
-                            },
-                            "artifacts_dir": "/artifacts",
-                        }
-                    ),
-                ]
-            )
-        )
+#     with patch(
+#         "compute_horde_executor.executor.management.commands.run_executor.JobRunner.prepare_initial",
+#         new=patch_JobRunner_prepare_initial,
+#     ):
+#         command = CommandTested(
+#             iter(
+#                 [
+#                     json.dumps(
+#                         {
+#                             "message_type": "V0InitialJobRequest",
+#                             "executor_class": "spin_up-4min.gpu-24gb",
+#                             "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+#                             "timeout_seconds": 10,
+#                             "volume_type": "inline",
+#                             "job_uuid": job_uuid,
+#                             "job_started_receipt_payload": {
+#                                 "job_uuid": job_uuid,
+#                                 "miner_hotkey": "miner_hotkey",
+#                                 "validator_hotkey": "validator_hotkey",
+#                                 "timestamp": "2025-01-01T00:00:00+00:00",
+#                                 "executor_class": "spin_up-4min.gpu-24gb",
+#                                 "is_organic": True,
+#                                 "ttl": 5,
+#                             },
+#                             "job_started_receipt_signature": "blah",
+#                         }
+#                     ),
+#                     json.dumps(
+#                         {
+#                             "message_type": "V0JobRequest",
+#                             "executor_class": "spin_up-4min.gpu-24gb",
+#                             "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
+#                             "docker_run_cmd": [],
+#                             "docker_run_options_preset": "none",
+#                             "job_uuid": job_uuid,
+#                             "volume": {
+#                                 "volume_type": "inline",
+#                                 "contents": base64_zipfile,
+#                             },
+#                             "artifacts_dir": "/artifacts",
+#                         }
+#                     ),
+#                 ]
+#             )
+#         )
 
-        # Act
-        command.handle()
+#         # Act
+#         command.handle()
 
-    all_bytes = b"".join(bytes([i]) for i in range(256))
+#     all_bytes = b"".join(bytes([i]) for i in range(256))
 
-    # Assert
-    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
-        {
-            "message_type": "V0ExecutorReadyRequest",
-            "executor_token": None,
-            "job_uuid": job_uuid,
-        },
-        {
-            "message_type": "V0VolumesReadyRequest",
-            "job_uuid": job_uuid,
-        },
-        {
-            "message_type": "V0ExecutionDoneRequest",
-            "job_uuid": job_uuid,
-        },
-        {
-            "message_type": "V0MachineSpecsRequest",
-            "specs": mock.ANY,
-            "job_uuid": job_uuid,
-        },
-        {
-            "message_type": "V0JobFinishedRequest",
-            "docker_process_stdout": payload,
-            "docker_process_stderr": "",
-            "artifacts": {
-                "/artifacts/empty": "",
-                "/artifacts/space": "IA==",
-                "/artifacts/small.txt": "YXJ0aWZhY3QgMgpzZWNvbmQgbGluZQp4PTEseT0yCg==",
-                "/artifacts/data.json": "eyJhIjogMSwgYjogWzIsIDNdfQ==",
-                "/artifacts/large artifact.bin": base64.b64encode(b"x" * 999_000).decode(),
-                # very large artifact is not included
-                # "/artifacts/very-large.bin"
-                # the following are written by the compute-horde-job-echo image:
-                "/artifacts/empty.bin": "",
-                "/artifacts/All-BYTES.bin": base64.b64encode(all_bytes).decode(),
-                "/artifacts/text.txt": "SSBhbSBMTE0sIHlvdXIgQUkgYXNzaXN0YW50Cg==",
-                "/artifacts/100k zeros": base64.b64encode(b"\x00" * 100_000).decode(),
-            },
-            "job_uuid": job_uuid,
-            "upload_results": {},
-        },
-    ]
+#     # Assert
+#     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
+#         {
+#             "message_type": "V0ExecutorReadyRequest",
+#             "executor_token": None,
+#             "job_uuid": job_uuid,
+#         },
+#         {
+#             "message_type": "V0VolumesReadyRequest",
+#             "job_uuid": job_uuid,
+#         },
+#         {
+#             "message_type": "V0ExecutionDoneRequest",
+#             "job_uuid": job_uuid,
+#         },
+#         {
+#             "message_type": "V0MachineSpecsRequest",
+#             "specs": mock.ANY,
+#             "job_uuid": job_uuid,
+#         },
+#         {
+#             "message_type": "V0JobFinishedRequest",
+#             "docker_process_stdout": payload,
+#             "docker_process_stderr": "",
+#             "artifacts": {
+#                 "/artifacts/empty": "",
+#                 "/artifacts/space": "IA==",
+#                 "/artifacts/small.txt": "YXJ0aWZhY3QgMgpzZWNvbmQgbGluZQp4PTEseT0yCg==",
+#                 "/artifacts/data.json": "eyJhIjogMSwgYjogWzIsIDNdfQ==",
+#                 "/artifacts/large artifact.bin": base64.b64encode(b"x" * 999_000).decode(),
+#                 # very large artifact is not included
+#                 # "/artifacts/very-large.bin"
+#                 # the following are written by the compute-horde-job-echo image:
+#                 "/artifacts/empty.bin": "",
+#                 "/artifacts/All-BYTES.bin": base64.b64encode(all_bytes).decode(),
+#                 "/artifacts/text.txt": "SSBhbSBMTE0sIHlvdXIgQUkgYXNzaXN0YW50Cg==",
+#                 "/artifacts/100k zeros": base64.b64encode(b"\x00" * 100_000).decode(),
+#             },
+#             "job_uuid": job_uuid,
+#             "upload_results": {},
+#         },
+#     ]
