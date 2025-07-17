@@ -241,7 +241,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                         docker_process_exit_status=job.exit_status,
                         error_type=V0JobFailedRequest.ErrorType(job.error_type)
                         if job.error_type
-                        else None,
+                        else V0JobFailedRequest.ErrorType.UNKNOWN,
                         error_detail=job.error_detail,
                     ).model_dump_json()
                 )

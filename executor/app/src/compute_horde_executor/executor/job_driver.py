@@ -47,7 +47,7 @@ class JobDriver:
             await self.miner_client.send_job_error(
                 JobError(
                     f"Timed out during {self.current_stage} stage",
-                    error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
+                    error_type=V0JobFailedRequest.ErrorType.TIMED_OUT,
                 )
             )
 
@@ -197,7 +197,7 @@ class JobDriver:
         if expected_output not in stdout.decode():
             raise JobError(
                 f'CVE-2022-0492 check failed: "{expected_output}" not in stdout.',
-                V0JobFailedRequest.ErrorType.SECURITY_CHECK,
+                V0JobFailedRequest.ErrorType.UNKNOWN,  # TODO(error propagation): this is not a joberror any more
                 f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
             )
 
@@ -245,7 +245,7 @@ class JobDriver:
             raise JobError(
                 f"Outdated NVIDIA Container Toolkit detected:"
                 f'{version}" not >= {NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION}',
-                V0JobFailedRequest.ErrorType.SECURITY_CHECK,
+                V0JobFailedRequest.ErrorType.UNKNOWN,  # TODO(error propagation): this is not a joberror any more
                 f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}',
             )
 
@@ -255,13 +255,13 @@ class JobDriver:
         if self.runner.execution_result.timed_out:
             raise JobError(
                 "Job container timed out during execution",
-                error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
+                error_type=V0JobFailedRequest.ErrorType.TIMED_OUT,
             )
 
         if self.runner.execution_result.return_code != 0:
             raise JobError(
                 f"Job container exited with non-zero exit code: {self.runner.execution_result.return_code}",
-                error_type=V0JobFailedRequest.ErrorType.NONZERO_EXIT_CODE,
+                error_type=V0JobFailedRequest.ErrorType.NONZERO_EXIT_STATUS,
                 error_detail=f"exit code: {self.runner.execution_result.return_code}",
                 execution_result=self.runner.execution_result,
             )

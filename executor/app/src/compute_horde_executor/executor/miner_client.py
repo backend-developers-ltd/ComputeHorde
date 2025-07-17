@@ -45,7 +45,7 @@ class JobError(Exception):
     def __init__(
         self,
         error_message: str,
-        error_type: V0JobFailedRequest.ErrorType | None = None,
+        error_type: V0JobFailedRequest.ErrorType = V0JobFailedRequest.ErrorType.UNKNOWN,
         error_detail: str | None = None,
         execution_result: ExecutionResult | None = None,
     ):

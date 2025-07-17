@@ -13,9 +13,14 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-from compute_horde.protocol_messages import V0InitialJobRequest, V0JobFailedRequest
+from compute_horde.protocol_messages import (
+    JobExecutionStage,
+    V0InitialJobRequest,
+    V0JobFailedRequest,
+)
 from compute_horde.transport import StubTransport
 from compute_horde_core.certificate import generate_certificate_at
+from compute_horde_core.volume import VolumeDownloadFailed
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
 
@@ -417,26 +422,31 @@ def test_huggingface_volume_failure():
         )
 
         # Act
-        command.handle(startup_time_limit=10)
+        with pytest.raises(VolumeDownloadFailed):
+            command.handle(startup_time_limit=10)
 
     # Assert
-    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
-        {
-            "message_type": "V0ExecutorReadyRequest",
-            "executor_token": None,
-            "job_uuid": job_uuid,
-        },
-        {
-            "message_type": "V0JobFailedRequest",
-            "docker_process_exit_status": None,
-            "docker_process_stdout": "",
-            "docker_process_stderr": "",
-            "error_type": V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD.value,
-            "error_detail": "Failed to download model from Hugging Face after 3 retries: Download failed: Download failed",
-            "timeout": False,
-            "job_uuid": job_uuid,
-        },
-    ]
+    assert (
+        [json.loads(msg) for msg in command.miner_client.transport.sent_messages]
+        == [
+            {
+                "message_type": "V0ExecutorReadyRequest",
+                "executor_token": None,
+                "job_uuid": job_uuid,
+            },
+            {
+                "message_type": "V0JobFailedRequest",
+                "docker_process_exit_status": None,
+                "docker_process_stdout": "",
+                "docker_process_stderr": "",
+                "error_type": V0JobFailedRequest.ErrorType.UNKNOWN.value,  # TODO(error propagation): HF errors are no longer a jobfailed
+                "error_stage": JobExecutionStage.UNKNOWN.value,
+                "error_detail": ContainsStr("Failed to download model from Hugging Face"),
+                "job_uuid": job_uuid,
+                "job_timing": None,
+            },
+        ]
+    )
 
     assert mock_snapshot_download.call_count == 3
 
@@ -761,7 +771,10 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
             ]
         )
     )
-    command.handle(startup_time_limit=10)
+
+    with pytest.raises(VolumeDownloadFailed):
+        command.handle(startup_time_limit=10)
+
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -771,12 +784,13 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "timeout": False,
             "docker_process_stdout": "",
             "docker_process_stderr": "",
-            "error_type": None,
-            "error_detail": "Input volume too large",
+            "error_type": V0JobFailedRequest.ErrorType.UNKNOWN.value,
             "job_uuid": job_uuid,
+            "error_stage": JobExecutionStage.UNKNOWN.value,
+            "error_detail": ContainsStr("Input volume too large"),
+            "job_timing": None,
         },
     ]
 
@@ -922,7 +936,10 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
             ]
         )
     )
-    command.handle(startup_time_limit=10)
+
+    with pytest.raises(VolumeDownloadFailed):
+        command.handle(startup_time_limit=10)
+
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -932,11 +949,12 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "timeout": False,
             "docker_process_stdout": "",
             "docker_process_stderr": "",
-            "error_type": None,
-            "error_detail": "Input volume too large",
+            "error_type": V0JobFailedRequest.ErrorType.UNKNOWN.value,
+            "error_stage": JobExecutionStage.UNKNOWN.value,
+            "error_detail": ContainsStr("Input volume too large"),
+            "job_timing": None,
             "job_uuid": job_uuid,
         },
     ]
@@ -1201,12 +1219,13 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "timeout": False,
             "docker_process_stdout": "",
             "docker_process_stderr": "",
-            "error_type": None,
+            "error_type": V0JobFailedRequest.ErrorType.UNKNOWN.value,
+            "error_stage": JobExecutionStage.UNKNOWN.value,
             "error_detail": ContainsStr("Job failed during upload"),
             "job_uuid": job_uuid,
+            "job_timing": None,
         },
     ]
 

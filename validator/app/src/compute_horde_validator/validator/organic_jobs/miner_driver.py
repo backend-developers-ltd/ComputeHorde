@@ -432,23 +432,28 @@ async def drive_organic_job(
             )
             subtype = SystemEvent.EventSubType.FAILURE
             if isinstance(exc.received, V0JobFailedRequest):
-                job.stdout = exc.received.docker_process_stdout
-                job.stderr = exc.received.docker_process_stderr
+                job.stdout = exc.received.docker_process_stdout or ""
+                job.stderr = exc.received.docker_process_stderr or ""
                 job.error_type = exc.received.error_type
                 job.error_detail = exc.received.error_detail
                 match exc.received.error_type:
                     case None:
                         pass
-                    case V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD:
-                        subtype = SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_HUGGINGFACE
-                    case V0JobFailedRequest.ErrorType.SECURITY_CHECK:
-                        subtype = SystemEvent.EventSubType.ERROR_FAILED_SECURITY_CHECK
-                    case V0JobFailedRequest.ErrorType.TIMEOUT:
+                    # TODO(error propagation): These are not part of JobFailed any more
+                    # case V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD:
+                    #     subtype = SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_HUGGINGFACE
+                    # case V0JobFailedRequest.ErrorType.SECURITY_CHECK:
+                    #     subtype = SystemEvent.EventSubType.ERROR_FAILED_SECURITY_CHECK
+                    case V0JobFailedRequest.ErrorType.TIMED_OUT:
                         subtype = SystemEvent.EventSubType.ERROR_EXECUTOR_REPORTED_TIMEOUT
-                    case V0JobFailedRequest.ErrorType.NONZERO_EXIT_CODE:
+                    case V0JobFailedRequest.ErrorType.NONZERO_EXIT_STATUS:
                         subtype = SystemEvent.EventSubType.JOB_PROCESS_NONZERO_EXIT_CODE
+                    case V0JobFailedRequest.ErrorType.UNKNOWN:
+                        subtype = SystemEvent.EventSubType.GENERIC_ERROR
                     case _:
-                        assert_never(exc.received.error_type)
+                        subtype = SystemEvent.EventSubType.GENERIC_ERROR
+                        # TODO(error propagation): Support all ErrorType values
+                        # assert_never(exc.received.error_type)
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
             await job.asave()
