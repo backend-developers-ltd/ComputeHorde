@@ -57,20 +57,17 @@ async def answer_prompts(
     job_generator = LlmPromptsJobGenerator(workload.s3_url, seed)
     await job_generator.ainit(miner_hotkey=TRUSTED_MINER_FAKE_KEY)
 
-    # TODO: Should be generated for all the llm executor classes.
-    #       SolveWorkload/PromptSample should have a executor_class field saying which
-    #       executor_class this sample is for.
     job_uuid = job_uuid or uuid.uuid4()
     job_details = OrganicJobDetails(
         job_uuid=str(job_uuid),
-        executor_class=ExecutorClass.always_on__llm__a6000,
+        executor_class=workload.executor_class,
         docker_image=job_generator.docker_image_name(),
         docker_run_options_preset=job_generator.docker_run_options_preset(),
         docker_run_cmd=job_generator.docker_run_cmd(),
         total_job_timeout=(
             job_generator.timeout_seconds()
             + max(
-                EXECUTOR_CLASS[ExecutorClass.always_on__llm__a6000].spin_up_time,
+                EXECUTOR_CLASS[workload.executor_class].spin_up_time,
                 MIN_SPIN_UP_TIME,
             )
         ),

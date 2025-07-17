@@ -37,6 +37,7 @@ class MockSyntheticJobGenerator(BaseSyntheticJobGenerator):
     def __init__(self, _uuid: uuid.UUID, **kwargs):
         super().__init__(**kwargs)
         self._uuid = _uuid
+        self._init_args = kwargs
 
     async def ainit(self, miner_hotkey: str):
         pass
@@ -114,3 +115,4 @@ class TimeTookScoreMockSyntheticJobGeneratorFactory(MockSyntheticJobGeneratorFac
     async def create(self, executor_class: ExecutorClass, *args) -> BaseSyntheticJobGenerator:
         _uuid = self._uuids.pop(0)
         return TimeTookScoreMockSyntheticJobGenerator(_uuid)
+

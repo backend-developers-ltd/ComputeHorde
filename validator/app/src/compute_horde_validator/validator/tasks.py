@@ -28,13 +28,14 @@ from bt_ddos_shield.turbobt import ShieldedBittensor
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
+from compute_horde_core.executor_class import ExecutorClass
 from compute_horde.dynamic_config import sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
-from compute_horde.miner_client.organic import OrganicMinerClient
-from compute_horde.subtensor import TEMPO, get_cycle_containing_block
-from compute_horde.transport.base import TransportConnectionError
-from compute_horde.utils import MIN_VALIDATOR_STAKE, turbobt_get_validators
-from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_validator.validator.generation_profile import (
+    PromptGenerationProfile,
+    EXECUTOR_TO_PROMPT_GENERATION_PROFILE,
+    PROMPT_GENERATION_PROFILES,
+)
 from constance import config
 from django.conf import settings
 from django.db import transaction
@@ -1707,19 +1708,43 @@ def fetch_dynamic_config() -> None:
     time_limit=5 * 60,
 )
 def llm_prompt_generation():
-    unprocessed_workloads_count = SolveWorkload.objects.filter(finished_at__isnull=True).count()
-    if unprocessed_workloads_count > 0:
-        # prevent any starvation issues
-        logger.info("Unprocessed workloads found - skipping prompt generation")
+    for profile in PromptGenerationProfile:
+        llm_prompt_generation_for_profile(profile)
+
+def llm_prompt_generation_for_profile(profile: PromptGenerationProfile):
+    logger.info("Generating prompts for profile %s", profile)
+    # Get executor classes that use this generation profile
+    executor_classes = [
+        executor_class for executor_class, gen_profile 
+        in EXECUTOR_TO_PROMPT_GENERATION_PROFILE.items()
+        if gen_profile == profile
+    ]
+
+    if not executor_classes:
+        logger.info("No executor class uses profile %s; skipping generation", profile)
         return
 
-    num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES
-    num_prompt_series = PromptSeries.objects.count()
+    unprocessed_workloads_count = SolveWorkload.objects.filter(
+        finished_at__isnull=True,
+        executor_class__in=executor_classes
+    ).count()
+
+    if unprocessed_workloads_count > 0:
+        # prevent any starvation issues
+        logger.info("Unprocessed workloads found for profile %s - skipping prompt generation", profile)
+        return
+
+    num_expected_prompt_series = config.DYNAMIC_MAX_PROMPT_SERIES_PER_EXECUTOR_CLASS * len(executor_classes)
+    num_prompt_series = PromptSeries.objects.filter(
+        generation_profile=profile,
+    ).count()
 
     if num_prompt_series >= num_expected_prompt_series:
         logger.warning(
-            "There are %s series in the db - skipping prompt generation",
+            "There are %s series in the db, more than %d for each of %d executor classes - skipping prompt generation",
             num_prompt_series,
+            config.DYNAMIC_MAX_PROMPT_SERIES_PER_EXECUTOR_CLASS,
+            len(executor_classes),
         )
         return
 
@@ -1731,6 +1756,7 @@ def llm_prompt_generation():
         data={
             "prompt_series_count": num_prompt_series,
             "expected_prompt_series_count": num_expected_prompt_series,
+            "prompt_generation_profile": profile,
         },
     )
 
@@ -1742,7 +1768,7 @@ def llm_prompt_generation():
             return
 
         try:
-            async_to_sync(generate_prompts)()
+            async_to_sync(generate_prompts)(profile=profile)
         except Exception as e:
             msg = f"Error while generating prompts: {e}"
             logger.warning(msg)
@@ -1750,7 +1776,9 @@ def llm_prompt_generation():
                 type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
                 subtype=SystemEvent.EventSubType.FAILURE,
                 long_description=msg,
-                data={},
+                data={
+                    "prompt_generation_profile": profile,
+                },
             )
 
 
@@ -1823,8 +1851,8 @@ def llm_prompt_answering():
         )
 
 
-def init_workload(seed: int) -> tuple[SolveWorkload, str]:
-    workload_uuid = uuid.uuid4()
+def init_workload(seed: int, executor_class: ExecutorClass) -> tuple[SolveWorkload, str]:
+    workload_uuid = generate_workload_uuid()
     # generate an s3 url to upload workload prompts to
     s3_upload_url = generate_upload_url(
         key=str(workload_uuid), bucket_name=settings.S3_BUCKET_NAME_ANSWERS
@@ -1834,21 +1862,35 @@ def init_workload(seed: int) -> tuple[SolveWorkload, str]:
         key=str(workload_uuid),
         bucket_name=settings.S3_BUCKET_NAME_ANSWERS,
     )
-    return SolveWorkload(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url), s3_upload_url
+    return (SolveWorkload(workload_uuid=workload_uuid, seed=seed, s3_url=s3_url, executor_class=executor_class),
+            s3_upload_url)
+
+
+def generate_workload_uuid():
+    return uuid.uuid4()
+
+
+@app.task
+def llm_prompt_sampling():
+    for executor_class in EXECUTOR_TO_PROMPT_GENERATION_PROFILE:
+        llm_prompt_sampling_for_executor_class(executor_class)
 
 
 @app.task()
-def llm_prompt_sampling():
+def llm_prompt_sampling_for_executor_class(executor_class: ExecutorClass):
     # generate new prompt samples if needed
 
-    num_prompt_series = PromptSeries.objects.count()
+    generation_profile = EXECUTOR_TO_PROMPT_GENERATION_PROFILE[executor_class]
+    num_prompt_series = PromptSeries.objects.filter(generation_profile=generation_profile).count()
+    # FIXME: I don't understand this math
     required_series_to_start_sampling = min(
-        config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY * 2, config.DYNAMIC_MAX_PROMPT_SERIES
+        config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY * 2, config.DYNAMIC_MAX_PROMPT_SERIES_PER_EXECUTOR_CLASS
     )
     if num_prompt_series < required_series_to_start_sampling:
         logger.warning(
-            "There are %s series in the db - expected %s for start sampling - skipping prompt sampling",
+            "There are %s series in the db generated with profile %s - expected %s to start sampling - skipping prompt sampling",
             num_prompt_series,
+            generation_profile,
             required_series_to_start_sampling,
         )
         SystemEvent.objects.create(
@@ -1858,19 +1900,26 @@ def llm_prompt_sampling():
             data={
                 "prompt_series_count": num_prompt_series,
                 "required_prompt_series_count_to_start_sampling": required_series_to_start_sampling,
+                "prompt_generation_profile": generation_profile,
             },
         )
         return
 
-    num_unused_prompt_samples = PromptSample.objects.filter(synthetic_job__isnull=True).count()
+    # check unused prompt samples for this executor_class
+    num_unused_prompt_samples = PromptSample.objects.filter(
+        workload__executor_class=executor_class,
+        synthetic_job__isnull=True
+    ).count()
+
     num_needed_prompt_samples = (
         config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY - num_unused_prompt_samples
     )
 
     if num_needed_prompt_samples <= 0:
         logger.warning(
-            "There are already %s prompt samples in the db not used in synthetic jobs - skipping prompt sampling",
+            "There are already %s prompt samples for executor class %s in the db not used in synthetic jobs - skipping prompt sampling",
             num_unused_prompt_samples,
+            executor_class,
         )
         SystemEvent.objects.create(
             type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
@@ -1879,16 +1928,19 @@ def llm_prompt_sampling():
             data={
                 "unused_prompt_samples_count": num_unused_prompt_samples,
                 "target_unused_prompt_samples_count": config.DYNAMIC_TARGET_NUMBER_OF_PROMPT_SAMPLES_READY,
+                "executor_class": executor_class,
             },
         )
         return
 
     logger.info(
-        "We need %s more prompt samples in the db for synthetic jobs - generating prompt answering workloads",
+        "We need %s more prompt samples for the executor class %s in the db for synthetic jobs - generating prompt answering workloads",
         num_needed_prompt_samples,
+        executor_class,
     )
 
-    num_workloads_created = create_sample_workloads(num_needed_prompt_samples)
+    num_workloads_created = create_sample_workloads(num_needed_prompt_samples, executor_class)
+
     SystemEvent.objects.create(
         type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
         subtype=SystemEvent.EventSubType.NEW_WORKLOADS_CREATED,
@@ -1897,6 +1949,7 @@ def llm_prompt_sampling():
             "new_workloads_count": num_workloads_created,
             "prompt_series_count": num_prompt_series,
             "unused_prompt_samples_count": num_unused_prompt_samples,
+            "executor_class": executor_class,
         },
     )
 
@@ -1915,20 +1968,23 @@ def persist_workload(
         logger.error(f"Failed to create workload {workload}")
 
 
-def create_sample_workloads(num_needed_prompt_samples: int) -> int:
+def create_sample_workloads(num_needed_prompt_samples: int, executor_class: ExecutorClass) -> int:
     """
     Creates enough workloads to cover at least `num_needed_prompt_samples` prompt samples
+    for the given executor_class
     Returns the number of workloads created
     """
     prompts_per_sample = config.DYNAMIC_NUMBER_OF_PROMPTS_TO_SAMPLE_FROM_SERIES
-    prompts_per_workload = config.DYNAMIC_NUMBER_OF_PROMPTS_PER_WORKLOAD
+    generation_profile = EXECUTOR_TO_PROMPT_GENERATION_PROFILE[executor_class]
+    generation_profile_spec = PROMPT_GENERATION_PROFILES[generation_profile]
+    prompts_per_workload = generation_profile_spec.num_prompts
 
     # set seed for the current synthetic jobs run
     seed = random.randint(0, MAX_SEED)
 
     # workload we are currently sampling for
     try:
-        current_workload, current_upload_url = init_workload(seed)
+        current_workload, current_upload_url = init_workload(seed, executor_class)
     except Exception as e:
         logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
         return 0
@@ -1941,9 +1997,18 @@ def create_sample_workloads(num_needed_prompt_samples: int) -> int:
     current_prompt_samples = []
     current_prompts = []
 
-    # assume we have sufficient prompt series in the db to make all the prompt_samples needed
+    # Iterating once over the series is not strictly correct as there's no guarantee that we'll manage
+    # to create the required number of workloads to sample num_needed_prompt_samples
+    # However, we consider it good enough, because the next run of llm_prompt_sampling will take care of it.
+    # Alternatively, we could iterate over the series multiple times, shuffling, until we have enough workloads,
+    # but then we'd have to worry about not getting into an infinite loop
+
     # take a random order of prompt series to avoid using the same series at each synthetic jobs run
-    for prompt_series in PromptSeries.objects.order_by("?").all():
+    series_for_generator = PromptSeries.objects.filter(
+        generation_profile=generation_profile
+    ).order_by("?").all()
+
+    for prompt_series in series_for_generator:
         # get all prompts
         try:
             lines = download_prompts_from_s3_url(prompt_series.s3_url)
@@ -1954,12 +2019,16 @@ def create_sample_workloads(num_needed_prompt_samples: int) -> int:
                 type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
                 subtype=SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_S3,
                 long_description=msg,
+                data={
+                    "prompt_series_id": prompt_series.id,
+                    "s3_url": prompt_series.s3_url,
+                },
             )
             continue
 
         # should always have enough prompts
         if len(lines) <= prompts_per_sample:
-            logger.error(f"Skipping bucket {prompt_series.s3_url}, not enough prompts")
+            logger.error(f"Skipping bucket {prompt_series.s3_url}, not enough prompts: {len(lines)} <= {prompts_per_sample}")
             continue
 
         # sample prompts
@@ -1985,6 +2054,10 @@ def create_sample_workloads(num_needed_prompt_samples: int) -> int:
                 SystemEvent.objects.create(
                     type=SystemEvent.EventType.LLM_PROMPT_SAMPLING,
                     subtype=SystemEvent.EventSubType.ERROR_UPLOADING_TO_S3,
+                    data={
+                        "workload_uuid": str(current_workload.workload_uuid),
+                        "upload_url": current_upload_url,
+                    },
                     long_description=msg,
                 )
 
@@ -1997,7 +2070,7 @@ def create_sample_workloads(num_needed_prompt_samples: int) -> int:
             current_prompt_samples = []
             current_prompts = []
             try:
-                current_workload, current_upload_url = init_workload(seed)
+                current_workload, current_upload_url = init_workload(seed, executor_class)
             except Exception as e:
                 logger.error(f"Failed to create new workload: {e} - aborting prompt sampling")
                 continue
