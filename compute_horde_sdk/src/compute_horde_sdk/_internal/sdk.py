@@ -3,6 +3,7 @@ import base64
 import dataclasses
 import json
 import logging
+import random
 import sys
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping, Sequence
@@ -49,6 +50,8 @@ JOB_REFRESH_INTERVAL = timedelta(seconds=3)
 DEFAULT_FACILITATOR_URL = "https://facilitator.computehorde.io/"
 DEFAULT_MAX_JOB_RUN_ATTEMPTS = 3
 HTTP_RETRY_MAX_ATTEMPTS = 5
+HTTP_RETRY_MIN_WAIT_SECONDS = 0.2
+HTTP_RETRY_MAX_WAIT_SECONDS = 5
 RETRYABLE_HTTP_EXCEPTIONS = (
     httpx.ConnectTimeout,
     httpx.PoolTimeout,
@@ -359,7 +362,7 @@ class ComputeHordeClient:
     @tenacity.retry(
         retry=tenacity.retry_if_exception(_retryable_exception),
         stop=tenacity.stop_after_attempt(HTTP_RETRY_MAX_ATTEMPTS),
-        wait=tenacity.wait_exponential_jitter(initial=0.2),
+        wait=tenacity.wait_exponential_jitter(initial=HTTP_RETRY_MIN_WAIT_SECONDS, max=HTTP_RETRY_MAX_WAIT_SECONDS),
         reraise=True,
     )
     async def _make_request(
@@ -553,6 +556,13 @@ class ComputeHordeClient:
 
             if max_attempts > 0 and attempt >= max_attempts:
                 return job
+
+            # Apply exponential backoff with jitter before retrying
+            backoff_seconds = min(HTTP_RETRY_MIN_WAIT_SECONDS * (2 ** (attempt - 1)), HTTP_RETRY_MAX_WAIT_SECONDS)
+            jitter = random.uniform(0, backoff_seconds * 0.1)
+            wait_time = backoff_seconds + jitter
+            logger.info(f"Job attempt {attempt_msg} failed, waiting {wait_time:.2f} seconds before retry")
+            await asyncio.sleep(wait_time)
 
     async def get_job(self, job_uuid: str) -> ComputeHordeJob:
         """

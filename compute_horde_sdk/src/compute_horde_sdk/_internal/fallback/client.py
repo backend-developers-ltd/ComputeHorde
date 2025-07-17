@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import pathlib
+import random
 import socket
 import subprocess
 import tempfile
@@ -67,6 +68,8 @@ class FallbackClient:
     """
 
     DEFAULT_MAX_JOB_RUN_ATTEMPTS = 3
+    HTTP_RETRY_MIN_WAIT_SECONDS = 0.2
+    HTTP_RETRY_MAX_WAIT_SECONDS = 5
     MAX_ARTIFACT_SIZE = 1_000_000
 
     def __init__(self, cloud: str, idle_minutes: int = 15, **kwargs: Any) -> None:
@@ -235,8 +238,17 @@ class FallbackClient:
             if job.status.is_successful():
                 return job
 
-            if 0 < max_attempts <= attempt:
+            if max_attempts > 0 and attempt >= max_attempts:
                 return job
+
+            # Apply exponential backoff with jitter before retrying
+            backoff_seconds = min(
+                self.HTTP_RETRY_MIN_WAIT_SECONDS * (2 ** (attempt - 1)), self.HTTP_RETRY_MAX_WAIT_SECONDS
+            )
+            jitter = random.uniform(0, backoff_seconds * 0.1)
+            wait_time = backoff_seconds + jitter
+            logger.info(f"Job attempt {attempt_msg} failed, waiting {wait_time:.2f} seconds before retry")
+            await asyncio.sleep(wait_time)
 
     async def get_job(self, job_uuid: str) -> FallbackJob:
         """

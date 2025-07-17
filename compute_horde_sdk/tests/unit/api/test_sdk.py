@@ -676,7 +676,7 @@ async def test_run_until_complete__attempts__infinite(compute_horde_client, job_
     # Make sure we did actually attempt to run jobs multiple times before we stopped it
     # Because of the `async_sleep_mock` fixture the count is stable at 202 and not flaky.
     # Still using a lower number as the count can change based on changes of the fixture.
-    assert len(jobs) > 100
+    assert len(jobs) > 75
 
 
 @pytest.mark.parametrize("timeout", list(range(5)))
