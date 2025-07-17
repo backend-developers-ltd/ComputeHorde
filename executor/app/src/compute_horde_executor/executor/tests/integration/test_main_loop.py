@@ -1740,7 +1740,8 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
 
 def test_artifacts():
     try:
-        # Temporarily disable logging
+        # Temporarily disable logging. This test produces huge amount of outputs,
+        # which GitHub Actions runner is not able to handle, resulting in a timeout.
         original_level = logging.getLogger().level
         logging.getLogger().setLevel(logging.CRITICAL)
 
