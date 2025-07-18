@@ -148,6 +148,11 @@ CONSTANCE_CONFIG = {
         "Whether this miner is updating axon_info",
         bool,
     ),
+    "FETCH_DYNAMIC_CONFIG_FROM_CONTRACT": (
+        False,
+        "Whether to fetch dynamic config from the smart contract",
+        bool,
+    ),
     "MIGRATING": (
         env.bool("MIGRATING", default=False),
         "Whether this miner is migrating the old miner's data",
@@ -442,6 +447,7 @@ BITTENSOR_WALLET_HOTKEY_NAME = env.str("BITTENSOR_WALLET_HOTKEY_NAME")
 DEBUG_TURN_AUTHENTICATION_OFF = env.bool("DEBUG_TURN_AUTHENTICATION_OFF", default=False)
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
+DYNAMIC_CONFIG_MAP_SMART_CONTRACT_ADDRESS = env.str("DYNAMIC_CONFIG_MAP_SMART_CONTRACT_ADDRESS")
 
 
 def BITTENSOR_WALLET() -> bittensor.wallet:

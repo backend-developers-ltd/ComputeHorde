@@ -28,9 +28,10 @@ from bt_ddos_shield.turbobt import ShieldedBittensor
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
-from compute_horde.dynamic_config import sync_dynamic_config
+from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.smart_contracts.utils import get_web3_connection
 from compute_horde.subtensor import TEMPO, get_cycle_containing_block
 from compute_horde.transport.base import TransportConnectionError
 from compute_horde.utils import MIN_VALIDATOR_STAKE, turbobt_get_validators
@@ -1417,7 +1418,7 @@ def sync_collaterals(
         block_hash=block.hash,
     )
     miners = Miner.objects.filter(hotkey__in=hotkeys)
-    w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
+    w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
     contract_address = collateral.get_collateral_contract_address()
 
     to_update = []
@@ -1691,6 +1692,13 @@ async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycl
 
 @app.task
 def fetch_dynamic_config() -> None:
+    if config.FETCH_DYNAMIC_CONFIG_FROM_CONTRACT:
+        fetch_dynamic_configs_from_contract(
+            settings.DYNAMIC_CONFIG_MAP_SMART_CONTRACT_ADDRESS,
+            namespace=config,
+        )
+        return
+
     # if same key exists in both places, common config wins
     sync_dynamic_config(
         config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/validator-config-{settings.DYNAMIC_CONFIG_ENV}.json",
@@ -2043,7 +2051,7 @@ def slash_collateral_task(job_uuid: str) -> None:
         slash_amount: int = config.DYNAMIC_COLLATERAL_SLASH_AMOUNT_WEI
         if contract_address and slash_amount > 0 and job.miner.evm_address:
             try:
-                w3 = collateral.get_web3_connection(network=settings.BITTENSOR_NETWORK)
+                w3 = get_web3_connection(network=settings.BITTENSOR_NETWORK)
                 collateral.slash_collateral(
                     w3=w3,
                     contract_address=contract_address,
