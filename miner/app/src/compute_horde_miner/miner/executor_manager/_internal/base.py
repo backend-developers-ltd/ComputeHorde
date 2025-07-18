@@ -56,6 +56,7 @@ class ExecutorClassPool:
         self._count = executor_count
         self._executors: list[ReservedExecutor] = []
         self._reservation_lock = asyncio.Lock()
+        self._pool_cleanup_lock = asyncio.Lock()
         self._pool_cleanup_task = asyncio.create_task(self._pool_cleanup_loop())
         self._reservation_futures: dict[str, asyncio.Future[None]] = {}
 
@@ -77,7 +78,8 @@ class ExecutorClassPool:
                 "No executor available, forcing pool cleanup, current list is:\n %s",
                 "\n".join(str(r) for r in self._executors),
             )
-            await self._pool_cleanup()
+            async with self._pool_cleanup_lock:
+                await self._pool_cleanup()
 
         async with self._reservation_lock:
             if self.get_availability() == 0:
@@ -117,7 +119,8 @@ class ExecutorClassPool:
         while True:
             try:
                 if self._executors:
-                    await self._pool_cleanup()
+                    async with self._pool_cleanup_lock:
+                        await self._pool_cleanup()
             except Exception as exc:
                 logger.error("Error during pool cleanup", exc_info=exc)
             await asyncio.sleep(self.POOL_CLEANUP_PERIOD)
