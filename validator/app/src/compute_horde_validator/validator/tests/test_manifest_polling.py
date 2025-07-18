@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from typing import TypedDict
 from unittest.mock import patch
 
@@ -7,6 +8,7 @@ import pytest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde_core.executor_class import ExecutorClass
+from django.utils import timezone
 
 from compute_horde_validator.validator.models import (
     MetagraphSnapshot,
@@ -349,3 +351,75 @@ async def test_poll_miner_manifests_with_partial_transport_failures():
     miner2_manifest = manifests_dict["test_miner_2"]
     assert miner2_manifest[ExecutorClass.always_on__gpu_24gb] == 0
     assert miner2_manifest[ExecutorClass.spin_up_4min__gpu_24gb] == 0
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_poll_miner_manifests_no_duplicate_offline_records():
+    """
+    Test that when miners don't respond, only one record per executor class is created.
+    """
+    miner = await Miner.objects.acreate(hotkey="test_miner_1", address="192.168.1.1", port=8080)
+
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
+        executor_count=1,
+        online_executor_count=1,
+        created_at=timezone.now() - timedelta(minutes=10),
+    )
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
+        executor_count=2,
+        online_executor_count=2,
+        created_at=timezone.now() - timedelta(minutes=5),
+    )
+    await MinerManifest.objects.acreate(
+        miner=miner,
+        batch=None,
+        executor_class=ExecutorClass.always_on__gpu_24gb,
+        executor_count=3,
+        online_executor_count=3,
+        created_at=timezone.now() - timedelta(minutes=1),
+    )
+
+    await MetagraphSnapshot.objects.acreate(
+        id=MetagraphSnapshot.SnapshotType.LATEST,
+        block=100,
+        alpha_stake=[100.0],
+        tao_stake=[100.0],
+        stake=[100.0],
+        uids=[1],
+        hotkeys=["test_miner_1"],
+        serving_hotkeys=["test_miner_1"],
+    )
+
+    transport_map = {}
+    initial_count = await MinerManifest.objects.filter(miner=miner).acount()
+
+    async with mock_organic_miner_client(transport_map):
+        await _poll_miner_manifests()
+
+    final_count = await MinerManifest.objects.filter(miner=miner).acount()
+
+    expected_new_records = 1
+    actual_new_records = final_count - initial_count
+
+    assert actual_new_records == expected_new_records, (
+        f"Expected {expected_new_records} new record, got {actual_new_records}. "
+        f"Initial count: {initial_count}, final count: {final_count}"
+    )
+
+    manifests_dict = await _get_latest_manifests([miner])
+
+    assert len(manifests_dict) == 1
+    assert "test_miner_1" in manifests_dict
+
+    miner_manifest = manifests_dict["test_miner_1"]
+    assert ExecutorClass.always_on__gpu_24gb in miner_manifest
+    assert miner_manifest[ExecutorClass.always_on__gpu_24gb] == 0, (
+        f"Expected online_executor_count=0, got {miner_manifest[ExecutorClass.always_on__gpu_24gb]}"
+    )
