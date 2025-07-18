@@ -48,7 +48,7 @@ class ReservedExecutor:
 
 
 class ExecutorClassPool:
-    POOL_CLEANUP_PERIOD = 10
+    POOL_CLEANUP_PERIOD = 1
 
     def __init__(self, manager, executor_class: ExecutorClass, executor_count: int):
         self.manager = manager
@@ -56,6 +56,7 @@ class ExecutorClassPool:
         self._count = executor_count
         self._executors: list[ReservedExecutor] = []
         self._reservation_lock = asyncio.Lock()
+        self._pool_cleanup_lock = asyncio.Lock()
         self._pool_cleanup_task = asyncio.create_task(self._pool_cleanup_loop())
         self._reservation_futures: dict[str, asyncio.Future[None]] = {}
 
@@ -72,6 +73,14 @@ class ExecutorClassPool:
         return self._reservation_futures[token]
 
     async def reserve_executor(self, token: str, timeout: float) -> object:
+        if self.get_availability() == 0:
+            logger.debug(
+                "No executor available, forcing pool cleanup, current list is:\n %s",
+                "\n".join(str(r) for r in self._executors),
+            )
+            async with self._pool_cleanup_lock:
+                await self._pool_cleanup()
+
         async with self._reservation_lock:
             if self.get_availability() == 0:
                 logger.debug(
@@ -109,7 +118,9 @@ class ExecutorClassPool:
         # TODO: this is a basic working logic - pool cleanup should be more robust
         while True:
             try:
-                await self._pool_cleanup()
+                if self._executors:
+                    async with self._pool_cleanup_lock:
+                        await self._pool_cleanup()
             except Exception as exc:
                 logger.error("Error during pool cleanup", exc_info=exc)
             await asyncio.sleep(self.POOL_CLEANUP_PERIOD)

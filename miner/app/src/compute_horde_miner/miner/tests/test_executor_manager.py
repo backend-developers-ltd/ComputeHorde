@@ -112,10 +112,6 @@ async def test_executor_class_pool(dummy_manager):
     assert isinstance(executor2, DummyExecutor)
     assert pool.get_availability() == 0
 
-    # Test AllExecutorsBusy exception
-    with pytest.raises(AllExecutorsBusy):
-        await pool.reserve_executor("token3", 20)
-
     # Test executor completion
     status = await dummy_manager.wait_for_executor(executor1, 1)
     assert status == "Completed"
@@ -203,7 +199,8 @@ async def test_concurrent_reservations(dummy_manager):
         except AllExecutorsBusy:
             return False
 
-    results = await asyncio.gather(*[reserve(i) for i in range(5)])
+    async with dummy_manager.set_runtime_offset(0):
+        results = await asyncio.gather(*[reserve(i) for i in range(5)])
     assert results.count(True) == 2
     assert results.count(False) == 3
 
