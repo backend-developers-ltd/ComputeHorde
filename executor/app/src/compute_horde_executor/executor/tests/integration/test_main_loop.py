@@ -1742,7 +1742,7 @@ def test_artifacts(caplog):
     # Temporarily change logging level. This test produces huge amount of outputs,
     # which GitHub Actions runner is not able to handle, resulting in a timeout.
     caplog.set_level(logging.CRITICAL)
-    
+
     original_JobRunner_prepare = JobRunner.prepare_initial
 
     async def patch_JobRunner_prepare_initial(
