@@ -16,10 +16,11 @@ import pytest
 from compute_horde.protocol_messages import V0InitialJobRequest, V0JobFailedRequest
 from compute_horde.transport import StubTransport
 from compute_horde_core.certificate import generate_certificate_at
+from django.core.management import call_command
 from pytest_httpx import HTTPXMock
 from requests_toolbelt.multipart import decoder
 
-from compute_horde_executor.executor.job_runner import JobRunner
+from compute_horde_executor.executor.job_runner import DefaultJobRunner
 from compute_horde_executor.executor.management.commands.run_executor import (
     Command,
 )
@@ -73,6 +74,13 @@ def get_file_from_request(request):
     return parsed_data
 
 
+class CustomJobRunner(DefaultJobRunner):
+    ECHO_VALUE = "I am test runner."
+
+    async def get_docker_run_cmd(self) -> list[str]:
+        return ["echo", "-n", self.ECHO_VALUE]
+
+
 @pytest.fixture(autouse=True)
 @patch("compute_horde_executor.executor.job_driver.JobDriver.run_cve_2022_0492_check_or_fail")
 @patch(
@@ -90,7 +98,18 @@ class CommandTested(Command):
         super().__init__(*args, **kwargs)
 
 
-def test_main_loop_basic():
+@pytest.mark.parametrize(
+    "command_kwargs, expected_stdout",
+    (
+        pytest.param({}, payload, id="default_job_runner"),
+        pytest.param(
+            {"job_runner_class": CustomJobRunner},
+            CustomJobRunner.ECHO_VALUE,
+            id="custom_job_runner",
+        ),
+    ),
+)
+def test_main_loop_basic(command_kwargs, expected_stdout):
     job_container_name = f"ch-{uuid.uuid4()}-job"
     nginx_container_name = f"ch-{uuid.uuid4()}-nginx"
     network_name = f"ch-{uuid.uuid4()}"
@@ -163,7 +182,7 @@ def test_main_loop_basic():
             ]
         )
     )
-    command.handle()
+    call_command(command, startup_time_limit=5, **command_kwargs)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -185,7 +204,7 @@ def test_main_loop_basic():
         },
         {
             "message_type": "V0JobFinishedRequest",
-            "docker_process_stdout": payload,
+            "docker_process_stdout": expected_stdout,
             "docker_process_stderr": mock.ANY,
             "artifacts": {},
             "job_uuid": job_uuid,
@@ -244,7 +263,7 @@ def test_main_loop_streaming_job():
             ]
         )
     )
-    command.handle()
+    call_command(command, startup_time_limit=5)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -333,7 +352,7 @@ def test_huggingface_volume():
         )
 
         # Act
-        command.handle()
+        call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -417,7 +436,7 @@ def test_huggingface_volume_failure():
         )
 
         # Act
-        command.handle()
+        call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -502,7 +521,7 @@ def test_huggingface_volume_fail_and_retry():
         )
 
         # Act
-        command.handle()
+        call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -601,7 +620,7 @@ def test_huggingface_volume_dataset():
         )
 
         # Act
-        command.handle()
+        call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -684,7 +703,7 @@ def test_zip_url_volume(httpx_mock: HTTPXMock):
             ]
         )
     )
-    command.handle()
+    call_command(command, startup_time_limit=5)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -761,7 +780,7 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
             ]
         )
     )
-    command.handle()
+    call_command(command, startup_time_limit=5)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -835,7 +854,7 @@ def test_zip_url_volume_without_content_length(httpx_mock: HTTPXMock):
             ]
         )
     )
-    command.handle()
+    call_command(command, startup_time_limit=5)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -922,7 +941,7 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
             ]
         )
     )
-    command.handle()
+    call_command(command, startup_time_limit=5)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -998,7 +1017,7 @@ def test_zip_and_http_post_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1091,7 +1110,7 @@ def test_zip_and_http_put_output_uploader(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1181,7 +1200,7 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1266,7 +1285,7 @@ def test_output_upload_retry(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1350,7 +1369,7 @@ def test_raw_script_job():
             ]
         )
     )
-    command.handle()
+    call_command(command, startup_time_limit=5)
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
         {
             "message_type": "V0ExecutorReadyRequest",
@@ -1468,7 +1487,7 @@ def test_multi_upload_output_uploader_with_system_output(httpx_mock: HTTPXMock, 
     )
 
     # Act
-    command.handle()
+    call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1583,7 +1602,7 @@ def test_single_file_volume(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1689,7 +1708,7 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     )
 
     # Act
-    command.handle()
+    call_command(command, startup_time_limit=5)
 
     # Assert
     assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
@@ -1743,12 +1762,12 @@ def test_artifacts(caplog):
     # which GitHub Actions runner is not able to handle, resulting in a timeout.
     caplog.set_level(logging.CRITICAL)
 
-    original_JobRunner_prepare = JobRunner.prepare_initial
+    original_DefaultJobRunner_prepare = DefaultJobRunner.prepare_initial
 
-    async def patch_JobRunner_prepare_initial(
+    async def patch_DefaultJobRunner_prepare_initial(
         self, initial_job_request: V0InitialJobRequest
     ) -> None:
-        await original_JobRunner_prepare(self, initial_job_request)
+        await original_DefaultJobRunner_prepare(self, initial_job_request)
 
         with open(self.artifacts_mount_dir / "empty", "wb") as f:
             pass
@@ -1769,8 +1788,8 @@ def test_artifacts(caplog):
             f.write(b"x" * 1_000_000)
 
     with patch(
-        "compute_horde_executor.executor.management.commands.run_executor.JobRunner.prepare_initial",
-        new=patch_JobRunner_prepare_initial,
+        "compute_horde_executor.executor.management.commands.run_executor.DefaultJobRunner.prepare_initial",
+        new=patch_DefaultJobRunner_prepare_initial,
     ):
         command = CommandTested(
             iter(
@@ -1815,7 +1834,7 @@ def test_artifacts(caplog):
         )
 
         # Act
-        command.handle()
+        call_command(command, startup_time_limit=5)
 
     all_bytes = b"".join(bytes([i]) for i in range(256))
 

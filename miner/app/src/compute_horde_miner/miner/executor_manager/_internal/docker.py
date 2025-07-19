@@ -64,6 +64,20 @@ class DockerExecutorManager(BaseExecutorManager):
         )
 
         nginx_port = executor_port_dispenser.get_port()
+
+        volumes = [
+            # the executor must be able to spawn images on host
+            "-v",
+            "/var/run/docker.sock:/var/run/docker.sock",
+            "-v",
+            "/tmp:/tmp",
+        ]
+        if settings.CUSTOM_JOB_RUNNERS_PATH:
+            volumes = [
+                *volumes,
+                "-v",
+                f"{settings.CUSTOM_JOB_RUNNERS_PATH}:/root/src/compute_horde_miner/custom_job_runners.py",
+            ]
         process_executor = await asyncio.create_subprocess_exec(
             "docker",
             "run",
@@ -77,11 +91,7 @@ class DockerExecutorManager(BaseExecutorManager):
             *hf_args,
             "--name",
             token,
-            # the executor must be able to spawn images on host
-            "-v",
-            "/var/run/docker.sock:/var/run/docker.sock",
-            "-v",
-            "/tmp:/tmp",
+            *volumes,
             settings.EXECUTOR_IMAGE,
             "python",
             "manage.py",
@@ -89,6 +99,16 @@ class DockerExecutorManager(BaseExecutorManager):
             *(await self.get_executor_cmdline_args()),
         )  # noqa: S607
         return DockerExecutor(process_executor, token)
+
+    async def get_executor_cmdline_args(self):
+        args = await super().get_executor_cmdline_args()
+        if runner_cls := settings.CUSTOM_JOB_RUNNER_CLASS_NAME:
+            args = [
+                *args,
+                "--job-runner-class",
+                f"compute_horde_miner.custom_job_runners.{runner_cls}",
+            ]
+        return args
 
     async def kill_executor(self, executor):
         # kill executor container first so it would not be able to report anything - job simply timeouts
