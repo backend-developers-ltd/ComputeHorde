@@ -5,6 +5,7 @@ Django settings for compute_horde_miner project.
 import inspect
 import ipaddress
 import logging
+import os
 import pathlib
 from datetime import timedelta
 from functools import wraps
@@ -493,3 +494,16 @@ if SENTRY_DSN := env("SENTRY_DSN", default=""):
 
 CLUSTER_SECRET = env.str("CLUSTER_SECRET", default="")
 CLUSTER_HOTKEYS = env.list("CLUSTER_HOTKEYS", default=[])
+
+# Path pointing to the file containing custom job runner classes.
+CUSTOM_JOB_RUNNERS_PATH = ""
+if "CUSTOM_JOB_RUNNERS_PATH" in os.environ:
+    CUSTOM_JOB_RUNNERS_PATH = str(env.path("CUSTOM_JOB_RUNNERS_PATH"))
+
+# One of the classes present in the CUSTOM_JOB_RUNNERS_PATH python file.
+CUSTOM_JOB_RUNNER_CLASS_NAME = env.str("CUSTOM_JOB_RUNNER_CLASS_NAME", default="")
+
+if CUSTOM_JOB_RUNNER_CLASS_NAME and not CUSTOM_JOB_RUNNERS_PATH:
+    raise RuntimeError(
+        "CUSTOM_JOB_RUNNERS_PATH must be set if CUSTOM_JOB_RUNNER_CLASS_NAME is set."
+    )
