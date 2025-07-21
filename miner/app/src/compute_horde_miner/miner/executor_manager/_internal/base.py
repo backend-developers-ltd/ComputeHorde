@@ -235,3 +235,14 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         current_block = subtensor.get_current_block()
         peak_cycle = get_peak_cycle(current_block, settings.BITTENSOR_NETUID)
         return current_block in peak_cycle
+
+    async def get_split_distribution(self) -> dict[str, float] | None:
+        """
+        Get the split distribution for decoupled dancing.
+        By default, returns None (no split).
+        Miners can override this to implement split exposure.
+        
+        Returns:
+            Dictionary mapping hotkeys to percentages, or None if no split
+        """
+        return None

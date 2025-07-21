@@ -428,6 +428,11 @@ CONSTANCE_CONFIG = {
         "In both cases allowance will still be deducted.",
         bool,
     ),
+    "DYNAMIC_DANCING_BONUS": (
+        0.3,
+        "Bonus multiplier for the split hotkey in decoupled dancing (30% = 0.3)",
+        float,
+    ),
 }
 
 # Content Security Policy
