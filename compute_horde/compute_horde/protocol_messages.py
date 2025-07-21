@@ -184,7 +184,6 @@ class V0JobFailedRequest(BaseModel):
     docker_process_stderr: str
     error_type: ErrorType | None = None
     error_detail: str | None = None
-    timeout: bool = False
 
 
 # executor -> miner.ec -> miner.vc -> validator
