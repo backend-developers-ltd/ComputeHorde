@@ -6,12 +6,13 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 from compute_horde.protocol_messages import V0JobFinishedRequest
+from compute_horde.executor_class import DEFAULT_LLM_EXECUTOR_CLASS
+
 from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.synthetic_jobs.batch_run import (
     _LLM_ANSWERS_DOWNLOAD_MAX_ATTEMPTS,
     _LLM_ANSWERS_DOWNLOAD_RETRY_MIN_BACKOFF,
-    LLM_EXECUTOR_CLASS,
     BatchConfig,
     BatchContext,
     LlmAnswerDownloadTask,
@@ -26,7 +27,7 @@ from compute_horde_validator.validator.synthetic_jobs.generator.llm_prompts impo
 
 def _create_mock_job(name):
     mock_job = MagicMock()
-    mock_job.executor_class = LLM_EXECUTOR_CLASS
+    mock_job.executor_class = DEFAULT_LLM_EXECUTOR_CLASS
     mock_job.job_generator = AsyncMock(spec=LlmPromptsSyntheticJobGenerator)
     mock_job.job_response = MagicMock(spec=V0JobFinishedRequest)
     mock_job.name = name

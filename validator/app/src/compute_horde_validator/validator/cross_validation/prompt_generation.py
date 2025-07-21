@@ -15,6 +15,7 @@ from compute_horde_validator.validator.cross_validation.utils import (
     TrustedMinerClient,
 )
 from compute_horde_validator.validator.dynamic_config import aget_config
+from compute_horde_validator.validator.generation_profile import PromptGenerationProfile
 from compute_horde_validator.validator.models import PromptSeries, SystemEvent
 from compute_horde_validator.validator.s3 import generate_upload_url, get_public_url
 
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 async def generate_prompts(
     *,
+    profile: PromptGenerationProfile,
     create_miner_client: Callable[..., TrustedMinerClient] | None = None,
     job_uuid: uuid.UUID | None = None,
     wait_timeout: int | None = None,
@@ -45,13 +47,12 @@ async def generate_prompts(
     job_uuid = job_uuid or uuid.uuid4()
 
     num_batches = await aget_config("DYNAMIC_PROMPTS_SERIES_IN_A_SINGLE_GENERATION")
-    num_prompts_per_batch = await aget_config("DYNAMIC_NUMBER_OF_PROMPTS_IN_SERIES")
 
     series_uuids, upload_urls, public_urls = _generate_uuids_and_urls(num_batches)
 
     job_generator = prompt_job_generator(
         job_uuid,
-        num_prompts_per_batch=num_prompts_per_batch,
+        profile=profile,
         batch_uuids=series_uuids,
         upload_urls=upload_urls,
     )
@@ -86,7 +87,9 @@ async def generate_prompts(
             type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
             subtype=SystemEvent.EventSubType.FAILURE,
             long_description=f"Trusted miner failed to run prompt generation job: {e!r}",
-            data={},
+            data={
+                "profile": profile,
+            },
         )
         logger.warning("Failed to run organic job", exc_info=True)
         return
@@ -103,6 +106,7 @@ async def generate_prompts(
             "completed_at": completed_at.isoformat(),
             "duration": (completed_at - started_at).total_seconds(),
             "count": len(series_uuids),
+            "profile": profile,
         },
     )
 
