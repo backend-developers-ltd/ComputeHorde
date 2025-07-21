@@ -10,6 +10,7 @@ import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
+from compute_horde import protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import (
     Error,
     OrganicJobRequest,
@@ -18,8 +19,8 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V2JobRequest,
 )
 from compute_horde.fv_protocol.validator_requests import (
-    JobStatusMetadata,
     JobStatusUpdate,
+    JobStatusUpdatePayload,
     V0AuthenticationRequest,
     V0Heartbeat,
     V0MachineSpecsUpdate,
@@ -375,8 +376,8 @@ class FacilitatorClient:
                 await self.send_model(
                     JobStatusUpdate(
                         uuid=job_request.uuid,
-                        status=JobStatusUpdate.Status.FAILED,
-                        metadata=JobStatusMetadata(comment=msg),
+                        status=protocol_consts.JobStatusValiFaci.FAILED,
+                        metadata=JobStatusUpdatePayload(comment=msg),
                     )
                 )
                 return
@@ -384,8 +385,8 @@ class FacilitatorClient:
         await self.send_model(
             JobStatusUpdate(
                 uuid=job_request.uuid,
-                status=JobStatusUpdate.Status.RECEIVED,
-                metadata=JobStatusMetadata(comment=""),
+                status=protocol_consts.JobStatusValiFaci.RECEIVED,
+                metadata=JobStatusUpdatePayload(comment=""),
             )
         )
 
@@ -398,8 +399,8 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=JobStatusUpdate.Status.REJECTED,
-                    metadata=JobStatusMetadata(comment=msg),
+                    status=protocol_consts.JobStatusValiFaci.REJECTED,
+                    metadata=JobStatusUpdatePayload(comment=msg),
                 )
             )
             return
@@ -409,8 +410,8 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=JobStatusUpdate.Status.REJECTED,
-                    metadata=JobStatusMetadata(comment=msg),
+                    status=protocol_consts.JobStatusValiFaci.REJECTED,
+                    metadata=JobStatusUpdatePayload(comment=msg),
                 )
             )
             return
@@ -420,8 +421,8 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=JobStatusUpdate.Status.FAILED,
-                    metadata=JobStatusMetadata(comment=msg),
+                    status=protocol_consts.JobStatusValiFaci.FAILED,
+                    metadata=JobStatusUpdatePayload(comment=msg),
                 )
             )
             return
@@ -431,8 +432,8 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=JobStatusUpdate.Status.REJECTED,
-                    metadata=JobStatusMetadata(comment=msg),
+                    status=protocol_consts.JobStatusValiFaci.REJECTED,
+                    metadata=JobStatusUpdatePayload(comment=msg),
                 )
             )
             return
@@ -442,8 +443,8 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=JobStatusUpdate.Status.REJECTED,
-                    metadata=JobStatusMetadata(comment=msg),
+                    status=protocol_consts.JobStatusValiFaci.REJECTED,
+                    metadata=JobStatusUpdatePayload(comment=msg),
                 )
             )
             return
@@ -453,8 +454,8 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=JobStatusUpdate.Status.FAILED,
-                    metadata=JobStatusMetadata(comment=msg),
+                    status=protocol_consts.JobStatusValiFaci.FAILED,
+                    metadata=JobStatusUpdatePayload(comment=msg),
                 )
             )
             return
@@ -474,7 +475,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=JobStatusUpdate.Status.FAILED,
-                    metadata=JobStatusMetadata(comment=msg),
+                    status=protocol_consts.JobStatusValiFaci.FAILED,
+                    metadata=JobStatusUpdatePayload(comment=msg),
                 )
             )

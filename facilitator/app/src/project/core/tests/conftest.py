@@ -9,9 +9,9 @@ from bittensor import Keypair
 from bittensor_wallet import Wallet
 from channels.testing import WebsocketCommunicator
 from compute_horde.fv_protocol.validator_requests import (
-    JobStatusMetadata,
     JobStatusUpdate,
-    MinerResponse,
+    JobStatusUpdatePayload,
+    JobSuccessDetails,
     V0AuthenticationRequest,
 )
 from compute_horde_core.signature import Signature
@@ -152,9 +152,9 @@ def job_status_update(job):
     return JobStatusUpdate(
         uuid=str(job.uuid),
         status="accepted",
-        metadata=JobStatusMetadata(
+        metadata=JobStatusUpdatePayload(
             comment="some comment",
-            miner_response=MinerResponse(
+            miner_response=JobSuccessDetails(
                 job_uuid=str(job.uuid),
                 message_type="some-type",
                 docker_process_stderr="some stderr",

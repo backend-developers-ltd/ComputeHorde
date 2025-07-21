@@ -7,6 +7,18 @@ else:
     from backports.strenum import StrEnum  #  noqa: UP035
 
 
+class JobStatusValiFaci(StrEnum):
+    RECEIVED = "received"
+    ACCEPTED = "accepted"
+    EXECUTOR_READY = "executor_ready"
+    STREAMING_READY = "streaming_ready"
+    VOLUMES_READY = "volumes_ready"
+    EXECUTION_DONE = "execution_done"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+
 class JobStatus(Enum):
     UNKNOWN = "unknown"
     NOT_SUBMITTED = "not_submitted"
@@ -58,7 +70,6 @@ class JobParticipantType(Enum):
 
 
 class JobStage(Enum):
-    UNKNOWN = "unknown"
     # ↓ Facilitator, validator
     SUBMISSION = "submission"
     ROUTING = "routing"

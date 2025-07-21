@@ -169,7 +169,7 @@ class V0JobFailedRequest(BaseModel):
     message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
     job_uuid: str
     # TODO(after error propagation): no default
-    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
+    stage: protocol_consts.JobStage | None = None
     docker_process_exit_status: int | None = None
     docker_process_stdout: str
     docker_process_stderr: str
