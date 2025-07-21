@@ -199,23 +199,41 @@ class BaseJobRunner(ABC):
     async def prepare_full(self, full_job_request: V0JobRequest):
         self.full_job_request = full_job_request
 
+    @abstractmethod
     async def get_docker_image(self) -> str:
-        return self.full_job_request.docker_image
+        """
+        Return the docker image name to run by the executor.
+        """
 
     @abstractmethod
-    async def get_docker_run_args(self) -> list[str]: ...
+    async def get_docker_run_args(self) -> list[str]:
+        """
+        Return the list of arguments to pass to the `docker run` command, e.g. `["--rm", "--name", "container_name"]`.
+        Returned arguments should not include volumes and docker image name.
+        """
 
     @abstractmethod
-    async def get_docker_run_cmd(self) -> list[str]: ...
+    async def get_docker_run_cmd(self) -> list[str]:
+        """
+        Return a cmd to pass to the docker container, e.g. `self.full_job_request.docker_run_cmd`.
+        The return value of this method is appended after the image name in the `docker run` command.
+        """
 
     @abstractmethod
-    async def job_cleanup(self, job_process: Process): ...
+    async def job_cleanup(self, job_process: Process):
+        """
+        Perform any cleanup necessary after the job is finished.
+        """
 
     async def before_start_job(self):
-        pass
+        """
+        Perform any action necessary just before the job process is started.
+        """
 
     async def after_start_job(self):
-        pass
+        """
+        Perform any action necessary just after the job process is started.
+        """
 
     @asynccontextmanager
     async def start_job(self) -> AsyncGenerator[None, Any]:
@@ -255,7 +273,8 @@ class BaseJobRunner(ABC):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         ) as job_process:
-            yield await self.after_start_job()
+            await self.after_start_job()
+            yield
             await self.job_cleanup(job_process)
 
     async def upload_results(self) -> JobResult:
@@ -400,7 +419,29 @@ class BaseJobRunner(ABC):
 
 
 class DefaultJobRunner(BaseJobRunner):
+    """
+    Default implementation of a job runner.
+    The image and run args are taken from a job request.
+    The job runner is prepared to handle the streaming jobs
+    by automatically creating and managing a docker network and Nginx instance.
+    """
+
+    async def get_docker_image(self) -> str:
+        assert self.full_job_request is not None, (
+            "Full job request must be set. Call prepare_full() first."
+        )
+        assert self.initial_job_request is not None, (
+            "Initial job request must be set. Call prepare_initial() first."
+        )
+        return self.full_job_request.docker_image
+
     async def get_docker_run_args(self) -> list[str]:
+        assert self.full_job_request is not None, (
+            "Full job request must be set. Call prepare_full() first."
+        )
+        assert self.initial_job_request is not None, (
+            "Initial job request must be set. Call prepare_initial() first."
+        )
         preset_run_options = preset_to_docker_run_args(
             self.full_job_request.docker_run_options_preset
         )
@@ -432,6 +473,12 @@ class DefaultJobRunner(BaseJobRunner):
         ]
 
     async def get_docker_run_cmd(self) -> list[str]:
+        assert self.full_job_request is not None, (
+            "Full job request must be set. Call prepare_full() first."
+        )
+        assert self.initial_job_request is not None, (
+            "Initial job request must be set. Call prepare_initial() first."
+        )
         cmd = self.full_job_request.docker_run_cmd
         if not cmd and self.full_job_request.raw_script:
             cmd = ["python", "/script.py"]
@@ -473,6 +520,9 @@ class DefaultJobRunner(BaseJobRunner):
             raise JobError("Streaming job health check failed")
 
     async def job_cleanup(self, job_process: Process):
+        assert self.initial_job_request is not None, (
+            "Initial job request must be set. Call prepare_initial() first."
+        )
         try:
             # Support for the legacy single-timeout
             docker_process_timeout = (

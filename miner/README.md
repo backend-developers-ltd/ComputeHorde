@@ -72,6 +72,9 @@ To create a custom executor manager, follow these steps:
 
 If you don't implement `get_executor_public_address` the executor's public address will be "guessed" by miner's at connection time - might not work well if your miner<->executor connection uses a local network. the input of this method is the outcome of `start_new_executor`. **IMPORTANT!** If you don't supply the right public addresses of your executors all [streaming jobs](/docs/job_flow.md#streaming-organic-job-flow) will fail.
 
+It is highly encouraged that the executor started by the `start_new_executor` method is a docker container from the `backenddevelopersltd/compute-horde-executor` image. 
+For reference, see the implementation in `compute_horde_miner.miner.executor_manager.docker`.
+
 3. Update your `.env` file with the following variables:
 
    ```
@@ -92,6 +95,106 @@ If you don't implement `get_executor_public_address` the executor's public addre
 5. Remember to set up the preprod miner images if the feature is not yet officially released.
 
 By following these steps, you can create and use a custom executor manager in your compute_horde_miner setup.
+
+## Custom job runner
+
+Using `backenddevelopersltd/compute-horde-executor` executor docker image you may customize how the job is run inside the executor container 
+by implementing your own job runner. To do this, follow these steps:
+
+1. Create a python file for your code, e.g. `/home/ubuntu/my_job_runner.py`.
+
+2. Add to it the following code: 
+
+   ```python
+   from compute_horde_executor.executor.job_runner import BaseJobRunner
+   
+   from asyncio.subprocess import Process
+   
+   class MyJobRunner(BaseJobRunner):
+       async def get_docker_image(self) -> str:
+           """
+           Return the docker image name to run by the executor.
+           """
+   
+       async def get_docker_run_args(self) -> list[str]:
+           """
+           Return the list of arguments to pass to the `docker run` command, e.g. `["--rm", "--name", "container_name"]`.
+           Returned arguments should not include volumes and docker image name.
+           """
+
+       async def get_docker_run_cmd(self) -> list[str]:
+           """
+           Return a cmd to pass to the docker container, e.g. `self.full_job_request.docker_run_cmd`.
+           The return value of this method is appended after the image name in the `docker run` command.
+           """
+
+       async def job_cleanup(self, job_process: Process):
+           """
+           Perform any cleanup necessery after the job is finished.
+           """
+
+       async def before_start_job(self):
+           """
+           Perform any action necessery just before the job process is started.
+           """
+
+       async def after_start_job(self):
+           """
+           Perform any action necessery just after the job process is started.
+           """
+   ```
+   
+Methods `get_docker_image`, `get_docker_run_args`, `get_docker_run_cmd` and `job_cleanup` **must** be implemented.
+
+The six methods listed above are the public interface of the job runner. All the other methods are subject to change without notice.
+
+Python packages currently available in the container are listed in `executor/pyproject.toml` file under `dependencies` key.
+They may be changed in the future.
+
+To use your custom code:
+
+1. Mount your custom code into the executor container's `/root/src/compute_horde_miner/` subdirectory 
+   via your executor manager. For example:
+
+   ```python
+   async def start_new_executor(self, token, executor_class, timeout):
+       ...
+       process_executor = await asyncio.create_subprocess_exec(
+           "docker",
+           "run",
+           "-v",
+           "/home/ubuntu/my_job_runner.py:/root/src/compute_horde_miner/my_job_runner.py",
+           ...,  # Other args
+           "backenddevelopersltd/compute-horde-executor:v1-latest"
+       )
+       ...
+   ``` 
+
+2. Pass the python module path pointing to your custom class to the `python manage.py run_executor` command by `--job-runner-class` arg:
+
+   ```python
+   async def start_new_executor(self, token, executor_class, timeout):
+       ...
+       process_executor = await asyncio.create_subprocess_exec(
+           "docker",
+           "run",
+           "-v",
+           "/home/ubuntu/my_job_runner.py:/root/src/compute_horde_miner/my_job_runner.py",
+           ...,  # Other args
+           "backenddevelopersltd/compute-horde-executor:v1-latest",
+           "python",
+           "manage.py",
+           "run_executor",
+           "--startup-time-limit",
+           "5",
+           "--job-runner-class",
+           "compute_horde_miner.my_job_runner.MyJobRunner"
+       )
+       ...
+   ```
+   
+There is also a default implementation of job runner: `compute_horde_executor.executor.job_runner.DefaultJobRunner`.
+It is used by default in the executor image, and it provides support for handling streaming jobs.
 
 ## Preloading job images
 
