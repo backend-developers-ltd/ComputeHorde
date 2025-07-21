@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 import tenacity
+
 from ._models import Volume
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,7 @@ class VolumeManagerClient:
 
         Raises:
             VolumeManagerError: If the request fails
+
         """
         url = f"{self.base_url}/prepare_volume"
         volume_data = volume.model_dump()
@@ -94,6 +96,7 @@ class VolumeManagerClient:
 
         Raises:
             VolumeManagerError: If the notification fails
+
         """
         url = f"{self.base_url}/job_finished"
         payload = {"job_uuid": job_uuid}
@@ -106,35 +109,31 @@ class VolumeManagerClient:
         retry=tenacity.retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
     )
     async def _make_request(
-        self, 
-        url: str, 
-        payload: dict[str, Any], 
-        operation: str, 
-        timeout: float = 300.0
+        self, url: str, payload: dict[str, Any], operation: str, timeout: float = 300.0
     ) -> dict[str, Any]:
         """
         Make a POST request to the Volume Manager with standardized error handling.
-        
+
         Args:
             url: The endpoint URL
             payload: The JSON payload to send
             operation: Operation name for error messages
             timeout: Request timeout in seconds
-            
+
         Returns:
             Parsed JSON response
-            
+
         Raises:
             VolumeManagerError: If the request fails or response is invalid
+
         """
         logger.debug(f"Making {operation} request to Volume Manager at {url}")
-        logger.debug(f"Request payload: {json.dumps(payload, indent=2)}")
 
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(url, json=payload, headers=self.headers)
                 response.raise_for_status()
-            
+
             logger.debug(f"Volume Manager {operation} response status: {response.status_code}")
             logger.debug(f"Volume Manager {operation} response: {response.text}")
 
@@ -144,7 +143,7 @@ class VolumeManagerClient:
             # Handle non-retryable status codes
             error_msg = f"Volume Manager {operation} returned status {e.response.status_code}"
             error_detail = None
-            
+
             try:
                 error_data = e.response.json()
                 if "error" in error_data:
@@ -160,13 +159,14 @@ class VolumeManagerClient:
 def create_volume_manager_client(base_url: str, headers: dict[str, str] | None = None) -> VolumeManagerClient:
     """
     Create a Volume Manager client with the specified configuration.
-    
+
     Args:
         base_url: The base URL of the Volume Manager service
         headers: Optional headers to include in requests
-        
+
     Returns:
         A configured VolumeManagerClient instance
+
     """
     logger.debug(f"Volume manager created at {base_url}")
     return VolumeManagerClient(base_url=base_url, headers=headers)

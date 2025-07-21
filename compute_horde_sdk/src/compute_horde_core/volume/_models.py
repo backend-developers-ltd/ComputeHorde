@@ -23,9 +23,10 @@ class VolumeType(str, enum.Enum):
 
 class VolumeUsageType(str, enum.Enum):
     """Hint for volume managers about expected usage patterns."""
+
     single_use = "single_use"  # Volume is expected to be used just once
-    reusable = "reusable"      # Volume is expected to be used many times
-    
+    reusable = "reusable"  # Volume is expected to be used many times
+
     def __str__(self) -> str:
         return str.__str__(self)
 

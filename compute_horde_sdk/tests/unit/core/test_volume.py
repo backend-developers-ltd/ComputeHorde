@@ -1,7 +1,6 @@
 import asyncio
 import base64
 import io
-import json
 import os
 import pathlib
 import zipfile
@@ -21,12 +20,11 @@ from compute_horde_core.volume import (
     SingleFileVolumeDownloader,
     VolumeDownloader,
     VolumeDownloadFailed,
-    ZipUrlVolume,
-    ZipUrlVolumeDownloader,
     VolumeManagerClient,
     VolumeManagerError,
-    VolumeManagerMount,
     VolumeManagerResponse,
+    ZipUrlVolume,
+    ZipUrlVolumeDownloader,
     create_volume_manager_client,
     get_volume_manager_headers,
 )
@@ -515,7 +513,7 @@ class TestGetVolumeManagerHeaders:
             "COMPUTE_HORDE_VOLUME_MANAGER_HEADER_X-Custom-Header": "custom-value",
             "COMPUTE_HORDE_OTHER_ENV_VAR": "should-be-ignored",
         }
-        
+
         with mock.patch.dict(os.environ, env_vars, clear=True):
             headers = get_volume_manager_headers()
             expected = {
@@ -545,29 +543,18 @@ class TestVolumeManagerClient:
             token="test_token",
         )
 
-
     @pytest.mark.asyncio
     async def test_prepare_volume_success(self, client, huggingface_volume):
         """Test successful prepare_volume call."""
-        mock_response = {
-            "mounts": [
-                {
-                    "type": "bind",
-                    "source": "/host/path",
-                    "target": "/container/path"
-                }
-            ]
-        }
-        
-        with mock.patch.object(client, '_make_request') as mock_make_request:
+        mock_response = {"mounts": [{"type": "bind", "source": "/host/path", "target": "/container/path"}]}
+
+        with mock.patch.object(client, "_make_request") as mock_make_request:
             mock_make_request.return_value = mock_response
-            
+
             result = await client.prepare_volume(
-                job_uuid="test-job-123",
-                volume=huggingface_volume,
-                job_metadata={"image": "test-image"}
+                job_uuid="test-job-123", volume=huggingface_volume, job_metadata={"image": "test-image"}
             )
-            
+
             assert isinstance(result, VolumeManagerResponse)
             assert len(result.mounts) == 1
             assert result.mounts[0].type == "bind"
@@ -575,14 +562,13 @@ class TestVolumeManagerClient:
     @pytest.mark.asyncio
     async def test_job_finished_success(self, client):
         """Test successful job_finished call."""
-        with mock.patch.object(client, '_make_request') as mock_make_request:
+        with mock.patch.object(client, "_make_request") as mock_make_request:
             await client.job_finished("test-job-123")
-            
+
             mock_make_request.assert_called_once()
             call_args = mock_make_request.call_args
             assert call_args[0][0] == "http://localhost:8080/job_finished"
             assert call_args[0][1] == {"job_uuid": "test-job-123"}
-
 
     @pytest.mark.asyncio
     async def test_error_handling(self, client, huggingface_volume):
@@ -591,30 +577,28 @@ class TestVolumeManagerClient:
         mock_response = mock.MagicMock()
         mock_response.status_code = 500
         mock_response.json.return_value = {"error": "Server error"}
-        
+
         http_error = httpx.HTTPStatusError("500 Internal Server Error", request=None, response=mock_response)
-        
-        with mock.patch('httpx.AsyncClient') as mock_client_class:
+
+        with mock.patch("httpx.AsyncClient") as mock_client_class:
             mock_client = mock.AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
             mock_client.post.side_effect = http_error
-            
+
             # Test prepare_volume error
             with pytest.raises(VolumeManagerError) as exc_info:
                 await client.prepare_volume(
-                    job_uuid="test-job-123",
-                    volume=huggingface_volume,
-                    job_metadata={"image": "test-image"}
+                    job_uuid="test-job-123", volume=huggingface_volume, job_metadata={"image": "test-image"}
                 )
-            
+
             error = exc_info.value
             assert "Volume Manager prepare_volume returned status 500" in error.description
             assert error.error_detail == "Server error"
-            
+
             # Test job_finished error
             with pytest.raises(VolumeManagerError) as exc_info:
                 await client.job_finished("test-job-123")
-            
+
             error = exc_info.value
             assert "Volume Manager job_finished returned status 500" in error.description
 
@@ -624,28 +608,18 @@ class TestVolumeManagerClient:
         # Test with InlineVolume
         inline_volume = InlineVolume(
             contents="dGVzdCBjb250ZW50",  # base64 encoded "test content"
-            relative_path="data"
+            relative_path="data",
         )
-        
-        mock_response = {
-            "mounts": [
-                {
-                    "type": "bind",
-                    "source": "/tmp/inline-data",
-                    "target": "/volume/data"
-                }
-            ]
-        }
-        
-        with mock.patch.object(client, '_make_request') as mock_make_request:
+
+        mock_response = {"mounts": [{"type": "bind", "source": "/tmp/inline-data", "target": "/volume/data"}]}
+
+        with mock.patch.object(client, "_make_request") as mock_make_request:
             mock_make_request.return_value = mock_response
-            
+
             result = await client.prepare_volume(
-                job_uuid="test-job-456",
-                volume=inline_volume,
-                job_metadata={"image": "test-image"}
+                job_uuid="test-job-456", volume=inline_volume, job_metadata={"image": "test-image"}
             )
-            
+
             assert isinstance(result, VolumeManagerResponse)
             assert len(result.mounts) == 1
             assert result.mounts[0].type == "bind"
@@ -655,46 +629,32 @@ class TestVolumeManagerClient:
         """Test prepare_volume with multiple mounts in response."""
         mock_response = {
             "mounts": [
-                {
-                    "type": "bind",
-                    "source": "/host/models",
-                    "target": "/volume/models"
-                },
-                {
-                    "type": "volume",
-                    "source": "cache-volume",
-                    "target": "/cache"
-                },
-                {
-                    "type": "tmpfs",
-                    "source": "",
-                    "target": "/tmp"
-                }
+                {"type": "bind", "source": "/host/models", "target": "/volume/models"},
+                {"type": "volume", "source": "cache-volume", "target": "/cache"},
+                {"type": "tmpfs", "source": "", "target": "/tmp"},
             ]
         }
-        
-        with mock.patch.object(client, '_make_request') as mock_make_request:
+
+        with mock.patch.object(client, "_make_request") as mock_make_request:
             mock_make_request.return_value = mock_response
-            
+
             result = await client.prepare_volume(
-                job_uuid="test-job-789",
-                volume=huggingface_volume,
-                job_metadata={"image": "test-image"}
+                job_uuid="test-job-789", volume=huggingface_volume, job_metadata={"image": "test-image"}
             )
-            
+
             assert isinstance(result, VolumeManagerResponse)
             assert len(result.mounts) == 3
-            
+
             # Check first mount
             assert result.mounts[0].type == "bind"
             assert result.mounts[0].source == "/host/models"
             assert result.mounts[0].target == "/volume/models"
-            
+
             # Check second mount
             assert result.mounts[1].type == "volume"
             assert result.mounts[1].source == "cache-volume"
             assert result.mounts[1].target == "/cache"
-            
+
             # Check third mount
             assert result.mounts[2].type == "tmpfs"
             assert result.mounts[2].source == ""
@@ -708,7 +668,7 @@ class TestCreateVolumeManagerClient:
         """Test creating a client with headers."""
         headers = {"Authorization": "Bearer token"}
         client = create_volume_manager_client("http://localhost:8080", headers)
-        
+
         assert isinstance(client, VolumeManagerClient)
         assert client.base_url == "http://localhost:8080"
         assert client.headers == headers
@@ -716,7 +676,7 @@ class TestCreateVolumeManagerClient:
     def test_create_volume_manager_client_no_headers(self):
         """Test creating a client without headers."""
         client = create_volume_manager_client("http://localhost:8080")
-        
+
         assert isinstance(client, VolumeManagerClient)
         assert client.base_url == "http://localhost:8080"
         assert client.headers == {}

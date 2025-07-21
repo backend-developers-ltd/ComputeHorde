@@ -26,18 +26,16 @@ from compute_horde_core.volume import (
     Volume,
     VolumeDownloader,
     VolumeDownloadFailed,
+    VolumeManagerClient,
+    VolumeManagerError,
+    VolumeManagerMount,
+    create_volume_manager_client,
+    get_volume_manager_headers,
 )
 from django.conf import settings
 
 from compute_horde_executor.executor.miner_client import ExecutionResult, JobError, JobResult
 from compute_horde_executor.executor.utils import temporary_process
-from compute_horde_core.volume import (
-    create_volume_manager_client,
-    VolumeManagerClient,
-    VolumeManagerError,
-    VolumeManagerMount,
-    get_volume_manager_headers,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +145,10 @@ class JobRunner:
         self.volume_manager_client: VolumeManagerClient | None = None
         if settings.VOLUME_MANAGER_ADDRESS:
             headers = get_volume_manager_headers()
-            self.volume_manager_client = create_volume_manager_client(settings.VOLUME_MANAGER_ADDRESS, headers)
-        
+            self.volume_manager_client = create_volume_manager_client(
+                settings.VOLUME_MANAGER_ADDRESS, headers
+            )
+
         # Track volume manager mounts for cleanup
         self.volume_manager_mounts: list[VolumeManagerMount] = []
 
@@ -514,26 +514,24 @@ class JobRunner:
         assert self.volume_manager_client is not None
 
         job_uuid = self.initial_job_request.job_uuid
-        
+
         # Prepare job metadata
         job_metadata = self.full_job_request.model_dump()
 
         try:
             logger.debug(f"Requesting volume preparation from Volume Manager for job {job_uuid}")
             response = await self.volume_manager_client.prepare_volume(
-                job_uuid=job_uuid,
-                volume=volume,
-                job_metadata=job_metadata
+                job_uuid=job_uuid, volume=volume, job_metadata=job_metadata
             )
-            
+
             # Store the mounts for later use in Docker command
             self.volume_manager_mounts = response.mounts
             logger.debug(f"Volume Manager provided {len(response.mounts)} mounts")
-            
+
         except VolumeManagerError as exc:
             logger.warning(f"Volume Manager failed to prepare volume for job {job_uuid}: {exc}")
             logger.info("Falling back to direct volume download")
-            
+
             # Fallback to direct download
             await self._download_volume_directly(volume)
 

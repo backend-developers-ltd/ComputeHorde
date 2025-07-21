@@ -7,12 +7,12 @@ from ._downloader import (
     VolumeDownloadFailed,
     ZipUrlVolumeDownloader,
 )
-from ._models import *
 from ._manager import (
     VolumeManagerClient,
     VolumeManagerError,
-    VolumeManagerResponse,
     VolumeManagerMount,
-    get_volume_manager_headers,
+    VolumeManagerResponse,
     create_volume_manager_client,
+    get_volume_manager_headers,
 )
+from ._models import *

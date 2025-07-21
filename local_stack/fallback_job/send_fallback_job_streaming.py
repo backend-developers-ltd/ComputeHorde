@@ -30,6 +30,7 @@ def terminate():
     return {"message": "Server is shutting down."}
 """
 
+
 async def main():
     compute_horde_job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.spin_up_4min__gpu_24gb,
@@ -48,15 +49,13 @@ async def main():
         streaming_start_time_limit_sec=10,
         input_volumes={
             "/volume/": InlineInputVolume.from_file_contents(
-                "app.py",
-                STREAMING_SERVER_CODE.encode('utf-8')
+                "app.py", STREAMING_SERVER_CODE.encode("utf-8")
             )
-        }
+        },
     )
 
     fallback_job_spec = FallbackJobSpec.from_job_spec(
-        compute_horde_job_spec, 
-        work_dir="/"
+        compute_horde_job_spec, work_dir="/"
     )
 
     with FallbackClient(cloud="runpod", idle_minutes=1) as fallback_client:
@@ -76,7 +75,9 @@ async def main():
                 else:
                     raise RuntimeError(f"[Fallback] Unexpected message content: {data}")
             else:
-                raise RuntimeError(f"[Fallback] Failed to get /message: {resp.status_code}")
+                raise RuntimeError(
+                    f"[Fallback] Failed to get /message: {resp.status_code}"
+                )
 
             # Terminate the server
             terminate_url = f"{url}/terminate"
@@ -85,10 +86,13 @@ async def main():
             if resp.status_code == 200:
                 logger.info("[Fallback] Server terminated successfully")
             else:
-                raise RuntimeError(f"[Fallback] Failed to terminate server: {resp.status_code}")
+                raise RuntimeError(
+                    f"[Fallback] Failed to terminate server: {resp.status_code}"
+                )
 
         await job.wait(timeout=60)
     logger.info("Success!")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
