@@ -7,6 +7,7 @@ from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
 from pydantic import BaseModel, Field
 
+from compute_horde import protocol_consts
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
@@ -89,15 +90,9 @@ class V0InitialJobRequest(BaseModel):
 
 # miner.vc -> validator
 class V0DeclineJobRequest(BaseModel):
-    class Reason(enum.Enum):
-        NOT_SPECIFIED = "not_specified"
-        BUSY = "busy"
-        EXECUTOR_FAILURE = "executor_failure"
-        VALIDATOR_BLACKLISTED = "validator_blacklisted"
-
     message_type: Literal["V0DeclineJobRequest"] = "V0DeclineJobRequest"
     job_uuid: str
-    reason: Reason = Reason.NOT_SPECIFIED
+    reason: protocol_consts.JobRejectionReason = protocol_consts.JobRejectionReason.NOT_SPECIFIED
     receipts: list[Receipt] = Field(default_factory=list)
 
 
@@ -171,18 +166,15 @@ class V0JobRequest(BaseModel):
 
 # executor -> miner.ec -> miner.vc -> validator
 class V0JobFailedRequest(BaseModel):
-    class ErrorType(enum.StrEnum):
-        TIMEOUT = "TIMEOUT"
-        SECURITY_CHECK = "SECURITY_CHECK"
-        HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
-        NONZERO_EXIT_CODE = "NONZERO_EXIT_STATUS"
-
     message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
     job_uuid: str
+    # TODO(after error propagation): no default
+    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
     docker_process_exit_status: int | None = None
     docker_process_stdout: str
     docker_process_stderr: str
-    error_type: ErrorType | None = None
+    # TODO(after error propagation): default = UNKNOWN
+    error_type: protocol_consts.JobFailureReason | None = None
     error_detail: str | None = None
 
 

@@ -5,6 +5,7 @@ from functools import partial
 from typing import assert_never
 
 from channels.layers import get_channel_layer
+from compute_horde import protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
 from compute_horde.fv_protocol.validator_requests import (
     JobStatusMetadata,
@@ -305,7 +306,7 @@ async def drive_organic_job(
         elif (
             exc.reason == FailureReason.JOB_DECLINED
             and isinstance(exc.received, V0DeclineJobRequest)
-            and exc.received.reason == V0DeclineJobRequest.Reason.BUSY
+            and exc.received.reason == protocol_consts.JobRejectionReason.BUSY
         ):
             # Check when the job was requested to validate excuses against that timestamp
             job_request_time = (
@@ -439,13 +440,13 @@ async def drive_organic_job(
                 match exc.received.error_type:
                     case None:
                         pass
-                    case V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD:
+                    case protocol_consts.JobFailureReason.HUGGINGFACE_DOWNLOAD:
                         subtype = SystemEvent.EventSubType.ERROR_DOWNLOADING_FROM_HUGGINGFACE
-                    case V0JobFailedRequest.ErrorType.SECURITY_CHECK:
+                    case protocol_consts.JobFailureReason.SECURITY_CHECK:
                         subtype = SystemEvent.EventSubType.ERROR_FAILED_SECURITY_CHECK
-                    case V0JobFailedRequest.ErrorType.TIMEOUT:
+                    case protocol_consts.JobFailureReason.TIMEOUT:
                         subtype = SystemEvent.EventSubType.ERROR_EXECUTOR_REPORTED_TIMEOUT
-                    case V0JobFailedRequest.ErrorType.NONZERO_EXIT_CODE:
+                    case protocol_consts.JobFailureReason.NONZERO_EXIT_CODE:
                         subtype = SystemEvent.EventSubType.JOB_PROCESS_NONZERO_EXIT_CODE
                     case _:
                         assert_never(exc.received.error_type)

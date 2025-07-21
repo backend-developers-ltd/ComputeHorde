@@ -3,6 +3,7 @@ import logging
 from dataclasses import dataclass
 
 import pydantic
+from compute_horde import protocol_consts
 from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
 from compute_horde.protocol_messages import (
     ExecutorToMinerMessage,
@@ -45,7 +46,7 @@ class JobError(Exception):
     def __init__(
         self,
         error_message: str,
-        error_type: V0JobFailedRequest.ErrorType | None = None,
+        error_type: protocol_consts.JobFailureReason | None = None,
         error_detail: str | None = None,
         execution_result: ExecutionResult | None = None,
     ):
@@ -199,6 +200,6 @@ class JobResult(pydantic.BaseModel):
     stderr: str
     artifacts: dict[str, str]
     specs: MachineSpecs | None = None
-    error_type: V0JobFailedRequest.ErrorType | None = None
+    error_type: protocol_consts.JobFailureReason | None = None
     error_detail: str | None = None
     upload_results: dict[str, str]

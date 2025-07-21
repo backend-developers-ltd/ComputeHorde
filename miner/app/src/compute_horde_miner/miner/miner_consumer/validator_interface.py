@@ -8,6 +8,7 @@ from functools import cached_property
 from typing import Protocol
 
 import bittensor
+from compute_horde import protocol_consts
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.protocol_messages import (
     GenericError,
@@ -239,7 +240,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                         docker_process_stdout=job.stdout,
                         docker_process_stderr=job.stderr,
                         docker_process_exit_status=job.exit_status,
-                        error_type=V0JobFailedRequest.ErrorType(job.error_type)
+                        error_type=protocol_consts.JobFailureReason(job.error_type)
                         if job.error_type
                         else None,
                         error_detail=job.error_detail,
@@ -321,7 +322,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             await self.send(
                 V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
-                    reason=V0DeclineJobRequest.Reason.VALIDATOR_BLACKLISTED,
+                    reason=protocol_consts.JobRejectionReason.VALIDATOR_BLACKLISTED,
                 ).model_dump_json()
             )
             return
@@ -410,7 +411,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             await self.send(
                 V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
-                    reason=V0DeclineJobRequest.Reason.BUSY,
+                    reason=protocol_consts.JobRejectionReason.BUSY,
                     receipts=[r.to_receipt() for r in receipts],
                 ).model_dump_json()
             )
@@ -424,7 +425,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             await self.send(
                 V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
-                    reason=V0DeclineJobRequest.Reason.EXECUTOR_FAILURE,
+                    reason=protocol_consts.JobRejectionReason.EXECUTOR_FAILURE,
                 ).model_dump_json()
             )
 

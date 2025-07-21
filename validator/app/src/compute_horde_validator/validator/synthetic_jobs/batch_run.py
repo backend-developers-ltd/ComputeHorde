@@ -16,6 +16,7 @@ import bittensor_wallet
 import httpx
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
+from compute_horde import protocol_consts
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
@@ -443,7 +444,7 @@ class Job:
     def is_declined(self) -> bool:
         return isinstance(self.accept_response, V0DeclineJobRequest)
 
-    def decline_reason(self) -> V0DeclineJobRequest.Reason | None:
+    def decline_reason(self) -> protocol_consts.JobRejectionReason | None:
         if isinstance(self.accept_response, V0DeclineJobRequest):
             return self.accept_response.reason
         return None
@@ -1809,7 +1810,7 @@ async def _score_job(ctx: BatchContext, job: Job) -> None:
     job.excused = False
     job.comment = "failed"
 
-    if job.decline_reason() == V0DeclineJobRequest.Reason.BUSY:
+    if job.decline_reason() == protocol_consts.JobRejectionReason.BUSY:
         relevant_executor_count = ctx.executors[job.miner_hotkey][job.executor_class]
         valid_excuse_receipts = await job.get_valid_decline_excuse_receipts()
         accepted_jobs = sum(
@@ -2306,7 +2307,8 @@ async def execute_synthetic_batch_run(
             executor_ready_jobs = await _get_executor_ready_jobs(ctx)
 
             any_job_busy = any(
-                job.decline_reason() == V0DeclineJobRequest.Reason.BUSY for job in ctx.jobs.values()
+                job.decline_reason() == protocol_consts.JobRejectionReason.BUSY
+                for job in ctx.jobs.values()
             )
 
             if executor_ready_jobs:

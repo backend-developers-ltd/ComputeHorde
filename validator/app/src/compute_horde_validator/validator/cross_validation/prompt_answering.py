@@ -4,6 +4,7 @@ from datetime import datetime
 
 import bittensor_wallet
 from asgiref.sync import sync_to_async
+from compute_horde import protocol_consts
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
@@ -96,7 +97,7 @@ async def answer_prompts(
         if (
             isinstance(e, OrganicJobError)
             and isinstance(e.received, V0DeclineJobRequest)
-            and e.received.reason == V0DeclineJobRequest.Reason.BUSY
+            and e.received.reason == protocol_consts.JobRejectionReason.BUSY
         ):
             logger.info("Failed to run answer_prompts: trusted miner is busy")
             return False

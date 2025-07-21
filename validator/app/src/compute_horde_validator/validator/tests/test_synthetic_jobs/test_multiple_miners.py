@@ -13,6 +13,7 @@ import bittensor_wallet
 import httpx
 import pytest
 import pytest_asyncio
+from compute_horde import protocol_consts
 from compute_horde.executor_class import (
     DEFAULT_EXECUTOR_CLASS,
     DEFAULT_LLM_EXECUTOR_CLASS,
@@ -643,7 +644,7 @@ async def flow_4(
 
     decline_message = V0DeclineJobRequest(
         job_uuid=str(job_uuid),
-        reason=V0DeclineJobRequest.Reason.BUSY,
+        reason=protocol_consts.JobRejectionReason.BUSY,
     ).model_dump_json()
     await transport.add_message(decline_message, send_before=1)
 
@@ -670,7 +671,7 @@ async def flow_5(
 
     decline_message = V0DeclineJobRequest(
         job_uuid=str(job_uuid),
-        reason=V0DeclineJobRequest.Reason.BUSY,
+        reason=protocol_consts.JobRejectionReason.BUSY,
         receipts=_build_invalid_excuse_receipts(
             active_validator_keypairs[0], miner_wallet, inactive_validator_keypairs[0], job_uuid
         ),
@@ -711,7 +712,7 @@ async def flow_6(
 
     decline_message = V0DeclineJobRequest(
         job_uuid=str(job_uuid),
-        reason=V0DeclineJobRequest.Reason.BUSY,
+        reason=protocol_consts.JobRejectionReason.BUSY,
         receipts=[
             Receipt(
                 payload=excuse,
@@ -756,7 +757,7 @@ async def flow_7(
 
     decline_message = V0DeclineJobRequest(
         job_uuid=str(job_uuid),
-        reason=V0DeclineJobRequest.Reason.BUSY,
+        reason=protocol_consts.JobRejectionReason.BUSY,
         receipts=[
             Receipt(
                 payload=excuse,

@@ -3,9 +3,9 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from compute_horde import protocol_consts
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.protocol_messages import (
-    V0DeclineJobRequest,
     V0InitialJobRequest,
     ValidatorAuthForMiner,
 )
@@ -151,6 +151,6 @@ async def test_reject_as_busy_when_busy(job_uuid, validator_wallet, miner_wallet
             response = await validator_channel.receive_json_from()
 
             assert response["message_type"] == "V0DeclineJobRequest"
-            assert response["reason"] == V0DeclineJobRequest.Reason.BUSY.value
+            assert response["reason"] == protocol_consts.JobRejectionReason.BUSY.value
             assert len(response["receipts"]) == 1
             assert response["receipts"][0]["payload"]["job_uuid"] == base_good_receipt.job_uuid
