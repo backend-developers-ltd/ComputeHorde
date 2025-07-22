@@ -9,6 +9,7 @@ from functools import partial
 from typing import Dict, List, Optional
 
 import numpy as np
+from compute_horde.subtensor import get_peak_cycle
 from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
@@ -17,6 +18,7 @@ from django.db.models import QuerySet
 from ..models import OrganicJob, SyntheticJob, SyntheticJobBatch, MinerManifest, Miner
 from ..dynamic_config import get_executor_class_weights, get_weights_version
 from .models import MinerSplit, MinerSplitDistribution
+from .exceptions import InvalidSplitPercentageError
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +299,9 @@ def get_hotkey_to_coldkey_mapping(hotkeys: list[str]) -> dict[str, str]:
                 logger.info(f"Updated {len(miners_to_update)} coldkey mappings from Bittensor")
                 
         except Exception as e:
+            # Log the error but don't raise - return partial mapping
             logger.warning(f"Failed to fetch coldkey mappings from Bittensor: {e}")
+            # Continue with partial mapping from database
     
     return hotkey_to_coldkey
 
@@ -544,7 +548,15 @@ def apply_decoupled_dancing_weights(
 
 
 def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
-    """Score a single batch with all the complex logic."""
+    """
+    Score a single batch with all complex logic including manifest bonuses and penalties.
+    
+    Args:
+        batch: Synthetic job batch to score
+        
+    Returns:
+        Dictionary mapping miner hotkeys to scores
+    """
     executor_class_weights = get_executor_class_weights()
     executor_class_synthetic_jobs = defaultdict(list)
     for synthetic_job in batch.synthetic_jobs.select_related("miner"):
@@ -604,22 +616,78 @@ def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
         for hotkey, score in normalized_scores.items():
             batch_scores[hotkey] += score
 
+    # Apply manifest bonus and penalty multipliers
+    curr_peak_cycle = get_peak_cycle(batch.block, netuid=settings.BITTENSOR_NETUID)
+    prev_peak_cycle = get_peak_cycle(curr_peak_cycle.start - 1, netuid=settings.BITTENSOR_NETUID)
+
+    curr_peak_batch = SyntheticJobBatch.objects.filter(
+        block__gte=curr_peak_cycle.start,
+        block__lt=curr_peak_cycle.stop,
+        should_be_scored=True,
+    ).first()
+    prev_peak_batch = SyntheticJobBatch.objects.filter(
+        block__gte=prev_peak_cycle.start,
+        block__lt=prev_peak_cycle.stop,
+        should_be_scored=True,
+    ).first()
+
+    curr_peak_executor_counts = get_executor_counts(curr_peak_batch)
+    prev_peak_executor_counts = get_executor_counts(prev_peak_batch)
+    curr_executor_counts = get_executor_counts(batch)
+
+    # apply manifest bonus and penalty multipliers
+    for hotkey in batch_scores:
+        prev_peak_base_synthetic_score: float | None = None
+        curr_peak_base_synthetic_score: float | None = None
+        if hotkey in prev_peak_executor_counts:
+            prev_peak_base_synthetic_score = get_base_synthetic_score(
+                prev_peak_executor_counts[hotkey],
+                executor_class_weights,
+            )
+        if hotkey in curr_peak_executor_counts:
+            curr_peak_base_synthetic_score = get_base_synthetic_score(
+                curr_peak_executor_counts[hotkey],
+                executor_class_weights,
+            )
+        bonus_multiplier = get_manifest_multiplier(
+            prev_peak_base_synthetic_score,
+            curr_peak_base_synthetic_score,
+        )
+        batch_scores[hotkey] *= bonus_multiplier
+
+        if batch.block not in curr_peak_cycle:
+            penalty_multiplier = get_penalty_multiplier(
+                curr_peak_executor_counts.get(hotkey),
+                curr_executor_counts.get(hotkey),
+            )
+            batch_scores[hotkey] *= penalty_multiplier
+
     return dict(batch_scores)
 
 
-def score_batches(batches: Sequence[SyntheticJobBatch], validator_hotkey: str) -> dict[str, float]:
+def score_batches(batches: Sequence[SyntheticJobBatch], validator_hotkey: str = None) -> dict[str, float]:
     """
-    Score multiple batches and apply decoupled dancing.
+    Score multiple batches with decoupled dancing support.
     
-    This is the main entry point for scoring multiple batches.
+    Args:
+        batches: List of synthetic job batches to score
+        validator_hotkey: Validator hotkey for decoupled dancing (optional for backward compatibility)
+        
+    Returns:
+        Dictionary mapping miner hotkeys to scores
     """
-    hotkeys_scores: defaultdict[str, float] = defaultdict(float)
+    if not batches:
+        return {}
+    
+    # Calculate base scores
+    scores = {}
     for batch in batches:
         batch_scores = score_batch(batch)
         for hotkey, score in batch_scores.items():
-            hotkeys_scores[hotkey] += score
+            scores[hotkey] = scores.get(hotkey, 0) + score
     
-    # Apply decoupled dancing weight adjustments
-    hotkeys_scores = apply_decoupled_dancing_weights(hotkeys_scores, batches, validator_hotkey)
+    # Apply decoupled dancing if validator_hotkey is provided
+    if validator_hotkey:
+        scores = apply_decoupled_dancing_weights(scores, batches, validator_hotkey)
     
-    return dict(hotkeys_scores) 
+    return scores 

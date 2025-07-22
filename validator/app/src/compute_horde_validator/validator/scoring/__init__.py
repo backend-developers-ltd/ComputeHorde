@@ -1,30 +1,24 @@
 """
-Scoring module for validator weight calculations.
+Scoring module for validator.
 
-This module provides a clean interface for calculating scores across cycles
-and applying decoupled dancing bonuses.
+This module provides scoring functionality through a clean interface.
+Users should interact with the scoring module only through the engine interface.
 """
 
-from .engine import ScoringEngine, DefaultScoringEngine
-from .models import MinerSplit, MinerSplitDistribution, SplitInfo, SplitStorage
+from .interface import ScoringEngine
+from .factory import create_scoring_engine, get_available_engine_types
 from .calculations import (
-    score_batches, 
-    apply_decoupled_dancing_weights, 
-    get_penalty_multiplier,
+    score_batches,
     get_executor_counts,
-    get_hotkey_to_coldkey_mapping
+    get_penalty_multiplier,
 )
 
 __all__ = [
-    "ScoringEngine", 
-    "DefaultScoringEngine",
-    "MinerSplit",
-    "MinerSplitDistribution", 
-    "SplitInfo", 
-    "SplitStorage",
+    "ScoringEngine",
+    "create_scoring_engine",
+    "get_available_engine_types",
+    # Backward compatibility exports
     "score_batches",
-    "apply_decoupled_dancing_weights",
+    "get_executor_counts", 
     "get_penalty_multiplier",
-    "get_executor_counts",
-    "get_hotkey_to_coldkey_mapping",
 ] 
