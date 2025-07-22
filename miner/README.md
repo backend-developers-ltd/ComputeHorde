@@ -130,17 +130,17 @@ by implementing your own job runner. To do this, follow these steps:
 
        async def job_cleanup(self, job_process: Process):
            """
-           Perform any cleanup necessery after the job is finished.
+           Perform any cleanup necessary after the job is finished.
            """
 
        async def before_start_job(self):
            """
-           Perform any action necessery just before the job process is started.
+           Perform any action necessary just before the job process is started.
            """
 
        async def after_start_job(self):
            """
-           Perform any action necessery just after the job process is started.
+           Perform any action necessary just after the job process is started.
            """
    ```
    
