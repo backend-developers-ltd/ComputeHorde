@@ -316,7 +316,7 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
 
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="statuses")
     status = models.SmallIntegerField(choices=Status.choices)
-    stage = models.CharField(choices=protocol_consts.JobStage.choices(), default=protocol_consts.JobStage.UNKNOWN.value, max_length=255)
+    stage = models.CharField(choices=protocol_consts.JobStage.choices(), default=protocol_consts.JobStage.NOT_SPECIFIED.value, max_length=255)
     metadata = models.JSONField(blank=True, default=dict)
     created_at = models.DateTimeField(default=now)
 

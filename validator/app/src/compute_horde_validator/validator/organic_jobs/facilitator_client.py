@@ -505,12 +505,24 @@ class FacilitatorClient:
             if job.status == OrganicJob.Status.FAILED:
                 await routing.report_miner_failed_job(job)
         except Exception as e:
-            msg = f"Error running organic job {job_request.uuid}: {e}"
-            logger.warning(msg, exc_info=True)
+            exc_type = type(e).__qualname__
+            msg = f"Error running organic job {job_request.uuid}: {exc_type}"
+            logger.error(msg, exc_info=True)
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.FAILED,
-                    metadata=JobStatusUpdatePayload(comment=msg),
+                    metadata=JobStatusUpdatePayload(
+                        comment=msg,
+                        horde_failure_details=HordeFailureDetails(
+                            reported_by=protocol_consts.JobParticipantType.VALIDATOR,
+                            reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
+                            exception_type=exc_type,
+                            message=msg,
+                            context={
+                                "exception_message": str(e),
+                            },
+                        ),
+                    ),
                 )
             )

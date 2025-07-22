@@ -104,7 +104,7 @@ class ComputeHordeJobFailure:
     # TODO(post error propagation): these should be enums
     reason: str
     message: str | None = None
-    contex: JsonValue = None
+    context: JsonValue = None
 
 
 @dataclass

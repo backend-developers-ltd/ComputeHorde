@@ -40,12 +40,12 @@ class V0AuthenticationRequest(BaseModel, extra="forbid"):
         return address
 
 
-class JobSuccessDetails(BaseModel, extra="allow"):
+class JobResultDetails(BaseModel, extra="allow"):
     # TODO(post error propagation): remove "extra"
     # TODO(post error propagation): job_uuid here makes no sense
     # TODO(post error propagation): this is an amalgam of success and failure responses
     job_uuid: str
-    message_type: str | None
+    message_type: str | None = None
     docker_process_stderr: str
     docker_process_stdout: str
     artifacts: dict[str, str] | None = None
@@ -85,7 +85,7 @@ class JobStatusUpdatePayload(BaseModel, extra="allow"):
     # TODO(post error propagation): "comment" is probably unnecessary? payloads should contain details if they need to
     comment: str
     # TODO(post error propagation): this is an amalgam of success and failure responses
-    miner_response: JobSuccessDetails | None = None
+    miner_response: JobResultDetails | None = None
     job_rejection_details: JobRejectionDetails | None = None
     job_failure_details: JobFailureDetails | None = None
     horde_failure_details: HordeFailureDetails | None = None
@@ -102,7 +102,7 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
     uuid: str
     status: protocol_consts.JobStatusValiFaci
     # TODO(post error propagation): no "None" default
-    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
+    stage: protocol_consts.JobStage = protocol_consts.JobStage.NOT_SPECIFIED
     # TODO(post error propagation): rename this to payload
     metadata: JobStatusUpdatePayload | None = None
 

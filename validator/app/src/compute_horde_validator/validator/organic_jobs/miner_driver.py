@@ -8,9 +8,9 @@ from channels.layers import get_channel_layer
 from compute_horde import protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
 from compute_horde.fv_protocol.validator_requests import (
+    JobResultDetails,
     JobStatusUpdate,
     JobStatusUpdatePayload,
-    JobSuccessDetails,
     StreamingServerDetails,
 )
 from compute_horde.miner_client.organic import (
@@ -54,7 +54,7 @@ def status_update_from_job(
     status: protocol_consts.JobStatusValiFaci,
     message_type: str | None = None,
 ) -> JobStatusUpdate:
-    miner_response = JobSuccessDetails(
+    miner_response = JobResultDetails(
         job_uuid=str(job.job_uuid),
         message_type=message_type,
         docker_process_stdout=job.stdout,
@@ -147,7 +147,7 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
         logger.debug("Broadcasting job status update: %s %s", status_update.uuid, status_update)
         await get_channel_layer().send(
             f"job_status_updates__{status_update.uuid}",
-            {"type": "job_status_update", "payload": status_update.model_dump()},
+            {"type": "job_status_update", "payload": status_update.model_dump(mode="json")},
         )
 
     await drive_organic_job(

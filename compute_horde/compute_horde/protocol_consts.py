@@ -83,7 +83,7 @@ class JobParticipantType(Enum):
 
 
 class JobStage(Enum):
-    UNKNOWN = "unknown"
+    NOT_SPECIFIED = "not_specified"
     # ↓ Facilitator, validator
     ACCEPTANCE = "acceptance"
     ROUTING = "routing"
@@ -114,7 +114,6 @@ class HordeFailureReason(StrEnum):
 
 
 class JobFailureReason(StrEnum):
-
     TIMEOUT = "TIMEOUT"
     SECURITY_CHECK = "SECURITY_CHECK"
     HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"

@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='jobstatus',
             name='stage',
-            field=models.CharField(choices=[('unknown', 'unknown'), ('acceptance', 'acceptance'), ('routing', 'routing'), ('reservation', 'reservation'), ('executor_spinup', 'executor_spinup'), ('executor_startup', 'executor_startup'), ('streaming_startup', 'streaming_startup'), ('volume_download', 'volume_download'), ('execution', 'execution'), ('result_upload', 'result_upload'), ('closure', 'closure')], default='unknown', max_length=255),
+            field=models.CharField(choices=[('not_specified', 'not_specified'), ('acceptance', 'acceptance'), ('routing', 'routing'), ('reservation', 'reservation'), ('executor_spinup', 'executor_spinup'), ('executor_startup', 'executor_startup'), ('streaming_startup', 'streaming_startup'), ('volume_download', 'volume_download'), ('execution', 'execution'), ('result_upload', 'result_upload'), ('closure', 'closure')], default='unknown', max_length=255),
         ),
     ]
