@@ -14,7 +14,6 @@ import bittensor_wallet
 import httpx
 import pydantic
 import tenacity
-from compute_horde import protocol_consts
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509 import Certificate
 
@@ -30,6 +29,9 @@ from compute_horde_core.signature import (
 
 from .exceptions import ComputeHordeError, ComputeHordeJobTimeoutError, ComputeHordeNotFoundError
 from .models import (
+    ComputeHordeHordeFailure,
+    ComputeHordeJobFailure,
+    ComputeHordeJobRejection,
     ComputeHordeJobResult,
     ComputeHordeJobStatus,
     FacilitatorJobResponse,
@@ -188,8 +190,10 @@ class ComputeHordeJob:
         client: "ComputeHordeClient",
         uuid: str,
         status: ComputeHordeJobStatus,
-        stage: protocol_consts.JobStage, # TODO(error propagation): apiver this somehow?
+        # TODO(post error propagation): how to handle common schema across the stack? this should be some enum
+        stage: str,
         result: ComputeHordeJobResult | None = None,
+        error: ComputeHordeJobRejection | ComputeHordeJobFailure | ComputeHordeHordeFailure | None = None,
         streaming_public_cert: Certificate | None = None,
         streaming_private_key: RSAPrivateKey | None = None,
         streaming_server_cert: str | None = None,
@@ -201,6 +205,7 @@ class ComputeHordeJob:
         self.status = status
         self.stage = stage
         self.result = result
+        self.error = error
         self.streaming_public_cert = streaming_public_cert
         self.streaming_private_key = streaming_private_key
         self.streaming_server_cert = streaming_server_cert
@@ -280,6 +285,7 @@ class ComputeHordeJob:
             uuid=response.uuid,
             status=response.status,
             result=result,
+            error=response.job_rejection or response.job_failure or response.horde_failure or None,
             stage=response.stage,
             streaming_public_cert=streaming_public_cert,
             streaming_private_key=streaming_private_key,

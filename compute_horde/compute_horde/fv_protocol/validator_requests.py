@@ -53,19 +53,21 @@ class JobSuccessDetails(BaseModel, extra="allow"):
 
 
 class JobRejectionDetails(BaseModel):
-    declined_by: protocol_consts.JobParticipantType
+    rejected_by: protocol_consts.JobParticipantType
     reason: protocol_consts.JobRejectionReason
     context: JsonValue = None
 
 
 class JobFailureDetails(BaseModel):
     reason: protocol_consts.JobFailureReason
+    stage: protocol_consts.JobStage
     context: JsonValue = None
 
 
 class HordeFailureDetails(BaseModel):
     reported_by: protocol_consts.JobParticipantType
     reason: protocol_consts.HordeFailureReason
+    stage: protocol_consts.JobStage
     context: JsonValue = None
 
 
@@ -81,7 +83,7 @@ class JobStatusUpdatePayload(BaseModel, extra="allow"):
     comment: str
     # TODO(post error propagation): this is an amalgam of success and failure responses
     miner_response: JobSuccessDetails | None = None
-    rejection_details: JobRejectionDetails | None = None
+    job_rejection_details: JobRejectionDetails | None = None
     job_failure_details: JobFailureDetails | None = None
     horde_failure_details: HordeFailureDetails | None = None
     streaming_details: StreamingServerDetails | None = None

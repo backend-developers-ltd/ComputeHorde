@@ -76,6 +76,9 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "streaming_server_cert",
             "streaming_server_address",
             "streaming_server_port",
+            "job_rejection",
+            "job_failure",
+            "horde_failure",
         )
         read_only_fields = ("created_at",)
 
@@ -96,6 +99,11 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
     last_update = serializers.SerializerMethodField()
     stdout = serializers.SerializerMethodField()
     stderr = serializers.SerializerMethodField()
+    # TODO(post error propagation): add a success result struct here instead of spreading it into fields like above
+    # TODO(post error propagation): ... then remove these fields if possible
+    job_rejection = serializers.SerializerMethodField()
+    job_failure = serializers.SerializerMethodField()
+    horde_failure = serializers.SerializerMethodField()
 
     def get_status(self, obj):
         return obj.status.get_status_display()
@@ -118,6 +126,17 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
     def get_last_update(self, obj):
         return obj.status.created_at
 
+    def get_job_rejection(self, obj):
+        details = obj.status.meta.job_rejection_details if obj.status.meta else None
+        return details.dict() if details else None
+
+    def get_job_failure(self, obj):
+        details = obj.status.meta.job_failure_details if obj.status.meta else None
+        return details.dict() if details else None
+
+    def get_horde_failure(self, obj):
+        details = obj.status.meta.horde_failure_details if obj.status.meta else None
+        return details.dict() if details else None
 
 class DockerJobSerializer(JobSerializer):
     class Meta:

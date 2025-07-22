@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 import pydantic
-from compute_horde import protocol_consts
+from pydantic import JsonValue
 
 from compute_horde_core import output_upload as compute_horde_output_upload
 from compute_horde_core import volume as compute_horde_volume
@@ -90,14 +90,40 @@ class ComputeHordeJobResult:
         self.upload_results[OUTPUT_MOUNT_PATH_PREFIX + path] = result
 
 
+@dataclass
+class ComputeHordeJobRejection:
+    # TODO(post error propagation): these should be enums
+    rejected_by: str
+    reason: str
+    context: JsonValue = None
+
+
+@dataclass
+class ComputeHordeJobFailure:
+    # TODO(post error propagation): these should be enums
+    reason: str
+    stage: str
+    contex: JsonValue = None
+
+
+@dataclass
+class ComputeHordeHordeFailure:
+    # TODO(post error propagation): these should be enums
+    reported_by: str
+    reason: str
+    stage: str
+    context: JsonValue = None
+
+
 class FacilitatorJobResponse(pydantic.BaseModel):
     uuid: str
     executor_class: str
     created_at: str
     # last_update: str
     status: ComputeHordeJobStatus
-    # TODO(post error propagation): remove default UNKNOWN
-    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
+    # TODO(post error propagation): this should be an enum
+    # TODO(post error propagation): remove the default "unknown"
+    stage: str = "unknown"
     docker_image: str
     args: list[str]
     env: dict[str, str]
@@ -107,6 +133,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # input_url: str
     # output_download_url: str
     # tag: str
+    # TODO(post error propagation): success details are in job_result_details; remove stdout/err/artifacts/uploads
     stdout: str
     stderr: str
     # volumes: list = []
@@ -117,6 +144,10 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     streaming_server_cert: str | None = None
     streaming_server_address: str | None = None
     streaming_server_port: int | None = None
+    job_result: ComputeHordeJobResult | None = None
+    job_rejection: ComputeHordeJobRejection | None = None
+    job_failure: ComputeHordeJobFailure | None = None
+    horde_failure: ComputeHordeHordeFailure | None = None
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):
