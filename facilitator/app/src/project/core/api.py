@@ -53,6 +53,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "created_at",
             "last_update",
             "status",
+            "stage",
             "docker_image",
             "args",
             "env",
@@ -91,12 +92,16 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
     volumes = SmartSchemaField(schema=list[MuliVolumeAllowedVolume], required=False)
 
     status = serializers.SerializerMethodField()
+    stage = serializers.SerializerMethodField()
     last_update = serializers.SerializerMethodField()
     stdout = serializers.SerializerMethodField()
     stderr = serializers.SerializerMethodField()
 
     def get_status(self, obj):
         return obj.status.get_status_display()
+
+    def get_stage(self, obj):
+        return obj.status.get_stage_display()
 
     def get_stdout(self, obj):
         meta = obj.status.meta
