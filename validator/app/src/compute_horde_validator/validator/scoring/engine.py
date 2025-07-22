@@ -123,10 +123,13 @@ class DefaultScoringEngine(ScoringEngine):
         coldkey_scores = defaultdict(float)
         hotkey_to_coldkey = {}
         
+        print(f"DEBUG: Processing scores: {scores}")
+        
         for hotkey, score in scores.items():
             try:
                 miner = await Miner.objects.aget(hotkey=hotkey)
                 coldkey = miner.coldkey
+                print(f"DEBUG: Found miner for {hotkey}: coldkey={coldkey}")
                 if coldkey:
                     coldkey_scores[coldkey] += score
                     hotkey_to_coldkey[hotkey] = coldkey
@@ -134,20 +137,29 @@ class DefaultScoringEngine(ScoringEngine):
                 logger.warning(f"Miner not found for hotkey: {hotkey}")
                 continue
         
+        print(f"DEBUG: coldkey_scores = {dict(coldkey_scores)}")
+        print(f"DEBUG: hotkey_to_coldkey = {hotkey_to_coldkey}")
+        
         # Get splits for each coldkey
         final_scores = {}
         
         for coldkey, total_score in coldkey_scores.items():
+            print(f"DEBUG: Processing coldkey {coldkey} with total_score {total_score}")
+            
             # Get current split distribution
             current_split = await self._get_split_distribution(
                 coldkey, current_cycle_start, validator_hotkey
             )
             
+            print(f"DEBUG: current_split for {coldkey} = {current_split}")
+            
             if current_split:
+                print(f"DEBUG: Found split for {coldkey}, distributions = {current_split.distributions}")
                 # Apply split distribution
                 distributed_scores = self._apply_split_distribution(
                     total_score, current_split.distributions
                 )
+                print(f"DEBUG: distributed_scores = {distributed_scores}")
                 
                 # Check for split changes and apply bonus
                 if await self._has_split_change(
@@ -156,8 +168,10 @@ class DefaultScoringEngine(ScoringEngine):
                     distributed_scores = self._apply_dancing_bonus(distributed_scores)
                     logger.info(f"Applied dancing bonus to coldkey: {coldkey}")
                 
-                final_scores.update(distributed_scores)
+                for hotkey, value in distributed_scores.items():
+                    final_scores[hotkey] = final_scores.get(hotkey, 0) + value
             else:
+                print(f"DEBUG: No split found for {coldkey}, distributing evenly")
                 # No split, distribute evenly among hotkeys in this coldkey
                 hotkeys_in_coldkey = [
                     hotkey for hotkey, ck in hotkey_to_coldkey.items() 
@@ -168,6 +182,7 @@ class DefaultScoringEngine(ScoringEngine):
                     for hotkey in hotkeys_in_coldkey:
                         final_scores[hotkey] = score_per_hotkey
         
+        print(f"DEBUG: Final scores = {final_scores}")
         return final_scores
     
     async def _get_split_distribution(

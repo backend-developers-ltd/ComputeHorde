@@ -160,7 +160,6 @@ class MetagraphSnapshot(models.Model):
 
     uids = ArrayField(models.IntegerField())
     hotkeys = ArrayField(models.CharField(max_length=255))
-    coldkeys = ArrayField(models.CharField(max_length=255))
 
     # current active miners
     serving_hotkeys = ArrayField(models.CharField(max_length=255))
