@@ -95,6 +95,7 @@ class ComputeHordeJobRejection:
     # TODO(post error propagation): these should be enums
     rejected_by: str
     reason: str
+    message: str | None = None
     context: JsonValue = None
 
 
@@ -102,7 +103,7 @@ class ComputeHordeJobRejection:
 class ComputeHordeJobFailure:
     # TODO(post error propagation): these should be enums
     reason: str
-    stage: str
+    message: str | None = None
     contex: JsonValue = None
 
 
@@ -111,7 +112,8 @@ class ComputeHordeHordeFailure:
     # TODO(post error propagation): these should be enums
     reported_by: str
     reason: str
-    stage: str
+    message: str | None = None
+    exception_type: str | None = None
     context: JsonValue = None
 
 

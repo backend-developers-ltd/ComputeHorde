@@ -55,19 +55,21 @@ class JobSuccessDetails(BaseModel, extra="allow"):
 class JobRejectionDetails(BaseModel):
     rejected_by: protocol_consts.JobParticipantType
     reason: protocol_consts.JobRejectionReason
+    message: str | None = None
     context: JsonValue = None
 
 
 class JobFailureDetails(BaseModel):
     reason: protocol_consts.JobFailureReason
-    stage: protocol_consts.JobStage
+    message: str | None = None
     context: JsonValue = None
 
 
 class HordeFailureDetails(BaseModel):
     reported_by: protocol_consts.JobParticipantType
     reason: protocol_consts.HordeFailureReason
-    stage: protocol_consts.JobStage
+    exception_type: str | None = None
+    message: str | None = None
     context: JsonValue = None
 
 
@@ -80,6 +82,7 @@ class StreamingServerDetails(BaseModel, extra="forbid"):
 
 class JobStatusUpdatePayload(BaseModel, extra="allow"):
     # TODO(post error propagation): remove "extra"
+    # TODO(post error propagation): "comment" is probably unnecessary? payloads should contain details if they need to
     comment: str
     # TODO(post error propagation): this is an amalgam of success and failure responses
     miner_response: JobSuccessDetails | None = None

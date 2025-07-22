@@ -19,6 +19,8 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V2JobRequest,
 )
 from compute_horde.fv_protocol.validator_requests import (
+    HordeFailureDetails,
+    JobRejectionDetails,
     JobStatusUpdate,
     JobStatusUpdatePayload,
     V0AuthenticationRequest,
@@ -261,9 +263,6 @@ class FacilitatorClient:
         Relay job status updates for given job back to the Facilitator.
         Loop until a terminal status is received.
         """
-        # see compute_horde_validator.validator.organic_jobs.miner_driver.JobStatusUpdate status field
-        terminal_states = {"failed", "rejected", "completed"}
-
         logger.debug(f"Listening for job status updates for job {job_uuid}")
         try:
             while True:
@@ -272,7 +271,7 @@ class FacilitatorClient:
                     envelope = _JobStatusChannelEnvelope.model_validate(msg)
                     task = asyncio.create_task(self.send_model(envelope.payload))
                     await self.tasks_to_reap.put(task)
-                    if envelope.payload.status in terminal_states:
+                    if not envelope.payload.status.is_in_progress():
                         return
                 except pydantic.ValidationError as exc:
                     logger.warning("Received malformed job status update: %s", exc)
@@ -376,8 +375,16 @@ class FacilitatorClient:
                 await self.send_model(
                     JobStatusUpdate(
                         uuid=job_request.uuid,
-                        status=protocol_consts.JobStatusValiFaci.FAILED,
-                        metadata=JobStatusUpdatePayload(comment=msg),
+                        status=protocol_consts.JobStatusValiFaci.REJECTED,
+                        stage=protocol_consts.JobStage.ACCEPTANCE,
+                        metadata=JobStatusUpdatePayload(
+                            comment=msg,
+                            job_rejection_details=JobRejectionDetails(
+                                rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
+                                reason=protocol_consts.JobRejectionReason.INVALID_SIGNATURE,
+                                message=msg,
+                            )
+                        ),
                     )
                 )
                 return
@@ -386,7 +393,7 @@ class FacilitatorClient:
             JobStatusUpdate(
                 uuid=job_request.uuid,
                 status=protocol_consts.JobStatusValiFaci.RECEIVED,
-                metadata=JobStatusUpdatePayload(comment=""),
+                stage=protocol_consts.JobStage.ACCEPTANCE,
             )
         )
 
@@ -400,7 +407,15 @@ class FacilitatorClient:
                 JobStatusUpdate(
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.REJECTED,
-                    metadata=JobStatusUpdatePayload(comment=msg),
+                    stage=protocol_consts.JobStage.ROUTING,
+                    metadata=JobStatusUpdatePayload(
+                        comment=msg,
+                        job_rejection_details=JobRejectionDetails(
+                            rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
+                            reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
+                            message=msg,
+                        )
+                    ),
                 )
             )
             return
@@ -411,7 +426,15 @@ class FacilitatorClient:
                 JobStatusUpdate(
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.REJECTED,
-                    metadata=JobStatusUpdatePayload(comment=msg),
+                    stage=protocol_consts.JobStage.ROUTING,
+                    metadata=JobStatusUpdatePayload(
+                        comment=msg,
+                        job_rejection_details=JobRejectionDetails(
+                            rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
+                            reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
+                            message=msg,
+                        )
+                    ),
                 )
             )
             return
@@ -422,6 +445,7 @@ class FacilitatorClient:
                 JobStatusUpdate(
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.FAILED,
+                    stage=protocol_consts.JobStage.ROUTING,
                     metadata=JobStatusUpdatePayload(comment=msg),
                 )
             )
@@ -433,6 +457,7 @@ class FacilitatorClient:
                 JobStatusUpdate(
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.REJECTED,
+                    stage=protocol_consts.JobStage.ROUTING,
                     metadata=JobStatusUpdatePayload(comment=msg),
                 )
             )
@@ -444,18 +469,28 @@ class FacilitatorClient:
                 JobStatusUpdate(
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.REJECTED,
+                    stage=protocol_consts.JobStage.ROUTING,
                     metadata=JobStatusUpdatePayload(comment=msg),
                 )
             )
             return
-        except Exception:
+        except Exception as e:
             msg = f"Unknown error occurred during selecting miner: {job_request.uuid}"
             logger.exception(f"Failing job: {msg}")
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.FAILED,
-                    metadata=JobStatusUpdatePayload(comment=msg),
+                    stage=protocol_consts.JobStage.ROUTING,
+                    metadata=JobStatusUpdatePayload(
+                        comment=msg,
+                        horde_failure_details=HordeFailureDetails(
+                            reported_by=protocol_consts.JobParticipantType.VALIDATOR,
+                            reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
+                            exception_type=type(e).__qualname__,
+                            message=msg,
+                        )
+                    ),
                 )
             )
             return

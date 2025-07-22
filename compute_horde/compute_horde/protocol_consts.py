@@ -18,6 +18,19 @@ class JobStatusValiFaci(StrEnum):
     REJECTED = "rejected"
     FAILED = "failed"
 
+    @classmethod
+    def end_states(cls) -> set["JobStatusValiFaci"]:
+        return {JobStatusValiFaci.COMPLETED, JobStatusValiFaci.REJECTED, JobStatusValiFaci.FAILED}
+
+    def is_in_progress(self) -> bool:
+        return self not in JobStatusValiFaci.end_states()
+
+    def is_successful(self) -> bool:
+        return self == JobStatusValiFaci.COMPLETED
+
+    def is_failed(self) -> bool:
+        return self in {JobStatusValiFaci.REJECTED, JobStatusValiFaci.FAILED}
+
 
 class JobStatus(Enum):
     UNKNOWN = "unknown"
@@ -101,6 +114,7 @@ class HordeFailureReason(StrEnum):
 
 
 class JobFailureReason(StrEnum):
+
     TIMEOUT = "TIMEOUT"
     SECURITY_CHECK = "SECURITY_CHECK"
     HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
@@ -110,5 +124,7 @@ class JobFailureReason(StrEnum):
 class JobRejectionReason(StrEnum):
     NOT_SPECIFIED = "not_specified"
     BUSY = "busy"
+    INVALID_SIGNATURE = "invalid_signature"
+    NO_MINER_FOR_JOB = "no_miner_for_job"
     EXECUTOR_FAILURE = "executor_failure"
     VALIDATOR_BLACKLISTED = "validator_blacklisted"

@@ -196,11 +196,14 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
             try:
                 status = JobStatus.Status[message.status.upper()]
                 stage = protocol_consts.JobStage(message.stage).value
+                # mode="json" serializes enums down to their values
+                # exclude="none" because most status updates will have most payloads empty - let's not store tons of Nones
+                metadata = message.metadata.model_dump(exclude_none=True, mode="json") if message.metadata else {}
                 await JobStatus.objects.acreate(
                     job=job,
                     status=status,
                     stage=stage,
-                    metadata=message.metadata.dict(exclude_none=True),
+                    metadata=metadata,
                 )
                 if (
                     status == JobStatus.Status.COMPLETED

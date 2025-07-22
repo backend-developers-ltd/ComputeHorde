@@ -251,7 +251,9 @@ class ComputeHordeJob:
     async def refresh_from_facilitator(self) -> None:
         new_job = await self._client.get_job(self.uuid)
         self.status = new_job.status
+        self.stage = new_job.stage
         self.result = new_job.result
+        self.error = new_job.error
         self.streaming_server_cert = new_job.streaming_server_cert
         self.streaming_server_address = new_job.streaming_server_address
         self.streaming_server_port = new_job.streaming_server_port
