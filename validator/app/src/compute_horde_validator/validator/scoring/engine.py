@@ -108,10 +108,10 @@ class DefaultScoringEngine(ScoringEngine):
         validator_hotkey: str
     ) -> Dict[str, float]:
         """
-        Apply decoupled dancing bonuses and split redistribution.
+        Apply decoupled dancing to scores.
         
         Args:
-            scores: Base scores by hotkey
+            scores: Dictionary of hotkey -> score
             current_cycle_start: Current cycle start block
             previous_cycle_start: Previous cycle start block
             validator_hotkey: Validator hotkey
@@ -125,6 +125,8 @@ class DefaultScoringEngine(ScoringEngine):
         
         print(f"DEBUG: Processing scores: {scores}")
         
+        # First, try to get coldkeys from database
+        hotkeys_without_coldkey = []
         for hotkey, score in scores.items():
             try:
                 miner = await Miner.objects.aget(hotkey=hotkey)
@@ -133,9 +135,28 @@ class DefaultScoringEngine(ScoringEngine):
                 if coldkey:
                     coldkey_scores[coldkey] += score
                     hotkey_to_coldkey[hotkey] = coldkey
+                else:
+                    hotkeys_without_coldkey.append(hotkey)
             except Miner.DoesNotExist:
+                hotkeys_without_coldkey.append(hotkey)
                 logger.warning(f"Miner not found for hotkey: {hotkey}")
-                continue
+        
+        # If we have hotkeys without coldkeys, try to get them from Bittensor
+        if hotkeys_without_coldkey:
+            from .calculations import get_hotkey_to_coldkey_mapping
+            bittensor_mapping = get_hotkey_to_coldkey_mapping(hotkeys_without_coldkey)
+            
+            for hotkey in hotkeys_without_coldkey:
+                if hotkey in bittensor_mapping:
+                    coldkey = bittensor_mapping[hotkey]
+                    print(f"DEBUG: Got coldkey from Bittensor for {hotkey}: coldkey={coldkey}")
+                    coldkey_scores[coldkey] += scores[hotkey]
+                    hotkey_to_coldkey[hotkey] = coldkey
+                else:
+                    print(f"DEBUG: No coldkey found for {hotkey}, keeping as individual hotkey")
+                    # Keep as individual hotkey (no coldkey grouping)
+                    coldkey_scores[hotkey] = scores[hotkey]
+                    hotkey_to_coldkey[hotkey] = hotkey
         
         print(f"DEBUG: coldkey_scores = {dict(coldkey_scores)}")
         print(f"DEBUG: hotkey_to_coldkey = {hotkey_to_coldkey}")
@@ -145,6 +166,12 @@ class DefaultScoringEngine(ScoringEngine):
         
         for coldkey, total_score in coldkey_scores.items():
             print(f"DEBUG: Processing coldkey {coldkey} with total_score {total_score}")
+            
+            # Skip split logic for individual hotkeys (coldkey == hotkey)
+            if coldkey in scores:
+                print(f"DEBUG: {coldkey} is an individual hotkey, no split applied")
+                final_scores[coldkey] = total_score
+                continue
             
             # Get current split distribution
             current_split = await self._get_split_distribution(

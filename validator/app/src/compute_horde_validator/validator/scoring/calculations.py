@@ -6,7 +6,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from functools import partial
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 from compute_horde_core.executor_class import ExecutorClass
@@ -230,14 +230,22 @@ def get_penalty_multiplier(
     return 1.0
 
 
-def get_coldkey_to_hotkey_mapping(miners: list) -> dict[str, str]:
+def get_coldkey_to_hotkey_mapping(miners: list) -> dict[str, list[str]]:
     """
-    Create a mapping from coldkey to hotkey for all miners.
+    Create a mapping from coldkey to list of hotkeys for all miners.
+    
+    Args:
+        miners: List of Miner objects
+        
+    Returns:
+        Dictionary mapping coldkey to list of hotkeys
     """
     mapping = {}
     for miner in miners:
         if miner.coldkey:
-            mapping[miner.coldkey] = miner.hotkey
+            if miner.coldkey not in mapping:
+                mapping[miner.coldkey] = []
+            mapping[miner.coldkey].append(miner.hotkey)
     return mapping
 
 
@@ -350,6 +358,148 @@ def split_changed_from_previous_cycle(coldkey: str, current_cycle_start: int, va
         return False
 
 
+def _group_scores_by_coldkey(scores: dict[str, float]) -> dict[str, dict[str, float]]:
+    """
+    Group scores by coldkey for decoupled dancing processing.
+    
+    Args:
+        scores: Base scores by hotkey
+        
+    Returns:
+        Dictionary mapping coldkey to hotkey scores
+    """
+    # Get all miners in one query for efficiency
+    miners = list(Miner.objects.filter(hotkey__in=scores.keys()).select_related())
+    hotkey_to_coldkey = get_hotkey_to_coldkey_mapping(list(scores.keys()))
+    
+    # Group scores by coldkey
+    coldkey_groups: dict[str, dict[str, float]] = defaultdict(dict)
+    for hotkey, score in scores.items():
+        coldkey = hotkey_to_coldkey.get(hotkey)
+        if coldkey:
+            coldkey_groups[coldkey][hotkey] = score
+    
+    return coldkey_groups
+
+
+def _get_split_distribution(coldkey: str, cycle_start: int, validator_hotkey: str) -> Optional[dict[str, float]]:
+    """
+    Get split distribution for a coldkey from database.
+    
+    Args:
+        coldkey: Miner coldkey
+        cycle_start: Cycle start block
+        validator_hotkey: Validator hotkey
+        
+    Returns:
+        Dictionary mapping hotkey to percentage, or None if not found
+    """
+    try:
+        split = MinerSplit.objects.get(
+            coldkey=coldkey,
+            cycle_start=cycle_start,
+            validator_hotkey=validator_hotkey
+        )
+        
+        # Get the distribution percentages
+        distributions = MinerSplitDistribution.objects.filter(split=split)
+        split_distribution = {d.hotkey: float(d.percentage) for d in distributions}
+        
+        # Validate that percentages sum to 1.0 (with small tolerance for floating point)
+        total_percentage = sum(split_distribution.values())
+        if abs(total_percentage - 1.0) > 0.0001:
+            logger.warning(f"Split distribution for {coldkey} doesn't sum to 1.0: {total_percentage}")
+            return None
+        
+        return split_distribution
+        
+    except MinerSplit.DoesNotExist:
+        logger.debug(f"No split found for coldkey: {coldkey}")
+        return None
+
+
+def _apply_split_distribution_to_group(
+    group_scores: dict[str, float], 
+    split_distribution: dict[str, float],
+    coldkey: str,
+    cycle_start: int,
+    validator_hotkey: str
+) -> dict[str, float]:
+    """
+    Apply split distribution to a group of hotkeys with the same coldkey.
+    
+    Args:
+        group_scores: Scores for hotkeys in the group
+        split_distribution: Distribution percentages by hotkey
+        coldkey: The coldkey for this group
+        cycle_start: Cycle start block
+        validator_hotkey: Validator hotkey
+        
+    Returns:
+        Adjusted scores for the group
+    """
+    # Calculate total score for the group
+    total_group_score = sum(group_scores.values())
+    
+    # Apply the split distribution to hotkeys that exist in the group
+    group_adjusted_scores = {}
+    for hotkey, percentage in split_distribution.items():
+        if hotkey in group_scores:
+            group_adjusted_scores[hotkey] = total_group_score * percentage
+    
+    # Check if split changed from previous cycle and apply dancing bonus
+    if split_changed_from_previous_cycle(coldkey, cycle_start, validator_hotkey):
+        # Apply dancing bonus to this group only
+        from constance import config
+        dancing_bonus = getattr(config, 'DYNAMIC_DANCING_BONUS', 0.1)  # 10% bonus by default
+        
+        for hotkey in group_adjusted_scores:
+            group_adjusted_scores[hotkey] *= (1 + dancing_bonus)
+        
+        logger.info(f"Applied dancing bonus ({dancing_bonus}) to coldkey: {coldkey}")
+    
+    # Add any hotkeys in the group that weren't in the split distribution
+    for hotkey, score in group_scores.items():
+        if hotkey not in group_adjusted_scores:
+            group_adjusted_scores[hotkey] = score
+    
+    return group_adjusted_scores
+
+
+def _process_coldkey_group(
+    coldkey: str,
+    group_scores: dict[str, float],
+    cycle_start: int,
+    validator_hotkey: str
+) -> dict[str, float]:
+    """
+    Process a group of hotkeys with the same coldkey.
+    
+    Args:
+        coldkey: The coldkey for this group
+        group_scores: Scores for hotkeys in the group
+        cycle_start: Cycle start block
+        validator_hotkey: Validator hotkey
+        
+    Returns:
+        Adjusted scores for the group
+    """
+    if len(group_scores) > 1:
+        # Multiple hotkeys in this coldkey group - apply split distribution
+        split_distribution = _get_split_distribution(coldkey, cycle_start, validator_hotkey)
+        
+        if split_distribution:
+            return _apply_split_distribution_to_group(
+                group_scores, split_distribution, coldkey, cycle_start, validator_hotkey
+            )
+        else:
+            # No split found for this coldkey, keep original scores
+            return group_scores
+    else:
+        # Single hotkey in group, keep original score
+        return group_scores
+
+
 def apply_decoupled_dancing_weights(
     scores: dict[str, float], 
     batches: Sequence[SyntheticJobBatch],
@@ -374,79 +524,16 @@ def apply_decoupled_dancing_weights(
     latest_batch = batches[-1]
     cycle_start = latest_batch.cycle.start
     
-    # Get all miners in one query for efficiency
-    miners = list(Miner.objects.filter(hotkey__in=scores.keys()).select_related())
-    hotkey_to_coldkey = get_hotkey_to_coldkey_mapping(list(scores.keys()))
-    
     # Group scores by coldkey
-    coldkey_groups: dict[str, dict[str, float]] = defaultdict(dict)
-    for hotkey, score in scores.items():
-        coldkey = hotkey_to_coldkey.get(hotkey)
-        if coldkey:
-            coldkey_groups[coldkey][hotkey] = score
+    coldkey_groups = _group_scores_by_coldkey(scores)
     
-    # Apply decoupled dancing adjustments
+    # Process each coldkey group
     adjusted_scores = {}
-    
     for coldkey, group_scores in coldkey_groups.items():
-        if len(group_scores) > 1:
-            # Multiple hotkeys in this coldkey group - apply split distribution
-            try:
-                # Get split distribution for this coldkey
-                split = MinerSplit.objects.get(
-                    coldkey=coldkey,
-                    cycle_start=cycle_start,
-                    validator_hotkey=validator_hotkey
-                )
-                
-                # Get the distribution percentages
-                distributions = MinerSplitDistribution.objects.filter(split=split)
-                split_distribution = {d.hotkey: float(d.percentage) for d in distributions}
-                
-                # Validate that percentages sum to 1.0 (with small tolerance for floating point)
-                total_percentage = sum(split_distribution.values())
-                if abs(total_percentage - 1.0) > 0.0001:
-                    logger.warning(f"Split distribution for {coldkey} doesn't sum to 1.0: {total_percentage}")
-                    # Keep original scores for this group
-                    adjusted_scores.update(group_scores)
-                    continue
-                
-                # Calculate total score for the group
-                total_group_score = sum(group_scores.values())
-                
-                # Apply the split distribution to hotkeys that exist in the group
-                group_adjusted_scores = {}
-                for hotkey, percentage in split_distribution.items():
-                    if hotkey in group_scores:
-                        group_adjusted_scores[hotkey] = total_group_score * percentage
-                
-                # Check if split changed from previous cycle
-                if split_changed_from_previous_cycle(coldkey, cycle_start, validator_hotkey):
-                    # Apply dancing bonus to this group only
-                    from constance import config
-                    dancing_bonus = getattr(config, 'DYNAMIC_DANCING_BONUS', 0.1)  # 10% bonus by default
-                    
-                    for hotkey in group_adjusted_scores:
-                        group_adjusted_scores[hotkey] *= (1 + dancing_bonus)
-                    
-                    logger.info(f"Applied dancing bonus ({dancing_bonus}) to coldkey: {coldkey}")
-                
-                # Add the adjusted scores for this group
-                adjusted_scores.update(group_adjusted_scores)
-                
-                # Add any hotkeys in the group that weren't in the split distribution
-                for hotkey, score in group_scores.items():
-                    if hotkey not in group_adjusted_scores:
-                        adjusted_scores[hotkey] = score
-                        
-            except MinerSplit.DoesNotExist:
-                # No split found for this coldkey, keep original scores
-                adjusted_scores.update(group_scores)
-                logger.debug(f"No split found for coldkey: {coldkey}")
-                
-        else:
-            # Single hotkey in group, keep original score
-            adjusted_scores.update(group_scores)
+        group_adjusted_scores = _process_coldkey_group(
+            coldkey, group_scores, cycle_start, validator_hotkey
+        )
+        adjusted_scores.update(group_adjusted_scores)
     
     # Add scores for hotkeys not in any group (no coldkey)
     for hotkey, score in scores.items():
