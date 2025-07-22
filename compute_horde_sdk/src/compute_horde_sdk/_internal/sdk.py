@@ -14,6 +14,7 @@ import bittensor_wallet
 import httpx
 import pydantic
 import tenacity
+from compute_horde import protocol_consts
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509 import Certificate
 
@@ -187,6 +188,7 @@ class ComputeHordeJob:
         client: "ComputeHordeClient",
         uuid: str,
         status: ComputeHordeJobStatus,
+        stage: protocol_consts.JobStage, # TODO(error propagation): apiver this somehow?
         result: ComputeHordeJobResult | None = None,
         streaming_public_cert: Certificate | None = None,
         streaming_private_key: RSAPrivateKey | None = None,
@@ -197,6 +199,7 @@ class ComputeHordeJob:
         self._client = client
         self.uuid = uuid
         self.status = status
+        self.stage = stage
         self.result = result
         self.streaming_public_cert = streaming_public_cert
         self.streaming_private_key = streaming_private_key
@@ -277,6 +280,7 @@ class ComputeHordeJob:
             uuid=response.uuid,
             status=response.status,
             result=result,
+            stage=response.stage,
             streaming_public_cert=streaming_public_cert,
             streaming_private_key=streaming_private_key,
             streaming_server_cert=response.streaming_server_cert,

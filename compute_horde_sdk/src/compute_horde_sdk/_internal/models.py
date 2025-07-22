@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 import pydantic
+from compute_horde import protocol_consts
 
 from compute_horde_core import output_upload as compute_horde_output_upload
 from compute_horde_core import volume as compute_horde_volume
@@ -95,6 +96,8 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     created_at: str
     # last_update: str
     status: ComputeHordeJobStatus
+    # TODO(post error propagation): remove default UNKNOWN
+    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
     docker_image: str
     args: list[str]
     env: dict[str, str]
