@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from compute_horde import protocol_consts
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     V0JobCheated,
@@ -195,7 +196,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             if is_new:
                 job_request = self.as_job_request().model_dump()
                 self.send_to_validator(job_request)
-                JobStatus.objects.create(job=self, status=JobStatus.Status.SENT)
+                JobStatus.objects.create(job=self, status=JobStatus.Status.SENT, stage=protocol_consts.JobStage.ACCEPTANCE)
 
     def report_cheated(self, signature: Signature) -> None:
         """
@@ -227,6 +228,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         if validator and validator.id in validator_ids:
             log.debug("selected (targeted) validator", validator=validator)
             return validator
+        # TODO(error propagation): "unknown validator" and "validator not connected" are different errors
         raise Validator.DoesNotExist
 
     @property
@@ -314,6 +316,7 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
 
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="statuses")
     status = models.SmallIntegerField(choices=Status.choices)
+    stage = models.CharField(choices=protocol_consts.JobStage.choices(), default=protocol_consts.JobStage.UNKNOWN.value, max_length=255)
     metadata = models.JSONField(blank=True, default=dict)
     created_at = models.DateTimeField(default=now)
 

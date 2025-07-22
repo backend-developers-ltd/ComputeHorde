@@ -70,8 +70,9 @@ class JobParticipantType(Enum):
 
 
 class JobStage(Enum):
+    UNKNOWN = "unknown"
     # ↓ Facilitator, validator
-    SUBMISSION = "submission"
+    ACCEPTANCE = "acceptance"
     ROUTING = "routing"
     # ↓ Miner
     RESERVATION = "reservation"

@@ -6,6 +6,7 @@ from typing import Annotated, ClassVar, Union
 
 import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
+from compute_horde import protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import Error, Response
 from compute_horde.fv_protocol.validator_requests import (
     JobStatusUpdate,
@@ -194,9 +195,11 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
 
             try:
                 status = JobStatus.Status[message.status.upper()]
+                stage = protocol_consts.JobStage(message.stage)
                 await JobStatus.objects.acreate(
                     job=job,
                     status=status,
+                    stage=stage,
                     metadata=message.metadata.dict(),
                 )
                 if (

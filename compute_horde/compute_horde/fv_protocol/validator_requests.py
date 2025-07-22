@@ -90,14 +90,14 @@ class JobStatusUpdatePayload(BaseModel, extra="allow"):
 class JobStatusUpdate(BaseModel, extra="forbid"):
     # TODO(post error propagation): remove "extra"
     """
-    Message sent from validator to facilitator in response to NewJobRequest.
+    Message sent from validator to facilitator when the job's state changes.
     """
 
     message_type: Literal["V0JobStatusUpdate"] = "V0JobStatusUpdate"
     uuid: str
     status: protocol_consts.JobStatusValiFaci
     # TODO(post error propagation): no "None" default
-    stage: protocol_consts.JobStage | None = None
+    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
     # TODO(post error propagation): rename this to payload
     metadata: JobStatusUpdatePayload | None = None
 

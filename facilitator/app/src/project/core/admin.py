@@ -113,6 +113,7 @@ class JobStatusAdmin(admin.ModelAdmin):
         "pk",
         "job",
         "status",
+        "stage",
         "created_at",
     )
     list_filter = (
@@ -170,6 +171,7 @@ class JobAdmin(admin.ModelAdmin):
         "docker_image",
         "created_at",
         "status",
+        "stage",
         "get_elapsed_display",
     )
     list_filter = (
@@ -193,6 +195,9 @@ class JobAdmin(admin.ModelAdmin):
 
     def status(self, obj: Job) -> str:
         return list(obj.statuses.all())[-1].get_status_display()
+
+    def stage(self, obj: Job) -> str:
+        return list(obj.statuses.all())[-1].get_stage_display()
 
     def save_model(self, request, obj, form, change):
         try:
