@@ -196,7 +196,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             if is_new:
                 job_request = self.as_job_request().model_dump()
                 self.send_to_validator(job_request)
-                JobStatus.objects.create(job=self, status=JobStatus.Status.SENT, stage=protocol_consts.JobStage.ACCEPTANCE)
+                JobStatus.objects.create(job=self, status=JobStatus.Status.SENT, stage=protocol_consts.JobStage.ACCEPTANCE.value)
 
     def report_cheated(self, signature: Signature) -> None:
         """

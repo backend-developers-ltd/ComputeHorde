@@ -195,12 +195,12 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
 
             try:
                 status = JobStatus.Status[message.status.upper()]
-                stage = protocol_consts.JobStage(message.stage)
+                stage = protocol_consts.JobStage(message.stage).value
                 await JobStatus.objects.acreate(
                     job=job,
                     status=status,
                     stage=stage,
-                    metadata=message.metadata.dict(),
+                    metadata=message.metadata.dict(exclude_none=True),
                 )
                 if (
                     status == JobStatus.Status.COMPLETED
