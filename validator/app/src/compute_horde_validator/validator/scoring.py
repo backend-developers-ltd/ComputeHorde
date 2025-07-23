@@ -4,7 +4,6 @@ from collections.abc import Callable, Sequence
 from functools import partial
 
 import numpy as np
-from compute_horde.subtensor import get_peak_cycle
 from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
@@ -144,51 +143,6 @@ def score_batch(batch: SyntheticJobBatch) -> dict[str, float]:
         for hotkey, score in normalized_scores.items():
             batch_scores[hotkey] += score
 
-    curr_peak_cycle = get_peak_cycle(batch.block, netuid=settings.BITTENSOR_NETUID)
-    prev_peak_cycle = get_peak_cycle(curr_peak_cycle.start - 1, netuid=settings.BITTENSOR_NETUID)
-
-    curr_peak_batch = SyntheticJobBatch.objects.filter(
-        block__gte=curr_peak_cycle.start,
-        block__lt=curr_peak_cycle.stop,
-        should_be_scored=True,
-    ).first()
-    prev_peak_batch = SyntheticJobBatch.objects.filter(
-        block__gte=prev_peak_cycle.start,
-        block__lt=prev_peak_cycle.stop,
-        should_be_scored=True,
-    ).first()
-
-    curr_peak_executor_counts = get_executor_counts(curr_peak_batch)
-    prev_peak_executor_counts = get_executor_counts(prev_peak_batch)
-    curr_executor_counts = get_executor_counts(batch)
-
-    # apply manifest bonus
-    for hotkey in batch_scores:
-        prev_peak_base_synthetic_score: float | None = None
-        curr_peak_base_synthetic_score: float | None = None
-        if hotkey in prev_peak_executor_counts:
-            prev_peak_base_synthetic_score = get_base_synthetic_score(
-                prev_peak_executor_counts[hotkey],
-                executor_class_weights,
-            )
-        if hotkey in curr_peak_executor_counts:
-            curr_peak_base_synthetic_score = get_base_synthetic_score(
-                curr_peak_executor_counts[hotkey],
-                executor_class_weights,
-            )
-        bonus_multiplier = get_manifest_multiplier(
-            prev_peak_base_synthetic_score,
-            curr_peak_base_synthetic_score,
-        )
-        batch_scores[hotkey] *= bonus_multiplier
-
-        if batch.block not in curr_peak_cycle:
-            penalty_multiplier = get_penalty_multiplier(
-                curr_peak_executor_counts.get(hotkey),
-                curr_executor_counts.get(hotkey),
-            )
-            batch_scores[hotkey] *= penalty_multiplier
-
     return dict(batch_scores)
 
 
@@ -215,56 +169,4 @@ def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, dict[Execu
     return result
 
 
-def get_base_synthetic_score(
-    executor_counts: dict[ExecutorClass, int],
-    executor_class_weights: dict[ExecutorClass, float],
-) -> float:
-    score = 0.0
-    for executor_class, weight in executor_class_weights.items():
-        score += weight * executor_counts.get(executor_class, 0)
-    return score
 
-
-def get_manifest_multiplier(
-    previous_base_synthetic_score: float | None,
-    current_base_synthetic_score: float | None,
-) -> float:
-    weights_version = get_weights_version()
-    multiplier = 1.0
-    if weights_version >= 2:
-        if previous_base_synthetic_score is None or current_base_synthetic_score is None:
-            # give bonus if miner was not present in either of the previous peak cycles
-            multiplier = config.DYNAMIC_MANIFEST_SCORE_MULTIPLIER
-        else:
-            low, high = sorted([previous_base_synthetic_score, current_base_synthetic_score])
-            # low can be 0 if previous_online_executors == 0, but we make it that way to
-            # make this function correct for any kind of input
-            threshold = config.DYNAMIC_MANIFEST_DANCE_RATIO_THRESHOLD
-            if low == 0 or high / low >= threshold:
-                multiplier = config.DYNAMIC_MANIFEST_SCORE_MULTIPLIER
-    return multiplier
-
-
-def get_penalty_multiplier(
-    peak_executor_counts: dict[ExecutorClass, int] | None,
-    curr_executor_counts: dict[ExecutorClass, int] | None,
-) -> float:
-    if not peak_executor_counts:
-        # Miner was not present during the peak cycle, so don't give penalty.
-        return 1.0
-    elif not curr_executor_counts:
-        # Miner was present during peak, but not current cycle's synthetic jobs.
-        return float(config.DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER)
-
-    for executor_class, peak_count in peak_executor_counts.items():
-        if peak_count == 0:
-            continue
-
-        if executor_class not in curr_executor_counts:
-            return float(config.DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER)
-
-        curr_count = curr_executor_counts[executor_class]
-        if curr_count / peak_count < config.DYNAMIC_NON_PEAK_CYCLE_EXECUTOR_MIN_RATIO:
-            return float(config.DYNAMIC_NON_PEAK_CYCLE_PENALTY_MULTIPLIER)
-
-    return 1.0
