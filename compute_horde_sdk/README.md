@@ -247,6 +247,101 @@ The SDK includes an optional `FallbackClient` that mirrors the standard `Compute
 
 See the [Fallback docs](https://sdk.computehorde.io/master/fallback.html) for usage examples and limitations.
 
+## 🔧 Custom Volume Managers
+
+By default, executors download all input volumes before running a job. Miners can implement their own volume manager to handle volume preparation more efficiently (e.g., caching, custom storage strategies).
+
+### How It Works
+
+When an executor has a volume manager configured, it delegates volume preparation to the volume manager instead of downloading volumes directly:
+
+1. Executor sends volume specifications to volume manager
+2. Volume manager returns Docker mount options
+3. Executor uses those mounts when running the job container
+4. Executor notifies volume manager when job completes
+
+### Configuration
+
+Set the volume manager address as an environment variable:
+
+```bash
+export VOLUME_MANAGER_ADDRESS="http://localhost:8080"
+```
+
+Add custom headers for authentication:
+
+```bash
+export VOLUME_MANAGER_HEADER_Authorization="Bearer your-token"
+export VOLUME_MANAGER_HEADER_X-Custom-Header="custom-value"
+```
+
+### Volume Manager API
+
+Your volume manager must implement these endpoints:
+
+#### `POST /prepare_volume`
+
+**Request:**
+```json
+{
+  "job_uuid": "7b522daa-e807-4094-8d96-99b9a863f960",
+  "volume": {
+    "volume_type": "huggingface_volume",
+    "repo_id": "example/model",
+    "revision": "main",
+    "relative_path": "models",
+    "usage_type": "reusable"
+  },
+  "job_metadata": {
+    "message_type": "V0JobRequest",
+    "job_uuid": "7b522daa-e807-4094-8d96-99b9a863f960",
+    "executor_class": "always_on__llm__a6000",
+    "docker_image": "example/image:latest",
+    "raw_script": null,
+    "docker_run_options_preset": "nvidia_all",
+    "docker_run_cmd": ["python", "main.py"],
+    "volume": null,
+    "output_upload": {
+      "output_upload_type": "single_file_put",
+      "relative_path": "results.json",
+      "url": "https://s3.example.com/results.json"
+    },
+    "artifacts_dir": "/artifacts"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "mounts": [
+    {
+      "type": "bind",
+      "source": "/host/path/to/cached/model",
+      "target": "/volume/models"
+    }
+  ]
+}
+```
+
+#### `POST /job_finished`
+
+**Request:**
+```json
+{
+  "job_uuid": "7b522daa-e807-4094-8d96-99b9a863f960"
+}
+```
+
+**Response:** `200 OK` (no body required)
+
+### Volume Usage Hints
+
+The `usage_type` field helps volume managers optimize storage:
+
+- `single_use`: Volume is used once and can be cleaned up immediately
+- `reusable`: Volume may be used multiple times (cache aggressively)
+
 ## Versioning
 
 This package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).

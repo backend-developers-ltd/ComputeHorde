@@ -296,6 +296,9 @@ OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES = env.int(
     "OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES", default=2147483648
 )  # 2GB
 
+# Volume Manager Configuration
+VOLUME_MANAGER_ADDRESS = env.str("VOLUME_MANAGER_ADDRESS", default=None)
+
 # Sentry
 if SENTRY_DSN := env("SENTRY_DSN", default=""):
     import sentry_sdk

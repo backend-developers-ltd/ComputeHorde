@@ -379,16 +379,19 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
             "revision": None,
             "allow_patterns": None,
             "token": None,
+            "usage_type": None,
         },
         {
             "volume_type": "inline",
             "relative_path": "version.txt",
             "contents": "dmVyc2lvbj0y",
+            "usage_type": None,
         },
         {
             "volume_type": "single_file",
             "relative_path": "dataset.json",
             "url": "https://s3.aws.something.com/mybucket/myfile.json",
+            "usage_type": None,
         },
     ]
     assert req_json["uploads"] == [
