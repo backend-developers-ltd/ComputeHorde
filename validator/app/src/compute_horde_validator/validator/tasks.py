@@ -1176,6 +1176,7 @@ def save_metagraph_snapshot(
             "stake": subnet_state["total_stake"],
             "uids": [neuron.uid for neuron in neurons],
             "hotkeys": [neuron.hotkey for neuron in neurons],
+            "coldkeys": [neuron.coldkey for neuron in neurons],
             "serving_hotkeys": [
                 neuron.hotkey
                 for neuron in neurons
@@ -1230,7 +1231,13 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
     existing_hotkeys = {m.hotkey for m in miners}
     new_hotkeys = set(current_hotkeys) - existing_hotkeys
     if len(new_hotkeys) > 0:
-        new_miners = Miner.objects.bulk_create([Miner(hotkey=hotkey) for hotkey in new_hotkeys])
+        new_miners = []
+        hotkey_to_neuron = {neuron.hotkey: neuron for neuron in neurons}
+        for hotkey in new_hotkeys:
+            neuron = hotkey_to_neuron.get(hotkey)
+            coldkey = neuron.coldkey if neuron else None
+            new_miners.append(Miner(hotkey=hotkey, coldkey=coldkey))
+        new_miners = Miner.objects.bulk_create(new_miners)
         miners.extend(new_miners)
         logger.info(f"Created new neurons: {new_hotkeys}")
 
@@ -1256,6 +1263,7 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
                 )
                 or miner.port != neuron.axon_info.port
                 or miner.ip_version != neuron.axon_info.ip.version
+                or miner.coldkey != neuron.coldkey
             )
         ):
             miner.uid = neuron.uid
@@ -1266,9 +1274,15 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
             )
             miner.port = neuron.axon_info.port
             miner.ip_version = neuron.axon_info.ip.version
+            miner.coldkey = neuron.coldkey
             miners_to_update.append(miner)
-    Miner.objects.bulk_update(miners_to_update, fields=["uid", "address", "port", "ip_version"])
-    logger.info(f"Updated axon infos for {len(miners_to_update)} miners")
+    
+    if miners_to_update:
+        Miner.objects.bulk_update(
+            miners_to_update, 
+            fields=["uid", "address", "port", "ip_version", "coldkey"]
+        )
+        logger.info(f"Updated axon infos and null coldkeys for {len(miners_to_update)} miners")
 
     data = {
         "block": block.number,
