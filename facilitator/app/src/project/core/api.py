@@ -18,7 +18,7 @@ from structlog import get_logger
 
 from .authentication import JWTAuthentication
 from .middleware.signature_middleware import require_signature
-from .models import Job, JobCreationDisabledError, JobFeedback
+from .models import Job, JobCreationDisabledError, JobFeedback, JobStatus
 from .schemas import MuliVolumeAllowedVolume
 
 logger = get_logger(__name__)
@@ -173,6 +173,22 @@ class JobFeedbackSerializer(serializers.ModelSerializer):
         fields = ["result_correctness", "expected_duration"]
 
 
+class JobStatusSerializer(serializers.ModelSerializer):
+    status = serializers.SerializerMethodField()
+    stage = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JobStatus
+        fields = ["status", "stage", "metadata", "created_at"]
+        read_only_fields = fields
+
+    def get_status_display(self, obj):
+        return obj.get_status_display()
+
+    def get_stage_display(self, obj):
+        return obj.get_stage_display()
+
+
 class RequestHasHotkey(BasePermission):
     def has_permission(self, request, view) -> bool:
         return hasattr(request, "hotkey")
@@ -295,8 +311,26 @@ class JobFeedbackViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, vie
         return self.create(request, *args, **kwargs)
 
 
+class JobStatusViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    serializer_class = JobStatusSerializer
+    permission_classes = (IsAuthenticated | RequestHasHotkey,)
+
+    def get_authenticators(self) -> list[BaseAuthentication]:
+        return super().get_authenticators() + [JWTAuthentication()]
+
+    def get_queryset(self):
+        job_uuid = self.kwargs["job_uuid"]
+        if hasattr(self.request, "hotkey"):
+            job = get_object_or_404(Job, uuid=job_uuid, hotkey=self.request.hotkey)
+        else:
+            job = get_object_or_404(Job, uuid=job_uuid, user=self.request.user)
+        
+        return JobStatus.objects.filter(job=job).order_by('created_at')
+
+
 router = routers.SimpleRouter()
 router.register(r"jobs", JobViewSet)
 router.register(r"job-docker", DockerJobViewset, basename="job_docker")
 router.register(r"jobs/(?P<job_uuid>[^/.]+)/feedback", JobFeedbackViewSet, basename="job_feedback")
+router.register(r"jobs/(?P<job_uuid>[^/.]+)/statuses", JobStatusViewSet, basename="job_statuses")
 router.register(r"cheated-job", CheatedJobViewSet, basename="cheated_job")

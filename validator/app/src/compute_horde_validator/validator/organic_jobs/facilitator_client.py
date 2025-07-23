@@ -383,7 +383,7 @@ class FacilitatorClient:
                                 rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
                                 reason=protocol_consts.JobRejectionReason.INVALID_SIGNATURE,
                                 message=msg,
-                            )
+                            ),
                         ),
                     )
                 )
@@ -414,7 +414,7 @@ class FacilitatorClient:
                             rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
                             reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
                             message=msg,
-                        )
+                        ),
                     ),
                 )
             )
@@ -433,7 +433,7 @@ class FacilitatorClient:
                             rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
                             reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
                             message=msg,
-                        )
+                        ),
                     ),
                 )
             )
@@ -489,7 +489,7 @@ class FacilitatorClient:
                             reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
                             exception_type=type(e).__qualname__,
                             message=msg,
-                        )
+                        ),
                     ),
                 )
             )

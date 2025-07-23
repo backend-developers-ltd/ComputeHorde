@@ -36,7 +36,9 @@ from .models import (
     ComputeHordeJobStatus,
     FacilitatorJobResponse,
     FacilitatorJobsResponse,
+    FacilitatorJobStatusesResponse,
     InputVolume,
+    JobStatusEntry,
     OutputVolume,
 )
 
@@ -565,6 +567,24 @@ class ComputeHordeClient:
 
             if max_attempts > 0 and attempt >= max_attempts:
                 return job
+
+    async def _fetch_job_statuses(self, job_uuid: str) -> list[JobStatusEntry]:
+        """
+        Retrieve job status update history.
+
+        :param job_uuid: The UUID of the job to retrieve statuses for.
+        :return: A list of JobStatusEntry instances representing the job's status history.
+        :raises ComputeHordeNotFoundError: If the job with this UUID does not exist.
+        """
+        logger.debug("Fetching job statuses with UUID=%s", job_uuid)
+
+        response = await self._make_request("GET", f"/api/v1/jobs/{job_uuid}/statuses/")
+        try:
+            statuses_response = FacilitatorJobStatusesResponse.model_validate_json(response)
+        except pydantic.ValidationError as e:
+            raise ComputeHordeError("ComputeHorde returned malformed response") from e
+
+        return statuses_response.results
 
     async def get_job(self, job_uuid: str) -> ComputeHordeJob:
         """

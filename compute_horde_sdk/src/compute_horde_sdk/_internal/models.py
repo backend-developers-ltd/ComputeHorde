@@ -5,6 +5,7 @@ import zipfile
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Literal
 
 import pydantic
@@ -115,6 +116,19 @@ class ComputeHordeHordeFailure:
     message: str | None = None
     exception_type: str | None = None
     context: JsonValue = None
+
+
+@dataclass
+class JobStatusEntry:
+    created_at: datetime
+    status: ComputeHordeJobStatus
+    # TODO(post error propagation): this should be an enum
+    stage: str
+    metadata: JsonValue = None
+
+
+class FacilitatorJobStatusesResponse(pydantic.BaseModel):
+    results: list[JobStatusEntry]
 
 
 class FacilitatorJobResponse(pydantic.BaseModel):
