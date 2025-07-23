@@ -39,20 +39,20 @@ class DefaultScoringEngine(ScoringEngine):
         )
 
         # Get jobs from current cycle
-        current_organic_jobs = await sync_to_async(list)(
-            OrganicJob.objects.filter(
-                block__gte=current_cycle_start, block__lt=current_cycle_start + 722
-            ).select_related("miner")
-        )
+        current_organic_jobs = await sync_to_async(list)(OrganicJob.objects.filter(
+            block__gte=current_cycle_start,
+            block__lt=current_cycle_start + 722,
+            cheated=False,
+            status=OrganicJob.Status.COMPLETED,
+            on_trusted_miner=False,
+        ).select_related('miner'))
 
-        current_synthetic_jobs = await sync_to_async(list)(
-            SyntheticJob.objects.filter(batch__cycle__start=current_cycle_start).select_related(
-                "miner"
-            )
-        )
+        current_synthetic_jobs = await sync_to_async(list)(SyntheticJob.objects.filter(
+            batch__cycle__start=current_cycle_start
+        ).select_related('miner'))
 
-        organic_scores = calculate_organic_scores(current_organic_jobs)
-        synthetic_scores = calculate_synthetic_scores(current_synthetic_jobs)
+        organic_scores = await calculate_organic_scores(current_organic_jobs)
+        synthetic_scores = await calculate_synthetic_scores(current_synthetic_jobs)
         combined_scores = combine_scores(organic_scores, synthetic_scores)
 
         logger.info(f"Base scores calculated: {len(combined_scores)} hotkeys")
