@@ -16,7 +16,6 @@ from typing import Any, ParamSpec, TypeVar, Union
 import billiard.exceptions
 import bittensor
 import celery.exceptions
-from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
 import numpy as np
 import requests
 import turbobt
@@ -32,6 +31,7 @@ from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
 from compute_horde.subtensor import TEMPO, get_cycle_containing_block
 from compute_horde.transport.base import TransportConnectionError
 from compute_horde.utils import MIN_VALIDATOR_STAKE, turbobt_get_validators

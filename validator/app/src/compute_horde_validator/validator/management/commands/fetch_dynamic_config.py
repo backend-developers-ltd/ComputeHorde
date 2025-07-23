@@ -1,12 +1,11 @@
 import logging
 
+from compute_horde.smart_contracts.map_contract import (
+    get_dynamic_config_types_from_settings,
+    get_dynamic_configs_from_contract,
+)
 from django.conf import settings
 from django.core.management import BaseCommand
-
-from compute_horde.smart_contracts.map_contract import (
-    get_dynamic_configs_from_contract,
-    get_dynamic_config_types_from_settings,
-)
 
 logger = logging.getLogger(__name__)
 

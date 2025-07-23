@@ -26,7 +26,9 @@ def get_web3_contract(contract_address: str) -> Contract:
     )
 
 
-def get_dynamic_configs_from_contract(configs: dict[str, type], contract_address: str) -> dict[str, Any]:
+def get_dynamic_configs_from_contract(
+    configs: dict[str, type], contract_address: str
+) -> dict[str, Any]:
     """
     Fetches dynamic config values from the Map contract.
     Casts the values to the specified types.
@@ -47,9 +49,13 @@ def get_dynamic_configs_from_contract(configs: dict[str, type], contract_address
 
             result[key] = type_object(value)
         except BadFunctionCallOutput as e:
-            raise ValueError(f"Failed to fetch dynamic config {key} from contract {contract_address}: {e}")
+            raise ValueError(
+                f"Failed to fetch dynamic config {key} from contract {contract_address}: {e}"
+            )
         except ValueError as e:
-            logger.warning(f"Failed to cast dynamic config {key}={value} to type {type_object}: {e}")
+            logger.warning(
+                f"Failed to cast dynamic config {key}={value} to type {type_object}: {e}"
+            )
         except Exception as e:
             logger.error(f"Failed to fetch dynamic config from contract {contract_address}: {e}")
     return result
