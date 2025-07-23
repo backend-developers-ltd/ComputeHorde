@@ -3,15 +3,14 @@ Tests for custom exceptions in the scoring module.
 """
 
 import pytest
-from unittest.mock import Mock, patch
 
 from .exceptions import (
-    ScoringError,
-    SplitDistributionError,
+    BittensorConnectionError,
     ColdkeyMappingError,
     InvalidSplitPercentageError,
-    BittensorConnectionError,
     ScoringConfigurationError,
+    ScoringError,
+    SplitDistributionError,
 )
 
 
@@ -41,9 +40,9 @@ class TestScoringExceptions:
         coldkey = "test_coldkey"
         total_percentage = 1.2
         distributions = {"hotkey1": 0.7, "hotkey2": 0.5}
-        
+
         error = InvalidSplitPercentageError(coldkey, total_percentage, distributions)
-        
+
         assert isinstance(error, ScoringError)
         assert error.coldkey == coldkey
         assert error.total_percentage == total_percentage
@@ -56,7 +55,7 @@ class TestScoringExceptions:
         """Test BittensorConnectionError."""
         original_error = ConnectionError("Connection refused")
         error = BittensorConnectionError("Failed to connect", original_error)
-        
+
         assert isinstance(error, ScoringError)
         assert "Failed to connect" in str(error)
         assert error.__cause__ == original_error
@@ -76,26 +75,27 @@ class TestScoringExceptions:
             BittensorConnectionError("test"),
             ScoringConfigurationError("test"),
         ]
-        
+
         for exc in exceptions:
             assert isinstance(exc, ScoringError)
             assert isinstance(exc, Exception)
 
     def test_exception_usage_example(self):
         """Test how exceptions can be used in practice."""
+
         def validate_split_percentage(coldkey: str, percentages: dict) -> None:
             total = sum(percentages.values())
             if abs(total - 1.0) > 0.0001:
                 raise InvalidSplitPercentageError(coldkey, total, percentages)
-        
+
         # Valid case
         validate_split_percentage("coldkey1", {"hotkey1": 0.6, "hotkey2": 0.4})
-        
+
         # Invalid case
         with pytest.raises(InvalidSplitPercentageError) as exc_info:
             validate_split_percentage("coldkey2", {"hotkey1": 0.6, "hotkey2": 0.5})
-        
+
         error = exc_info.value
         assert error.coldkey == "coldkey2"
         assert error.total_percentage == 1.1
-        assert error.distributions == {"hotkey1": 0.6, "hotkey2": 0.5} 
+        assert error.distributions == {"hotkey1": 0.6, "hotkey2": 0.5}

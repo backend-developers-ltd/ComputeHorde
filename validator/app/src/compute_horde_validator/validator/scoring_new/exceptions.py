@@ -8,22 +8,25 @@ to provide more explicit error handling and better debugging information.
 
 class ScoringError(Exception):
     """Base exception for scoring module errors."""
+
     pass
 
 
 class SplitDistributionError(ScoringError):
     """Raised when split distribution is invalid or missing."""
+
     pass
 
 
 class ColdkeyMappingError(ScoringError):
     """Raised when coldkey mapping cannot be determined."""
+
     pass
 
 
 class InvalidSplitPercentageError(ScoringError):
     """Raised when split distribution percentages don't sum to 1.0."""
-    
+
     def __init__(self, coldkey: str, total_percentage: float, distributions: dict):
         self.coldkey = coldkey
         self.total_percentage = total_percentage
@@ -36,7 +39,7 @@ class InvalidSplitPercentageError(ScoringError):
 
 class BittensorConnectionError(ScoringError):
     """Raised when connection to Bittensor metagraph fails."""
-    
+
     def __init__(self, message: str, cause: Exception = None):
         super().__init__(message)
         if cause:
@@ -45,4 +48,5 @@ class BittensorConnectionError(ScoringError):
 
 class ScoringConfigurationError(ScoringError):
     """Raised when scoring configuration is invalid or missing."""
-    pass 
+
+    pass

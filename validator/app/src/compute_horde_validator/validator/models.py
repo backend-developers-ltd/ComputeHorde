@@ -574,6 +574,3 @@ class MinerPreliminaryReservation(models.Model):
     expires_at = models.DateTimeField()
 
     objects = MinerPreliminaryReservationQueryset.as_manager()
-
-
-
