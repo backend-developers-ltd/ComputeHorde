@@ -4,11 +4,16 @@ from collections import defaultdict
 from asgiref.sync import sync_to_async
 from django.conf import settings
 
-from ..models import Miner, OrganicJob, SyntheticJob
-from .calculations import calculate_organic_scores, calculate_synthetic_scores, combine_scores
-from .interface import ScoringEngine
-from .models import MinerSplit, MinerSplitDistribution, SplitInfo
-from .split_querying import query_miner_split_distributions
+from compute_horde.subtensor import get_cycle_containing_block
+from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
+from compute_horde_validator.validator.scoring_new.calculations import (
+    calculate_organic_scores,
+    calculate_synthetic_scores,
+    combine_scores,
+)
+from compute_horde_validator.validator.scoring_new.interface import ScoringEngine
+from compute_horde_validator.validator.scoring_new.models import MinerSplit, MinerSplitDistribution, SplitInfo
+from compute_horde_validator.validator.scoring_new.split_querying import query_miner_split_distributions
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +30,7 @@ class DefaultScoringEngine(ScoringEngine):
         self, current_cycle_start: int, previous_cycle_start: int, validator_hotkey: str
     ) -> dict[str, float]:
         """
-        Calculate scores for two cycles and apply decoupled dancing.
+        Calculate scores for two cycles and apply dancing.
 
         Args:
             current_cycle_start: Start block of current cycle
@@ -40,11 +45,16 @@ class DefaultScoringEngine(ScoringEngine):
         )
 
         # Get jobs from current cycle
+        current_cycle_range = get_cycle_containing_block(
+            block=current_cycle_start, 
+            netuid=settings.BITTENSOR_NETUID
+        )
+        
         current_organic_jobs: list[OrganicJob] = await sync_to_async(
             lambda: list(
                 OrganicJob.objects.filter(
                     block__gte=current_cycle_start,
-                    block__lt=current_cycle_start + 722,
+                    block__lt=current_cycle_range.stop,  # Use dynamic cycle end
                     cheated=False,
                     status=OrganicJob.Status.COMPLETED,
                     on_trusted_miner=False,

@@ -730,24 +730,6 @@ def _get_subtensor_for_setting_scores(network):
         return bittensor.subtensor(network=network)
 
 
-def _score_cycles_with_new_engine(batches: list[SyntheticJobBatch]) -> dict[str, float]:
-    """Bridge function to use new scoring engine with batch-based system."""
-    if not batches:
-        return {}
-
-    # Get cycle start from the batch
-    cycle_start = batches[0].cycle.start
-
-    # Create scoring engine and calculate scores
-    engine = create_scoring_engine()
-    validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-    return async_to_sync(engine.calculate_scores_for_cycles)(
-        current_cycle_start=cycle_start,
-        previous_cycle_start=0,  # Default for backward compatibility
-        validator_hotkey=validator_hotkey,
-    )
-
-
 def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
     """
     Determine current and previous cycle start blocks for scoring.
@@ -813,11 +795,6 @@ def _score_cycles_directly(current_block: int) -> dict[str, float]:
             logger.warning("Previous cycle start is negative, using 0")
             previous_cycle_start = 0
 
-        # Check if cycle was already scored
-        if _check_if_cycle_already_scored(current_cycle_start):
-            logger.info(f"Cycle {current_cycle_start} already scored, skipping")
-            return {}
-
         # Get validator hotkey
         validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
 
@@ -845,34 +822,6 @@ def _score_cycles_directly(current_block: int) -> dict[str, float]:
         return {}
 
 
-def _check_if_cycle_already_scored(current_cycle_start: int) -> bool:
-    """
-    Check if the current cycle has already been scored to avoid duplicate scoring.
-
-    Args:
-        current_cycle_start: Current cycle start block
-
-    Returns:
-        True if cycle was already scored, False otherwise
-    """
-    try:
-        # Check if we have any synthetic job batches for this cycle that are marked as scored
-        scored_batches = SyntheticJobBatch.objects.filter(
-            cycle__start=current_cycle_start,
-            scored=True,
-        ).count()
-
-        if scored_batches > 0:
-            logger.info(f"Cycle {current_cycle_start} already has {scored_batches} scored batches")
-            return True
-
-        return False
-
-    except Exception as e:
-        logger.warning(f"Failed to check if cycle {current_cycle_start} was already scored: {e}")
-        return False
-
-
 def _mark_cycle_as_scored(current_cycle_start: int):
     """
     Mark the current cycle as scored by updating any related batches.
@@ -894,25 +843,6 @@ def _mark_cycle_as_scored(current_cycle_start: int):
 
     except Exception as e:
         logger.warning(f"Failed to mark cycle {current_cycle_start} as scored: {e}")
-
-
-def _mark_existing_batches_as_scored():
-    """
-    Mark any existing unscored batches as scored since we're now using direct cycle scoring.
-    This prevents old batches from accumulating.
-    """
-    try:
-        unscored_batches = SyntheticJobBatch.objects.filter(
-            scored=False,
-            should_be_scored=True,
-            started_at__gte=now() - timedelta(days=1),
-        )
-        count = unscored_batches.count()
-        if count > 0:
-            unscored_batches.update(scored=True)
-            logger.info(f"Marked {count} existing batches as scored (direct cycle scoring active)")
-    except Exception as e:
-        logger.warning(f"Failed to mark existing batches as scored: {e}")
 
 
 def normalize_batch_scores(
@@ -996,9 +926,6 @@ def set_scores(bittensor: turbobt.Bittensor):
             if not hotkey_scores:
                 logger.warning("No scores calculated, skipping weight setting")
                 return
-
-            # Mark any existing batches as scored (for cleanup)
-            _mark_existing_batches_as_scored()
 
             uids, weights = normalize_batch_scores(
                 hotkey_scores,

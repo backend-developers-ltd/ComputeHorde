@@ -75,7 +75,7 @@ async def score_synthetic_jobs(
 
 
 async def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
-    """Score organic jobs with configurable limits."""
+    """Score organic jobs."""
     batch_scores: defaultdict[str, float] = defaultdict(float)
     score = await sync_to_async(lambda: config.DYNAMIC_ORGANIC_JOB_SCORE)()
     limit = await sync_to_async(lambda: config.DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT)()
@@ -130,7 +130,7 @@ async def calculate_organic_scores(organic_jobs: list[OrganicJob]) -> dict[str, 
 
 async def calculate_synthetic_scores(synthetic_jobs: list[SyntheticJob]) -> dict[str, float]:
     """
-    Calculate scores from synthetic jobs using executor class-based logic.
+    Calculate scores from synthetic jobs.
 
     Args:
         synthetic_jobs: List of synthetic jobs
