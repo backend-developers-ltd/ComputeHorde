@@ -2,18 +2,27 @@ import logging
 from collections import defaultdict
 
 from asgiref.sync import sync_to_async
+from compute_horde.subtensor import get_cycle_containing_block
 from django.conf import settings
 
-from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
 from compute_horde_validator.validator.scoring_new.calculations import (
     calculate_organic_scores,
     calculate_synthetic_scores,
     combine_scores,
 )
+from compute_horde_validator.validator.scoring_new.exceptions import (
+    SplitDistributionError,
+)
 from compute_horde_validator.validator.scoring_new.interface import ScoringEngine
-from compute_horde_validator.validator.scoring_new.models import MinerSplit, MinerSplitDistribution, SplitInfo
-from compute_horde_validator.validator.scoring_new.split_querying import query_miner_split_distributions
+from compute_horde_validator.validator.scoring_new.models import (
+    MinerSplit,
+    MinerSplitDistribution,
+    SplitInfo,
+)
+from compute_horde_validator.validator.scoring_new.split_querying import (
+    query_miner_split_distributions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +55,9 @@ class DefaultScoringEngine(ScoringEngine):
 
         # Get jobs from current cycle
         current_cycle_range = get_cycle_containing_block(
-            block=current_cycle_start, 
-            netuid=settings.BITTENSOR_NETUID
+            block=current_cycle_start, netuid=settings.BITTENSOR_NETUID
         )
-        
+
         current_organic_jobs: list[OrganicJob] = await sync_to_async(
             lambda: list(
                 OrganicJob.objects.filter(
@@ -315,6 +323,7 @@ class DefaultScoringEngine(ScoringEngine):
 
         except Exception as e:
             logger.error(f"Failed to save split distribution for {coldkey}: {e}")
+            raise SplitDistributionError(f"Failed to save split distribution for {coldkey}: {e}")
 
     def _process_coldkey_split(
         self,
@@ -433,6 +442,7 @@ class DefaultScoringEngine(ScoringEngine):
         distributed_scores = {}
         for hotkey, percentage in distributions.items():
             distributed_scores[hotkey] = total_score * percentage
+
         return distributed_scores
 
     def _apply_dancing_bonus(self, scores: dict[str, float]) -> dict[str, float]:

@@ -8,12 +8,15 @@ from compute_horde.protocol_messages import (
     V0SplitDistributionRequest,
     ValidatorAuthForMiner,
 )
-from compute_horde.transport import WSTransport
-from compute_horde.transport.base import TransportConnectionError
+from compute_horde.transport import TransportConnectionError, WSTransport
 from compute_horde.utils import sign_blob
 from django.conf import settings
 
 from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.scoring_new.exceptions import (
+    BittensorConnectionError,
+    SplitDistributionError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,9 +106,12 @@ async def _query_single_miner_split_distribution(miner: Miner) -> dict[str, floa
                         await transport.stop()
                         return {}
 
-    except (TimeoutError, TransportConnectionError, Exception) as e:
+    except (TimeoutError, TransportConnectionError) as e:
         logger.warning(f"Failed to query split distribution from {miner.hotkey}: {e}")
-        return {}
+        raise BittensorConnectionError(f"Connection failed for {miner.hotkey}", e)
+    except Exception as e:
+        logger.warning(f"Unexpected error querying split distribution from {miner.hotkey}: {e}")
+        raise SplitDistributionError(f"Failed to get split distribution from {miner.hotkey}: {e}")
     finally:
         try:
             await transport.stop()

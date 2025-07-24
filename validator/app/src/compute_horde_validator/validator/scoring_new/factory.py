@@ -3,6 +3,7 @@ Factory for creating scoring engine instances.
 """
 
 from .engine import DefaultScoringEngine
+from .exceptions import ScoringConfigurationError
 from .interface import ScoringEngine
 
 
@@ -18,12 +19,12 @@ def create_scoring_engine(engine_type: str | None = None) -> ScoringEngine:
         ScoringEngine instance
 
     Raises:
-        ValueError: If engine_type is not supported
+        ScoringConfigurationError: If engine_type is not supported
     """
     if engine_type is None or engine_type == "default":
         return DefaultScoringEngine()
     else:
-        raise ValueError(f"Unsupported engine type: {engine_type}")
+        raise ScoringConfigurationError(f"Unsupported engine type: {engine_type}")
 
 
 def get_available_engine_types() -> list[str]:
