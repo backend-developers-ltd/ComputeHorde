@@ -8,7 +8,7 @@ from compute_horde_core.executor_class import ExecutorClass
 from constance import config
 from django.conf import settings
 
-from .dynamic_config import get_executor_class_weights, get_weights_version
+from .dynamic_config import get_executor_class_weights
 from .models import MinerManifest, OrganicJob, SyntheticJob, SyntheticJobBatch
 
 logger = logging.getLogger(__name__)
@@ -167,6 +167,3 @@ def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, dict[Execu
         result[manifest.miner.hotkey][executor_class] += manifest.online_executor_count
 
     return result
-
-
-

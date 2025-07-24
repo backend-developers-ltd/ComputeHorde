@@ -213,23 +213,10 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
 
         self.validator_authenticated = True
         
-        # Get split distribution for decoupled dancing
-        split_distribution = await current.executor_manager.get_split_distribution()
-        
         # Create manifest with split distribution
         manifest = await current.executor_manager.get_manifest()
-        manifest_with_split = {
-            "executor_classes": [
-                {"count": count, "executor_class": executor_class}
-                for executor_class, count in manifest.items()
-            ]
-        }
         
-        # Add split distribution if provided
-        if split_distribution:
-            manifest_with_split["split_distribution"] = split_distribution
-        
-        await self.send(V0ExecutorManifestRequest(manifest=manifest_with_split).model_dump_json())
+        await self.send(V0ExecutorManifestRequest(manifest=manifest).model_dump_json())
 
         # Handle messages that may have arrived during the authentication
         for msg in self.msg_queue:

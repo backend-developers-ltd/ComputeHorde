@@ -83,7 +83,7 @@ class TestScoringExceptions:
     def test_exception_usage_example(self):
         """Test how exceptions can be used in practice."""
 
-        def validate_split_percentage(coldkey: str, percentages: dict) -> None:
+        def validate_split_percentage(coldkey: str, percentages: dict[str, float]) -> None:
             total = sum(percentages.values())
             if abs(total - 1.0) > 0.0001:
                 raise InvalidSplitPercentageError(coldkey, total, percentages)

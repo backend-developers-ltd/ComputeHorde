@@ -11,7 +11,7 @@ from datetime import timedelta
 from decimal import Decimal
 from functools import cached_property
 from math import ceil, floor
-from typing import Any, ParamSpec, TypeVar, Union
+from typing import Any, ParamSpec, TypeVar
 
 import billiard.exceptions
 import bittensor
@@ -734,102 +734,112 @@ def _score_cycles_with_new_engine(batches: list[SyntheticJobBatch]) -> dict[str,
     """Bridge function to use new scoring engine with batch-based system."""
     if not batches:
         return {}
-    
+
     # Get cycle start from the batch
     cycle_start = batches[0].cycle.start
-    
+
     # Create scoring engine and calculate scores
     engine = create_scoring_engine()
-    return async_to_sync(engine.calculate_scores_for_cycles)(cycle_start)
+    validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+    return async_to_sync(engine.calculate_scores_for_cycles)(
+        current_cycle_start=cycle_start,
+        previous_cycle_start=0,  # Default for backward compatibility
+        validator_hotkey=validator_hotkey,
+    )
 
 
 def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
     """
     Determine current and previous cycle start blocks for scoring.
-    
+
     Args:
         current_block: Current block number
-        
+
     Returns:
         Tuple of (current_cycle_start, previous_cycle_start)
     """
     # Get current cycle containing the current block
     current_cycle = get_cycle_containing_block(
-        block=current_block, 
-        netuid=settings.BITTENSOR_NETUID
+        block=current_block, netuid=settings.BITTENSOR_NETUID
     )
-    
+
     if current_cycle is None:
         logger.error(f"Could not determine cycle for block {current_block}")
         return None, None
-    
+
     # Look for the most recent cycle in database that's before current cycle
     try:
-        previous_cycle = Cycle.objects.filter(
-            start__lt=current_cycle.start
-        ).order_by('-start').first()
-        
+        previous_cycle = (
+            Cycle.objects.filter(start__lt=current_cycle.start).order_by("-start").first()
+        )
+
         if previous_cycle:
             previous_cycle_start = previous_cycle.start
-            logger.info(f"Found previous cycle in database: current={current_cycle.start}, previous={previous_cycle_start}")
+            logger.info(
+                f"Found previous cycle in database: current={current_cycle.start}, previous={previous_cycle_start}"
+            )
         else:
-            logger.warning(f"No previous cycle found in database for current cycle {current_cycle.start}, using 0")
+            logger.warning(
+                f"No previous cycle found in database for current cycle {current_cycle.start}, using 0"
+            )
             previous_cycle_start = 0
-            
+
     except Exception as e:
         logger.warning(f"Database lookup failed for previous cycle: {e}, using 0 as previous cycle")
         previous_cycle_start = 0
-    
+
     return current_cycle.start, previous_cycle_start
 
 
 def _score_cycles_directly(current_block: int) -> dict[str, float]:
     """
     Score cycles directly without relying on batches.
-    
+
     Args:
         current_block: Current block number
-        
+
     Returns:
         Dictionary mapping hotkey to score
     """
     try:
         # Get current and previous cycle starts
         current_cycle_start, previous_cycle_start = _get_cycles_for_scoring(current_block)
-        
+
         if current_cycle_start is None or previous_cycle_start is None:
             logger.error("Could not determine cycles for scoring")
             return {}
-            
+
         if previous_cycle_start < 0:
             logger.warning("Previous cycle start is negative, using 0")
             previous_cycle_start = 0
-        
+
         # Check if cycle was already scored
         if _check_if_cycle_already_scored(current_cycle_start):
             logger.info(f"Cycle {current_cycle_start} already scored, skipping")
             return {}
-        
+
         # Get validator hotkey
         validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-        
+
         # Create scoring engine and calculate scores
         engine = create_scoring_engine()
-        
-        logger.info(f"Calculating scores for cycles: current={current_cycle_start}, previous={previous_cycle_start}")
-        
+
+        logger.info(
+            f"Calculating scores for cycles: current={current_cycle_start}, previous={previous_cycle_start}"
+        )
+
         scores = async_to_sync(engine.calculate_scores_for_cycles)(
             current_cycle_start=current_cycle_start,
             previous_cycle_start=previous_cycle_start,
-            validator_hotkey=validator_hotkey
+            validator_hotkey=validator_hotkey,
         )
-        
+
         # Mark cycle as scored if we got results
         if scores:
             _mark_cycle_as_scored(current_cycle_start)
-        
+
         return scores
-        
+
     except Exception as e:
         logger.error(f"Failed to score cycles directly: {e}")
         return {}
@@ -838,10 +848,10 @@ def _score_cycles_directly(current_block: int) -> dict[str, float]:
 def _check_if_cycle_already_scored(current_cycle_start: int) -> bool:
     """
     Check if the current cycle has already been scored to avoid duplicate scoring.
-    
+
     Args:
         current_cycle_start: Current cycle start block
-        
+
     Returns:
         True if cycle was already scored, False otherwise
     """
@@ -851,13 +861,13 @@ def _check_if_cycle_already_scored(current_cycle_start: int) -> bool:
             cycle__start=current_cycle_start,
             scored=True,
         ).count()
-        
+
         if scored_batches > 0:
             logger.info(f"Cycle {current_cycle_start} already has {scored_batches} scored batches")
             return True
-            
+
         return False
-        
+
     except Exception as e:
         logger.warning(f"Failed to check if cycle {current_cycle_start} was already scored: {e}")
         return False
@@ -866,7 +876,7 @@ def _check_if_cycle_already_scored(current_cycle_start: int) -> bool:
 def _mark_cycle_as_scored(current_cycle_start: int):
     """
     Mark the current cycle as scored by updating any related batches.
-    
+
     Args:
         current_cycle_start: Current cycle start block
     """
@@ -876,10 +886,12 @@ def _mark_cycle_as_scored(current_cycle_start: int):
             cycle__start=current_cycle_start,
             scored=False,
         ).update(scored=True)
-        
+
         if batches_updated > 0:
-            logger.info(f"Marked {batches_updated} batches as scored for cycle {current_cycle_start}")
-            
+            logger.info(
+                f"Marked {batches_updated} batches as scored for cycle {current_cycle_start}"
+            )
+
     except Exception as e:
         logger.warning(f"Failed to mark cycle {current_cycle_start} as scored: {e}")
 
@@ -938,9 +950,6 @@ def normalize_batch_scores(
     )
 
     return uids, weights
-
-
-
 
 
 @app.task
@@ -1415,11 +1424,10 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
             miner.ip_version = neuron.axon_info.ip.version
             miner.coldkey = neuron.coldkey
             miners_to_update.append(miner)
-    
+
     if miners_to_update:
         Miner.objects.bulk_update(
-            miners_to_update, 
-            fields=["uid", "address", "port", "ip_version", "coldkey"]
+            miners_to_update, fields=["uid", "address", "port", "ip_version", "coldkey"]
         )
         logger.info(f"Updated axon infos and null coldkeys for {len(miners_to_update)} miners")
 

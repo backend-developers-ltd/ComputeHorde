@@ -1,21 +1,16 @@
-import asyncio
 import logging
-import time
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from functools import partial
-from typing import Dict, List, Optional, Any
 
 import numpy as np
 from asgiref.sync import sync_to_async
 from compute_horde_core.executor_class import ExecutorClass
+from constance import config
 from django.conf import settings
-from django.db.models import QuerySet
 
-from compute_horde_validator.validator.models import OrganicJob, SyntheticJob, Miner
 from compute_horde_validator.validator.dynamic_config import get_executor_class_weights
-from compute_horde_validator.validator.scoring_new.models import MinerSplit, MinerSplitDistribution
-from compute_horde_validator.validator.scoring_new.exceptions import InvalidSplitPercentageError
+from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
 
 logger = logging.getLogger(__name__)
 
@@ -95,61 +90,63 @@ async def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
     return batch_scores
 
 
-async def calculate_organic_scores(organic_jobs: list[OrganicJob]) -> Dict[str, float]:
+async def calculate_organic_scores(organic_jobs: list[OrganicJob]) -> dict[str, float]:
     """
     Calculate scores from organic jobs using executor class-based logic.
-    
+
     Args:
         organic_jobs: List of organic jobs
-        
+
     Returns:
         Dictionary mapping hotkey to score
     """
     executor_class_weights = await sync_to_async(get_executor_class_weights)()
     executor_class_organic_jobs = defaultdict(list)
-    
+
     # Group organic jobs by executor class
     for job in organic_jobs:
-        if (job.status == OrganicJob.Status.COMPLETED and 
-            not job.cheated and 
-            not job.on_trusted_miner and
-            job.executor_class in executor_class_weights):
+        if (
+            job.status == OrganicJob.Status.COMPLETED
+            and not job.cheated
+            and not job.on_trusted_miner
+            and job.executor_class in executor_class_weights
+        ):
             executor_class = ExecutorClass(job.executor_class)
             executor_class_organic_jobs[executor_class].append(job)
-    
+
     # Calculate scores per executor class
     batch_scores: defaultdict[str, float] = defaultdict(float)
     for executor_class, executor_class_weight in executor_class_weights.items():
         organic_jobs_for_class = executor_class_organic_jobs.get(executor_class, [])
         executor_class_organic_scores = await score_organic_jobs(organic_jobs_for_class)
-        
+
         # Normalize scores for executor class weight
         normalized_scores = normalize(executor_class_organic_scores, executor_class_weight)
         for hotkey, score in normalized_scores.items():
             batch_scores[hotkey] += score
-    
+
     return dict(batch_scores)
 
 
-async def calculate_synthetic_scores(synthetic_jobs: list[SyntheticJob]) -> Dict[str, float]:
+async def calculate_synthetic_scores(synthetic_jobs: list[SyntheticJob]) -> dict[str, float]:
     """
     Calculate scores from synthetic jobs using executor class-based logic.
-    
+
     Args:
         synthetic_jobs: List of synthetic jobs
-        
+
     Returns:
         Dictionary mapping hotkey to score
     """
     executor_class_weights = await sync_to_async(get_executor_class_weights)()
     executor_class_synthetic_jobs = defaultdict(list)
-    
+
     # Group synthetic jobs by executor class
     for job in synthetic_jobs:
         if job.executor_class in executor_class_weights:
             executor_class = ExecutorClass(job.executor_class)
             executor_class_synthetic_jobs[executor_class].append(job)
-    
+
     # Create parameterized horde score function
     parameterized_horde_score: Callable[[list[float]], float] = partial(
         horde_score,
@@ -160,66 +157,68 @@ async def calculate_synthetic_scores(synthetic_jobs: list[SyntheticJob]) -> Dict
         # horde size for 0.5 value of sigmoid - sigmoid is for 1 / horde_size
         delta=1 / settings.HORDE_SCORE_CENTRAL_SIZE_PARAM,
     )
-    
+
     # Calculate scores per executor class
     batch_scores: defaultdict[str, float] = defaultdict(float)
     for executor_class, executor_class_weight in executor_class_weights.items():
         synthetic_jobs_for_class = executor_class_synthetic_jobs.get(executor_class, [])
-        
+
         # Use horde scoring for specific executor class, sum for others
         if executor_class == ExecutorClass.spin_up_4min__gpu_24gb:
             score_aggregation = parameterized_horde_score
         else:
             score_aggregation = sum
-            
+
         executor_class_synthetic_scores = await score_synthetic_jobs(
             synthetic_jobs_for_class,
             score_aggregation=score_aggregation,
         )
-        
+
         # Normalize scores for executor class weight
         normalized_scores = normalize(executor_class_synthetic_scores, executor_class_weight)
         for hotkey, score in normalized_scores.items():
             batch_scores[hotkey] += score
-    
+
     return dict(batch_scores)
 
 
-def combine_scores(organic_scores: Dict[str, float], synthetic_scores: Dict[str, float]) -> Dict[str, float]:
+def combine_scores(
+    organic_scores: dict[str, float], synthetic_scores: dict[str, float]
+) -> dict[str, float]:
     """
     Combine organic and synthetic scores.
-    
+
     Args:
         organic_scores: Scores from organic jobs
         synthetic_scores: Scores from synthetic jobs
-        
+
     Returns:
         Combined scores by hotkey
     """
-    combined = defaultdict(float)
-    
+    combined: defaultdict[str, float] = defaultdict(float)
+
     # Add organic scores
     for hotkey, score in organic_scores.items():
         combined[hotkey] += score
-    
+
     # Add synthetic scores
     for hotkey, score in synthetic_scores.items():
         combined[hotkey] += score
-    
+
     return dict(combined)
 
 
-def get_coldkey_to_hotkey_mapping(miners: list) -> dict[str, list[str]]:
+def get_coldkey_to_hotkey_mapping(miners: list[Miner]) -> dict[str, list[str]]:
     """
     Create a mapping from coldkey to list of hotkeys for all miners.
-    
+
     Args:
         miners: List of Miner objects
-        
+
     Returns:
         Dictionary mapping coldkey to list of hotkeys
     """
-    mapping = {}
+    mapping: dict[str, list[str]] = {}
     for miner in miners:
         if miner.coldkey:
             if miner.coldkey not in mapping:
@@ -232,26 +231,29 @@ async def get_hotkey_to_coldkey_mapping(hotkeys: list[str]) -> dict[str, str]:
     """
     Get hotkey to coldkey mapping from database.
     Missing coldkeys will be logged and synced during next metagraph sync.
-    
+
     Args:
         hotkeys: List of hotkeys to get coldkeys for
-        
+
     Returns:
         Dictionary mapping hotkeys to coldkeys
     """
     # Get from database only
-    miners = await sync_to_async(list)(Miner.objects.filter(hotkey__in=hotkeys).select_related())
-    hotkey_to_coldkey = {}
-    missing_hotkeys = []
-    
+    miners: list[Miner] = await sync_to_async(
+        lambda: list(Miner.objects.filter(hotkey__in=hotkeys).select_related())
+    )()
+    hotkey_to_coldkey: dict[str, str] = {}
+    missing_hotkeys: list[str] = []
+
     for miner in miners:
         if miner.coldkey:
             hotkey_to_coldkey[miner.hotkey] = miner.coldkey
         else:
             missing_hotkeys.append(miner.hotkey)
-    
+
     if missing_hotkeys:
-        logger.warning(f"Missing coldkeys for hotkeys: {missing_hotkeys}. Will be synced during next metagraph sync.")
-    
+        logger.warning(
+            f"Missing coldkeys for hotkeys: {missing_hotkeys}. Will be synced during next metagraph sync."
+        )
+
     return hotkey_to_coldkey
- 

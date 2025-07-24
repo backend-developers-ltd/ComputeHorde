@@ -305,9 +305,6 @@ def create_batch(n: int, cycle: Cycle) -> SyntheticJobBatch:
     return batch
 
 
-
-
-
 @pytest.mark.override_config(
     DYNAMIC_EXECUTOR_CLASS_WEIGHTS="always_on.llm.a6000=100",
     DYNAMIC_MANIFEST_SCORE_MULTIPLIER=DYNAMIC_MANIFEST_SCORE_MULTIPLIER,
@@ -462,6 +459,3 @@ def test_temporary_scoring_formula(override_weights_version_v1):
     assert scores["miner1"] == approx(miner1_score, abs=10**-4)
     assert scores["miner2"] == approx(miner2_score, abs=10**-4)
     assert scores["miner3"] == approx(miner3_score, abs=10**-4)
-
-
-

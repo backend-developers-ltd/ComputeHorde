@@ -27,7 +27,7 @@ class ColdkeyMappingError(ScoringError):
 class InvalidSplitPercentageError(ScoringError):
     """Raised when split distribution percentages don't sum to 1.0."""
 
-    def __init__(self, coldkey: str, total_percentage: float, distributions: dict):
+    def __init__(self, coldkey: str, total_percentage: float, distributions: dict[str, float]):
         self.coldkey = coldkey
         self.total_percentage = total_percentage
         self.distributions = distributions

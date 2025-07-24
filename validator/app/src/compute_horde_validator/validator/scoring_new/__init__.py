@@ -1,7 +1,7 @@
 """
 Scoring module for validator.
 
-This module provides scoring functionality through a clean interface.
+This module provides scoring functionality.
 Users should interact with the scoring module only through the engine interface.
 """
 

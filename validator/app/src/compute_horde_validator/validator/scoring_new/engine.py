@@ -6,9 +6,9 @@ from django.conf import settings
 
 from ..models import Miner, OrganicJob, SyntheticJob
 from .calculations import calculate_organic_scores, calculate_synthetic_scores, combine_scores
-from .split_querying import query_miner_split_distributions
 from .interface import ScoringEngine
-from .models import MinerSplit, SplitInfo, MinerSplitDistribution
+from .models import MinerSplit, MinerSplitDistribution, SplitInfo
+from .split_querying import query_miner_split_distributions
 
 logger = logging.getLogger(__name__)
 
@@ -40,17 +40,25 @@ class DefaultScoringEngine(ScoringEngine):
         )
 
         # Get jobs from current cycle
-        current_organic_jobs = await sync_to_async(list)(OrganicJob.objects.filter(
-            block__gte=current_cycle_start,
-            block__lt=current_cycle_start + 722,
-            cheated=False,
-            status=OrganicJob.Status.COMPLETED,
-            on_trusted_miner=False,
-        ).select_related('miner'))
+        current_organic_jobs: list[OrganicJob] = await sync_to_async(
+            lambda: list(
+                OrganicJob.objects.filter(
+                    block__gte=current_cycle_start,
+                    block__lt=current_cycle_start + 722,
+                    cheated=False,
+                    status=OrganicJob.Status.COMPLETED,
+                    on_trusted_miner=False,
+                ).select_related("miner")
+            )
+        )()
 
-        current_synthetic_jobs = await sync_to_async(list)(SyntheticJob.objects.filter(
-            batch__cycle__start=current_cycle_start
-        ).select_related('miner'))
+        current_synthetic_jobs: list[SyntheticJob] = await sync_to_async(
+            lambda: list(
+                SyntheticJob.objects.filter(batch__cycle__start=current_cycle_start).select_related(
+                    "miner"
+                )
+            )
+        )()
 
         organic_scores = await calculate_organic_scores(current_organic_jobs)
         synthetic_scores = await calculate_synthetic_scores(current_synthetic_jobs)
@@ -109,11 +117,13 @@ class DefaultScoringEngine(ScoringEngine):
         Returns:
             Tuple of (coldkey_scores, hotkey_to_coldkey_mapping)
         """
-        coldkey_scores = defaultdict(float)
-        hotkey_to_coldkey = {}
+        coldkey_scores: defaultdict[str, float] = defaultdict(float)
+        hotkey_to_coldkey: dict[str, str] = {}
 
         hotkeys_list = list(scores.keys())
-        miners = await sync_to_async(list)(Miner.objects.filter(hotkey__in=hotkeys_list))
+        miners: list[Miner] = await sync_to_async(
+            lambda: list(Miner.objects.filter(hotkey__in=hotkeys_list))
+        )()
         miner_map = {miner.hotkey: miner for miner in miners}
 
         # Group by coldkey from database
@@ -170,7 +180,7 @@ class DefaultScoringEngine(ScoringEngine):
         current_splits = await self._query_and_save_current_splits(
             coldkeys_for_splits, current_cycle_start, validator_hotkey
         )
-        
+
         # Get previous splits from database
         previous_splits = await self._get_split_distributions_batch(
             coldkeys_for_splits, previous_cycle_start, validator_hotkey
@@ -203,26 +213,26 @@ class DefaultScoringEngine(ScoringEngine):
     ) -> dict[str, SplitInfo]:
         """
         Query miners for current split distributions and save to database.
-        
+
         Args:
             coldkeys: List of miner coldkeys
             cycle_start: Current cycle start block
             validator_hotkey: Validator hotkey
-            
+
         Returns:
             Dictionary mapping coldkey to SplitInfo
         """
         if not coldkeys:
             return {}
-        
+
         # Get miners for these coldkeys
-        miners = await sync_to_async(list)(
-            Miner.objects.filter(coldkey__in=coldkeys, serving=True).select_related()
-        )
-        
+        miners: list[Miner] = await sync_to_async(
+            lambda: list(Miner.objects.filter(coldkey__in=coldkeys).select_related())
+        )()
+
         # Query miners for split distributions
         split_distributions = await query_miner_split_distributions(miners)
-        
+
         # Save to database and return SplitInfo objects
         result = {}
         for coldkey in coldkeys:
@@ -232,22 +242,31 @@ class DefaultScoringEngine(ScoringEngine):
                 if miner.coldkey == coldkey:
                     miner_for_coldkey = miner
                     break
-            
+
             if miner_for_coldkey and miner_for_coldkey.hotkey in split_distributions:
-                distributions = split_distributions[miner_for_coldkey.hotkey]
-                
+                distributions_result = split_distributions[miner_for_coldkey.hotkey]
+
+                # Skip if we got an exception
+                if isinstance(distributions_result, Exception):
+                    logger.warning(
+                        f"Failed to get split distribution for {coldkey}: {distributions_result}"
+                    )
+                    continue
+
+                distributions = distributions_result
+
                 # Save to database
                 await self._save_split_to_database(
                     coldkey, cycle_start, validator_hotkey, distributions
                 )
-                
+
                 result[coldkey] = SplitInfo(
                     coldkey=coldkey,
                     cycle_start=cycle_start,
                     validator_hotkey=validator_hotkey,
                     distributions=distributions,
                 )
-        
+
         return result
 
     async def _save_split_to_database(
@@ -255,7 +274,7 @@ class DefaultScoringEngine(ScoringEngine):
     ):
         """
         Save split distribution to database.
-        
+
         Args:
             coldkey: Miner coldkey
             cycle_start: Cycle start block
@@ -268,12 +287,12 @@ class DefaultScoringEngine(ScoringEngine):
                 coldkey=coldkey,
                 cycle_start=cycle_start,
                 validator_hotkey=validator_hotkey,
-                defaults={}
+                defaults={},
             )
-            
+
             # Clear existing distributions and add new ones
             await sync_to_async(split.distributions.all().delete)()
-            
+
             # Create new distributions
             for hotkey, percentage in distributions.items():
                 await sync_to_async(MinerSplitDistribution.objects.create)(
@@ -281,9 +300,9 @@ class DefaultScoringEngine(ScoringEngine):
                     hotkey=hotkey,
                     percentage=percentage,
                 )
-            
+
             logger.debug(f"Saved split distribution for {coldkey}: {distributions}")
-            
+
         except Exception as e:
             logger.error(f"Failed to save split distribution for {coldkey}: {e}")
 
@@ -348,11 +367,13 @@ class DefaultScoringEngine(ScoringEngine):
         """
         if not coldkeys:
             return {}
-        splits = await sync_to_async(list)(
-            MinerSplit.objects.filter(
-                coldkey__in=coldkeys, cycle_start=cycle_start, validator_hotkey=validator_hotkey
-            ).prefetch_related("distributions")
-        )
+        splits: list[MinerSplit] = await sync_to_async(
+            lambda: list(
+                MinerSplit.objects.filter(
+                    coldkey__in=coldkeys, cycle_start=cycle_start, validator_hotkey=validator_hotkey
+                ).prefetch_related("distributions")
+            )
+        )()
 
         result = {}
         for split in splits:

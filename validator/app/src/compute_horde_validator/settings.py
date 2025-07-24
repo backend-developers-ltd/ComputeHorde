@@ -429,8 +429,8 @@ CONSTANCE_CONFIG = {
         bool,
     ),
     "DYNAMIC_DANCING_BONUS": (
-        0.3,
-        "Bonus multiplier for the split hotkey in decoupled dancing (30% = 0.3)",
+        0.1,
+        "Bonus multiplier for the split distribution in dancing (10% = 0.1)",
         float,
     ),
 }
