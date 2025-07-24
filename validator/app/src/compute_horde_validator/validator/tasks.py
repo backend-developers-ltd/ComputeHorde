@@ -743,6 +743,166 @@ def _score_cycles_with_new_engine(batches: list[SyntheticJobBatch]) -> dict[str,
     return async_to_sync(engine.calculate_scores_for_cycles)(cycle_start)
 
 
+def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
+    """
+    Determine current and previous cycle start blocks for scoring.
+    
+    Args:
+        current_block: Current block number
+        
+    Returns:
+        Tuple of (current_cycle_start, previous_cycle_start)
+    """
+    # Get current cycle containing the current block
+    current_cycle = get_cycle_containing_block(
+        block=current_block, 
+        netuid=settings.BITTENSOR_NETUID
+    )
+    
+    if current_cycle is None:
+        logger.error(f"Could not determine cycle for block {current_block}")
+        return None, None
+    
+    # Look for the most recent cycle in database that's before current cycle
+    try:
+        previous_cycle = Cycle.objects.filter(
+            start__lt=current_cycle.start
+        ).order_by('-start').first()
+        
+        if previous_cycle:
+            previous_cycle_start = previous_cycle.start
+            logger.info(f"Found previous cycle in database: current={current_cycle.start}, previous={previous_cycle_start}")
+        else:
+            logger.warning(f"No previous cycle found in database for current cycle {current_cycle.start}, using 0")
+            previous_cycle_start = 0
+            
+    except Exception as e:
+        logger.warning(f"Database lookup failed for previous cycle: {e}, using 0 as previous cycle")
+        previous_cycle_start = 0
+    
+    return current_cycle.start, previous_cycle_start
+
+
+def _score_cycles_directly(current_block: int) -> dict[str, float]:
+    """
+    Score cycles directly without relying on batches.
+    
+    Args:
+        current_block: Current block number
+        
+    Returns:
+        Dictionary mapping hotkey to score
+    """
+    try:
+        # Get current and previous cycle starts
+        current_cycle_start, previous_cycle_start = _get_cycles_for_scoring(current_block)
+        
+        if current_cycle_start is None or previous_cycle_start is None:
+            logger.error("Could not determine cycles for scoring")
+            return {}
+            
+        if previous_cycle_start < 0:
+            logger.warning("Previous cycle start is negative, using 0")
+            previous_cycle_start = 0
+        
+        # Check if cycle was already scored
+        if _check_if_cycle_already_scored(current_cycle_start):
+            logger.info(f"Cycle {current_cycle_start} already scored, skipping")
+            return {}
+        
+        # Get validator hotkey
+        validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+        
+        # Create scoring engine and calculate scores
+        engine = create_scoring_engine()
+        
+        logger.info(f"Calculating scores for cycles: current={current_cycle_start}, previous={previous_cycle_start}")
+        
+        scores = async_to_sync(engine.calculate_scores_for_cycles)(
+            current_cycle_start=current_cycle_start,
+            previous_cycle_start=previous_cycle_start,
+            validator_hotkey=validator_hotkey
+        )
+        
+        # Mark cycle as scored if we got results
+        if scores:
+            _mark_cycle_as_scored(current_cycle_start)
+        
+        return scores
+        
+    except Exception as e:
+        logger.error(f"Failed to score cycles directly: {e}")
+        return {}
+
+
+def _check_if_cycle_already_scored(current_cycle_start: int) -> bool:
+    """
+    Check if the current cycle has already been scored to avoid duplicate scoring.
+    
+    Args:
+        current_cycle_start: Current cycle start block
+        
+    Returns:
+        True if cycle was already scored, False otherwise
+    """
+    try:
+        # Check if we have any synthetic job batches for this cycle that are marked as scored
+        scored_batches = SyntheticJobBatch.objects.filter(
+            cycle__start=current_cycle_start,
+            scored=True,
+        ).count()
+        
+        if scored_batches > 0:
+            logger.info(f"Cycle {current_cycle_start} already has {scored_batches} scored batches")
+            return True
+            
+        return False
+        
+    except Exception as e:
+        logger.warning(f"Failed to check if cycle {current_cycle_start} was already scored: {e}")
+        return False
+
+
+def _mark_cycle_as_scored(current_cycle_start: int):
+    """
+    Mark the current cycle as scored by updating any related batches.
+    
+    Args:
+        current_cycle_start: Current cycle start block
+    """
+    try:
+        # Mark any batches for this cycle as scored
+        batches_updated = SyntheticJobBatch.objects.filter(
+            cycle__start=current_cycle_start,
+            scored=False,
+        ).update(scored=True)
+        
+        if batches_updated > 0:
+            logger.info(f"Marked {batches_updated} batches as scored for cycle {current_cycle_start}")
+            
+    except Exception as e:
+        logger.warning(f"Failed to mark cycle {current_cycle_start} as scored: {e}")
+
+
+def _mark_existing_batches_as_scored():
+    """
+    Mark any existing unscored batches as scored since we're now using direct cycle scoring.
+    This prevents old batches from accumulating.
+    """
+    try:
+        unscored_batches = SyntheticJobBatch.objects.filter(
+            scored=False,
+            should_be_scored=True,
+            started_at__gte=now() - timedelta(days=1),
+        )
+        count = unscored_batches.count()
+        if count > 0:
+            unscored_batches.update(scored=True)
+            logger.info(f"Marked {count} existing batches as scored (direct cycle scoring active)")
+    except Exception as e:
+        logger.warning(f"Failed to mark existing batches as scored: {e}")
+
+
 def normalize_batch_scores(
     hotkey_scores: dict[str, float],
     neurons: list[turbobt.Neuron],
@@ -821,32 +981,15 @@ def set_scores(bittensor: turbobt.Bittensor):
             hyperparameters = async_to_sync(subnet.get_hyperparameters)(current_block.hash)
             neurons = async_to_sync(subnet.list_neurons)(current_block.hash)
 
-            batches = list(
-                SyntheticJobBatch.objects.select_related("cycle")
-                .filter(
-                    scored=False,
-                    should_be_scored=True,
-                    started_at__gte=now() - timedelta(days=1),
-                    cycle__stop__lt=current_block.number,
-                )
-                .order_by("started_at")
-            )
-            if not batches:
-                logger.info("No batches - nothing to score")
+            # DIRECT CYCLE SCORING - No more batch dependency!
+            hotkey_scores = _score_cycles_directly(current_block.number)
+
+            if not hotkey_scores:
+                logger.warning("No scores calculated, skipping weight setting")
                 return
-            if len(batches) > 1:
-                logger.error("Unexpected number batches eligible for scoring: %s", len(batches))
-                for batch in batches[:-1]:
-                    batch.scored = True
-                    batch.save()
-                batches = [batches[-1]]
 
-            logger.info(
-                "Selected batches for scoring: [%s]",
-                ", ".join(str(batch.id) for batch in batches),
-            )
-
-            hotkey_scores = _score_cycles_with_new_engine(batches)
+            # Mark any existing batches as scored (for cleanup)
+            _mark_existing_batches_as_scored()
 
             uids, weights = normalize_batch_scores(
                 hotkey_scores,
@@ -854,10 +997,6 @@ def set_scores(bittensor: turbobt.Bittensor):
                 min_allowed_weights=hyperparameters["min_allowed_weights"],
                 max_weight_limit=hyperparameters["max_weights_limit"],
             )
-
-            for batch in batches:
-                batch.scored = True
-                batch.save()
 
             for try_number in range(WEIGHT_SETTING_ATTEMPTS):
                 logger.debug(
