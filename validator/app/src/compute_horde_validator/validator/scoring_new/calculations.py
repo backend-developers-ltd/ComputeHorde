@@ -1,21 +1,21 @@
+import asyncio
 import logging
+import time
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from functools import partial
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import numpy as np
-from compute_horde.subtensor import get_peak_cycle
+from asgiref.sync import sync_to_async
 from compute_horde_core.executor_class import ExecutorClass
-from constance import config
 from django.conf import settings
 from django.db.models import QuerySet
-from asgiref.sync import sync_to_async
 
-from ..models import OrganicJob, SyntheticJob, Miner
-from ..dynamic_config import get_executor_class_weights
-from .models import MinerSplit, MinerSplitDistribution
-from .exceptions import InvalidSplitPercentageError
+from compute_horde_validator.validator.models import OrganicJob, SyntheticJob, Miner
+from compute_horde_validator.validator.dynamic_config import get_executor_class_weights
+from compute_horde_validator.validator.scoring_new.models import MinerSplit, MinerSplitDistribution
+from compute_horde_validator.validator.scoring_new.exceptions import InvalidSplitPercentageError
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +230,8 @@ def get_coldkey_to_hotkey_mapping(miners: list) -> dict[str, list[str]]:
 
 async def get_hotkey_to_coldkey_mapping(hotkeys: list[str]) -> dict[str, str]:
     """
-    Get hotkey to coldkey mapping with fallback to Bittensor if needed.
+    Get hotkey to coldkey mapping from database.
+    Missing coldkeys will be logged and synced during next metagraph sync.
     
     Args:
         hotkeys: List of hotkeys to get coldkeys for
@@ -238,7 +239,7 @@ async def get_hotkey_to_coldkey_mapping(hotkeys: list[str]) -> dict[str, str]:
     Returns:
         Dictionary mapping hotkeys to coldkeys
     """
-    # First try to get from database
+    # Get from database only
     miners = await sync_to_async(list)(Miner.objects.filter(hotkey__in=hotkeys).select_related())
     hotkey_to_coldkey = {}
     missing_hotkeys = []
@@ -249,92 +250,8 @@ async def get_hotkey_to_coldkey_mapping(hotkeys: list[str]) -> dict[str, str]:
         else:
             missing_hotkeys.append(miner.hotkey)
     
-    # If we have missing hotkeys, try to fetch from Bittensor
     if missing_hotkeys:
-        try:
-            import bittensor
-            from django.conf import settings
-            
-            # Connect to Bittensor
-            subtensor = bittensor.subtensor(network=settings.BITTENSOR_NETWORK)
-            metagraph = subtensor.metagraph(netuid=settings.BITTENSOR_NETUID)
-            
-            # Get missing mappings
-            for neuron in metagraph.neurons:
-                if neuron.hotkey in missing_hotkeys:
-                    hotkey_to_coldkey[neuron.hotkey] = neuron.coldkey
-                    
-            # Update database with new mappings
-            miners_to_update = []
-            for miner in miners:
-                if miner.hotkey in missing_hotkeys and miner.hotkey in hotkey_to_coldkey:
-                    miner.coldkey = hotkey_to_coldkey[miner.hotkey]
-                    miners_to_update.append(miner)
-            
-            if miners_to_update:
-                Miner.objects.bulk_update(miners_to_update, fields=['coldkey'])
-                logger.info(f"Updated {len(miners_to_update)} coldkey mappings from Bittensor")
-                
-        except Exception as e:
-            # Log the error but don't raise - return partial mapping
-            logger.warning(f"Failed to fetch coldkey mappings from Bittensor: {e}")
-            # Continue with partial mapping from database
+        logger.warning(f"Missing coldkeys for hotkeys: {missing_hotkeys}. Will be synced during next metagraph sync.")
     
     return hotkey_to_coldkey
-
-
-def split_changed_from_previous_cycle(coldkey: str, current_cycle_start: int, validator_hotkey: str) -> bool:
-    """
-    Check if the split distribution changed from the previous cycle.
-    
-    Args:
-        coldkey: Miner coldkey
-        current_cycle_start: Current cycle start block
-        validator_hotkey: Validator hotkey
-        
-    Returns:
-        True if split changed, False otherwise
-    """
-    try:
-        # Get previous cycle (722 blocks per cycle)
-        previous_cycle_start = current_cycle_start - 722
-        
-        # Get current split
-        current_split = MinerSplit.objects.get(
-            coldkey=coldkey,
-            cycle_start=current_cycle_start,
-            validator_hotkey=validator_hotkey
-        )
-        current_distributions = MinerSplitDistribution.objects.filter(split=current_split)
-        current_distribution = {d.hotkey: float(d.percentage) for d in current_distributions}
-        
-        # Get previous split
-        previous_split = MinerSplit.objects.get(
-            coldkey=coldkey,
-            cycle_start=previous_cycle_start,
-            validator_hotkey=validator_hotkey
-        )
-        previous_distributions = MinerSplitDistribution.objects.filter(split=previous_split)
-        previous_distribution = {d.hotkey: float(d.percentage) for d in previous_distributions}
-        
-        # Compare distributions
-        if current_distribution != previous_distribution:
-            logger.debug(f"Split changed for {coldkey}: {previous_distribution} -> {current_distribution}")
-            return True
-        else:
-            logger.debug(f"No split change for {coldkey}")
-            return False
-        
-    except MinerSplit.DoesNotExist:
-        # If no previous split exists, consider it as "changed" (new split)
-        logger.debug(f"No previous split found for {coldkey}, considering as changed")
-        return True
-    except MinerSplitDistribution.DoesNotExist:
-        # If no distributions exist, consider it as "changed"
-        logger.debug(f"No distributions found for {coldkey}, considering as changed")
-        return True
-    except Exception as e:
-        # Log error but don't fail - assume no change
-        logger.warning(f"Error checking split change for {coldkey}: {e}")
-        return False
  

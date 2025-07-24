@@ -6,8 +6,9 @@ from django.conf import settings
 
 from ..models import Miner, OrganicJob, SyntheticJob
 from .calculations import calculate_organic_scores, calculate_synthetic_scores, combine_scores
+from .split_querying import query_miner_split_distributions
 from .interface import ScoringEngine
-from .models import MinerSplit, SplitInfo
+from .models import MinerSplit, SplitInfo, MinerSplitDistribution
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ class DefaultScoringEngine(ScoringEngine):
         miners = await sync_to_async(list)(Miner.objects.filter(hotkey__in=hotkeys_list))
         miner_map = {miner.hotkey: miner for miner in miners}
 
-        # First, try to get coldkeys from database
+        # Group by coldkey from database
         hotkeys_without_coldkey = []
         for hotkey, score in scores.items():
             miner = miner_map.get(hotkey)
@@ -128,21 +129,10 @@ class DefaultScoringEngine(ScoringEngine):
                 if not miner:
                     logger.warning(f"Miner not found for hotkey: {hotkey}")
 
-        # If we have hotkeys without coldkeys, try to get them from Bittensor
-        if hotkeys_without_coldkey:
-            from .calculations import get_hotkey_to_coldkey_mapping
-
-            bittensor_mapping = await get_hotkey_to_coldkey_mapping(hotkeys_without_coldkey)
-
-            for hotkey in hotkeys_without_coldkey:
-                if hotkey in bittensor_mapping:
-                    coldkey = bittensor_mapping[hotkey]
-                    coldkey_scores[coldkey] += scores[hotkey]
-                    hotkey_to_coldkey[hotkey] = coldkey
-                else:
-                    # Keep as individual hotkey (no coldkey grouping)
-                    coldkey_scores[hotkey] = scores[hotkey]
-                    hotkey_to_coldkey[hotkey] = hotkey
+        # Handle hotkeys without coldkeys - keep as individual hotkeys
+        for hotkey in hotkeys_without_coldkey:
+            coldkey_scores[hotkey] = scores[hotkey]
+            hotkey_to_coldkey[hotkey] = hotkey
 
         return dict(coldkey_scores), hotkey_to_coldkey
 
@@ -176,10 +166,12 @@ class DefaultScoringEngine(ScoringEngine):
             coldkey for coldkey in coldkey_scores.keys() if coldkey not in original_scores
         ]
 
-        # Batch fetch all splits
-        current_splits = await self._get_split_distributions_batch(
+        # Get current splits by querying miners
+        current_splits = await self._query_and_save_current_splits(
             coldkeys_for_splits, current_cycle_start, validator_hotkey
         )
+        
+        # Get previous splits from database
         previous_splits = await self._get_split_distributions_batch(
             coldkeys_for_splits, previous_cycle_start, validator_hotkey
         )
@@ -205,6 +197,95 @@ class DefaultScoringEngine(ScoringEngine):
                 final_scores[hotkey] = final_scores.get(hotkey, 0) + score
 
         return final_scores
+
+    async def _query_and_save_current_splits(
+        self, coldkeys: list[str], cycle_start: int, validator_hotkey: str
+    ) -> dict[str, SplitInfo]:
+        """
+        Query miners for current split distributions and save to database.
+        
+        Args:
+            coldkeys: List of miner coldkeys
+            cycle_start: Current cycle start block
+            validator_hotkey: Validator hotkey
+            
+        Returns:
+            Dictionary mapping coldkey to SplitInfo
+        """
+        if not coldkeys:
+            return {}
+        
+        # Get miners for these coldkeys
+        miners = await sync_to_async(list)(
+            Miner.objects.filter(coldkey__in=coldkeys, serving=True).select_related()
+        )
+        
+        # Query miners for split distributions
+        split_distributions = await query_miner_split_distributions(miners)
+        
+        # Save to database and return SplitInfo objects
+        result = {}
+        for coldkey in coldkeys:
+            # Find a miner for this coldkey to get the split distribution
+            miner_for_coldkey = None
+            for miner in miners:
+                if miner.coldkey == coldkey:
+                    miner_for_coldkey = miner
+                    break
+            
+            if miner_for_coldkey and miner_for_coldkey.hotkey in split_distributions:
+                distributions = split_distributions[miner_for_coldkey.hotkey]
+                
+                # Save to database
+                await self._save_split_to_database(
+                    coldkey, cycle_start, validator_hotkey, distributions
+                )
+                
+                result[coldkey] = SplitInfo(
+                    coldkey=coldkey,
+                    cycle_start=cycle_start,
+                    validator_hotkey=validator_hotkey,
+                    distributions=distributions,
+                )
+        
+        return result
+
+    async def _save_split_to_database(
+        self, coldkey: str, cycle_start: int, validator_hotkey: str, distributions: dict[str, float]
+    ):
+        """
+        Save split distribution to database.
+        
+        Args:
+            coldkey: Miner coldkey
+            cycle_start: Cycle start block
+            validator_hotkey: Validator hotkey
+            distributions: Distribution percentages by hotkey
+        """
+        try:
+            # Create or update the split
+            split, created = await sync_to_async(MinerSplit.objects.get_or_create)(
+                coldkey=coldkey,
+                cycle_start=cycle_start,
+                validator_hotkey=validator_hotkey,
+                defaults={}
+            )
+            
+            # Clear existing distributions and add new ones
+            await sync_to_async(split.distributions.all().delete)()
+            
+            # Create new distributions
+            for hotkey, percentage in distributions.items():
+                await sync_to_async(MinerSplitDistribution.objects.create)(
+                    split=split,
+                    hotkey=hotkey,
+                    percentage=percentage,
+                )
+            
+            logger.debug(f"Saved split distribution for {coldkey}: {distributions}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save split distribution for {coldkey}: {e}")
 
     def _process_coldkey_split(
         self,
