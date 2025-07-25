@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Literal
 
 import pydantic
-from pydantic import JsonValue
+from pydantic import Field, JsonValue
 
 from compute_horde_core import output_upload as compute_horde_output_upload
 from compute_horde_core import volume as compute_horde_volume
@@ -119,16 +119,28 @@ class ComputeHordeHordeFailure:
 
 
 @dataclass
-class JobStatusEntry:
+class JobStatusUpdateMetadata:
+    comment: str | None = None
+    # TODO(post error propagation): this is an amalgam of success and failure responses
+    miner_response: dict[str, JsonValue] | None = None
+    # TODO(error propagation): create structs for these
+    job_rejection_details: dict[str, JsonValue] | None = None
+    job_failure_details: dict[str, JsonValue] | None = None
+    horde_failure_details: dict[str, JsonValue] | None = None
+    streaming_details: dict[str, JsonValue] | None = None
+
+
+@dataclass
+class ComputeHordeJobStatusEntry:
     created_at: datetime
     status: ComputeHordeJobStatus
     # TODO(post error propagation): this should be an enum
     stage: str
-    metadata: JsonValue = None
+    metadata: JobStatusUpdateMetadata | None = None
 
 
 class FacilitatorJobStatusesResponse(pydantic.BaseModel):
-    results: list[JobStatusEntry]
+    results: list[ComputeHordeJobStatusEntry]
 
 
 class FacilitatorJobResponse(pydantic.BaseModel):
@@ -136,10 +148,6 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     executor_class: str
     created_at: str
     # last_update: str
-    status: ComputeHordeJobStatus
-    # TODO(post error propagation): this should be an enum
-    # TODO(post error propagation): remove the default "unknown"
-    stage: str = "unknown"
     docker_image: str
     args: list[str]
     env: dict[str, str]
@@ -149,21 +157,19 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # input_url: str
     # output_download_url: str
     # tag: str
-    # TODO(post error propagation): success details are in job_result_details; remove stdout/err/artifacts/uploads
-    stdout: str
-    stderr: str
     # volumes: list = []
     # uploads: list = []
     # target_validator_hotkey: str
-    artifacts: dict[str, str] = {}
-    upload_results: dict[str, str] = {}
+    # TODO(post error propagation): remove status/stdout/err/artifacts/uploads - use status_history
+    status: ComputeHordeJobStatus
+    stdout: str
+    stderr: str
+    artifacts: dict[str, str] = Field(default_factory=dict)
+    upload_results: dict[str, str] = Field(default_factory=dict)
     streaming_server_cert: str | None = None
     streaming_server_address: str | None = None
     streaming_server_port: int | None = None
-    job_result: ComputeHordeJobResult | None = None
-    job_rejection: ComputeHordeJobRejection | None = None
-    job_failure: ComputeHordeJobFailure | None = None
-    horde_failure: ComputeHordeHordeFailure | None = None
+    status_history: list[ComputeHordeJobStatusEntry] = Field(default_factory=list)
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):

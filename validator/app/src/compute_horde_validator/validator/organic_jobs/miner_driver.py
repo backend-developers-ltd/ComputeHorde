@@ -10,7 +10,7 @@ from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2
 from compute_horde.fv_protocol.validator_requests import (
     JobResultDetails,
     JobStatusUpdate,
-    JobStatusUpdatePayload,
+    JobStatusUpdateMetadata,
     StreamingServerDetails,
 )
 from compute_horde.miner_client.organic import (
@@ -62,7 +62,7 @@ def status_update_from_job(
         artifacts=job.artifacts,
         upload_results=job.upload_results,
     )
-    metadata = JobStatusUpdatePayload(
+    metadata = JobStatusUpdateMetadata(
         comment=job.comment,
         miner_response=miner_response,
     )

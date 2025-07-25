@@ -80,9 +80,9 @@ class StreamingServerDetails(BaseModel, extra="forbid"):
     streaming_server_port: int | None = None
 
 
-class JobStatusUpdatePayload(BaseModel, extra="allow"):
+class JobStatusUpdateMetadata(BaseModel, extra="allow"):
     # TODO(post error propagation): remove "extra"
-    # TODO(post error propagation): "comment" is probably unnecessary? payloads should contain details if they need to
+    # TODO(post error propagation): "comment" is probably unnecessary? payloads below should contain details if they need to
     comment: str
     # TODO(post error propagation): this is an amalgam of success and failure responses
     miner_response: JobResultDetails | None = None
@@ -103,8 +103,7 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
     status: protocol_consts.JobStatusValiFaci
     # TODO(post error propagation): no "None" default
     stage: protocol_consts.JobStage = protocol_consts.JobStage.NOT_SPECIFIED
-    # TODO(post error propagation): rename this to payload
-    metadata: JobStatusUpdatePayload | None = None
+    metadata: JobStatusUpdateMetadata | None = None
 
 
 class V0MachineSpecsUpdate(BaseModel, extra="forbid"):

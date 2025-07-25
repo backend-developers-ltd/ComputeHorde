@@ -14,6 +14,7 @@ from compute_horde_sdk._internal.models import (
     ComputeHordeJobRejection,
     ComputeHordeJobFailure,
     ComputeHordeHordeFailure,
+    ComputeHordeJobStatusEntry,
     InputVolume,
     HTTPInputVolume,
     HuggingfaceInputVolume,

@@ -22,7 +22,7 @@ from compute_horde.fv_protocol.validator_requests import (
     HordeFailureDetails,
     JobRejectionDetails,
     JobStatusUpdate,
-    JobStatusUpdatePayload,
+    JobStatusUpdateMetadata,
     V0AuthenticationRequest,
     V0Heartbeat,
     V0MachineSpecsUpdate,
@@ -377,7 +377,7 @@ class FacilitatorClient:
                         uuid=job_request.uuid,
                         status=protocol_consts.JobStatusValiFaci.REJECTED,
                         stage=protocol_consts.JobStage.ACCEPTANCE,
-                        metadata=JobStatusUpdatePayload(
+                        metadata=JobStatusUpdateMetadata(
                             comment=msg,
                             job_rejection_details=JobRejectionDetails(
                                 rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
@@ -408,7 +408,7 @@ class FacilitatorClient:
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.REJECTED,
                     stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdatePayload(
+                    metadata=JobStatusUpdateMetadata(
                         comment=msg,
                         job_rejection_details=JobRejectionDetails(
                             rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
@@ -427,7 +427,7 @@ class FacilitatorClient:
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.REJECTED,
                     stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdatePayload(
+                    metadata=JobStatusUpdateMetadata(
                         comment=msg,
                         job_rejection_details=JobRejectionDetails(
                             rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
@@ -446,7 +446,7 @@ class FacilitatorClient:
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.FAILED,
                     stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdatePayload(comment=msg),
+                    metadata=JobStatusUpdateMetadata(comment=msg),
                 )
             )
             return
@@ -458,7 +458,7 @@ class FacilitatorClient:
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.REJECTED,
                     stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdatePayload(comment=msg),
+                    metadata=JobStatusUpdateMetadata(comment=msg),
                 )
             )
             return
@@ -470,7 +470,7 @@ class FacilitatorClient:
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.REJECTED,
                     stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdatePayload(comment=msg),
+                    metadata=JobStatusUpdateMetadata(comment=msg),
                 )
             )
             return
@@ -482,7 +482,7 @@ class FacilitatorClient:
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.FAILED,
                     stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdatePayload(
+                    metadata=JobStatusUpdateMetadata(
                         comment=msg,
                         horde_failure_details=HordeFailureDetails(
                             reported_by=protocol_consts.JobParticipantType.VALIDATOR,
@@ -512,7 +512,7 @@ class FacilitatorClient:
                 JobStatusUpdate(
                     uuid=job_request.uuid,
                     status=protocol_consts.JobStatusValiFaci.FAILED,
-                    metadata=JobStatusUpdatePayload(
+                    metadata=JobStatusUpdateMetadata(
                         comment=msg,
                         horde_failure_details=HordeFailureDetails(
                             reported_by=protocol_consts.JobParticipantType.VALIDATOR,

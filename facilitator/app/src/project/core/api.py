@@ -44,7 +44,27 @@ class DefaultModelPagination(PageNumberPagination):
     max_page_size = 256
 
 
+class JobStatusEntrySerializer(serializers.ModelSerializer):
+    status = serializers.SerializerMethodField()
+    stage = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JobStatus
+        fields = ["status", "stage", "metadata", "created_at"]
+        read_only_fields = fields
+
+    def get_status(self, obj):
+        return obj.get_status_display()
+
+    def get_stage(self, obj):
+        return obj.get_stage_display()
+
+
 class JobSerializer(serializers.HyperlinkedModelSerializer):
+    """
+    - status/stdout/stderr/artifacts/uploads are used by pre-error-propagation SDK
+    - newer SDKs should use status_history instead
+    """
     class Meta:
         model = Job
         fields = (
@@ -53,7 +73,6 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "created_at",
             "last_update",
             "status",
-            "stage",
             "docker_image",
             "args",
             "env",
@@ -76,9 +95,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "streaming_server_cert",
             "streaming_server_address",
             "streaming_server_port",
-            "job_rejection",
-            "job_failure",
-            "horde_failure",
+            "status_history",
         )
         read_only_fields = ("created_at",)
 
@@ -95,21 +112,13 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
     volumes = SmartSchemaField(schema=list[MuliVolumeAllowedVolume], required=False)
 
     status = serializers.SerializerMethodField()
-    stage = serializers.SerializerMethodField()
     last_update = serializers.SerializerMethodField()
     stdout = serializers.SerializerMethodField()
     stderr = serializers.SerializerMethodField()
-    # TODO(post error propagation): add a success result struct here instead of spreading it into fields like above
-    # TODO(post error propagation): ... then remove these fields if possible
-    job_rejection = serializers.SerializerMethodField()
-    job_failure = serializers.SerializerMethodField()
-    horde_failure = serializers.SerializerMethodField()
+    status_history = JobStatusEntrySerializer(many=True, read_only=True, source="statuses")
 
     def get_status(self, obj):
         return obj.status.get_status_display()
-
-    def get_stage(self, obj):
-        return obj.status.get_stage_display()
 
     def get_stdout(self, obj):
         meta = obj.status.meta
@@ -126,17 +135,6 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
     def get_last_update(self, obj):
         return obj.status.created_at
 
-    def get_job_rejection(self, obj):
-        details = obj.status.meta.job_rejection_details if obj.status.meta else None
-        return details.dict() if details else None
-
-    def get_job_failure(self, obj):
-        details = obj.status.meta.job_failure_details if obj.status.meta else None
-        return details.dict() if details else None
-
-    def get_horde_failure(self, obj):
-        details = obj.status.meta.horde_failure_details if obj.status.meta else None
-        return details.dict() if details else None
 
 class DockerJobSerializer(JobSerializer):
     class Meta:
@@ -171,22 +169,6 @@ class JobFeedbackSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobFeedback
         fields = ["result_correctness", "expected_duration"]
-
-
-class JobStatusSerializer(serializers.ModelSerializer):
-    status = serializers.SerializerMethodField()
-    stage = serializers.SerializerMethodField()
-
-    class Meta:
-        model = JobStatus
-        fields = ["status", "stage", "metadata", "created_at"]
-        read_only_fields = fields
-
-    def get_status_display(self, obj):
-        return obj.get_status_display()
-
-    def get_stage_display(self, obj):
-        return obj.get_stage_display()
 
 
 class RequestHasHotkey(BasePermission):
@@ -311,26 +293,8 @@ class JobFeedbackViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, vie
         return self.create(request, *args, **kwargs)
 
 
-class JobStatusViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
-    serializer_class = JobStatusSerializer
-    permission_classes = (IsAuthenticated | RequestHasHotkey,)
-
-    def get_authenticators(self) -> list[BaseAuthentication]:
-        return super().get_authenticators() + [JWTAuthentication()]
-
-    def get_queryset(self):
-        job_uuid = self.kwargs["job_uuid"]
-        if hasattr(self.request, "hotkey"):
-            job = get_object_or_404(Job, uuid=job_uuid, hotkey=self.request.hotkey)
-        else:
-            job = get_object_or_404(Job, uuid=job_uuid, user=self.request.user)
-        
-        return JobStatus.objects.filter(job=job).order_by('created_at')
-
-
 router = routers.SimpleRouter()
 router.register(r"jobs", JobViewSet)
 router.register(r"job-docker", DockerJobViewset, basename="job_docker")
 router.register(r"jobs/(?P<job_uuid>[^/.]+)/feedback", JobFeedbackViewSet, basename="job_feedback")
-router.register(r"jobs/(?P<job_uuid>[^/.]+)/statuses", JobStatusViewSet, basename="job_statuses")
 router.register(r"cheated-job", CheatedJobViewSet, basename="cheated_job")
