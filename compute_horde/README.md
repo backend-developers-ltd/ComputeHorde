@@ -40,7 +40,7 @@ This is a cheap-to-query store that stores the current block number.
 
 Usage:
 
-* Add `compute_horde.blockchain.tasks.update_block_cache` as a Celery Beat task with some reasonable frequency (like 1 or 2 s)
+* Add `compute_horde.blockchain.tasks.update_block_cache` as a Celery Beat task with some reasonable frequency (like 6s)
   * Make sure to set the expires= option for the beat entry to about the same value to avoid the tasks piling up
 * To get the current block number from cache, use `aget_current_block` (or `get_current_block`).
 
