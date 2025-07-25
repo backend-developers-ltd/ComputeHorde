@@ -51,6 +51,9 @@ def horde_score(
     delta - controls where sigmoid function has 0.5 value allowing for better control over effect of beta param;
             the best values are from range [0, 1]
     """
+    if not benchmarks:
+        return 0.0
+    
     sum_agent = sum(benchmarks)
     inverted_n = 1 / len(benchmarks)
     avg_benchmark = sum_agent * inverted_n
