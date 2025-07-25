@@ -5,9 +5,11 @@ from abc import ABC, abstractmethod
 import pydantic
 
 from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_validator.validator.allowance.utils.types import ss58_address
 
-ss58_address = str
 reservation_id = int
+block_id = int
+block_ids = list[int]
 
 
 class AllowanceException(Exception):
@@ -91,7 +93,7 @@ class AllowanceBase(ABC):
         executor_class: ExecutorClass,
         amount: float,
         job_start_block: int,
-    ) -> reservation_id:
+    ) -> tuple[reservation_id, block_ids]:
         """
         Reserve allowance for a specific miner. The reservation will auto expire after `amount` seconds.
 
