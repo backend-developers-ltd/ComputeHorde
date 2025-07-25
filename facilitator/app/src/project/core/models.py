@@ -1,6 +1,7 @@
 from datetime import timedelta
 from math import ceil
 from operator import attrgetter
+from typing import assert_never
 from uuid import uuid4
 
 from asgiref.sync import async_to_sync
@@ -196,7 +197,11 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             if is_new:
                 job_request = self.as_job_request().model_dump()
                 self.send_to_validator(job_request)
-                JobStatus.objects.create(job=self, status=JobStatus.Status.SENT, stage=protocol_consts.JobStage.ACCEPTANCE.value)
+                JobStatus.objects.create(
+                    job=self,
+                    status=protocol_consts.JobStatusValiFaci.SENT.value,
+                    stage=protocol_consts.JobStage.ACCEPTANCE.value,
+                )
 
     def report_cheated(self, signature: Signature) -> None:
         """
@@ -295,27 +300,8 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
-    class Status(models.IntegerChoices):
-        # These correspond to compute_horde.protocol_consts.JobStatusValiFaci
-        FAILED = -2
-        REJECTED = -1
-        SENT = 0
-        RECEIVED = 1
-        ACCEPTED = 2
-        EXECUTOR_READY = 3
-        VOLUMES_READY = 4
-        EXECUTION_DONE = 5
-        COMPLETED = 6
-        STREAMING_READY = 7
-
-    FINAL_STATUS_VALUES = (
-        Status.COMPLETED,
-        Status.REJECTED,
-        Status.FAILED,
-    )
-
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="statuses")
-    status = models.SmallIntegerField(choices=Status.choices)
+    status = models.CharField(choices=protocol_consts.JobStatusValiFaci.choices())
     stage = models.CharField(choices=protocol_consts.JobStage.choices(), default=protocol_consts.JobStage.NOT_SPECIFIED.value, max_length=255)
     metadata = models.JSONField(blank=True, default=dict)
     created_at = models.DateTimeField(default=now)
@@ -333,6 +319,35 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     def meta(self) -> JobStatusUpdateMetadata | None:
         if self.metadata:
             return JobStatusUpdateMetadata.model_validate(self.metadata)
+
+    def get_legacy_status_display(self) -> str:
+        """
+        For legacy SDK users.
+        TODO: Remove this when nobody is using older SDK.
+        """
+        match self.status:
+            case protocol_consts.JobStatusValiFaci.SENT.value:
+                return "Sent"
+            case protocol_consts.JobStatusValiFaci.RECEIVED.value:
+                return "Received"
+            case protocol_consts.JobStatusValiFaci.ACCEPTED.value:
+                return "Accepted"
+            case protocol_consts.JobStatusValiFaci.EXECUTOR_READY.value:
+                return "Executor Ready"
+            case protocol_consts.JobStatusValiFaci.STREAMING_READY.value:
+                return "Streaming Ready"
+            case protocol_consts.JobStatusValiFaci.VOLUMES_READY.value:
+                return "Volumes Ready"
+            case protocol_consts.JobStatusValiFaci.EXECUTION_DONE.value:
+                return "Execution Done"
+            case protocol_consts.JobStatusValiFaci.COMPLETED.value:
+                return "Completed"
+            case protocol_consts.JobStatusValiFaci.REJECTED.value:
+                return "Rejected"
+            case protocol_consts.JobStatusValiFaci.FAILED.value:
+                return "Failed"
+            case _:
+                assert_never(self.status)
 
 
 class JobFeedback(models.Model):

@@ -7,34 +7,14 @@ else:
     from backports.strenum import StrEnum  #  noqa: UP035
 
 
-class JobStatusValiFaci(StrEnum):
-    RECEIVED = "received"
-    ACCEPTED = "accepted"
-    EXECUTOR_READY = "executor_ready"
-    STREAMING_READY = "streaming_ready"
-    VOLUMES_READY = "volumes_ready"
-    EXECUTION_DONE = "execution_done"
-    COMPLETED = "completed"
-    REJECTED = "rejected"
-    FAILED = "failed"
-
-    @classmethod
-    def end_states(cls) -> set["JobStatusValiFaci"]:
-        return {JobStatusValiFaci.COMPLETED, JobStatusValiFaci.REJECTED, JobStatusValiFaci.FAILED}
-
-    def is_in_progress(self) -> bool:
-        return self not in JobStatusValiFaci.end_states()
-
-    def is_successful(self) -> bool:
-        return self == JobStatusValiFaci.COMPLETED
-
-    def is_failed(self) -> bool:
-        return self in {JobStatusValiFaci.REJECTED, JobStatusValiFaci.FAILED}
-
-
 class JobStatus(Enum):
-    UNKNOWN = "unknown"
-    NOT_SUBMITTED = "not_submitted"
+    """
+    This is the minimum set of job statuses.
+    All this should really answer is: "is the job running already?" and "is it still running?"
+    (job == consumer code == the job's docker container)
+    """
+
+    SENT = "sent"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     REJECTED = "rejected"
@@ -66,6 +46,46 @@ class JobStatus(Enum):
     def choices(cls):
         """Return Django-compatible choices tuple for model fields."""
         return [(status.value, status.value) for status in cls]
+
+
+class JobStatusValiFaci(StrEnum):
+    """
+    Legacy job status set.
+    - used between facilitator and validator
+    - stored in facilitator's database
+    - sent to the SDK
+    """
+
+    SENT = "sent"
+    RECEIVED = "received"
+    ACCEPTED = "accepted"
+
+    EXECUTOR_READY = "executor_ready"
+    STREAMING_READY = "streaming_ready"
+    VOLUMES_READY = "volumes_ready"
+    EXECUTION_DONE = "execution_done"
+
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+    @classmethod
+    def choices(cls):
+        """Return Django-compatible choices tuple for model fields."""
+        return [(status.value, status.value) for status in cls]
+
+    @classmethod
+    def end_states(cls) -> set["JobStatusValiFaci"]:
+        return {JobStatusValiFaci.COMPLETED, JobStatusValiFaci.REJECTED, JobStatusValiFaci.FAILED}
+
+    def is_in_progress(self) -> bool:
+        return self not in JobStatusValiFaci.end_states()
+
+    def is_successful(self) -> bool:
+        return self == JobStatusValiFaci.COMPLETED
+
+    def is_failed(self) -> bool:
+        return self in {JobStatusValiFaci.REJECTED, JobStatusValiFaci.FAILED}
 
 
 class JobParticipantType(Enum):

@@ -306,8 +306,8 @@ class FacilitatorClient:
             job_request: OrganicJobRequest = pydantic.TypeAdapter(OrganicJobRequest).validate_json(
                 raw_msg
             )
-        except pydantic.ValidationError as exc:
-            logger.debug("could not parse raw message as JobRequest: %s", exc)
+        except pydantic.ValidationError:
+            pass
         else:
             task = asyncio.create_task(self.process_job_request(job_request))
             await self.tasks_to_reap.put(task)
@@ -315,8 +315,8 @@ class FacilitatorClient:
 
         try:
             cheated_job_report = pydantic.TypeAdapter(V0JobCheated).validate_json(raw_msg)
-        except pydantic.ValidationError as exc:
-            logger.debug("could not parse raw message as V0JobCheated: %s", exc)
+        except pydantic.ValidationError:
+            pass
         else:
             await self.report_miner_cheated_job(cheated_job_report)
             return

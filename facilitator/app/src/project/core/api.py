@@ -118,7 +118,10 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
     status_history = JobStatusEntrySerializer(many=True, read_only=True, source="statuses")
 
     def get_status(self, obj):
-        return obj.status.get_status_display()
+        # Legacy status field has the "uppercase" enum values
+        # for older SDK.
+        # TODO: Remove this when nobody is using it any more.
+        return obj.status.get_legacy_status_display()
 
     def get_stdout(self, obj):
         meta = obj.status.meta

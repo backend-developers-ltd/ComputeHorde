@@ -30,16 +30,16 @@ class ComputeHordeJobStatus(StrEnum):
     Status of a ComputeHorde job.
     """
 
-    SENT = "Sent"
-    RECEIVED = "Received"
-    ACCEPTED = "Accepted"
-    REJECTED = "Rejected"
-    STREAMING_READY = "Streaming Ready"
-    EXECUTOR_READY = "Executor Ready"
-    VOLUMES_READY = "Volumes Ready"
-    EXECUTION_DONE = "Execution Done"
-    COMPLETED = "Completed"
-    FAILED = "Failed"
+    SENT = "sent"
+    RECEIVED = "received"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    STREAMING_READY = "streaming_ready"
+    EXECUTOR_READY = "executor_ready"
+    VOLUMES_READY = "volumes_ready"
+    EXECUTION_DONE = "execution_done"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
     @classmethod
     def end_states(cls) -> set["ComputeHordeJobStatus"]:
@@ -160,8 +160,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # volumes: list = []
     # uploads: list = []
     # target_validator_hotkey: str
-    # TODO(post error propagation): remove status/stdout/err/artifacts/uploads - use status_history
-    status: ComputeHordeJobStatus
+    # TODO(post error propagation): remove stdout/err/artifacts/uploads - use status_history
     stdout: str
     stderr: str
     artifacts: dict[str, str] = Field(default_factory=dict)
@@ -170,6 +169,11 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     streaming_server_address: str | None = None
     streaming_server_port: int | None = None
     status_history: list[ComputeHordeJobStatusEntry] = Field(default_factory=list)
+
+    @property
+    def latest_status(self) -> ComputeHordeJobStatus:
+        # Faci creates an initial status, so there should be at least one entry
+        return self.status_history[-1].status
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):

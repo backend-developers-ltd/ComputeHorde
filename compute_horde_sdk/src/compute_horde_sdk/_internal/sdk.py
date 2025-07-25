@@ -326,7 +326,7 @@ class ComputeHordeJob:
         streaming_private_key: RSAPrivateKey | None = None,
     ) -> Self:
         result = None
-        if not response.status.is_in_progress():
+        if not response.latest_status.is_in_progress():
             # TODO: Handle base64 decode errors
             result = ComputeHordeJobResult(
                 stdout=response.stdout,
@@ -341,7 +341,7 @@ class ComputeHordeJob:
         return cls(
             client,
             uuid=response.uuid,
-            status=response.status,
+            status=response.latest_status,
             result=result,
             status_history=response.status_history,
             streaming_public_cert=streaming_public_cert,
