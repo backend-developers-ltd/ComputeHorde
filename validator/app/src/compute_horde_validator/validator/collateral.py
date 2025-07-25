@@ -122,7 +122,7 @@ async def get_evm_key_associations(
     Returns:
         dict: A dictionary mapping UIDs (int) to their associated EVM key addresses (str).
     """
-    associations = await subtensor.subtensor_module.AssociatedEvmAddress.query(
+    associations = await subtensor.subtensor_module.AssociatedEvmAddress.fetch(
         netuid,
         block_hash=block_hash,
     )
