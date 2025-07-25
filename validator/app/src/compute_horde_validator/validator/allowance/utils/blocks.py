@@ -152,7 +152,7 @@ def process_block_allowance(block_number: int):
                                         manifests.get((neuron.hotkey, executor_class), 0.0)
                                         * get_stake_share(validators, validator)
                                         * (
-                                                    finalized_block.end_timestamp - finalized_block.creation_timestamp).total_seconds()
+                                                finalized_block.end_timestamp - finalized_block.creation_timestamp).total_seconds()
                                 ),
                                 miner_ss58=neuron.hotkey,
                                 validator_ss58=validator.hotkey,
@@ -236,11 +236,11 @@ def scan_blocks_and_calculate_allowance():
 
 
 def find_miners_with_allowance(
-    required_allowance: float,
-    executor_class: ExecutorClass,
-    job_start_block: int,
-    validator_ss58: ss58_address,
-)-> list(tuple(ss58_address, float)):
+        required_allowance: float,
+        executor_class: ExecutorClass,
+        job_start_block: int,
+        validator_ss58: ss58_address,
+) -> list[tuple[ss58_address, float]]:
     """
     Find miners that have at least the required amount of allowance left.
 
@@ -260,5 +260,118 @@ def find_miners_with_allowance(
         NotEnoughAllowanceException is raised. The returned miners are present in the subnet's metagraph snapshot
         kept by this module.
     """
+    from django.db.models import Q, Sum, Case, When, Min, F, Value, FloatField
+    from collections import defaultdict
 
-    
+    # Calculate the earliest block that can be used for this job
+    earliest_usable_block = job_start_block - BLOCK_EXPIRY
+
+    # Use SQL aggregation to calculate all values per miner in one query
+    miner_aggregates = BlockAllowance.objects.filter(
+        validator_ss58=validator_ss58,
+        executor_class=executor_class,
+        block__block_number__gte=earliest_usable_block,
+        invalidated_at_block__isnull=True,  # Only non-invalidated allowances
+    ).values('miner_ss58').annotate(
+        # Total allowance for non-invalidated allowances
+        total_allowance=Sum('allowance'),
+
+        # Available allowance: sum where booking is null OR (not spent AND not reserved)
+        available_allowance=Sum(
+            Case(
+                When(
+                    Q(allowance_booking__isnull=True) |
+                    Q(allowance_booking__is_spent=False, allowance_booking__is_reserved=False),
+                    then='allowance'
+                ),
+                default=Value(0.0),
+                output_field=FloatField()
+            )
+        ),
+
+        # Unspent allowance: sum where booking is null OR booking has is_spent=False
+        unspent_allowance=Sum(
+            Case(
+                When(
+                    Q(allowance_booking__isnull=True) |
+                    Q(allowance_booking__is_spent=False),
+                    then='allowance'
+                ),
+                default=Value(0.0),
+                output_field=FloatField()
+            )
+        ),
+
+        # Earliest unspent block: minimum block number where allowance is available
+        earliest_unspent_block=Min(
+            Case(
+                When(
+                    Q(allowance_booking__isnull=True),
+                    then='block__block_number'
+                ),
+                default=None
+            )
+        )
+    )
+
+    # Convert to dictionary for easier access
+    miner_data = {
+        agg['miner_ss58']: {
+            'total_allowance': agg['total_allowance'] or 0.0,
+            'available_allowance': agg['available_allowance'] or 0.0,
+            'unspent_allowance': agg['unspent_allowance'] or 0.0,
+            'earliest_unspent_block': agg['earliest_unspent_block'],
+        }
+        for agg in miner_aggregates
+    }
+
+    # Filter miners with sufficient allowance
+    eligible_miners = []
+    highest_available_allowance = 0.0
+    highest_available_allowance_ss58 = None
+    highest_unspent_allowance = 0.0
+    highest_unspent_allowance_ss58 = None
+
+    for miner_ss58, data in miner_data.items():
+        available = data['available_allowance']
+        total = data['total_allowance']
+        unspent = data['unspent_allowance']
+
+        # Track highest allowances for exception handling
+        if available > highest_available_allowance:
+            highest_available_allowance = available
+            highest_available_allowance_ss58 = miner_ss58
+
+        if unspent > highest_unspent_allowance:
+            highest_unspent_allowance = unspent
+            highest_unspent_allowance_ss58 = miner_ss58
+
+        # Check if miner has sufficient allowance
+        if available >= required_allowance:
+            # Calculate allowance percentage left (available / total)
+            allowance_percentage = available / total if total > 0 else 0.0
+            earliest_block = data['earliest_unspent_block'] or float('inf')
+
+            eligible_miners.append((
+                miner_ss58,
+                available,
+                earliest_block,
+                allowance_percentage
+            ))
+
+    # If no miners have enough allowance, raise exception
+    if not eligible_miners:
+        raise NotEnoughAllowanceException(
+            highest_available_allowance=highest_available_allowance,
+            highest_available_allowance_ss58=highest_available_allowance_ss58 or "",
+            highest_unspent_allowance=highest_unspent_allowance,
+            highest_unspent_allowance_ss58=highest_unspent_allowance_ss58 or "",
+        )
+
+    # Sort miners by:
+    # 1. Earliest unspent/unreserved block (ascending)
+    # 2. Highest total allowance percentage left (descending)
+    eligible_miners.sort(key=lambda x: (x[2], -x[3]))
+
+    # Return list of tuples (miner_ss58, available_allowance)
+    return [(miner[0], miner[1]) for miner in eligible_miners]
