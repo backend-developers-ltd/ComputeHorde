@@ -65,7 +65,7 @@ class AllowanceBase(ABC):
         required_allowance: float,
         executor_class: ExecutorClass,
         job_start_block: int,
-    ) -> list(tuple(ss58_address, float)):
+    ) -> list[tuple[ss58_address, float]]:
         """
         Find miners that have at least the required amount of allowance left.
 
