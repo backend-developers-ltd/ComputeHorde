@@ -47,8 +47,6 @@ from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
-MINER_CLIENT_CLASS = MinerClient
-
 
 def status_update_from_job(
     job: OrganicJob,
@@ -134,7 +132,7 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
         else None,
     )
 
-    miner_client = MINER_CLIENT_CLASS(
+    miner_client = MinerClient(
         miner_hotkey=miner.hotkey,
         miner_address=job.miner_address,
         miner_port=job.miner_port,
