@@ -45,19 +45,10 @@ class DefaultModelPagination(PageNumberPagination):
 
 
 class JobStatusEntrySerializer(serializers.ModelSerializer):
-    status = serializers.SerializerMethodField()
-    stage = serializers.SerializerMethodField()
-
     class Meta:
         model = JobStatus
         fields = ["status", "stage", "metadata", "created_at"]
         read_only_fields = fields
-
-    def get_status(self, obj):
-        return obj.get_status_display()
-
-    def get_stage(self, obj):
-        return obj.get_stage_display()
 
 
 class JobSerializer(serializers.HyperlinkedModelSerializer):
