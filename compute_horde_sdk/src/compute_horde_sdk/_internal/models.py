@@ -121,7 +121,6 @@ class ComputeHordeHordeFailure:
 @dataclass
 class JobStatusUpdateMetadata:
     comment: str | None = None
-    # TODO(post error propagation): this is an amalgam of success and failure responses
     miner_response: dict[str, JsonValue] | None = None
     # TODO(error propagation): create structs for these
     job_rejection_details: dict[str, JsonValue] | None = None
@@ -144,6 +143,12 @@ class FacilitatorJobStatusesResponse(pydantic.BaseModel):
 
 
 class FacilitatorJobResponse(pydantic.BaseModel):
+    """
+    Note: stdout/stderr/artifacts/upload_results are considered deprecated.
+    Instead, use the `status_history` field to get the success or failure status of the job.
+    The status update entry will have an appropriate payload.
+    """
+
     uuid: str
     executor_class: str
     created_at: str
@@ -158,12 +163,11 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # input_url: str
     # output_download_url: str
     # tag: str
+    stdout: str
+    stderr: str
     # volumes: list = []
     # uploads: list = []
     # target_validator_hotkey: str
-    # TODO(post error propagation): remove stdout/err/artifacts/uploads - use status_history
-    stdout: str
-    stderr: str
     artifacts: dict[str, str] = Field(default_factory=dict)
     upload_results: dict[str, str] = Field(default_factory=dict)
     streaming_server_cert: str | None = None

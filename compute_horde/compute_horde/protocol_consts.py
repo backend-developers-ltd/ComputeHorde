@@ -44,7 +44,6 @@ class JobStage(Enum):
 
 
 class HordeFailureReason(StrEnum):
-    # TODO(error propagation): it could be beneficial to turn these into simple str constants
     UNCAUGHT_EXCEPTION = "uncaught_exception"
     STREAMING_SETUP_FAILED = "streaming_setup_failed"
     JOB_IMAGE_MISSING = "job_image_missing"
