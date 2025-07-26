@@ -148,6 +148,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     executor_class: str
     created_at: str
     # last_update: str
+    # status: str
     docker_image: str
     args: list[str]
     env: dict[str, str]
