@@ -15,11 +15,11 @@ from compute_horde.fv_protocol.validator_requests import (
     StreamingServerDetails,
 )
 from compute_horde.miner_client.organic import (
-    FailureReason,
     OrganicJobDetails,
     OrganicJobError,
     execute_organic_job_on_miner,
 )
+from compute_horde.protocol_consts import MinerFailureReason
 from compute_horde.protocol_messages import (
     MinerToValidatorMessage,
     V0DeclineJobRequest,
@@ -282,7 +282,7 @@ async def drive_organic_job(
         return True
 
     except OrganicJobError as exc:
-        if exc.reason == FailureReason.MINER_CONNECTION_FAILED:
+        if exc.reason == MinerFailureReason.MINER_CONNECTION_FAILED:
             comment = f"Miner connection error: {exc}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
@@ -295,7 +295,7 @@ async def drive_organic_job(
                 status_update_from_job(job, status=fv_protocol_consts.FaciValiJobStatus.FAILED)
             )
 
-        elif exc.reason == FailureReason.INITIAL_RESPONSE_TIMED_OUT:
+        elif exc.reason == MinerFailureReason.INITIAL_RESPONSE_TIMED_OUT:
             comment = f"Miner {miner_client.miner_name} timed out waiting for initial response {job.job_uuid}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
@@ -310,7 +310,7 @@ async def drive_organic_job(
             )
 
         elif (
-            exc.reason == FailureReason.JOB_DECLINED
+            exc.reason == MinerFailureReason.JOB_DECLINED
             and isinstance(exc.received, V0DeclineJobRequest)
             and exc.received.reason == protocol_consts.JobRejectionReason.BUSY
         ):
@@ -365,7 +365,7 @@ async def drive_organic_job(
                     status_update_from_job(job, fv_protocol_consts.FaciValiJobStatus.REJECTED)
                 )
 
-        elif exc.reason == FailureReason.JOB_DECLINED:
+        elif exc.reason == MinerFailureReason.JOB_DECLINED:
             comment = f"Miner declined job {miner_client.miner_name}: {exc.received_str()}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
@@ -379,7 +379,7 @@ async def drive_organic_job(
                 status_update_from_job(job, fv_protocol_consts.FaciValiJobStatus.REJECTED)
             )
 
-        elif exc.reason == FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT:
+        elif exc.reason == MinerFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT:
             comment = f"Miner {miner_client.miner_name} timed out while preparing executor for job {job.job_uuid}"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
@@ -393,7 +393,7 @@ async def drive_organic_job(
                 status_update_from_job(job, fv_protocol_consts.FaciValiJobStatus.FAILED)
             )
 
-        elif exc.reason == FailureReason.STREAMING_JOB_READY_TIMED_OUT:
+        elif exc.reason == MinerFailureReason.STREAMING_JOB_READY_TIMED_OUT:
             comment = f"Streaming job {job.job_uuid} readiness timeout"
             job.status = OrganicJob.Status.FAILED
             job.comment = comment
@@ -407,7 +407,7 @@ async def drive_organic_job(
                 status_update_from_job(job, fv_protocol_consts.FaciValiJobStatus.FAILED)
             )
 
-        elif exc.reason == FailureReason.EXECUTOR_FAILED:
+        elif exc.reason == MinerFailureReason.EXECUTOR_FAILED:
             comment = (
                 f"Miner {miner_client.miner_name} failed to start executor: {exc.received_str()}"
             )
@@ -424,9 +424,9 @@ async def drive_organic_job(
             )
 
         elif (
-            exc.reason == FailureReason.VOLUMES_TIMED_OUT
-            or exc.reason == FailureReason.EXECUTION_TIMED_OUT
-            or exc.reason == FailureReason.FINAL_RESPONSE_TIMED_OUT
+            exc.reason == MinerFailureReason.VOLUMES_TIMED_OUT
+            or exc.reason == MinerFailureReason.EXECUTION_TIMED_OUT
+            or exc.reason == MinerFailureReason.FINAL_RESPONSE_TIMED_OUT
             # mypy doesn't understand `elif exc.reason in { ... }`
         ):
             comment = f"Miner {miner_client.miner_name} timed out: {exc.reason}"
@@ -443,10 +443,10 @@ async def drive_organic_job(
             )
 
         elif (
-            exc.reason == FailureReason.JOB_FAILED
-            or exc.reason == FailureReason.VOLUMES_FAILED
-            or exc.reason == FailureReason.EXECUTION_FAILED
-            or exc.reason == FailureReason.STREAMING_FAILED
+            exc.reason == MinerFailureReason.JOB_FAILED
+            or exc.reason == MinerFailureReason.VOLUMES_FAILED
+            or exc.reason == MinerFailureReason.EXECUTION_FAILED
+            or exc.reason == MinerFailureReason.STREAMING_FAILED
         ):
             comment = (
                 f"Miner {miner_client.miner_name} failed with {exc.reason}: {exc.received_str()}"
@@ -468,6 +468,8 @@ async def drive_organic_job(
                         subtype = SystemEvent.EventSubType.ERROR_EXECUTOR_REPORTED_TIMEOUT
                     case protocol_consts.JobFailureReason.NONZERO_EXIT_CODE:
                         subtype = SystemEvent.EventSubType.JOB_PROCESS_NONZERO_EXIT_CODE
+                    case protocol_consts.JobFailureReason.UNKNOWN:
+                        subtype = SystemEvent.EventSubType.GENERIC_ERROR
                     case _:
                         assert_never(exc.received.error_type)
             job.status = OrganicJob.Status.FAILED

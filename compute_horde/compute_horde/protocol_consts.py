@@ -1,3 +1,4 @@
+import enum
 import sys
 from enum import Enum
 
@@ -8,7 +9,6 @@ else:
 
 
 class JobParticipantType(Enum):
-    UNKNOWN = "unknown"
     SDK = "sdk"
     FACILITATOR = "facilitator"
     VALIDATOR = "validator"
@@ -43,15 +43,40 @@ class JobStage(Enum):
         return [(status.value, status.value) for status in cls]
 
 
+class MinerFailureReason(enum.Enum):
+    """
+    Legacy vali/miner/executor failure reasons
+    Pulled from the organic job miner client
+    TODO: Explode this into horde/job failure reasons
+    """
+
+    MINER_CONNECTION_FAILED = enum.auto()
+    INITIAL_RESPONSE_TIMED_OUT = enum.auto()
+    EXECUTOR_READINESS_RESPONSE_TIMED_OUT = enum.auto()
+    VOLUMES_TIMED_OUT = enum.auto()
+    VOLUMES_FAILED = enum.auto()
+    EXECUTION_TIMED_OUT = enum.auto()
+    EXECUTION_FAILED = enum.auto()
+    FINAL_RESPONSE_TIMED_OUT = enum.auto()
+    JOB_DECLINED = enum.auto()
+    EXECUTOR_FAILED = enum.auto()
+    STREAMING_JOB_READY_TIMED_OUT = enum.auto()
+    JOB_FAILED = enum.auto()
+    STREAMING_FAILED = enum.auto()
+
+
 class HordeFailureReason(StrEnum):
+    UNKNOWN = "unknown"
     UNCAUGHT_EXCEPTION = "uncaught_exception"
     STREAMING_SETUP_FAILED = "streaming_setup_failed"
     JOB_IMAGE_MISSING = "job_image_missing"
     SECURITY_CHECK_FAILED = "security_check_failed"
+    GENERIC_STREAMING_SETUP_FAILED = "generic_streaming_setup_failed"
     UPSTREAM_CONNECTION_ERROR = "upstream_connection_error"
 
 
 class JobFailureReason(StrEnum):
+    UNKNOWN = "unknown"
     TIMEOUT = "TIMEOUT"
     SECURITY_CHECK = "SECURITY_CHECK"
     HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
@@ -59,7 +84,7 @@ class JobFailureReason(StrEnum):
 
 
 class JobRejectionReason(StrEnum):
-    NOT_SPECIFIED = "not_specified"
+    UNKNOWN = "unknown"
     BUSY = "busy"
     INVALID_SIGNATURE = "invalid_signature"
     NO_MINER_FOR_JOB = "no_miner_for_job"

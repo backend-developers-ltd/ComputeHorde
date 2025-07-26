@@ -8,10 +8,9 @@ from compute_horde import protocol_consts
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
-    OrganicJobError,
+    UpstreamJobRejectedException,
     execute_organic_job_on_miner,
 )
-from compute_horde.protocol_messages import V0DeclineJobRequest
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.db import transaction
@@ -95,13 +94,13 @@ async def answer_prompts(
         )
     except Exception as e:
         if (
-            isinstance(e, OrganicJobError)
-            and isinstance(e.received, V0DeclineJobRequest)
-            and e.received.reason == protocol_consts.JobRejectionReason.BUSY
+            isinstance(e, UpstreamJobRejectedException)
+            and e.msg.reason == protocol_consts.JobRejectionReason.BUSY
         ):
             logger.info("Failed to run answer_prompts: trusted miner is busy")
             return False
 
+        # TODO(error propagation): handle Upstream exceptions
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.FAILURE,

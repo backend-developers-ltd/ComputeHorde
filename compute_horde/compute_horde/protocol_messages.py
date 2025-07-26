@@ -92,7 +92,8 @@ class V0InitialJobRequest(BaseModel):
 class V0DeclineJobRequest(BaseModel):
     message_type: Literal["V0DeclineJobRequest"] = "V0DeclineJobRequest"
     job_uuid: str
-    reason: protocol_consts.JobRejectionReason = protocol_consts.JobRejectionReason.NOT_SPECIFIED
+    rejected_by: protocol_consts.JobParticipantType | None = None
+    reason: protocol_consts.JobRejectionReason = protocol_consts.JobRejectionReason.UNKNOWN
     receipts: list[Receipt] = Field(default_factory=list)
 
 
@@ -173,6 +174,16 @@ class V0JobFailedRequest(BaseModel):
     docker_process_stdout: str
     docker_process_stderr: str
     error_type: protocol_consts.JobFailureReason | None = None
+    error_detail: str | None = None
+
+
+# executor -> miner.ec -> miner.vc -> validator
+class V0HordeFailedRequest(BaseModel):
+    message_type: Literal["V0HordeFailedRequest"] = "V0HordeFailedRequest"
+    job_uuid: str
+    reported_by: protocol_consts.JobParticipantType
+    stage: protocol_consts.JobStage | None = None
+    error_type: protocol_consts.HordeFailureReason
     error_detail: str | None = None
 
 
@@ -258,6 +269,7 @@ MinerToValidatorMessage = Annotated[
     | V0VolumesReadyRequest
     | V0ExecutionDoneRequest
     | V0JobFinishedRequest
-    | V0MachineSpecsRequest,
+    | V0MachineSpecsRequest
+    | V0HordeFailedRequest,
     Field(discriminator="message_type"),
 ]

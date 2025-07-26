@@ -80,6 +80,7 @@ class StreamingServerDetails(BaseModel, extra="forbid"):
 
 class JobStatusUpdateMetadata(BaseModel, extra="allow"):
     """This is really a "payload" attached to a status update."""
+
     # TODO: "comment" is probably unnecessary? payloads below should contain details if they need to
     comment: str
     miner_response: JobResultDetails | None = None
