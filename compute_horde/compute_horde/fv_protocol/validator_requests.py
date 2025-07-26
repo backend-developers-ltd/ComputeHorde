@@ -4,6 +4,7 @@ import bittensor
 from pydantic import BaseModel, JsonValue
 
 from compute_horde import protocol_consts
+from compute_horde.fv_protocol import fv_protocol_consts
 
 
 class V0Heartbeat(BaseModel, extra="forbid"):
@@ -100,7 +101,7 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
 
     message_type: Literal["V0JobStatusUpdate"] = "V0JobStatusUpdate"
     uuid: str
-    status: protocol_consts.JobStatusValiFaci
+    status: fv_protocol_consts.FaciValiJobStatus
     # TODO(post error propagation): no "None" default
     stage: protocol_consts.JobStage = protocol_consts.JobStage.NOT_SPECIFIED
     metadata: JobStatusUpdateMetadata | None = None

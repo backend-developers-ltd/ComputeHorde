@@ -11,6 +11,7 @@ import tenacity
 import websockets
 from channels.layers import get_channel_layer
 from compute_horde import protocol_consts
+from compute_horde.fv_protocol import fv_protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import (
     Error,
     OrganicJobRequest,
@@ -375,7 +376,7 @@ class FacilitatorClient:
                 await self.send_model(
                     JobStatusUpdate(
                         uuid=job_request.uuid,
-                        status=protocol_consts.JobStatusValiFaci.REJECTED,
+                        status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
                         stage=protocol_consts.JobStage.ACCEPTANCE,
                         metadata=JobStatusUpdateMetadata(
                             comment=msg,
@@ -392,7 +393,7 @@ class FacilitatorClient:
         await self.send_model(
             JobStatusUpdate(
                 uuid=job_request.uuid,
-                status=protocol_consts.JobStatusValiFaci.RECEIVED,
+                status=fv_protocol_consts.FaciValiJobStatus.RECEIVED,
                 stage=protocol_consts.JobStage.ACCEPTANCE,
             )
         )
@@ -406,7 +407,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=protocol_consts.JobStatusValiFaci.REJECTED,
+                    status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
                     stage=protocol_consts.JobStage.ROUTING,
                     metadata=JobStatusUpdateMetadata(
                         comment=msg,
@@ -425,7 +426,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=protocol_consts.JobStatusValiFaci.REJECTED,
+                    status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
                     stage=protocol_consts.JobStage.ROUTING,
                     metadata=JobStatusUpdateMetadata(
                         comment=msg,
@@ -444,7 +445,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=protocol_consts.JobStatusValiFaci.FAILED,
+                    status=fv_protocol_consts.FaciValiJobStatus.FAILED,
                     stage=protocol_consts.JobStage.ROUTING,
                     metadata=JobStatusUpdateMetadata(comment=msg),
                 )
@@ -456,7 +457,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=protocol_consts.JobStatusValiFaci.REJECTED,
+                    status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
                     stage=protocol_consts.JobStage.ROUTING,
                     metadata=JobStatusUpdateMetadata(comment=msg),
                 )
@@ -468,7 +469,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=protocol_consts.JobStatusValiFaci.REJECTED,
+                    status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
                     stage=protocol_consts.JobStage.ROUTING,
                     metadata=JobStatusUpdateMetadata(comment=msg),
                 )
@@ -480,7 +481,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=protocol_consts.JobStatusValiFaci.FAILED,
+                    status=fv_protocol_consts.FaciValiJobStatus.FAILED,
                     stage=protocol_consts.JobStage.ROUTING,
                     metadata=JobStatusUpdateMetadata(
                         comment=msg,
@@ -511,7 +512,7 @@ class FacilitatorClient:
             await self.send_model(
                 JobStatusUpdate(
                     uuid=job_request.uuid,
-                    status=protocol_consts.JobStatusValiFaci.FAILED,
+                    status=fv_protocol_consts.FaciValiJobStatus.FAILED,
                     metadata=JobStatusUpdateMetadata(
                         comment=msg,
                         horde_failure_details=HordeFailureDetails(

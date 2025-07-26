@@ -1,13 +1,13 @@
 from datetime import timedelta
 from math import ceil
 from operator import attrgetter
-from typing import assert_never
 from uuid import uuid4
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from compute_horde import protocol_consts
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.fv_protocol import fv_protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import (
     V0JobCheated,
     V2JobRequest,
@@ -199,7 +199,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 self.send_to_validator(job_request)
                 JobStatus.objects.create(
                     job=self,
-                    status=protocol_consts.JobStatusValiFaci.SENT.value,
+                    status=fv_protocol_consts.FaciValiJobStatus.SENT.value,
                     stage=protocol_consts.JobStage.ACCEPTANCE.value,
                 )
 
@@ -301,7 +301,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="statuses")
-    status = models.CharField(choices=protocol_consts.JobStatusValiFaci.choices())
+    status = models.CharField(choices=fv_protocol_consts.FaciValiJobStatus.choices())
     stage = models.CharField(choices=protocol_consts.JobStage.choices(), default=protocol_consts.JobStage.NOT_SPECIFIED.value, max_length=255)
     metadata = models.JSONField(blank=True, default=dict)
     created_at = models.DateTimeField(default=now)
@@ -322,32 +322,22 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
 
     def get_legacy_status_display(self) -> str:
         """
-        For legacy SDK users.
-        TODO: Remove this when nobody is using older SDK.
+        Job serializer uses this for the legacy "status" field.
+        Older SDK clients require the human-readable label.
         """
-        match self.status:
-            case protocol_consts.JobStatusValiFaci.SENT.value:
-                return "Sent"
-            case protocol_consts.JobStatusValiFaci.RECEIVED.value:
-                return "Received"
-            case protocol_consts.JobStatusValiFaci.ACCEPTED.value:
-                return "Accepted"
-            case protocol_consts.JobStatusValiFaci.EXECUTOR_READY.value:
-                return "Executor Ready"
-            case protocol_consts.JobStatusValiFaci.STREAMING_READY.value:
-                return "Streaming Ready"
-            case protocol_consts.JobStatusValiFaci.VOLUMES_READY.value:
-                return "Volumes Ready"
-            case protocol_consts.JobStatusValiFaci.EXECUTION_DONE.value:
-                return "Execution Done"
-            case protocol_consts.JobStatusValiFaci.COMPLETED.value:
-                return "Completed"
-            case protocol_consts.JobStatusValiFaci.REJECTED.value:
-                return "Rejected"
-            case protocol_consts.JobStatusValiFaci.FAILED.value:
-                return "Failed"
-            case _:
-                assert_never(self.status)
+        status_display = {
+            fv_protocol_consts.FaciValiJobStatus.SENT.value: "Sent",
+            fv_protocol_consts.FaciValiJobStatus.RECEIVED.value: "Received",
+            fv_protocol_consts.FaciValiJobStatus.ACCEPTED.value: "Accepted",
+            fv_protocol_consts.FaciValiJobStatus.EXECUTOR_READY.value: "Executor Ready",
+            fv_protocol_consts.FaciValiJobStatus.STREAMING_READY.value: "Streaming Ready",
+            fv_protocol_consts.FaciValiJobStatus.VOLUMES_READY.value: "Volumes Ready",
+            fv_protocol_consts.FaciValiJobStatus.EXECUTION_DONE.value: "Execution Done",
+            fv_protocol_consts.FaciValiJobStatus.COMPLETED.value: "Completed",
+            fv_protocol_consts.FaciValiJobStatus.REJECTED.value: "Rejected",
+            fv_protocol_consts.FaciValiJobStatus.FAILED.value: "Failed",
+        }
+        return status_display[self.status]
 
 
 class JobFeedback(models.Model):
