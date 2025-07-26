@@ -72,6 +72,7 @@ class HordeFailureReason(StrEnum):
     JOB_IMAGE_MISSING = "job_image_missing"
     SECURITY_CHECK_FAILED = "security_check_failed"
     GENERIC_STREAMING_SETUP_FAILED = "generic_streaming_setup_failed"
+    GENERIC_EXECUTOR_FAILED = "generic_executor_failed"
     UPSTREAM_CONNECTION_ERROR = "upstream_connection_error"
 
 

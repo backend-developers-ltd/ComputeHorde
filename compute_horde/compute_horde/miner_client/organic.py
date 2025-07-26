@@ -20,7 +20,6 @@ from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     ErrorCallback,
-    UnsupportedMessageReceived,
 )
 from compute_horde.protocol_consts import MinerFailureReason
 from compute_horde.protocol_messages import (
@@ -30,6 +29,7 @@ from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutionDoneRequest,
+    V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0HordeFailedRequest,
@@ -255,6 +255,16 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             )
             await self.handle_message(mapped_msg)
 
+        elif isinstance(msg, V0ExecutorFailedRequest):
+            # TODO(post error propagation): remove this when miners stop sending V0ExecutorFailedRequest
+            # for now, pretend we received a horde failure.
+            mapped_msg = V0HordeFailedRequest(
+                job_uuid=msg.job_uuid,
+                reported_by=protocol_consts.JobParticipantType.MINER,
+                error_type=protocol_consts.HordeFailureReason.GENERIC_EXECUTOR_FAILED,
+            )
+            await self.handle_message(mapped_msg)
+
         elif isinstance(msg, V0VolumesReadyRequest):
             try:
                 self.volumes_ready_future.set_result(msg)
@@ -306,7 +316,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             await self.handle_machine_specs_request(msg)
 
         else:
-            raise UnsupportedMessageReceived(msg)
+            assert_never(msg)
 
     def generate_authentication_message(self) -> ValidatorAuthForMiner:
         msg = ValidatorAuthForMiner(
