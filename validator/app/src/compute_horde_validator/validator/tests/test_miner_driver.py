@@ -177,15 +177,15 @@ async def test_miner_driver(
     miner_client = get_miner_client(MockMinerClient, job_uuid)
     f0, f1, f2, f3, f4 = futures_result
     if f0:
-        miner_client.miner_accepting_or_declining_future.set_result(f0(job_uuid=job_uuid))
+        miner_client.job_accepted_future.set_result(f0(job_uuid=job_uuid))
     if f1:
-        miner_client.executor_ready_or_failed_future.set_result(f1(job_uuid=job_uuid))
+        miner_client.executor_ready_future.set_result(f1(job_uuid=job_uuid))
     if f2:
         miner_client.volumes_ready_future.set_result(f2(job_uuid=job_uuid))
     if f3:
         miner_client.execution_done_future.set_result(f3(job_uuid=job_uuid))
     if f4:
-        miner_client.miner_finished_or_failed_future.set_result(
+        miner_client.job_finished_future.set_result(
             f4(
                 job_uuid=job_uuid,
                 docker_process_stdout="mocked stdout",

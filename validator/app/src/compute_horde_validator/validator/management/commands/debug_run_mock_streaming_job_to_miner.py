@@ -91,7 +91,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
         try:
             try:
                 initial_response = await asyncio.wait_for(
-                    client.miner_accepting_or_declining_future,
+                    client.job_accepted_future,
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
@@ -103,7 +103,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
 
             try:
                 exec_ready_response = await asyncio.wait_for(
-                    client.executor_ready_or_failed_future,
+                    client.executor_ready_future,
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
@@ -128,7 +128,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
 
             try:
                 streaming_job_ready_response = await asyncio.wait_for(
-                    client.streaming_job_ready_or_not_future,
+                    client.streaming_ready_future,
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
@@ -170,7 +170,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
 
             try:
                 final_response = await asyncio.wait_for(
-                    client.miner_finished_or_failed_future,
+                    client.job_finished_future,
                     timeout=job_timer.time_left(),
                 )
                 if isinstance(final_response, V0JobFailedRequest):

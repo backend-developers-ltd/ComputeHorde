@@ -128,20 +128,16 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         self.online_executor_count = 0
 
         # for waiting on miner responses
-        self.miner_accepting_or_declining_future: asyncio.Future[V0AcceptJobRequest] = (
-            loop.create_future()
-        )
-        self.miner_accepting_or_declining_timestamp: int = 0
+        self.job_accepted_future: asyncio.Future[V0AcceptJobRequest] = loop.create_future()
+        self.job_accepted_timestamp: int = 0
 
-        self.executor_ready_or_failed_future: asyncio.Future[V0ExecutorReadyRequest] = (
-            loop.create_future()
-        )
-        self.executor_ready_or_failed_timestamp: int = 0
+        self.executor_ready_future: asyncio.Future[V0ExecutorReadyRequest] = loop.create_future()
+        self.executor_ready_timestamp: int = 0
 
-        self.streaming_job_ready_or_not_future: asyncio.Future[V0StreamingJobReadyRequest] = (
+        self.streaming_ready_future: asyncio.Future[V0StreamingJobReadyRequest] = (
             loop.create_future()
         )
-        self.streaming_job_ready_or_not_timestamp: int = 0
+        self.streaming_ready_timestamp: int = 0
 
         self.volumes_ready_future: asyncio.Future[V0VolumesReadyRequest] = loop.create_future()
         self.volumes_ready_timestamp: int = 0
@@ -149,10 +145,8 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         self.execution_done_future: asyncio.Future[V0ExecutionDoneRequest] = loop.create_future()
         self.execution_done_timestamp: int = 0
 
-        self.miner_finished_or_failed_future: asyncio.Future[V0JobFinishedRequest] = (
-            loop.create_future()
-        )
-        self.miner_finished_or_failed_timestamp: int = 0
+        self.job_finished_future: asyncio.Future[V0JobFinishedRequest] = loop.create_future()
+        self.job_finished_timestamp: int = 0
 
         self.miner_machine_specs: MachineSpecs | None = None
 
@@ -232,22 +226,22 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
         if isinstance(msg, V0AcceptJobRequest):
             try:
-                self.miner_accepting_or_declining_future.set_result(msg)
-                self.miner_accepting_or_declining_timestamp = int(time.time())
+                self.job_accepted_future.set_result(msg)
+                self.job_accepted_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
 
         elif isinstance(msg, V0ExecutorReadyRequest):
             try:
-                self.executor_ready_or_failed_future.set_result(msg)
-                self.executor_ready_or_failed_timestamp = int(time.time())
+                self.executor_ready_future.set_result(msg)
+                self.executor_ready_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
 
         elif isinstance(msg, V0StreamingJobReadyRequest):
             try:
-                self.streaming_job_ready_or_not_future.set_result(msg)
-                self.streaming_job_ready_or_not_timestamp = int(time.time())
+                self.streaming_ready_future.set_result(msg)
+                self.streaming_ready_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
 
@@ -277,8 +271,8 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
         elif isinstance(msg, V0JobFinishedRequest):
             try:
-                self.miner_finished_or_failed_future.set_result(msg)
-                self.miner_finished_or_failed_timestamp = int(time.time())
+                self.job_finished_future.set_result(msg)
+                self.job_finished_timestamp = int(time.time())
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
 
@@ -296,12 +290,12 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
             # On error, consider the remaining stages as failed and throw:
             for future in (
-                self.miner_accepting_or_declining_future,
-                self.executor_ready_or_failed_future,
-                self.streaming_job_ready_or_not_future,
+                self.job_accepted_future,
+                self.executor_ready_future,
+                self.streaming_ready_future,
                 self.volumes_ready_future,
                 self.execution_done_future,
-                self.miner_finished_or_failed_future,
+                self.job_finished_future,
             ):
                 try:
                     future.set_exception(exc)
@@ -560,7 +554,7 @@ async def execute_organic_job_on_miner(
             try:
                 logger.debug(f"Waiting for initial response for {reservation_time_limit:.2f}s")
                 initial_response = await asyncio.wait_for(
-                    client.miner_accepting_or_declining_future,
+                    client.job_accepted_future,
                     timeout=reservation_time_limit,
                 )
             except TimeoutError as exc:
@@ -581,7 +575,7 @@ async def execute_organic_job_on_miner(
                     ttl=job_accepted_receipt_ttl,
                 )
                 executor_readiness_response = await asyncio.wait_for(
-                    client.executor_ready_or_failed_future,
+                    client.executor_ready_future,
                     timeout=readiness_time_limit,
                 )
             except TimeoutError as exc:
@@ -644,7 +638,7 @@ async def execute_organic_job_on_miner(
                         deadline.extend_timeout(executor_timing.streaming_start_time_limit)
                     logger.debug(f"Waiting for streaming (time left: {deadline.time_left():.2f}s)")
                     streaming_response = await asyncio.wait_for(
-                        client.streaming_job_ready_or_not_future,
+                        client.streaming_ready_future,
                         timeout=deadline.time_left(),
                     )
                 except TimeoutError as exc:
@@ -678,7 +672,7 @@ async def execute_organic_job_on_miner(
                     deadline.extend_timeout(executor_timing.upload_time_limit)
                 logger.debug(f"Waiting for upload (time left: {deadline.time_left():.2f}s)")
                 final_response = await asyncio.wait_for(
-                    client.miner_finished_or_failed_future,
+                    client.job_finished_future,
                     timeout=deadline.time_left(),
                 )
                 logger.debug(f"Upload done with {deadline.time_left():.2f}s left")
