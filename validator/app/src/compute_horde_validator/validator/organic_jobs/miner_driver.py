@@ -53,11 +53,9 @@ MINER_CLIENT_CLASS = MinerClient
 def status_update_from_job(
     job: OrganicJob,
     status: fv_protocol_consts.FaciValiJobStatus,
-    message_type: str | None = None,
 ) -> JobStatusUpdate:
     miner_response = JobResultDetails(
         job_uuid=str(job.job_uuid),
-        message_type=message_type,
         docker_process_stdout=job.stdout,
         docker_process_stderr=job.stderr,
         artifacts=job.artifacts,
@@ -184,7 +182,7 @@ async def drive_organic_job(
 
     def status_callback(status: fv_protocol_consts.FaciValiJobStatus):
         async def relay(msg: MinerToValidatorMessage) -> None:
-            await notify_callback(status_update_from_job(job, status, msg.message_type))
+            await notify_callback(status_update_from_job(job, status))
 
         return relay
 
@@ -224,7 +222,6 @@ async def drive_organic_job(
         status_update = status_update_from_job(
             job,
             fv_protocol_consts.FaciValiJobStatus.STREAMING_READY,
-            msg.message_type,
         )
         if status_update.metadata is not None:
             status_update.metadata.streaming_details = StreamingServerDetails(
@@ -282,9 +279,7 @@ async def drive_organic_job(
             subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
         )
         await notify_callback(
-            status_update_from_job(
-                job, fv_protocol_consts.FaciValiJobStatus.COMPLETED, "V0JobFinishedRequest"
-            )
+            status_update_from_job(job, fv_protocol_consts.FaciValiJobStatus.COMPLETED)
         )
         return True
 
@@ -483,9 +478,7 @@ async def drive_organic_job(
             logger.info(comment)
             await save_event(subtype=subtype, long_description=comment)
             await notify_callback(
-                status_update_from_job(
-                    job, fv_protocol_consts.FaciValiJobStatus.FAILED, "V0JobFailedRequest"
-                )
+                status_update_from_job(job, fv_protocol_consts.FaciValiJobStatus.FAILED)
             )
 
         else:

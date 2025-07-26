@@ -45,7 +45,6 @@ class JobResultDetails(BaseModel, extra="allow"):
     # TODO(post error propagation): this payload is an amalgam of success and failure responses, don't sent errors here.
     # TODO(post error propagation): job_uuid is redundant,
     job_uuid: str
-    message_type: str | None = None
     docker_process_stderr: str
     docker_process_stdout: str
     artifacts: dict[str, str] | None = None
