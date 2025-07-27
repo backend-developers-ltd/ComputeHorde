@@ -1,8 +1,5 @@
 """
 Custom exceptions for the scoring module.
-
-This module defines domain-specific exceptions that can be raised by the scoring module
-to provide more explicit error handling and better debugging information.
 """
 
 
@@ -18,26 +15,7 @@ class SplitDistributionError(ScoringError):
     pass
 
 
-class ColdkeyMappingError(ScoringError):
-    """Raised when coldkey mapping cannot be determined."""
-
-    pass
-
-
-class InvalidSplitPercentageError(ScoringError):
-    """Raised when split distribution percentages don't sum to 1.0."""
-
-    def __init__(self, coldkey: str, total_percentage: float, distributions: dict[str, float]):
-        self.coldkey = coldkey
-        self.total_percentage = total_percentage
-        self.distributions = distributions
-        super().__init__(
-            f"Split distribution for {coldkey} doesn't sum to 1.0: {total_percentage}. "
-            f"Distributions: {distributions}"
-        )
-
-
-class BittensorConnectionError(ScoringError):
+class MinerConnectionError(ScoringError):
     """Raised when connection to Bittensor metagraph fails."""
 
     def __init__(self, message: str, cause: Exception = None):

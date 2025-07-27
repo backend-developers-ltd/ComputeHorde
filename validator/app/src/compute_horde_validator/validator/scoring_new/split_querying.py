@@ -4,6 +4,7 @@ import time
 
 from compute_horde.protocol_messages import (
     GenericError,
+    MinerToValidatorMessage,
     V0MinerSplitDistributionRequest,
     V0SplitDistributionRequest,
     ValidatorAuthForMiner,
@@ -11,10 +12,11 @@ from compute_horde.protocol_messages import (
 from compute_horde.transport import TransportConnectionError, WSTransport
 from compute_horde.utils import sign_blob
 from django.conf import settings
+from pydantic import TypeAdapter
 
 from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.scoring_new.exceptions import (
-    BittensorConnectionError,
+    MinerConnectionError,
     SplitDistributionError,
 )
 
@@ -74,26 +76,19 @@ async def _query_single_miner_split_distribution(miner: Miner) -> dict[str, floa
     )
 
     try:
-        # Connect to miner
-        await transport.connect()
+        await transport.start()
 
-        # Send authentication
         auth_msg = _create_auth_message(miner.hotkey)
         await transport.send(auth_msg.model_dump_json())
 
-        # Send split distribution request
         request = V0SplitDistributionRequest()
         await transport.send(request.model_dump_json())
 
-        # Wait for response with timeout
-        async with asyncio.timeout(10):  # 10 second timeout
+        async with asyncio.timeout(10):
             while True:
                 response = await transport.receive()
                 if response:
                     # Parse response
-                    from compute_horde.protocol_messages import MinerToValidatorMessage
-                    from pydantic import TypeAdapter
-
                     msg: MinerToValidatorMessage = TypeAdapter(
                         MinerToValidatorMessage
                     ).validate_json(response)
@@ -108,7 +103,7 @@ async def _query_single_miner_split_distribution(miner: Miner) -> dict[str, floa
 
     except (TimeoutError, TransportConnectionError) as e:
         logger.warning(f"Failed to query split distribution from {miner.hotkey}: {e}")
-        raise BittensorConnectionError(f"Connection failed for {miner.hotkey}", e)
+        raise MinerConnectionError(f"Connection failed for {miner.hotkey}", e)
     except Exception as e:
         logger.warning(f"Unexpected error querying split distribution from {miner.hotkey}: {e}")
         raise SplitDistributionError(f"Failed to get split distribution from {miner.hotkey}: {e}")
@@ -121,8 +116,6 @@ async def _query_single_miner_split_distribution(miner: Miner) -> dict[str, floa
 
 def _create_auth_message(miner_hotkey: str) -> ValidatorAuthForMiner:
     """Create authentication message for miner."""
-    from compute_horde.protocol_messages import ValidatorAuthForMiner
-
     wallet = settings.BITTENSOR_WALLET()
     keypair = wallet.get_hotkey()
 

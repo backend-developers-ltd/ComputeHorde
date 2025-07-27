@@ -53,7 +53,7 @@ def horde_score(
     """
     if not benchmarks:
         return 0.0
-    
+
     sum_agent = sum(benchmarks)
     inverted_n = 1 / len(benchmarks)
     avg_benchmark = sum_agent * inverted_n
@@ -95,7 +95,7 @@ async def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
 
 async def calculate_organic_scores(organic_jobs: list[OrganicJob]) -> dict[str, float]:
     """
-    Calculate scores from organic jobs using executor class-based logic.
+    Calculate scores from organic jobs.
 
     Args:
         organic_jobs: List of organic jobs

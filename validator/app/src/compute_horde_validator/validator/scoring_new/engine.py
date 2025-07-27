@@ -53,7 +53,6 @@ class DefaultScoringEngine(ScoringEngine):
             f"Calculating scores for cycles {current_cycle_start} and {previous_cycle_start}"
         )
 
-        # Get jobs from current cycle
         current_cycle_range = get_cycle_containing_block(
             block=current_cycle_start, netuid=settings.BITTENSOR_NETUID
         )
@@ -62,7 +61,7 @@ class DefaultScoringEngine(ScoringEngine):
             lambda: list(
                 OrganicJob.objects.filter(
                     block__gte=current_cycle_start,
-                    block__lt=current_cycle_range.stop,  # Use dynamic cycle end
+                    block__lt=current_cycle_range.stop,
                     cheated=False,
                     status=OrganicJob.Status.COMPLETED,
                     on_trusted_miner=False,
@@ -72,9 +71,10 @@ class DefaultScoringEngine(ScoringEngine):
 
         current_synthetic_jobs: list[SyntheticJob] = await sync_to_async(
             lambda: list(
-                SyntheticJob.objects.filter(batch__cycle__start=current_cycle_start).select_related(
-                    "miner"
-                )
+                SyntheticJob.objects.filter(
+                    batch__cycle__start=current_cycle_start,
+                    status=SyntheticJob.Status.COMPLETED,
+                ).select_related("miner")
             )
         )()
 
@@ -127,7 +127,7 @@ class DefaultScoringEngine(ScoringEngine):
         self, scores: dict[str, float]
     ) -> tuple[dict[str, float], dict[str, str]]:
         """
-        Group scores by coldkey, handling hotkeys that don't have coldkeys.
+        Group scores by coldkey.
 
         Args:
             scores: Dictionary of hotkey -> score
@@ -194,13 +194,12 @@ class DefaultScoringEngine(ScoringEngine):
             coldkey for coldkey in coldkey_scores.keys() if coldkey not in original_scores
         ]
 
-        # Get current splits by querying miners
-        current_splits = await self._query_and_save_current_splits(
+        current_splits = await self._query_current_splits(
             coldkeys_for_splits, current_cycle_start, validator_hotkey
         )
 
-        # Get previous splits from database
-        previous_splits = await self._get_split_distributions_batch(
+        # Get previous splits
+        previous_splits = await self._get_split_distributions(
             coldkeys_for_splits, previous_cycle_start, validator_hotkey
         )
 
@@ -211,7 +210,6 @@ class DefaultScoringEngine(ScoringEngine):
                 final_scores[coldkey] = total_score
                 continue
 
-            # Process coldkey with potential split
             distributed_scores = self._process_coldkey_split(
                 coldkey,
                 total_score,
@@ -222,11 +220,11 @@ class DefaultScoringEngine(ScoringEngine):
 
             # Add distributed scores to final result
             for hotkey, score in distributed_scores.items():
-                final_scores[hotkey] = final_scores.get(hotkey, 0) + score
+                final_scores[hotkey] = score
 
         return final_scores
 
-    async def _query_and_save_current_splits(
+    async def _query_current_splits(
         self, coldkeys: list[str], cycle_start: int, validator_hotkey: str
     ) -> dict[str, SplitInfo]:
         """
@@ -243,18 +241,15 @@ class DefaultScoringEngine(ScoringEngine):
         if not coldkeys:
             return {}
 
-        # Get miners for these coldkeys
         miners: list[Miner] = await sync_to_async(
             lambda: list(Miner.objects.filter(coldkey__in=coldkeys).select_related())
         )()
 
-        # Query miners for split distributions
         split_distributions = await query_miner_split_distributions(miners)
 
-        # Save to database and return SplitInfo objects
         result = {}
         for coldkey in coldkeys:
-            # Find a miner for this coldkey to get the split distribution
+            # Find first miner for this coldkey to get the split distribution
             miner_for_coldkey = None
             for miner in miners:
                 if miner.coldkey == coldkey:
@@ -264,8 +259,7 @@ class DefaultScoringEngine(ScoringEngine):
             if miner_for_coldkey and miner_for_coldkey.hotkey in split_distributions:
                 distributions_result = split_distributions[miner_for_coldkey.hotkey]
 
-                # Skip if we got an exception
-                if isinstance(distributions_result, Exception):
+                if isinstance(distributions_result, Exception) or not distributions_result:
                     logger.warning(
                         f"Failed to get split distribution for {coldkey}: {distributions_result}"
                     )
@@ -274,9 +268,7 @@ class DefaultScoringEngine(ScoringEngine):
                 distributions = distributions_result
 
                 # Save to database
-                await self._save_split_to_database(
-                    coldkey, cycle_start, validator_hotkey, distributions
-                )
+                await self._save_split(coldkey, cycle_start, validator_hotkey, distributions)
 
                 result[coldkey] = SplitInfo(
                     coldkey=coldkey,
@@ -287,7 +279,7 @@ class DefaultScoringEngine(ScoringEngine):
 
         return result
 
-    async def _save_split_to_database(
+    async def _save_split(
         self, coldkey: str, cycle_start: int, validator_hotkey: str, distributions: dict[str, float]
     ):
         """
@@ -300,18 +292,12 @@ class DefaultScoringEngine(ScoringEngine):
             distributions: Distribution percentages by hotkey
         """
         try:
-            # Create or update the split
-            split, created = await sync_to_async(MinerSplit.objects.get_or_create)(
+            split = await sync_to_async(MinerSplit.objects.create)(
                 coldkey=coldkey,
                 cycle_start=cycle_start,
                 validator_hotkey=validator_hotkey,
-                defaults={},
             )
 
-            # Clear existing distributions and add new ones
-            await sync_to_async(split.distributions.all().delete)()
-
-            # Create new distributions
             for hotkey, percentage in distributions.items():
                 await sync_to_async(MinerSplitDistribution.objects.create)(
                     split=split,
@@ -347,15 +333,24 @@ class DefaultScoringEngine(ScoringEngine):
             Distributed scores by hotkey
         """
         if current_split:
-            # Apply split distribution
-            distributed_scores = self._apply_split_distribution(
-                total_score, current_split.distributions
+            # Check for split changes to determine if dancing bonus should be applied
+            dancing_bonus_applied = (
+                previous_split and current_split.distributions != previous_split.distributions
             )
 
-            # Check for split changes and apply bonus
-            if previous_split and current_split.distributions != previous_split.distributions:
-                distributed_scores = self._apply_dancing_bonus(distributed_scores)
-                logger.info(f"Applied dancing bonus to coldkey: {coldkey}")
+            if dancing_bonus_applied:
+                logger.info(
+                    f"Split distribution changed for coldkey: {coldkey}, applying dancing bonus"
+                )
+                # Apply dancing bonus logic: give bonus to main hotkey, distribute rest equally
+                distributed_scores = self._apply_dancing_split_distribution(
+                    total_score, current_split.distributions
+                )
+            else:
+                # Apply normal split distribution
+                distributed_scores = self._apply_split_distribution(
+                    total_score, current_split.distributions
+                )
 
             return distributed_scores
         else:
@@ -370,7 +365,7 @@ class DefaultScoringEngine(ScoringEngine):
             else:
                 return {}
 
-    async def _get_split_distributions_batch(
+    async def _get_split_distributions(
         self, coldkeys: list[str], cycle_start: int, validator_hotkey: str
     ) -> dict[str, SplitInfo]:
         """
@@ -409,23 +404,6 @@ class DefaultScoringEngine(ScoringEngine):
 
         return result
 
-    async def _get_split_distribution(
-        self, coldkey: str, cycle_start: int, validator_hotkey: str
-    ) -> SplitInfo | None:
-        """
-        Get split distribution for a coldkey from database.
-
-        Args:
-            coldkey: Miner coldkey
-            cycle_start: Cycle start block
-            validator_hotkey: Validator hotkey
-
-        Returns:
-            SplitInfo if found, None otherwise
-        """
-        result = await self._get_split_distributions_batch([coldkey], cycle_start, validator_hotkey)
-        return result.get(coldkey)
-
     def _apply_split_distribution(
         self, total_score: float, distributions: dict[str, float]
     ) -> dict[str, float]:
@@ -445,15 +423,42 @@ class DefaultScoringEngine(ScoringEngine):
 
         return distributed_scores
 
-    def _apply_dancing_bonus(self, scores: dict[str, float]) -> dict[str, float]:
+    def _apply_dancing_split_distribution(
+        self, total_score: float, distributions: dict[str, float]
+    ) -> dict[str, float]:
         """
         Apply dancing bonus to scores.
 
         Args:
-            scores: Scores by hotkey
+            total_score: Total score for the coldkey
+            distributions: Distribution percentages by hotkey
 
         Returns:
-            Scores with bonus applied
+            Distributed scores by hotkey with bonus applied to main hotkey
         """
+        # Find the hotkey with the highest percentage (main hotkey)
+        main_hotkey = max(distributions.keys(), key=lambda k: distributions[k])
+        main_percentage = distributions[main_hotkey]
+
+        # Calculate the main hotkey's base share
+        main_base_share = total_score * main_percentage
+
+        # Apply bonus to the main hotkey's share
         bonus_multiplier = 1.0 + self.dancing_bonus
-        return {hotkey: score * bonus_multiplier for hotkey, score in scores.items()}
+        main_bonus_share = main_base_share * bonus_multiplier
+
+        # Calculate remaining score to distribute among other hotkeys
+        remaining_score = total_score - main_base_share
+        other_hotkeys = [hotkey for hotkey in distributions.keys() if hotkey != main_hotkey]
+
+        # Distribute remaining score equally among other hotkeys
+        if other_hotkeys:
+            score_per_other_hotkey = remaining_score / len(other_hotkeys)
+            distributed_scores = {hotkey: score_per_other_hotkey for hotkey in other_hotkeys}
+        else:
+            distributed_scores = {}
+
+        # Add the bonus for the main hotkey
+        distributed_scores[main_hotkey] = main_bonus_share
+
+        return distributed_scores

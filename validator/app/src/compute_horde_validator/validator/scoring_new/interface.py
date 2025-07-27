@@ -1,5 +1,5 @@
 """
-Abstract interface for scoring engines.
+Abstract interface for scoring engine.
 """
 
 from abc import ABC, abstractmethod
@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 
 class ScoringEngine(ABC):
     """
-    Abstract interface for scoring engines that calculate scores.
+    Abstract interface for scoring engine.
     """
 
     @abstractmethod
