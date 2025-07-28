@@ -241,7 +241,7 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         Get the split distribution for decoupled dancing.
         By default, returns the miner's own hotkey with 100% distribution.
         Miners can override this to implement split exposure.
-        
+
         Returns:
             Dictionary mapping hotkeys to percentages, or None if no split
         """
