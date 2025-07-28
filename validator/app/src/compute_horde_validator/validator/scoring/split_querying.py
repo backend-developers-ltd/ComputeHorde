@@ -44,13 +44,11 @@ async def _query_miners(miners: list[Miner]) -> dict[str, dict[str, float]]:
     """
     tasks = []
     for miner in miners:
-        task = asyncio.create_task(
-            _query_single_miner(miner), name=f"query_split_{miner.hotkey}"
-        )
+        task = asyncio.create_task(_query_single_miner(miner), name=f"query_split_{miner.hotkey}")
         tasks.append(task)
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    
+
     split_distributions: dict[str, dict[str, float]] = {}
     for i, result in enumerate(results):
         miner = miners[i]
@@ -75,10 +73,10 @@ async def _query_single_miner(miner: Miner) -> dict[str, float]:
     """
     try:
         transport = WSTransport(
-        f"split_query_{miner.hotkey}",
-        f"ws://{miner.address}:{miner.port}/v0.1/validator_interface/{settings.BITTENSOR_WALLET().get_hotkey().ss58_address}",
-        max_retries=2,
-    )
+            f"split_query_{miner.hotkey}",
+            f"ws://{miner.address}:{miner.port}/v0.1/validator_interface/{settings.BITTENSOR_WALLET().get_hotkey().ss58_address}",
+            max_retries=2,
+        )
         await transport.start()
 
         auth_msg = _create_auth_message(miner.hotkey)
