@@ -24,6 +24,8 @@ from compute_horde.protocol_messages import (
     V0JobFinishedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
+    V0MinerSplitDistributionRequest,
+    V0SplitDistributionRequest,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
     V0VolumesReadyRequest,
@@ -210,7 +212,8 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                 return
 
         self.validator_authenticated = True
-        manifest = await current.executor_manager.get_manifest()
+
+        manifest = await current.executor_manager.get_manifest()  
         await self.send(V0ExecutorManifestRequest(manifest=manifest).model_dump_json())
 
         # Handle messages that may have arrived during the authentication
@@ -309,6 +312,9 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             msg.payload, msg.signature
         ):
             await self.handle_job_finished_receipt(msg)
+
+        if isinstance(msg, V0SplitDistributionRequest):
+            await self.handle_split_distribution_request(msg)
 
     async def handle_initial_job_request(self, msg: V0InitialJobRequest):
         validator_blacklisted = await ValidatorBlacklist.objects.filter(
@@ -533,6 +539,21 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         )
 
         (await current_store()).store([created_receipt.to_receipt()])
+
+    async def handle_split_distribution_request(self, msg: V0SplitDistributionRequest):
+        logger.info(f"Received split distribution request from validator {self.validator_key}")
+        
+        if not self.validator_authenticated:
+            logger.warning(f"Received split distribution request from unauthenticated validator {self.validator_key}")
+            await self.send(GenericError(details="Unauthenticated validator").model_dump_json())
+            return
+
+        # Get split distribution from executor manager
+        split_distribution = await current.executor_manager.get_split_distribution()
+        
+        # Send response
+        await self.send(V0MinerSplitDistributionRequest(split_distribution=split_distribution).model_dump_json())
+        logger.info(f"Sent split distribution to validator {self.validator_key}: {split_distribution}")
 
     async def _executor_ready(self, msg: V0ExecutorReadyRequest):
         logger.debug(f"_executor_ready for {msg}")

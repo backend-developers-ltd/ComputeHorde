@@ -160,6 +160,7 @@ class MetagraphSnapshot(models.Model):
 
     uids = ArrayField(models.IntegerField())
     hotkeys = ArrayField(models.CharField(max_length=255))
+    coldkeys = ArrayField(models.CharField(max_length=255), null=True, blank=True)
 
     # current active miners
     serving_hotkeys = ArrayField(models.CharField(max_length=255))
@@ -216,6 +217,7 @@ class Miner(models.Model):
     objects = MinerQueryset.as_manager()
 
     hotkey = models.CharField(max_length=255, unique=True)
+    coldkey = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     uid = models.IntegerField(null=True)
