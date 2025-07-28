@@ -82,7 +82,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 from . import eviction
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
-from .scoring_new import create_scoring_engine
+from .scoring import create_scoring_engine
 
 if False:
     import torch
@@ -740,7 +740,6 @@ def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
     Returns:
         Tuple of (current_cycle_start, previous_cycle_start)
     """
-    # Get current cycle containing the current block
     current_cycle = get_cycle_containing_block(
         block=current_block, netuid=settings.BITTENSOR_NETUID
     )
@@ -749,7 +748,6 @@ def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
         logger.error(f"Could not determine cycle for block {current_block}")
         return None, None
 
-    # Look for the most recent cycle in database that's before current cycle
     try:
         previous_cycle = (
             Cycle.objects.filter(start__lt=current_cycle.start).order_by("-start").first()
@@ -773,7 +771,7 @@ def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
     return current_cycle.start, previous_cycle_start
 
 
-def _score_cycles_directly(current_block: int) -> dict[str, float]:
+def _score_cycles(current_block: int) -> dict[str, float]:
     """
     Score cycles directly without relying on batches.
 
@@ -795,10 +793,8 @@ def _score_cycles_directly(current_block: int) -> dict[str, float]:
             logger.warning("Previous cycle start is negative, using 0")
             previous_cycle_start = 0
 
-        # Get validator hotkey
         validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
 
-        # Create scoring engine and calculate scores
         engine = create_scoring_engine()
 
         logger.info(
@@ -811,7 +807,6 @@ def _score_cycles_directly(current_block: int) -> dict[str, float]:
             validator_hotkey=validator_hotkey,
         )
 
-        # Mark cycle as scored if we got results
         if scores:
             _mark_cycle_as_scored(current_cycle_start)
 
@@ -920,8 +915,7 @@ def set_scores(bittensor: turbobt.Bittensor):
             hyperparameters = async_to_sync(subnet.get_hyperparameters)(current_block.hash)
             neurons = async_to_sync(subnet.list_neurons)(current_block.hash)
 
-            # DIRECT CYCLE SCORING - No more batch dependency!
-            hotkey_scores = _score_cycles_directly(current_block.number)
+            hotkey_scores = _score_cycles(current_block.number)
 
             if not hotkey_scores:
                 logger.warning("No scores calculated, skipping weight setting")

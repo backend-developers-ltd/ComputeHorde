@@ -5,22 +5,23 @@ from asgiref.sync import sync_to_async
 from compute_horde.subtensor import get_cycle_containing_block
 from django.conf import settings
 
+from compute_horde_validator.validator.dynamic_config import get_executor_class_weights
 from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
-from compute_horde_validator.validator.scoring_new.calculations import (
+from compute_horde_validator.validator.scoring.calculations import (
     calculate_organic_scores,
     calculate_synthetic_scores,
     combine_scores,
 )
-from compute_horde_validator.validator.scoring_new.exceptions import (
+from compute_horde_validator.validator.scoring.exceptions import (
     SplitDistributionError,
 )
-from compute_horde_validator.validator.scoring_new.interface import ScoringEngine
-from compute_horde_validator.validator.scoring_new.models import (
+from compute_horde_validator.validator.scoring.interface import ScoringEngine
+from compute_horde_validator.validator.scoring.models import (
     MinerSplit,
     MinerSplitDistribution,
     SplitInfo,
 )
-from compute_horde_validator.validator.scoring_new.split_querying import (
+from compute_horde_validator.validator.scoring.split_querying import (
     query_miner_split_distributions,
 )
 
@@ -80,16 +81,33 @@ class DefaultScoringEngine(ScoringEngine):
 
         organic_scores = await calculate_organic_scores(current_organic_jobs)
         synthetic_scores = await calculate_synthetic_scores(current_synthetic_jobs)
-        combined_scores = combine_scores(organic_scores, synthetic_scores)
 
-        logger.info(f"Base scores calculated: {len(combined_scores)} hotkeys")
+        combined_scores_by_executor = await combine_scores(organic_scores, synthetic_scores)
 
-        final_scores = await self._apply_decoupled_dancing(
-            combined_scores, current_cycle_start, previous_cycle_start, validator_hotkey
-        )
+        logger.info(f"Base scores calculated: {len(combined_scores_by_executor)} executor classes")
 
-        logger.info(f"Final scores calculated: {len(final_scores)} hotkeys")
-        return final_scores
+        executor_class_weights = await sync_to_async(get_executor_class_weights)()
+        normalized_scores: dict[str, float] = {}
+
+        for executor_class, executor_scores in combined_scores_by_executor.items():
+            weight = executor_class_weights.get(executor_class, 1.0)
+
+            final_executor_scores = await self._apply_decoupled_dancing(
+                executor_scores, current_cycle_start, previous_cycle_start, validator_hotkey
+            )
+
+            total_executor_score = sum(final_executor_scores.values())
+            if total_executor_score > 0:
+                normalized_executor_scores = {
+                    hotkey: (score / total_executor_score) * weight
+                    for hotkey, score in final_executor_scores.items()
+                }
+                # Accumulate scores from different executor classes
+                for hotkey, score in normalized_executor_scores.items():
+                    normalized_scores[hotkey] = normalized_scores.get(hotkey, 0) + score
+
+        logger.info(f"Final scores calculated: {len(normalized_scores)} hotkeys")
+        return normalized_scores
 
     async def _apply_decoupled_dancing(
         self,

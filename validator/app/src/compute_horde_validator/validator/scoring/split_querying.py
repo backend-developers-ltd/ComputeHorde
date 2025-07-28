@@ -15,7 +15,7 @@ from django.conf import settings
 from pydantic import TypeAdapter
 
 from compute_horde_validator.validator.models import Miner
-from compute_horde_validator.validator.scoring_new.exceptions import (
+from compute_horde_validator.validator.scoring.exceptions import (
     MinerConnectionError,
     SplitDistributionError,
 )

@@ -212,10 +212,8 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                 return
 
         self.validator_authenticated = True
-        
-        # Create manifest with split distribution
-        manifest = await current.executor_manager.get_manifest()
-        
+
+        manifest = await current.executor_manager.get_manifest()  
         await self.send(V0ExecutorManifestRequest(manifest=manifest).model_dump_json())
 
         # Handle messages that may have arrived during the authentication
