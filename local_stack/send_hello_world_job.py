@@ -139,11 +139,6 @@ async def main() -> None:
         var in os.environ for var in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
     )
 
-    # TODO: There should not be a need to sleep here. 
-    # Figure out why the job fails to start immediately after the 
-    # previous job is finished.
-    await asyncio.sleep(15)
-
     compute_horde_job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
