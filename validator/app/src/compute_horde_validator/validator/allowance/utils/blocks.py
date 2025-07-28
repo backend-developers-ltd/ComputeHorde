@@ -4,6 +4,8 @@ from collections import defaultdict
 import turbobt
 from celery.utils.log import get_task_logger
 from django.db import transaction
+from django.forms.models import model_to_dict
+
 
 from compute_horde_core.executor_class import ExecutorClass
 
@@ -99,8 +101,11 @@ def save_neurons(neurons: list[turbobt.Neuron], block: int):
 
 
 def process_block_allowance(block_number: int):
+    """
+    Only call this once the block is already minted
+    """
     with transaction.atomic():
-        block_obj, created = Block.objects.create(
+        block_obj = Block.objects.create(
             block_number=block_number,
             creation_timestamp=supertensor().get_block_timestamp(block_number),
         )
@@ -166,6 +171,9 @@ def process_block_allowance(block_number: int):
 
 
 def process_block_allowance_with_reporting(block_number: int):
+    """
+    Only call this once the block is already minted
+    """
     try:
         start = time.time()
         process_block_allowance(block_number)
@@ -173,8 +181,8 @@ def process_block_allowance_with_reporting(block_number: int):
     except Exception as e:
         logger.error(f"Error processing block allowance for block {block_number}: {e!r}", exc_info=True)
         SystemEvent.objects.create(
-            event_type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
-            event_subtype=SystemEvent.EventSubType.FAILURE,
+            type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
+            subtype=SystemEvent.EventSubType.FAILURE,
             data={
                 "block_number": block_number,
                 "error": str(e),
@@ -183,8 +191,8 @@ def process_block_allowance_with_reporting(block_number: int):
     else:
         logger.info(f"Block allowance processing for block {block_number} took {end - start} seconds")
         SystemEvent.objects.create(
-            event_type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
-            event_subtype=SystemEvent.EventSubType.SUCCESS,
+            type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
+            subtype=SystemEvent.EventSubType.SUCCESS,
             data={
                 "block_number": block_number,
                 "duration_seconds": end - start,
@@ -196,17 +204,17 @@ def process_block_allowance_with_reporting(block_number: int):
 
 def report_checkpoint(block_number):
     allowances = BlockAllowance.objects.filter(
-        block__block_number__le=block_number,
+        block__block_number__lte=block_number,
         block__block_number__gt=block_number - 50,
     ).order_by("block__block_number", "validator_ss58", "miner_ss58", "executor_class")
 
     by_block = defaultdict(list)
     for allowance in allowances:
-        by_block[str(allowance.block.block_number)].append(allowance)
+        by_block[str(allowance.block.block_number)].append(model_to_dict(allowance))
 
     SystemEvent.objects.create(
-        event_type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
-        event_subtype=SystemEvent.EventSubType.CHECKPOINT,
+        type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
+        subtype=SystemEvent.EventSubType.CHECKPOINT,
         data={
             "block_number": block_number,
             "allowances": by_block,
@@ -220,6 +228,8 @@ def scan_blocks_and_calculate_allowance():
         current_block = supertensor().get_current_block()
         missing_block_numbers = find_missing_blocks(current_block)
         for block_number in missing_block_numbers:
+            # TODO process_block_allowance_with_reporting never throws, but logs errors appropraitely. maybe it should
+            # be retried? otherwise random failures will leave holes until they are backfilled
             process_block_allowance_with_reporting(block_number)
             timer.check_time()
 
@@ -247,6 +257,7 @@ def find_miners_with_allowance(
     Returns miners sorted by:
     1. Earliest unspent/unreserved block
     2. Highest total allowance percentage left
+    3. Highest total allowance left
 
     Args:
         required_allowance: The minimum allowance amount required (in seconds)
@@ -260,18 +271,36 @@ def find_miners_with_allowance(
         NotEnoughAllowanceException is raised. The returned miners are present in the subnet's metagraph snapshot
         kept by this module.
     """
-    from django.db.models import Q, Sum, Case, When, Min, F, Value, FloatField
+    from django.db.models import Q, Sum, Case, When, Min, F, Value, FloatField, Max, Subquery, OuterRef
     from collections import defaultdict
 
     # Calculate the earliest block that can be used for this job
     earliest_usable_block = job_start_block - BLOCK_EXPIRY
 
-    # Use SQL aggregation to calculate all values per miner in one query
+    # Create a single query with subselect to find miners with the latest block value
+    # This eliminates all separate database queries by using a subquery that finds
+    # miners whose block equals the maximum block value in the Neuron table
+    
+    # Subquery to find miners with the latest block value
+    # Use a subquery to get miners whose block equals the maximum block value
+    valid_miners_subquery = Subquery(
+        NeuronModel.objects.filter(
+            block=Subquery(
+                NeuronModel.objects.values().annotate(
+                    max_block=Max('block')
+                ).values('max_block')[:1]
+            )
+        ).values_list('hotkey_ss58address', flat=True)
+    )
+
+    # Use single SQL query with subselect to calculate all values per miner
+    # Only consider miners that are present in Neuron table with latest block
     miner_aggregates = BlockAllowance.objects.filter(
         validator_ss58=validator_ss58,
         executor_class=executor_class,
         block__block_number__gte=earliest_usable_block,
         invalidated_at_block__isnull=True,  # Only non-invalidated allowances
+        miner_ss58__in=valid_miners_subquery,  # Use subquery to find valid miners
     ).values('miner_ss58').annotate(
         # Total allowance for non-invalidated allowances
         total_allowance=Sum('allowance'),
@@ -371,7 +400,8 @@ def find_miners_with_allowance(
     # Sort miners by:
     # 1. Earliest unspent/unreserved block (ascending)
     # 2. Highest total allowance percentage left (descending)
-    eligible_miners.sort(key=lambda x: (x[2], -x[3]))
+    # 3. Highest total allowance left
+    eligible_miners.sort(key=lambda x: (x[2], -x[3], -x[1]))
 
     # Return list of tuples (miner_ss58, available_allowance)
     return [(miner[0], miner[1]) for miner in eligible_miners]

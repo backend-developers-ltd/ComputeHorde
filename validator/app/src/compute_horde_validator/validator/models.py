@@ -573,3 +573,14 @@ class MinerPreliminaryReservation(models.Model):
     expires_at = models.DateTimeField()
 
     objects = MinerPreliminaryReservationQueryset.as_manager()
+
+
+# Import allowance models to make them part of the validator app for migrations
+from compute_horde_validator.validator.allowance.models.internal import (
+    MinerAddress,
+    Neuron,
+    AllowanceMinerManifest,
+    AllowanceBooking,
+    Block,
+    BlockAllowance,
+)

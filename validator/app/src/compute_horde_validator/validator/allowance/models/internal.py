@@ -32,7 +32,7 @@ class AllowanceMinerManifest(models.Model):
     class Meta:
         constraints = [
             UniqueConstraint(
-                fields=["miner_ss58address", "block_number", "executor_class"], name="unique_miner_manifest"
+                fields=["miner_ss58address", "block_number", "executor_class"], name="unique_allowance_miner_manifest"
             ),
         ]
         indexes = [
@@ -74,7 +74,7 @@ class BlockAllowance(models.Model):
     class Meta:
         constraints = [
             UniqueConstraint(
-                fields=["block_number", "miner_ss58", "validator_ss58", "executor_class"],
+                fields=["block", "miner_ss58", "validator_ss58", "executor_class"],
                 name="unique_block_allowance"
             ),
         ]

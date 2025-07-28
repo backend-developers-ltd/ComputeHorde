@@ -15,6 +15,8 @@ from compute_horde_validator.validator.allowance.utils.types import ss58_address
 from compute_horde_validator.validator.allowance.models.internal import AllowanceMinerManifest, MinerAddress, BlockAllowance
 from compute_horde_validator.validator.locks import Lock, LockType
 from compute_horde_validator.validator.tasks import get_single_manifest
+from .. import settings
+from ...dynamic_config import get_miner_max_executors_per_class
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +34,10 @@ def get_manifests(block_number: int, hotkeys: list[ss58_address]) -> dict[tuple[
         return {}
     
     # Get the newest manifest for each hotkey-executor_class combination
-    # that has block_number < the given block_number
+    # that has block_number <= the given block_number
     manifests = AllowanceMinerManifest.objects.filter(
         miner_ss58address__in=hotkeys,
-        block_number__lt=block_number,
+        block_number__lte=block_number,
     ).values(
         'miner_ss58address', 'executor_class', 'executor_count', 'block_number'
     ).order_by(
@@ -84,7 +86,7 @@ def get_manifest_drops(block_number: int, hotkeys: list[ss58_address]) -> dict[t
     
     drops = AllowanceMinerManifest.objects.filter(
         miner_ss58address__in=hotkeys,
-        block_number__gte=block_number,
+        block_number__gt=block_number,
         is_drop=True,
     ).values(
         'miner_ss58address', 'executor_class'
@@ -105,18 +107,28 @@ def get_manifest_drops(block_number: int, hotkeys: list[ss58_address]) -> dict[t
 
 
 
+def event_loop():
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
+
+
 def sync_manifests():
     block = supertensor().get_current_block()
     neurons = supertensor().get_shielded_neurons()
+    max_executors_per_class = asyncio.run(get_miner_max_executors_per_class())
     miners = [
         (n.hotkey, n.axon_info.ip, n.axon_info.port)
-        for n in neurons if n.axon_info.ip
+        for n in neurons if n.axon_info.port
     ]
-    new_manifests = asyncio.get_event_loop().run_until_complete(fetch_manifests_from_miners(miners))
+    new_manifests = event_loop().run_until_complete(fetch_manifests_from_miners(miners))
     with transaction.atomic():
         with Lock(LockType.ALLOWANCE_BLOCK_INJECTION, 10.0):
             # This will throw an error if the lock cannot be obtained in 10.0s and that's correct
-            MinerAddress.objects.delete()
+            MinerAddress.objects.all().delete()
             MinerAddress.objects.bulk_create([
                 MinerAddress(
                     hotkey_ss58address=miner[0],
@@ -127,7 +139,9 @@ def sync_manifests():
             old_manifests = get_manifests(block, [n.hotkey for n in neurons])
             manifests_to_inject = []
             block_allowances_to_invalidate = []
-            for miner_hotkey, executor_class in itertools.chain(new_manifests, old_manifests):
+            # Use a set to avoid duplicates when combining new and old manifests
+            all_manifest_keys = set(itertools.chain(new_manifests.keys(), old_manifests.keys()))
+            for miner_hotkey, executor_class in all_manifest_keys:
                 is_drop = False
                 if new_manifests.get((miner_hotkey, executor_class), 0) < old_manifests.get((miner_hotkey, executor_class), 0):
                     is_drop = True
@@ -138,7 +152,7 @@ def sync_manifests():
                     success=(miner_hotkey, executor_class) in new_manifests,
                     executor_class=executor_class.value,
                     is_drop=is_drop,
-                    executor_count=new_manifests.get((miner_hotkey, executor_class), 0),
+                    executor_count=min(new_manifests.get((miner_hotkey, executor_class), 0), max_executors_per_class[executor_class]),
                 ))
             if manifests_to_inject:
                 AllowanceMinerManifest.objects.bulk_create(manifests_to_inject)
@@ -153,13 +167,12 @@ def sync_manifests():
                 logger.info(f"Invalidated {updated_count} block allowances for block {block}")
 
 
-MANIFEST_FETCHING_TIMEOUT = 30.0
 async def fetch_manifests_from_miners(
     miners: list[tuple[ss58_address, str, int]],
 ) -> dict[tuple[ss58_address, ExecutorClass], int]:
     """Only includes results for miners that have replied succesfully."""
 
-    my_keypair = supertensor().wallet.get_hotkey()
+    my_keypair = supertensor().wallet().get_hotkey()
 
     miner_clients = [
         OrganicMinerClient(
@@ -176,7 +189,7 @@ async def fetch_manifests_from_miners(
         logger.info(f"Scraping manifests for {len(miner_clients)} miners")
         tasks = [
             asyncio.create_task(
-                get_single_manifest(client, MANIFEST_FETCHING_TIMEOUT), name=f"{client.miner_hotkey}.get_manifest"
+                get_single_manifest(client, settings.MANIFEST_FETCHING_TIMEOUT), name=f"{client.miner_hotkey}.get_manifest"
             )
             for client in miner_clients
         ]
