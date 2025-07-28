@@ -556,14 +556,8 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         if split_distribution is None:
             split_distribution = {}
 
-        # Ensure split_distribution is a dict[str, float] for type checker
-        split_distribution_dict: dict[str, float] = split_distribution
-
-        # Send response
         await self.send(
-            V0MinerSplitDistributionRequest(
-                split_distribution=split_distribution_dict
-            ).model_dump_json()
+            V0MinerSplitDistributionRequest(split_distribution=split_distribution).model_dump_json()
         )
         logger.info(
             f"Sent split distribution to validator {self.validator_key}: {split_distribution}"

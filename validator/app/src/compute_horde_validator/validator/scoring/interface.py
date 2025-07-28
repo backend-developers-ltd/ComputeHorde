@@ -11,7 +11,7 @@ class ScoringEngine(ABC):
     """
 
     @abstractmethod
-    async def calculate_scores_for_cycles(
+    def calculate_scores_for_cycles(
         self, current_cycle_start: int, previous_cycle_start: int, validator_hotkey: str
     ) -> dict[str, float]:
         """

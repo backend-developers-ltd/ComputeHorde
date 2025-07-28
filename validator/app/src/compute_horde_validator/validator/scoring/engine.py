@@ -1,7 +1,6 @@
 import logging
 from collections import defaultdict
 
-from asgiref.sync import sync_to_async
 from compute_horde.subtensor import get_cycle_containing_block
 from django.conf import settings
 
@@ -36,7 +35,7 @@ class DefaultScoringEngine(ScoringEngine):
     def __init__(self):
         self.dancing_bonus = getattr(settings, "DYNAMIC_DANCING_BONUS", 0.1)
 
-    async def calculate_scores_for_cycles(
+    def calculate_scores_for_cycles(
         self, current_cycle_start: int, previous_cycle_start: int, validator_hotkey: str
     ) -> dict[str, float]:
         """
@@ -58,41 +57,37 @@ class DefaultScoringEngine(ScoringEngine):
             block=current_cycle_start, netuid=settings.BITTENSOR_NETUID
         )
 
-        current_organic_jobs: list[OrganicJob] = await sync_to_async(
-            lambda: list(
-                OrganicJob.objects.filter(
-                    block__gte=current_cycle_start,
-                    block__lt=current_cycle_range.stop,
-                    cheated=False,
-                    status=OrganicJob.Status.COMPLETED,
-                    on_trusted_miner=False,
-                ).select_related("miner")
-            )
-        )()
+        current_organic_jobs: list[OrganicJob] = list(
+            OrganicJob.objects.filter(
+                block__gte=current_cycle_start,
+                block__lt=current_cycle_range.stop,
+                cheated=False,
+                status=OrganicJob.Status.COMPLETED,
+                on_trusted_miner=False,
+            ).select_related("miner")
+        )
 
-        current_synthetic_jobs: list[SyntheticJob] = await sync_to_async(
-            lambda: list(
-                SyntheticJob.objects.filter(
-                    batch__cycle__start=current_cycle_start,
-                    status=SyntheticJob.Status.COMPLETED,
-                ).select_related("miner")
-            )
-        )()
+        current_synthetic_jobs: list[SyntheticJob] = list(
+            SyntheticJob.objects.filter(
+                batch__cycle__start=current_cycle_start,
+                status=SyntheticJob.Status.COMPLETED,
+            ).select_related("miner")
+        )
 
-        organic_scores = await calculate_organic_scores(current_organic_jobs)
-        synthetic_scores = await calculate_synthetic_scores(current_synthetic_jobs)
+        organic_scores = calculate_organic_scores(current_organic_jobs)
+        synthetic_scores = calculate_synthetic_scores(current_synthetic_jobs)
 
-        combined_scores_by_executor = await combine_scores(organic_scores, synthetic_scores)
+        combined_scores_by_executor = combine_scores(organic_scores, synthetic_scores)
 
         logger.info(f"Base scores calculated: {len(combined_scores_by_executor)} executor classes")
 
-        executor_class_weights = await sync_to_async(get_executor_class_weights)()
+        executor_class_weights = get_executor_class_weights()
         normalized_scores: dict[str, float] = {}
 
         for executor_class, executor_scores in combined_scores_by_executor.items():
             weight = executor_class_weights.get(executor_class, 1.0)
 
-            final_executor_scores = await self._apply_decoupled_dancing(
+            final_executor_scores = self._apply_decoupled_dancing(
                 executor_scores, current_cycle_start, previous_cycle_start, validator_hotkey
             )
 
@@ -109,7 +104,7 @@ class DefaultScoringEngine(ScoringEngine):
         logger.info(f"Final scores calculated: {len(normalized_scores)} hotkeys")
         return normalized_scores
 
-    async def _apply_decoupled_dancing(
+    def _apply_decoupled_dancing(
         self,
         scores: dict[str, float],
         current_cycle_start: int,
@@ -128,9 +123,9 @@ class DefaultScoringEngine(ScoringEngine):
         Returns:
             Final scores with dancing applied
         """
-        coldkey_scores, hotkey_to_coldkey = await self._group_scores_by_coldkey(scores)
+        coldkey_scores, hotkey_to_coldkey = self._group_scores_by_coldkey(scores)
 
-        final_scores = await self._process_splits_and_distribute(
+        final_scores = self._process_splits_and_distribute(
             coldkey_scores,
             hotkey_to_coldkey,
             scores,
@@ -141,7 +136,7 @@ class DefaultScoringEngine(ScoringEngine):
 
         return final_scores
 
-    async def _group_scores_by_coldkey(
+    def _group_scores_by_coldkey(
         self, scores: dict[str, float]
     ) -> tuple[dict[str, float], dict[str, str]]:
         """
@@ -157,9 +152,7 @@ class DefaultScoringEngine(ScoringEngine):
         hotkey_to_coldkey: dict[str, str] = {}
 
         hotkeys_list = list(scores.keys())
-        miners: list[Miner] = await sync_to_async(
-            lambda: list(Miner.objects.filter(hotkey__in=hotkeys_list))
-        )()
+        miners: list[Miner] = list(Miner.objects.filter(hotkey__in=hotkeys_list))
         miner_map = {miner.hotkey: miner for miner in miners}
 
         # Group by coldkey from database
@@ -182,7 +175,7 @@ class DefaultScoringEngine(ScoringEngine):
 
         return dict(coldkey_scores), hotkey_to_coldkey
 
-    async def _process_splits_and_distribute(
+    def _process_splits_and_distribute(
         self,
         coldkey_scores: dict[str, float],
         hotkey_to_coldkey: dict[str, str],
@@ -212,12 +205,12 @@ class DefaultScoringEngine(ScoringEngine):
             coldkey for coldkey in coldkey_scores.keys() if coldkey not in original_scores
         ]
 
-        current_splits = await self._query_current_splits(
+        current_splits = self._query_current_splits(
             coldkeys_for_splits, current_cycle_start, validator_hotkey
         )
 
         # Get previous splits
-        previous_splits = await self._get_split_distributions(
+        previous_splits = self._get_split_distributions(
             coldkeys_for_splits, previous_cycle_start, validator_hotkey
         )
 
@@ -242,7 +235,7 @@ class DefaultScoringEngine(ScoringEngine):
 
         return final_scores
 
-    async def _query_current_splits(
+    def _query_current_splits(
         self, coldkeys: list[str], cycle_start: int, validator_hotkey: str
     ) -> dict[str, SplitInfo]:
         """
@@ -259,11 +252,9 @@ class DefaultScoringEngine(ScoringEngine):
         if not coldkeys:
             return {}
 
-        miners: list[Miner] = await sync_to_async(
-            lambda: list(Miner.objects.filter(coldkey__in=coldkeys).select_related())
-        )()
+        miners: list[Miner] = list(Miner.objects.filter(coldkey__in=coldkeys).select_related())
 
-        split_distributions = await query_miner_split_distributions(miners)
+        split_distributions = query_miner_split_distributions(miners)
 
         result = {}
         for coldkey in coldkeys:
@@ -286,7 +277,7 @@ class DefaultScoringEngine(ScoringEngine):
                 distributions = distributions_result
 
                 # Save to database
-                await self._save_split(coldkey, cycle_start, validator_hotkey, distributions)
+                self._save_split(coldkey, cycle_start, validator_hotkey, distributions)
 
                 result[coldkey] = SplitInfo(
                     coldkey=coldkey,
@@ -297,7 +288,7 @@ class DefaultScoringEngine(ScoringEngine):
 
         return result
 
-    async def _save_split(
+    def _save_split(
         self, coldkey: str, cycle_start: int, validator_hotkey: str, distributions: dict[str, float]
     ):
         """
@@ -310,14 +301,14 @@ class DefaultScoringEngine(ScoringEngine):
             distributions: Distribution percentages by hotkey
         """
         try:
-            split = await sync_to_async(MinerSplit.objects.create)(
+            split = MinerSplit.objects.create(
                 coldkey=coldkey,
                 cycle_start=cycle_start,
                 validator_hotkey=validator_hotkey,
             )
 
             for hotkey, percentage in distributions.items():
-                await sync_to_async(MinerSplitDistribution.objects.create)(
+                MinerSplitDistribution.objects.create(
                     split=split,
                     hotkey=hotkey,
                     percentage=percentage,
@@ -383,7 +374,7 @@ class DefaultScoringEngine(ScoringEngine):
             else:
                 return {}
 
-    async def _get_split_distributions(
+    def _get_split_distributions(
         self, coldkeys: list[str], cycle_start: int, validator_hotkey: str
     ) -> dict[str, SplitInfo]:
         """
@@ -399,13 +390,11 @@ class DefaultScoringEngine(ScoringEngine):
         """
         if not coldkeys:
             return {}
-        splits: list[MinerSplit] = await sync_to_async(
-            lambda: list(
-                MinerSplit.objects.filter(
-                    coldkey__in=coldkeys, cycle_start=cycle_start, validator_hotkey=validator_hotkey
-                ).prefetch_related("distributions")
-            )
-        )()
+        splits: list[MinerSplit] = list(
+            MinerSplit.objects.filter(
+                coldkey__in=coldkeys, cycle_start=cycle_start, validator_hotkey=validator_hotkey
+            ).prefetch_related("distributions")
+        )
 
         result = {}
         for split in splits:

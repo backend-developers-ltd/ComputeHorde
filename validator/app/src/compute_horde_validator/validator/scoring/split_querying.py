@@ -9,21 +9,17 @@ from compute_horde.protocol_messages import (
     V0SplitDistributionRequest,
     ValidatorAuthForMiner,
 )
-from compute_horde.transport import TransportConnectionError, WSTransport
+from compute_horde.transport import WSTransport
 from compute_horde.utils import sign_blob
 from django.conf import settings
 from pydantic import TypeAdapter
 
 from compute_horde_validator.validator.models import Miner
-from compute_horde_validator.validator.scoring.exceptions import (
-    MinerConnectionError,
-    SplitDistributionError,
-)
 
 logger = logging.getLogger(__name__)
 
 
-async def query_miner_split_distributions(miners: list[Miner]) -> dict[str, dict[str, float]]:
+def query_miner_split_distributions(miners: list[Miner]) -> dict[str, dict[str, float]]:
     """
     Query miners for their split distributions.
 
@@ -33,20 +29,29 @@ async def query_miner_split_distributions(miners: list[Miner]) -> dict[str, dict
     Returns:
         Dictionary mapping miner hotkey to split distribution
     """
-    split_distributions: dict[str, dict[str, float]] = {}
+    return asyncio.run(_query_miners(miners))
 
-    # Create tasks for concurrent querying
+
+async def _query_miners(miners: list[Miner]) -> dict[str, dict[str, float]]:
+    """
+    Query all miners.
+
+    Args:
+        miners: List of miners to query
+
+    Returns:
+        Dictionary mapping miner hotkey to split distribution
+    """
     tasks = []
     for miner in miners:
         task = asyncio.create_task(
-            _query_single_miner_split_distribution(miner), name=f"query_split_{miner.hotkey}"
+            _query_single_miner(miner), name=f"query_split_{miner.hotkey}"
         )
         tasks.append(task)
 
-    # Wait for all queries to complete
     results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Process results
+    
+    split_distributions: dict[str, dict[str, float]] = {}
     for i, result in enumerate(results):
         miner = miners[i]
         if isinstance(result, BaseException):
@@ -58,9 +63,9 @@ async def query_miner_split_distributions(miners: list[Miner]) -> dict[str, dict
     return split_distributions
 
 
-async def _query_single_miner_split_distribution(miner: Miner) -> dict[str, float]:
+async def _query_single_miner(miner: Miner) -> dict[str, float]:
     """
-    Query a single miner for its split distribution.
+    Async helper to query a single miner.
 
     Args:
         miner: Miner to query
@@ -68,14 +73,12 @@ async def _query_single_miner_split_distribution(miner: Miner) -> dict[str, floa
     Returns:
         Split distribution dictionary
     """
-    # Create transport
-    transport = WSTransport(
+    try:
+        transport = WSTransport(
         f"split_query_{miner.hotkey}",
         f"ws://{miner.address}:{miner.port}/v0.1/validator_interface/{settings.BITTENSOR_WALLET().get_hotkey().ss58_address}",
         max_retries=2,
     )
-
-    try:
         await transport.start()
 
         auth_msg = _create_auth_message(miner.hotkey)
@@ -100,30 +103,41 @@ async def _query_single_miner_split_distribution(miner: Miner) -> dict[str, floa
                         logger.warning(f"Error from {miner.hotkey}: {msg.details}")
                         await transport.stop()
                         return {}
+                    else:
+                        logger.warning(f"Unexpected message type from {miner.hotkey}: {type(msg)}")
+                        await transport.stop()
+                        return {}
 
-    except (TimeoutError, TransportConnectionError) as e:
-        logger.warning(f"Failed to query split distribution from {miner.hotkey}: {e}")
-        raise MinerConnectionError(f"Connection failed for {miner.hotkey}", e)
+    except TimeoutError:
+        logger.warning(f"Timeout querying split distribution from {miner.hotkey}")
+        await transport.stop()
+        return {}
     except Exception as e:
-        logger.warning(f"Unexpected error querying split distribution from {miner.hotkey}: {e}")
-        raise SplitDistributionError(f"Failed to get split distribution from {miner.hotkey}: {e}")
+        logger.warning(f"Error querying split distribution from {miner.hotkey}: {e}")
+        await transport.stop()
+        return {}
     finally:
-        try:
-            await transport.stop()
-        except Exception:
-            pass
+        await transport.stop()
 
 
 def _create_auth_message(miner_hotkey: str) -> ValidatorAuthForMiner:
-    """Create authentication message for miner."""
+    """
+    Create authentication message for miner.
+
+    Args:
+        miner_hotkey: Miner hotkey
+
+    Returns:
+        Authentication message
+    """
     wallet = settings.BITTENSOR_WALLET()
-    keypair = wallet.get_hotkey()
+    hotkey = wallet.get_hotkey()
 
     msg = ValidatorAuthForMiner(
-        validator_hotkey=keypair.ss58_address,
+        validator_hotkey=hotkey.ss58_address,
         miner_hotkey=miner_hotkey,
         timestamp=int(time.time()),
         signature="",
     )
-    msg.signature = sign_blob(keypair, msg.blob_for_signing())
+    msg.signature = sign_blob(hotkey, msg.blob_for_signing())
     return msg

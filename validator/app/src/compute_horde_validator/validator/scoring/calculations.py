@@ -3,7 +3,6 @@ from collections import defaultdict
 from collections.abc import Callable, Sequence
 
 import numpy as np
-from asgiref.sync import sync_to_async
 from constance import config
 
 from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
@@ -58,7 +57,7 @@ def horde_score(
     return scaled_avg_benchmark * sum_agent * scaled_inverted_n
 
 
-async def score_synthetic_jobs(
+def score_synthetic_jobs(
     jobs: Sequence[SyntheticJob],
     score_aggregation: Callable[[list[float]], float] = sum,
 ) -> dict[str, float]:
@@ -73,11 +72,11 @@ async def score_synthetic_jobs(
     return score_per_hotkey
 
 
-async def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
+def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
     """Score organic jobs."""
     batch_scores: defaultdict[str, float] = defaultdict(float)
-    score = await sync_to_async(lambda: config.DYNAMIC_ORGANIC_JOB_SCORE)()
-    limit = await sync_to_async(lambda: config.DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT)()
+    score = config.DYNAMIC_ORGANIC_JOB_SCORE
+    limit = config.DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT
 
     for job in jobs:
         batch_scores[job.miner.hotkey] += score
@@ -89,7 +88,7 @@ async def score_organic_jobs(jobs: Sequence[OrganicJob]) -> dict[str, float]:
     return batch_scores
 
 
-async def calculate_organic_scores(organic_jobs: list[OrganicJob]) -> dict[str, dict[str, float]]:
+def calculate_organic_scores(organic_jobs: list[OrganicJob]) -> dict[str, dict[str, float]]:
     """
     Calculate raw scores from organic jobs for each executor class.
 
@@ -111,7 +110,7 @@ async def calculate_organic_scores(organic_jobs: list[OrganicJob]) -> dict[str, 
             executor_class_organic_jobs[job.executor_class].append(job)
 
     organic_scores_by_executor: dict[str, dict[str, float]] = {}
-    organic_job_score = await sync_to_async(lambda: config.DYNAMIC_ORGANIC_JOB_SCORE)()
+    organic_job_score = config.DYNAMIC_ORGANIC_JOB_SCORE
 
     for executor_class, jobs in executor_class_organic_jobs.items():
         executor_class_scores: dict[str, float] = {}
@@ -125,7 +124,7 @@ async def calculate_organic_scores(organic_jobs: list[OrganicJob]) -> dict[str, 
     return organic_scores_by_executor
 
 
-async def calculate_synthetic_scores(
+def calculate_synthetic_scores(
     synthetic_jobs: list[SyntheticJob],
 ) -> dict[str, dict[str, float]]:
     """
@@ -159,7 +158,7 @@ async def calculate_synthetic_scores(
     return synthetic_scores_by_executor
 
 
-async def combine_scores(
+def combine_scores(
     organic_scores_by_executor: dict[str, dict[str, float]],
     synthetic_scores_by_executor: dict[str, dict[str, float]],
 ) -> dict[str, dict[str, float]]:
@@ -215,7 +214,7 @@ def get_coldkey_to_hotkey_mapping(miners: list[Miner]) -> dict[str, list[str]]:
     return mapping
 
 
-async def get_hotkey_to_coldkey_mapping(hotkeys: list[str]) -> dict[str, str]:
+def get_hotkey_to_coldkey_mapping(hotkeys: list[str]) -> dict[str, str]:
     """
     Get hotkey to coldkey mapping from database.
     Missing coldkeys will be logged and synced during next metagraph sync.
@@ -227,9 +226,7 @@ async def get_hotkey_to_coldkey_mapping(hotkeys: list[str]) -> dict[str, str]:
         Dictionary mapping hotkeys to coldkeys
     """
     # Get from database only
-    miners: list[Miner] = await sync_to_async(
-        lambda: list(Miner.objects.filter(hotkey__in=hotkeys).select_related())
-    )()
+    miners: list[Miner] = list(Miner.objects.filter(hotkey__in=hotkeys).select_related())
     hotkey_to_coldkey: dict[str, str] = {}
     missing_hotkeys: list[str] = []
 
