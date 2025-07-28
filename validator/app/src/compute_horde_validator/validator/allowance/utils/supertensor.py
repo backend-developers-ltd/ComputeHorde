@@ -1,6 +1,7 @@
+import abc
 import asyncio
+import datetime
 import functools
-from functools import lru_cache
 
 import bittensor_wallet
 import turbobt
@@ -35,7 +36,28 @@ def archive_fallback(func):
     return wrapper
 
 
-class SuperTensor:
+
+class BaseSuperTensor(abc.ABC):
+    @abc.abstractmethod
+    async def list_neurons(self, block_number: int) -> list[turbobt.Neuron]: ...
+
+    @abc.abstractmethod
+    async def list_validators(self, block_number: int) -> list[turbobt.Neuron]: ...
+
+    @abc.abstractmethod
+    async def get_block_timestamp(self, block_number: int) -> datetime.datetime: ...
+
+    @abc.abstractmethod
+    async def get_shielded_neurons(self) -> list[turbobt.Neuron]: ...
+
+    @abc.abstractmethod
+    def get_current_block(self) -> int: ...
+
+    @abc.abstractmethod
+    def wallet(self) -> bittensor_wallet.Wallet: ...
+
+
+class SuperTensor(BaseSuperTensor):
     def __init__(
             self,
             network: str | None = None,
@@ -46,19 +68,25 @@ class SuperTensor:
     ):
         if network is None:
             from django.conf import settings
-            self.network = settings.BITTENSOR_NETWORK
+            network = settings.BITTENSOR_NETWORK
         if netuid is None:
             from django.conf import settings
-            self.netuid = settings.BITTENSOR_NETUID
+            netuid = settings.BITTENSOR_NETUID
         if archive_network is None:
             from django.conf import settings
             archive_network = settings.BITTENSOR_ARCHIVE_NETWORK
         if wallet is None:
             from django.conf import settings
-            self.wallet = settings.BITTENSOR_WALLET()
+            wallet = settings.BITTENSOR_WALLET()
         if shield_metagraph_options is None:
             from django.conf import settings
-            self.shield_metagraph_options = settings.SHIELD_METAGRAPH_OPTIONS()
+            shield_metagraph_options = settings.BITTENSOR_SHIELD_METAGRAPH_OPTIONS()
+
+        self.network = network
+        self.netuid = netuid
+        self._wallet = wallet
+        self._shield_metagraph_options = shield_metagraph_options
+
 
         self.bittensor = turbobt.Bittensor(self.network)
         self.subnet = self.bittensor.subnet(netuid)
@@ -91,15 +119,21 @@ class SuperTensor:
         async with ShieldedBittensor(
             self.network,
             ddos_shield_netuid=self.netuid,
-            ddos_shield_options=self.shield_metagraph_options,
-            wallet=self.wallet,
+            ddos_shield_options=self._shield_metagraph_options,
+            wallet=self.wallet(),
         ) as bittensor:
             return await bittensor.subnet(self.netuid).subnet.list_neurons()
+
+    def wallet(self) -> bittensor_wallet.Wallet:
+        return self._wallet
 
     def get_current_block(self) -> int:
         return get_current_block()
 
 
-@lru_cache(maxsize=1)
 def supertensor():
-    return SuperTensor()
+    if not supertensor.instance:
+        supertensor.instance = SuperTensor()
+    return supertensor.instance
+
+supertensor.instance = None

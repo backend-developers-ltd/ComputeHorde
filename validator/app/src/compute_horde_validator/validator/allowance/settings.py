@@ -8,3 +8,5 @@ BLOCK_EVICTION_THRESHOLD = int(BLOCK_LOOKBACK * 1.5)
 
 BLOCK_EXPIRY = 722
 # A job started at block N can be paid for block N-BLOCK_EXPIRY and newer ones
+
+MANIFEST_FETCHING_TIMEOUT = 30.0

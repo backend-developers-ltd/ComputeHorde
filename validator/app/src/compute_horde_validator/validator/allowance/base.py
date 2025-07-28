@@ -49,6 +49,23 @@ class NotEnoughAllowanceException(AllowanceException):
         self.highest_unspent_allowance = highest_unspent_allowance
         self.highest_unspent_allowance_ss58 = highest_unspent_allowance_ss58
 
+    def to_dict(self) -> dict:
+        """
+        Convert exception attributes to dictionary for easier testing.
+        
+        Returns:
+            Dictionary containing all exception attributes
+        """
+        return {
+            'highest_available_allowance': self.highest_available_allowance,
+            'highest_available_allowance_ss58': self.highest_available_allowance_ss58,
+            'highest_unspent_allowance': self.highest_unspent_allowance,
+            'highest_unspent_allowance_ss58': self.highest_unspent_allowance_ss58,
+        }
+
+    def __str__(self):
+        return f"NotEnoughAllowanceException(highest_available_allowance={self.highest_available_allowance}, highest_available_allowance_ss58={self.highest_available_allowance_ss58}, highest_unspent_allowance={self.highest_unspent_allowance}, highest_unspent_allowance_ss58={self.highest_unspent_allowance_ss58})"
+
 
 class AllowanceBase(ABC):
     """
