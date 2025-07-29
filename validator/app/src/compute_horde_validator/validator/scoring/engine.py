@@ -45,9 +45,7 @@ class DefaultScoringEngine(ScoringEngine):
         Returns:
             Dictionary mapping hotkey to final score
         """
-        logger.info(
-            f"Calculating scores for cycle {current_cycle_start}"
-        )
+        logger.info(f"Calculating scores for cycle {current_cycle_start}")
 
         current_cycle_range = get_cycle_containing_block(
             block=current_cycle_start, netuid=settings.BITTENSOR_NETUID
@@ -250,32 +248,47 @@ class DefaultScoringEngine(ScoringEngine):
 
         result = {}
         for coldkey in coldkeys:
-            # Find first miner for this coldkey to get the split distribution
-            miner_for_coldkey = None
-            for miner in miners:
-                if miner.coldkey == coldkey:
-                    miner_for_coldkey = miner
+            # Find all miners for this coldkey
+            miners_for_coldkey = [miner for miner in miners if miner.coldkey == coldkey]
+
+            if not miners_for_coldkey:
+                logger.warning(f"No miners found for coldkey {coldkey}")
+                continue
+
+            distributions = None
+            successful_hotkey = None
+
+            for miner in miners_for_coldkey:
+                if miner.hotkey in split_distributions:
+                    distributions_result = split_distributions[miner.hotkey]
+
+                    if isinstance(distributions_result, Exception) or not distributions_result:
+                        logger.debug(
+                            f"Failed to get split distribution for {coldkey} using hotkey {miner.hotkey}: {distributions_result}"
+                        )
+                        continue
+
+                    distributions = distributions_result
+                    successful_hotkey = miner.hotkey
+                    logger.info(
+                        f"Successfully got split distribution for {coldkey} using hotkey {successful_hotkey}"
+                    )
                     break
 
-            if miner_for_coldkey and miner_for_coldkey.hotkey in split_distributions:
-                distributions_result = split_distributions[miner_for_coldkey.hotkey]
-
-                if isinstance(distributions_result, Exception) or not distributions_result:
-                    logger.warning(
-                        f"Failed to get split distribution for {coldkey}: {distributions_result}"
-                    )
-                    continue
-
-                distributions = distributions_result
-
-                self._save_split(coldkey, cycle_start, validator_hotkey, distributions)
-
-                result[coldkey] = SplitInfo(
-                    coldkey=coldkey,
-                    cycle_start=cycle_start,
-                    validator_hotkey=validator_hotkey,
-                    distributions=distributions,
+            if distributions is None:
+                logger.warning(
+                    f"Failed to get split distribution for {coldkey} using any of its hotkeys: {[m.hotkey for m in miners_for_coldkey]}"
                 )
+                continue
+
+            self._save_split(coldkey, cycle_start, validator_hotkey, distributions)
+
+            result[coldkey] = SplitInfo(
+                coldkey=coldkey,
+                cycle_start=cycle_start,
+                validator_hotkey=validator_hotkey,
+                distributions=distributions,
+            )
 
         return result
 

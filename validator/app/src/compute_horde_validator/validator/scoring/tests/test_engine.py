@@ -1,6 +1,6 @@
 import asyncio
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from compute_horde.protocol_messages import (
@@ -579,3 +579,80 @@ class TestScoringEngine(TestCase):
 
             assert scores["hotkey1"] == pytest.approx(79.2, abs=0.01)
             assert scores["hotkey2"] == pytest.approx(19.8, abs=0.01)
+
+    @pytest.mark.django_db
+    def test_query_current_splits_multiple_hotkeys_for_coldkey(self):
+        """Test that multiple hotkeys are tried for the same coldkey when first fails."""
+
+        miner1 = MagicMock(spec=Miner)
+        miner1.coldkey = "coldkey1"
+        miner1.hotkey = "hotkey1"
+
+        miner2 = MagicMock(spec=Miner)
+        miner2.coldkey = "coldkey1"  # Same coldkey
+        miner2.hotkey = "hotkey2"
+
+        miner3 = MagicMock(spec=Miner)
+        miner3.coldkey = "coldkey2"
+        miner3.hotkey = "hotkey3"
+
+        mock_split_distributions = {
+            "hotkey1": Exception("Connection failed"),  # First hotkey fails
+            "hotkey2": {"hotkey_a": 0.6, "hotkey_b": 0.4},  # Second hotkey succeeds
+            "hotkey3": {"hotkey_c": 1.0},  # Different coldkey
+        }
+
+        with patch(
+            "compute_horde_validator.validator.scoring.engine.query_miner_split_distributions",
+            return_value=mock_split_distributions,
+        ):
+            with patch(
+                "compute_horde_validator.validator.models.Miner.objects.filter"
+            ) as mock_filter:
+                mock_filter.return_value.select_related.return_value = [miner1, miner2, miner3]
+
+                engine = DefaultScoringEngine()
+                result = engine._query_current_splits(
+                    coldkeys=["coldkey1", "coldkey2"],
+                    cycle_start=1000,
+                    validator_hotkey="validator1",
+                )
+
+                assert "coldkey1" in result
+                assert result["coldkey1"].distributions == {"hotkey_a": 0.6, "hotkey_b": 0.4}
+
+                assert "coldkey2" in result
+                assert result["coldkey2"].distributions == {"hotkey_c": 1.0}
+
+    @pytest.mark.django_db
+    def test_query_current_splits_all_hotkeys_fail(self):
+        """Test that when all hotkeys for a coldkey fail, it's skipped."""
+
+        miner1 = MagicMock(spec=Miner)
+        miner1.coldkey = "coldkey1"
+        miner1.hotkey = "hotkey1"
+
+        miner2 = MagicMock(spec=Miner)
+        miner2.coldkey = "coldkey1"
+        miner2.hotkey = "hotkey2"
+
+        mock_split_distributions = {
+            "hotkey1": Exception("Connection failed"),
+            "hotkey2": Exception("Connection failed"),
+        }
+
+        with patch(
+            "compute_horde_validator.validator.scoring.engine.query_miner_split_distributions",
+            return_value=mock_split_distributions,
+        ):
+            with patch(
+                "compute_horde_validator.validator.models.Miner.objects.filter"
+            ) as mock_filter:
+                mock_filter.return_value.select_related.return_value = [miner1, miner2]
+
+                engine = DefaultScoringEngine()
+                result = engine._query_current_splits(
+                    coldkeys=["coldkey1"], cycle_start=1000, validator_hotkey="validator1"
+                )
+
+                assert result == {}
