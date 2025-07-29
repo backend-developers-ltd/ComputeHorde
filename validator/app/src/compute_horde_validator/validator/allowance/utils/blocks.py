@@ -13,10 +13,9 @@ from compute_horde_validator.validator.locks import Lock, LockType
 
 from .manifests import get_manifests, get_manifest_drops
 from .supertensor import supertensor
-from .types import ss58_address
+from ..types import ss58_address, NotEnoughAllowanceException
 from ..models.internal import Block, BlockAllowance, Neuron as NeuronModel
 from ..settings import BLOCK_LOOKBACK, BLOCK_EXPIRY
-from ..base import NotEnoughAllowanceException
 from ...models import SystemEvent
 
 logger = get_task_logger(__name__)

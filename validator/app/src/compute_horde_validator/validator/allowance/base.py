@@ -2,69 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-import pydantic
-
 from compute_horde_core.executor_class import ExecutorClass
-from compute_horde_validator.validator.allowance.utils.types import ss58_address
-
-reservation_id = int
-block_id = int
-block_ids = list[int]
-
-
-class AllowanceException(Exception):
-    pass
-
-
-class NeuronSnapshotMissing(AllowanceException):
-    pass
-
-
-class ReservationNotFound(AllowanceException):
-    pass
-
-
-class CannotReserveAllowanceException(AllowanceException):
-    """Exception raised when there is not enough allowance from a particular miner."""
-
-
-class NotEnoughAllowanceException(AllowanceException):
-    """Exception raised when there is not enough allowance."""
-
-    def __init__(
-        self,
-        highest_available_allowance: float,
-        highest_available_allowance_ss58: ss58_address,
-        highest_unspent_allowance: float,
-        highest_unspent_allowance_ss58: ss58_address,
-    ):
-        """
-        :param highest_available_allowance: highest number of executor-seconds available
-        :param highest_available_allowance_ss58: hotkey of the miner with highest number of executor-seconds available
-        :param highest_unspent_allowance: highest number of executor-seconds unspent (free or reserved)
-        :param highest_unspent_allowance_ss58: hotkey of the miner with highest number of executor-seconds unspent
-        """
-        self.highest_available_allowance = highest_available_allowance
-        self.highest_available_allowance_ss58 = highest_available_allowance_ss58
-        self.highest_unspent_allowance = highest_unspent_allowance
-        self.highest_unspent_allowance_ss58 = highest_unspent_allowance_ss58
-
-    def to_dict(self) -> dict:
-        """
-        Convert exception attributes to dictionary for easier testing.
-        
-        Returns:
-            Dictionary containing all exception attributes
-        """
-        return {
-            'highest_available_allowance': self.highest_available_allowance,
-            'highest_available_allowance_ss58': self.highest_available_allowance_ss58,
-            'highest_unspent_allowance': self.highest_unspent_allowance,
-            'highest_unspent_allowance_ss58': self.highest_unspent_allowance_ss58,
-        }
-
-    def __str__(self):
-        return f"NotEnoughAllowanceException(highest_available_allowance={self.highest_available_allowance}, highest_available_allowance_ss58={self.highest_available_allowance_ss58}, highest_unspent_allowance={self.highest_unspent_allowance}, highest_unspent_allowance_ss58={self.highest_unspent_allowance_ss58})"
+from compute_horde_validator.validator.allowance.types import ss58_address, reservation_id, block_ids, Miner, Neuron
 
 
 class AllowanceBase(ABC):
@@ -130,7 +69,7 @@ class AllowanceBase(ABC):
         pass
 
     @abstractmethod
-    def undo_allowance_reservation(self, reservation_id: reservation_id) -> None:
+    def undo_allowance_reservation(self, reservation_id_: reservation_id) -> None:
         """
         Undo a previously made allowance reservation.
 
@@ -141,12 +80,12 @@ class AllowanceBase(ABC):
         pass
 
     @abstractmethod
-    def spend_allowance(self, reservation_id: reservation_id) -> None:
+    def spend_allowance(self, reservation_id_: reservation_id) -> None:
         """
         Spend allowance (make a reservation permanent).
 
          Args:
-             reservation_id: reservation_id
+             reservation_id_: reservation_id
 
          raises ReservationNotFound if the reservation is not found.
         """
@@ -170,19 +109,11 @@ class AllowanceBase(ABC):
         """
         pass
 
-    class Miner(pydantic.BaseModel):
-        address: str
-        hotkey_ss58: ss58_address
-
     @abstractmethod
     def miners(self) -> list[Miner]:
         """
         Return neurons that have their axon addresses set.
         """
-
-    class Neuron(pydantic.BaseModel):
-        hotkey_ss58: ss58_address
-        coldkey: ss58_address
 
     @abstractmethod
     def neurons(self, block: int) -> list[Neuron]:

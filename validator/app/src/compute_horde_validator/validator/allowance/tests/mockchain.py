@@ -51,9 +51,25 @@ def cmbm(block_number):
         return START_BLOCK
     return block_number
 
+@lru_cache
+def wallet():
+    wallet_ = bittensor_wallet.Wallet(name="test_mock_validator")
+    wallet_.regenerate_coldkey(
+        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
+        use_password=False,
+        overwrite=True,
+    )
+    wallet_.regenerate_hotkey(
+        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
+        use_password=False,
+        overwrite=True,
+    )
+    return wallet_
+
 
 VALIDATOR_HOTKEYS = {
-    **{i: f"regular_validator_{i}" for i in range(NUM_VALIDATORS - 2)},
+    **{i: f"regular_validator_{i}" for i in range(NUM_VALIDATORS - 2) if i != 2},
+    2: wallet().get_hotkey().ss58_address,
     # these validators will have a steadily increasing stake
     NUM_VALIDATORS - 2: f"stake_loosing_validator_{NUM_VALIDATORS - 2}",
     # this validator will occasionally get a stake lower than 1000
@@ -255,22 +271,6 @@ def list_neurons(block_number: int, with_shield: bool) -> list[turbobt.Neuron]:
         ],
         *list_validators(block_number, filter_=False)
     ]
-
-
-@lru_cache
-def wallet():
-    wallet_ = bittensor_wallet.Wallet(name="test_mock_validator")
-    wallet_.regenerate_coldkey(
-        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
-        use_password=False,
-        overwrite=True,
-    )
-    wallet_.regenerate_hotkey(
-        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
-        use_password=False,
-        overwrite=True,
-    )
-    return wallet_
 
 
 @contextmanager
