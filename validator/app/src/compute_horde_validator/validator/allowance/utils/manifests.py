@@ -10,9 +10,9 @@ from django.db.models import Q
 
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde_core.executor_class import ExecutorClass
-from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
-from compute_horde_validator.validator.allowance.utils.types import ss58_address
-from compute_horde_validator.validator.allowance.models.internal import AllowanceMinerManifest, MinerAddress, BlockAllowance
+from ..utils.supertensor import supertensor
+from ..types import ss58_address
+from ..models.internal import AllowanceMinerManifest, MinerAddress, BlockAllowance
 from compute_horde_validator.validator.locks import Lock, LockType
 from compute_horde_validator.validator.tasks import get_single_manifest
 from .. import settings
@@ -152,7 +152,7 @@ def sync_manifests():
                     success=(miner_hotkey, executor_class) in new_manifests,
                     executor_class=executor_class.value,
                     is_drop=is_drop,
-                    executor_count=min(new_manifests.get((miner_hotkey, executor_class), 0), max_executors_per_class[executor_class]),
+                    executor_count=min(new_manifests.get((miner_hotkey, executor_class), 0), max_executors_per_class.get(executor_class, float("inf"))),
                 ))
             if manifests_to_inject:
                 AllowanceMinerManifest.objects.bulk_create(manifests_to_inject)

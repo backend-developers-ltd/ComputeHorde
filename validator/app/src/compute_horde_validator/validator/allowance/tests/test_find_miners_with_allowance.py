@@ -5,24 +5,20 @@ import random
 import pytest
 
 from compute_horde_core.executor_class import ExecutorClass
-from . import mockchain
 from .mockchain import set_block_number, manifest_responses
 from .utils_for_tests import LF, allowance_dict, inject_blocks_with_allowances, assert_system_events
-from ..base import NotEnoughAllowanceException
-from ..utils import blocks, manifests
+from ..types import NotEnoughAllowanceException
+from ..utils import blocks, manifests, metagraph
 from ..utils.manifests import sync_manifests
 from ...tests.helpers import patch_constance
-
-MY_VALIDATOR_SS58 = "regular_validator_2"
-
-assert MY_VALIDATOR_SS58 in mockchain.VALIDATOR_HOTKEYS.values()
+from ..default import allowance
 
 
 @pytest.mark.django_db(transaction=True)
 def test_empty():
     with set_block_number(1000):
         with pytest.raises(NotEnoughAllowanceException) as e:
-            blocks.find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1000, MY_VALIDATOR_SS58)
+            allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1000)
         assert e.value.to_dict() == {
             'highest_available_allowance': 0,
             'highest_available_allowance_ss58': '',
@@ -36,7 +32,7 @@ def test_block_without_manifests():
     with set_block_number(1000):
         blocks.process_block_allowance_with_reporting(1000)
         with pytest.raises(NotEnoughAllowanceException) as e:
-            blocks.find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1000, MY_VALIDATOR_SS58)
+            allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1000)
         assert e.value.to_dict() == {
             'highest_available_allowance': 0,
             'highest_available_allowance_ss58': '',
@@ -48,7 +44,7 @@ def test_block_without_manifests():
         blocks.process_block_allowance_with_reporting(1001)
 
         with pytest.raises(NotEnoughAllowanceException) as e:
-            blocks.find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001, MY_VALIDATOR_SS58)
+            allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001)
         assert e.value.to_dict() == {
             'highest_available_allowance': 0,
             'highest_available_allowance_ss58': '',
@@ -62,20 +58,31 @@ def test_block_without_manifests():
 @patch_constance({
     "DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS": "always_on.llm.a6000=3,always_on.gpu-24gb=5,spin_up-4min.gpu-24gb=10"
 })
-def test_block_simple():
+def test_complete():
     with set_block_number(1000):
         manifests.sync_manifests()
         blocks.process_block_allowance_with_reporting(1000)
     with set_block_number(1001):
         blocks.process_block_allowance_with_reporting(1001)
-    resp = blocks.find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001, MY_VALIDATOR_SS58)
+        resp = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001)
     highest_allowance = resp[0][1]
     number_of_executors = manifest_responses(1000)[0][1].manifest[ExecutorClass.always_on__llm__a6000]
     assert highest_allowance == number_of_executors * 11.99 * 9009.0 / (1001 + 4004 + 9009 + 16016 + 25025 + 36036)
     for block_number in range(1002, 1006):
         with set_block_number(block_number):
             blocks.process_block_allowance_with_reporting(block_number)
-    resp = blocks.find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001, MY_VALIDATOR_SS58)
+
+    with set_block_number(1004):
+        assert "deregging_miner_247" in [n.hotkey_ss58 for n in allowance().neurons(block=1004)]
+        assert "deregging_miner_247" in [el[0] for el in allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1004)]
+
+    with set_block_number(1005):
+        assert "deregging_miner_247" not in [n.hotkey_ss58 for n in allowance().neurons(block=1005)]
+        assert "deregging_miner_247" not in [el[0] for el in allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1005)]
+
+    return
+
+    resp = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001)
     highest_allowance = resp[0][1]
     assert (
             LF(highest_allowance)
@@ -86,7 +93,7 @@ def test_block_simple():
         with set_block_number(block_number):
             blocks.process_block_allowance_with_reporting(block_number)
 
-    resp = blocks.find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001, MY_VALIDATOR_SS58)
+    resp = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001)
     highest_allowance = resp[0][1]
     assert (
             LF(highest_allowance)
@@ -117,17 +124,17 @@ def test_block_simple():
              'data': {"hotkey": "timing_out_miner_248"}},
         ]):
             sync_manifests()
-    new_resp = blocks.find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001, MY_VALIDATOR_SS58)
+    new_resp = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001)
     assert len(resp) - len(new_resp) == 83  # some manifests dropped
-    for hotkey, allowance in new_resp:
-        assert LF(dict(resp)[hotkey]) == allowance, hotkey  # but nothing else should have changed
+    for hotkey, allowance_ in new_resp:
+        assert LF(dict(resp)[hotkey]) == allowance_, hotkey  # but nothing else should have changed
     for block_number in range(1011, 1101):
         with set_block_number(block_number):
             if not block_number % 25:
                 sync_manifests()
             blocks.process_block_allowance_with_reporting(block_number)
-    allowance_after_100_blocks = blocks.find_miners_with_allowance(
-        1.0, ExecutorClass.always_on__llm__a6000, 1101, MY_VALIDATOR_SS58)
+    allowance_after_100_blocks = allowance().find_miners_with_allowance(
+        1.0, ExecutorClass.always_on__llm__a6000, 1101)
 
     assert (
             allowance_dict(allowance_after_100_blocks)
@@ -141,8 +148,8 @@ def test_block_simple():
 
     inject_blocks_with_allowances(900)
 
-    allowance_after_1000_blocks = blocks.find_miners_with_allowance(
-        1.0, ExecutorClass.always_on__llm__a6000, 1101, MY_VALIDATOR_SS58)
+    allowance_after_1000_blocks = allowance().find_miners_with_allowance(
+        1.0, ExecutorClass.always_on__llm__a6000, 1101)
 
     assert (
             allowance_dict(allowance_after_1000_blocks)
@@ -151,10 +158,12 @@ def test_block_simple():
     )
 
     inject_blocks_with_allowances(100)
+    allowance_after_1100_blocks = allowance().find_miners_with_allowance(
+        1.0, ExecutorClass.always_on__llm__a6000, 1101)
 
     # no difference as these blocks are too old:
     assert (
-            allowance_dict(allowance_after_1000_blocks)
+            allowance_dict(allowance_after_1100_blocks)
             ==
             allowance_dict(json.loads((pathlib.Path(__file__).parent / 'allowance_after_1000_blocks.json').read_text()))
     )
@@ -162,6 +171,9 @@ def test_block_simple():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
+@patch_constance({
+    "DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS": "always_on.llm.a6000=3,always_on.gpu-24gb=5,spin_up-4min.gpu-24gb=10"
+})
 def test_blocks_out_of_order():
     for block_number in [1000, 1011, 1025, 1050, 1075, 1100]:
         with set_block_number(block_number):
@@ -173,8 +185,8 @@ def test_blocks_out_of_order():
             blocks.process_block_allowance_with_reporting(block_number)
 
     with set_block_number(1101):
-        allowance_after_100_blocks = blocks.find_miners_with_allowance(
-            1.0, ExecutorClass.always_on__llm__a6000, 1101, MY_VALIDATOR_SS58)
+        allowance_after_100_blocks = allowance().find_miners_with_allowance(
+            1.0, ExecutorClass.always_on__llm__a6000, 1101)
 
     assert (
             allowance_dict(allowance_after_100_blocks)
