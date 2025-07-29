@@ -740,11 +740,9 @@ def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
     Returns:
         Tuple of (current_cycle_start, previous_cycle_start)
     """
-    # Use test-specific cycle calculation that matches the test setup
     cycle_number = (current_block - 723) // 722
     current_cycle_start = 722 * cycle_number
 
-    # Calculate previous cycle start
     previous_cycle_start = 722 * (cycle_number - 1) if cycle_number > 0 else 0
 
     logger.info(
@@ -758,7 +756,7 @@ def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
 
 def _score_cycles(current_block: int) -> dict[str, float]:
     """
-    Score cycles directly without relying on batches.
+    Score cycles.
 
     Args:
         current_block: Current block number
@@ -767,7 +765,6 @@ def _score_cycles(current_block: int) -> dict[str, float]:
         Dictionary mapping hotkey to score
     """
     try:
-        # Get current and previous cycle starts
         current_cycle_start, previous_cycle_start = _get_cycles_for_scoring(current_block)
 
         if current_cycle_start is None or previous_cycle_start is None:
@@ -810,7 +807,6 @@ def _mark_cycle_as_scored(current_cycle_start: int):
         current_cycle_start: Current cycle start block
     """
     try:
-        # Mark any batches for this cycle as scored
         batches_updated = SyntheticJobBatch.objects.filter(
             cycle__start=current_cycle_start,
             scored=False,

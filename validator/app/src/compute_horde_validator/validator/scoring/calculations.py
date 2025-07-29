@@ -163,7 +163,7 @@ def combine_scores(
     synthetic_scores_by_executor: dict[str, dict[str, float]],
 ) -> dict[str, dict[str, float]]:
     """
-    Combine organic and synthetic scores for each executor class separately.
+    Combine organic and synthetic scores for each executor class.
 
     Args:
         organic_scores_by_executor: Raw scores from organic jobs grouped by executor class
@@ -217,7 +217,6 @@ def get_coldkey_to_hotkey_mapping(miners: list[Miner]) -> dict[str, list[str]]:
 def get_hotkey_to_coldkey_mapping(hotkeys: list[str]) -> dict[str, str]:
     """
     Get hotkey to coldkey mapping from database.
-    Missing coldkeys will be logged and synced during next metagraph sync.
 
     Args:
         hotkeys: List of hotkeys to get coldkeys for

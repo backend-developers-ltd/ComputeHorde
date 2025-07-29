@@ -28,10 +28,6 @@ logger = logging.getLogger(__name__)
 
 
 class DefaultScoringEngine(ScoringEngine):
-    """
-    Default implementation of the scoring engine.
-    """
-
     def __init__(self):
         self.dancing_bonus = getattr(settings, "DYNAMIC_DANCING_BONUS", 0.1)
 
@@ -39,7 +35,7 @@ class DefaultScoringEngine(ScoringEngine):
         self, current_cycle_start: int, previous_cycle_start: int, validator_hotkey: str
     ) -> dict[str, float]:
         """
-        Calculate scores for two cycles and apply dancing.
+        Calculate scores for current cycle.
 
         Args:
             current_cycle_start: Start block of current cycle
@@ -50,7 +46,7 @@ class DefaultScoringEngine(ScoringEngine):
             Dictionary mapping hotkey to final score
         """
         logger.info(
-            f"Calculating scores for cycles {current_cycle_start} and {previous_cycle_start}"
+            f"Calculating scores for cycle {current_cycle_start}"
         )
 
         current_cycle_range = get_cycle_containing_block(
@@ -78,16 +74,17 @@ class DefaultScoringEngine(ScoringEngine):
         synthetic_scores = calculate_synthetic_scores(current_synthetic_jobs)
 
         combined_scores_by_executor = combine_scores(organic_scores, synthetic_scores)
-
-        logger.info(f"Base scores calculated: {len(combined_scores_by_executor)} executor classes")
+        logger.info(f"Base scores calculated for cycle {current_cycle_start}")
 
         executor_class_weights = get_executor_class_weights()
+        logger.info(f"Executor class weights calculated for cycle {current_cycle_start}")
+
         normalized_scores: dict[str, float] = {}
 
         for executor_class, executor_scores in combined_scores_by_executor.items():
             weight = executor_class_weights.get(executor_class, 1.0)
 
-            final_executor_scores = self._apply_decoupled_dancing(
+            final_executor_scores = self._apply_dancing(
                 executor_scores, current_cycle_start, previous_cycle_start, validator_hotkey
             )
 
@@ -101,10 +98,10 @@ class DefaultScoringEngine(ScoringEngine):
                 for hotkey, score in normalized_executor_scores.items():
                     normalized_scores[hotkey] = normalized_scores.get(hotkey, 0) + score
 
-        logger.info(f"Final scores calculated: {len(normalized_scores)} hotkeys")
+        logger.info(f"Final scores calculated for cycle {current_cycle_start}")
         return normalized_scores
 
-    def _apply_decoupled_dancing(
+    def _apply_dancing(
         self,
         scores: dict[str, float],
         current_cycle_start: int,
@@ -112,7 +109,7 @@ class DefaultScoringEngine(ScoringEngine):
         validator_hotkey: str,
     ) -> dict[str, float]:
         """
-        Apply decoupled dancing to scores.
+        Apply dancing to scores.
 
         Args:
             scores: Dictionary of hotkey -> score
@@ -200,7 +197,6 @@ class DefaultScoringEngine(ScoringEngine):
         """
         final_scores = {}
 
-        # Get coldkeys that need split processing
         coldkeys_for_splits = [
             coldkey for coldkey in coldkey_scores.keys() if coldkey not in original_scores
         ]
@@ -209,14 +205,11 @@ class DefaultScoringEngine(ScoringEngine):
             coldkeys_for_splits, current_cycle_start, validator_hotkey
         )
 
-        # Get previous splits
         previous_splits = self._get_split_distributions(
             coldkeys_for_splits, previous_cycle_start, validator_hotkey
         )
 
-        # Process each coldkey
         for coldkey, total_score in coldkey_scores.items():
-            # Handle individual hotkeys (no split processing needed)
             if coldkey in original_scores:
                 final_scores[coldkey] = total_score
                 continue
@@ -229,7 +222,6 @@ class DefaultScoringEngine(ScoringEngine):
                 previous_splits.get(coldkey),
             )
 
-            # Add distributed scores to final result
             for hotkey, score in distributed_scores.items():
                 final_scores[hotkey] = score
 
@@ -239,7 +231,7 @@ class DefaultScoringEngine(ScoringEngine):
         self, coldkeys: list[str], cycle_start: int, validator_hotkey: str
     ) -> dict[str, SplitInfo]:
         """
-        Query miners for current split distributions and save to database.
+        Query miners for current split distributions.
 
         Args:
             coldkeys: List of miner coldkeys
@@ -276,7 +268,6 @@ class DefaultScoringEngine(ScoringEngine):
 
                 distributions = distributions_result
 
-                # Save to database
                 self._save_split(coldkey, cycle_start, validator_hotkey, distributions)
 
                 result[coldkey] = SplitInfo(
@@ -351,7 +342,7 @@ class DefaultScoringEngine(ScoringEngine):
                 logger.info(
                     f"Split distribution changed for coldkey: {coldkey}, applying dancing bonus"
                 )
-                # Apply dancing bonus logic: give bonus to main hotkey, distribute rest equally
+                # Apply dancing bonus
                 distributed_scores = self._apply_dancing_split_distribution(
                     total_score, current_split.distributions
                 )
@@ -378,7 +369,7 @@ class DefaultScoringEngine(ScoringEngine):
         self, coldkeys: list[str], cycle_start: int, validator_hotkey: str
     ) -> dict[str, SplitInfo]:
         """
-        Get split distributions for multiple coldkeys from database in a single query.
+        Get split distributions for multiple coldkeys.
 
         Args:
             coldkeys: List of miner coldkeys

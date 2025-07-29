@@ -15,7 +15,7 @@ class ScoringEngine(ABC):
         self, current_cycle_start: int, previous_cycle_start: int, validator_hotkey: str
     ) -> dict[str, float]:
         """
-        Calculate scores for two cycles.
+        Calculate scores for current cycle.
 
         Args:
             current_cycle_start: Start block of current cycle
