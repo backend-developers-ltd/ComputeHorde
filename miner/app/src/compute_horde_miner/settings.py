@@ -5,6 +5,7 @@ Django settings for compute_horde_miner project.
 import inspect
 import ipaddress
 import logging
+import os
 import pathlib
 from datetime import timedelta
 from functools import wraps
@@ -407,16 +408,35 @@ EXECUTOR_MANAGER_CLASS_PATH = env.str(
     "EXECUTOR_MANAGER_CLASS_PATH",
     default="compute_horde_miner.miner.executor_manager.v1:DockerExecutorManager",
 )
-EXECUTOR_IMAGE = env.str(
-    "EXECUTOR_IMAGE", default="backenddevelopersltd/compute-horde-executor:v1-latest"
-)
+
+# ========= Docker and dev executor manager related settings =========
+
 DEFAULT_EXECUTOR_CLASS = (
     env.str("DEFAULT_EXECUTOR_CLASS", None) or executor_class.DEFAULT_EXECUTOR_CLASS
 )
-
-DEBUG_SKIP_PULLING_EXECUTOR_IMAGE = env.bool("DEBUG_SKIP_PULLING_EXECUTOR_IMAGE", default=False)
 ADDRESS_FOR_EXECUTORS = env.str("ADDRESS_FOR_EXECUTORS", default="")
 PORT_FOR_EXECUTORS = env.int("PORT_FOR_EXECUTORS")
+
+# ========= Docker executor manager only related settings =========
+
+EXECUTOR_IMAGE = env.str(
+    "EXECUTOR_IMAGE", default="backenddevelopersltd/compute-horde-executor:v1-latest"
+)
+DEBUG_SKIP_PULLING_EXECUTOR_IMAGE = env.bool("DEBUG_SKIP_PULLING_EXECUTOR_IMAGE", default=False)
+# Path pointing to the file containing custom job runner classes.
+CUSTOM_JOB_RUNNERS_PATH = ""
+if "CUSTOM_JOB_RUNNERS_PATH" in os.environ:
+    CUSTOM_JOB_RUNNERS_PATH = str(env.path("CUSTOM_JOB_RUNNERS_PATH"))
+
+# One of the classes present in the CUSTOM_JOB_RUNNERS_PATH python file.
+CUSTOM_JOB_RUNNER_CLASS_NAME = env.str("CUSTOM_JOB_RUNNER_CLASS_NAME", default="")
+
+if CUSTOM_JOB_RUNNER_CLASS_NAME and not CUSTOM_JOB_RUNNERS_PATH:
+    raise RuntimeError(
+        "CUSTOM_JOB_RUNNERS_PATH must be set if CUSTOM_JOB_RUNNER_CLASS_NAME is set."
+    )
+
+# ========= Docker and dev executor manager related settings end here =========
 
 LOCAL_RECEIPTS_ROOT = env.path("LOCAL_RECEIPTS_ROOT", default=root("..", "..", "receipts"))
 

@@ -6,7 +6,7 @@ from compute_horde.protocol_messages import V0InitialJobRequest, V0JobFailedRequ
 from compute_horde.utils import MachineSpecs, Timer
 from django.conf import settings
 
-from compute_horde_executor.executor.job_runner import JobRunner
+from compute_horde_executor.executor.job_runner import BaseJobRunner
 from compute_horde_executor.executor.miner_client import JobError, MinerClient
 from compute_horde_executor.executor.utils import get_machine_specs, temporary_process
 
@@ -26,7 +26,7 @@ class JobDriver:
     The distinction between JobDriver and JobRunner is not very clear.
     """
 
-    def __init__(self, runner: JobRunner, miner_client: MinerClient, startup_time_limit: int):
+    def __init__(self, runner: BaseJobRunner, miner_client: MinerClient, startup_time_limit: int):
         self.runner = runner
         self.miner_client = miner_client
         self.startup_time_limit = startup_time_limit
