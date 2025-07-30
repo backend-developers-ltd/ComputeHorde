@@ -32,7 +32,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.6.x"
-          enable-cache: true
+          enable-cache: false
 
       - name: Setup SSH key
         run: |
