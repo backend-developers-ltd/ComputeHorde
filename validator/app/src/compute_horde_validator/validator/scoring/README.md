@@ -15,7 +15,7 @@ from compute_horde_validator.validator.scoring import create_scoring_engine
 engine = create_scoring_engine()
 
 # Calculate scores for current and previous cycles
-scores = await engine.calculate_scores_for_cycles(
+scores = engine.calculate_scores_for_cycles(
     current_cycle_start=1000,
     previous_cycle_start=278,
     validator_hotkey="your_validator_hotkey"

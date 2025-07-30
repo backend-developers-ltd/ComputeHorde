@@ -7,6 +7,10 @@ from compute_horde.protocol_messages import (
     V0SplitDistributionRequest,
 )
 
+from compute_horde_miner.miner.miner_consumer.validator_interface import (
+    MinerValidatorConsumer,
+)
+
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
@@ -26,10 +30,6 @@ async def test_split_distribution_request_authenticated():
     with patch(
         "compute_horde_miner.miner.executor_manager.current.executor_manager", mock_executor_manager
     ):
-        from compute_horde_miner.miner.miner_consumer.validator_interface import (
-            MinerValidatorConsumer,
-        )
-
         real_consumer = MinerValidatorConsumer(MagicMock())
         real_consumer.validator_authenticated = True
         real_consumer.validator_key = "test_validator"
@@ -49,10 +49,6 @@ async def test_split_distribution_request_authenticated():
 async def test_split_distribution_request_unauthenticated():
     """Test handling V0SplitDistributionRequest when validator is not authenticated."""
     with patch("compute_horde_miner.miner.executor_manager.current.executor_manager", MagicMock()):
-        from compute_horde_miner.miner.miner_consumer.validator_interface import (
-            MinerValidatorConsumer,
-        )
-
         real_consumer = MinerValidatorConsumer(MagicMock())
         real_consumer.validator_authenticated = False
         real_consumer.validator_key = "test_validator"
@@ -79,10 +75,6 @@ async def test_split_distribution_request_none_response():
     with patch(
         "compute_horde_miner.miner.executor_manager.current.executor_manager", mock_executor_manager
     ):
-        from compute_horde_miner.miner.miner_consumer.validator_interface import (
-            MinerValidatorConsumer,
-        )
-
         real_consumer = MinerValidatorConsumer(MagicMock())
         real_consumer.validator_authenticated = True
         real_consumer.validator_key = "test_validator"
@@ -107,10 +99,6 @@ async def test_split_distribution_request_empty_response():
     with patch(
         "compute_horde_miner.miner.executor_manager.current.executor_manager", mock_executor_manager
     ):
-        from compute_horde_miner.miner.miner_consumer.validator_interface import (
-            MinerValidatorConsumer,
-        )
-
         real_consumer = MinerValidatorConsumer(MagicMock())
         real_consumer.validator_authenticated = True
         real_consumer.validator_key = "test_validator"
