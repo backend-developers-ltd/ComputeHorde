@@ -8,7 +8,7 @@ from compute_horde_core.executor_class import ExecutorClass
 from .mockchain import set_block_number, manifest_responses
 from .utils_for_tests import LF, allowance_dict, inject_blocks_with_allowances, assert_system_events
 from ..types import NotEnoughAllowanceException
-from ..utils import blocks, manifests, metagraph
+from ..utils import blocks, manifests
 from ..utils.manifests import sync_manifests
 from ...tests.helpers import patch_constance
 from ..default import allowance
@@ -76,12 +76,6 @@ def test_complete():
         assert "deregging_miner_247" in [n.hotkey_ss58 for n in allowance().neurons(block=1004)]
         assert "deregging_miner_247" in [el[0] for el in allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1004)]
 
-    with set_block_number(1005):
-        assert "deregging_miner_247" not in [n.hotkey_ss58 for n in allowance().neurons(block=1005)]
-        assert "deregging_miner_247" not in [el[0] for el in allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1005)]
-
-    return
-
     resp = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001)
     highest_allowance = resp[0][1]
     assert (
@@ -92,6 +86,10 @@ def test_complete():
     for block_number in range(1006, 1011):
         with set_block_number(block_number):
             blocks.process_block_allowance_with_reporting(block_number)
+
+    with set_block_number(1010):
+        assert "deregging_miner_247" not in [n.hotkey_ss58 for n in allowance().neurons(block=1010)]
+        assert "deregging_miner_247" not in [el[0] for el in allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1010)]
 
     resp = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001)
     highest_allowance = resp[0][1]
@@ -116,6 +114,14 @@ def test_complete():
                        1005.004 + 4023.2191999999995 + 9059.4504 + 16118.5024 + 25205.180000000004 + 36324.288)  # stake loosing validator fell out
            )
    )
+    with pytest.raises(NotEnoughAllowanceException) as e:
+        allowance().find_miners_with_allowance(1000000000.0, ExecutorClass.always_on__llm__a6000, 1001)
+    assert e.value.to_dict() == {
+        'highest_available_allowance': LF(highest_allowance),
+        'highest_available_allowance_ss58': 'stable_miner_012',
+        'highest_unspent_allowance': LF(highest_allowance),
+        'highest_unspent_allowance_ss58': 'stable_miner_012',
+    }
     with set_block_number(1011):
         with assert_system_events([
             {'type': 'COMPUTE_TIME_ALLOWANCE', 'subtype': "MANIFEST_TIMEOUT",
@@ -125,7 +131,7 @@ def test_complete():
         ]):
             sync_manifests()
     new_resp = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001)
-    assert len(resp) - len(new_resp) == 83  # some manifests dropped
+    assert len(resp) - len(new_resp) == 82  # some manifests dropped
     for hotkey, allowance_ in new_resp:
         assert LF(dict(resp)[hotkey]) == allowance_, hotkey  # but nothing else should have changed
     for block_number in range(1011, 1101):
@@ -143,7 +149,7 @@ def test_complete():
     )
 
     # Up unitl now nothing was relying on internals - only interfaces of other parts of the system were mocked - like
-    # miner and subtensor reponses. it does, however take too long to generate even more blocks so now we're diving
+    # miner and subtensor responses. it does, however take too long to generate even more blocks so now we're diving
     # into internals and messing with the DB to test a case when there's a lot of data
 
     inject_blocks_with_allowances(900)
