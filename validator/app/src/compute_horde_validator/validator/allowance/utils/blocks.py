@@ -109,6 +109,9 @@ def process_block_allowance(block_number: int):
             creation_timestamp=supertensor().get_block_timestamp(block_number),
         )
 
+        neurons = supertensor().list_neurons(block_number)
+        save_neurons(neurons, block_number)
+
         finalized_blocks = []
 
         # Check if next block exists (would finalize current block)
@@ -135,7 +138,6 @@ def process_block_allowance(block_number: int):
         for finalized_block in finalized_blocks:
 
             neurons = supertensor().list_neurons(finalized_block.block_number)
-            save_neurons(neurons, finalized_block.block_number)
 
             validators = supertensor().list_validators(finalized_block.block_number)
 
@@ -270,36 +272,19 @@ def find_miners_with_allowance(
         NotEnoughAllowanceException is raised. The returned miners are present in the subnet's metagraph snapshot
         kept by this module.
     """
-    from django.db.models import Q, Sum, Case, When, Min, F, Value, FloatField, Max, Subquery, OuterRef
-    from collections import defaultdict
+    from django.db.models import Q, Sum, Case, When, Min, F, Value, FloatField, Max
 
-    # Calculate the earliest block that can be used for this job
     earliest_usable_block = job_start_block - BLOCK_EXPIRY
 
-    # Create a single query with subselect to find miners with the latest block value
-    # This eliminates all separate database queries by using a subquery that finds
-    # miners whose block equals the maximum block value in the Neuron table
-    
-    # Subquery to find miners with the latest block value
-    # Use a subquery to get miners whose block equals the maximum block value
-    valid_miners_subquery = Subquery(
-        NeuronModel.objects.filter(
-            block=Subquery(
-                NeuronModel.objects.values().annotate(
-                    max_block=Max('block')
-                ).values('max_block')[:1]
-            )
-        ).values_list('hotkey_ss58address', flat=True)
-    )
-
-    # Use single SQL query with subselect to calculate all values per miner
-    # Only consider miners that are present in Neuron table with latest block
     miner_aggregates = BlockAllowance.objects.filter(
         validator_ss58=validator_ss58,
         executor_class=executor_class,
         block__block_number__gte=earliest_usable_block,
         invalidated_at_block__isnull=True,  # Only non-invalidated allowances
-        miner_ss58__in=valid_miners_subquery,  # Use subquery to find valid miners
+        miner_ss58__in=NeuronModel.objects.filter(
+            block=NeuronModel.objects.aggregate(Max('block'))['block__max']
+        ).values_list('hotkey_ss58address', flat=True)
+
     ).values('miner_ss58').annotate(
         # Total allowance for non-invalidated allowances
         total_allowance=Sum('allowance'),

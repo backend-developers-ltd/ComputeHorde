@@ -46,6 +46,8 @@ None
 6. return manifests
 7. return the metagraph (include ddos-shield-mangled addresses)
 
+Access them using the singleton `allowance.allowance()`.
+
 ## Dependencies
 
 1. core (system events and stuff)
