@@ -75,13 +75,13 @@ from compute_horde_validator.validator.dynamic_config import (
 )
 from compute_horde_validator.validator.models import (
     Miner,
+    MinerManifest,
     PromptSample,
     PromptSeries,
     SyntheticJob,
     SyntheticJobBatch,
     SystemEvent,
 )
-from compute_horde_validator.validator.scoring import get_executor_counts
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
@@ -1553,6 +1553,20 @@ async def _adjust_miner_max_executors_per_class(ctx: BatchContext) -> None:
                     func="_adjust_miner_max_executors_per_class",
                 )
                 ctx.executors[hotkey][executor_class] = allowed_count
+
+
+def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, dict[ExecutorClass, int]]:
+    """In a given batch, get the number of online executors per miner per executor class"""
+    if not batch:
+        return {}
+
+    result: dict[str, dict[ExecutorClass, int]] = defaultdict(lambda: defaultdict(int))
+
+    for manifest in MinerManifest.objects.select_related("miner").filter(batch_id=batch.id):
+        executor_class = ExecutorClass(manifest.executor_class)
+        result[manifest.miner.hotkey][executor_class] += manifest.online_executor_count
+
+    return result
 
 
 @sync_to_async

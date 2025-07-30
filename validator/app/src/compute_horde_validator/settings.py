@@ -428,6 +428,11 @@ CONSTANCE_CONFIG = {
         "In both cases allowance will still be deducted.",
         bool,
     ),
+    "DYNAMIC_DANCING_BONUS": (
+        0.1,
+        "Bonus multiplier for the split distribution in dancing (10% = 0.1)",
+        float,
+    ),
 }
 
 # Content Security Policy

@@ -82,7 +82,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 from . import eviction
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
-from .scoring import score_batches
+from .scoring import create_scoring_engine
 
 if False:
     import torch
@@ -730,6 +730,97 @@ def _get_subtensor_for_setting_scores(network):
         return bittensor.subtensor(network=network)
 
 
+def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
+    """
+    Determine current and previous cycle start blocks for scoring.
+
+    Args:
+        current_block: Current block number
+
+    Returns:
+        Tuple of (current_cycle_start, previous_cycle_start)
+    """
+    cycle_number = (current_block - 723) // 722
+    current_cycle_start = 722 * cycle_number
+
+    previous_cycle_start = 722 * (cycle_number - 1) if cycle_number > 0 else 0
+
+    logger.info(
+        f"Using test cycle calculation: current_block={current_block}, "
+        f"cycle_number={cycle_number}, current_cycle_start={current_cycle_start}, "
+        f"previous_cycle_start={previous_cycle_start}"
+    )
+
+    return current_cycle_start, previous_cycle_start
+
+
+def _score_cycles(current_block: int) -> dict[str, float]:
+    """
+    Score cycles.
+
+    Args:
+        current_block: Current block number
+
+    Returns:
+        Dictionary mapping hotkey to score
+    """
+    try:
+        current_cycle_start, previous_cycle_start = _get_cycles_for_scoring(current_block)
+
+        if current_cycle_start is None or previous_cycle_start is None:
+            logger.error("Could not determine cycles for scoring")
+            return {}
+
+        if previous_cycle_start < 0:
+            logger.warning("Previous cycle start is negative, using 0")
+            previous_cycle_start = 0
+
+        validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+
+        engine = create_scoring_engine()
+
+        logger.info(
+            f"Calculating scores for cycles: current={current_cycle_start}, previous={previous_cycle_start}"
+        )
+
+        scores = engine.calculate_scores_for_cycles(
+            current_cycle_start=current_cycle_start,
+            previous_cycle_start=previous_cycle_start,
+            validator_hotkey=validator_hotkey,
+        )
+
+        if scores:
+            _mark_cycle_as_scored(current_cycle_start)
+
+        return scores
+
+    except Exception as e:
+        logger.error(f"Failed to score cycles directly: {e}")
+        return {}
+
+
+def _mark_cycle_as_scored(current_cycle_start: int):
+    """
+    Mark the current cycle as scored by updating any related batches.
+
+    Args:
+        current_cycle_start: Current cycle start block
+    """
+    try:
+        batches_updated = SyntheticJobBatch.objects.filter(
+            cycle__start=current_cycle_start,
+            scored=False,
+        ).update(scored=True)
+
+        if batches_updated > 0:
+            logger.info(
+                f"Marked {batches_updated} batches as scored for cycle {current_cycle_start}"
+            )
+
+    except Exception as e:
+        logger.warning(f"Failed to mark cycle {current_cycle_start} as scored: {e}")
+
+
 def normalize_batch_scores(
     hotkey_scores: dict[str, float],
     neurons: list[turbobt.Neuron],
@@ -916,7 +1007,11 @@ def set_scores(bittensor: turbobt.Bittensor):
                 ", ".join(str(batch.id) for batch in batches),
             )
 
-            hotkey_scores = score_batches(batches)
+            hotkey_scores = _score_cycles(current_block.number)
+
+            if not hotkey_scores:
+                logger.warning("No scores calculated, skipping weight setting")
+                return
 
             uids, weights = normalize_batch_scores(
                 hotkey_scores,
@@ -1255,6 +1350,7 @@ def save_metagraph_snapshot(
             "stake": subnet_state["total_stake"],
             "uids": [neuron.uid for neuron in neurons],
             "hotkeys": [neuron.hotkey for neuron in neurons],
+            "coldkeys": [neuron.coldkey for neuron in neurons],
             "serving_hotkeys": [
                 neuron.hotkey
                 for neuron in neurons
@@ -1309,7 +1405,13 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
     existing_hotkeys = {m.hotkey for m in miners}
     new_hotkeys = set(current_hotkeys) - existing_hotkeys
     if len(new_hotkeys) > 0:
-        new_miners = Miner.objects.bulk_create([Miner(hotkey=hotkey) for hotkey in new_hotkeys])
+        new_miners = []
+        hotkey_to_neuron = {neuron.hotkey: neuron for neuron in neurons}
+        for hotkey in new_hotkeys:
+            neuron = hotkey_to_neuron.get(hotkey)
+            coldkey = neuron.coldkey if neuron else None
+            new_miners.append(Miner(hotkey=hotkey, coldkey=coldkey))
+        new_miners = Miner.objects.bulk_create(new_miners)
         miners.extend(new_miners)
         logger.info(f"Created new neurons: {new_hotkeys}")
 
@@ -1335,6 +1437,7 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
                 )
                 or miner.port != neuron.axon_info.port
                 or miner.ip_version != neuron.axon_info.ip.version
+                or miner.coldkey != neuron.coldkey
             )
         ):
             miner.uid = neuron.uid
@@ -1345,9 +1448,14 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
             )
             miner.port = neuron.axon_info.port
             miner.ip_version = neuron.axon_info.ip.version
+            miner.coldkey = neuron.coldkey
             miners_to_update.append(miner)
-    Miner.objects.bulk_update(miners_to_update, fields=["uid", "address", "port", "ip_version"])
-    logger.info(f"Updated axon infos for {len(miners_to_update)} miners")
+
+    if miners_to_update:
+        Miner.objects.bulk_update(
+            miners_to_update, fields=["uid", "address", "port", "ip_version", "coldkey"]
+        )
+        logger.info(f"Updated axon infos and null coldkeys for {len(miners_to_update)} miners")
 
     data = {
         "block": block.number,
