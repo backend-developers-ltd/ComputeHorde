@@ -335,9 +335,9 @@ def test__run_synthetic_jobs__different_timings(
     ) as _run_synthetic_jobs:
         run_synthetic_jobs(wait_in_advance_blocks=3)
 
-    assert len([r for r in caplog.records if "Waiting for block " in r.message]) == expected_logs, (
-        str([r.message for r in caplog.records])
-    )
+    assert (
+        len([r for r in caplog.records if "Waiting for block " in r.error_detail]) == expected_logs
+    ), str([r.error_detail for r in caplog.records])
 
     if system_event:
         check_system_events(*system_event)

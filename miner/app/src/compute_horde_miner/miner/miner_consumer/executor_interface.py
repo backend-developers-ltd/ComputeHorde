@@ -1,12 +1,15 @@
 import logging
 from functools import cached_property
+from typing import assert_never
 
+from compute_horde import protocol_consts
 from compute_horde.protocol_messages import (
     ExecutorToMinerMessage,
     GenericError,
     V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
+    V0HordeFailedRequest,
     V0InitialJobRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
@@ -97,41 +100,98 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
             self.job.status = AcceptedJob.Status.WAITING_FOR_PAYLOAD
             await self.job.asave()
             await self.send_executor_ready(self.executor_token, msg)
-        if isinstance(msg, V0ExecutorFailedRequest):
-            self.job.status = AcceptedJob.Status.FAILED
-            await self.job.asave()
-            await self.send_executor_failed_to_prepare(self.executor_token, msg)
+            return
+
         if isinstance(msg, V0StreamingJobReadyRequest):
             # Job status is RUNNING
             msg.ip = self.get_executor_ip()
             await self.send_streaming_job_ready(self.executor_token, msg)
+            return
+
         if isinstance(msg, V0VolumesReadyRequest):
             await self.send_volumes_ready(self.executor_token, msg)
+            return
+
         if isinstance(msg, V0ExecutionDoneRequest):
             await self.send_execution_done(self.executor_token, msg)
-        if isinstance(msg, V0StreamingJobNotReadyRequest):
-            self.job.status = AcceptedJob.Status.FAILED
-            await self.job.asave()
-            await self.send_streaming_job_failed_to_prepare(self.executor_token, msg)
+            return
+
         if isinstance(msg, V0JobFinishedRequest):
             self.job.status = AcceptedJob.Status.FINISHED
             self.job.stderr = msg.docker_process_stderr
             self.job.stdout = msg.docker_process_stdout
             self.job.artifacts = msg.artifacts or {}
-
             await self.job.asave()
             await self.send_executor_finished(self.executor_token, msg)
+            return
+
         if isinstance(msg, V0MachineSpecsRequest):
             await self.send_executor_specs(self.executor_token, msg)
+            return
+
         if isinstance(msg, V0JobFailedRequest):
             self.job.status = AcceptedJob.Status.FAILED
-            self.job.stderr = msg.docker_process_stderr
-            self.job.stdout = msg.docker_process_stdout
-            self.job.error_type = msg.error_type
-            self.job.error_detail = msg.error_detail
+            self.job.stderr = msg.docker_process_stderr or ""
+            self.job.stdout = msg.docker_process_stdout or ""
+            self.job.error_type = msg.reason
+            self.job.error_detail = msg.message
+            await self.job.asave()
+            await self.send_job_failed(self.executor_token, msg)
+            return
 
+        if isinstance(msg, V0HordeFailedRequest):
+            self.job.status = AcceptedJob.Status.FAILED
+            self.job.error_type = msg.reason
+            self.job.error_detail = msg.message
             await self.job.asave()
             await self.send_executor_failed(self.executor_token, msg)
+            return
+
+        if isinstance(msg, V0StreamingJobNotReadyRequest):
+            # TODO(post error propagation): Remove this handler
+            self.job.status = AcceptedJob.Status.FAILED
+            await self.job.asave()
+            await self.send_job_failed(
+                self.executor_token,
+                V0JobFailedRequest(
+                    job_uuid=msg.job_uuid,
+                    stage=protocol_consts.JobStage.STREAMING_STARTUP,
+                    reason=protocol_consts.JobFailureReason.UNKNOWN,
+                    message="Legacy streaming failure (V0StreamingJobNotReadyRequest)",
+                ),
+            )
+            return
+
+        if isinstance(msg, V0ExecutorFailedRequest):
+            # TODO(post error propagation): Remove this handler
+            self.job.status = AcceptedJob.Status.FAILED
+            await self.job.asave()
+            await self.send_executor_failed(
+                self.executor_token,
+                V0HordeFailedRequest(
+                    job_uuid=msg.job_uuid,
+                    stage=protocol_consts.JobStage.UNKNOWN,
+                    reported_by=protocol_consts.JobParticipantType.EXECUTOR,
+                    reason=protocol_consts.HordeFailureReason.UNKNOWN,
+                    message="Legacy executor failure (V0ExecutorFailedRequest)",
+                ),
+            )
+            return
+
+        if isinstance(msg, GenericError):
+            await self.send_executor_failed(
+                self.executor_token,
+                V0HordeFailedRequest(
+                    job_uuid=str(self.job.job_uuid),
+                    stage=protocol_consts.JobStage.UNKNOWN,
+                    reported_by=protocol_consts.JobParticipantType.EXECUTOR,
+                    reason=protocol_consts.HordeFailureReason.GENERIC_EXECUTOR_FAILED,
+                    message=msg.details or "No error details provided",
+                ),
+            )
+            return
+
+        assert_never(msg)
 
     async def _miner_job_request(self, msg: V0JobRequest) -> None:
         await self.send(msg.model_dump_json())

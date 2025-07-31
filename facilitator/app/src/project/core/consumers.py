@@ -6,6 +6,7 @@ from typing import Annotated, ClassVar, Union
 
 import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
+from compute_horde.fv_protocol import fv_protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import Error, Response
 from compute_horde.fv_protocol.validator_requests import (
     JobStatusUpdate,
@@ -179,7 +180,7 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
         """Handle job status update message sent from validator to this app"""
 
         with bound_contextvars(message=message):
-            log.debug("handling new job response")
+            log.debug("handling job status update")
 
             try:
                 job = await Job.objects.aget(uuid=message.uuid)
@@ -193,14 +194,17 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                 return
 
             try:
-                status = JobStatus.Status[message.status.upper()]
+                # mode="json" serializes enums down to their values
+                # exclude="none" because most status updates will have most payloads empty - let's not store tons of Nones
+                metadata = message.metadata.model_dump(exclude_none=True, mode="json") if message.metadata else {}
                 await JobStatus.objects.acreate(
                     job=job,
-                    status=status,
-                    metadata=message.metadata.dict(),
+                    status=message.status.value,
+                    stage=message.stage.value,
+                    metadata=metadata,
                 )
                 if (
-                    status == JobStatus.Status.COMPLETED
+                    message.status.is_successful()
                     and (miner_response := message.metadata.miner_response) is not None
                 ):
                     if (artifacts := miner_response.artifacts) is not None:
@@ -208,13 +212,15 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                     if (upload_results := miner_response.upload_results) is not None:
                         job.upload_results = upload_results
                     await job.asave()
-                elif status == JobStatus.Status.STREAMING_READY:
-                    if (streaming_details := message.metadata.streaming_details) is not None:
-                        log.warning(f"streaming_details: {streaming_details}")
-                        job.streaming_server_cert = streaming_details.streaming_server_cert
-                        job.streaming_server_address = streaming_details.streaming_server_address
-                        job.streaming_server_port = streaming_details.streaming_server_port
-                        await job.asave()
+                elif (
+                        message.status == fv_protocol_consts.FaciValiJobStatus.STREAMING_READY
+                        and (streaming_details := message.metadata.streaming_details) is not None
+                ):
+                    log.debug(f"received streaming details: {streaming_details}")
+                    job.streaming_server_cert = streaming_details.streaming_server_cert
+                    job.streaming_server_address = streaming_details.streaming_server_address
+                    job.streaming_server_port = streaming_details.streaming_server_port
+                    await job.asave()
 
             except IntegrityError as exc:
                 log.debug("job status update failed", exc=exc)

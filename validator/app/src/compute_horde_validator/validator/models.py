@@ -344,6 +344,7 @@ class JobBase(models.Model):
         abstract = True
 
     class Status(models.TextChoices):
+        # TODO(error propagation): support for horde failed and rejected errors / use some other status enum
         PENDING = "PENDING"
         COMPLETED = "COMPLETED"
         FAILED = "FAILED"

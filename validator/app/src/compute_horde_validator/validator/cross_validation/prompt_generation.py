@@ -3,11 +3,12 @@ import uuid
 from collections.abc import Callable, Iterable
 
 import bittensor_wallet
+from compute_horde import protocol_consts
 from compute_horde.miner_client.organic import (
     OrganicJobError,
     execute_organic_job_on_miner,
 )
-from compute_horde.protocol_messages import V0DeclineJobRequest
+from compute_horde.protocol_messages import V0JobRejectedRequest
 from django.conf import settings
 from django.utils.timezone import now
 
@@ -76,8 +77,8 @@ async def generate_prompts(
     except Exception as e:
         if (
             isinstance(e, OrganicJobError)
-            and isinstance(e.received, V0DeclineJobRequest)
-            and e.received.reason == V0DeclineJobRequest.Reason.BUSY
+            and isinstance(e.received, V0JobRejectedRequest)
+            and e.received.reason == protocol_consts.JobRejectionReason.BUSY
         ):
             logger.info("Failed to run generate_prompts: trusted miner is busy")
             return

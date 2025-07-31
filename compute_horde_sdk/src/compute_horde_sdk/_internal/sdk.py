@@ -16,6 +16,7 @@ import pydantic
 import tenacity
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509 import Certificate
+from pydantic import JsonValue
 
 from compute_horde_core.certificate import generate_certificate, serialize_certificate
 from compute_horde_core.executor_class import ExecutorClass
@@ -31,6 +32,7 @@ from .exceptions import ComputeHordeError, ComputeHordeJobTimeoutError, ComputeH
 from .models import (
     ComputeHordeJobResult,
     ComputeHordeJobStatus,
+    ComputeHordeJobStatusEntry,
     FacilitatorJobResponse,
     FacilitatorJobsResponse,
     InputVolume,
@@ -66,6 +68,12 @@ JobAttemptCallbackType: TypeAlias = (
     Callable[["ComputeHordeJob"], None]
     | Callable[["ComputeHordeJob"], Awaitable[None]]
     | Callable[["ComputeHordeJob"], Coroutine[Any, Any, None]]
+)
+
+
+JobStatusCallbackType: TypeAlias = (
+    Callable[["ComputeHordeJob", ComputeHordeJobStatusEntry], Awaitable[None]]
+    | Callable[["ComputeHordeJob", ComputeHordeJobStatusEntry], None]
 )
 
 
@@ -193,6 +201,7 @@ class ComputeHordeJob:
         streaming_server_cert: str | None = None,
         streaming_server_address: str | None = None,
         streaming_server_port: int | None = None,
+        status_history: list[ComputeHordeJobStatusEntry] | None = None,
     ):
         self._client = client
         self.uuid = uuid
@@ -203,23 +212,78 @@ class ComputeHordeJob:
         self.streaming_server_cert = streaming_server_cert
         self.streaming_server_address = streaming_server_address
         self.streaming_server_port = streaming_server_port
+        self.status_history = status_history or []
 
-    async def wait(self, timeout: float | None = None) -> None:
+    @property
+    def current_stage(self) -> str | None:
+        """
+        Return the latest known stage of the job.
+        Use `refresh_from_facilitator` to pull the latest info.
+        """
+        if not self.status_history:
+            return None
+        return self.status_history[-1].stage
+
+    @property
+    def current_status(self) -> ComputeHordeJobStatus:
+        """
+        Return the latest known status of the job.
+        Use `refresh_from_facilitator` to pull the latest info.
+        """
+        if not self.status_history:
+            return self.status
+        return self.status_history[-1].status
+
+    @property
+    def error(self) -> dict[str, JsonValue] | None:
+        """
+        If the job finished with some error, returns the error details.
+        """
+        # TODO(error propagation): structs for the error types, return union type
+        if not self.status_history:
+            return None
+        last_status = self.status_history[-1]
+        metadata = last_status.metadata
+        if not metadata:
+            return None
+        return metadata.horde_failure_details or metadata.job_failure_details or metadata.job_rejection_details
+
+    async def wait(self, timeout: float | None = None, status_callback: JobStatusCallbackType | None = None) -> None:
         """
         Wait for this job to complete or fail.
 
         :param timeout: Maximum number of seconds to wait for.
+        :param status_callback: Optional callback function that will be called for each newly received status.
+            The function will be passed the job and the latest status update whenever the status changes.
+            It can be a regular or an async function.
         :raises ComputeHordeJobTimeoutError: If the job does not complete within ``timeout`` seconds.
         """
         start_time = time.monotonic()
 
+        async def _maybe_execute_callback(entries: list[ComputeHordeJobStatusEntry]) -> None:
+            if not status_callback:
+                return
+            for entry in entries:
+                maybe_coro = status_callback(self, entry)
+                if asyncio.iscoroutine(maybe_coro):
+                    await maybe_coro
+
+        if self.status_history:
+            # Handle the already known statuses if any
+            await _maybe_execute_callback(self.status_history)
+
         while self.status.is_in_progress():
+            await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
             if timeout is not None and time.monotonic() - start_time > timeout:
                 raise ComputeHordeJobTimeoutError(
                     f"Job {self.uuid} did not complete within {timeout} seconds, last status: {self.status}"
                 )
-            await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
+            prev_history_len = len(self.status_history)
             await self.refresh_from_facilitator()
+
+            # Call the callback for each new status
+            if self.status_history:
+                await _maybe_execute_callback(self.status_history[prev_history_len:])
 
     async def wait_for_streaming(self, timeout: float | None = None) -> None:
         """
@@ -247,6 +311,7 @@ class ComputeHordeJob:
         self.streaming_server_cert = new_job.streaming_server_cert
         self.streaming_server_address = new_job.streaming_server_address
         self.streaming_server_port = new_job.streaming_server_port
+        self.status_history = new_job.status_history
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__qualname__}: {self.uuid!r}>"
@@ -260,7 +325,7 @@ class ComputeHordeJob:
         streaming_private_key: RSAPrivateKey | None = None,
     ) -> Self:
         result = None
-        if not response.status.is_in_progress():
+        if not response.latest_status.is_in_progress():
             # TODO: Handle base64 decode errors
             result = ComputeHordeJobResult(
                 stdout=response.stdout,
@@ -275,8 +340,9 @@ class ComputeHordeJob:
         return cls(
             client,
             uuid=response.uuid,
-            status=response.status,
+            status=response.latest_status,
             result=result,
+            status_history=response.status_history,
             streaming_public_cert=streaming_public_cert,
             streaming_private_key=streaming_private_key,
             streaming_server_cert=response.streaming_server_cert,

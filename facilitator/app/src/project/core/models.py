@@ -5,12 +5,14 @@ from uuid import uuid4
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from compute_horde import protocol_consts
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde.fv_protocol import fv_protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import (
     V0JobCheated,
     V2JobRequest,
 )
-from compute_horde.fv_protocol.validator_requests import JobStatusMetadata
+from compute_horde.fv_protocol.validator_requests import JobStatusUpdateMetadata
 from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
@@ -195,7 +197,11 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             if is_new:
                 job_request = self.as_job_request().model_dump()
                 self.send_to_validator(job_request)
-                JobStatus.objects.create(job=self, status=JobStatus.Status.SENT)
+                JobStatus.objects.create(
+                    job=self,
+                    status=fv_protocol_consts.FaciValiJobStatus.SENT.value,
+                    stage=protocol_consts.JobStage.ACCEPTANCE.value,
+                )
 
     def report_cheated(self, signature: Signature) -> None:
         """
@@ -227,6 +233,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         if validator and validator.id in validator_ids:
             log.debug("selected (targeted) validator", validator=validator)
             return validator
+        # TODO(post error propagation): "unknown validator" and "validator not connected" are different errors
         raise Validator.DoesNotExist
 
     @property
@@ -293,27 +300,9 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
-    class Status(models.IntegerChoices):
-        # These correspond to JobStatusUpdate.Status
-        FAILED = -2
-        REJECTED = -1
-        SENT = 0
-        RECEIVED = 1
-        ACCEPTED = 2
-        EXECUTOR_READY = 3
-        VOLUMES_READY = 4
-        EXECUTION_DONE = 5
-        COMPLETED = 6
-        STREAMING_READY = 7
-
-    FINAL_STATUS_VALUES = (
-        Status.COMPLETED,
-        Status.REJECTED,
-        Status.FAILED,
-    )
-
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="statuses")
-    status = models.SmallIntegerField(choices=Status.choices)
+    status = models.CharField(choices=fv_protocol_consts.FaciValiJobStatus.choices())
+    stage = models.CharField(choices=protocol_consts.JobStage.choices(), default=protocol_consts.JobStage.UNKNOWN.value, max_length=255)
     metadata = models.JSONField(blank=True, default=dict)
     created_at = models.DateTimeField(default=now)
 
@@ -327,9 +316,30 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
         return self.get_status_display()
 
     @property
-    def meta(self) -> JobStatusMetadata | None:
+    def meta(self) -> JobStatusUpdateMetadata | None:
         if self.metadata:
-            return JobStatusMetadata.model_validate(self.metadata)
+            return JobStatusUpdateMetadata.model_validate(self.metadata)
+
+    def get_legacy_status_display(self) -> str:
+        """
+        Job serializer uses this for the legacy "status" field.
+        - Older SDK clients require the human-readable label
+        - The HORDE_FAILED status is new and will not be accepted
+        """
+        status_display = {
+            fv_protocol_consts.FaciValiJobStatus.SENT.value: "Sent",
+            fv_protocol_consts.FaciValiJobStatus.RECEIVED.value: "Received",
+            fv_protocol_consts.FaciValiJobStatus.ACCEPTED.value: "Accepted",
+            fv_protocol_consts.FaciValiJobStatus.EXECUTOR_READY.value: "Executor Ready",
+            fv_protocol_consts.FaciValiJobStatus.STREAMING_READY.value: "Streaming Ready",
+            fv_protocol_consts.FaciValiJobStatus.VOLUMES_READY.value: "Volumes Ready",
+            fv_protocol_consts.FaciValiJobStatus.EXECUTION_DONE.value: "Execution Done",
+            fv_protocol_consts.FaciValiJobStatus.COMPLETED.value: "Completed",
+            fv_protocol_consts.FaciValiJobStatus.REJECTED.value: "Rejected",
+            fv_protocol_consts.FaciValiJobStatus.FAILED.value: "Failed",
+            fv_protocol_consts.FaciValiJobStatus.HORDE_FAILED.value: "Failed",
+        }
+        return status_display[self.status]
 
 
 class JobFeedback(models.Model):

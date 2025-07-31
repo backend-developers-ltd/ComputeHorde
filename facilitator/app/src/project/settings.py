@@ -390,7 +390,7 @@ REST_FRAMEWORK = {
         "project.core.authentication.JWTAuthentication",
     ],
     "DEFAULT_RENDERER_CLASSES": [
-        "rest_framework.renderers.JSONRenderer",
+        "project.drf_renderer.EnumJSONRenderer",
     ],
     "DEFAULT_PARSER_CLASSES": [
         "rest_framework.parsers.JSONParser",

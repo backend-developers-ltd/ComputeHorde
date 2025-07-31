@@ -122,15 +122,11 @@ class MockMinerClient(MinerClient):
 class MockSuccessfulMinerClient(MockMinerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.miner_accepting_or_declining_future.set_result(
-            V0AcceptJobRequest(job_uuid=self.job_uuid)
-        )
-        self.executor_ready_or_failed_future.set_result(
-            V0ExecutorReadyRequest(job_uuid=self.job_uuid)
-        )
+        self.job_accepted_future.set_result(V0AcceptJobRequest(job_uuid=self.job_uuid))
+        self.executor_ready_future.set_result(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
         self.volumes_ready_future.set_result(V0VolumesReadyRequest(job_uuid=self.job_uuid))
         self.execution_done_future.set_result(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
-        self.miner_finished_or_failed_future.set_result(
+        self.job_finished_future.set_result(
             V0JobFinishedRequest(
                 job_uuid=self.job_uuid,
                 docker_process_stdout="",
@@ -143,13 +139,9 @@ class MockSuccessfulMinerClient(MockMinerClient):
 class MockFaillingMinerClient(MockMinerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.miner_accepting_or_declining_future.set_result(
-            V0AcceptJobRequest(job_uuid=self.job_uuid)
-        )
-        self.executor_ready_or_failed_future.set_result(
-            V0ExecutorReadyRequest(job_uuid=self.job_uuid)
-        )
-        self.miner_finished_or_failed_future.set_result(
+        self.job_accepted_future.set_result(V0AcceptJobRequest(job_uuid=self.job_uuid))
+        self.executor_ready_future.set_result(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
+        self.job_finished_future.set_result(
             V0JobFailedRequest(
                 job_uuid=self.job_uuid,
                 docker_process_stdout="",

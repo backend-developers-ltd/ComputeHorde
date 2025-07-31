@@ -4,13 +4,12 @@ from datetime import datetime
 
 import bittensor_wallet
 from asgiref.sync import sync_to_async
+from compute_horde import organic_job_errors, protocol_consts
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.organic import (
     OrganicJobDetails,
-    OrganicJobError,
     execute_organic_job_on_miner,
 )
-from compute_horde.protocol_messages import V0DeclineJobRequest
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.db import transaction
@@ -94,13 +93,13 @@ async def answer_prompts(
         )
     except Exception as e:
         if (
-            isinstance(e, OrganicJobError)
-            and isinstance(e.received, V0DeclineJobRequest)
-            and e.received.reason == V0DeclineJobRequest.Reason.BUSY
+            isinstance(e, organic_job_errors.JobRejected)
+            and e.reason == protocol_consts.JobRejectionReason.BUSY
         ):
             logger.info("Failed to run answer_prompts: trusted miner is busy")
             return False
 
+        # TODO(error propagation): handle Upstream exceptions
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.FAILURE,

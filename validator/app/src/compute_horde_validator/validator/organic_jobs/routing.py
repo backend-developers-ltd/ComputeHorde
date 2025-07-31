@@ -12,6 +12,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import async_synchronized
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.utils import timezone
 
@@ -36,8 +37,10 @@ class JobRoutingException(Exception):
     pass
 
 
-class NoMinerForExecutorType(JobRoutingException):
-    pass
+class NoMinerForExecutorClass(JobRoutingException):
+    def __init__(self, executor_class: ExecutorClass) -> None:
+        self.executor_class = executor_class
+        super().__init__(f"No miner with available executors of class '{executor_class}'")
 
 
 class AllMinersBusy(JobRoutingException):
@@ -49,7 +52,12 @@ class MinerIsBlacklisted(JobRoutingException):
 
 
 class NotEnoughTimeInCycle(JobRoutingException):
-    pass
+    def __init__(self, seconds_remaining_in_cycle: int, seconds_required: int) -> None:
+        self.seconds_remaining_in_cycle = seconds_remaining_in_cycle
+        self.seconds_required = seconds_required
+        super().__init__(
+            f"Not enough time in current cycle: {seconds_remaining_in_cycle=} {seconds_required=}"
+        )
 
 
 class NoMinerWithEnoughAllowance(JobRoutingException):
@@ -115,7 +123,7 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
             logger.debug(
                 f"NotEnoughTimeInCycle: {seconds_remaining_in_cycle=} {seconds_required_in_cycle=}"
             )
-            raise NotEnoughTimeInCycle()
+            raise NotEnoughTimeInCycle(seconds_remaining_in_cycle, seconds_required_in_cycle)
 
     manifests_qs = (
         MinerManifest.objects.select_related("miner")
@@ -147,7 +155,7 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
 
     if not latest_miner_manifest:
         logger.error(f"Failed to find a miner with available executors of type {executor_class}")
-        raise NoMinerForExecutorType()
+        raise NoMinerForExecutorClass(executor_class)
 
     # filter/sort miners based on available allowance
     allowance_qs = ComputeTimeAllowance.objects.select_related("miner").filter(

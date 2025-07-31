@@ -1,8 +1,10 @@
-from enum import StrEnum
 from typing import Any, Literal, Self
 
 import bittensor
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
+
+from compute_horde import protocol_consts
+from compute_horde.fv_protocol import fv_protocol_consts
 
 
 class V0Heartbeat(BaseModel, extra="forbid"):
@@ -39,13 +41,35 @@ class V0AuthenticationRequest(BaseModel, extra="forbid"):
         return address
 
 
-class MinerResponse(BaseModel, extra="allow"):
+class JobResultDetails(BaseModel, extra="allow"):
+    # TODO(post error propagation): this payload is an amalgam of success and failure responses, don't sent errors here.
+    # TODO(post error propagation): job_uuid is redundant,
     job_uuid: str
-    message_type: str | None
     docker_process_stderr: str
     docker_process_stdout: str
     artifacts: dict[str, str] | None = None
     upload_results: dict[str, str] | None = None
+
+
+class JobRejectionDetails(BaseModel):
+    rejected_by: protocol_consts.JobParticipantType
+    reason: protocol_consts.JobRejectionReason
+    message: str | None = None
+    context: JsonValue = None
+
+
+class JobFailureDetails(BaseModel):
+    reason: protocol_consts.JobFailureReason
+    message: str | None = None
+    context: JsonValue = None
+    # TODO(error propagation): job output and error code
+
+
+class HordeFailureDetails(BaseModel):
+    reported_by: protocol_consts.JobParticipantType
+    reason: protocol_consts.HordeFailureReason
+    message: str | None = None
+    context: JsonValue = None
 
 
 class StreamingServerDetails(BaseModel, extra="forbid"):
@@ -54,32 +78,30 @@ class StreamingServerDetails(BaseModel, extra="forbid"):
     streaming_server_port: int | None = None
 
 
-class JobStatusMetadata(BaseModel, extra="allow"):
+class JobStatusUpdateMetadata(BaseModel, extra="allow"):
+    """This is really a "payload" attached to a status update."""
+
+    # TODO: "comment" is probably unnecessary? payloads below should contain details if they need to
     comment: str
-    miner_response: MinerResponse | None = None
+    miner_response: JobResultDetails | None = None
+    job_rejection_details: JobRejectionDetails | None = None
+    job_failure_details: JobFailureDetails | None = None
+    horde_failure_details: HordeFailureDetails | None = None
     streaming_details: StreamingServerDetails | None = None
 
 
 class JobStatusUpdate(BaseModel, extra="forbid"):
+    # TODO(post error propagation): remove "extra"
     """
-    Message sent from validator to facilitator in response to NewJobRequest.
+    Message sent from validator to facilitator when the job's state changes.
     """
-
-    class Status(StrEnum):
-        RECEIVED = "received"
-        ACCEPTED = "accepted"
-        EXECUTOR_READY = "executor_ready"
-        VOLUMES_READY = "volumes_ready"
-        EXECUTION_DONE = "execution_done"
-        COMPLETED = "completed"
-        REJECTED = "rejected"
-        FAILED = "failed"
-        STREAMING_READY = "streaming_ready"
 
     message_type: Literal["V0JobStatusUpdate"] = "V0JobStatusUpdate"
     uuid: str
-    status: Status
-    metadata: JobStatusMetadata | None = None
+    status: fv_protocol_consts.FaciValiJobStatus
+    # TODO(post error propagation): no "None" default
+    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
+    metadata: JobStatusUpdateMetadata | None = None
 
 
 class V0MachineSpecsUpdate(BaseModel, extra="forbid"):
