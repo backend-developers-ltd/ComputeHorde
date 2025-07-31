@@ -139,7 +139,7 @@ class VolumeManagerClient:
             logger.debug(f"Volume Manager {operation} response status: {response.status_code}")
             logger.debug(f"Volume Manager {operation} response: {response.text}")
 
-            return response.json()
+            return response.json()  # type: ignore
 
         except httpx.HTTPStatusError as e:
             # Handle non-retryable status codes
