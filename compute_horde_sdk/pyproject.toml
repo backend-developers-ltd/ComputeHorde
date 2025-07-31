@@ -39,6 +39,7 @@ fallback = [
     "build",
     "wheel",
     "setuptools",
+    "ray<2.9.0",
     "skypilot[runpod]>=0.8.1,<0.9.0",
 ]
 
