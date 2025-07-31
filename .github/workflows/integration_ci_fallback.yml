@@ -32,7 +32,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.6.x"
-          enable-cache: true
+          enable-cache: false
 
       - name: Setup SSH key
         run: |
@@ -62,6 +62,20 @@ jobs:
           S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
           RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
 
+      - name: Debug SkyPilot logs after regular job
+        if: always()
+        run: |
+          echo "=== SkyPilot logs after regular job ==="
+          if [ -d ~/sky_logs ]; then
+            find ~/sky_logs -name "*.log" -type f | while read -r logfile; do
+              echo "=== Content of $logfile ==="
+              cat "$logfile"
+              echo "=== End of $logfile ==="
+            done
+          else
+            echo "No sky_logs directory found"
+          fi
+
       - name: test streaming job
         working-directory: ./local_stack
         run: uv run ./fallback_job/send_fallback_job_streaming.py
@@ -71,3 +85,17 @@ jobs:
           AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
           S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
           RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
+
+      - name: Debug SkyPilot logs after streaming job
+        if: always()
+        run: |
+          echo "=== SkyPilot logs after streaming job ==="
+          if [ -d ~/sky_logs ]; then
+            find ~/sky_logs -name "*.log" -type f | while read -r logfile; do
+              echo "=== Content of $logfile ==="
+              cat "$logfile"
+              echo "=== End of $logfile ==="
+            done
+          else
+            echo "No sky_logs directory found"
+          fi

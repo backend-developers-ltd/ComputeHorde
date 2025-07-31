@@ -190,12 +190,25 @@ class SkyJob:
             logger.error("Attempted to get a status from a job that is not yet submitted.")
             raise SkyError("Job not yet submitted")
 
-        with sky.sky_logging.silent():
-            sky_status = sky.job_status(self.cluster_name, job_ids=[self.job_id]).get(self.job_id)
+        # If job_id is None, we can't get status from SkyPilot
+        if self.job_id is None:
+            logger.warning("Job ID is None, cannot get status from SkyPilot")
+            return sky.JobStatus.RUNNING
 
-        logger.debug("Job %s status is: %s", self.job_uuid, sky_status)
-
-        return sky_status
+        try:
+            with sky.sky_logging.silent():
+                job_statuses = sky.job_status(self.cluster_name, job_ids=[self.job_id])
+                sky_status = job_statuses.get(self.job_id)
+                
+                if sky_status is None:
+                    logger.warning("No status found for job %s, assuming RUNNING", self.job_id)
+                    return sky.JobStatus.RUNNING
+                    
+                logger.debug("Job %s status is: %s", self.job_uuid, sky_status)
+                return sky_status
+        except Exception as e:
+            logger.warning("Failed to get job status from SkyPilot: %s", e)
+            return sky.JobStatus.RUNNING
 
     def get_job_head_ip(self) -> str:
         if not self.submitted or self._job_resource_handle is None:
