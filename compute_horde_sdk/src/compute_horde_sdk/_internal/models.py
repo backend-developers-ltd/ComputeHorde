@@ -40,13 +40,14 @@ class ComputeHordeJobStatus(StrEnum):
     EXECUTION_DONE = "execution_done"
     COMPLETED = "completed"
     FAILED = "failed"
+    HORDE_FAILED = "horde_failed"
 
     @classmethod
     def end_states(cls) -> set["ComputeHordeJobStatus"]:
         """
         Determines which job statuses mean that the job will not be updated anymore.
         """
-        return {cls.COMPLETED, cls.FAILED, cls.REJECTED}
+        return {cls.COMPLETED, cls.FAILED, cls.REJECTED, cls.HORDE_FAILED}
 
     def is_in_progress(self) -> bool:
         """
@@ -64,7 +65,7 @@ class ComputeHordeJobStatus(StrEnum):
 
     def is_failed(self) -> bool:
         """Check if the job has failed."""
-        return self in (self.FAILED, self.REJECTED)
+        return self in (self.FAILED, self.REJECTED, self.HORDE_FAILED)
 
 
 @dataclass

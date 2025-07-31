@@ -315,15 +315,15 @@ async def test_facilitator_client__cheated_job():
         )
         assert job.cheated is False
 
-        await facilitator_client.report_miner_cheated_job(cheated_job_request)
+        await facilitator_client.process_miner_cheat_report(cheated_job_request)
         await job.arefresh_from_db()
         assert job.cheated is True
         assert await MinerBlacklist.objects.acount() == 1
         assert (
             await MinerBlacklist.objects.aget(miner_id=miner.id)
-        ).reason == MinerBlacklist.BlacklistReason.JOB_CHEATED
+        ).error_type == MinerBlacklist.BlacklistReason.JOB_CHEATED
 
-        await facilitator_client.report_miner_cheated_job(cheated_job_request)
+        await facilitator_client.process_miner_cheat_report(cheated_job_request)
         await job.arefresh_from_db()
         assert job.cheated is True
         # do not blacklist second time

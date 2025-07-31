@@ -27,7 +27,6 @@ from compute_horde.protocol_messages import (
     MinerToValidatorMessage,
     UnauthorizedError,
     V0AcceptJobRequest,
-    V0DeclineJobRequest,
     V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
@@ -36,6 +35,7 @@ from compute_horde.protocol_messages import (
     V0JobFailedRequest,
     V0JobFinishedReceiptRequest,
     V0JobFinishedRequest,
+    V0JobRejectedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
     V0StreamingJobNotReadyRequest,
@@ -273,7 +273,7 @@ class Job:
     accept_barrier_2_time: datetime | None = None
     accept_before_sent_time: datetime | None = None
     accept_after_sent_time: datetime | None = None
-    accept_response: V0AcceptJobRequest | V0DeclineJobRequest | None = None
+    accept_response: V0AcceptJobRequest | V0JobRejectedRequest | None = None
     accept_response_time: datetime | None = None
     accept_response_event: asyncio.Event = field(default_factory=asyncio.Event)
 
@@ -330,7 +330,7 @@ class Job:
         duplicate = False
 
         match msg:
-            case V0AcceptJobRequest() | V0DeclineJobRequest():
+            case V0AcceptJobRequest() | V0JobRejectedRequest():
                 if self.accept_response is None:
                     self.accept_response = msg
                     self.accept_response_time = datetime.now(tz=UTC)
@@ -442,16 +442,16 @@ class Job:
         return spin_up_time
 
     def is_declined(self) -> bool:
-        return isinstance(self.accept_response, V0DeclineJobRequest)
+        return isinstance(self.accept_response, V0JobRejectedRequest)
 
     def decline_reason(self) -> protocol_consts.JobRejectionReason | None:
-        if isinstance(self.accept_response, V0DeclineJobRequest):
+        if isinstance(self.accept_response, V0JobRejectedRequest):
             return self.accept_response.reason
         return None
 
     async def get_valid_decline_excuse_receipts(self) -> list[Receipt]:
         assert self.job_started_receipt_payload is not None
-        assert isinstance(self.accept_response, V0DeclineJobRequest)
+        assert isinstance(self.accept_response, V0JobRejectedRequest)
 
         # Use the time when the receipt for this job was generated as an excuse time cutoff time
         return await job_excuses.filter_valid_excuse_receipts(
@@ -1234,7 +1234,7 @@ async def _send_initial_job_request(
             case V0AcceptJobRequest():
                 logger.info("%s accepted job %s", job.miner_hotkey, job.uuid)
                 await _handle_job_accepted(client, ctx, job)
-            case V0DeclineJobRequest():
+            case V0JobRejectedRequest():
                 logger.info(
                     "%s declined job %s (reason=%s)",
                     job.miner_hotkey,
@@ -1406,7 +1406,7 @@ async def _send_job_finished_receipts(ctx: BatchContext) -> None:
 
 def _emit_decline_or_failure_events(ctx: BatchContext) -> None:
     for job in ctx.jobs.values():
-        if isinstance(job.accept_response, V0DeclineJobRequest) or isinstance(
+        if isinstance(job.accept_response, V0JobRejectedRequest) or isinstance(
             job.executor_response, V0ExecutorFailedRequest
         ):
             if job.excused:

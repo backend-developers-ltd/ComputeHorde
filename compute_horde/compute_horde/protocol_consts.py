@@ -1,6 +1,5 @@
 import enum
 import sys
-from enum import Enum
 
 if sys.version_info >= (3, 11):  # noqa: UP036
     from enum import StrEnum
@@ -8,7 +7,8 @@ else:
     from backports.strenum import StrEnum  #  noqa: UP035
 
 
-class JobParticipantType(Enum):
+class JobParticipantType(StrEnum):
+    UNKNOWN = "unknown"  # TODO(post error propagation): remove this
     SDK = "sdk"
     FACILITATOR = "facilitator"
     VALIDATOR = "validator"
@@ -20,9 +20,12 @@ class JobParticipantType(Enum):
         """Return Django-compatible choices tuple for model fields."""
         return [(status.value, status.value) for status in cls]
 
+    def __repr__(self):
+        return self.value
 
-class JobStage(Enum):
-    NOT_SPECIFIED = "not_specified"
+
+class JobStage(StrEnum):
+    UNKNOWN = "unknown"
     # ↓ Facilitator, validator
     ACCEPTANCE = "acceptance"
     ROUTING = "routing"
@@ -41,6 +44,9 @@ class JobStage(Enum):
     def choices(cls):
         """Return Django-compatible choices tuple for model fields."""
         return [(status.value, status.value) for status in cls]
+
+    def __repr__(self):
+        return self.value
 
 
 class MinerFailureReason(enum.Enum):
@@ -75,13 +81,20 @@ class HordeFailureReason(StrEnum):
     GENERIC_EXECUTOR_FAILED = "generic_executor_failed"
     UPSTREAM_CONNECTION_ERROR = "upstream_connection_error"
 
+    def __repr__(self):
+        return self.value
+
 
 class JobFailureReason(StrEnum):
     UNKNOWN = "unknown"
     TIMEOUT = "TIMEOUT"
+    # TODO(post error propagation): security check failure is a horde failure, remove it
     SECURITY_CHECK = "SECURITY_CHECK"
     HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
     NONZERO_EXIT_CODE = "NONZERO_EXIT_STATUS"
+
+    def __repr__(self):
+        return self.value
 
 
 class JobRejectionReason(StrEnum):
@@ -90,4 +103,11 @@ class JobRejectionReason(StrEnum):
     INVALID_SIGNATURE = "invalid_signature"
     NO_MINER_FOR_JOB = "no_miner_for_job"
     EXECUTOR_FAILURE = "executor_failure"
+    MINER_BLACKLISTED = (
+        "miner_blacklisted"  # This is a legacy thing - consumers don't select miners anymore
+    )
+    NOT_ENOUGH_TIME_IN_CYCLE = "not_enough_time_in_cycle"
     VALIDATOR_BLACKLISTED = "validator_blacklisted"
+
+    def __repr__(self):
+        return self.value

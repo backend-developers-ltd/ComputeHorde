@@ -14,7 +14,7 @@ from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
 from pydantic import TypeAdapter
 
-from compute_horde import protocol_consts
+from compute_horde import organic_job_errors, protocol_consts
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
@@ -27,7 +27,6 @@ from compute_horde.protocol_messages import (
     MinerToValidatorMessage,
     UnauthorizedError,
     V0AcceptJobRequest,
-    V0DeclineJobRequest,
     V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
@@ -38,6 +37,7 @@ from compute_horde.protocol_messages import (
     V0JobFailedRequest,
     V0JobFinishedReceiptRequest,
     V0JobFinishedRequest,
+    V0JobRejectedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
     V0StreamingJobNotReadyRequest,
@@ -66,24 +66,6 @@ from compute_horde.utils import MachineSpecs, Timer, sign_blob
 logger = logging.getLogger(__name__)
 
 
-class UpstreamJobRejectedException(Exception):
-    def __init__(self, msg: V0DeclineJobRequest) -> None:
-        super().__init__(f"Job {msg.job_uuid} rejected by miner - {msg.reason}")
-        self.msg = msg
-
-
-class UpstreamJobFailedException(Exception):
-    def __init__(self, msg: V0JobFailedRequest) -> None:
-        super().__init__(f"Job {msg.job_uuid} failed by miner - {msg.error_type}")
-        self.msg = msg
-
-
-class UpstreamHordeFailedException(Exception):
-    def __init__(self, msg: V0HordeFailedRequest) -> None:
-        super().__init__(f"Horde failure {msg.job_uuid} reported by miner - {msg.error_type}")
-        self.msg = msg
-
-
 class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorToMinerMessage]):
     """
     Miner client to run organic job on a miner.
@@ -104,7 +86,10 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
     Note that the waiting on the response futures should properly be handled with timeouts
     (with ``asyncio.timeout()``, ``asyncio.wait_for()`` etc.).
-    The futures will throw an exception when the miner reports an issue.
+    The futures will throw an exception when the miner reports an issue:
+    - JobRejected: when the miner rejects the job (V0DeclineJobRequest)
+    - JobFailed: when the job fails because of an error in the job itself (V0JobFailedRequest)
+    - HordeFailed: for other general failures (V0HordeFailedRequest)
     """
 
     def __init__(
@@ -203,7 +188,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         self.miner_machine_specs = msg.specs
 
     async def handle_message(self, msg: MinerToValidatorMessage) -> None:
-        logger.debug(f"Received message: {msg.message_type}")
+        logger.debug(f"Received message from miner: {msg.message_type}")
         if isinstance(msg, GenericError):
             logger.warning(
                 f"Received error message from miner {self.miner_name}: {msg.model_dump_json()}"
@@ -250,8 +235,10 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             # for now, pretend we received a horde failure.
             mapped_msg = V0HordeFailedRequest(
                 job_uuid=msg.job_uuid,
+                stage=protocol_consts.JobStage.STREAMING_STARTUP,
                 reported_by=protocol_consts.JobParticipantType.MINER,
-                error_type=protocol_consts.HordeFailureReason.GENERIC_STREAMING_SETUP_FAILED,
+                reason=protocol_consts.HordeFailureReason.GENERIC_STREAMING_SETUP_FAILED,
+                message="Executor reported legacy V0StreamingJobNotReadyRequest message",
             )
             await self.handle_message(mapped_msg)
 
@@ -260,8 +247,10 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             # for now, pretend we received a horde failure.
             mapped_msg = V0HordeFailedRequest(
                 job_uuid=msg.job_uuid,
+                stage=protocol_consts.JobStage.UNKNOWN,
                 reported_by=protocol_consts.JobParticipantType.MINER,
-                error_type=protocol_consts.HordeFailureReason.GENERIC_EXECUTOR_FAILED,
+                reason=protocol_consts.HordeFailureReason.GENERIC_EXECUTOR_FAILED,
+                message="Executor reported legacy V0ExecutorFailedRequest message",
             )
             await self.handle_message(mapped_msg)
 
@@ -286,19 +275,38 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
 
-        elif isinstance(msg, V0JobFailedRequest | V0HordeFailedRequest | V0DeclineJobRequest):
+        elif isinstance(msg, V0JobFailedRequest | V0HordeFailedRequest | V0JobRejectedRequest):
             exc: Exception
 
-            if isinstance(msg, V0DeclineJobRequest):
-                exc = UpstreamJobRejectedException(msg)
+            if isinstance(msg, V0JobRejectedRequest):
+                exc = organic_job_errors.JobRejected(
+                    rejected_by=msg.rejected_by,
+                    reason=msg.reason,
+                    message=msg.message,
+                    context=msg.context,
+                )
             elif isinstance(msg, V0JobFailedRequest):
-                exc = UpstreamJobFailedException(msg)
+                exc = organic_job_errors.JobFailed(
+                    stage=msg.stage,
+                    reason=msg.reason,
+                    docker_process_exit_status=msg.docker_process_exit_status,
+                    docker_process_stdout=msg.docker_process_stdout,
+                    docker_process_stderr=msg.docker_process_stderr,
+                    message=msg.message,
+                    context=msg.context,
+                )
             elif isinstance(msg, V0HordeFailedRequest):
-                exc = UpstreamHordeFailedException(msg)
+                exc = organic_job_errors.HordeFailed(
+                    reported_by=msg.reported_by,
+                    stage=msg.stage,
+                    reason=msg.reason,
+                    message=msg.message,
+                    context=msg.context,
+                )
             else:
                 assert_never(msg)
 
-            # On error, consider the remaining stages as failed and throw:
+            # On error, consider the remaining stages as failed and throw the wrapped error:
             for future in (
                 self.job_accepted_future,
                 self.executor_ready_future,
@@ -704,7 +712,7 @@ async def execute_organic_job_on_miner(
                 raise OrganicJobError(MinerFailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
 
         except Exception as e:
-            logger.warning(f"Job failed with {type(e).__name__}: {e}")
+            logger.info(f"Job failed with {type(e).__name__}: {e}")
             await client.send_job_finished_receipt_message(
                 started_timestamp=timer.start_time.timestamp(),
                 time_took_seconds=timer.passed_time(),

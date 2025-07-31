@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 import packaging.version
-from compute_horde import protocol_consts
+from compute_horde import organic_job_errors, protocol_consts
 from compute_horde.protocol_messages import V0InitialJobRequest
 from compute_horde.utils import MachineSpecs, Timer
 from django.conf import settings
@@ -33,6 +33,7 @@ class JobDriver:
         self.startup_time_limit = startup_time_limit
         self.specs: MachineSpecs | None = None
         self.deadline = Timer()
+        # TODO(error propagation): use stages from protocol_consts, or map to them in the error handler
         self.current_stage = "pre-startup"
 
     @property
@@ -40,74 +41,93 @@ class JobDriver:
         return self.deadline.time_left()
 
     async def execute(self):
-        try:
-            await self._do_execute()
-
-        except TimeoutError:
-            logger.warning(f"Job timed out during {self.current_stage} stage")
-            await self.miner_client.send_job_error(
-                JobError(
-                    f"Timed out during {self.current_stage} stage",
-                    error_type=protocol_consts.JobFailureReason.TIMEOUT,
-                )
-            )
-
-        except JobError as e:
-            logger.warning(f"Job error: {e}")
-            await self.miner_client.send_job_error(e)
-
-        except BaseException as e:
-            logger.error(f"Unexpected error: {e}")
-            await self.miner_client.send_job_error(JobError(f"Unexpected error: {e}"))
-            raise
-
-        finally:
+        async with self.miner_client:  # TODO: Can this hang?
             try:
-                await self.runner.clean()
-            except Exception as e:
-                logger.error(f"Job cleanup failed: {e}")
+                await self._do_execute()
+
+            except TimeoutError:
+                # TODO(error propagation): more context would be helpful - what timed out? what stage?
+                logger.error(f"Job timed out during {self.current_stage} stage")
+                await self.miner_client.send_job_failed(
+                    organic_job_errors.JobFailed(
+                        stage=protocol_consts.JobStage.UNKNOWN,
+                        reason=protocol_consts.JobFailureReason.TIMEOUT,
+                        message=f"Timed out during {self.current_stage} stage",
+                    )
+                )
+
+            except organic_job_errors.JobFailed as job_failure:
+                await self.miner_client.send_job_failed(job_failure)
+
+            except organic_job_errors.HordeFailed as horde_failure:
+                await self.miner_client.send_horde_failed(horde_failure)
+
+            except JobError as e:
+                # TODO(error propagation): Remove "JobError", move handling to respective error handler above
+                logger.warning(f"Job error: {e}")
+                await self.miner_client.old_send_job_error(e)
+
+            except BaseException as e:
+                await self.miner_client.send_horde_failed(
+                    organic_job_errors.HordeFailed(
+                        reported_by=protocol_consts.JobParticipantType.EXECUTOR,
+                        stage=protocol_consts.JobStage.UNKNOWN,
+                        reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
+                        message="Executor failed with unexpected exception",
+                        context={
+                            "exception_type": type(e).__qualname__,
+                            "exception_message": str(e),
+                        },
+                    )
+                )
+                raise
+
+            finally:
+                try:
+                    await self.runner.clean()
+                except Exception as e:
+                    logger.error(f"Job cleanup failed: {e}")
 
     async def _do_execute(self):
-        async with self.miner_client:  # TODO: Can this hang?
-            # This limit should be enough to receive the initial job request, which contains further timing details.
-            self._set_deadline(self.startup_time_limit, "startup time limit")
-            async with asyncio.timeout(self.time_left):
-                initial_job_request = await self._startup_stage()
-                timing_details = initial_job_request.executor_timing
+        # This limit should be enough to receive the initial job request, which contains further timing details.
+        self._set_deadline(self.startup_time_limit, "startup time limit")
+        async with asyncio.timeout(self.time_left):
+            initial_job_request = await self._startup_stage()
+            timing_details = initial_job_request.executor_timing
 
-            if timing_details:
-                # With timing details, re-initialize the deadline with leeway
-                # It will be extended before each stage down the line
-                self._set_deadline(timing_details.allowed_leeway, "allowed leeway")
-            elif initial_job_request.timeout_seconds is not None:
-                # For single-timeout, this is the full timeout for the whole job
-                self._set_deadline(initial_job_request.timeout_seconds, "single-timeout mode")
-            else:
-                raise JobError(
-                    "No timing received: either timeout_seconds or timing_details must be set"
+        if timing_details:
+            # With timing details, re-initialize the deadline with leeway
+            # It will be extended before each stage down the line
+            self._set_deadline(timing_details.allowed_leeway, "allowed leeway")
+        elif initial_job_request.timeout_seconds is not None:
+            # For single-timeout, this is the full timeout for the whole job
+            self._set_deadline(initial_job_request.timeout_seconds, "single-timeout mode")
+        else:
+            raise JobError(
+                "No timing received: either timeout_seconds or timing_details must be set"
+            )
+
+        # Download stage
+        if timing_details:
+            self._extend_deadline(timing_details.download_time_limit, "download time limit")
+        async with asyncio.timeout(self.time_left):
+            await self._download_stage()
+
+        # Execution stage
+        if timing_details:
+            self._extend_deadline(timing_details.execution_time_limit, "execution time limit")
+            if self.runner.is_streaming_job:
+                self._extend_deadline(
+                    timing_details.streaming_start_time_limit, "streaming start time limit"
                 )
+        async with asyncio.timeout(self.time_left):
+            await self._execution_stage()
 
-            # Download stage
-            if timing_details:
-                self._extend_deadline(timing_details.download_time_limit, "download time limit")
-            async with asyncio.timeout(self.time_left):
-                await self._download_stage()
-
-            # Execution stage
-            if timing_details:
-                self._extend_deadline(timing_details.execution_time_limit, "execution time limit")
-                if self.runner.is_streaming_job:
-                    self._extend_deadline(
-                        timing_details.streaming_start_time_limit, "streaming start time limit"
-                    )
-            async with asyncio.timeout(self.time_left):
-                await self._execution_stage()
-
-            # Upload stage
-            if timing_details:
-                self._extend_deadline(timing_details.upload_time_limit, "upload time limit")
-            async with asyncio.timeout(self.time_left):
-                await self._upload_stage()
+        # Upload stage
+        if timing_details:
+            self._extend_deadline(timing_details.upload_time_limit, "upload time limit")
+        async with asyncio.timeout(self.time_left):
+            await self._upload_stage()
 
         logger.debug(f"Finished with {self.time_left:.2f}s time left")
 
@@ -165,6 +185,8 @@ class JobDriver:
 
     async def _upload_stage(self):
         self._enter_stage("upload")
+
+        raise ValueError("potato")
 
         job_result = await self.runner.upload_results()
         job_result.specs = self.specs

@@ -21,6 +21,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
 )
 from compute_horde.fv_protocol.validator_requests import (
     HordeFailureDetails,
+    JobFailureDetails,
     JobRejectionDetails,
     JobStatusUpdate,
     JobStatusUpdateMetadata,
@@ -270,7 +271,10 @@ class FacilitatorClient:
                 msg = await get_channel_layer().receive(f"job_status_updates__{job_uuid}")
                 try:
                     envelope = _JobStatusChannelEnvelope.model_validate(msg)
-                    task = asyncio.create_task(self.send_model(envelope.payload))
+                    logger.debug(
+                        f"Received job status update for job {job_uuid}: status={envelope.payload.status} stage={envelope.payload.stage}"
+                    )
+                    task = asyncio.create_task(self.send_job_status_update(envelope.payload))
                     await self.tasks_to_reap.put(task)
                     if not envelope.payload.status.is_in_progress():
                         return
@@ -310,6 +314,7 @@ class FacilitatorClient:
         except pydantic.ValidationError:
             pass
         else:
+            await asyncio.sleep(1)  # TODO: Do not commit.
             task = asyncio.create_task(self.process_job_request(job_request))
             await self.tasks_to_reap.put(task)
             return
@@ -319,12 +324,12 @@ class FacilitatorClient:
         except pydantic.ValidationError:
             pass
         else:
-            await self.report_miner_cheated_job(cheated_job_report)
+            await self.process_miner_cheat_report(cheated_job_report)
             return
 
-        logger.error("unsupported message received from facilitator: %s", raw_msg)
+        logger.error("unsupported or malformed message received from facilitator: %s", raw_msg)
 
-    async def report_miner_cheated_job(self, cheated_job_request: V0JobCheated) -> None:
+    async def process_miner_cheat_report(self, cheated_job_request: V0JobCheated) -> None:
         try:
             await verify_request(cheated_job_request)
         except Exception as e:
@@ -366,31 +371,36 @@ class FacilitatorClient:
             slash_collateral_task.delay(str(job.job_uuid))
 
     async def process_job_request(self, job_request: OrganicJobRequest) -> None:
+        try:
+            await self._process_job_request(job_request)
+        except organic_job_errors.JobRejected as job_failure:
+            # TODO(post error propagation): do better than "UNKNOWN"
+            await self.send_job_rejected(
+                job_request.uuid, protocol_consts.JobStage.UNKNOWN, job_failure
+            )
+        except organic_job_errors.JobFailed as job_failure:
+            await self.send_job_failed(job_request.uuid, job_failure)
+        except organic_job_errors.HordeFailed as horde_failure:
+            await self.send_horde_failed(job_request.uuid, horde_failure)
+
+    async def _process_job_request(self, job_request: OrganicJobRequest) -> None:
         if isinstance(job_request, V2JobRequest):
             logger.debug(f"Received signed job request: {job_request}")
             try:
                 await verify_request(job_request)
             except Exception as e:
-                msg = f"Failed to verify signed payload: {e} - will not run job"
-                logger.warning(msg)
-                await self.send_model(
-                    JobStatusUpdate(
-                        uuid=job_request.uuid,
-                        status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
-                        stage=protocol_consts.JobStage.ACCEPTANCE,
-                        metadata=JobStatusUpdateMetadata(
-                            comment=msg,
-                            job_rejection_details=JobRejectionDetails(
-                                rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
-                                reason=protocol_consts.JobRejectionReason.INVALID_SIGNATURE,
-                                message=msg,
-                            ),
-                        ),
-                    )
+                # TODO(error propagation): surely there are more ways this can fail than "INVALID_SIGNATURE"
+                raise organic_job_errors.JobRejected(
+                    message="Failed to verify signed payload - will not run job",
+                    rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
+                    reason=protocol_consts.JobRejectionReason.INVALID_SIGNATURE,
+                    context={
+                        "exception_type": type(e).__qualname__,
+                        "exception_message": str(e),
+                    },
                 )
-                return
 
-        await self.send_model(
+        await self.send_job_status_update(
             JobStatusUpdate(
                 uuid=job_request.uuid,
                 status=fv_protocol_consts.FaciValiJobStatus.RECEIVED,
@@ -401,129 +411,143 @@ class FacilitatorClient:
         try:
             miner = await routing.pick_miner_for_job_request(job_request)
             logger.info(f"Selected miner {miner.hotkey} for job {job_request.uuid}")
-        except routing.NoMinerForExecutorType:
-            msg = f"No executor for job request: {job_request.uuid} ({job_request.executor_class})"
-            logger.info(f"Rejecting job: {msg}")
-            await self.send_model(
-                JobStatusUpdate(
-                    uuid=job_request.uuid,
-                    status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
-                    stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdateMetadata(
-                        comment=msg,
-                        job_rejection_details=JobRejectionDetails(
-                            rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
-                            reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
-                            message=msg,
-                        ),
-                    ),
-                )
+
+        except routing.NoMinerForExecutorClass:
+            raise organic_job_errors.JobRejected(
+                rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
+                reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
+                message=f"No '{job_request.executor_class.value}' executor available",
             )
-            return
+
         except routing.AllMinersBusy:
-            msg = f"All miners busy for job: {job_request.uuid}"
-            logger.info(f"Rejecting job: {msg}")
-            await self.send_model(
-                JobStatusUpdate(
-                    uuid=job_request.uuid,
-                    status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
-                    stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdateMetadata(
-                        comment=msg,
-                        job_rejection_details=JobRejectionDetails(
-                            rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
-                            reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
-                            message=msg,
-                        ),
-                    ),
-                )
+            raise organic_job_errors.JobRejected(
+                rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
+                reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
+                message="All miners busy",
             )
-            return
+
         except routing.MinerIsBlacklisted:
-            msg = f"Miner for job is blacklisted: {job_request.uuid}"
-            logger.info(f"Failing job: {msg}")
-            await self.send_model(
-                JobStatusUpdate(
-                    uuid=job_request.uuid,
-                    status=fv_protocol_consts.FaciValiJobStatus.FAILED,
-                    stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdateMetadata(comment=msg),
-                )
+            raise organic_job_errors.JobRejected(
+                rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
+                reason=protocol_consts.JobRejectionReason.MINER_BLACKLISTED,
+                message="Selected miner is blacklisted",
             )
-            return
-        except routing.NotEnoughTimeInCycle:
-            msg = f"Requested job cannot complete in current cycle: {job_request.uuid}"
-            logger.info(f"Rejecting job: {msg}")
-            await self.send_model(
-                JobStatusUpdate(
-                    uuid=job_request.uuid,
-                    status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
-                    stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdateMetadata(comment=msg),
-                )
+
+        except routing.NotEnoughTimeInCycle as e:
+            raise organic_job_errors.JobRejected(
+                rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
+                reason=protocol_consts.JobRejectionReason.NOT_ENOUGH_TIME_IN_CYCLE,
+                message="Cannot complete job in current cycle: job too long",
+                context={
+                    "seconds_remaining_in_cycle": e.seconds_remaining_in_cycle,
+                    "seconds_required": e.seconds_required,
+                },
             )
-            return
+
         except routing.NoMinerWithEnoughAllowance:
-            msg = f"No miner available with enough allowance: {job_request.uuid}"
-            logger.info(f"Rejecting job: {msg}")
-            await self.send_model(
-                JobStatusUpdate(
-                    uuid=job_request.uuid,
-                    status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
-                    stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdateMetadata(comment=msg),
-                )
+            raise organic_job_errors.JobRejected(
+                rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
+                reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
+                message="No miner available with enough allowance",
             )
-            return
+
         except Exception as e:
-            msg = f"Unknown error occurred during selecting miner: {job_request.uuid}"
-            logger.exception(f"Failing job: {msg}")
-            await self.send_model(
-                JobStatusUpdate(
-                    uuid=job_request.uuid,
-                    status=fv_protocol_consts.FaciValiJobStatus.FAILED,
-                    stage=protocol_consts.JobStage.ROUTING,
-                    metadata=JobStatusUpdateMetadata(
-                        comment=msg,
-                        horde_failure_details=HordeFailureDetails(
-                            reported_by=protocol_consts.JobParticipantType.VALIDATOR,
-                            reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
-                            exception_type=type(e).__qualname__,
-                            message=msg,
-                        ),
-                    ),
-                )
+            raise organic_job_errors.HordeFailed(
+                reported_by=protocol_consts.JobParticipantType.VALIDATOR,
+                stage=protocol_consts.JobStage.ROUTING,
+                reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
+                message="Error during picking miner for job",
+                context={
+                    "exception_type": type(e).__qualname__,
+                    "exception_message": str(e),
+                },
             )
-            return
 
         try:
             logger.info(f"Submitting job {job_request.uuid} to worker")
             job_status_task = asyncio.create_task(self.handle_job_status_updates(job_request.uuid))
             await self.tasks_to_reap.put(job_status_task)
             job = await execute_organic_job_request_on_worker(job_request, miner)
-            logger.info(f"Job {job_request.uuid} finished with status: {job.status}")
+            logger.info(
+                f"Job {job_request.uuid} finished with status: {job.status} (comment={job.comment})"
+            )
 
             if job.status == OrganicJob.Status.FAILED:
                 await routing.report_miner_failed_job(job)
+
         except Exception as e:
-            exc_type = type(e).__qualname__
-            msg = f"Error running organic job {job_request.uuid}: {exc_type}"
-            logger.error(msg, exc_info=True)
-            await self.send_model(
-                JobStatusUpdate(
-                    uuid=job_request.uuid,
-                    status=fv_protocol_consts.FaciValiJobStatus.FAILED,
-                    metadata=JobStatusUpdateMetadata(
-                        comment=msg,
-                        horde_failure_details=HordeFailureDetails(
-                            reported_by=protocol_consts.JobParticipantType.VALIDATOR,
-                            reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
-                            exception_type=exc_type,
-                            message=msg,
-                            context={
-                                "exception_message": str(e),
-                            },
-                        ),
-                    ),
-                )
+            raise organic_job_errors.HordeFailed(
+                reported_by=protocol_consts.JobParticipantType.VALIDATOR,
+                stage=protocol_consts.JobStage.UNKNOWN,
+                reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
+                message="Error during handling of job",
+                context={
+                    "exception_type": type(e).__qualname__,
+                    "exception_message": str(e),
+                },
             )
+
+    async def send_job_status_update(self, status_update: JobStatusUpdate) -> None:
+        await self.send_model(status_update)
+
+    async def send_job_rejected(
+        self,
+        job_uuid: str,
+        stage: protocol_consts.JobStage,
+        job_rejection: organic_job_errors.JobRejected,
+    ) -> None:
+        await self.send_job_status_update(
+            JobStatusUpdate(
+                uuid=job_uuid,
+                status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
+                stage=stage,
+                metadata=JobStatusUpdateMetadata(
+                    comment=job_rejection.message,
+                    job_rejection_details=JobRejectionDetails(
+                        rejected_by=job_rejection.rejected_by,
+                        reason=job_rejection.reason,
+                        message=job_rejection.message,
+                        context=job_rejection.context,
+                    ),
+                ),
+            )
+        )
+
+    async def send_job_failed(
+        self, job_uuid: str, job_failure: organic_job_errors.JobFailed
+    ) -> None:
+        await self.send_job_status_update(
+            JobStatusUpdate(
+                uuid=job_uuid,
+                status=fv_protocol_consts.FaciValiJobStatus.FAILED,
+                stage=job_failure.stage,
+                metadata=JobStatusUpdateMetadata(
+                    comment=job_failure.message,
+                    job_failure_details=JobFailureDetails(
+                        reason=job_failure.reason,
+                        message=job_failure.message,
+                        context=job_failure.context,
+                    ),
+                ),
+            )
+        )
+
+    async def send_horde_failed(
+        self, job_uuid: str, horde_failure: organic_job_errors.HordeFailed
+    ) -> None:
+        await self.send_job_status_update(
+            JobStatusUpdate(
+                uuid=job_uuid,
+                status=fv_protocol_consts.FaciValiJobStatus.HORDE_FAILED,
+                stage=horde_failure.stage,
+                metadata=JobStatusUpdateMetadata(
+                    comment=horde_failure.message,
+                    horde_failure_details=HordeFailureDetails(
+                        reported_by=horde_failure.reported_by,
+                        reason=horde_failure.reason,
+                        message=horde_failure.message,
+                        context=horde_failure.context,
+                    ),
+                ),
+            )
+        )

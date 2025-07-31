@@ -6,11 +6,11 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS, DEFAULT_LLM_EXE
 from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
-    V0DeclineJobRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
+    V0JobRejectedRequest,
 )
 from django.utils.timezone import now
 from pytest_mock import MockerFixture
@@ -114,7 +114,7 @@ def accept_job_message(job_uuid: uuid.UUID):
 
 @pytest.fixture
 def decline_job_message(job_uuid: uuid.UUID):
-    return V0DeclineJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+    return V0JobRejectedRequest(job_uuid=str(job_uuid)).model_dump_json()
 
 
 @pytest.fixture

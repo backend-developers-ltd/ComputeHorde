@@ -302,7 +302,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="statuses")
     status = models.CharField(choices=fv_protocol_consts.FaciValiJobStatus.choices())
-    stage = models.CharField(choices=protocol_consts.JobStage.choices(), default=protocol_consts.JobStage.NOT_SPECIFIED.value, max_length=255)
+    stage = models.CharField(choices=protocol_consts.JobStage.choices(), default=protocol_consts.JobStage.UNKNOWN.value, max_length=255)
     metadata = models.JSONField(blank=True, default=dict)
     created_at = models.DateTimeField(default=now)
 
@@ -323,7 +323,8 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     def get_legacy_status_display(self) -> str:
         """
         Job serializer uses this for the legacy "status" field.
-        Older SDK clients require the human-readable label.
+        - Older SDK clients require the human-readable label
+        - The HORDE_FAILED status is new and will not be accepted
         """
         status_display = {
             fv_protocol_consts.FaciValiJobStatus.SENT.value: "Sent",
@@ -336,6 +337,7 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
             fv_protocol_consts.FaciValiJobStatus.COMPLETED.value: "Completed",
             fv_protocol_consts.FaciValiJobStatus.REJECTED.value: "Rejected",
             fv_protocol_consts.FaciValiJobStatus.FAILED.value: "Failed",
+            fv_protocol_consts.FaciValiJobStatus.HORDE_FAILED.value: "Failed",
         }
         return status_display[self.status]
 

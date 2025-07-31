@@ -7,11 +7,11 @@ from pydantic import BaseModel
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
-    V0DeclineJobRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
+    V0JobRejectedRequest,
 )
 from compute_horde.transport import StubTransport
 
@@ -38,7 +38,7 @@ def get_miner_client(
 @pytest.mark.parametrize(
     "initial_msg,executor_msg,final_msg",
     [
-        (V0DeclineJobRequest(job_uuid=JOB_UUID), None, None),
+        (V0JobRejectedRequest(job_uuid=JOB_UUID), None, None),
         (V0AcceptJobRequest(job_uuid=JOB_UUID), V0ExecutorFailedRequest(job_uuid=JOB_UUID), None),
         (
             V0AcceptJobRequest(job_uuid=JOB_UUID),
@@ -121,7 +121,7 @@ async def test_organic_miner_client__futures__properly_set(
     "initial_msg",
     [
         V0AcceptJobRequest(job_uuid=str(uuid.uuid4())),
-        V0DeclineJobRequest(job_uuid=str(uuid.uuid4())),
+        V0JobRejectedRequest(job_uuid=str(uuid.uuid4())),
     ],
 )
 async def test_organic_miner_client__skip_different_job__initial_future(initial_msg, keypair):

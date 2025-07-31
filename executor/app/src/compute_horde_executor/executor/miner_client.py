@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass
 
 import pydantic
-from compute_horde import protocol_consts
+from compute_horde import organic_job_errors, protocol_consts
 from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
 from compute_horde.protocol_messages import (
     ExecutorToMinerMessage,
@@ -11,12 +11,12 @@ from compute_horde.protocol_messages import (
     MinerToExecutorMessage,
     V0ExecutionDoneRequest,
     V0ExecutorReadyRequest,
+    V0HordeFailedRequest,
     V0InitialJobRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
-    V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
     V0VolumesReadyRequest,
 )
@@ -140,25 +140,59 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
     async def send_execution_done(self):
         await self.send_model(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
 
-    async def send_job_error(self, job_error: JobError):
-        error_detail = job_error.error_message
+    async def old_send_job_error(self, job_error: JobError):
+        # TODO(post error propagation): get rid of this method and use send_job_failed or send_horde_failed
+        message = job_error.error_message
         if job_error.error_detail:
-            error_detail += f": {job_error.error_detail}"
-
-        msg = V0JobFailedRequest(
-            job_uuid=self.job_uuid,
-            error_type=job_error.error_type,
-            error_detail=error_detail,
-            docker_process_stdout="",
-            docker_process_stderr="",
-        )
+            message += f": {job_error.error_detail}"
 
         if job_error.execution_result:
-            msg.docker_process_stdout = job_error.execution_result.stdout
-            msg.docker_process_stderr = job_error.execution_result.stderr
-            msg.docker_process_exit_status = job_error.execution_result.return_code
+            await self.send_job_failed(
+                organic_job_errors.JobFailed(
+                    stage=protocol_consts.JobStage.UNKNOWN,
+                    reason=protocol_consts.JobFailureReason.NONZERO_EXIT_CODE,
+                    message=message,
+                    docker_process_exit_status=job_error.execution_result.return_code,
+                    docker_process_stdout=job_error.execution_result.stdout,
+                    docker_process_stderr=job_error.execution_result.stderr,
+                )
+            )
 
-        await self.send_model(msg)
+        else:
+            await self.send_horde_failed(
+                organic_job_errors.HordeFailed(
+                    reported_by=protocol_consts.JobParticipantType.EXECUTOR,
+                    stage=protocol_consts.JobStage.UNKNOWN,
+                    reason=protocol_consts.HordeFailureReason.GENERIC_EXECUTOR_FAILED,
+                    message=job_error.error_message,
+                )
+            )
+
+    async def send_job_failed(self, job_failure: organic_job_errors.JobFailed):
+        await self.send_model(
+            V0JobFailedRequest(
+                job_uuid=self.job_uuid,
+                stage=job_failure.stage,
+                reason=job_failure.reason,
+                message=job_failure.message,
+                context=job_failure.context,
+                docker_process_exit_status=job_failure.docker_process_exit_status,
+                docker_process_stdout=job_failure.docker_process_stdout,
+                docker_process_stderr=job_failure.docker_process_stderr,
+            )
+        )
+
+    async def send_horde_failed(self, horde_failure: organic_job_errors.HordeFailed):
+        await self.send_model(
+            V0HordeFailedRequest(
+                job_uuid=self.job_uuid,
+                reported_by=horde_failure.reported_by,
+                stage=horde_failure.stage,
+                reason=horde_failure.reason,
+                message=horde_failure.message,
+                context=horde_failure.context,
+            )
+        )
 
     async def send_result(self, job_result: "JobResult"):
         if job_result.specs:
@@ -182,13 +216,6 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
         await self.send_model(
             GenericError(
                 details=details,
-            )
-        )
-
-    async def send_streaming_job_failed_to_prepare(self):
-        await self.send_model(
-            V0StreamingJobNotReadyRequest(
-                job_uuid=self.job_uuid,
             )
         )
 

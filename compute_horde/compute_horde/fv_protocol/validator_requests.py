@@ -62,12 +62,12 @@ class JobFailureDetails(BaseModel):
     reason: protocol_consts.JobFailureReason
     message: str | None = None
     context: JsonValue = None
+    # TODO(error propagation): job output and error code
 
 
 class HordeFailureDetails(BaseModel):
     reported_by: protocol_consts.JobParticipantType
     reason: protocol_consts.HordeFailureReason
-    exception_type: str | None = None
     message: str | None = None
     context: JsonValue = None
 
@@ -100,7 +100,7 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
     uuid: str
     status: fv_protocol_consts.FaciValiJobStatus
     # TODO(post error propagation): no "None" default
-    stage: protocol_consts.JobStage = protocol_consts.JobStage.NOT_SPECIFIED
+    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
     metadata: JobStatusUpdateMetadata | None = None
 
 

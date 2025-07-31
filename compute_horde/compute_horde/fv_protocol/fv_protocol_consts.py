@@ -23,6 +23,7 @@ class FaciValiJobStatus(StrEnum):
     COMPLETED = "completed"
     REJECTED = "rejected"
     FAILED = "failed"
+    HORDE_FAILED = "horde_failed"
 
     @classmethod
     def choices(cls):

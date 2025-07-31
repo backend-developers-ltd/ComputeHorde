@@ -21,10 +21,10 @@ from compute_horde.executor_class import (
 from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
-    V0DeclineJobRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
+    V0JobRejectedRequest,
     V0StreamingJobReadyRequest,
 )
 from compute_horde.receipts import Receipt
@@ -624,7 +624,7 @@ async def flow_3(
 
     await transport.add_message(manifest_message, send_before=1)
 
-    decline_message = V0DeclineJobRequest(job_uuid=str(job_uuid)).model_dump_json()
+    decline_message = V0JobRejectedRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(decline_message, send_before=1)
 
 
@@ -642,7 +642,7 @@ async def flow_4(
 
     await transport.add_message(manifest_message, send_before=1)
 
-    decline_message = V0DeclineJobRequest(
+    decline_message = V0JobRejectedRequest(
         job_uuid=str(job_uuid),
         reason=protocol_consts.JobRejectionReason.BUSY,
     ).model_dump_json()
@@ -669,7 +669,7 @@ async def flow_5(
 
     await transport.add_message(manifest_message, send_before=1)
 
-    decline_message = V0DeclineJobRequest(
+    decline_message = V0JobRejectedRequest(
         job_uuid=str(job_uuid),
         reason=protocol_consts.JobRejectionReason.BUSY,
         receipts=_build_invalid_excuse_receipts(
@@ -710,7 +710,7 @@ async def flow_6(
     )
     excuse_blob = excuse.blob_for_signing()
 
-    decline_message = V0DeclineJobRequest(
+    decline_message = V0JobRejectedRequest(
         job_uuid=str(job_uuid),
         reason=protocol_consts.JobRejectionReason.BUSY,
         receipts=[
@@ -755,7 +755,7 @@ async def flow_7(
     )
     excuse_blob = excuse.blob_for_signing()
 
-    decline_message = V0DeclineJobRequest(
+    decline_message = V0JobRejectedRequest(
         job_uuid=str(job_uuid),
         reason=protocol_consts.JobRejectionReason.BUSY,
         receipts=[
