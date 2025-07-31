@@ -1,5 +1,7 @@
 import datetime
+import re
 from contextlib import contextmanager
+from typing import Pattern
 
 from compute_horde_validator.validator.allowance.models.internal import BlockAllowance, Block
 from compute_horde_validator.validator.models import SystemEvent
@@ -105,3 +107,21 @@ def assert_system_events(specs: list[dict]):
                 break
         else:
             raise AssertionError(f"{spec} not found in system events: {after}")
+
+
+class Matcher:
+    """A helper class for regex matching in test assertions."""
+
+    def __init__(self, pattern: str | Pattern[str]):
+        if isinstance(pattern, str):
+            self.pattern = re.compile(pattern)
+        else:
+            self.pattern = pattern
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, str):
+            return False
+        return bool(self.pattern.match(other))
+
+    def __repr__(self) -> str:
+        return f"Matcher({self.pattern.pattern!r})"

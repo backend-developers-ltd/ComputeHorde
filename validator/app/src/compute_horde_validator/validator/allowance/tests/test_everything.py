@@ -5,9 +5,9 @@ import random
 import pytest
 
 from compute_horde_core.executor_class import ExecutorClass
-from .mockchain import set_block_number, manifest_responses
-from .utils_for_tests import LF, allowance_dict, inject_blocks_with_allowances, assert_system_events
-from ..types import NotEnoughAllowanceException
+from .mockchain import set_block_number, manifest_responses, MINER_HOTKEYS
+from .utils_for_tests import LF, allowance_dict, inject_blocks_with_allowances, assert_system_events, Matcher
+from ..types import NotEnoughAllowanceException, CannotReserveAllowanceException
 from ..utils import blocks, manifests
 from ..utils.manifests import sync_manifests
 from ...tests.helpers import patch_constance
@@ -25,6 +25,15 @@ def test_empty():
             'highest_unspent_allowance': 0,
             'highest_unspent_allowance_ss58': '',
         }
+        with pytest.raises(CannotReserveAllowanceException) as e:
+            allowance().reserve_allowance(
+                MINER_HOTKEYS[0],
+                ExecutorClass.always_on__llm__a6000,
+                1.0,
+                1000,
+            )
+        assert e.value.args == ('Not enough allowance from miner stable_miner_000. Required: 1.0, Available: 0.0',)
+
 
 
 @pytest.mark.django_db(transaction=True)
@@ -39,6 +48,14 @@ def test_block_without_manifests():
             'highest_unspent_allowance': 0,
             'highest_unspent_allowance_ss58': '',
         }
+        with pytest.raises(CannotReserveAllowanceException) as e:
+            allowance().reserve_allowance(
+                MINER_HOTKEYS[0],
+                ExecutorClass.always_on__llm__a6000,
+                1.0,
+                1000,
+            )
+        assert e.value.args == ('Not enough allowance from miner stable_miner_000. Required: 1.0, Available: 0.0',)
 
     with set_block_number(1001):
         blocks.process_block_allowance_with_reporting(1001)
@@ -51,6 +68,14 @@ def test_block_without_manifests():
             'highest_unspent_allowance': 0,
             'highest_unspent_allowance_ss58': '',
         }
+        with pytest.raises(CannotReserveAllowanceException) as e:
+            allowance().reserve_allowance(
+                MINER_HOTKEYS[0],
+                ExecutorClass.always_on__llm__a6000,
+                1.0,
+                1000,
+            )
+        assert e.value.args == ('Not enough allowance from miner stable_miner_000. Required: 1.0, Available: 0.0',)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -118,9 +143,9 @@ def test_complete():
         allowance().find_miners_with_allowance(1000000000.0, ExecutorClass.always_on__llm__a6000, 1001)
     assert e.value.to_dict() == {
         'highest_available_allowance': LF(highest_allowance),
-        'highest_available_allowance_ss58': 'stable_miner_012',
+        'highest_available_allowance_ss58': Matcher(r"stable_miner_\d{3}"),
         'highest_unspent_allowance': LF(highest_allowance),
-        'highest_unspent_allowance_ss58': 'stable_miner_012',
+        'highest_unspent_allowance_ss58': Matcher(r"stable_miner_\d{3}"),
     }
     with set_block_number(1011):
         with assert_system_events([
@@ -173,6 +198,36 @@ def test_complete():
             ==
             allowance_dict(json.loads((pathlib.Path(__file__).parent / 'allowance_after_1000_blocks.json').read_text()))
     )
+
+    # a quick test to check reserving works for huge numbers of blocks
+    reservation_id, blocks_ = allowance().reserve_allowance(
+        "stable_miner_081",
+        ExecutorClass.always_on__llm__a6000,
+        1755,
+        1101,
+    )
+    assert blocks_ == list(range(379, 1100))
+
+    # nothing left
+    with pytest.raises(CannotReserveAllowanceException) as e:
+        allowance().reserve_allowance(
+            "stable_miner_081",
+            ExecutorClass.always_on__llm__a6000,
+            1.0,
+            1101,
+        )
+    assert e.value.args == ('Not enough allowance from miner stable_miner_081. Required: 1.0, Available: 0.0',)
+
+    allowance().undo_allowance_reservation(reservation_id)
+
+    # now it's working again
+    _, blocks_ = allowance().reserve_allowance(
+        "stable_miner_081",
+        ExecutorClass.always_on__llm__a6000,
+        1755,
+        1101,
+    )
+    assert blocks_ == list(range(379, 1100))
 
 
 @pytest.mark.django_db(transaction=True)

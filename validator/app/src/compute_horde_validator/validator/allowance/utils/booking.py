@@ -42,7 +42,7 @@ def reserve_allowance(
     available_allowances = BlockAllowance.objects.filter(
         miner_ss58=miner,
         validator_ss58=validator,
-        executor_class=executor_class,
+        executor_class=executor_class.value,
         block__block_number__gte=earliest_usable_block,
         invalidated_at_block__isnull=True,  # Only non-invalidated allowances
     ).filter(
