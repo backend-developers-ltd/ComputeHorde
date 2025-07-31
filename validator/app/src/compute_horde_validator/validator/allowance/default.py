@@ -4,7 +4,7 @@ from django.conf import settings
 from compute_horde_core.executor_class import ExecutorClass
 from .base import AllowanceBase
 from .types import ss58_address, reservation_id, block_ids, Miner, Neuron
-from .utils import blocks, metagraph
+from .utils import blocks, booking, metagraph
 from .utils.supertensor import supertensor
 
 
@@ -14,13 +14,19 @@ class Allowance(AllowanceBase):
 
     def reserve_allowance(self, miner: ss58_address, executor_class: ExecutorClass, amount: float,
                           job_start_block: int) -> tuple[reservation_id, block_ids]:
-        raise NotImplementedError
+        return booking.reserve_allowance(
+            miner=miner,
+            validator=self.my_ss58_address,
+            executor_class=executor_class,
+            amount=amount,
+            job_start_block=job_start_block
+        )
 
     def undo_allowance_reservation(self, reservation_id_: reservation_id) -> None:
-        raise NotImplementedError
+        booking.undo_allowance_reservation(reservation_id_)
 
     def spend_allowance(self, reservation_id_: reservation_id) -> None:
-        raise NotImplementedError
+        booking.spend_allowance(reservation_id_)
 
     def validate_foreign_receipt(self):
         raise NotImplementedError

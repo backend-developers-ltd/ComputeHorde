@@ -51,7 +51,8 @@ class AllowanceBase(ABC):
         job_start_block: int,
     ) -> tuple[reservation_id, block_ids]:
         """
-        Reserve allowance for a specific miner. The reservation will auto expire after `amount` seconds.
+        Reserve allowance for a specific miner. The reservation will auto expire after
+        `amount + settings.RESERVATION_MARGIN_SECONDS` seconds.
 
         This is used for temporary allowance reservation for pending jobs.
 
