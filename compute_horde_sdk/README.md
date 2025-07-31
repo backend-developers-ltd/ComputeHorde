@@ -268,12 +268,21 @@ Set the volume manager address as an environment variable:
 export VOLUME_MANAGER_ADDRESS="http://localhost:8080"
 ```
 
-Add custom headers for authentication:
+You can also add custom headers for authentication or any other purpose. Any environment variable starting with `VOLUME_MANAGER_HEADER_` will be added as a header to each request sent to the volume manager.
+
+**Examples:**
 
 ```bash
-export VOLUME_MANAGER_HEADER_Authorization="Bearer your-token"
-export VOLUME_MANAGER_HEADER_X-Custom-Header="custom-value"
+# Authentication header
+export VOLUME_MANAGER_HEADER_AUTHORIZATION='Bearer dupadupakupa'
+
+# Custom API key
+export VOLUME_MANAGER_HEADER_X_API_KEY='your-api-key-here'
+
+# Custom metadata
+export VOLUME_MANAGER_HEADER_X_CUSTOM_METADATA='project:compute-horde'
 ```
+**Local development**: The local stack setup script [`prepare.sh`](https://github.com/backend-developers-ltd/ComputeHorde/blob/master/local_stack/prepare.sh) includes a commented volume manager configuration. To test volume manager functionality, uncomment the section and run [`send_hello_world_job.py`](https://github.com/backend-developers-ltd/ComputeHorde/blob/master/local_stack/send_hello_world_job.py) with the `--test-volume` flag. 
 
 ### Volume Manager API
 
@@ -315,11 +324,10 @@ Your volume manager must implement these endpoints:
 ```json
 {
   "mounts": [
-    {
-      "type": "bind",
-      "source": "/host/path/to/cached/model",
-      "target": "/volume/models"
-    }
+    ["-v", "/host/path/to/cached/model:/volume/models"],
+    ["--tmpfs", "/tmp/cache:size=100m"],
+    ["-v", "my_named_volume:/data", "--volume-driver", "local"],
+    ["--device", "/dev/gpu0:/dev/gpu0:rwm"]
   ]
 }
 ```

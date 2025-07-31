@@ -61,8 +61,9 @@ PROJECT_ROOT=$(git rev-parse --show-toplevel)
 cd $PROJECT_ROOT/executor
 ./setup-dev.sh
 update_env_var "DEBUG_NO_GPU_MODE" "true" ".env"
-# Use for volume manager testing, not a requirement for the local stack setup
-update_env_var "VOLUME_MANAGER_ADDRESS" "http://localhost:8001" ".env"
+
+# Uncomment the line below only if you have a volume manager service running
+# update_env_var "VOLUME_MANAGER_ADDRESS" "http://localhost:8001" ".env"
 
 # setup miner
 cd $PROJECT_ROOT/miner

@@ -22,7 +22,6 @@ from compute_horde_core.volume import (
     VolumeDownloadFailed,
     VolumeManagerClient,
     VolumeManagerError,
-    VolumeManagerResponse,
     ZipUrlVolume,
     ZipUrlVolumeDownloader,
     create_volume_manager_client,
@@ -546,7 +545,7 @@ class TestVolumeManagerClient:
     @pytest.mark.asyncio
     async def test_prepare_volume_success(self, client, huggingface_volume):
         """Test successful prepare_volume call."""
-        mock_response = {"mounts": [{"type": "bind", "source": "/host/path", "target": "/container/path"}]}
+        mock_response = {"mounts": [["-v", "/host/path:/container/path"]]}
 
         with mock.patch.object(client, "_make_request") as mock_make_request:
             mock_make_request.return_value = mock_response
@@ -555,9 +554,11 @@ class TestVolumeManagerClient:
                 job_uuid="test-job-123", volume=huggingface_volume, job_metadata={"image": "test-image"}
             )
 
-            assert isinstance(result, VolumeManagerResponse)
-            assert len(result.mounts) == 1
-            assert result.mounts[0].type == "bind"
+            assert isinstance(result, list)
+            assert all(isinstance(item, list) for item in result)
+            assert all(all(isinstance(subitem, str) for subitem in item) for item in result)
+            assert len(result) == 1
+            assert result[0] == ["-v", "/host/path:/container/path"]
 
     @pytest.mark.asyncio
     async def test_job_finished_success(self, client):
@@ -580,12 +581,12 @@ class TestVolumeManagerClient:
 
         http_error = httpx.HTTPStatusError("500 Internal Server Error", request=None, response=mock_response)
 
-        with mock.patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = mock.AsyncMock()
-            mock_client_class.return_value.__aenter__.return_value = mock_client
-            mock_client.post.side_effect = http_error
+        # Mock the _get_client method to return a mock client that always raises the error
+        mock_client = mock.AsyncMock()
+        mock_client.post = mock.AsyncMock(side_effect=http_error)
 
-            # Test prepare_volume error
+        with mock.patch.object(client, "_get_client", return_value=mock_client):
+            # Test prepare_volume error - should retry and eventually raise VolumeManagerError
             with pytest.raises(VolumeManagerError) as exc_info:
                 await client.prepare_volume(
                     job_uuid="test-job-123", volume=huggingface_volume, job_metadata={"image": "test-image"}
@@ -595,7 +596,7 @@ class TestVolumeManagerClient:
             assert "Volume Manager prepare_volume returned status 500" in error.description
             assert error.error_detail == "Server error"
 
-            # Test job_finished error
+            # Test job_finished error - should retry and eventually raise VolumeManagerError
             with pytest.raises(VolumeManagerError) as exc_info:
                 await client.job_finished("test-job-123")
 
@@ -611,7 +612,7 @@ class TestVolumeManagerClient:
             relative_path="data",
         )
 
-        mock_response = {"mounts": [{"type": "bind", "source": "/tmp/inline-data", "target": "/volume/data"}]}
+        mock_response = {"mounts": [["-v", "/tmp/inline-data:/volume/data"]]}
 
         with mock.patch.object(client, "_make_request") as mock_make_request:
             mock_make_request.return_value = mock_response
@@ -620,18 +621,20 @@ class TestVolumeManagerClient:
                 job_uuid="test-job-456", volume=inline_volume, job_metadata={"image": "test-image"}
             )
 
-            assert isinstance(result, VolumeManagerResponse)
-            assert len(result.mounts) == 1
-            assert result.mounts[0].type == "bind"
+            assert isinstance(result, list)
+            assert all(isinstance(item, list) for item in result)
+            assert all(all(isinstance(subitem, str) for subitem in item) for item in result)
+            assert len(result) == 1
+            assert result[0] == ["-v", "/tmp/inline-data:/volume/data"]
 
     @pytest.mark.asyncio
     async def test_prepare_volume_with_multiple_mounts(self, client, huggingface_volume):
         """Test prepare_volume with multiple mounts in response."""
         mock_response = {
             "mounts": [
-                {"type": "bind", "source": "/host/models", "target": "/volume/models"},
-                {"type": "volume", "source": "cache-volume", "target": "/cache"},
-                {"type": "tmpfs", "source": "", "target": "/tmp"},
+                ["-v", "/host/models:/volume/models"],
+                ["-v", "cache-volume:/cache"],
+                ["--tmpfs", "/tmp"],
             ]
         }
 
@@ -642,23 +645,19 @@ class TestVolumeManagerClient:
                 job_uuid="test-job-789", volume=huggingface_volume, job_metadata={"image": "test-image"}
             )
 
-            assert isinstance(result, VolumeManagerResponse)
-            assert len(result.mounts) == 3
+            assert isinstance(result, list)
+            assert all(isinstance(item, list) for item in result)
+            assert all(all(isinstance(subitem, str) for subitem in item) for item in result)
+            assert len(result) == 3
 
             # Check first mount
-            assert result.mounts[0].type == "bind"
-            assert result.mounts[0].source == "/host/models"
-            assert result.mounts[0].target == "/volume/models"
+            assert result[0] == ["-v", "/host/models:/volume/models"]
 
             # Check second mount
-            assert result.mounts[1].type == "volume"
-            assert result.mounts[1].source == "cache-volume"
-            assert result.mounts[1].target == "/cache"
+            assert result[1] == ["-v", "cache-volume:/cache"]
 
             # Check third mount
-            assert result.mounts[2].type == "tmpfs"
-            assert result.mounts[2].source == ""
-            assert result.mounts[2].target == "/tmp"
+            assert result[2] == ["--tmpfs", "/tmp"]
 
 
 class TestCreateVolumeManagerClient:

@@ -28,7 +28,6 @@ from compute_horde_core.volume import (
     VolumeDownloadFailed,
     VolumeManagerClient,
     VolumeManagerError,
-    VolumeManagerMount,
     create_volume_manager_client,
     get_volume_manager_headers,
 )
@@ -150,7 +149,7 @@ class JobRunner:
             )
 
         # Track volume manager mounts for cleanup
-        self.volume_manager_mounts: list[VolumeManagerMount] = []
+        self.volume_manager_mounts: list[list[str]] = []
 
     def generate_streaming_certificate(self, executor_ip: str, public_key: str):
         """
@@ -262,9 +261,9 @@ class JobRunner:
         volume_flags = []
         if self.volume_manager_mounts:
             # Use volume manager mounts
-            for mount in self.volume_manager_mounts:
-                volume_flags.extend(["-v", f"{mount.source}:{mount.target}"])
-                logger.debug(f"Adding volume manager mount: {mount.source}:{mount.target}")
+            for mount_flags in self.volume_manager_mounts:
+                volume_flags.extend(mount_flags)
+                logger.debug(f"Adding volume manager mount: {mount_flags}")
         else:
             # Use default volume mount
             volume_flags = ["-v", f"{self.volume_mount_dir.as_posix()}/:/volume/"]
@@ -437,9 +436,18 @@ class JobRunner:
         )
 
     async def clean(self):
-        # Notify volume manager if configured
-        if self.volume_manager_client and self.initial_job_request:
-            await self._notify_volume_manager_job_finished()
+        # Close volume manager client to prevent resource leaks
+        if self.volume_manager_client:
+            if self.initial_job_request:
+                # Notify volume manager if configured
+                await self._notify_volume_manager_job_finished()
+
+            try:
+                await self.volume_manager_client.close()
+            except Exception as e:
+                logger.warning(f"Failed to close volume manager client: {e}")
+            finally:
+                self.volume_manager_client = None
 
         # remove input/output directories with docker, to deal with funky file permissions
         root_for_remove = pathlib.Path("/temp_dir/")
@@ -525,8 +533,8 @@ class JobRunner:
             )
 
             # Store the mounts for later use in Docker command
-            self.volume_manager_mounts = response.mounts
-            logger.debug(f"Volume Manager provided {len(response.mounts)} mounts")
+            self.volume_manager_mounts = response
+            logger.debug(f"Volume Manager provided {len(response)} mounts")
 
         except VolumeManagerError as exc:
             logger.warning(f"Volume Manager failed to prepare volume for job {job_uuid}: {exc}")

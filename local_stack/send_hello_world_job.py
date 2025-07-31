@@ -7,6 +7,7 @@ import logging
 import tempfile
 import time
 import ssl
+import argparse
 
 import boto3
 import bittensor
@@ -16,7 +17,7 @@ from cryptography.x509 import Certificate
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from compute_horde_sdk._internal.sdk import ComputeHordeJobSpec
-from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass, HTTPOutputVolume
+from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass, HTTPOutputVolume, HuggingfaceInputVolume
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -91,37 +92,76 @@ def create_mt_client_with_tempfiles(
     return client
 
 
-async def main() -> None:
-    # Pull required Docker images
-    os.system("docker pull alpine")
-    os.system("docker pull backenddevelopersltd/compute-horde-executor:v1-latest")
-    os.system("docker pull backenddevelopersltd/compute-horde-streaming-job-test:v0-latest")
-
-    compute_horde_streaming_job_spec = ComputeHordeJobSpec(
+async def run_volume_test():
+    """Run a test job that downloads a HuggingFace model."""
+    logger.info("Running volume download test...")
+    
+    # Pull required Docker image
+    os.system("docker pull python:3.11-slim")
+    
+    # Create a job spec that downloads a small HuggingFace model
+    compute_horde_job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
-        docker_image="backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
-        args=["python", "./mock_streaming_job.py"],
+        docker_image="python:3.11-slim",
+        args=[
+            "bash",
+            "-c",
+            "echo 'Testing volume download...' && "
+            "ls -la /volume && "
+            "echo 'Job completed successfully' > /artifacts/stuff",
+        ],
         artifacts_dir="/artifacts",
-        streaming=True,
-        download_time_limit_sec=5,
-        execution_time_limit_sec=15,
-        streaming_start_time_limit_sec=5,
-        upload_time_limit_sec=5,
-    )
-    streaming_job = await compute_horde_client.create_job(
-        compute_horde_streaming_job_spec
-    )
-    await streaming_job.wait_for_streaming(timeout=60)
-    logger.info(
-        f"Streaming server: {streaming_job.streaming_server_address}:{streaming_job.streaming_server_port}"
+        input_volumes={
+            "/volume/model": HuggingfaceInputVolume(
+                repo_id="prajjwal1/bert-tiny",
+                repo_type="model",
+            ),
+        },
+        download_time_limit_sec=60,
+        execution_time_limit_sec=30,
+        upload_time_limit_sec=10,
     )
 
+    # Create and submit the job.
+    job = await compute_horde_client.create_job(compute_horde_job_spec)
+    await job.wait(timeout=10 * 60)
+
+    # Validate job completion and output.
+    expected_artifacts = {"/artifacts/stuff": b"Job completed successfully\n"}
+    if job.status != "Completed" or job.result.artifacts != expected_artifacts:
+        raise RuntimeError(
+            f"Job failed: status={job.status}, artifacts={job.result.artifacts}"
+        )
+
+    logger.info("Volume test success!")
+
+async def run_hello_world_job():
+    compute_horde_streaming_job_spec = ComputeHordeJobSpec(
+            executor_class=ExecutorClass.always_on__llm__a6000,
+            job_namespace="SN123.0",
+            docker_image="backenddevelopersltd/compute-horde-streaming-job-test:v0-latest",
+            args=["python", "./mock_streaming_job.py"],
+            artifacts_dir="/artifacts",
+            streaming=True,
+            download_time_limit_sec=5,
+            execution_time_limit_sec=15,
+            streaming_start_time_limit_sec=5,
+            upload_time_limit_sec=5,
+        )
+    streaming_job = await compute_horde_client.create_job(
+            compute_horde_streaming_job_spec
+        )
+    await streaming_job.wait_for_streaming(timeout=60)
+    logger.info(
+            f"Streaming server: {streaming_job.streaming_server_address}:{streaming_job.streaming_server_port}"
+        )
+
     client = create_mt_client_with_tempfiles(
-        streaming_job.streaming_public_cert,
-        streaming_job.streaming_private_key,
-        streaming_job.streaming_server_cert,
-    )
+            streaming_job.streaming_public_cert,
+            streaming_job.streaming_private_key,
+            streaming_job.streaming_server_cert,
+        )
 
     max_terminate_retries = 3
     for attempt in range(1, max_terminate_retries + 1):
@@ -231,6 +271,26 @@ async def main() -> None:
 
     logger.info("Success!")
 
+async def main() -> None:
+    parser = argparse.ArgumentParser(description="Run ComputeHorde integration tests")
+    parser.add_argument(
+        "--test-volume",
+        action="store_true",
+        help="Include volume download test"
+    )
+    args = parser.parse_args()
+
+    # Pull required Docker images
+    os.system("docker pull alpine")
+    os.system("docker pull backenddevelopersltd/compute-horde-executor:v1-latest")
+    os.system("docker pull backenddevelopersltd/compute-horde-streaming-job-test:v0-latest")
+
+    # Run volume test if requested
+    if args.test_volume:
+        await run_volume_test()
+    else:
+        await run_hello_world_job()
+        
 
 if __name__ == "__main__":
     asyncio.run(main())
