@@ -139,37 +139,41 @@ The dancing bonus encourages miners to dynamically adjust their resource allocat
 
 ### What is Dancing?
 
-"Dancing" refers to miners changing how they distribute their computational resources across multiple hotkeys. This is tracked through **split distributions**.
+"Dancing" refers to miners changing their main hotkey between cycles. This is tracked through **main hotkey declarations**.
 
-### Split Distribution
+### Main Hotkey
 
-A split distribution defines how a miner divides their total score among their hotkeys:
-
-```python
-# Example: Miner "miner1" has two hotkeys with 60/40 split
-split_distribution = {
-    "hotkey1": 0.6,  # 60% of total score
-    "hotkey2": 0.4   # 40% of total score
-}
-```
+A main hotkey is the primary hotkey that a miner designates for a given coldkey. Miners can change their main hotkey between cycles to "dance" and earn bonus rewards.
 
 ### How Dancing Bonus Works
 
-1. **Previous Cycle**: Records split distributions from the previous cycle
-2. **Current Cycle**: Calculates new split distributions based on current performance
-3. **Comparison**: Checks if split distributions changed between cycles
-4. **Bonus Application**: If distributions changed, applies a bonus multiplier (e.g., 1.1x) to the main hotkey in the group.
+1. **Previous Cycle**: Records main hotkey from the previous cycle
+2. **Current Cycle**: Queries miners for their current main hotkey
+3. **Comparison**: Checks if main hotkey changed between cycles
+4. **Bonus Application**: If main hotkey changed, applies a bonus multiplier (e.g., 1.1x) to the coldkey total score.
+
+### Score Distribution
+
+When a main hotkey is specified and registered:
+
+- **Main Hotkey**: Gets 80% of the total score for the coldkey (configurable via `MAIN_HOTKEY_SHARE`)
+- **Other Hotkeys**: Share the remaining 20% equally
+- **Dancing Bonus**: When main hotkey changes, the main hotkey gets an additional 10% bonus (configurable via `DYNAMIC_DANCING_BONUS`)
 
 ### Example Dancing Scenario
 
 ```python
-# Previous cycle: 50/50 split
-previous_splits = {"hotkey1": 0.5, "hotkey2": 0.5}
+# Previous cycle: main hotkey = "hotkey1"
+previous_main_hotkey = "hotkey1"
 
-# Current cycle: 70/30 split (dancing occurred)
-current_splits = {"hotkey1": 0.7, "hotkey2": 0.3}
+# Current cycle: main hotkey = "hotkey2" (dancing occurred)
+current_main_hotkey = "hotkey2"
 
-# Result: bonus applied to the hotkey1
+# Result: 
+# - Total score earned in this cycle for the coldkey is 100
+# - Total score is multiplied by DYNAMIC_DANCING_BONUS - 100 * 1.1 = 110
+# - Main hothey gets 80% of the the score - 110 * 0.8 = 88
+# - Other hotkeys share the remaining 20% equally
 ```
 
 ## Configuration
@@ -188,6 +192,7 @@ DYNAMIC_SCORE_ORGANIC_JOBS_LIMIT = -1  # -1 = unlimited
 
 # Dancing bonus
 DYNAMIC_DANCING_BONUS = 0.1  # 10% bonus for dancing
+MAIN_HOTKEY_SHARE = 0.8  # 80% share for main hotkey
 
 # Synthetic job scoring
 DYNAMIC_EXCUSED_SYNTHETIC_JOB_SCORE = 1.0  # Score for excused jobs

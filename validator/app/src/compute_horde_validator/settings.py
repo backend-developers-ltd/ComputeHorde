@@ -433,6 +433,11 @@ CONSTANCE_CONFIG = {
         "Bonus multiplier for the split distribution in dancing (10% = 0.1)",
         float,
     ),
+    "MAIN_HOTKEY_SHARE": (
+        0.8,
+        "Share of the total score that goes to the main hotkey (80% = 0.8)",
+        float,
+    ),
 }
 
 # Content Security Policy

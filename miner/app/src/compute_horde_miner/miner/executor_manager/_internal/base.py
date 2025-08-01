@@ -247,15 +247,15 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         peak_cycle = get_peak_cycle(current_block, settings.BITTENSOR_NETUID)
         return current_block in peak_cycle
 
-    async def get_split_distribution(self) -> dict[str, float] | None:
+    async def get_main_hotkey(self) -> str | None:
         """
-        Get the split distribution for decoupled dancing.
-        By default, returns the miner's own hotkey with 100% distribution.
-        Miners can override this to implement split exposure.
+        Get the main hotkey for this coldkey.
+        By default, returns the miner's own hotkey as the main hotkey.
+        Miners can override this to implement main hotkey selection.
 
         Returns:
-            Dictionary mapping hotkeys to percentages, or None if no split
+            The main hotkey for this coldkey, or None if no main hotkey
         """
         # Get the miner's own hotkey
-        my_hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address
-        return {my_hotkey: 1.0}
+        my_hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address  # type: str
+        return my_hotkey

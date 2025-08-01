@@ -12,16 +12,15 @@ from compute_horde_validator.validator.scoring.calculations import (
     combine_scores,
 )
 from compute_horde_validator.validator.scoring.exceptions import (
-    SplitDistributionError,
+    MainHotkeyError,
 )
 from compute_horde_validator.validator.scoring.interface import ScoringEngine
-from compute_horde_validator.validator.scoring.models import (
-    MinerSplit,
-    MinerSplitDistribution,
-    SplitInfo,
+from compute_horde_validator.validator.scoring.main_hotkey_querying import (
+    query_miner_main_hotkeys,
 )
-from compute_horde_validator.validator.scoring.split_querying import (
-    query_miner_split_distributions,
+from compute_horde_validator.validator.scoring.models import (
+    MainHotkeyInfo,
+    MinerMainHotkey,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,9 +29,10 @@ logger = logging.getLogger(__name__)
 class DefaultScoringEngine(ScoringEngine):
     def __init__(self):
         self.dancing_bonus = getattr(settings, "DYNAMIC_DANCING_BONUS", 0.1)
+        self.main_hotkey_share = getattr(settings, "MAIN_HOTKEY_SHARE", 0.8)
 
     def calculate_scores_for_cycles(
-        self, current_cycle_start: int, previous_cycle_start: int, validator_hotkey: str
+        self, current_cycle_start: int, previous_cycle_start: int
     ) -> dict[str, float]:
         """
         Calculate scores for current cycle.
@@ -46,6 +46,8 @@ class DefaultScoringEngine(ScoringEngine):
             Dictionary mapping hotkey to final score
         """
         logger.info(f"Calculating scores for cycle {current_cycle_start}")
+
+        hotkey_to_coldkey = self._create_hotkey_to_coldkey_mapping()
 
         current_cycle_range = get_cycle_containing_block(
             block=current_cycle_start, netuid=settings.BITTENSOR_NETUID
@@ -83,7 +85,10 @@ class DefaultScoringEngine(ScoringEngine):
             weight = executor_class_weights.get(executor_class, 1.0)
 
             final_executor_scores = self._apply_dancing(
-                executor_scores, current_cycle_start, previous_cycle_start, validator_hotkey
+                executor_scores,
+                current_cycle_start,
+                previous_cycle_start,
+                hotkey_to_coldkey,
             )
 
             total_executor_score = sum(final_executor_scores.values())
@@ -99,12 +104,31 @@ class DefaultScoringEngine(ScoringEngine):
         logger.info(f"Final scores calculated for cycle {current_cycle_start}")
         return normalized_scores
 
+    def _create_hotkey_to_coldkey_mapping(self) -> dict[str, str]:
+        """
+        Create mapping from hotkey to coldkey for all miners.
+
+        Returns:
+            Dictionary mapping hotkey to coldkey
+        """
+        hotkey_to_coldkey: dict[str, str] = {}
+
+        all_miners: list[Miner] = list(Miner.objects.all())
+        for miner in all_miners:
+            if miner.coldkey:
+                hotkey_to_coldkey[miner.hotkey] = miner.coldkey
+            else:
+                # Handle hotkeys without coldkeys - map to themselves
+                hotkey_to_coldkey[miner.hotkey] = miner.hotkey
+
+        return hotkey_to_coldkey
+
     def _apply_dancing(
         self,
         scores: dict[str, float],
         current_cycle_start: int,
         previous_cycle_start: int,
-        validator_hotkey: str,
+        hotkey_to_coldkey: dict[str, str],
     ) -> dict[str, float]:
         """
         Apply dancing to scores.
@@ -114,73 +138,59 @@ class DefaultScoringEngine(ScoringEngine):
             current_cycle_start: Current cycle start block
             previous_cycle_start: Previous cycle start block
             validator_hotkey: Validator hotkey
+            hotkey_to_coldkey: Mapping from hotkey to coldkey
 
         Returns:
             Final scores with dancing applied
         """
-        coldkey_scores, hotkey_to_coldkey = self._group_scores_by_coldkey(scores)
+        coldkey_scores = self._group_scores_by_coldkey(scores, hotkey_to_coldkey)
 
-        final_scores = self._process_splits_and_distribute(
+        final_scores = self._process_main_hotkeys_and_distribute(
             coldkey_scores,
             hotkey_to_coldkey,
             scores,
             current_cycle_start,
             previous_cycle_start,
-            validator_hotkey,
         )
 
         return final_scores
 
     def _group_scores_by_coldkey(
-        self, scores: dict[str, float]
-    ) -> tuple[dict[str, float], dict[str, str]]:
+        self, scores: dict[str, float], hotkey_to_coldkey: dict[str, str]
+    ) -> dict[str, float]:
         """
         Group scores by coldkey.
 
         Args:
             scores: Dictionary of hotkey -> score
+            hotkey_to_coldkey: Mapping from hotkey to coldkey
 
         Returns:
-            Tuple of (coldkey_scores, hotkey_to_coldkey_mapping)
+            Dictionary mapping coldkey to total score
         """
         coldkey_scores: defaultdict[str, float] = defaultdict(float)
-        hotkey_to_coldkey: dict[str, str] = {}
 
-        hotkeys_list = list(scores.keys())
-        miners: list[Miner] = list(Miner.objects.filter(hotkey__in=hotkeys_list))
-        miner_map = {miner.hotkey: miner for miner in miners}
-
-        # Group by coldkey from database
-        hotkeys_without_coldkey = []
         for hotkey, score in scores.items():
-            miner = miner_map.get(hotkey)
-            if miner and miner.coldkey:
-                coldkey = miner.coldkey
+            coldkey = hotkey_to_coldkey.get(hotkey)
+            if coldkey:
                 coldkey_scores[coldkey] += score
-                hotkey_to_coldkey[hotkey] = coldkey
             else:
-                hotkeys_without_coldkey.append(hotkey)
-                if not miner:
-                    logger.warning(f"Miner not found for hotkey: {hotkey}")
+                # Handle hotkeys not in mapping - keep as individual hotkeys
+                coldkey_scores[hotkey] = score
+                logger.warning(f"Hotkey {hotkey} not found in hotkey_to_coldkey mapping")
 
-        # Handle hotkeys without coldkeys - keep as individual hotkeys
-        for hotkey in hotkeys_without_coldkey:
-            coldkey_scores[hotkey] = scores[hotkey]
-            hotkey_to_coldkey[hotkey] = hotkey
+        return dict(coldkey_scores)
 
-        return dict(coldkey_scores), hotkey_to_coldkey
-
-    def _process_splits_and_distribute(
+    def _process_main_hotkeys_and_distribute(
         self,
         coldkey_scores: dict[str, float],
         hotkey_to_coldkey: dict[str, str],
         original_scores: dict[str, float],
         current_cycle_start: int,
         previous_cycle_start: int,
-        validator_hotkey: str,
     ) -> dict[str, float]:
         """
-        Process splits and distribute scores to hotkeys.
+        Process main hotkeys and distribute scores to hotkeys.
 
         Args:
             coldkey_scores: Scores grouped by coldkey
@@ -188,23 +198,22 @@ class DefaultScoringEngine(ScoringEngine):
             original_scores: Original hotkey -> score mapping
             current_cycle_start: Current cycle start block
             previous_cycle_start: Previous cycle start block
-            validator_hotkey: Validator hotkey
 
         Returns:
             Final scores distributed to hotkeys
         """
         final_scores = {}
 
-        coldkeys_for_splits = [
+        coldkeys_for_main_hotkeys = [
             coldkey for coldkey in coldkey_scores.keys() if coldkey not in original_scores
         ]
 
-        current_splits = self._query_current_splits(
-            coldkeys_for_splits, current_cycle_start, validator_hotkey
+        current_main_hotkeys = self._query_current_main_hotkeys(
+            coldkeys_for_main_hotkeys, current_cycle_start
         )
 
-        previous_splits = self._get_split_distributions(
-            coldkeys_for_splits, previous_cycle_start, validator_hotkey
+        previous_main_hotkeys = self._get_main_hotkey(
+            coldkeys_for_main_hotkeys, previous_cycle_start
         )
 
         for coldkey, total_score in coldkey_scores.items():
@@ -212,12 +221,12 @@ class DefaultScoringEngine(ScoringEngine):
                 final_scores[coldkey] = total_score
                 continue
 
-            distributed_scores = self._process_coldkey_split(
+            distributed_scores = self._process_coldkey_main_hotkey(
                 coldkey,
                 total_score,
                 hotkey_to_coldkey,
-                current_splits.get(coldkey),
-                previous_splits.get(coldkey),
+                current_main_hotkeys.get(coldkey),
+                previous_main_hotkeys.get(coldkey),
             )
 
             for hotkey, score in distributed_scores.items():
@@ -225,26 +234,25 @@ class DefaultScoringEngine(ScoringEngine):
 
         return final_scores
 
-    def _query_current_splits(
-        self, coldkeys: list[str], cycle_start: int, validator_hotkey: str
-    ) -> dict[str, SplitInfo]:
+    def _query_current_main_hotkeys(
+        self, coldkeys: list[str], cycle_start: int
+    ) -> dict[str, MainHotkeyInfo]:
         """
-        Query miners for current split distributions.
+        Query miners for current main hotkeys.
 
         Args:
             coldkeys: List of miner coldkeys
             cycle_start: Current cycle start block
-            validator_hotkey: Validator hotkey
 
         Returns:
-            Dictionary mapping coldkey to SplitInfo
+            Dictionary mapping coldkey to MainHotkeyInfo
         """
         if not coldkeys:
             return {}
 
         miners: list[Miner] = list(Miner.objects.filter(coldkey__in=coldkeys).select_related())
 
-        split_distributions = query_miner_split_distributions(miners)
+        main_hotkeys = query_miner_main_hotkeys(miners)
 
         result = {}
         for coldkey in coldkeys:
@@ -255,119 +263,108 @@ class DefaultScoringEngine(ScoringEngine):
                 logger.warning(f"No miners found for coldkey {coldkey}")
                 continue
 
-            distributions = None
+            main_hotkey = None
             successful_hotkey = None
 
             for miner in miners_for_coldkey:
-                if miner.hotkey in split_distributions:
-                    distributions_result = split_distributions[miner.hotkey]
+                if miner.hotkey in main_hotkeys:
+                    main_hotkey_result = main_hotkeys[miner.hotkey]
 
-                    if isinstance(distributions_result, Exception) or not distributions_result:
+                    if isinstance(main_hotkey_result, Exception) or not main_hotkey_result:
                         logger.debug(
-                            f"Failed to get split distribution for {coldkey} using hotkey {miner.hotkey}: {distributions_result}"
+                            f"Failed to get main hotkey for {coldkey} using hotkey {miner.hotkey}: {main_hotkey_result}"
                         )
                         continue
 
-                    distributions = distributions_result
+                    main_hotkey = main_hotkey_result
                     successful_hotkey = miner.hotkey
                     logger.info(
-                        f"Successfully got split distribution for {coldkey} using hotkey {successful_hotkey}"
+                        f"Successfully got main hotkey for {coldkey} using hotkey {successful_hotkey}: {main_hotkey}"
                     )
                     break
 
-            if distributions is None:
+            if main_hotkey is None:
                 logger.warning(
-                    f"Failed to get split distribution for {coldkey} using any of its hotkeys: {[m.hotkey for m in miners_for_coldkey]}"
+                    f"Failed to get main hotkey for {coldkey} using any of its hotkeys: {[m.hotkey for m in miners_for_coldkey]}"
                 )
                 continue
 
-            self._save_split(coldkey, cycle_start, validator_hotkey, distributions)
+            self._save_main_hotkey(coldkey, cycle_start, main_hotkey)
 
-            result[coldkey] = SplitInfo(
+            result[coldkey] = MainHotkeyInfo(
                 coldkey=coldkey,
                 cycle_start=cycle_start,
-                validator_hotkey=validator_hotkey,
-                distributions=distributions,
+                main_hotkey=main_hotkey,
             )
 
         return result
 
-    def _save_split(
-        self, coldkey: str, cycle_start: int, validator_hotkey: str, distributions: dict[str, float]
-    ):
+    def _save_main_hotkey(self, coldkey: str, cycle_start: int, main_hotkey: str | None):
         """
-        Save split distribution to database.
+        Save main hotkey to database.
 
         Args:
             coldkey: Miner coldkey
             cycle_start: Cycle start block
-            validator_hotkey: Validator hotkey
-            distributions: Distribution percentages by hotkey
+            main_hotkey: Main hotkey for this coldkey
         """
         try:
-            split = MinerSplit.objects.create(
+            MinerMainHotkey.objects.create(
                 coldkey=coldkey,
                 cycle_start=cycle_start,
-                validator_hotkey=validator_hotkey,
+                main_hotkey=main_hotkey,
             )
 
-            for hotkey, percentage in distributions.items():
-                MinerSplitDistribution.objects.create(
-                    split=split,
-                    hotkey=hotkey,
-                    percentage=percentage,
-                )
-
-            logger.debug(f"Saved split distribution for {coldkey}: {distributions}")
+            logger.debug(f"Saved main hotkey for {coldkey}: {main_hotkey}")
 
         except Exception as e:
-            logger.error(f"Failed to save split distribution for {coldkey}: {e}")
-            raise SplitDistributionError(f"Failed to save split distribution for {coldkey}: {e}")
+            logger.error(f"Failed to save main hotkey for {coldkey}: {e}")
+            raise MainHotkeyError(f"Failed to save main hotkey for {coldkey}: {e}")
 
-    def _process_coldkey_split(
+    def _process_coldkey_main_hotkey(
         self,
         coldkey: str,
         total_score: float,
         hotkey_to_coldkey: dict[str, str],
-        current_split: SplitInfo | None,
-        previous_split: SplitInfo | None,
+        current_main_hotkey: MainHotkeyInfo | None,
+        previous_main_hotkey: MainHotkeyInfo | None,
     ) -> dict[str, float]:
         """
-        Process split for a single coldkey and return distributed scores.
+        Process main hotkey for a single coldkey and return distributed scores.
 
         Args:
             coldkey: Coldkey to process
             total_score: Total score for this coldkey
             hotkey_to_coldkey: Mapping from hotkey to coldkey
-            current_split: Current split information
-            previous_split: Previous split information
+            current_main_hotkey: Current main hotkey information
+            previous_main_hotkey: Previous main hotkey information
 
         Returns:
             Distributed scores by hotkey
         """
-        if current_split:
-            # Check for split changes to determine if dancing bonus should be applied
+        if current_main_hotkey and current_main_hotkey.main_hotkey:
+            # Check for main hotkey changes to determine if dancing bonus should be applied
             dancing_bonus_applied = (
-                previous_split and current_split.distributions != previous_split.distributions
+                previous_main_hotkey
+                and previous_main_hotkey.main_hotkey
+                and current_main_hotkey.main_hotkey != previous_main_hotkey.main_hotkey
             )
 
             if dancing_bonus_applied:
-                logger.info(
-                    f"Split distribution changed for coldkey: {coldkey}, applying dancing bonus"
-                )
-                # Apply dancing bonus
-                distributed_scores = self._apply_dancing_split_distribution(
-                    total_score, current_split.distributions
+                logger.info(f"Main hotkey changed for coldkey: {coldkey}, applying dancing bonus")
+                # Apply dancing bonus with main hotkey share
+                distributed_scores = self._apply_dancing_main_hotkey_distribution(
+                    total_score, current_main_hotkey.main_hotkey, hotkey_to_coldkey, coldkey
                 )
             else:
-                # Apply normal split distribution
-                distributed_scores = self._apply_split_distribution(
-                    total_score, current_split.distributions
+                # Apply normal main hotkey distribution
+                distributed_scores = self._apply_main_hotkey_distribution(
+                    total_score, current_main_hotkey.main_hotkey, hotkey_to_coldkey, coldkey
                 )
 
             return distributed_scores
         else:
-            # No split, distribute evenly among hotkeys in this coldkey
+            # No main hotkey, distribute evenly among all hotkeys in this coldkey
             hotkeys_in_coldkey = [
                 hotkey for hotkey, ck in hotkey_to_coldkey.items() if ck == coldkey
             ]
@@ -378,98 +375,114 @@ class DefaultScoringEngine(ScoringEngine):
             else:
                 return {}
 
-    def _get_split_distributions(
-        self, coldkeys: list[str], cycle_start: int, validator_hotkey: str
-    ) -> dict[str, SplitInfo]:
+    def _get_main_hotkey(self, coldkeys: list[str], cycle_start: int) -> dict[str, MainHotkeyInfo]:
         """
-        Get split distributions for multiple coldkeys.
+        Get main hotkey for multiple coldkeys.
 
         Args:
             coldkeys: List of miner coldkeys
             cycle_start: Cycle start block
-            validator_hotkey: Validator hotkey
 
         Returns:
-            Dictionary mapping coldkey to SplitInfo
+            Dictionary mapping coldkey to MainHotkeyInfo
         """
         if not coldkeys:
             return {}
-        splits: list[MinerSplit] = list(
-            MinerSplit.objects.filter(
-                coldkey__in=coldkeys, cycle_start=cycle_start, validator_hotkey=validator_hotkey
-            ).prefetch_related("distributions")
+        main_hotkeys: list[MinerMainHotkey] = list(
+            MinerMainHotkey.objects.filter(coldkey__in=coldkeys, cycle_start=cycle_start)
         )
 
         result = {}
-        for split in splits:
-            distributions = {}
-            for distribution in split.distributions.all():
-                distributions[distribution.hotkey] = float(distribution.percentage)
-
-            result[split.coldkey] = SplitInfo(
-                coldkey=split.coldkey,
+        for main_hotkey_record in main_hotkeys:
+            result[main_hotkey_record.coldkey] = MainHotkeyInfo(
+                coldkey=main_hotkey_record.coldkey,
                 cycle_start=cycle_start,
-                validator_hotkey=validator_hotkey,
-                distributions=distributions,
+                main_hotkey=main_hotkey_record.main_hotkey,
             )
 
         return result
 
-    def _apply_split_distribution(
-        self, total_score: float, distributions: dict[str, float]
+    def _apply_main_hotkey_distribution(
+        self, total_score: float, main_hotkey: str, hotkey_to_coldkey: dict[str, str], coldkey: str
     ) -> dict[str, float]:
         """
-        Apply split distribution to total score.
+        Apply main hotkey distribution to total score.
 
         Args:
             total_score: Total score for the coldkey
-            distributions: Distribution percentages by hotkey
+            main_hotkey: Main hotkey for this coldkey
+            hotkey_to_coldkey: Mapping from hotkey to coldkey
+            coldkey: Coldkey being processed
 
         Returns:
             Distributed scores by hotkey
         """
-        distributed_scores = {}
-        for hotkey, percentage in distributions.items():
-            distributed_scores[hotkey] = total_score * percentage
+        # Get all hotkeys for this coldkey
+        hotkeys_in_coldkey = [hotkey for hotkey, ck in hotkey_to_coldkey.items() if ck == coldkey]
+
+        if main_hotkey in hotkeys_in_coldkey:
+            # If there's only one hotkey in this coldkey, give it 100% of the score
+            if len(hotkeys_in_coldkey) == 1:
+                distributed_scores = {main_hotkey: total_score}
+            else:
+                # Multiple hotkeys: apply main hotkey share distribution
+                main_hotkey_score = total_score * self.main_hotkey_share
+                remaining_score = total_score - main_hotkey_score
+                other_hotkeys = [hotkey for hotkey in hotkeys_in_coldkey if hotkey != main_hotkey]
+
+                distributed_scores = {main_hotkey: main_hotkey_score}
+
+                # Distribute remaining score equally among other hotkeys
+                score_per_other_hotkey = remaining_score / len(other_hotkeys)
+                for hotkey in other_hotkeys:
+                    distributed_scores[hotkey] = score_per_other_hotkey
+        else:
+            # Main hotkey is not registered, distribute evenly among all hotkeys
+            score_per_hotkey = total_score / len(hotkeys_in_coldkey)
+            distributed_scores = {hotkey: score_per_hotkey for hotkey in hotkeys_in_coldkey}
 
         return distributed_scores
 
-    def _apply_dancing_split_distribution(
-        self, total_score: float, distributions: dict[str, float]
+    def _apply_dancing_main_hotkey_distribution(
+        self, total_score: float, main_hotkey: str, hotkey_to_coldkey: dict[str, str], coldkey: str
     ) -> dict[str, float]:
         """
-        Apply dancing bonus to scores.
+        Apply dancing bonus with main hotkey distribution.
 
         Args:
             total_score: Total score for the coldkey
-            distributions: Distribution percentages by hotkey
+            main_hotkey: Main hotkey for this coldkey
+            hotkey_to_coldkey: Mapping from hotkey to coldkey
+            coldkey: Coldkey being processed
 
         Returns:
-            Distributed scores by hotkey with bonus applied to main hotkey
+            Distributed scores by hotkey with bonus applied
         """
-        # Find the hotkey with the highest percentage (main hotkey)
-        main_hotkey = max(distributions.keys(), key=lambda k: distributions[k])
-        main_percentage = distributions[main_hotkey]
+        # Get all hotkeys for this coldkey
+        hotkeys_in_coldkey = [hotkey for hotkey, ck in hotkey_to_coldkey.items() if ck == coldkey]
 
-        # Calculate the main hotkey's base share
-        main_base_share = total_score * main_percentage
-
-        # Apply bonus to the main hotkey's share
         bonus_multiplier = 1.0 + self.dancing_bonus
-        main_bonus_share = main_base_share * bonus_multiplier
+        total_score_with_bonus = total_score * bonus_multiplier
 
-        # Calculate remaining score to distribute among other hotkeys
-        remaining_score = total_score - main_base_share
-        other_hotkeys = [hotkey for hotkey in distributions.keys() if hotkey != main_hotkey]
+        if main_hotkey in hotkeys_in_coldkey:
+            # If there's only one hotkey in this coldkey, give it 100% of the score with bonus
+            if len(hotkeys_in_coldkey) == 1:
+                distributed_scores = {main_hotkey: total_score_with_bonus}
+            else:
+                # Multiple hotkeys: apply main hotkey share distribution with bonus
+                main_hotkey_score = total_score_with_bonus * self.main_hotkey_share
+                remaining_score = total_score_with_bonus - main_hotkey_score
+                other_hotkeys = [hotkey for hotkey in hotkeys_in_coldkey if hotkey != main_hotkey]
 
-        # Distribute remaining score equally among other hotkeys
-        if other_hotkeys:
-            score_per_other_hotkey = remaining_score / len(other_hotkeys)
-            distributed_scores = {hotkey: score_per_other_hotkey for hotkey in other_hotkeys}
+                distributed_scores = {main_hotkey: main_hotkey_score}
+
+                # Distribute remaining score equally among other hotkeys
+                score_per_other_hotkey = remaining_score / len(other_hotkeys)
+                for hotkey in other_hotkeys:
+                    distributed_scores[hotkey] = score_per_other_hotkey
         else:
-            distributed_scores = {}
-
-        # Add the bonus for the main hotkey
-        distributed_scores[main_hotkey] = main_bonus_share
+            # Main hotkey is not registered, distribute evenly among all hotkeys
+            score_per_hotkey = total_score_with_bonus / len(hotkeys_in_coldkey)
+            distributed_scores = {hotkey: score_per_hotkey for hotkey in hotkeys_in_coldkey}
 
         return distributed_scores

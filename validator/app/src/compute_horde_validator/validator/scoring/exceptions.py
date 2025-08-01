@@ -9,8 +9,8 @@ class ScoringError(Exception):
     pass
 
 
-class SplitDistributionError(ScoringError):
-    """Raised when split distribution is invalid or missing."""
+class MainHotkeyError(ScoringError):
+    """Raised when main hotkey processing fails."""
 
     pass
 

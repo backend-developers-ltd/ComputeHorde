@@ -24,8 +24,7 @@ from compute_horde.protocol_messages import (
     V0JobFinishedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
-    V0MinerSplitDistributionRequest,
-    V0SplitDistributionRequest,
+    V0MainHotkeyMessage,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
     V0VolumesReadyRequest,
@@ -313,8 +312,8 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         ):
             await self.handle_job_finished_receipt(msg)
 
-        if isinstance(msg, V0SplitDistributionRequest):
-            await self.handle_split_distribution_request(msg)
+        if isinstance(msg, V0MainHotkeyMessage):
+            await self.handle_main_hotkey_request(msg)
 
     async def handle_initial_job_request(self, msg: V0InitialJobRequest):
         validator_blacklisted = await ValidatorBlacklist.objects.filter(
@@ -540,28 +539,21 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
 
         (await current_store()).store([created_receipt.to_receipt()])
 
-    async def handle_split_distribution_request(self, msg: V0SplitDistributionRequest):
-        logger.info(f"Received split distribution request from validator {self.validator_key}")
+    async def handle_main_hotkey_request(self, msg: V0MainHotkeyMessage):
+        logger.info(f"Received main hotkey request from validator {self.validator_key}")
 
         if not self.validator_authenticated:
             logger.warning(
-                f"Received split distribution request from unauthenticated validator {self.validator_key}"
+                f"Received main hotkey request from unauthenticated validator {self.validator_key}"
             )
             await self.send(GenericError(details="Unauthenticated validator").model_dump_json())
             return
 
-        # Get split distribution from executor manager
-        split_distribution = await current.executor_manager.get_split_distribution()
+        # Get main hotkey from executor manager
+        main_hotkey = await current.executor_manager.get_main_hotkey()
 
-        if split_distribution is None:
-            split_distribution = {}
-
-        await self.send(
-            V0MinerSplitDistributionRequest(split_distribution=split_distribution).model_dump_json()
-        )
-        logger.info(
-            f"Sent split distribution to validator {self.validator_key}: {split_distribution}"
-        )
+        await self.send(V0MainHotkeyMessage(main_hotkey=main_hotkey).model_dump_json())
+        logger.info(f"Sent main hotkey to validator {self.validator_key}: {main_hotkey}")
 
     async def _executor_ready(self, msg: V0ExecutorReadyRequest):
         logger.debug(f"_executor_ready for {msg}")

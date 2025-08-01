@@ -775,8 +775,6 @@ def _score_cycles(current_block: int) -> dict[str, float]:
             logger.warning("Previous cycle start is negative, using 0")
             previous_cycle_start = 0
 
-        validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-
         engine = create_scoring_engine()
 
         logger.info(
@@ -786,7 +784,6 @@ def _score_cycles(current_block: int) -> dict[str, float]:
         scores = engine.calculate_scores_for_cycles(
             current_cycle_start=current_cycle_start,
             previous_cycle_start=previous_cycle_start,
-            validator_hotkey=validator_hotkey,
         )
 
         if scores:
