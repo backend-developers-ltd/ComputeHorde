@@ -16,6 +16,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_validator.validator import collateral
+from compute_horde_validator.validator.allowance.types import reservation_id
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
@@ -56,11 +57,9 @@ class NoMinerWithEnoughAllowance(JobRoutingException):
     pass
 
 
-async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
-    if settings.DEBUG_MINER_KEY:
-        miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
-        return miner
-
+async def pick_miner_for_job_request(
+    request: OrganicJobRequest,
+) -> tuple[reservation_id | None, Miner]:
     if isinstance(request, V2JobRequest):
         return await pick_miner_for_job_v2(request)
 
@@ -68,7 +67,7 @@ async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
 
 
 @async_synchronized
-async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
+async def pick_miner_for_job_v2(request: V2JobRequest) -> tuple[reservation_id | None, Miner]:
     """
     Goes through all miners with recent manifests and online executors of the given executor class.
     Filters miners based on compute time allowance and minimum collateral requirements.
@@ -82,10 +81,15 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     executor_class = request.executor_class
     logger.info(f"Picking a miner for job {request.uuid} with executor class {executor_class}")
 
+    if settings.DEBUG_MINER_KEY:
+        logger.debug(f"Using DEBUG_MINER_KEY for job {request.uuid}")
+        miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
+        return None, miner
+
     if request.on_trusted_miner:
         logger.debug(f"Using trusted miner for job {request.uuid}")
         miner, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
-        return miner
+        return None, miner
 
     executor_seconds = (
         request.download_time_limit + request.execution_time_limit + request.upload_time_limit
@@ -239,7 +243,8 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
                 expires_at=timezone.now() + timedelta(seconds=reservation_time),
             )
             logger.info(f"Picked miner {manifest.miner.hotkey}")
-            return miner
+            allowance_reservation_id = None
+            return allowance_reservation_id, miner
 
     logger.error("All miners are busy")
     raise AllMinersBusy()
