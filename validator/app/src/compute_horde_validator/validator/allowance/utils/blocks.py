@@ -4,6 +4,7 @@ from collections import defaultdict
 import turbobt
 from celery.utils.log import get_task_logger
 from django.db import transaction
+from django.db.models import Q, Sum, Case, When, Min, Value, FloatField, Max
 from django.forms.models import model_to_dict
 
 from compute_horde_core.executor_class import ExecutorClass
@@ -12,9 +13,9 @@ from compute_horde_validator.validator.locks import Lock, LockType
 
 from .manifests import get_manifests, get_manifest_drops
 from .supertensor import supertensor
-from ..types import ss58_address, NotEnoughAllowanceException
+from .. import settings
+from ..types import ss58_address, NotEnoughAllowanceException, AllowanceException
 from ..models.internal import Block, BlockAllowance, Neuron as NeuronModel
-from ..settings import BLOCK_LOOKBACK, BLOCK_EXPIRY
 from ..metrics import VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION
 from ...models import SystemEvent
 
@@ -33,7 +34,7 @@ def find_missing_blocks(current_block: int) -> list[int]:
         List of missing block numbers within the lookback range
     """
     # Calculate the lookback block number
-    lookback_block = current_block - BLOCK_LOOKBACK
+    lookback_block = current_block - settings.BLOCK_LOOKBACK
 
     # Get all block numbers that should exist within the lookback range
     expected_block_numbers = set(range(lookback_block, current_block))
@@ -268,9 +269,10 @@ def find_miners_with_allowance(
         NotEnoughAllowanceException is raised. The returned miners are present in the subnet's metagraph snapshot
         kept by this module.
     """
-    from django.db.models import Q, Sum, Case, When, Min, F, Value, FloatField, Max
+    if required_allowance > settings.MAX_JOB_RUN_TIME:
+        raise AllowanceException(f"Required allowance cannot be greater than {settings.MAX_JOB_RUN_TIME} seconds")
 
-    earliest_usable_block = job_start_block - BLOCK_EXPIRY
+    earliest_usable_block = job_start_block - settings.BLOCK_EXPIRY
 
     miner_aggregates = BlockAllowance.objects.filter(
         validator_ss58=validator_ss58,

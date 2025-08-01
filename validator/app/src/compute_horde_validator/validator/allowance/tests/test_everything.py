@@ -7,13 +7,23 @@ import pytest
 from compute_horde_core.executor_class import ExecutorClass
 from .mockchain import set_block_number, manifest_responses, MINER_HOTKEYS
 from .utils_for_tests import LF, allowance_dict, inject_blocks_with_allowances, assert_system_events, Matcher, assert_metric_observed
-from ..types import NotEnoughAllowanceException, CannotReserveAllowanceException, ReservationNotFound
+from ..types import NotEnoughAllowanceException, CannotReserveAllowanceException, ReservationNotFound, \
+    ReservationAlreadySpent, ss58_address, AllowanceException
 from ..utils import blocks, manifests
 from ..utils.manifests import sync_manifests
 from ..metrics import VALIDATOR_RESERVE_ALLOWANCE_DURATION, VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION
-from ...tests.helpers import patch_constance
 from ..default import allowance
 
+
+def test_job_too_long():
+    with set_block_number(1000):
+        with pytest.raises(AllowanceException) as e:
+            allowance().find_miners_with_allowance(3601.0, ExecutorClass.always_on__llm__a6000, 1000)
+        assert "Required allowance cannot be greater than 3600.0 seconds" in e.value.args[0]
+
+        with pytest.raises(AllowanceException) as e:
+            allowance().reserve_allowance("doesn't matter", ExecutorClass.always_on__llm__a6000, 3601.0, 1000)
+        assert "Required allowance cannot be greater than 3600.0 seconds" in e.value.args[0]
 
 
 
@@ -38,7 +48,11 @@ def test_empty():
                     1.0,
                     1000,
                 )
-        assert e.value.args == ('Not enough allowance from miner stable_miner_000. Required: 1.0, Available: 0.0',)
+        assert e.value.to_dict() == {
+            'miner': "stable_miner_000",
+            'amount': LF(1.0),
+            'total_available': LF(0.0),
+        }
         
         # Test undo_allowance_reservation with metrics (using non-existent reservation)
         with assert_metric_observed(VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION, "undo_allowance_reservation"):
@@ -67,7 +81,11 @@ def test_block_without_manifests():
                 1.0,
                 1000,
             )
-        assert e.value.args == ('Not enough allowance from miner stable_miner_000. Required: 1.0, Available: 0.0',)
+        assert e.value.to_dict() == {
+            'miner': "stable_miner_000",
+            'amount': LF(1.0),
+            'total_available': LF(0.0),
+        }
 
     with set_block_number(1001):
         blocks.process_block_allowance_with_reporting(1001)
@@ -87,14 +105,43 @@ def test_block_without_manifests():
                 1.0,
                 1000,
             )
-        assert e.value.args == ('Not enough allowance from miner stable_miner_000. Required: 1.0, Available: 0.0',)
+        assert e.value.to_dict() == {
+            'miner': "stable_miner_000",
+            'amount': LF(1.0),
+            'total_available': LF(0.0),
+        }
+
+
+
+def assert_error_messages(block_number: int, highest_available: float):
+    with pytest.raises(NotEnoughAllowanceException) as e:
+        allowance().find_miners_with_allowance(highest_available + 1e-6, ExecutorClass.always_on__llm__a6000, block_number)
+    assert e.value.to_dict() == {
+        'highest_available_allowance': LF(highest_available),
+        'highest_available_allowance_ss58': Matcher(r".*"),
+        'highest_unspent_allowance': LF(highest_available),
+        'highest_unspent_allowance_ss58': Matcher(r".*"),
+    }, "find_miners_with_allowance returned wrong error message"
+
+    highest_miner = e.value.highest_available_allowance_ss58
+
+    with pytest.raises(CannotReserveAllowanceException) as e:
+        allowance().reserve_allowance(
+            highest_miner,
+            ExecutorClass.always_on__llm__a6000,
+            highest_available + 1e-6,
+            block_number,
+        )
+
+    assert e.value.to_dict() == {
+        'miner': highest_miner,
+        'amount': LF(highest_available + 1e-6),
+        'total_available': LF(highest_available),
+    }, "reserve_allowance returned wrong error message"
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-@patch_constance({
-    "DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS": "always_on.llm.a6000=3,always_on.gpu-24gb=5,spin_up-4min.gpu-24gb=10"
-})
 def test_complete():
     with set_block_number(1000):
         manifests.sync_manifests()
@@ -152,7 +199,7 @@ def test_complete():
            )
    )
     with pytest.raises(NotEnoughAllowanceException) as e:
-        allowance().find_miners_with_allowance(1000000000.0, ExecutorClass.always_on__llm__a6000, 1001)
+        allowance().find_miners_with_allowance(3600.0, ExecutorClass.always_on__llm__a6000, 1001)
     assert e.value.to_dict() == {
         'highest_available_allowance': LF(highest_allowance),
         'highest_available_allowance_ss58': Matcher(r"stable_miner_\d{3}"),
@@ -184,6 +231,8 @@ def test_complete():
             ==
             allowance_dict(json.loads((pathlib.Path(__file__).parent / 'allowance_after_100_blocks.json').read_text()))
     )
+    # Let's check that various errors are consistent in terms of calculated available amount
+    assert_error_messages(1101, 394.6701132404817)
 
     # Up unitl now nothing was relying on internals - only interfaces of other parts of the system were mocked - like
     # miner and subtensor responses. it does, however take too long to generate even more blocks so now we're diving
@@ -200,16 +249,19 @@ def test_complete():
             allowance_dict(json.loads((pathlib.Path(__file__).parent / 'allowance_after_1000_blocks.json').read_text()))
     )
 
+    assert_error_messages(1101, 1755.5362369976503)
+
     inject_blocks_with_allowances(100)
     allowance_after_1100_blocks = allowance().find_miners_with_allowance(
         1.0, ExecutorClass.always_on__llm__a6000, 1101)
 
     # no difference as these blocks are too old:
     assert (
-            allowance_dict(allowance_after_1100_blocks)
-            ==
-            allowance_dict(json.loads((pathlib.Path(__file__).parent / 'allowance_after_1000_blocks.json').read_text()))
+        allowance_dict(allowance_after_1100_blocks)
+        ==
+        allowance_dict(json.loads((pathlib.Path(__file__).parent / 'allowance_after_1000_blocks.json').read_text()))
     )
+    assert_error_messages(1101, 1755.5362369976503)
 
     # a quick test to check reserving works for huge numbers of blocks
     with assert_metric_observed(VALIDATOR_RESERVE_ALLOWANCE_DURATION, "reserve_allowance"):
@@ -230,7 +282,11 @@ def test_complete():
             1.0,
             1101,
         )
-    assert e.value.args == ('Not enough allowance from miner stable_miner_081. Required: 1.0, Available: 0.0',)
+    assert e.value.to_dict() == {
+        'miner': "stable_miner_081",
+        'amount': LF(1.0),
+        'total_available': LF(0.0),
+    }
 
     with assert_metric_observed(VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION, "undo_allowance_reservation"):
         allowance().undo_allowance_reservation(reservation_id)
@@ -249,9 +305,6 @@ def test_complete():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-@patch_constance({
-    "DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS": "always_on.llm.a6000=3,always_on.gpu-24gb=5,spin_up-4min.gpu-24gb=10"
-})
 def test_blocks_out_of_order():
     for block_number in [1000, 1011, 1025, 1050, 1075, 1100]:
         with set_block_number(block_number):
@@ -267,9 +320,160 @@ def test_blocks_out_of_order():
             1.0, ExecutorClass.always_on__llm__a6000, 1101)
 
     assert (
-            allowance_dict(allowance_after_100_blocks)
-            ==
-            allowance_dict(json.loads((pathlib.Path(__file__).parent / 'allowance_after_100_blocks.json').read_text()))
+        allowance_dict(allowance_after_100_blocks)
+        ==
+        allowance_dict(json.loads((pathlib.Path(__file__).parent / 'allowance_after_100_blocks.json').read_text()))
     )
 
-# TODO: assert system events on errors such as subtensor connectivity
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
+def test_allowance_reservation_corner_cases():
+    """Test all corner cases of reserve_allowance, undo_allowance_reservation, and spend_allowance methods."""
+    
+    # Set up initial state with some blocks and allowances
+    with set_block_number(1000):
+        manifests.sync_manifests()
+        blocks.process_block_allowance_with_reporting(1000)
+    
+    for block_number in range(1001, 1006):
+        with set_block_number(block_number):
+            blocks.process_block_allowance_with_reporting(block_number)
+    
+    with set_block_number(1005):
+        # Get miners with available allowance
+        miners_with_allowance = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1005)
+        test_miner = miners_with_allowance[0][0]  # Get the first miner's hotkey
+        available_allowance = miners_with_allowance[0][1]  # Get available allowance
+        
+        first_reservation_amount = available_allowance * 0.3
+
+        # Test Case 1: Successful reservation - normal case
+        reservation_id_1, block_ids_1 = allowance().reserve_allowance(
+            test_miner,
+            ExecutorClass.always_on__llm__a6000,
+            first_reservation_amount,
+            1005
+        )
+
+        assert block_ids_1 == [1000, 1001]
+
+        # Use second miner for this test
+        second_miner = miners_with_allowance[1][0]
+        second_miner_allowance = miners_with_allowance[1][1]
+        reservation_amount = second_miner_allowance * 0.3
+
+        reservation_id_2, block_ids_2 = allowance().reserve_allowance(
+            second_miner,
+            ExecutorClass.always_on__llm__a6000,
+            reservation_amount,
+            1005
+        )
+        
+        # Verify second reservation is different
+        assert reservation_id_2 != reservation_id_1
+        assert block_ids_2 == [1000, 1001]
+        
+        gpu_miners = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__gpu_24gb, 1005)
+        gpu_miner = gpu_miners[0][0]
+        gpu_allowance = gpu_miners[0][1]
+        gpu_reservation_amount = min(gpu_allowance * 0.3, 3.0)
+
+        reservation_id_3, block_ids_3 = allowance().reserve_allowance(
+            gpu_miner,
+            ExecutorClass.always_on__gpu_24gb,
+            gpu_reservation_amount,
+            1005
+        )
+
+        assert reservation_id_3 not in [reservation_id_1, reservation_id_2]
+
+        # Test Case 4: CannotReserveAllowanceException when not enough allowance
+        # Find current available allowance for the test miner after first reservation
+        current_miners = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1005)
+
+        current_available = dict(current_miners)[test_miner]
+        # Request more than currently available
+        excessive_amount = current_available + 10.0
+        
+        with pytest.raises(CannotReserveAllowanceException) as exc_info:
+            allowance().reserve_allowance(
+                test_miner,
+                ExecutorClass.always_on__llm__a6000,
+                excessive_amount,
+                1005
+            )
+        
+        # Test Case 5: Successful undo of valid reservation
+        allowance().undo_allowance_reservation(reservation_id_1)
+        
+        # Test Case 6: After undo, same reservation can be made again
+        reservation_id_1_new, block_ids_1_new = allowance().reserve_allowance(
+            test_miner,
+            ExecutorClass.always_on__llm__a6000,
+            first_reservation_amount,  # Same amount as before
+            1005
+        )
+        
+        # New reservation should have different ID but similar block allocation
+        assert reservation_id_1_new != reservation_id_1
+        assert block_ids_1_new == block_ids_1
+        
+        # Test Case 7: ReservationNotFound when undoing non-existent reservation
+        with pytest.raises(ReservationNotFound):
+            allowance().undo_allowance_reservation(999999)  # Non-existent ID
+
+        # Test Case 8: ReservationNotFound when undoing already undone reservation
+        with pytest.raises(ReservationNotFound):
+            allowance().undo_allowance_reservation(reservation_id_1)  # Already undone
+        
+        # Test Case 9: Successful spend of valid reservation
+        allowance().spend_allowance(reservation_id_2)
+        
+        # Test Case 10: ReservationNotFound when spending non-existent reservation
+        with pytest.raises(ReservationNotFound):
+            allowance().spend_allowance(888888)  # Non-existent ID
+        
+        # Test Case 11: Spending already spent reservation raises
+        with pytest.raises(ReservationAlreadySpent):
+            allowance().spend_allowance(reservation_id_2)
+
+        # Test Case 12: ReservationNotFound when spending undone reservation
+        allowance().undo_allowance_reservation(reservation_id_1_new)  # Undo first
+        
+        with pytest.raises(ReservationNotFound):
+            allowance().spend_allowance(reservation_id_1_new)  # Try to spend undone reservation
+
+        # Test Case 13: Appropriate values in NotEnoughAllowanceException
+        reservations = []
+        for ind, miner_allowance_ in enumerate(allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1005)):
+            # half the miners we'll book fully, the other half we'll reserve at >50%
+            miner, allowance_ = miner_allowance_
+            res_id, _ = allowance().reserve_allowance(
+                miner,
+                ExecutorClass.always_on__llm__a6000,
+                (allowance_ / (ind % 2 +1)) - 1e-6,
+                1005,
+            )
+            reservations.append(res_id)
+
+        with pytest.raises(NotEnoughAllowanceException) as exc_info:
+            allowance().find_miners_with_allowance(100.0, ExecutorClass.always_on__llm__a6000, 1005)
+        assert exc_info.value.to_dict() == {
+            'highest_available_allowance': LF(4.749230769230769),
+            'highest_available_allowance_ss58': Matcher(r".*"),
+            'highest_unspent_allowance': LF(11.86813186813187),
+            'highest_unspent_allowance_ss58': Matcher(r'stable_miner_\d{3}'),
+        }
+
+        for res_id in reservations:
+            allowance().spend_allowance(res_id)
+
+        with pytest.raises(NotEnoughAllowanceException) as exc_info:
+            allowance().find_miners_with_allowance(100.0, ExecutorClass.always_on__llm__a6000, 1005)
+        assert exc_info.value.to_dict() == {
+            'highest_available_allowance': LF(4.749230769230769),
+            'highest_available_allowance_ss58': Matcher(r".*"),
+            'highest_unspent_allowance': LF(4.749230769230769),
+            'highest_unspent_allowance_ss58': Matcher(r".*"),
+        }

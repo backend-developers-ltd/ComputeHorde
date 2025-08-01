@@ -5,7 +5,7 @@ import operator
 from functools import reduce
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Min
 
 
 from compute_horde.miner_client.organic import OrganicMinerClient
@@ -82,8 +82,7 @@ def get_manifest_drops(block_number: int, hotkeys: list[ss58_address]) -> dict[t
     # Get all manifest records that are drops (is_drop=True) 
     # and have block_number >= the given block_number (newer than or equal to the block)
     # We need to find the earliest block_number for each (hotkey, executor_class) combination
-    from django.db.models import Min
-    
+
     drops = AllowanceMinerManifest.objects.filter(
         miner_ss58address__in=hotkeys,
         block_number__gt=block_number,

@@ -3,9 +3,10 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from compute_horde_core.executor_class import ExecutorClass
-from ..types import ss58_address, reservation_id, block_ids, CannotReserveAllowanceException, ReservationNotFound
+from .. import settings
+from ..types import ss58_address, reservation_id, block_ids, CannotReserveAllowanceException, ReservationNotFound, \
+    ReservationAlreadySpent, AllowanceException
 from ..models.internal import BlockAllowance, AllowanceBooking
-from ..settings import BLOCK_EXPIRY, RESERVATION_MARGIN_SECONDS
 from ..metrics import VALIDATOR_RESERVE_ALLOWANCE_DURATION, VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION, timing_decorator
 
 
@@ -37,8 +38,11 @@ def reserve_allowance(
 
     raises CannotReserveAllowanceException if there is not enough allowance from the miner.
     """
+    if amount > settings.MAX_JOB_RUN_TIME:
+        raise AllowanceException(f"Required allowance cannot be greater than {settings.MAX_JOB_RUN_TIME} seconds")
+
     # Calculate the earliest usable block based on block expiry rules
-    earliest_usable_block = job_start_block - BLOCK_EXPIRY
+    earliest_usable_block = job_start_block - settings.BLOCK_EXPIRY
 
     # Get available allowances for the specific miner
     available_allowances = BlockAllowance.objects.filter(
@@ -61,11 +65,13 @@ def reserve_allowance(
     # Check if there's enough allowance
     if total_available < amount:
         raise CannotReserveAllowanceException(
-            f"Not enough allowance from miner {miner}. Required: {amount}, Available: {total_available}"
+            miner=miner,
+            amount=amount,
+            total_available=total_available,
         )
 
     # Create the reservation booking
-    expiry_time = timezone.now() + timedelta(seconds=amount + RESERVATION_MARGIN_SECONDS)
+    expiry_time = timezone.now() + timedelta(seconds=amount + settings.RESERVATION_MARGIN_SECONDS)
     booking = AllowanceBooking.objects.create(
         is_reserved=True,
         is_spent=False,
@@ -133,15 +139,22 @@ def spend_allowance(reservation_id_: reservation_id) -> None:
      Args:
          reservation_id_: reservation_id
 
-     raises ReservationNotFound if the reservation is not found.
+     raises ReservationNotFound if the reservation is not found. raise ReservationAlreadySpent is reservation
+     already spent.
     """
     updated_count = AllowanceBooking.objects.filter(
-        id=reservation_id_
+        id=reservation_id_,
+        is_spent=False
     ).update(
         is_spent=True,
         is_reserved=False,
         reservation_expiry_time=None
     )
-    
+
     if updated_count == 0:
-        raise ReservationNotFound(f"Reservation with ID {reservation_id_} not found")
+        # Check if the reservation exists but is already spent
+        if AllowanceBooking.objects.filter(id=reservation_id_, is_spent=True).exists():
+            raise ReservationAlreadySpent(f"Reservation with ID {reservation_id_} is already spent")
+        else:
+            raise ReservationNotFound(f"Reservation with ID {reservation_id_} not found")
+

@@ -29,8 +29,32 @@ class ReservationNotFound(AllowanceException):
     pass
 
 
+class ReservationAlreadySpent(AllowanceException):
+    pass
+
+
 class CannotReserveAllowanceException(AllowanceException):
     """Exception raised when there is not enough allowance from a particular miner."""
+    def __init__(self, miner: ss58_address, amount: float, total_available: float):
+        self.miner = miner
+        self.amount = amount
+        self.total_available = total_available
+
+    def __str__(self):
+        return f"Not enough allowance from miner {self.miner}. Required: {self.amount}, Available: {self.total_available}"
+
+    def to_dict(self) -> dict:
+        """
+        Convert exception attributes to dictionary for easier testing.
+
+        Returns:
+            Dictionary containing all exception attributes
+        """
+        return {
+            'miner': self.miner,
+            'amount': self.amount,
+            'total_available': self.total_available,
+        }
 
 
 class NotEnoughAllowanceException(AllowanceException):
