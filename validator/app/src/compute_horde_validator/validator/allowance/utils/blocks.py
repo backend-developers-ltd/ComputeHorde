@@ -5,7 +5,6 @@ import turbobt
 from celery.utils.log import get_task_logger
 from django.db import transaction
 from django.forms.models import model_to_dict
-from prometheus_client import Histogram
 
 from compute_horde_core.executor_class import ExecutorClass
 
@@ -16,16 +15,11 @@ from .supertensor import supertensor
 from ..types import ss58_address, NotEnoughAllowanceException
 from ..models.internal import Block, BlockAllowance, Neuron as NeuronModel
 from ..settings import BLOCK_LOOKBACK, BLOCK_EXPIRY
+from ..metrics import VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION
 from ...models import SystemEvent
 
 logger = get_task_logger(__name__)
 
-# Prometheus metric for tracking block allowance processing duration
-block_allowance_processing_duration = Histogram(
-    'compute_time_allowance_processing_duration_seconds',
-    'Time spent processing block allowance calculations',
-    buckets=(0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, float('inf'))
-)
 
 
 def find_missing_blocks(current_block: int) -> list[int]:
@@ -200,7 +194,7 @@ def process_block_allowance_with_reporting(block_number: int):
         duration = end - start
         logger.info(f"Block allowance processing for block {block_number} took {duration} seconds")
         # Record processing duration in Prometheus metric instead of SystemEvent
-        block_allowance_processing_duration.observe(duration)
+        VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION.observe(duration)
     if not block_number % 50:
         report_checkpoint(block_number)
 

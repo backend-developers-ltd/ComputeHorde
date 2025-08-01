@@ -3,8 +3,42 @@ import re
 from contextlib import contextmanager
 from typing import Pattern
 
+import prometheus_client
+
 from compute_horde_validator.validator.allowance.models.internal import BlockAllowance, Block
 from compute_horde_validator.validator.models import SystemEvent
+
+
+def get_metric_values(metric):
+    """Extract count and sum values from histogram samples."""
+    count = 0
+    sum_value = 0
+    for sample_family in metric.collect():
+        for sample in sample_family.samples:
+            if sample.name.endswith('_count'):
+                count = sample.value
+            elif sample.name.endswith('_sum'):
+                sum_value = sample.value
+    return count, sum_value
+
+
+@contextmanager
+def assert_metric_observed(metric: prometheus_client.Histogram, operation_name: str):
+    """Context manager to assert that a Prometheus metric was observed and print the measurement."""
+    
+    # Get initial metric values
+    count_before, samples_before = get_metric_values(metric)
+    
+    yield
+    
+    # Get metric values after operation
+    count_after, samples_after = get_metric_values(metric)
+    duration = samples_after - samples_before
+    
+    print(f"{operation_name} took {duration:.6f}s")
+    
+    # Assert that the metric was observed
+    assert count_after > count_before, f"{operation_name} metric should have been observed"
 
 
 class LenientFloat(float):

@@ -6,12 +6,15 @@ import pytest
 
 from compute_horde_core.executor_class import ExecutorClass
 from .mockchain import set_block_number, manifest_responses, MINER_HOTKEYS
-from .utils_for_tests import LF, allowance_dict, inject_blocks_with_allowances, assert_system_events, Matcher
-from ..types import NotEnoughAllowanceException, CannotReserveAllowanceException
+from .utils_for_tests import LF, allowance_dict, inject_blocks_with_allowances, assert_system_events, Matcher, assert_metric_observed
+from ..types import NotEnoughAllowanceException, CannotReserveAllowanceException, ReservationNotFound
 from ..utils import blocks, manifests
 from ..utils.manifests import sync_manifests
+from ..metrics import VALIDATOR_RESERVE_ALLOWANCE_DURATION, VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION
 from ...tests.helpers import patch_constance
 from ..default import allowance
+
+
 
 
 @pytest.mark.django_db(transaction=True)
@@ -25,14 +28,23 @@ def test_empty():
             'highest_unspent_allowance': 0,
             'highest_unspent_allowance_ss58': '',
         }
-        with pytest.raises(CannotReserveAllowanceException) as e:
-            allowance().reserve_allowance(
-                MINER_HOTKEYS[0],
-                ExecutorClass.always_on__llm__a6000,
-                1.0,
-                1000,
-            )
+        
+        # Test reserve_allowance with metrics
+        with assert_metric_observed(VALIDATOR_RESERVE_ALLOWANCE_DURATION, "reserve_allowance"):
+            with pytest.raises(CannotReserveAllowanceException) as e:
+                allowance().reserve_allowance(
+                    MINER_HOTKEYS[0],
+                    ExecutorClass.always_on__llm__a6000,
+                    1.0,
+                    1000,
+                )
         assert e.value.args == ('Not enough allowance from miner stable_miner_000. Required: 1.0, Available: 0.0',)
+        
+        # Test undo_allowance_reservation with metrics (using non-existent reservation)
+        with assert_metric_observed(VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION, "undo_allowance_reservation"):
+            with pytest.raises(ReservationNotFound) as e:
+                allowance().undo_allowance_reservation(999999)  # Non-existent reservation ID
+        assert "Reservation with ID 999999 not found" in str(e.value)
 
 
 
@@ -200,12 +212,14 @@ def test_complete():
     )
 
     # a quick test to check reserving works for huge numbers of blocks
-    reservation_id, blocks_ = allowance().reserve_allowance(
-        "stable_miner_081",
-        ExecutorClass.always_on__llm__a6000,
-        1755,
-        1101,
-    )
+    with assert_metric_observed(VALIDATOR_RESERVE_ALLOWANCE_DURATION, "reserve_allowance"):
+        reservation_id, blocks_ = allowance().reserve_allowance(
+            "stable_miner_081",
+            ExecutorClass.always_on__llm__a6000,
+            1755,
+            1101,
+        )
+    
     assert blocks_ == list(range(379, 1100))
 
     # nothing left
@@ -218,15 +232,18 @@ def test_complete():
         )
     assert e.value.args == ('Not enough allowance from miner stable_miner_081. Required: 1.0, Available: 0.0',)
 
-    allowance().undo_allowance_reservation(reservation_id)
+    with assert_metric_observed(VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION, "undo_allowance_reservation"):
+        allowance().undo_allowance_reservation(reservation_id)
 
     # now it's working again
-    _, blocks_ = allowance().reserve_allowance(
-        "stable_miner_081",
-        ExecutorClass.always_on__llm__a6000,
-        1755,
-        1101,
-    )
+    with assert_metric_observed(VALIDATOR_RESERVE_ALLOWANCE_DURATION, "reserve_allowance"):
+        _, blocks_ = allowance().reserve_allowance(
+            "stable_miner_081",
+            ExecutorClass.always_on__llm__a6000,
+            1755,
+            1101,
+        )
+    
     assert blocks_ == list(range(379, 1100))
 
 

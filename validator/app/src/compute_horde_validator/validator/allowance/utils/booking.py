@@ -6,10 +6,12 @@ from compute_horde_core.executor_class import ExecutorClass
 from ..types import ss58_address, reservation_id, block_ids, CannotReserveAllowanceException, ReservationNotFound
 from ..models.internal import BlockAllowance, AllowanceBooking
 from ..settings import BLOCK_EXPIRY, RESERVATION_MARGIN_SECONDS
+from ..metrics import VALIDATOR_RESERVE_ALLOWANCE_DURATION, VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION, timing_decorator
 
 
 
 
+@timing_decorator(VALIDATOR_RESERVE_ALLOWANCE_DURATION)
 def reserve_allowance(
         miner: ss58_address,
         validator: ss58_address,
@@ -93,6 +95,7 @@ def reserve_allowance(
     return booking.id, reserved_block_ids
     
 
+@timing_decorator(VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION)
 def undo_allowance_reservation(reservation_id_: reservation_id) -> None:
     """
     Undo a previously made allowance reservation.
