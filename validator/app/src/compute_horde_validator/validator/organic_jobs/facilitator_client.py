@@ -390,7 +390,7 @@ class FacilitatorClient:
         )
 
         try:
-            miner = await routing.pick_miner_for_job_request(job_request)
+            allowance_reservation_id, miner = await routing.pick_miner_for_job_request(job_request)
             logger.info(f"Selected miner {miner.hotkey} for job {job_request.uuid}")
         except routing.NoMinerForExecutorType:
             msg = f"No executor for job request: {job_request.uuid} ({job_request.executor_class})"

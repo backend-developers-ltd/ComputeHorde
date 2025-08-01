@@ -9,7 +9,7 @@ from django.core.cache import cache
 _BLOCK_CACHE_KEY = getattr(
     settings, "COMPUTE_HORDE_BLOCK_CACHE_KEY", "compute_horde.blockchain.block_cache.current_block"
 )
-_BLOCK_CACHE_TIMEOUT = getattr(settings, "COMPUTE_HORDE_BLOCK_CACHE_TIMEOUT", 2)
+_BLOCK_CACHE_TIMEOUT = getattr(settings, "COMPUTE_HORDE_BLOCK_CACHE_TIMEOUT", 12)
 
 
 class BlockNotInCacheError(KeyError):
