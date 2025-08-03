@@ -35,13 +35,13 @@ class ReservationAlreadySpent(AllowanceException):
 
 class CannotReserveAllowanceException(AllowanceException):
     """Exception raised when there is not enough allowance from a particular miner."""
-    def __init__(self, miner: ss58_address, amount: float, total_available: float):
+    def __init__(self, miner: ss58_address, required_allowance_seconds: float, available_allowance_seconds: float):
         self.miner = miner
-        self.amount = amount
-        self.total_available = total_available
+        self.required_allowance_seconds = required_allowance_seconds
+        self.available_allowance_seconds = available_allowance_seconds
 
     def __str__(self):
-        return f"Not enough allowance from miner {self.miner}. Required: {self.amount}, Available: {self.total_available}"
+        return f"Not enough allowance from miner {self.miner}. Required: {self.required_allowance_seconds}, Available: {self.available_allowance_seconds}"
 
     def to_dict(self) -> dict:
         """
@@ -52,8 +52,8 @@ class CannotReserveAllowanceException(AllowanceException):
         """
         return {
             'miner': self.miner,
-            'amount': self.amount,
-            'total_available': self.total_available,
+            'required_allowance_seconds': self.required_allowance_seconds,
+            'available_allowance_seconds': self.available_allowance_seconds,
         }
 
 

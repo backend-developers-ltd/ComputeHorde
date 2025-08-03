@@ -244,7 +244,7 @@ def scan_blocks_and_calculate_allowance():
 
 
 def find_miners_with_allowance(
-        required_allowance: float,
+        allowance_seconds: float,
         executor_class: ExecutorClass,
         job_start_block: int,
         validator_ss58: ss58_address,
@@ -258,7 +258,7 @@ def find_miners_with_allowance(
     3. Highest total allowance left
 
     Args:
-        required_allowance: The minimum allowance amount required (in seconds)
+        allowance_seconds: The minimum allowance amount required (in seconds)
         executor_class: executor class
         job_start_block: used to determine which blocks can be used for the reservation, as per block expiry rules
         validator_ss58: validator's ss58address
@@ -269,7 +269,7 @@ def find_miners_with_allowance(
         NotEnoughAllowanceException is raised. The returned miners are present in the subnet's metagraph snapshot
         kept by this module.
     """
-    if required_allowance > settings.MAX_JOB_RUN_TIME:
+    if allowance_seconds > settings.MAX_JOB_RUN_TIME:
         raise AllowanceException(f"Required allowance cannot be greater than {settings.MAX_JOB_RUN_TIME} seconds")
 
     earliest_usable_block = job_start_block - settings.BLOCK_EXPIRY
@@ -358,7 +358,7 @@ def find_miners_with_allowance(
             highest_unspent_allowance_ss58 = miner_ss58
 
         # Check if miner has sufficient allowance
-        if available >= required_allowance:
+        if available >= allowance_seconds:
             # Calculate allowance percentage left (available / total)
             allowance_percentage = available / total if total > 0 else 0.0
             earliest_block = data['earliest_unspent_block'] or float('inf')

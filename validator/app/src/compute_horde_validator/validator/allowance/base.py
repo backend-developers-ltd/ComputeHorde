@@ -18,7 +18,7 @@ class AllowanceBase(ABC):
     @abstractmethod
     def find_miners_with_allowance(
         self,
-        required_allowance: float,
+        allowance_seconds: float,
         executor_class: ExecutorClass,
         job_start_block: int,
     ) -> list[tuple[ss58_address, float]]:
@@ -30,7 +30,7 @@ class AllowanceBase(ABC):
         2. Highest total allowance percentage left
 
         Args:
-            required_allowance: The minimum allowance amount required (in seconds)
+            allowance_seconds: The minimum allowance amount required
             executor_class: executor class
             job_start_block: used to determine which blocks can be used for the reservation, as per block expiry rules
 
@@ -47,19 +47,19 @@ class AllowanceBase(ABC):
         self,
         miner: ss58_address,
         executor_class: ExecutorClass,
-        amount: float,
+        allowance_seconds: float,
         job_start_block: int,
     ) -> tuple[reservation_id, block_ids]:
         """
         Reserve allowance for a specific miner. The reservation will auto expire after
-        `amount + settings.RESERVATION_MARGIN_SECONDS` seconds.
+        `allowance_seconds + settings.RESERVATION_MARGIN_SECONDS` seconds.
 
         This is used for temporary allowance reservation for pending jobs.
 
         Args:
             miner: hotkey of the miner
             executor_class: When the reservation expires
-            amount: Amount of allowance to reserve (in seconds)
+            allowance_seconds: Amount of allowance to reserve (in seconds)
             job_start_block: used to determine which blocks can be used for the reservation, as per block expiry rules
 
         Returns:

@@ -42,6 +42,11 @@ class LockTimeout(Locked):
 
 
 class Lock:
+    """
+    Context manager for running a block of code in a lock. If the lock isn't immediately available, wait at most
+    `timeout_seconds`.
+    """
+    # TODO: write tests
     def __init__(self, type_: LockType, timeout_seconds: float):
         self.type = type_
         self.timeout_seconds = timeout_seconds
@@ -49,6 +54,8 @@ class Lock:
     def __enter__(self):
         cursor = connection.cursor()
         cursor.execute("SET LOCAL statement_timeout = %s", [f"{self.timeout_seconds:.3f}s"])
+        # this changed the timeout for the whole transaction, tread carefully. Preferrably use it with a separate
+        # db connection than the one you will use for actual stuff
 
         try:
             cursor.execute("SELECT pg_advisory_xact_lock(%s)", [self.type.value])

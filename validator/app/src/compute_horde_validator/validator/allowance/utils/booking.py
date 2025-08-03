@@ -17,7 +17,7 @@ def reserve_allowance(
         miner: ss58_address,
         validator: ss58_address,
         executor_class: ExecutorClass,
-        amount: float,
+        allowance_seconds: float,
         job_start_block: int,
 ) -> tuple[reservation_id, block_ids]:
     """
@@ -30,7 +30,7 @@ def reserve_allowance(
         miner: hotkey of the miner
         validator: hotkey of the validator
         executor_class: When the reservation expires
-        amount: Amount of allowance to reserve (in seconds)
+        allowance_seconds: Amount of allowance to reserve (in seconds)
         job_start_block: used to determine which blocks can be used for the reservation, as per block expiry rules
 
     Returns:
@@ -38,14 +38,14 @@ def reserve_allowance(
 
     raises CannotReserveAllowanceException if there is not enough allowance from the miner.
     """
-    if amount > settings.MAX_JOB_RUN_TIME:
+    if allowance_seconds > settings.MAX_JOB_RUN_TIME:
         raise AllowanceException(f"Required allowance cannot be greater than {settings.MAX_JOB_RUN_TIME} seconds")
 
     # Calculate the earliest usable block based on block expiry rules
     earliest_usable_block = job_start_block - settings.BLOCK_EXPIRY
 
     # Get available allowances for the specific miner
-    available_allowances = BlockAllowance.objects.filter(
+    available_block_allowances = BlockAllowance.objects.filter(
         miner_ss58=miner,
         validator_ss58=validator,
         executor_class=executor_class.value,
@@ -58,20 +58,20 @@ def reserve_allowance(
     ).select_related('block').order_by('block__block_number')  # Order by block number for consistent selection
 
     # Calculate total available allowance
-    total_available = available_allowances.aggregate(
+    total_available = available_block_allowances.aggregate(
         total=Sum('allowance')
     )['total'] or 0.0
 
     # Check if there's enough allowance
-    if total_available < amount:
+    if total_available < allowance_seconds:
         raise CannotReserveAllowanceException(
             miner=miner,
-            amount=amount,
-            total_available=total_available,
+            required_allowance_seconds=allowance_seconds,
+            available_allowance_seconds=total_available,
         )
 
     # Create the reservation booking
-    expiry_time = timezone.now() + timedelta(seconds=amount + settings.RESERVATION_MARGIN_SECONDS)
+    expiry_time = timezone.now() + timedelta(seconds=allowance_seconds + settings.RESERVATION_MARGIN_SECONDS)
     booking = AllowanceBooking.objects.create(
         is_reserved=True,
         is_spent=False,
@@ -83,16 +83,16 @@ def reserve_allowance(
     reserved_block_ids = []
     allowances_to_update = []
 
-    for allowance in available_allowances:
-        if reserved_amount >= amount:
+    for block_allowance in available_block_allowances:
+        if reserved_amount >= allowance_seconds:
             break
 
         # Link this allowance to the booking
-        allowance.allowance_booking = booking
-        allowances_to_update.append(allowance)
+        block_allowance.allowance_booking = booking
+        allowances_to_update.append(block_allowance)
 
-        reserved_amount += allowance.allowance
-        reserved_block_ids.append(allowance.block.block_number)
+        reserved_amount += block_allowance.allowance
+        reserved_block_ids.append(block_allowance.block.block_number)
 
     # Bulk update all allowances at once
     if allowances_to_update:

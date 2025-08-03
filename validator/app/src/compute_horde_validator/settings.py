@@ -670,13 +670,13 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(minutes=5).total_seconds(),
         },
     },
-    "update_block_cache": {
-        "task": "compute_horde.blockchain.tasks.update_block_cache",
-        "schedule": timedelta(seconds=6),
-        "options": {
-            "expires": 6,
-        },
-    },
+    # "update_block_cache": {
+    #     "task": "compute_horde.blockchain.tasks.update_block_cache",
+    #     "schedule": timedelta(seconds=6),
+    #     "options": {
+    #         "expires": 6,
+    #     },
+    # },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")

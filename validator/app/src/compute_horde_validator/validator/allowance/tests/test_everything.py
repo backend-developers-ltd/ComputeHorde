@@ -50,8 +50,8 @@ def test_empty():
                 )
         assert e.value.to_dict() == {
             'miner': "stable_miner_000",
-            'amount': LF(1.0),
-            'total_available': LF(0.0),
+            'required_allowance_seconds': LF(1.0),
+            'available_allowance_seconds': LF(0.0),
         }
         
         # Test undo_allowance_reservation with metrics (using non-existent reservation)
@@ -83,8 +83,8 @@ def test_block_without_manifests():
             )
         assert e.value.to_dict() == {
             'miner': "stable_miner_000",
-            'amount': LF(1.0),
-            'total_available': LF(0.0),
+            'required_allowance_seconds': LF(1.0),
+            'available_allowance_seconds': LF(0.0),
         }
 
     with set_block_number(1001):
@@ -107,8 +107,8 @@ def test_block_without_manifests():
             )
         assert e.value.to_dict() == {
             'miner': "stable_miner_000",
-            'amount': LF(1.0),
-            'total_available': LF(0.0),
+            'required_allowance_seconds': LF(1.0),
+            'available_allowance_seconds': LF(0.0),
         }
 
 
@@ -135,8 +135,8 @@ def assert_error_messages(block_number: int, highest_available: float):
 
     assert e.value.to_dict() == {
         'miner': highest_miner,
-        'amount': LF(highest_available + 1e-6),
-        'total_available': LF(highest_available),
+        'required_allowance_seconds': LF(highest_available + 1e-6),
+        'available_allowance_seconds': LF(highest_available),
     }, "reserve_allowance returned wrong error message"
 
 
@@ -284,8 +284,8 @@ def test_complete():
         )
     assert e.value.to_dict() == {
         'miner': "stable_miner_081",
-        'amount': LF(1.0),
-        'total_available': LF(0.0),
+        'required_allowance_seconds': LF(1.0),
+        'available_allowance_seconds': LF(0.0),
     }
 
     with assert_metric_observed(VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION, "undo_allowance_reservation"):
