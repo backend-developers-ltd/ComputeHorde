@@ -6,7 +6,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("validator", "0071_minersplit_metagraphsnapshot_coldkeys_miner_coldkey_and_more"),
+        ("validator", "0072_minermainhotkey_and_more"),
     ]
 
     operations = [
