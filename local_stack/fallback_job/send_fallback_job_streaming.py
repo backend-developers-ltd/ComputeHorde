@@ -26,8 +26,8 @@ def health():
 def terminate():
     def shutdown(): 
         os._exit(0)
-        threading.Thread(target=shutdown).start()
-        return {"message": "Server is shutting down."}
+    threading.Thread(target=shutdown).start()
+    return {"message": "Server is shutting down."}
 """
 
 async def main():
