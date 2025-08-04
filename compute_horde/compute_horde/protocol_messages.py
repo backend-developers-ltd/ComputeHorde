@@ -61,10 +61,10 @@ class V0ExecutorManifestRequest(BaseModel):
         return sum(self.manifest.values())
 
 
-# miner.vc -> validator
-class V0MinerSplitDistributionRequest(BaseModel):
-    message_type: Literal["V0MinerSplitDistributionRequest"] = "V0MinerSplitDistributionRequest"
-    split_distribution: dict[str, float]  # hotkey -> percentage mapping
+# validator -> miner.vc and miner.vc -> validator
+class V0MainHotkeyMessage(BaseModel):
+    message_type: Literal["V0MainHotkeyMessage"] = "V0MainHotkeyMessage"
+    main_hotkey: str | None = None
 
 
 # validator -> miner.vc -> miner.ec -> executor
@@ -226,12 +226,6 @@ class V0JobFinishedReceiptRequest(BaseModel):
         return self.payload.blob_for_signing()
 
 
-# validator -> miner.vc
-class V0SplitDistributionRequest(BaseModel):
-    message_type: Literal["V0SplitDistributionRequest"] = "V0SplitDistributionRequest"
-    # No additional fields needed - just a simple request
-
-
 # executor -> miner.ec -> miner.vc -> validator
 class V0MachineSpecsRequest(BaseModel):
     message_type: Literal["V0MachineSpecsRequest"] = "V0MachineSpecsRequest"
@@ -246,7 +240,7 @@ ValidatorToMinerMessage = Annotated[
     | V0JobRequest
     | V0JobAcceptedReceiptRequest
     | V0JobFinishedReceiptRequest
-    | V0SplitDistributionRequest,
+    | V0MainHotkeyMessage,
     Field(discriminator="message_type"),
 ]
 
@@ -273,7 +267,7 @@ MinerToValidatorMessage = Annotated[
     GenericError
     | UnauthorizedError
     | V0ExecutorManifestRequest
-    | V0MinerSplitDistributionRequest
+    | V0MainHotkeyMessage
     | V0DeclineJobRequest
     | V0AcceptJobRequest
     | V0ExecutorFailedRequest

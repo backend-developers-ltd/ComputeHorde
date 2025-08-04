@@ -5,8 +5,7 @@ import time
 from compute_horde.protocol_messages import (
     GenericError,
     MinerToValidatorMessage,
-    V0MinerSplitDistributionRequest,
-    V0SplitDistributionRequest,
+    V0MainHotkeyMessage,
     ValidatorAuthForMiner,
 )
 from compute_horde.transport import WSTransport
@@ -19,20 +18,20 @@ from compute_horde_validator.validator.models import Miner
 logger = logging.getLogger(__name__)
 
 
-def query_miner_split_distributions(miners: list[Miner]) -> dict[str, dict[str, float]]:
+def query_miner_main_hotkeys(miners: list[Miner]) -> dict[str, str | None]:
     """
-    Query miners for their split distributions.
+    Query miners for their main hotkeys.
 
     Args:
         miners: List of miners to query
 
     Returns:
-        Dictionary mapping miner hotkey to split distribution
+        Dictionary mapping miner hotkey to main hotkey (or None)
     """
     return asyncio.run(_query_miners(miners))
 
 
-async def _query_miners(miners: list[Miner]) -> dict[str, dict[str, float]]:
+async def _query_miners(miners: list[Miner]) -> dict[str, str | None]:
     """
     Query all miners.
 
@@ -40,28 +39,30 @@ async def _query_miners(miners: list[Miner]) -> dict[str, dict[str, float]]:
         miners: List of miners to query
 
     Returns:
-        Dictionary mapping miner hotkey to split distribution
+        Dictionary mapping miner hotkey to main hotkey (or None)
     """
     tasks = []
     for miner in miners:
-        task = asyncio.create_task(_query_single_miner(miner), name=f"query_split_{miner.hotkey}")
+        task = asyncio.create_task(
+            _query_single_miner(miner), name=f"query_main_hotkey_{miner.hotkey}"
+        )
         tasks.append(task)
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    split_distributions: dict[str, dict[str, float]] = {}
+    main_hotkeys: dict[str, str | None] = {}
     for i, result in enumerate(results):
         miner = miners[i]
         if isinstance(result, BaseException):
-            logger.warning(f"Failed to query split distribution from {miner.hotkey}: {result}")
-            split_distributions[miner.hotkey] = {}
+            logger.warning(f"Failed to query main hotkey from {miner.hotkey}: {result}")
+            main_hotkeys[miner.hotkey] = None
         else:
-            split_distributions[miner.hotkey] = result
+            main_hotkeys[miner.hotkey] = result
 
-    return split_distributions
+    return main_hotkeys
 
 
-async def _query_single_miner(miner: Miner) -> dict[str, float]:
+async def _query_single_miner(miner: Miner) -> str | None:
     """
     Async helper to query a single miner.
 
@@ -69,11 +70,12 @@ async def _query_single_miner(miner: Miner) -> dict[str, float]:
         miner: Miner to query
 
     Returns:
-        Split distribution dictionary
+        Main hotkey (or None)
     """
+    transport = None
     try:
         transport = WSTransport(
-            f"split_query_{miner.hotkey}",
+            f"main_hotkey_query_{miner.hotkey}",
             f"ws://{miner.address}:{miner.port}/v0.1/validator_interface/{settings.BITTENSOR_WALLET().get_hotkey().ss58_address}",
             max_retries=2,
         )
@@ -82,40 +84,35 @@ async def _query_single_miner(miner: Miner) -> dict[str, float]:
         auth_msg = _create_auth_message(miner.hotkey)
         await transport.send(auth_msg.model_dump_json())
 
-        request = V0SplitDistributionRequest()
+        request = V0MainHotkeyMessage()
         await transport.send(request.model_dump_json())
 
         async with asyncio.timeout(10):
             while True:
                 response = await transport.receive()
                 if response:
-                    # Parse response
                     msg: MinerToValidatorMessage = TypeAdapter(
                         MinerToValidatorMessage
                     ).validate_json(response)
 
-                    if isinstance(msg, V0MinerSplitDistributionRequest):
-                        await transport.stop()
-                        return msg.split_distribution
+                    if isinstance(msg, V0MainHotkeyMessage):
+                        return msg.main_hotkey
                     elif isinstance(msg, GenericError):
                         logger.warning(f"Error from {miner.hotkey}: {msg.details}")
-                        await transport.stop()
-                        return {}
+                        return None
                     else:
                         logger.warning(f"Unexpected message type from {miner.hotkey}: {type(msg)}")
-                        await transport.stop()
-                        return {}
+                        return None
 
     except TimeoutError:
-        logger.warning(f"Timeout querying split distribution from {miner.hotkey}")
-        await transport.stop()
-        return {}
+        logger.warning(f"Timeout querying main hotkey from {miner.hotkey}")
+        return None
     except Exception as e:
-        logger.warning(f"Error querying split distribution from {miner.hotkey}: {e}")
-        await transport.stop()
-        return {}
+        logger.warning(f"Error querying main hotkey from {miner.hotkey}: {e}")
+        return None
     finally:
-        await transport.stop()
+        if transport:
+            await transport.stop()
 
 
 def _create_auth_message(miner_hotkey: str) -> ValidatorAuthForMiner:

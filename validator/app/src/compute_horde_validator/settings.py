@@ -434,6 +434,11 @@ CONSTANCE_CONFIG = {
         "Bonus multiplier for the split distribution in dancing (10% = 0.1)",
         float,
     ),
+    "MAIN_HOTKEY_SHARE": (
+        0.8,
+        "Share of the total score that goes to the main hotkey (80% = 0.8)",
+        float,
+    ),
 }
 
 # Content Security Policy
@@ -577,6 +582,13 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": timedelta(seconds=10),
         "options": {
             "expires": timedelta(seconds=10).total_seconds(),
+        },
+    },
+    "sync_collaterals": {
+        "task": "compute_horde_validator.validator.tasks.sync_collaterals",
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
         },
     },
     "schedule_synthetic_jobs": {
