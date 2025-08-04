@@ -25,9 +25,9 @@ def health():
 @app.post("/terminate")
 def terminate():
     def shutdown(): 
-        os.kill(os.getpid(), signal.SIGINT)
-    threading.Thread(target=shutdown).start()
-    return {"message": "Server is shutting down."}
+        os._exit(0)
+        threading.Thread(target=shutdown).start()
+        return {"message": "Server is shutting down."}
 """
 
 async def main():
@@ -87,7 +87,7 @@ async def main():
             else:
                 raise RuntimeError(f"[Fallback] Failed to terminate server: {resp.status_code}")
 
-        await job.wait(timeout=60)
+        await job.wait(timeout=120)
     logger.info("Success!")
 
 if __name__ == "__main__":
