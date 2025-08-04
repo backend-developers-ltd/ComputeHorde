@@ -1487,35 +1487,33 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
             snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START,
         )
 
-        hotkeys_to_sync = [neuron.hotkey for neuron in neurons]
 
-        try:
-            sync_collaterals(bittensor, hotkeys_to_sync, block)
-        except Exception as e:
-            msg = f"Error while syncing collaterals: {e}"
-            logger.warning(msg)
-            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-                type=SystemEvent.EventType.COLLATERAL_SYNCING,
-                subtype=SystemEvent.EventSubType.FAILURE,
-                long_description=msg,
-                data={"block": current_cycle.start},
-            )
-
-
-def sync_collaterals(
-    bittensor: turbobt.Bittensor,
-    hotkeys: list[str],
-    block: turbobt.Block,
-) -> None:
+@app.task
+@bittensor_client
+def sync_collaterals(bittensor: turbobt.Bittensor) -> None:
     """
     Synchronizes miner evm addresses and collateral amounts.
 
-    :param hotkeys: Hotkeys to sync collaterals for.
-    :type hotkeys: Iterable[str]
-    :param block: Block number for querying the collateral contract.
-    :type block: int
     :return: None
     """
+    # Get current metagraph data
+    try:
+        neurons, subnet_state, block = async_to_sync(_get_metagraph_for_sync)(bittensor)
+        if not block:
+            logger.warning("Could not get current block for collateral sync")
+            return
+
+        hotkeys = [neuron.hotkey for neuron in neurons]
+    except Exception as e:
+        msg = f"Error getting metagraph data for collateral sync: {e}"
+        logger.warning(msg)
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.COLLATERAL_SYNCING,
+            subtype=SystemEvent.EventSubType.FAILURE,
+            long_description=msg,
+            data={"error": str(e)},
+        )
+        return
     associations = async_to_sync(collateral.get_evm_key_associations)(
         subtensor=bittensor.subtensor,
         netuid=settings.BITTENSOR_NETUID,

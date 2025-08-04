@@ -583,6 +583,13 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(seconds=10).total_seconds(),
         },
     },
+    "sync_collaterals": {
+        "task": "compute_horde_validator.validator.tasks.sync_collaterals",
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
+    },
     "schedule_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
         "schedule": timedelta(minutes=1),
