@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     "django_probes",
     "constance",
     "compute_horde.receipts",
+    "compute_horde.blockchain",
     "compute_horde_validator.validator",
     "compute_horde_validator.validator.admin_config.ValidatorAdminConfig",
     "rangefilter",
@@ -686,6 +687,13 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(minutes=5).total_seconds(),
         },
     },
+    # "update_block_cache": {
+    #     "task": "compute_horde.blockchain.tasks.update_block_cache",
+    #     "schedule": timedelta(seconds=6),
+    #     "options": {
+    #         "expires": 6,
+    #     },
+    # },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
@@ -777,6 +785,7 @@ LOGGING = {
 
 BITTENSOR_NETUID = env.int("BITTENSOR_NETUID")
 BITTENSOR_NETWORK = env.str("BITTENSOR_NETWORK")
+BITTENSOR_ARCHIVE_NETWORK = env.str("BITTENSOR_ARCHIVE_NETWORK", "archive")
 
 BITTENSOR_WALLET_DIRECTORY = env.path(
     "BITTENSOR_WALLET_DIRECTORY",
