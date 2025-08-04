@@ -46,7 +46,9 @@ MINER_HOTKEYS = {
 
 def cmbm(block_number):
     """
-    Curated manifest block number
+    Curated (trimmed to START_BLOCK if block nuber lower than START_CHANGING_MANIFESTS_BLOCK) manifest block number.
+    This allows us to have a simple manifest evolution function AND make the manifests constant for the first
+    `START_CHANGING_MANIFESTS_BLOCK - START_BLOCK` (+/-1) blocks.
     """
     if block_number < START_CHANGING_MANIFESTS_BLOCK:
         return START_BLOCK
