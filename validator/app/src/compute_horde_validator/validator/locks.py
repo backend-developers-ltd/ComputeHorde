@@ -46,7 +46,6 @@ class Lock:
     `timeout_seconds`.
     """
 
-    # TODO: write tests
     def __init__(self, type_: LockType, timeout_seconds: float):
         self.type = type_
         self.timeout_seconds = timeout_seconds
