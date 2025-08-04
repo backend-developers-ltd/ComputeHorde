@@ -175,6 +175,14 @@ class FallbackJob:
         start_time = time.time()
         url = f"http://{self.streaming_server_address}:{self.streaming_server_port}/health"
 
+        while self.status != FallbackJobStatus.ACCEPTED:
+            if timeout is not None and time.monotonic() - start_time > timeout:
+                raise FallbackJobTimeoutError(
+                    f"Job {self.uuid} did not complete within {timeout} seconds, last status: {self.status}"
+                )
+            await asyncio.sleep(JOB_REFRESH_INTERVAL.total_seconds())
+            await self.refresh()
+
         with httpx.Client() as client:
             while time.time() - start_time < timeout:
                 try:
