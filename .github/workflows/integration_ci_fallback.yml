@@ -32,7 +32,24 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.6.x"
-          enable-cache: true
+          enable-cache: false
+
+      - name: Install dependencies
+        working-directory: ./local_stack
+        run: |
+          echo "=== Installing dependencies ==="
+          uv sync
+          echo "=== Dependencies installed ==="
+          echo "=== Checking if SkyPilot is available ==="
+          uv run sky --version || echo "SkyPilot not found in uv environment"
+          echo "=== Checking if RunPod CLI is available ==="
+          uv run runpod --version || echo "RunPod CLI not found in uv environment"
+          echo "=== Checking installed packages ==="
+          uv run pip list | grep -E "(sky|runpod|ray|gpustat|setuptools)" || echo "No relevant packages found"
+          echo "=== Checking specific package versions ==="
+          uv run pip show ray gpustat setuptools-scm skypilot || echo "Some packages not found"
+          echo "=== Checking dependency resolution ==="
+          uv run pip list | grep -E "(ray|gpustat|setuptools)" || echo "No relevant packages found"
 
       - name: Setup SSH key
         run: |
@@ -44,30 +61,166 @@ jobs:
 
       - name: configure runpod
         working-directory: ./local_stack
-        run: uv run runpod config ${{ env.RUNPOD_API_KEY }}
+        run: |
+          echo "=== Configuring RunPod ==="
+          uv run runpod config ${{ env.RUNPOD_API_KEY }}
+          echo "=== RunPod configured ==="
         env:
           RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
 
       - name: run sky check
         working-directory: ./local_stack
-        run: uv run sky check
+        run: |
+          echo "=== Running sky check with verbose output ==="
+          uv run sky check --verbose
+          echo "=== Sky check completed ==="
+
+      - name: Debug SkyPilot logs after sky check
+        if: always()
+        run: |
+          echo "=== SkyPilot logs after sky check ==="
+          if [ -d ~/sky_logs ]; then
+            echo "Found sky_logs directory: ~/sky_logs"
+            echo "Sky logs directory contents:"
+            ls -la ~/sky_logs/
+            
+            find ~/sky_logs -name "*.log" -type f | while read -r logfile; do
+              echo "=== Content of $logfile ==="
+              echo "File size: $(wc -c < "$logfile") bytes"
+              echo "Last modified: $(stat -c %y "$logfile")"
+              cat "$logfile"
+              echo "=== End of $logfile ==="
+            done
+          else
+            echo "No sky_logs directory found after sky check"
+          fi
 
       - name: test regular job
         working-directory: ./local_stack
-        run: uv run ./fallback_job/send_fallback_job.py
+        run: |
+          echo "=== Starting regular job test ==="
+          echo "Current working directory: $(pwd)"
+          echo "Files in current directory:"
+          ls -la
+          echo "=== Running fallback job with verbose output ==="
+          uv run ./fallback_job/send_fallback_job.py --verbose 2>&1 || {
+            echo "=== Job failed, but continuing to capture logs ==="
+            exit 1
+          }
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
           S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
           RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
+          SKYPILOT_DEBUG: "1"
+          SKY_LOG_LEVEL: "DEBUG"
+
+      - name: Debug SkyPilot logs after regular job
+        if: always()
+        run: |
+          echo "=== System Information ==="
+          echo "Current directory: $(pwd)"
+          echo "Home directory: $HOME"
+          echo "User: $(whoami)"
+          echo "Python version: $(python --version)"
+          echo "SkyPilot version: $(uv run sky --version 2>/dev/null || echo 'SkyPilot not found in uv environment')"
+          
+          echo "=== Environment Variables ==="
+          env | grep -E "(AWS|SKY|RUNPOD)" | sort
+          
+          echo "=== SkyPilot logs after regular job ==="
+          if [ -d ~/sky_logs ]; then
+            echo "Found sky_logs directory: ~/sky_logs"
+            echo "Sky logs directory contents:"
+            ls -la ~/sky_logs/
+            
+            find ~/sky_logs -name "*.log" -type f | while read -r logfile; do
+              echo "=== Content of $logfile ==="
+              echo "File size: $(wc -c < "$logfile") bytes"
+              echo "Last modified: $(stat -c %y "$logfile")"
+              cat "$logfile"
+              echo "=== End of $logfile ==="
+            done
+            
+            echo "=== All files in sky_logs (including non-log files) ==="
+            find ~/sky_logs -type f | while read -r file; do
+              echo "=== File: $file ==="
+              if [[ "$file" == *.log ]]; then
+                echo "Log file - showing last 50 lines:"
+                tail -50 "$file"
+              else
+                echo "Non-log file - showing first 20 lines:"
+                head -20 "$file"
+              fi
+              echo "=== End of $file ==="
+            done
+          else
+            echo "No sky_logs directory found"
+            echo "Checking for alternative log locations:"
+            find /tmp -name "*sky*" -type d 2>/dev/null | head -10
+            find ~ -name "*sky*" -type d 2>/dev/null | head -10
+          fi
+          
+          echo "=== Recent system logs ==="
+          journalctl --since "10 minutes ago" | grep -i sky | tail -20 || echo "No recent SkyPilot system logs found"
 
       - name: test streaming job
         working-directory: ./local_stack
-        run: uv run ./fallback_job/send_fallback_job_streaming.py
+        run: |
+          echo "=== Starting streaming job test ==="
+          echo "Current working directory: $(pwd)"
+          echo "Files in current directory:"
+          ls -la
+          echo "=== Running streaming fallback job with verbose output ==="
+          uv run ./fallback_job/send_fallback_job_streaming.py --verbose 2>&1 || {
+            echo "=== Streaming job failed, but continuing to capture logs ==="
+            exit 1
+          }
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
           S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
           RUNPOD_API_KEY: ${{ secrets.INTEGRATION_TESTS_RUNPOD_API_KEY }}
+          SKYPILOT_DEBUG: "1"
+          SKY_LOG_LEVEL: "DEBUG"
+
+      - name: Debug SkyPilot logs after streaming job
+        if: always()
+        run: |
+          echo "=== SkyPilot logs after streaming job ==="
+          if [ -d ~/sky_logs ]; then
+            echo "Found sky_logs directory: ~/sky_logs"
+            echo "Sky logs directory contents:"
+            ls -la ~/sky_logs/
+            
+            find ~/sky_logs -name "*.log" -type f | while read -r logfile; do
+              echo "=== Content of $logfile ==="
+              echo "File size: $(wc -c < "$logfile") bytes"
+              echo "Last modified: $(stat -c %y "$logfile")"
+              cat "$logfile"
+              echo "=== End of $logfile ==="
+            done
+            
+            echo "=== All files in sky_logs (including non-log files) ==="
+            find ~/sky_logs -type f | while read -r file; do
+              echo "=== File: $file ==="
+              if [[ "$file" == *.log ]]; then
+                echo "Log file - showing last 50 lines:"
+                tail -50 "$file"
+              else
+                echo "Non-log file - showing first 20 lines:"
+                head -20 "$file"
+              fi
+              echo "=== End of $file ==="
+            done
+          else
+            echo "No sky_logs directory found"
+            echo "Checking for alternative log locations:"
+            find /tmp -name "*sky*" -type d 2>/dev/null | head -10
+            find ~ -name "*sky*" -type d 2>/dev/null | head -10
+          fi
+          
+          echo "=== Recent system logs ==="
+          journalctl --since "10 minutes ago" | grep -i sky | tail -20 || echo "No recent SkyPilot system logs found"
