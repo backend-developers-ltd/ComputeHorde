@@ -87,7 +87,7 @@ async def main():
             else:
                 raise RuntimeError(f"[Fallback] Failed to terminate server: {resp.status_code}")
 
-        await job.wait(timeout=120)
+        await job.wait(timeout=60)
     logger.info("Success!")
 
 if __name__ == "__main__":
