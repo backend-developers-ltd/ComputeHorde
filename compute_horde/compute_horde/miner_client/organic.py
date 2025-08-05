@@ -718,6 +718,7 @@ async def execute_organic_job_on_miner(
                 time_took_seconds=timer.passed_time(),
                 score=0,
             )
+            # TODO(post error propagation): wrap unexpected errors in HordeFailed
             raise
 
     raise Exception("Organic job flow ended with no result")

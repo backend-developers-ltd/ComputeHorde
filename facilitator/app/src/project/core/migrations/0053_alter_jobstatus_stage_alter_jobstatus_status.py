@@ -4,16 +4,28 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0052_jobstatus_stage'),
+        ("core", "0052_jobstatus_stage"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='jobstatus',
-            name='status',
-            field=models.CharField(choices=[('sent', 'sent'), ('received', 'received'), ('accepted', 'accepted'), ('executor_ready', 'executor_ready'), ('streaming_ready', 'streaming_ready'), ('volumes_ready', 'volumes_ready'), ('execution_done', 'execution_done'), ('completed', 'completed'), ('rejected', 'rejected'), ('failed', 'failed')]),
+            model_name="jobstatus",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("sent", "sent"),
+                    ("received", "received"),
+                    ("accepted", "accepted"),
+                    ("executor_ready", "executor_ready"),
+                    ("streaming_ready", "streaming_ready"),
+                    ("volumes_ready", "volumes_ready"),
+                    ("execution_done", "execution_done"),
+                    ("completed", "completed"),
+                    ("rejected", "rejected"),
+                    ("failed", "failed"),
+                ]
+            ),
         ),
         migrations.RunSQL(
             """

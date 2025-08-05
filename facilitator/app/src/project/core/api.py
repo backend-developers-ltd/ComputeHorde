@@ -56,6 +56,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
     - status/stdout/stderr/artifacts/uploads are used by pre-error-propagation SDK
     - newer SDKs should use status_history instead
     """
+
     class Meta:
         model = Job
         fields = (

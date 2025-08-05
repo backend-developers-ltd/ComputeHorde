@@ -4,15 +4,30 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0051_job_streaming_client_cert_and_more'),
+        ("core", "0051_job_streaming_client_cert_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='jobstatus',
-            name='stage',
-            field=models.CharField(choices=[('not_specified', 'not_specified'), ('acceptance', 'acceptance'), ('routing', 'routing'), ('reservation', 'reservation'), ('executor_spinup', 'executor_spinup'), ('executor_startup', 'executor_startup'), ('streaming_startup', 'streaming_startup'), ('volume_download', 'volume_download'), ('execution', 'execution'), ('result_upload', 'result_upload'), ('closure', 'closure')], default='not_specified', max_length=255),
+            model_name="jobstatus",
+            name="stage",
+            field=models.CharField(
+                choices=[
+                    ("not_specified", "not_specified"),
+                    ("acceptance", "acceptance"),
+                    ("routing", "routing"),
+                    ("reservation", "reservation"),
+                    ("executor_spinup", "executor_spinup"),
+                    ("executor_startup", "executor_startup"),
+                    ("streaming_startup", "streaming_startup"),
+                    ("volume_download", "volume_download"),
+                    ("execution", "execution"),
+                    ("result_upload", "result_upload"),
+                    ("closure", "closure"),
+                ],
+                default="not_specified",
+                max_length=255,
+            ),
         ),
     ]

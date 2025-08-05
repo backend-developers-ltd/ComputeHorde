@@ -10,7 +10,7 @@ import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde import protocol_consts
+from compute_horde import organic_job_errors, protocol_consts
 from compute_horde.fv_protocol import fv_protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import (
     Error,

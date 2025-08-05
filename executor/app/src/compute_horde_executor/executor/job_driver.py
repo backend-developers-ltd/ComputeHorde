@@ -186,8 +186,6 @@ class JobDriver:
     async def _upload_stage(self):
         self._enter_stage("upload")
 
-        raise ValueError("potato")
-
         job_result = await self.runner.upload_results()
         job_result.specs = self.specs
         await self.miner_client.send_result(job_result)

@@ -42,7 +42,7 @@ class V0AuthenticationRequest(BaseModel, extra="forbid"):
 
 
 class JobResultDetails(BaseModel, extra="allow"):
-    # TODO(post error propagation): this payload is an amalgam of success and failure responses, don't sent errors here.
+    # TODO(post error propagation): this payload is an amalgam of a success and failure: don't use this for errors.
     # TODO(post error propagation): job_uuid is redundant,
     job_uuid: str
     docker_process_stderr: str
@@ -62,7 +62,9 @@ class JobFailureDetails(BaseModel):
     reason: protocol_consts.JobFailureReason
     message: str | None = None
     context: JsonValue = None
-    # TODO(error propagation): job output and error code
+    docker_process_exit_status: int | None = None
+    docker_process_stdout: str | None = None
+    docker_process_stderr: str | None = None
 
 
 class HordeFailureDetails(BaseModel):

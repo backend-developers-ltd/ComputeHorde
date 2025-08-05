@@ -203,18 +203,15 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                     stage=message.stage.value,
                     metadata=metadata,
                 )
-                if (
-                    message.status.is_successful()
-                    and (miner_response := message.metadata.miner_response) is not None
-                ):
+                if message.status.is_successful() and (miner_response := message.metadata.miner_response) is not None:
                     if (artifacts := miner_response.artifacts) is not None:
                         job.artifacts = artifacts
                     if (upload_results := miner_response.upload_results) is not None:
                         job.upload_results = upload_results
                     await job.asave()
                 elif (
-                        message.status == fv_protocol_consts.FaciValiJobStatus.STREAMING_READY
-                        and (streaming_details := message.metadata.streaming_details) is not None
+                    message.status == fv_protocol_consts.FaciValiJobStatus.STREAMING_READY
+                    and (streaming_details := message.metadata.streaming_details) is not None
                 ):
                     log.debug(f"received streaming details: {streaming_details}")
                     job.streaming_server_cert = streaming_details.streaming_server_cert
