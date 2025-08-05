@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 
-from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.routing.types import JobRoute
 
 
 class RoutingBase(ABC):
@@ -15,7 +15,7 @@ class RoutingBase(ABC):
     """
 
     @abstractmethod
-    async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> Miner:
+    async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute:
         """
         Filters miners based on compute time allowance and minimum collateral requirements.
         Creates a preliminary reservation for the selected miner and returns the miner with:
