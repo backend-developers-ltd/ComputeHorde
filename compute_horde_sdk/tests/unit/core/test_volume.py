@@ -621,11 +621,7 @@ class TestVolumeManagerClient:
                 job_uuid="test-job-456", volume=inline_volume, job_metadata={"image": "test-image"}
             )
 
-            assert isinstance(result, list)
-            assert all(isinstance(item, list) for item in result)
-            assert all(all(isinstance(subitem, str) for subitem in item) for item in result)
-            assert len(result) == 1
-            assert result[0] == ["-v", "/tmp/inline-data:/volume/data"]
+            assert result == [["-v", "/tmp/inline-data:/volume/data"]]
 
     @pytest.mark.asyncio
     async def test_prepare_volume_with_multiple_mounts(self, client, huggingface_volume):
@@ -645,19 +641,11 @@ class TestVolumeManagerClient:
                 job_uuid="test-job-789", volume=huggingface_volume, job_metadata={"image": "test-image"}
             )
 
-            assert isinstance(result, list)
-            assert all(isinstance(item, list) for item in result)
-            assert all(all(isinstance(subitem, str) for subitem in item) for item in result)
-            assert len(result) == 3
-
-            # Check first mount
-            assert result[0] == ["-v", "/host/models:/volume/models"]
-
-            # Check second mount
-            assert result[1] == ["-v", "cache-volume:/cache"]
-
-            # Check third mount
-            assert result[2] == ["--tmpfs", "/tmp"]
+            assert result == [
+                ["-v", "/host/models:/volume/models"],
+                ["-v", "cache-volume:/cache"],
+                ["--tmpfs", "/tmp"],
+            ]
 
 
 class TestCreateVolumeManagerClient:

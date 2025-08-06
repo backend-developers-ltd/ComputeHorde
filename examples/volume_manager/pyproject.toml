@@ -1,0 +1,43 @@
+[project]
+name = "volume-manager-poc"
+version = "0.1.0"
+description = "POC Volume Manager for Compute Horde"
+authors = [
+    {name = "Compute Horde Team"}
+]
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.0.0",
+    "httpx>=0.25.0",
+    "huggingface-hub>=0.19.0",
+    "pytest>=8.4.1",
+    "bittensor>=9.8.2",
+    "compute-horde-sdk",
+]
+requires-python = ">=3.11"
+
+[project.scripts]
+volume-manager = "volume_manager.__main__:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.25.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["volume_manager"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto" 

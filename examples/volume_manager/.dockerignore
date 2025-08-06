@@ -1,0 +1,5 @@
+*
+
+!compute_horde_sdk/src/
+!compute_horde_sdk/pyproject.toml
+!examples/volume_manager/

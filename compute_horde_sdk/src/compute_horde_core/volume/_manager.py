@@ -57,9 +57,7 @@ class VolumeManagerClient:
             await self._client.aclose()
             self._client = None
 
-    async def prepare_volume(
-        self, job_uuid: str, volume: Volume, job_metadata: dict[str, Any], timeout: float = 60.0
-    ) -> list[list[str]]:
+    async def prepare_volume(self, job_uuid: str, volume: Volume, job_metadata: dict[str, Any]) -> list[list[str]]:
         """
         Request the volume manager to prepare a volume for the job.
 
@@ -67,7 +65,6 @@ class VolumeManagerClient:
             job_uuid: Unique identifier for the job
             volume: Volume specification to prepare
             job_metadata: Additional metadata about the job
-            timeout: Request timeout in seconds
 
         Returns:
             List of mount flag lists for Docker
@@ -80,14 +77,9 @@ class VolumeManagerClient:
         volume_data = volume.model_dump()
         payload = {"job_uuid": job_uuid, "volume": volume_data, "job_metadata": job_metadata}
 
-        response_data = await self._make_request(url, payload, "prepare_volume", timeout=timeout)
+        response_data = await self._make_request(url, payload, "prepare_volume")
 
-        # Convert string mount types to MountType objects
-        mounts = []
-        for mount_data in response_data["mounts"]:
-            mounts.append(mount_data)
-
-        return mounts
+        return response_data["mounts"]
 
     async def job_finished(self, job_uuid: str) -> None:
         """
@@ -103,16 +95,14 @@ class VolumeManagerClient:
         url = f"{self.base_url}/job_finished"
         payload = {"job_uuid": job_uuid}
 
-        await self._make_request(url, payload, "job_finished", timeout=30.0)
+        await self._make_request(url, payload, "job_finished")
 
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(3),
         wait=tenacity.wait_fixed(1),
         retry=tenacity.retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
     )
-    async def _make_request(
-        self, url: str, payload: dict[str, Any], operation: str, timeout: float = 60.0
-    ) -> dict[str, list[list[str]]]:
+    async def _make_request(self, url: str, payload: dict[str, Any], operation: str) -> dict[str, list[list[str]]]:
         """
         Make a POST request to the Volume Manager with standardized error handling.
 
@@ -120,7 +110,6 @@ class VolumeManagerClient:
             url: The endpoint URL
             payload: The JSON payload to send
             operation: Operation name for error messages
-            timeout: Request timeout in seconds
 
         Returns:
             Mount options for the job
@@ -133,7 +122,12 @@ class VolumeManagerClient:
 
         try:
             client = self._get_client()
-            response = await client.post(url, json=payload, headers=self.headers, timeout=timeout)
+            response = await client.post(
+                url,
+                json=payload,
+                headers=self.headers,
+                timeout=httpx.Timeout(connect=30.0, read=None, write=None, pool=None),
+            )
             response.raise_for_status()
 
             logger.debug(f"Volume Manager {operation} response status: {response.status_code}")
