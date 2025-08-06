@@ -288,11 +288,22 @@ def list_neurons(block_number: int, with_shield: bool) -> list[turbobt.Neuron]:
     ]
 
 
+def get_block_timestamp(block_number):
+    base_time = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
+    return base_time + datetime.timedelta(
+        seconds=(block_number - START_BLOCK) * 12 + (0.01 if not (block_number % 5) else 0)
+    )
+
+
 @contextmanager
 def set_block_number(block_number_):
     class MockSuperTensor(supertensor.BaseSuperTensor):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.block_number = block_number_
+
         def get_current_block(self):
-            return block_number_
+            return self.block_number
 
         def get_shielded_neurons(self):
             return list_neurons(block_number_, with_shield=False)
@@ -304,10 +315,7 @@ def set_block_number(block_number_):
             return list_validators(block_number, filter_=True)
 
         def get_block_timestamp(self, block_number):
-            base_time = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
-            return base_time + datetime.timedelta(
-                seconds=(block_number - START_BLOCK) * 12 + (0.01 if not (block_number % 5) else 0)
-            )
+            return get_block_timestamp(block_number)
 
         def wallet(self):
             return wallet()
