@@ -100,9 +100,6 @@ async def _query_single_miner(miner: Miner) -> str | None:
                     elif isinstance(msg, GenericError):
                         logger.warning(f"Error from {miner.hotkey}: {msg.details}")
                         return None
-                    else:
-                        logger.warning(f"Unexpected message type from {miner.hotkey}: {type(msg)}")
-                        return None
 
     except TimeoutError:
         logger.warning(f"Timeout querying main hotkey from {miner.hotkey}")
