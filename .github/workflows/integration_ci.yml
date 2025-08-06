@@ -44,6 +44,9 @@ jobs:
       - name: test volume manager integration
         working-directory: ./examples/volume_manager
         run: ./run_tests.sh -i -d
+        env:
+          VOLUME_MANAGER_ADDRESS: ${{ 0.0.0.0:8001 }}
+          DEBUG_TURN_AUTHENTICATION_OFF: true
           
       # - name: Upload integration test logs
       #   uses: actions/upload-artifact@v4
