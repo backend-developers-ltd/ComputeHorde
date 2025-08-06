@@ -1,0 +1,21 @@
+services:
+  volume-manager:
+    build:
+      context: ../..  # Point to project root, important for the COPY command in the Dockerfile
+      dockerfile: examples/volume_manager/Dockerfile
+    ports:
+      - "${VOLUME_MANAGER_PORT:-8001}:${VOLUME_MANAGER_PORT:-8001}"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - VOLUME_MANAGER_CACHE_DIR=/tmp/volume_manager/cache
+      - VOLUME_MANAGER_PORT=${VOLUME_MANAGER_PORT:-8001}
+    volumes:
+      # Mount volume manager cache to host for testing
+      - /tmp/volume_manager/cache:/tmp/volume_manager/cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${VOLUME_MANAGER_PORT:-8001}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

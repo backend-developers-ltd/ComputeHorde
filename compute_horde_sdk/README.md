@@ -274,7 +274,7 @@ You can also add custom headers for authentication or any other purpose. Any env
 
 ```bash
 # Authentication header
-export VOLUME_MANAGER_HEADER_AUTHORIZATION='Bearer dupadupakupa'
+export VOLUME_MANAGER_HEADER_AUTHORIZATION='Bearer tokentokentoken'
 
 # Custom API key
 export VOLUME_MANAGER_HEADER_X_API_KEY='your-api-key-here'
@@ -319,6 +319,8 @@ Your volume manager must implement these endpoints:
   }
 }
 ```
+
+**Note:** Large volume downloads may take considerable time, so volume managers should not implement self-timeout mechanisms during volume preparation as the system already handles timeouts. For the same reason, the manager service should handle executor disconnections gracefully.
 
 **Response:**
 ```json
