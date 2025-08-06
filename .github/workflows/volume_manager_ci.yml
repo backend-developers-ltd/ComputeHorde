@@ -1,0 +1,48 @@
+name: Volume Manager Integration Tests
+
+on:
+  push:
+    branches: [master, main, ci_test]
+  pull_request:
+
+env:
+  PYTHON_DEFAULT_VERSION: "3.11"
+
+jobs:
+  volume-manager-test:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          cache: "pip"
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.6.x"
+          enable-cache: true
+      
+      - name: Set VOLUME_MANAGER_ADDRESS env variable
+        run: |
+          sed -i 's/# update_env_var "VOLUME_MANAGER_ADDRESS"/update_env_var "VOLUME_MANAGER_ADDRESS"/' local_stack/prepare.sh
+      
+      - name: Start all services
+        run: local_stack/run_and_await_readiness.sh /tmp/volume_manager_test_logs/
+      
+      - name: Test volume manager integration
+        working-directory: ./examples/volume_manager
+        run: ./run_tests.sh -i -d
+          
+      - name: Upload volume manager test logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: volume-manager-test-logs
+          path: /tmp/volume_manager_test_logs/*.log 
