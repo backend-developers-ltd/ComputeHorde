@@ -1,9 +1,14 @@
 import asyncio
 import pathlib
 import os
+import sys
 import logging
 import requests
 import bittensor
+
+# Add the local compute_horde_sdk to the Python path
+sdk_path = pathlib.Path(__file__).parent.parent.parent / "compute_horde_sdk" / "src"
+sys.path.insert(0, str(sdk_path))
 
 from compute_horde_sdk._internal.sdk import ComputeHordeJobSpec
 from compute_horde_sdk.v1 import (
