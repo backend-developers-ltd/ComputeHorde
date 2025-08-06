@@ -1,6 +1,7 @@
 import time
 from collections import defaultdict
-from typing import Callable
+from collections.abc import Callable
+from typing import Any
 
 import turbobt
 from celery.utils.log import get_task_logger
@@ -233,12 +234,11 @@ def report_checkpoint(block_number_lt: int, block_number_gte: int):
     )
 
 
-def scan_blocks_and_calculate_allowance(report_callback: Callable[[int, int], None] | None = None):
+def scan_blocks_and_calculate_allowance(report_callback: Callable[[int, int], Any] | None = None):
     timer = Timer()
     try:
         current_block = supertensor().get_current_block()
         missing_block_numbers = find_missing_blocks(current_block)
-        missing_block_numbers = []
         for block_number in missing_block_numbers:
             # TODO process_block_allowance_with_reporting never throws, but logs errors appropriately. maybe it should
             # be retried? otherwise random failures will leave holes until they are backfilled

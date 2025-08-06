@@ -31,7 +31,6 @@ from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
 from compute_horde.subtensor import TEMPO, get_cycle_containing_block
-from compute_horde.transport.base import TransportConnectionError
 from compute_horde.utils import MIN_VALIDATOR_STAKE, turbobt_get_validators
 from compute_horde_core.executor_class import ExecutorClass
 from constance import config
@@ -81,13 +80,11 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
+from .allowance import tasks  # noqa
+from .clean_me_up import get_single_manifest, save_compute_time_allowance_event
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
 from .scoring import create_scoring_engine
-
-from .allowance import tasks  # noqa
-from .clean_me_up import save_compute_time_allowance_event, get_single_manifest
-
 
 if False:
     import torch
