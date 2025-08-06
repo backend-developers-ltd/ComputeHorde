@@ -1,8 +1,8 @@
-name: Volume Manager Integration Tests
+name: Run Volume Manager Integration Tests
 
 on:
   push:
-    branches: [master, main, ci_test]
+    branches: [master, main]
   pull_request:
 
 env:
