@@ -10,7 +10,7 @@ from django.db import transaction
 from django.db.models import Min, Q
 
 from compute_horde_validator.validator.locks import Lock, LockType
-from compute_horde_validator.validator.tasks import get_single_manifest
+from compute_horde_validator.validator.clean_me_up import get_single_manifest
 
 from ...dynamic_config import get_miner_max_executors_per_class
 from ...models.allowance.internal import AllowanceMinerManifest, BlockAllowance, MinerAddress

@@ -1,14 +1,12 @@
-import utils.blocks
-import utils.manifests
 from celery.utils.log import get_task_logger
 from django.conf import settings
 from django.db import transaction
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.allowance import utils
 from compute_horde_validator.validator.locks import Lock, Locked, LockType
-from compute_horde_validator.validator.models import SystemEvent
-
-from . import utils
+from compute_horde_validator.validator.models import SystemEvent, AllowanceMinerManifest
+from compute_horde_validator.validator.allowance.utils import blocks, manifests
 
 logger = get_task_logger(__name__)
 
@@ -18,14 +16,22 @@ logger = get_task_logger(__name__)
 )
 def scan_blocks_and_calculate_allowance():
     # TODO: write tests and add to celery beat config
+    if not AllowanceMinerManifest.objects.exists():
+        logger.warning("No miner manifests found, skipping allowance calculation")
+        return
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
         try:
             with Lock(LockType.ALLOWANCE_FETCHING, 5.0):
-                utils.blocks.scan_blocks_and_calculate_allowance()
+                utils.blocks.scan_blocks_and_calculate_allowance(report_allowance_to_system_events.delay)
         except Locked:
             logger.debug("Another thread already fetching blocks")
         except utils.blocks.TimesUpError:
             scan_blocks_and_calculate_allowance.delay()
+
+
+@app.task()
+def report_allowance_to_system_events(block_number_lt: int, block_number_gte: int):
+    utils.blocks.report_checkpoint(block_number_lt, block_number_gte)
 
 
 @app.task()
