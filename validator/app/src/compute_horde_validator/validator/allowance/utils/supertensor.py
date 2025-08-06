@@ -137,17 +137,22 @@ class SuperTensor(BaseSuperTensor):
 
         self._neuron_list_cache: deque[tuple[int, list[turbobt.Neuron]]] = deque(maxlen=15)
 
-    @archive_fallback
-    @make_sync
-    async def list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
+
+    def list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
         cache = dict(self._neuron_list_cache)
         if hit := cache.get(block_number):
             return hit
+        result: list[turbobt.Neuron] = self.real_list_neurons(block_number)
+        self._neuron_list_cache.append((block_number, result))
+        return result
+
+    @archive_fallback
+    @make_sync
+    async def real_list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
         bittensor = bittensor_context.get()
         subnet = subnet_context.get()
         async with bittensor.block(block_number):
             result: list[turbobt.Neuron] = await subnet.list_neurons()
-            self._neuron_list_cache.append((block_number, result))
             return result
 
     @archive_fallback
