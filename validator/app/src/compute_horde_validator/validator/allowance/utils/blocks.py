@@ -1,5 +1,6 @@
 import time
 from collections import defaultdict
+from typing import Callable
 
 import turbobt
 from celery.utils.log import get_task_logger
@@ -209,14 +210,12 @@ def process_block_allowance_with_reporting(block_number: int):
         logger.info(f"Block allowance processing for block {block_number} took {duration} seconds")
         # Record processing duration in Prometheus metric instead of SystemEvent
         VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION.observe(duration)
-    if not block_number % 50:
-        report_checkpoint(block_number)
 
 
-def report_checkpoint(block_number):
+def report_checkpoint(block_number_lt: int, block_number_gte: int):
     allowances = BlockAllowance.objects.filter(
-        block__block_number__lte=block_number,
-        block__block_number__gt=block_number - 50,
+        block__block_number__lt=block_number_lt,
+        block__block_number__gte=block_number_gte,
     ).order_by("block__block_number", "validator_ss58", "miner_ss58", "executor_class")
 
     by_block = defaultdict(list)
@@ -227,21 +226,25 @@ def report_checkpoint(block_number):
         type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
         subtype=SystemEvent.EventSubType.CHECKPOINT,
         data={
-            "block_number": block_number,
+            "block_number_lt": block_number_lt,
+            "block_number_gte": block_number_gte,
             "allowances": by_block,
         },
     )
 
 
-def scan_blocks_and_calculate_allowance():
+def scan_blocks_and_calculate_allowance(report_callback: Callable[[int, int], None] | None = None):
     timer = Timer()
     try:
         current_block = supertensor().get_current_block()
         missing_block_numbers = find_missing_blocks(current_block)
+        missing_block_numbers = []
         for block_number in missing_block_numbers:
             # TODO process_block_allowance_with_reporting never throws, but logs errors appropriately. maybe it should
             # be retried? otherwise random failures will leave holes until they are backfilled
             process_block_allowance_with_reporting(block_number)
+            if not block_number % 10 and report_callback:
+                report_callback(block_number, block_number-10)
             timer.check_time()
 
         while True:
@@ -249,6 +252,8 @@ def scan_blocks_and_calculate_allowance():
             current_block += 1
 
             process_block_allowance_with_reporting(current_block)
+            if not current_block % 10 and report_callback:
+                report_callback(current_block, current_block-10)
             timer.check_time()
 
     except TimesUpError:

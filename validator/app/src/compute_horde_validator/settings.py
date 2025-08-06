@@ -635,13 +635,27 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(minutes=5).total_seconds(),
         },
     },
-    # "update_block_cache": {
-    #     "task": "compute_horde.blockchain.tasks.update_block_cache",
-    #     "schedule": timedelta(seconds=6),
-    #     "options": {
-    #         "expires": 6,
-    #     },
-    # },
+    "scan_blocks_and_calculate_allowance": {
+        "task": "compute_horde_validator.validator.allowance.tasks.scan_blocks_and_calculate_allowance",
+        "schedule": timedelta(minutes=1),
+        "options": {
+            "expires": timedelta(minutes=1).total_seconds(),
+        },
+    },
+    "sync_manifests": {
+        "task": "compute_horde_validator.validator.allowance.tasks.sync_manifests",
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
+    },
+    "update_block_cache": {
+        "task": "compute_horde.blockchain.tasks.update_block_cache",
+        "schedule": timedelta(seconds=6),
+        "options": {
+            "expires": 6,
+        },
+    },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
@@ -750,7 +764,7 @@ BITTENSOR_SHIELD_CERTIFICATE_PATH = env.path(
 )
 BITTENSOR_SHIELD_DISABLE_UPLOADING_CERTIFICATE = env.bool(
     "BITTENSOR_SHIELD_DISABLE_UPLOADING_CERTIFICATE",
-    default=False,
+    default=True,
 )
 
 
