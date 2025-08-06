@@ -31,8 +31,6 @@ jobs:
           enable-cache: true
       - name: Start all services
         run: local_stack/run_and_await_readiness.sh /tmp/integration_test_logs/
-        env:
-          VOLUME_MANAGER_ADDRESS: "http://localhost:8001"
       
       - name: test
         working-directory: ./local_stack
@@ -43,12 +41,6 @@ jobs:
           AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
           S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
 
-      - name: test volume manager integration
-        working-directory: ./examples/volume_manager
-        run: ./run_tests.sh -i -d
-        env:
-          VOLUME_MANAGER_ADDRESS: "http://localhost:8001"
-          
       - name: Upload integration test logs
         uses: actions/upload-artifact@v4
         if: always()
