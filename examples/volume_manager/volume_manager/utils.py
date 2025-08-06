@@ -17,7 +17,7 @@ def create_volume_from_spec(volume_spec: VolumeSpec) -> "Volume":
 
         volume_adapter = TypeAdapter(Volume)
         return volume_adapter.validate_python(volume_data)
-        
+
     except Exception as e:
         logger.exception(f"Failed to create {volume_spec.volume_type} volume")
         raise ValueError(f"Failed to create {volume_spec.volume_type} volume: {e}")

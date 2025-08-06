@@ -1,23 +1,20 @@
 import logging
 import os
 import sys
-
 import uvicorn
 
 
 def main():
-    """Main entry point for the Volume Manager Example."""
-    # Configure basic logging
+
     log_level = os.environ.get("VOLUME_MANAGER_LOG_LEVEL", "INFO").upper()
     logging.basicConfig(
         level=getattr(logging, log_level),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
     logger = logging.getLogger(__name__)
-    
-    # Get configuration from environment
+
     port = int(os.environ.get("VOLUME_MANAGER_PORT", "8001"))
-    
+
     try:
         uvicorn.run(
             "volume_manager.api:app",
@@ -34,4 +31,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

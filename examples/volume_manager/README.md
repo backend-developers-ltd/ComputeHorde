@@ -1,6 +1,6 @@
 # Volume Manager Example
 
-An example implementation of a volume manager for Compute Horde. This demonstrates how to build an external volume management service that can download, cache, and prepare volumes for compute jobs.
+An example implementation of a volume manager for Compute Horde. This demonstrates how to build an external volume management service that can download, cache, and return mount options for volumes used in compute jobs.
 
 ## Quick Start
 
@@ -24,16 +24,16 @@ docker-compose down
 
 ```bash
 # Set env variable directly
-export VOLUME_MANAGER_PORT=9000
+export VOLUME_MANAGER_PORT=8123
 
 # Or use it with docker-compose
-VOLUME_MANAGER_PORT=9000 docker-compose up -d
+VOLUME_MANAGER_PORT=8123 docker-compose up -d
 ```
 
 ## Monitoring
 
 ```bash
-# Check health (uses VOLUME_MANAGER_PORT or defaults to 8001)
+# Check health
 curl http://localhost:${VOLUME_MANAGER_PORT:-8001}/health
 
 # Check cache status
@@ -42,7 +42,7 @@ curl http://localhost:${VOLUME_MANAGER_PORT:-8001}/cache/status
 
 ## Local Testing
 
-After setting everything up with `local_stack/run_in_screen.sh`, test the 
+After setting everything up with [`local_stack/run_in_screen.sh`](https://github.com/backend-developers-ltd/ComputeHorde/blob/master/local_stack/run_in_screen.sh), test the volume manager with:
 
 ```bash
 ./run_tests.sh
@@ -56,8 +56,3 @@ VOLUME_MANAGER_PORT=9000 ./run_tests.sh
 # Test the whole ComputeHorde integration instead of endpoints only
 ./run_tests.sh -i
 ```
-
-**Available flags:**
-- `-d, --deploy`: Deploy volume manager example
-- `-i, --integration`: Test complete job integration 
-- `-h, --help`: Show help message

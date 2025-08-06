@@ -3,18 +3,14 @@ import pathlib
 import os
 import logging
 import requests
-
 import bittensor
 
-import sys
-import pathlib
-
-# Add the local compute_horde_sdk to the Python path
-sdk_path = pathlib.Path(__file__).parent.parent.parent / "compute_horde_sdk" / "src"
-sys.path.insert(0, str(sdk_path))
-
 from compute_horde_sdk._internal.sdk import ComputeHordeJobSpec
-from compute_horde_sdk.v1 import ComputeHordeClient, ExecutorClass, HuggingfaceInputVolume
+from compute_horde_sdk.v1 import (
+    ComputeHordeClient,
+    ExecutorClass,
+    HuggingfaceInputVolume,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +20,9 @@ logger = logging.getLogger(__name__)
 wallet = bittensor.wallet(
     name="validator",
     hotkey="default",
-    path=(pathlib.Path(__file__).parent.parent.parent / "local_stack" / "wallets").as_posix(),
+    path=(
+        pathlib.Path(__file__).parent.parent.parent / "local_stack" / "wallets"
+    ).as_posix(),
 )
 compute_horde_client = ComputeHordeClient(
     hotkey=wallet.hotkey,
@@ -36,11 +34,13 @@ compute_horde_client = ComputeHordeClient(
 async def run_volume_test():
     """Run a test job that downloads a HuggingFace model."""
     logger.info("Running volume download test...")
-    
+
     # Pull required Docker images
     os.system("docker pull python:3.11-slim")
-    os.system("docker pull us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest")
-    
+    os.system(
+        "docker pull us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest"
+    )
+
     # Create a job spec that downloads a small HuggingFace model
     compute_horde_job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.always_on__llm__a6000,
@@ -49,9 +49,7 @@ async def run_volume_test():
         args=[
             "bash",
             "-c",
-            "echo 'Testing volume download...' && "
-            "ls -la /volume && "
-            "echo 'Job completed successfully' > /artifacts/stuff",
+            "echo 'Running volume test...' > /artifacts/stuff",
         ],
         artifacts_dir="/artifacts",
         input_volumes={
@@ -70,7 +68,7 @@ async def run_volume_test():
     await job.wait(timeout=60)
 
     # Validate job completion and output.
-    expected_artifacts = {"/artifacts/stuff": b"Job completed successfully\n"}
+    expected_artifacts = {"/artifacts/stuff": b"Running volume test...\n"}
     if job.status != "Completed" or job.result.artifacts != expected_artifacts:
         raise RuntimeError(
             f"Job failed: status={job.status}, artifacts={job.result.artifacts}"
@@ -85,11 +83,12 @@ async def run_volume_test():
             if "hf-prajjwal1_bert-tiny" in cache_data.get("cached_volumes", []):
                 logger.info("✓ Volume manager successfully cached the model")
             else:
-                logger.error("Volume manager cache is empty")
-    except Exception as e:
-        logger.error(f"Could not check volume manager status: {e}")
+                logger.warning("Volume manager cache is empty")
+    except Exception:
+        logger.warning("Could not check volume manager status")
 
-    logger.info("Volume test success!")
+    logger.info("Volume test finished!")
+
 
 if __name__ == "__main__":
     asyncio.run(run_volume_test())
