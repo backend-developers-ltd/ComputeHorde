@@ -20,7 +20,7 @@ def scan_blocks_and_calculate_allowance():
         return
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
         try:
-            with Lock(LockType.ALLOWANCE_FETCHING, 5.0):
+            with Lock(LockType.ALLOWANCE_FETCHING, 5.0, settings.DEFAULT_DB_ALIAS):
                 blocks.scan_blocks_and_calculate_allowance(report_allowance_to_system_events.delay)
         except Locked:
             logger.debug("Another thread already fetching blocks")
