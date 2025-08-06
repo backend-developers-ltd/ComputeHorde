@@ -8,6 +8,7 @@ block_ids = list[int]
 
 class Miner(pydantic.BaseModel):
     address: str
+    ip_version: int
     port: int
     hotkey_ss58: ss58_address
 

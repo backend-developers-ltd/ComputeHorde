@@ -8,6 +8,7 @@ from django.db.models import UniqueConstraint
 class MinerAddress(models.Model):
     hotkey_ss58address = models.TextField(unique=True)
     address = models.TextField()
+    ip_version = models.IntegerField()
     port = models.IntegerField()
 
 
