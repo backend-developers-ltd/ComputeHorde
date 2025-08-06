@@ -1,12 +1,12 @@
 import time
-from collections import defaultdict
+from collections.abc import Callable
+from typing import Any
 
 import turbobt
 from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
 from django.db import transaction
 from django.db.models import Case, FloatField, Max, Min, Q, Sum, Value, When
-from django.forms.models import model_to_dict
 
 from compute_horde_validator.validator.locks import Lock, LockType
 
@@ -14,10 +14,10 @@ from ...models import SystemEvent
 from ...models.allowance.internal import Block, BlockAllowance
 from ...models.allowance.internal import Neuron as NeuronModel
 from .. import settings
-from ..metrics import VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION
+from ..metrics import VALIDATOR_ALLOWANCE_CHECKPOINT, VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION
 from ..types import AllowanceException, NotEnoughAllowanceException, ss58_address
 from .manifests import get_manifest_drops, get_manifests
-from .supertensor import supertensor
+from .supertensor import SuperTensor, supertensor
 
 logger = get_task_logger(__name__)
 
@@ -36,7 +36,7 @@ def find_missing_blocks(current_block: int) -> list[int]:
     lookback_block = current_block - settings.BLOCK_LOOKBACK
 
     # Get all block numbers that should exist within the lookback range
-    expected_block_numbers = set(range(lookback_block, current_block))
+    expected_block_numbers = set(range(lookback_block, current_block + 1))
 
     # Get existing block numbers from the database
     existing_blocks = Block.objects.filter(
@@ -51,7 +51,7 @@ def find_missing_blocks(current_block: int) -> list[int]:
     return sorted(list(missing_block_numbers))
 
 
-MAX_RUN_TIME = 300
+MAX_RUN_TIME = 90
 MIN_BLOCK_WAIT_TIME = 15
 
 
@@ -103,17 +103,17 @@ def save_neurons(neurons: list[turbobt.Neuron], block: int):
     )
 
 
-def process_block_allowance(block_number: int):
+def process_block_allowance(block_number: int, supertensor_: SuperTensor):
     """
     Only call this once the block is already minted
     """
     with transaction.atomic():
         block_obj = Block.objects.create(
             block_number=block_number,
-            creation_timestamp=supertensor().get_block_timestamp(block_number),
+            creation_timestamp=supertensor_.get_block_timestamp(block_number),
         )
 
-        neurons = supertensor().list_neurons(block_number)
+        neurons = supertensor_.list_neurons(block_number)
         save_neurons(neurons, block_number)
 
         finalized_blocks = []
@@ -142,9 +142,9 @@ def process_block_allowance(block_number: int):
         for finalized_block in finalized_blocks:
             assert finalized_block.end_timestamp is not None
 
-            neurons = supertensor().list_neurons(finalized_block.block_number)
+            neurons = supertensor_.list_neurons(finalized_block.block_number)
 
-            validators = supertensor().list_validators(finalized_block.block_number)
+            validators = supertensor_.list_validators(finalized_block.block_number)
 
             hotkeys_from_metagraph = [neuron.hotkey for neuron in neurons]
 
@@ -184,13 +184,13 @@ def process_block_allowance(block_number: int):
                     )
 
 
-def process_block_allowance_with_reporting(block_number: int):
+def process_block_allowance_with_reporting(block_number: int, supertensor_: SuperTensor):
     """
     Only call this once the block is already minted
     """
     try:
         start = time.time()
-        process_block_allowance(block_number)
+        process_block_allowance(block_number, supertensor_)
         end = time.time()
     except Exception as e:
         logger.error(
@@ -209,46 +209,61 @@ def process_block_allowance_with_reporting(block_number: int):
         logger.info(f"Block allowance processing for block {block_number} took {duration} seconds")
         # Record processing duration in Prometheus metric instead of SystemEvent
         VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION.observe(duration)
-    if not block_number % 50:
-        report_checkpoint(block_number)
 
 
-def report_checkpoint(block_number):
-    allowances = BlockAllowance.objects.filter(
-        block__block_number__lte=block_number,
-        block__block_number__gt=block_number - 50,
-    ).order_by("block__block_number", "validator_ss58", "miner_ss58", "executor_class")
-
-    by_block = defaultdict(list)
-    for allowance in allowances:
-        by_block[str(allowance.block.block_number)].append(model_to_dict(allowance))
-
-    SystemEvent.objects.create(
-        type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
-        subtype=SystemEvent.EventSubType.CHECKPOINT,
-        data={
-            "block_number": block_number,
-            "allowances": by_block,
-        },
+def report_checkpoint(block_number_lt: int, block_number_gte: int):
+    allowances = (
+        BlockAllowance.objects.filter(
+            block__block_number__lt=block_number_lt,
+            block__block_number__gte=block_number_gte,
+            invalidated_at_block__isnull=True,
+        )
+        .values(
+            "miner_ss58",
+            "validator_ss58",
+            "executor_class",
+        )
+        .annotate(total_allowance=Sum("allowance"))
+        .filter(total_allowance__gt=0)
     )
 
+    for allowance in allowances:
+        VALIDATOR_ALLOWANCE_CHECKPOINT.labels(
+            allowance["miner_ss58"],
+            allowance["validator_ss58"],
+            allowance["executor_class"],
+        ).set(allowance["total_allowance"])
 
-def scan_blocks_and_calculate_allowance():
+
+def scan_blocks_and_calculate_allowance(
+    report_callback: Callable[[int, int], Any] | None = None,
+    backfilling_supertensor: SuperTensor | None = None,
+    livefilling_supertensor: SuperTensor | None = None,
+):
+    if backfilling_supertensor is None:
+        backfilling_supertensor = supertensor()
+    if livefilling_supertensor is None:
+        livefilling_supertensor = supertensor()
     timer = Timer()
     try:
-        current_block = supertensor().get_current_block()
+        current_block = livefilling_supertensor.get_current_block()
         missing_block_numbers = find_missing_blocks(current_block)
         for block_number in missing_block_numbers:
             # TODO process_block_allowance_with_reporting never throws, but logs errors appropriately. maybe it should
             # be retried? otherwise random failures will leave holes until they are backfilled
-            process_block_allowance_with_reporting(block_number)
+            process_block_allowance_with_reporting(block_number, backfilling_supertensor)
+            if not block_number % 100 and report_callback:
+                report_callback(block_number, block_number - 100)
             timer.check_time()
 
         while True:
             wait_for_block(current_block + 1, timer.time_left())
             current_block += 1
 
-            process_block_allowance_with_reporting(current_block)
+            process_block_allowance_with_reporting(current_block, livefilling_supertensor)
+            # no precaching needed in live sampling
+            if not current_block % 100 and report_callback:
+                report_callback(current_block, current_block - 100)
             timer.check_time()
 
     except TimesUpError:
