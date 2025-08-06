@@ -85,6 +85,10 @@ from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
 from .scoring import create_scoring_engine
 
+from .allowance import tasks  # noqa
+from .clean_me_up import save_compute_time_allowance_event, get_single_manifest
+
+
 if False:
     import torch
 
@@ -1225,58 +1229,6 @@ def sync_collaterals(bittensor: turbobt.Bittensor) -> None:
                 )
 
     Miner.objects.bulk_update(to_update, fields=["evm_address", "collateral_wei"])
-
-
-async def save_compute_time_allowance_event(subtype, msg, data):
-    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-        type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
-        subtype=subtype,
-        long_description=msg,
-        data=data,
-    )
-
-
-async def get_single_manifest(
-    client: OrganicMinerClient, timeout: float = 30
-) -> tuple[str, dict[ExecutorClass, int] | None]:
-    """Get manifest from a single miner client"""
-    hotkey = client.miner_hotkey
-    data = {"hotkey": hotkey}
-    try:
-        async with asyncio.timeout(timeout):
-            try:
-                # Connect to the miner - this will trigger the manifest to be sent
-                await client.connect()
-                manifest = await client.miner_manifest
-                return hotkey, manifest
-
-            except TransportConnectionError as exc:
-                msg = f"Error fetching manifest for {hotkey}: {exc}"
-                await save_compute_time_allowance_event(
-                    SystemEvent.EventSubType.MANIFEST_ERROR, msg, data=data
-                )
-                logger.warning(msg)
-                return hotkey, None
-
-    except TimeoutError:
-        msg = f"Timeout fetching manifest for {hotkey}"
-        await save_compute_time_allowance_event(
-            SystemEvent.EventSubType.MANIFEST_TIMEOUT,
-            msg,
-            data,
-        )
-        logger.warning(msg)
-        return hotkey, None
-
-    except Exception as exc:
-        msg = f"Failed to fetch manifest for {hotkey}: {exc}"
-        await save_compute_time_allowance_event(
-            SystemEvent.EventSubType.MANIFEST_ERROR,
-            msg,
-            data,
-        )
-        logger.warning(msg)
-        return hotkey, None
 
 
 async def get_manifests_from_miners(

@@ -2,9 +2,15 @@ import abc
 import asyncio
 import contextvars
 import datetime
+import enum
 import functools
+import logging
+import threading
+import time
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+from functools import lru_cache
+from queue import Queue
+from typing import Any, TypeVar, assert_never
 
 import bittensor_wallet
 import turbobt
@@ -19,6 +25,9 @@ bittensor_context: contextvars.ContextVar[turbobt.Bittensor] = contextvars.Conte
 subnet_context: contextvars.ContextVar[turbobt.subnet.SubnetReference] = contextvars.ContextVar(
     "subnet"
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class SuperTensorTimeout(TimeoutError):
@@ -114,17 +123,19 @@ class SuperTensor(BaseSuperTensor):
 
         self.network = network
         self.netuid = netuid
+        self.archive_network = archive_network
         self._wallet = wallet
         self._shield_metagraph_options = shield_metagraph_options
 
         self.bittensor = turbobt.Bittensor(self.network)
         self.subnet = self.bittensor.subnet(netuid)
 
-        self.archive_bittensor = turbobt.Bittensor(archive_network)
+        self.archive_bittensor = turbobt.Bittensor(self.archive_network)
         self.archive_subnet = self.archive_bittensor.subnet(netuid)
 
         self.loop = asyncio.get_event_loop()
 
+    @lru_cache(maxsize=15)
     @archive_fallback
     @make_sync
     async def list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
@@ -137,11 +148,9 @@ class SuperTensor(BaseSuperTensor):
     @archive_fallback
     @make_sync
     async def list_validators(self, block_number: int) -> list[turbobt.Neuron]:
-        bittensor = bittensor_context.get()
-        subnet = subnet_context.get()
-        async with bittensor.block(block_number):
-            result: list[turbobt.Neuron] = await subnet.list_validators()
-            return result
+        return [n for n in self.list_neurons(block_number) if n.stake >= 1000]
+        # TODO: yes this is reimplementing `subnet.list_validators()` but since turbobt doens't support caching yet
+        # (or i don't know how to use it) it's just too time consuming to be doing it properly
 
     @archive_fallback
     @make_sync
@@ -159,7 +168,7 @@ class SuperTensor(BaseSuperTensor):
             ddos_shield_options=self._shield_metagraph_options,
             wallet=self.wallet(),
         ) as bittensor:
-            result: list[turbobt.Neuron] = await bittensor.subnet(self.netuid).subnet.list_neurons()
+            result: list[turbobt.Neuron] = await bittensor.subnet(self.netuid).list_neurons()
             return result
 
     def wallet(self) -> bittensor_wallet.Wallet:
@@ -169,11 +178,114 @@ class SuperTensor(BaseSuperTensor):
         return get_current_block()
 
 
+N_THREADS = 10
+CACHE_AHEAD = 10
+
+
+class TaskType(enum.Enum):
+    NEURONS = 'NEURONS'
+    BLOCK_TIMESTAMP = 'BLOCK_TIMESTAMP'
+
+
+class PrecachingSuperTensor(SuperTensor):
+    """
+    SuperTensor that tries to do clever forward caching.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.task_queue = Queue()
+        self.neuron_cache: dict[int, list[turbobt.Neuron]] = {}
+        self.block_timestamp_cache: dict[int, datetime.datetime] = {}
+        self.highest_block_requested: int | None = None
+        self.highest_block_submitted: int | None = None
+        self.start_workers()
+        self.start_producer()
+
+
+    def worker(self, ind: int):
+        while True:
+            try:
+                asyncio.set_event_loop(asyncio.new_event_loop())
+                super_tensor = SuperTensor(
+                    network=self.network,
+                    archive_network=self.archive_network,
+                    netuid=self.netuid,
+                    wallet=self._wallet,
+                    shield_metagraph_options=self._shield_metagraph_options,
+                )
+                while True:
+                    task: TaskType
+                    block_number: int
+                    task, block_number = self.task_queue.get()
+                    logger.debug(f"Worker {ind} processing task {task} for block {block_number}")
+                    if task == TaskType.NEURONS:
+                        self.neuron_cache[block_number] = super_tensor.list_neurons(block_number)
+                    elif task == TaskType.BLOCK_TIMESTAMP:
+                        self.block_timestamp_cache[block_number] = super_tensor.get_block_timestamp(block_number)
+                    else:
+                        assert_never(task)
+                    logger.debug(f"Worker {ind} finished task {task} for block {block_number}")
+            except Exception as e:
+                logger.error(f"Error in worker ({ind=}) thread: {e}", exc_info=True)
+                time.sleep(1)
+
+    def start_workers(self):
+        for ind in range(N_THREADS):
+            threading.Thread(target=self.worker, args=(ind,), daemon=True).start()
+
+    def produce_thread(self):
+        while True:
+            try:
+                current_block = self.get_current_block()
+                if self.highest_block_requested is None or self.highest_block_submitted is None:
+                    time.sleep(0.1)
+                    continue
+                if self.highest_block_submitted - self.highest_block_requested >= CACHE_AHEAD:
+                    time.sleep(0.1)
+                    continue
+                if self.highest_block_submitted >= current_block:
+                    time.sleep(0.1)
+                    continue
+                block_to_submit = self.highest_block_submitted + 1
+                logger.debug(f"Submitting tasks for block {block_to_submit}")
+                self.task_queue.put((TaskType.NEURONS, block_to_submit))
+                self.task_queue.put((TaskType.BLOCK_TIMESTAMP, block_to_submit))
+                self.highest_block_submitted = block_to_submit
+            except Exception as e:
+                logger.error(f"Error in producer thread: {e}", exc_info=True)
+                time.sleep(1)
+
+    def start_producer(self):
+        threading.Thread(target=self.produce_thread, daemon=True).start()
+
+    def set_starting_block(self, block_number: int):
+        self.highest_block_requested = max(self.highest_block_requested or 0, block_number)
+        if self.highest_block_submitted is None:
+            self.highest_block_submitted = block_number - 1
+
+    def list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
+        self.set_starting_block(block_number)
+        if block_number in self.neuron_cache:
+            return self.neuron_cache[block_number]
+        else:
+            logger.debug(f"Cache miss for block {block_number}")
+            return super().list_neurons(block_number)
+
+    def get_block_timestamp(self, block_number: int) -> datetime.datetime:
+        self.set_starting_block(block_number)
+        if block_number in self.block_timestamp_cache:
+            return self.block_timestamp_cache[block_number]
+        else:
+            logger.debug(f"Cache miss for block {block_number}")
+            return super().get_block_timestamp(block_number)
+
+
 _supertensor_instance: SuperTensor | None = None
 
 
 def supertensor() -> SuperTensor:
     global _supertensor_instance
     if _supertensor_instance is None:
-        _supertensor_instance = SuperTensor()
+        _supertensor_instance = PrecachingSuperTensor()
     return _supertensor_instance
