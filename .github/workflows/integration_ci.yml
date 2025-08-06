@@ -3,7 +3,7 @@ name: Run integration tests
 # temporary disable integration test
 on:
   push:
-    branches: [master, main, ci_test]
+    branches: [master, main]
   pull_request:
 
 env:
@@ -34,14 +34,14 @@ jobs:
         env:
           VOLUME_MANAGER_ADDRESS: "http://localhost:8001"
       
-      # - name: test
-      #   working-directory: ./local_stack
-      #   run: uv run ./send_hello_world_job.py
-      #   env:
-      #     AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
-      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
-      #     AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
-      #     S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
+      - name: test
+        working-directory: ./local_stack
+        run: uv run ./send_hello_world_job.py
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.INTEGRATION_TESTS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.INTEGRATION_TESTS_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+          S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME }}
 
       - name: test volume manager integration
         working-directory: ./examples/volume_manager
@@ -49,10 +49,10 @@ jobs:
         env:
           VOLUME_MANAGER_ADDRESS: "http://localhost:8001"
           
-      # - name: Upload integration test logs
-      #   uses: actions/upload-artifact@v4
-      #   if: always()
-      #   with:
-      #     name: integration-test-logs
-      #     path: /tmp/integration_test_logs/*.log
+      - name: Upload integration test logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-logs
+          path: /tmp/integration_test_logs/*.log
 
