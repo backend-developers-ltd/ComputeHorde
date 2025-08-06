@@ -10,7 +10,6 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 
-
 logger = get_task_logger(__name__)
 
 async def save_compute_time_allowance_event(subtype, msg, data):

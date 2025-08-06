@@ -7,8 +7,8 @@ import functools
 import logging
 import threading
 import time
+from collections import deque
 from collections.abc import Awaitable, Callable
-from functools import lru_cache
 from queue import Queue
 from typing import Any, TypeVar, assert_never
 
@@ -135,29 +135,35 @@ class SuperTensor(BaseSuperTensor):
 
         self.loop = asyncio.get_event_loop()
 
-    @lru_cache(maxsize=15)
+        self._neuron_list_cache: deque[tuple[int, list[turbobt.Neuron]]] = deque(maxlen=15)
+
     @archive_fallback
     @make_sync
     async def list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
+        cache = dict(self._neuron_list_cache)
+        if hit := cache.get(block_number):
+            return hit
         bittensor = bittensor_context.get()
         subnet = subnet_context.get()
         async with bittensor.block(block_number):
             result: list[turbobt.Neuron] = await subnet.list_neurons()
+            self._neuron_list_cache.append((block_number, result))
             return result
 
     @archive_fallback
     @make_sync
     async def list_validators(self, block_number: int) -> list[turbobt.Neuron]:
         return [n for n in self.list_neurons(block_number) if n.stake >= 1000]
-        # TODO: yes this is reimplementing `subnet.list_validators()` but since turbobt doens't support caching yet
+        # TODO: yes this is reimplementing `subnet.list_validators()` but since turbobt doesn't support caching yet
         # (or i don't know how to use it) it's just too time consuming to be doing it properly
 
     @archive_fallback
     @make_sync
-    async def get_block_timestamp(self, block_num):
+    async def get_block_timestamp(self, block_num) -> datetime.datetime:
         bittensor = bittensor_context.get()
         async with bittensor.block(block_num) as block:
-            return await block.get_timestamp()
+            ret: datetime.datetime = await block.get_timestamp()
+            return ret
 
     @make_sync
     async def get_shielded_neurons(self) -> list[turbobt.Neuron]:
@@ -194,7 +200,7 @@ class PrecachingSuperTensor(SuperTensor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.task_queue = Queue()
+        self.task_queue: Queue[tuple[TaskType, int]] = Queue()
         self.neuron_cache: dict[int, list[turbobt.Neuron]] = {}
         self.block_timestamp_cache: dict[int, datetime.datetime] = {}
         self.highest_block_requested: int | None = None
