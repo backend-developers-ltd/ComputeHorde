@@ -4,14 +4,14 @@ from contextlib import contextmanager
 from re import Pattern
 from typing import Any
 
-import prometheus_client
+import prometheus_client.metrics
 
 from compute_horde_validator.validator.models import SystemEvent
 
 from ...models.allowance.internal import Block, BlockAllowance
 
 
-def get_metric_values(metric):
+def get_histogram_metric_values(metric):
     """Extract count and sum values from histogram samples."""
     count = 0
     sum_value = 0
@@ -29,12 +29,12 @@ def assert_metric_observed(metric: prometheus_client.Histogram, operation_name: 
     """Context manager to assert that a Prometheus metric was observed and print the measurement."""
 
     # Get initial metric values
-    count_before, samples_before = get_metric_values(metric)
+    count_before, samples_before = get_histogram_metric_values(metric)
 
     yield
 
     # Get metric values after operation
-    count_after, samples_after = get_metric_values(metric)
+    count_after, samples_after = get_histogram_metric_values(metric)
     duration = samples_after - samples_before
 
     print(f"{operation_name} took {duration:.6f}s")
@@ -163,3 +163,52 @@ class Matcher:
 
     def __repr__(self) -> str:
         return f"Matcher({self.pattern.pattern!r})"
+
+
+def get_metric_values_by_remaining_labels(
+    metric: prometheus_client.metrics.MetricWrapperBase, filter_labels: dict[str, str]
+) -> dict[str, float]:
+    """
+    From a Prometheus metric and a dict of labelname->labelvalue to filter by,
+    return a mapping from the remaining label values (excluding the filtered ones),
+    concatenated together with no separator, to the metric values.
+
+    Notes:
+    - Only samples whose labels match the provided filter_labels exactly for the given
+      label names are considered.
+    - The remaining label values are concatenated in the order defined by the metric's
+      labelnames (metric._labelnames), with the filtered label names removed. If the
+      metric has no labelnames or all are filtered out, the resulting key will be an
+      empty string "".
+    - For Histogram/Summary metrics, multiple sample names (e.g., _count, _sum, buckets)
+      may be present. This helper is primarily intended for Gauge/Counter. We restrict
+      to samples whose name matches the family name collected from the metric to avoid
+      _count/_sum artifacts.
+    """
+    result: dict[str, float] = {}
+
+    remaining_names = [ln for ln in getattr(metric, "_labelnames", []) if ln not in filter_labels]
+
+    for family in metric.collect():
+        family_name = family.name  # fully-qualified (e.g., namespace_name)
+        for sample in family.samples:
+            # Skip helper samples like _count/_sum for Histograms/Summaries
+            if sample.name != family_name:
+                continue
+
+            # sample.labels is a dict[str, str]
+            labels = sample.labels or {}
+
+            # Check filter match
+            match = True
+            for k, v in filter_labels.items():
+                if labels.get(k) != v:
+                    match = False
+                    break
+            if not match:
+                continue
+
+            key = "".join(labels.get(name, "") for name in remaining_names)
+            result[key] = float(sample.value)
+
+    return result

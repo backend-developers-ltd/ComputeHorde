@@ -21,6 +21,11 @@ def _get_subtensor(network):
     return bittensor.subtensor(network)
 
 
+def _clear_subtensor_cache():
+    """Clears the memoized subtensor client. Intended for tests to avoid cross-test leakage."""
+    _get_subtensor.cache_clear()
+
+
 async def aget_current_block(timeout: float = 1.0) -> int:
     """
     Gets the current block number from cache. Waits for ``timeout`` seconds if it's not there.
@@ -41,11 +46,16 @@ async def aget_current_block(timeout: float = 1.0) -> int:
     return await aget_current_block(timeout=0)
 
 
-get_current_block = async_to_sync(aget_current_block)
+def get_current_block() -> int:
+    try:
+        return async_to_sync(aget_current_block)(timeout=0)
+    except BlockNotInCacheError:
+        return cache_current_block()
 
 
-def cache_current_block() -> None:
+def cache_current_block() -> int:
     subtensor = _get_subtensor(network=settings.BITTENSOR_NETWORK)
-    current_block = subtensor.get_current_block()
+    current_block: int = subtensor.get_current_block()
 
     cache.set(_BLOCK_CACHE_KEY, current_block, _BLOCK_CACHE_TIMEOUT)
+    return current_block
