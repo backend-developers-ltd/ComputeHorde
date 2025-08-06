@@ -3,7 +3,6 @@ from django.conf import settings
 from django.db import transaction
 
 from compute_horde_validator.celery import app
-from compute_horde_validator.validator.allowance import utils
 from compute_horde_validator.validator.locks import Lock, Locked, LockType
 from compute_horde_validator.validator.models import SystemEvent, AllowanceMinerManifest
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
@@ -12,7 +11,7 @@ logger = get_task_logger(__name__)
 
 
 @app.task(
-    time_limit=utils.blocks.MAX_RUN_TIME + 30,
+    time_limit=blocks.MAX_RUN_TIME + 30,
 )
 def scan_blocks_and_calculate_allowance():
     # TODO: write tests and add to celery beat config
@@ -22,23 +21,23 @@ def scan_blocks_and_calculate_allowance():
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
         try:
             with Lock(LockType.ALLOWANCE_FETCHING, 5.0):
-                utils.blocks.scan_blocks_and_calculate_allowance(report_allowance_to_system_events.delay)
+                blocks.scan_blocks_and_calculate_allowance(report_allowance_to_system_events.delay)
         except Locked:
             logger.debug("Another thread already fetching blocks")
-        except utils.blocks.TimesUpError:
+        except blocks.TimesUpError:
             scan_blocks_and_calculate_allowance.delay()
 
 
 @app.task()
 def report_allowance_to_system_events(block_number_lt: int, block_number_gte: int):
-    utils.blocks.report_checkpoint(block_number_lt, block_number_gte)
+    blocks.report_checkpoint(block_number_lt, block_number_gte)
 
 
 @app.task()
 def sync_manifests():
     # TODO: write tests and add to celery beat config
     try:
-        utils.manifests.sync_manifests()
+        manifests.sync_manifests()
     except Exception as e:
         msg = f"Failed to sync manifests: {e}"
         logger.error(msg, exc_info=True)
