@@ -198,16 +198,55 @@ class TaskType(enum.Enum):
     BLOCK_TIMESTAMP = 'BLOCK_TIMESTAMP'
 
 
+class BaseCache(abc.ABC):
+
+    @abc.abstractmethod
+    def put_neurons(self, block_number: int, neurons: list[turbobt.Neuron]):
+        ...
+
+    @abc.abstractmethod
+    def put_block_timestamp(self, block_number: int, timestamp: datetime.datetime):
+        ...
+
+    @abc.abstractmethod
+    def get_neurons(self, block_number: int) -> list[turbobt.Neuron] | None:
+        ...
+
+    @abc.abstractmethod
+    def get_block_timestamp(self, block_number: int) -> datetime.datetime | None:
+        ...
+
+
+
+class InMemoryCache(BaseCache):
+    def __init__(self):
+        self._neuron_cache: dict[int, list[turbobt.Neuron]] = {}
+        self._block_timestamp_cache: dict[int, datetime.datetime] = {}
+
+    def put_neurons(self, block_number: int, neurons: list[turbobt.Neuron]):
+        self._neuron_cache[block_number] = neurons
+
+    def put_block_timestamp(self, block_number: int, timestamp: datetime.datetime):
+        self._block_timestamp_cache[block_number] = timestamp
+
+    def get_neurons(self, block_number: int) -> list[turbobt.Neuron] | None:
+        return self._neuron_cache.get(block_number)
+
+    def get_block_timestamp(self, block_number: int) -> datetime.datetime | None:
+        return self._block_timestamp_cache.get(block_number)
+
+
 class PrecachingSuperTensor(SuperTensor):
     """
     SuperTensor that tries to do clever forward caching.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, cache: BaseCache | None = None, **kwargs):
+        if cache is None:
+            cache = InMemoryCache()
+        self.cache = cache
         super().__init__(*args, **kwargs)
         self.task_queue: Queue[tuple[TaskType, int]] = Queue()
-        self.neuron_cache: dict[int, list[turbobt.Neuron]] = {}
-        self.block_timestamp_cache: dict[int, datetime.datetime] = {}
         self.highest_block_requested: int | None = None
         self.highest_block_submitted: int | None = None
         self.start_workers()
@@ -231,9 +270,15 @@ class PrecachingSuperTensor(SuperTensor):
                     task, block_number = self.task_queue.get()
                     logger.debug(f"Worker {ind} processing task {task} for block {block_number}")
                     if task == TaskType.NEURONS:
-                        self.neuron_cache[block_number] = super_tensor.list_neurons(block_number)
+                        if self.cache.get_neurons(block_number) is not None:
+                            logger.debug(f"Worker {ind} skipping task {task} for block {block_number} (cached)")
+                            continue
+                        self.cache.put_neurons(block_number, super_tensor.list_neurons(block_number))
                     elif task == TaskType.BLOCK_TIMESTAMP:
-                        self.block_timestamp_cache[block_number] = super_tensor.get_block_timestamp(block_number)
+                        if self.cache.get_block_timestamp(block_number) is not None:
+                            logger.debug(f"Worker {ind} skipping task {task} for block {block_number} (cached)")
+                            continue
+                        self.cache.put_block_timestamp(block_number, super_tensor.get_block_timestamp(block_number))
                     else:
                         assert_never(task)
                     logger.debug(f"Worker {ind} finished task {task} for block {block_number}")
@@ -277,16 +322,18 @@ class PrecachingSuperTensor(SuperTensor):
 
     def list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
         self.set_starting_block(block_number)
-        if block_number in self.neuron_cache:
-            return self.neuron_cache[block_number]
+        neurons = self.cache.get_neurons(block_number)
+        if neurons is not None:
+            return neurons
         else:
             logger.debug(f"Cache miss for block {block_number}")
             return super().list_neurons(block_number)
 
     def get_block_timestamp(self, block_number: int) -> datetime.datetime:
         self.set_starting_block(block_number)
-        if block_number in self.block_timestamp_cache:
-            return self.block_timestamp_cache[block_number]
+        timestamp = self.cache.get_block_timestamp(block_number)
+        if timestamp is not None:
+            return timestamp
         else:
             logger.debug(f"Cache miss for block {block_number}")
             return super().get_block_timestamp(block_number)
@@ -298,5 +345,5 @@ _supertensor_instance: SuperTensor | None = None
 def supertensor() -> SuperTensor:
     global _supertensor_instance
     if _supertensor_instance is None:
-        _supertensor_instance = PrecachingSuperTensor()
+        _supertensor_instance = SuperTensor()
     return _supertensor_instance
