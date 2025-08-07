@@ -101,12 +101,7 @@ class JobStatusUpdateMetadata(BaseModel, extra="allow"):
                 reported_by=reported_by,
                 reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
                 message="Uncaught exception",
-                context={
-                    "exception_type": type(exception).__qualname__,
-                    "exception_message": str(
-                        exception
-                    ),  # TODO(post error propagation): this may be sensitive
-                },
+                context={"exception_type": type(exception).__qualname__},
             ),
         )
 

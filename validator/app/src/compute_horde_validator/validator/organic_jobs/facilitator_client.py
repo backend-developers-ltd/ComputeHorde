@@ -399,10 +399,7 @@ class FacilitatorClient:
                 stage=protocol_consts.JobStage.ROUTING,
                 rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
                 reason=protocol_consts.JobRejectionReason.UNKNOWN,
-                context={
-                    "exception_type": type(e).__qualname__,
-                    "exception_message": str(e),
-                },
+                context={"exception_type": type(e).__qualname__},
             )
         except Exception as e:
             await self.send_horde_failed(
@@ -411,10 +408,7 @@ class FacilitatorClient:
                 stage=protocol_consts.JobStage.UNKNOWN,  # TODO(post error propagation): fill this in
                 reported_by=protocol_consts.JobParticipantType.VALIDATOR,
                 reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
-                context={
-                    "exception_type": type(e).__qualname__,
-                    "exception_message": str(e),
-                },
+                context={"exception_type": type(e).__qualname__},
             )
 
     async def _process_job_request(self, job_request: OrganicJobRequest) -> None:

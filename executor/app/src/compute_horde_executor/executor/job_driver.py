@@ -101,10 +101,7 @@ class JobDriver:
                 await self.send_horde_failed(
                     reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
                     message="Executor failed with unexpected exception",
-                    context={
-                        "exception_type": type(e).__qualname__,
-                        "exception_message": str(e),
-                    },
+                    context={"exception_type": type(e).__qualname__},
                 )
                 raise
 
