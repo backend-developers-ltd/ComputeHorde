@@ -7,6 +7,7 @@ def miners() -> list[Miner]:
     return [
         Miner(
             address=ma.address,
+            ip_version=ma.ip_version,
             port=ma.port,
             hotkey_ss58=ma.hotkey_ss58address,
         )
