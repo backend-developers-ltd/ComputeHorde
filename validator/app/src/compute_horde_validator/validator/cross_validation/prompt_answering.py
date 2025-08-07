@@ -94,6 +94,7 @@ async def answer_prompts(
             executor_startup_time_limit=await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
         )
     except Exception as e:
+        # TODO(error propagation): there should be many more "except" cases before this
         if (
             isinstance(e, OrganicJobError)
             and isinstance(e.received, V0DeclineJobRequest)
@@ -102,7 +103,6 @@ async def answer_prompts(
             logger.info("Failed to run answer_prompts: trusted miner is busy")
             return False
 
-        # TODO(error propagation): handle Upstream exceptions
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.FAILURE,

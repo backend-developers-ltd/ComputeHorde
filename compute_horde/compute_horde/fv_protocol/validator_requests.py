@@ -42,7 +42,7 @@ class V0AuthenticationRequest(BaseModel, extra="forbid"):
 
 
 class JobResultDetails(BaseModel, extra="allow"):
-    # TODO(post error propagation): this payload is an amalgam of a success and failure: don't use this for errors.
+    # TODO(error propagation): this payload is an amalgam of a success and failure: don't use this for errors.
     # TODO(post error propagation): job_uuid is redundant,
     job_uuid: str
     docker_process_stderr: str

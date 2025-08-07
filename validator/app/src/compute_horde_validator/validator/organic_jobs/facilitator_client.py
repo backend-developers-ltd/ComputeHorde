@@ -323,9 +323,6 @@ class FacilitatorClient:
         except pydantic.ValidationError:
             pass
         else:
-            await asyncio.sleep(
-                1
-            )  # TODO(post error propagation): remove (faci is slow to commit the job to the db)
             task = asyncio.create_task(self.process_job_request(job_request))
             await self.tasks_to_reap.put(task)
             return
@@ -405,7 +402,7 @@ class FacilitatorClient:
             await self.send_horde_failed(
                 job_uuid=job_request.uuid,
                 message="Uncaught exception during handling of job",
-                stage=protocol_consts.JobStage.UNKNOWN,  # TODO(post error propagation): fill this in
+                stage=protocol_consts.JobStage.UNKNOWN,  # TODO(error propagation): fill this in
                 reported_by=protocol_consts.JobParticipantType.VALIDATOR,
                 reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
                 context={"exception_type": type(e).__qualname__},

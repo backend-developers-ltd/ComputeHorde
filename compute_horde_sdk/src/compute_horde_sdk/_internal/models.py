@@ -94,7 +94,7 @@ class ComputeHordeJobResult:
 
 @dataclass
 class ComputeHordeJobRejection:
-    # TODO(post error propagation): these should be enums
+    # TODO(error propagation): these should be enums
     rejected_by: str
     reason: str
     message: str | None = None
@@ -103,7 +103,7 @@ class ComputeHordeJobRejection:
 
 @dataclass
 class ComputeHordeJobFailure:
-    # TODO(post error propagation): these should be enums
+    # TODO(error propagation): these should be enums
     reason: str
     message: str | None = None
     context: JsonValue = None
@@ -111,7 +111,7 @@ class ComputeHordeJobFailure:
 
 @dataclass
 class ComputeHordeHordeFailure:
-    # TODO(post error propagation): these should be enums
+    # TODO(error propagation): these should be enums
     reported_by: str
     reason: str
     message: str | None = None
@@ -134,7 +134,7 @@ class JobStatusUpdateMetadata:
 class ComputeHordeJobStatusEntry:
     created_at: datetime
     status: ComputeHordeJobStatus
-    # TODO(post error propagation): this should be an enum
+    # TODO(error propagation): this should be an enum
     stage: str
     metadata: JobStatusUpdateMetadata | None = None
 

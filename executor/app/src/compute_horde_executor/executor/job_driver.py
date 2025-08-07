@@ -56,7 +56,7 @@ class JobDriver:
                 await self._execute()
 
             except JobError as e:
-                # TODO(post error propagation): Extract executor errors into ExecutorError.
+                # TODO(error propagation): Raise executor errors as ExecutorError, keep JobError for job-related errors
                 # ...we don't want random errors here.
                 if e.execution_result:
                     logger.warning(f"Job failed: {e}")
@@ -84,9 +84,9 @@ class JobDriver:
                 )
 
             except TimeoutError:
-                # TODO(post error propagation): This is not right, only specific timeouts should result in job error.
-                # TODO(post error propagation): ...wrap them into JobError with reason=TIMEOUT.
-                # TODO(post error propagation): ...otherwise any uncaught timeout will result in a job error.
+                # TODO(error propagation): This is not right, only specific timeouts should result in job error.
+                # TODO(error propagation): ...wrap them into JobError with reason=TIMEOUT.
+                # TODO(error propagation): ...otherwise any uncaught timeout will result in a job error.
                 logger.error(f"Job timed out during {self.current_stage} stage")
                 await self.send_job_failed(
                     reason=protocol_consts.JobFailureReason.TIMEOUT,
@@ -121,7 +121,7 @@ class JobDriver:
         await self.miner_client.send_job_failed(
             V0JobFailedRequest(
                 job_uuid=self.miner_client.job_uuid,
-                stage=protocol_consts.JobStage.UNKNOWN,  # TODO(post error propagation): fill this in
+                stage=protocol_consts.JobStage.UNKNOWN,  # TODO(error propagation): fill this in
                 reason=reason,
                 message=message,
                 docker_process_exit_status=execution_result.return_code
@@ -143,7 +143,7 @@ class JobDriver:
             V0HordeFailedRequest(
                 job_uuid=self.miner_client.job_uuid,
                 reported_by=protocol_consts.JobParticipantType.EXECUTOR,
-                stage=protocol_consts.JobStage.UNKNOWN,  # TODO(post error propagation): fill this in
+                stage=protocol_consts.JobStage.UNKNOWN,  # TODO(error propagation): fill this in
                 reason=reason,
                 message=message,
                 context=context,

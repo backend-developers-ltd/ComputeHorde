@@ -364,7 +364,7 @@ async def drive_organic_job(
         )
 
     except OrganicJobError as exc:
-        # TODO(post error propagation): clean up this handler
+        # TODO(error propagation): clean up this handler
         if exc.reason == FailureReason.MINER_CONNECTION_FAILED:
             comment = f"Miner connection error: {exc}"
             job.status = OrganicJob.Status.FAILED

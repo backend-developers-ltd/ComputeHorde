@@ -239,7 +239,7 @@ class ComputeHordeJob:
         """
         If the job finished with some error, returns the error details.
         """
-        # TODO(error propagation): structs for the error types, return union type
+        # TODO(error propagation): structs for the error types
         if not self.status_history:
             return None
         last_status = self.status_history[-1]
