@@ -53,7 +53,7 @@ def find_missing_blocks(current_block: int) -> list[int]:
     return sorted(list(missing_block_numbers))
 
 
-MAX_RUN_TIME = 300
+MAX_RUN_TIME = 90
 MIN_BLOCK_WAIT_TIME = 15
 
 
