@@ -395,10 +395,14 @@ class FacilitatorClient:
         except routing.JobRoutingException as e:
             await self.send_job_rejected(
                 job_uuid=job_request.uuid,
-                message=e.message,
+                message="Job could not be routed to a miner",
                 stage=protocol_consts.JobStage.ROUTING,
                 rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
-                reason=e.reason,
+                reason=protocol_consts.JobRejectionReason.UNKNOWN,
+                context={
+                    "exception_type": type(e).__qualname__,
+                    "exception_message": str(e),
+                },
             )
         except Exception as e:
             await self.send_horde_failed(

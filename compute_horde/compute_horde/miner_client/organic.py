@@ -66,14 +66,22 @@ from compute_horde.utils import MachineSpecs, Timer, sign_blob
 logger = logging.getLogger(__name__)
 
 
-class UpstreamMinerJobException(Exception):
-    def __init__(
-        self, msg: V0DeclineJobRequest | V0JobFailedRequest | V0HordeFailedRequest
-    ) -> None:
+class MinerRejectedJob(Exception):
+    def __init__(self, msg: V0DeclineJobRequest) -> None:
         self.msg = msg
-        super().__init__(
-            f"Upstream miner reported exception: {type(msg).__qualname__} (reason={msg.reason.value}) {msg.model_dump_json()}"
-        )
+        super().__init__(f"Miner rejected job (reason={msg.reason.value})")
+
+
+class MinerReportedJobFailed(Exception):
+    def __init__(self, msg: V0JobFailedRequest) -> None:
+        self.msg = msg
+        super().__init__(f"Miner reported job failure (reason={msg.reason.value})")
+
+
+class MinerReportedHordeFailed(Exception):
+    def __init__(self, msg: V0HordeFailedRequest) -> None:
+        self.msg = msg
+        super().__init__(f"Miner reported horde failure (reason={msg.reason.value})")
 
 
 class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorToMinerMessage]):
@@ -96,7 +104,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
     Note that the waiting on the response futures should properly be handled with timeouts
     (with ``asyncio.timeout()``, ``asyncio.wait_for()`` etc.).
-    The futures will throw an UpstreamMinerJobException when the miner reports an issue
+    The futures will throw an appropriate exception when the miner reports an issue
     """
 
     def __init__(
@@ -284,6 +292,17 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
         elif isinstance(msg, V0JobFailedRequest | V0HordeFailedRequest | V0DeclineJobRequest):
             # On error, consider the remaining stages as failed and throw the wrapped error:
+            exc: Exception
+
+            if isinstance(msg, V0DeclineJobRequest):
+                exc = MinerRejectedJob(msg)
+            elif isinstance(msg, V0JobFailedRequest):
+                exc = MinerReportedJobFailed(msg)
+            elif isinstance(msg, V0HordeFailedRequest):
+                exc = MinerReportedHordeFailed(msg)
+            else:
+                assert_never(msg)
+
             for future in (
                 self.job_accepted_future,
                 self.executor_ready_future,
@@ -293,7 +312,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                 self.job_finished_future,
             ):
                 try:
-                    future.set_exception(UpstreamMinerJobException(msg))
+                    future.set_exception(exc)
                 except asyncio.InvalidStateError:
                     pass
 

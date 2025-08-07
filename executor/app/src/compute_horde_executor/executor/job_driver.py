@@ -53,7 +53,7 @@ class JobDriver:
     async def execute(self):
         async with self.miner_client:  # TODO: Can this hang?
             try:
-                await self._do_execute()
+                await self._execute()
 
             except JobError as e:
                 # TODO(post error propagation): Extract executor errors into ExecutorError.
@@ -153,7 +153,7 @@ class JobDriver:
             )
         )
 
-    async def _do_execute(self):
+    async def _execute(self):
         # This limit should be enough to receive the initial job request, which contains further timing details.
         self._set_deadline(self.startup_time_limit, "startup time limit")
         async with asyncio.timeout(self.time_left):
