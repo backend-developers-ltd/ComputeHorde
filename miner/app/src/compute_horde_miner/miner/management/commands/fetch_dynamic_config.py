@@ -28,6 +28,7 @@ class Command(BaseCommand):
 
         try:
             dynamic_config_keys = get_dynamic_config_types_from_settings()
+
             if not dynamic_config_keys:
                 self.stdout.write(self.style.WARNING("No dynamic config keys found in settings"))
                 return
@@ -42,7 +43,10 @@ class Command(BaseCommand):
                 return
 
             for key, value in configs.items():
-                self.stdout.write(f"- {key}: {value} [type: {type(value).__name__}]")
+                if value is not None:
+                    self.stdout.write(f"✓ {key}: {value}")
+                else:
+                    self.stdout.write(self.style.WARNING(f"✗ {key}: Not found"))
 
         except Exception as exc:
             error_msg = f"Failed to fetch dynamic config from contract: {exc}"
