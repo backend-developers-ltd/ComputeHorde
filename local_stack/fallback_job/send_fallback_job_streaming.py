@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-STREAMING_SERVER_CODE = """from fastapi import FastAPI
+STREAMING_SERVER_CODE = """from fastapi import FastAPI, BackgroundTasks
 import os, signal, threading
 
 app = FastAPI()
@@ -23,10 +23,10 @@ def health():
     return {"status": "healthy"}
 
 @app.post("/terminate")
-def terminate():
+def terminate(background_tasks: BackgroundTasks):
     def shutdown(): 
-        os.kill(os.getpid(), signal.SIGINT)
-    threading.Thread(target=shutdown).start()
+        os._exit(0)
+    background_tasks.add_task(shutdown)
     return {"message": "Server is shutting down."}
 """
 

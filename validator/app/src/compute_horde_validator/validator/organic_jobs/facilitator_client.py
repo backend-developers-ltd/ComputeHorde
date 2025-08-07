@@ -35,7 +35,15 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
     ValidatorWhitelist,
 )
-from compute_horde_validator.validator.organic_jobs import routing
+from compute_horde_validator.validator.organic_jobs import blacklist
+from compute_horde_validator.validator.routing.default import routing
+from compute_horde_validator.validator.routing.types import (
+    AllMinersBusy,
+    MinerIsBlacklisted,
+    NoMinerForExecutorType,
+    NoMinerWithEnoughAllowance,
+    NotEnoughTimeInCycle,
+)
 from compute_horde_validator.validator.tasks import (
     execute_organic_job_request_on_worker,
     slash_collateral_task,
@@ -348,7 +356,7 @@ class FacilitatorClient:
         await job.asave()
 
         blacklist_time = await aget_config("DYNAMIC_JOB_CHEATED_BLACKLIST_TIME_SECONDS")
-        await routing.blacklist_miner(
+        await blacklist.blacklist_miner(
             job, MinerBlacklist.BlacklistReason.JOB_CHEATED, blacklist_time
         )
         await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
@@ -390,9 +398,9 @@ class FacilitatorClient:
         )
 
         try:
-            miner = await routing.pick_miner_for_job_request(job_request)
-            logger.info(f"Selected miner {miner.hotkey} for job {job_request.uuid}")
-        except routing.NoMinerForExecutorType:
+            job_route = await routing().pick_miner_for_job_request(job_request)
+            logger.info(f"Selected miner {job_route.miner.hotkey_ss58} for job {job_request.uuid}")
+        except NoMinerForExecutorType:
             msg = f"No executor for job request: {job_request.uuid} ({job_request.executor_class})"
             logger.info(f"Rejecting job: {msg}")
             await self.send_model(
@@ -403,7 +411,7 @@ class FacilitatorClient:
                 )
             )
             return
-        except routing.AllMinersBusy:
+        except AllMinersBusy:
             msg = f"All miners busy for job: {job_request.uuid}"
             logger.info(f"Rejecting job: {msg}")
             await self.send_model(
@@ -414,7 +422,7 @@ class FacilitatorClient:
                 )
             )
             return
-        except routing.MinerIsBlacklisted:
+        except MinerIsBlacklisted:
             msg = f"Miner for job is blacklisted: {job_request.uuid}"
             logger.info(f"Failing job: {msg}")
             await self.send_model(
@@ -425,7 +433,7 @@ class FacilitatorClient:
                 )
             )
             return
-        except routing.NotEnoughTimeInCycle:
+        except NotEnoughTimeInCycle:
             msg = f"Requested job cannot complete in current cycle: {job_request.uuid}"
             logger.info(f"Rejecting job: {msg}")
             await self.send_model(
@@ -436,7 +444,7 @@ class FacilitatorClient:
                 )
             )
             return
-        except routing.NoMinerWithEnoughAllowance:
+        except NoMinerWithEnoughAllowance:
             msg = f"No miner available with enough allowance: {job_request.uuid}"
             logger.info(f"Rejecting job: {msg}")
             await self.send_model(
@@ -463,11 +471,11 @@ class FacilitatorClient:
             logger.info(f"Submitting job {job_request.uuid} to worker")
             job_status_task = asyncio.create_task(self.handle_job_status_updates(job_request.uuid))
             await self.tasks_to_reap.put(job_status_task)
-            job = await execute_organic_job_request_on_worker(job_request, miner)
+            job = await execute_organic_job_request_on_worker(job_request, job_route)
             logger.info(f"Job {job_request.uuid} finished with status: {job.status}")
 
             if job.status == OrganicJob.Status.FAILED:
-                await routing.report_miner_failed_job(job)
+                await blacklist.report_miner_failed_job(job)
         except Exception as e:
             msg = f"Error running organic job {job_request.uuid}: {e}"
             logger.warning(msg, exc_info=True)

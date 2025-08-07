@@ -65,6 +65,7 @@ from compute_horde_validator.validator.organic_jobs.miner_driver import (
     drive_organic_job,
     execute_organic_job_request,
 )
+from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.s3 import (
     download_prompts_from_s3_url,
     generate_upload_url,
@@ -2113,11 +2114,11 @@ def evict_old_data():
 
 
 async def execute_organic_job_request_on_worker(
-    job_request: OrganicJobRequest, miner: Miner
+    job_request: OrganicJobRequest, job_route: JobRoute
 ) -> OrganicJob:
     timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
     future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
-        args=(job_request.model_dump(), miner.hotkey),
+        args=(job_request.model_dump(), job_route.model_dump()),
         expires=timeout,
     )
     # Note - thread sensitive is essential, otherwise the wait will block the sync thread.
@@ -2127,10 +2128,10 @@ async def execute_organic_job_request_on_worker(
 
 
 @app.task
-def _execute_organic_job_on_worker(job_request: JsonValue, miner_hotkey: str) -> None:
+def _execute_organic_job_on_worker(job_request: JsonValue, job_route: JsonValue) -> None:
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
-    miner = Miner.objects.get(hotkey=miner_hotkey)
-    async_to_sync(execute_organic_job_request)(request, miner)
+    route: JobRoute = TypeAdapter(JobRoute).validate_python(job_route)
+    async_to_sync(execute_organic_job_request)(request, route)
 
 
 @app.task

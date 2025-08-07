@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import itertools
 import logging
 import operator
@@ -134,6 +135,7 @@ def sync_manifests():
                     MinerAddress(
                         hotkey_ss58address=miner[0],
                         address=miner[1],
+                        ip_version=6 if isinstance(miner[1], ipaddress.IPv6Address) else 4,
                         port=miner[2],
                     )
                     for miner in miners
