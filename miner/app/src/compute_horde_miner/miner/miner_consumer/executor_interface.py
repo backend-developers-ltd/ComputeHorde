@@ -102,6 +102,22 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
             await self.send_executor_ready(self.executor_token, msg)
             return
 
+        if isinstance(msg, V0ExecutorFailedRequest):
+            # TODO(post error propagation): Remove this handler
+            self.job.status = AcceptedJob.Status.FAILED
+            await self.job.asave()
+            await self.send_horde_failed(
+                self.executor_token,
+                V0HordeFailedRequest(
+                    job_uuid=msg.job_uuid,
+                    stage=protocol_consts.JobStage.UNKNOWN,
+                    reported_by=protocol_consts.JobParticipantType.EXECUTOR,
+                    reason=protocol_consts.HordeFailureReason.UNKNOWN,
+                    message="Legacy executor failure (V0ExecutorFailedRequest)",
+                ),
+            )
+            return
+
         if isinstance(msg, V0StreamingJobReadyRequest):
             # Job status is RUNNING
             msg.ip = self.get_executor_ip()
@@ -114,6 +130,21 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
 
         if isinstance(msg, V0ExecutionDoneRequest):
             await self.send_execution_done(self.executor_token, msg)
+            return
+
+        if isinstance(msg, V0StreamingJobNotReadyRequest):
+            # TODO(post error propagation): Remove this handler
+            self.job.status = AcceptedJob.Status.FAILED
+            await self.job.asave()
+            await self.send_job_failed(
+                self.executor_token,
+                V0JobFailedRequest(
+                    job_uuid=msg.job_uuid,
+                    stage=protocol_consts.JobStage.STREAMING_STARTUP,
+                    reason=protocol_consts.JobFailureReason.UNKNOWN,
+                    message="Legacy streaming failure (V0StreamingJobNotReadyRequest)",
+                ),
+            )
             return
 
         if isinstance(msg, V0JobFinishedRequest):
@@ -144,42 +175,11 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
             self.job.error_type = msg.reason
             self.job.error_detail = msg.message
             await self.job.asave()
-            await self.send_executor_failed(self.executor_token, msg)
-            return
-
-        if isinstance(msg, V0StreamingJobNotReadyRequest):
-            # TODO(post error propagation): Remove this handler
-            self.job.status = AcceptedJob.Status.FAILED
-            await self.job.asave()
-            await self.send_job_failed(
-                self.executor_token,
-                V0JobFailedRequest(
-                    job_uuid=msg.job_uuid,
-                    stage=protocol_consts.JobStage.STREAMING_STARTUP,
-                    reason=protocol_consts.JobFailureReason.UNKNOWN,
-                    message="Legacy streaming failure (V0StreamingJobNotReadyRequest)",
-                ),
-            )
-            return
-
-        if isinstance(msg, V0ExecutorFailedRequest):
-            # TODO(post error propagation): Remove this handler
-            self.job.status = AcceptedJob.Status.FAILED
-            await self.job.asave()
-            await self.send_executor_failed(
-                self.executor_token,
-                V0HordeFailedRequest(
-                    job_uuid=msg.job_uuid,
-                    stage=protocol_consts.JobStage.UNKNOWN,
-                    reported_by=protocol_consts.JobParticipantType.EXECUTOR,
-                    reason=protocol_consts.HordeFailureReason.UNKNOWN,
-                    message="Legacy executor failure (V0ExecutorFailedRequest)",
-                ),
-            )
+            await self.send_horde_failed(self.executor_token, msg)
             return
 
         if isinstance(msg, GenericError):
-            await self.send_executor_failed(
+            await self.send_horde_failed(
                 self.executor_token,
                 V0HordeFailedRequest(
                     job_uuid=str(self.job.job_uuid),

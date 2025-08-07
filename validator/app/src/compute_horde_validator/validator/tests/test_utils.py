@@ -10,11 +10,11 @@ from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
+    V0DeclineJobRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
-    V0JobRejectedRequest,
 )
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.volume import InlineVolume, Volume
@@ -257,7 +257,7 @@ mock_synthetic_job_generator_factory = MagicMock(name="MockSyntheticJobGenerator
             ),
         ),
         (
-            (V0JobRejectedRequest, None, None),
+            (V0DeclineJobRequest, None, None),
             SyntheticJob.Status.FAILED,
             NOT_SCORED,
             (

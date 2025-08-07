@@ -4,6 +4,7 @@ from datetime import timedelta
 from typing import assert_never
 
 import bittensor
+from compute_horde import protocol_consts
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
@@ -34,21 +35,36 @@ logger = logging.getLogger(__name__)
 
 
 class JobRoutingException(Exception):
-    pass
+    def __init__(self, message: str, reason: protocol_consts.JobRejectionReason) -> None:
+        self.reason = reason
+        self.message = message
+        super().__init__(message)
 
 
 class NoMinerForExecutorClass(JobRoutingException):
     def __init__(self, executor_class: ExecutorClass) -> None:
-        self.executor_class = executor_class
-        super().__init__(f"No miner with available executors of class '{executor_class}'")
+        super().__init__(
+            message=f"No miner with available executors of class '{executor_class}'",
+            reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
+        )
 
 
 class AllMinersBusy(JobRoutingException):
-    pass
+    def __init__(self) -> None:
+        super().__init__(
+            message="All miners are busy",
+            reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
+        )
 
 
 class MinerIsBlacklisted(JobRoutingException):
-    pass
+    reason = protocol_consts.JobRejectionReason.MINER_BLACKLISTED
+
+    def __init__(self, miner: Miner, blacklist_reason: MinerBlacklist.BlacklistReason) -> None:
+        super().__init__(
+            message=f"Miner {miner.hotkey} is blacklisted ({blacklist_reason})",
+            reason=self.reason,
+        )
 
 
 class NotEnoughTimeInCycle(JobRoutingException):
@@ -56,12 +72,17 @@ class NotEnoughTimeInCycle(JobRoutingException):
         self.seconds_remaining_in_cycle = seconds_remaining_in_cycle
         self.seconds_required = seconds_required
         super().__init__(
-            f"Not enough time in current cycle: {seconds_remaining_in_cycle=} {seconds_required=}"
+            message=f"Not enough time in current cycle: {seconds_remaining_in_cycle=} {seconds_required=}",
+            reason=protocol_consts.JobRejectionReason.NOT_ENOUGH_TIME_IN_CYCLE,
         )
 
 
 class NoMinerWithEnoughAllowance(JobRoutingException):
-    pass
+    def __init__(self) -> None:
+        super().__init__(
+            message="No miner with enough allowance",
+            reason=protocol_consts.JobRejectionReason.NO_MINER_FOR_JOB,
+        )
 
 
 async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:

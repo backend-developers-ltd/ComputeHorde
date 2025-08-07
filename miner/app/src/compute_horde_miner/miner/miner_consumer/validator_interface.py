@@ -13,6 +13,7 @@ from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.protocol_messages import (
     GenericError,
     V0AcceptJobRequest,
+    V0DeclineJobRequest,
     V0ExecutionDoneRequest,
     V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
@@ -22,7 +23,6 @@ from compute_horde.protocol_messages import (
     V0JobFailedRequest,
     V0JobFinishedReceiptRequest,
     V0JobFinishedRequest,
-    V0JobRejectedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
     V0StreamingJobReadyRequest,
@@ -325,7 +325,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
 
         if isinstance(msg, GenericError):
             logger.error(f"Received GenericError from validator: {msg.details}")
-            # Nothing to do here
+            # Nothing to do here - this doesn't tell us whether the job is dead.
             return
 
         assert_never(msg)
@@ -339,7 +339,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                 f"Declining job {msg.job_uuid} from blacklisted validator: {self.validator_key}"
             )
             await self.send(
-                V0JobRejectedRequest(
+                V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
                     reason=protocol_consts.JobRejectionReason.VALIDATOR_BLACKLISTED,
                 ).model_dump_json()
@@ -428,7 +428,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
                     f"Receipt for job {receipt.job_uuid} from validator {receipt.validator_hotkey} valid until {valid_until}"
                 )
             await self.send(
-                V0JobRejectedRequest(
+                V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
                     reason=protocol_consts.JobRejectionReason.BUSY,
                     receipts=[r.to_receipt() for r in receipts],
@@ -442,7 +442,7 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             self.pending_jobs.pop(msg.job_uuid)
             logger.info(f"Declining job {msg.job_uuid}: executor failed to start")
             await self.send(
-                V0JobRejectedRequest(
+                V0DeclineJobRequest(
                     job_uuid=msg.job_uuid,
                     reason=protocol_consts.JobRejectionReason.EXECUTOR_FAILURE,
                 ).model_dump_json()
@@ -602,6 +602,14 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             f"Reported specs for job {msg.job_uuid}: {msg.specs} to validator {self.validator_key}"
         )
 
+    async def _job_rejected(self, msg: V0DeclineJobRequest):
+        await self.send(msg.model_dump_json())
+        logger.debug(f"Rejected job {msg.job_uuid} reported to validator {self.validator_key}")
+        job = self.pending_jobs.pop(msg.job_uuid)
+        await job.arefresh_from_db()
+        job.result_reported_to_validator = timezone.now()
+        await job.asave()
+
     async def _job_failed(self, msg: V0JobFailedRequest):
         await self.send(msg.model_dump_json())
         logger.debug(f"Failed job {msg.job_uuid} reported to validator {self.validator_key}")
@@ -610,10 +618,10 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         job.result_reported_to_validator = timezone.now()
         await job.asave()
 
-    async def _executor_failed(self, msg: V0HordeFailedRequest):
+    async def _horde_failed(self, msg: V0HordeFailedRequest):
         await self.send(msg.model_dump_json())
         logger.debug(
-            f"Executor failed at job {msg.job_uuid} reported to validator {self.validator_key}"
+            f"Horde failed at job {msg.job_uuid} reported to validator {self.validator_key}"
         )
         job = self.pending_jobs.pop(msg.job_uuid)
         await job.arefresh_from_db()

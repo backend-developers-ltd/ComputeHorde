@@ -91,6 +91,25 @@ class JobStatusUpdateMetadata(BaseModel, extra="allow"):
     horde_failure_details: HordeFailureDetails | None = None
     streaming_details: StreamingServerDetails | None = None
 
+    @classmethod
+    def from_uncaught_exception(
+        cls, reported_by: protocol_consts.JobParticipantType, exception: Exception
+    ) -> Self:
+        return cls(
+            comment="Uncaught exception",
+            horde_failure_details=HordeFailureDetails(
+                reported_by=reported_by,
+                reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
+                message="Uncaught exception",
+                context={
+                    "exception_type": type(exception).__qualname__,
+                    "exception_message": str(
+                        exception
+                    ),  # TODO(post error propagation): this may be sensitive
+                },
+            ),
+        )
+
 
 class JobStatusUpdate(BaseModel, extra="forbid"):
     # TODO(post error propagation): remove "extra"

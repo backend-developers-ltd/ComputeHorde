@@ -4,12 +4,12 @@ from compute_horde.fv_protocol.facilitator_requests import V0JobCheated
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
+    V0DeclineJobRequest,
     V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
-    V0JobRejectedRequest,
     V0VolumesReadyRequest,
 )
 
@@ -40,7 +40,7 @@ async def test_miner_is_blacklisted__after_rejecting_job(
     # Vali -> miner: initial job request
 
     # Miner -> vali: rejects job
-    accept_job_msg = V0JobRejectedRequest(job_uuid=job_request.uuid, reason=reason)
+    accept_job_msg = V0DeclineJobRequest(job_uuid=job_request.uuid, reason=reason)
     await miner_transport.add_message(accept_job_msg, send_before=1)
 
     # Vali -> faci: job failed

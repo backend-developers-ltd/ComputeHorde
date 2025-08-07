@@ -5,7 +5,7 @@ from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import AliasChoices, BaseModel, Field, JsonValue
 from typing_extensions import deprecated
 
 from compute_horde import protocol_consts
@@ -98,8 +98,6 @@ class V0AcceptJobRequest(BaseModel):
 # executor -> miner.ec -> miner.vc -> validator
 @deprecated("Use V0HordeFailedRequest instead")
 class V0ExecutorFailedRequest(BaseModel):
-    """deprecated"""
-
     message_type: Literal["V0ExecutorFailedRequest"] = "V0ExecutorFailedRequest"
     job_uuid: str
     executor_token: str | None = None  # SET ONLY on miner.ec -> miner.vc
@@ -111,6 +109,25 @@ class V0StreamingJobNotReadyRequest(BaseModel):
     message_type: Literal["V0StreamingJobNotReadyRequest"] = "V0StreamingJobNotReadyRequest"
     job_uuid: str
     executor_token: str | None = None  # SET ONLY on miner.ec -> miner.vc
+
+
+# executor -> miner.ec -> miner.vc -> validator
+class V0JobFailedRequest(BaseModel):
+    # TODO(post error propagation): make stage and failure reason non-optional
+    # TODO(post error propagation): remove aliases after all participants are updated
+    # TODO(post error propagation): message should not be optional
+    message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
+    job_uuid: str
+    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
+    docker_process_exit_status: int | None = None
+    docker_process_stdout: str | None = None
+    docker_process_stderr: str | None = None
+    reason: protocol_consts.JobFailureReason = Field(
+        default=protocol_consts.JobFailureReason.UNKNOWN,
+        validation_alias=AliasChoices("reason", "error_type"),
+    )
+    message: str = Field(default="", validation_alias=AliasChoices("message", "error_detail"))
+    context: dict[str, JsonValue] | None = None
 
 
 # executor -> miner.ec -> miner.vc -> validator
@@ -173,6 +190,19 @@ class V0JobFinishedRequest(BaseModel):
     )
 
 
+# miner.vc -> validator
+class V0DeclineJobRequest(BaseModel):
+    # TODO(post error propagation): rejected_by should not be optional
+    # TODO(post error propagation): message should not be optional
+    message_type: Literal["V0DeclineJobRequest"] = "V0DeclineJobRequest"
+    job_uuid: str
+    rejected_by: protocol_consts.JobParticipantType = protocol_consts.JobParticipantType.UNKNOWN
+    reason: protocol_consts.JobRejectionReason = protocol_consts.JobRejectionReason.UNKNOWN
+    message: str = ""
+    receipts: list[Receipt] = Field(default_factory=list)
+    context: dict[str, JsonValue] | None = None
+
+
 # validator -> miner.vc
 class V0JobAcceptedReceiptRequest(BaseModel):
     message_type: Literal["V0JobAcceptedReceiptRequest"] = "V0JobAcceptedReceiptRequest"
@@ -198,40 +228,6 @@ class V0MachineSpecsRequest(BaseModel):
     message_type: Literal["V0MachineSpecsRequest"] = "V0MachineSpecsRequest"
     job_uuid: str
     specs: MachineSpecs
-
-
-### Failure messages
-
-
-# miner.vc -> validator
-class V0JobRejectedRequest(BaseModel):
-    # TODO(post error propagation): rejected_by should not be optional
-    # TODO(post error propagation): message should not be optional
-    message_type: Literal["V0DeclineJobRequest"] = "V0DeclineJobRequest"
-    job_uuid: str
-    rejected_by: protocol_consts.JobParticipantType = protocol_consts.JobParticipantType.UNKNOWN
-    reason: protocol_consts.JobRejectionReason = protocol_consts.JobRejectionReason.UNKNOWN
-    message: str = ""
-    receipts: list[Receipt] = Field(default_factory=list)
-    context: dict[str, JsonValue] | None = None
-
-
-# executor -> miner.ec -> miner.vc -> validator
-class V0JobFailedRequest(BaseModel):
-    # TODO(post error propagation): make stage and failure reason non-optional
-    # TODO(post error propagation): remove aliases after all participants are updated
-    # TODO(post error propagation): message should not be optional
-    message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
-    job_uuid: str
-    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
-    docker_process_exit_status: int | None = None
-    docker_process_stdout: str | None = None
-    docker_process_stderr: str | None = None
-    reason: protocol_consts.JobFailureReason = Field(
-        default=protocol_consts.JobFailureReason.UNKNOWN, validation_alias="error_type"
-    )
-    message: str = Field(default="", validation_alias="error_detail")
-    context: dict[str, JsonValue] | None = None
 
 
 # executor -> miner.ec -> miner.vc -> validator
@@ -288,7 +284,7 @@ MinerToValidatorMessage = Annotated[
     | V0ExecutionDoneRequest
     | V0JobFinishedRequest
     | V0MachineSpecsRequest
-    | V0JobRejectedRequest
+    | V0DeclineJobRequest
     | V0JobFailedRequest
     | V0HordeFailedRequest,
     Field(discriminator="message_type"),

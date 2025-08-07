@@ -14,19 +14,20 @@ from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
 from pydantic import TypeAdapter
 
-from compute_horde import organic_job_errors, protocol_consts
+from compute_horde import protocol_consts
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     ErrorCallback,
 )
-from compute_horde.protocol_consts import MinerFailureReason
+from compute_horde.protocol_consts import MinerFailureReason as FailureReason
 from compute_horde.protocol_messages import (
     GenericError,
     MinerToValidatorMessage,
     UnauthorizedError,
     V0AcceptJobRequest,
+    V0DeclineJobRequest,
     V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
     V0ExecutorManifestRequest,
@@ -37,7 +38,6 @@ from compute_horde.protocol_messages import (
     V0JobFailedRequest,
     V0JobFinishedReceiptRequest,
     V0JobFinishedRequest,
-    V0JobRejectedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
     V0StreamingJobNotReadyRequest,
@@ -66,6 +66,16 @@ from compute_horde.utils import MachineSpecs, Timer, sign_blob
 logger = logging.getLogger(__name__)
 
 
+class UpstreamMinerJobException(Exception):
+    def __init__(
+        self, msg: V0DeclineJobRequest | V0JobFailedRequest | V0HordeFailedRequest
+    ) -> None:
+        self.msg = msg
+        super().__init__(
+            f"Upstream miner reported exception: {type(msg).__qualname__} (reason={msg.reason.value}) {msg.model_dump_json()}"
+        )
+
+
 class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorToMinerMessage]):
     """
     Miner client to run organic job on a miner.
@@ -86,10 +96,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
     Note that the waiting on the response futures should properly be handled with timeouts
     (with ``asyncio.timeout()``, ``asyncio.wait_for()`` etc.).
-    The futures will throw an exception when the miner reports an issue:
-    - JobRejected: when the miner rejects the job (V0DeclineJobRequest)
-    - JobFailed: when the job fails because of an error in the job itself (V0JobFailedRequest)
-    - HordeFailed: for other general failures (V0HordeFailedRequest)
+    The futures will throw an UpstreamMinerJobException when the miner reports an issue
     """
 
     def __init__(
@@ -275,37 +282,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             except asyncio.InvalidStateError:
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
 
-        elif isinstance(msg, V0JobFailedRequest | V0HordeFailedRequest | V0JobRejectedRequest):
-            exc: Exception
-
-            if isinstance(msg, V0JobRejectedRequest):
-                exc = organic_job_errors.JobRejected(
-                    rejected_by=msg.rejected_by,
-                    reason=msg.reason,
-                    message=msg.message,
-                    context=msg.context,
-                )
-            elif isinstance(msg, V0JobFailedRequest):
-                exc = organic_job_errors.JobFailed(
-                    stage=msg.stage,
-                    reason=msg.reason,
-                    docker_process_exit_status=msg.docker_process_exit_status,
-                    docker_process_stdout=msg.docker_process_stdout,
-                    docker_process_stderr=msg.docker_process_stderr,
-                    message=msg.message,
-                    context=msg.context,
-                )
-            elif isinstance(msg, V0HordeFailedRequest):
-                exc = organic_job_errors.HordeFailed(
-                    reported_by=msg.reported_by,
-                    stage=msg.stage,
-                    reason=msg.reason,
-                    message=msg.message,
-                    context=msg.context,
-                )
-            else:
-                assert_never(msg)
-
+        elif isinstance(msg, V0JobFailedRequest | V0HordeFailedRequest | V0DeclineJobRequest):
             # On error, consider the remaining stages as failed and throw the wrapped error:
             for future in (
                 self.job_accepted_future,
@@ -316,7 +293,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                 self.job_finished_future,
             ):
                 try:
-                    future.set_exception(exc)
+                    future.set_exception(UpstreamMinerJobException(msg))
                 except asyncio.InvalidStateError:
                     pass
 
@@ -477,7 +454,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
 
 class OrganicJobError(Exception):
-    def __init__(self, reason: MinerFailureReason, received: MinerToValidatorMessage | None = None):
+    def __init__(self, reason: FailureReason, received: MinerToValidatorMessage | None = None):
         self.reason = reason
         self.received = received
 
@@ -551,7 +528,7 @@ async def execute_organic_job_on_miner(
         try:
             await exit_stack.enter_async_context(client)
         except TransportConnectionError as exc:
-            raise OrganicJobError(MinerFailureReason.MINER_CONNECTION_FAILED) from exc
+            raise OrganicJobError(FailureReason.MINER_CONNECTION_FAILED) from exc
 
         ## STAGE: reservation
         # Miner should reserve an executor and respond with accept/reject quickly.
@@ -576,7 +553,7 @@ async def execute_organic_job_on_miner(
                     timeout=reservation_time_limit,
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(MinerFailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
+                raise OrganicJobError(FailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
 
             await client.notify_job_accepted(initial_response)
 
@@ -597,9 +574,7 @@ async def execute_organic_job_on_miner(
                     timeout=readiness_time_limit,
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(
-                    MinerFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT
-                ) from exc
+                raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
 
             await client.notify_executor_ready(executor_readiness_response)
 
@@ -643,7 +618,7 @@ async def execute_organic_job_on_miner(
                 )
                 logger.debug(f"Volume download done with {deadline.time_left():.2f}s left")
             except TimeoutError as exc:
-                raise OrganicJobError(MinerFailureReason.VOLUMES_TIMED_OUT) from exc
+                raise OrganicJobError(FailureReason.VOLUMES_TIMED_OUT) from exc
             await client.notify_volumes_ready(volumes_ready_response)
 
             ## STAGE: Start streaming
@@ -660,7 +635,7 @@ async def execute_organic_job_on_miner(
                         timeout=deadline.time_left(),
                     )
                 except TimeoutError as exc:
-                    raise OrganicJobError(MinerFailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
+                    raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
 
                 await client.notify_streaming_readiness(streaming_response)
 
@@ -678,7 +653,7 @@ async def execute_organic_job_on_miner(
                 )
                 logger.debug(f"Execution done with {deadline.time_left():.2f}s left")
             except TimeoutError as exc:
-                raise OrganicJobError(MinerFailureReason.EXECUTION_TIMED_OUT) from exc
+                raise OrganicJobError(FailureReason.EXECUTION_TIMED_OUT) from exc
             await client.notify_execution_done(execution_done_response)
 
             ## STAGE: upload
@@ -709,7 +684,7 @@ async def execute_organic_job_on_miner(
                     final_response.upload_results or {},
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(MinerFailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
+                raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
 
         except Exception as e:
             logger.info(f"Job failed with {type(e).__name__}: {e}")

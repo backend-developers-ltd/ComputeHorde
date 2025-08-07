@@ -14,9 +14,9 @@ from compute_horde.miner_client.organic import (
 )
 from compute_horde.protocol_consts import MinerFailureReason
 from compute_horde.protocol_messages import (
+    V0DeclineJobRequest,
     V0InitialJobRequest,
     V0JobFailedRequest,
-    V0JobRejectedRequest,
     V0JobRequest,
     V0StreamingJobReadyRequest,
 )
@@ -96,7 +96,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                 )
             except TimeoutError as exc:
                 raise OrganicJobError(MinerFailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
-            if isinstance(initial_response, V0JobRejectedRequest):
+            if isinstance(initial_response, V0DeclineJobRequest):
                 raise OrganicJobError(MinerFailureReason.JOB_DECLINED, initial_response)
 
             await client.notify_job_accepted(initial_response)

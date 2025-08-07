@@ -5,6 +5,7 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
+    V0DeclineJobRequest,
     V0ExecutionDoneRequest,
     V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
@@ -12,7 +13,6 @@ from compute_horde.protocol_messages import (
     V0JobFailedRequest,
     V0JobFinishedReceiptRequest,
     V0JobFinishedRequest,
-    V0JobRejectedRequest,
     V0VolumesReadyRequest,
 )
 
@@ -57,7 +57,7 @@ WEBSOCKET_TIMEOUT = 10
         ),
         (
             (
-                V0JobRejectedRequest,
+                V0DeclineJobRequest,
                 None,
                 None,
                 None,

@@ -108,6 +108,7 @@ class JobRejectionReason(StrEnum):
     )
     NOT_ENOUGH_TIME_IN_CYCLE = "not_enough_time_in_cycle"
     VALIDATOR_BLACKLISTED = "validator_blacklisted"
+    UNSAFE_VOLUME = "unsafe_volume"
 
     def __repr__(self):
         return self.value

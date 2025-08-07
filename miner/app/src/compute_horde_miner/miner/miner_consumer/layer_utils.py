@@ -98,13 +98,13 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
     async def _job_failed(self, msg: V0JobFailedRequest): ...
 
     @log_errors_explicitly
-    async def executor_failed(self, event: dict[str, Any]):
-        payload = self.validate_event("executor_failed", V0HordeFailedRequest, event)
+    async def horde_failed(self, event: dict[str, Any]):
+        payload = self.validate_event("horde_failed", V0HordeFailedRequest, event)
         if payload:
-            await self._executor_failed(payload)
+            await self._horde_failed(payload)
 
     @abc.abstractmethod
-    async def _executor_failed(self, msg: V0HordeFailedRequest): ...
+    async def _horde_failed(self, msg: V0HordeFailedRequest): ...
 
     async def send_job_request(self, executor_token, job_request: V0JobRequest):
         await self.channel_layer.group_send(
@@ -180,11 +180,11 @@ class ExecutorInterfaceMixin(BaseMixin):
             {"type": "executor.finished", **msg.model_dump()},
         )
 
-    async def send_executor_failed(self, executor_token: str, msg: V0HordeFailedRequest):
+    async def send_horde_failed(self, executor_token: str, msg: V0HordeFailedRequest):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
         await self.channel_layer.group_send(
             group_name,
-            {"type": "executor.failed", **msg.model_dump()},
+            {"type": "horde.failed", **msg.model_dump()},
         )
 
     async def send_job_failed(self, executor_token: str, msg: V0JobFailedRequest):
