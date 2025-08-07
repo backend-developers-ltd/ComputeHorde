@@ -1,3 +1,4 @@
+import aiodocker
 import asyncio
 import csv
 import logging
@@ -6,6 +7,7 @@ import shutil
 import subprocess
 import typing
 from contextlib import asynccontextmanager
+from typing import List
 
 from compute_horde.utils import MachineSpecs
 
@@ -21,16 +23,46 @@ def run_cmd(cmd):
     return proc.stdout
 
 
+async def run_nvidia_smi():
+    async with aiodocker.Docker() as client:
+        container = await client.containers.create({
+            "Image": "ubuntu",
+            "Cmd": [
+                "nvidia-smi",
+                "--query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem,uuid,serial",
+                "--format=csv"
+            ],
+            "HostConfig": {
+                "Runtime": "nvidia",
+                "DeviceRequests": [
+                    {
+                        "Driver": "nvidia",
+                        "Count": -1,
+                        "Capabilities": [["gpu"]],
+                    }
+                ],
+            }
+        })
+        await container.start()
+        result = await container.wait()
+        stdout, stderr = await get_docker_container_outputs(container)
+        await container.remove(force=True)
+
+        if result["StatusCode"] != 0:
+            raise RuntimeError(
+                f"run_nvidia_smi error ({result['StatusCode']}) {stdout=!r} {stderr=!r}"
+            )
+
+        return stdout
+
+
 @typing.no_type_check
-def get_machine_specs() -> MachineSpecs:
+async def get_machine_specs() -> MachineSpecs:
     data = {}
 
     data["gpu"] = {"count": 0, "details": []}
     try:
-        nvidia_cmd = run_cmd(
-            "docker run --rm --runtime=nvidia --gpus all ubuntu "
-            "nvidia-smi --query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem,uuid,serial --format=csv"
-        )
+        nvidia_cmd = await run_nvidia_smi()
         csv_data = csv.reader(nvidia_cmd.splitlines())
         header = [x.strip() for x in next(csv_data)]
         for row in csv_data:
@@ -105,33 +137,66 @@ def get_machine_specs() -> MachineSpecs:
 
 
 @asynccontextmanager
-async def temporary_process(program, *args, clean_exit_timeout: float = 1.0, **subprocess_kwargs):
+async def docker_container_wrapper(
+    image: str,
+    name: str = None,
+    command: List[str] = None,
+    clean_exit_timeout: float = 1.0,
+    auto_remove: bool = False,
+    **container_kwargs,
+):
     """
-    Context manager.
-    Runs the program in a subprocess, yields it for you to interact with and cleans it up after the context exits.
-    This will first try to stop the process nicely but kill it shortly after.
+    Context manager for Docker containers using Docker SDK.
+    Creates and runs a container in a separate thread, yields it for interaction, and closes the client after the context exits.
 
     Parameters:
-        program: Program to execute
-        *args: Program arguments
+        image: Docker image to run
+        name: Name of the container (default: None)
+        command: Command to execute in the container. This should be formatted as a list that the
+            Docker API would understand, e.g. ["bash", "-c", "..."]. If None, will run the default
+            command for the image (default: None)
         clean_exit_timeout: Seconds to wait before force kill (default: 1.0)
-        **subprocess_kwargs: Additional keyword arguments passed to asyncio.create_subprocess_exec()
+        auto_remove: Automatically remove the container on exit. Equivalent to --rm flag (default: False)
+        **container_kwargs: Additional keyword arguments passed to aiodocker.Docker.containers.create()
     """
-    process = await asyncio.create_subprocess_exec(program, *args, **subprocess_kwargs)
+    client = aiodocker.Docker()
+    container = None
+
+    # Configure and run the Docker container
+    config = {"Image": image, **container_kwargs}
+    if command:
+        config["Cmd"] = command
+    container = await client.containers.create(config=config, name=name)
+    await container.start()
+
     try:
-        yield process
+        yield container
     finally:
-        try:
+        if container and auto_remove:
             try:
-                process.terminate()
-                await asyncio.wait_for(process.wait(), timeout=clean_exit_timeout)
-            except ProcessLookupError:
-                # Process already gone - nothing to do
-                pass
-            except TimeoutError:
-                logger.warning(
-                    f"Process `{program}` didn't exit after {clean_exit_timeout} seconds - killing ({args=})"
-                )
-                process.kill()
+                # Try to stop the container (with SIGTERM and then after timeout with SIGKILL)
+                try:
+                    await container.stop(timeout=int(clean_exit_timeout))
+                except Exception as e:
+                    logger.warning(f"Failed to stop container: {e}")
+
+                # Remove the container
+                try:
+                    await container.delete(force=True)
+                except Exception as e:
+                    logger.warning(f"Failed to remove container: {e}")
+
+            except Exception as e:
+                logger.error(f"Failed to clean up container: {e}", exc_info=True)
+
+        # Close the Docker client
+        try:
+            await client.close()
         except Exception as e:
-            logger.error(f"Failed to clean up process `{program}` ({args=}): {e}", exc_info=True)
+            logger.warning(f"Failed to close Docker client: {e}")
+
+
+async def get_docker_container_outputs(container: aiodocker.containers.DockerContainer):
+    stdout = "".join(await container.log(stdout=True, stderr=False))
+    stderr = "".join(await container.log(stdout=False, stderr=True))
+    return stdout, stderr
