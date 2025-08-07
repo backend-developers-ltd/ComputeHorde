@@ -41,11 +41,16 @@ async def aget_current_block(timeout: float = 1.0) -> int:
     return await aget_current_block(timeout=0)
 
 
-get_current_block = async_to_sync(aget_current_block)
+def get_current_block():
+    try:
+        async_to_sync(aget_current_block)(timeout=0)
+    except BlockNotInCacheError:
+        return cache_current_block
 
 
-def cache_current_block() -> None:
+def cache_current_block() -> int:
     subtensor = _get_subtensor(network=settings.BITTENSOR_NETWORK)
     current_block = subtensor.get_current_block()
 
     cache.set(_BLOCK_CACHE_KEY, current_block, _BLOCK_CACHE_TIMEOUT)
+    return current_block
