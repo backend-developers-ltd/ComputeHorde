@@ -2,6 +2,7 @@ import abc
 import asyncio
 import datetime as dt
 import logging
+import warnings
 from typing import Any
 
 from asgiref.sync import sync_to_async
@@ -12,9 +13,6 @@ from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
 from compute_horde_miner.miner.dynamic_config import aget_config
-from compute_horde_miner.miner.executor_manager._internal.selector import (
-    HistoricalRandomMinerSelector,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +156,6 @@ class ExecutorClassPool:
 class BaseExecutorManager(metaclass=abc.ABCMeta):
     def __init__(self):
         self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
-        self.selector = HistoricalRandomMinerSelector(settings.CLUSTER_SECRET)
 
     @abc.abstractmethod
     async def start_new_executor(self, token, executor_class, timeout):
@@ -230,12 +227,12 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
 
     async def is_active(self) -> bool:
         """Check if the Miner is an active one for configured Cluster"""
-        selected = await self.selector.active(
-            settings.CLUSTER_HOTKEYS,
+        warnings.warn(
+            "is_active() method is deprecated.",
+            DeprecationWarning,
+            stacklevel=2,
         )
-        my_address = settings.BITTENSOR_WALLET().hotkey.ss58_address  # type: str
-
-        return selected == my_address
+        return True
 
     @sync_to_async(thread_sensitive=False)
     def is_peak(self) -> bool:
