@@ -19,7 +19,7 @@ from .. import settings
 from ..metrics import VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION
 from ..types import AllowanceException, NotEnoughAllowanceException, ss58_address
 from .manifests import get_manifest_drops, get_manifests
-from .supertensor import supertensor
+from .supertensor import supertensor, SuperTensor
 
 logger = get_task_logger(__name__)
 
@@ -105,17 +105,17 @@ def save_neurons(neurons: list[turbobt.Neuron], block: int):
     )
 
 
-def process_block_allowance(block_number: int):
+def process_block_allowance(block_number: int, supertensor_: SuperTensor):
     """
     Only call this once the block is already minted
     """
     with transaction.atomic():
         block_obj = Block.objects.create(
             block_number=block_number,
-            creation_timestamp=supertensor().get_block_timestamp(block_number),
+            creation_timestamp=supertensor_.get_block_timestamp(block_number),
         )
 
-        neurons = supertensor().list_neurons(block_number)
+        neurons = supertensor_.list_neurons(block_number)
         save_neurons(neurons, block_number)
 
         finalized_blocks = []
@@ -144,9 +144,9 @@ def process_block_allowance(block_number: int):
         for finalized_block in finalized_blocks:
             assert finalized_block.end_timestamp is not None
 
-            neurons = supertensor().list_neurons(finalized_block.block_number)
+            neurons = supertensor_.list_neurons(finalized_block.block_number)
 
-            validators = supertensor().list_validators(finalized_block.block_number)
+            validators = supertensor_.list_validators(finalized_block.block_number)
 
             hotkeys_from_metagraph = [neuron.hotkey for neuron in neurons]
 
@@ -186,13 +186,13 @@ def process_block_allowance(block_number: int):
                     )
 
 
-def process_block_allowance_with_reporting(block_number: int):
+def process_block_allowance_with_reporting(block_number: int, supertensor_: SuperTensor):
     """
     Only call this once the block is already minted
     """
     try:
         start = time.time()
-        process_block_allowance(block_number)
+        process_block_allowance(block_number, supertensor_)
         end = time.time()
     except Exception as e:
         logger.error(
@@ -234,15 +234,23 @@ def report_checkpoint(block_number_lt: int, block_number_gte: int):
     )
 
 
-def scan_blocks_and_calculate_allowance(report_callback: Callable[[int, int], Any] | None = None):
+def scan_blocks_and_calculate_allowance(
+    report_callback: Callable[[int, int], Any] | None = None,
+    backfilling_supertensor: SuperTensor | None = None,
+    livefilling_supertensor: SuperTensor | None = None,
+):
+    if backfilling_supertensor is None:
+        backfilling_supertensor = supertensor()
+    if livefilling_supertensor is None:
+        livefilling_supertensor = supertensor()
     timer = Timer()
     try:
-        current_block = supertensor().get_current_block()
+        current_block = livefilling_supertensor.get_current_block()
         missing_block_numbers = find_missing_blocks(current_block)
         for block_number in missing_block_numbers:
             # TODO process_block_allowance_with_reporting never throws, but logs errors appropriately. maybe it should
             # be retried? otherwise random failures will leave holes until they are backfilled
-            process_block_allowance_with_reporting(block_number)
+            process_block_allowance_with_reporting(block_number, backfilling_supertensor)
             if not block_number % 10 and report_callback:
                 report_callback(block_number, block_number-10)
             timer.check_time()
@@ -251,7 +259,8 @@ def scan_blocks_and_calculate_allowance(report_callback: Callable[[int, int], An
             wait_for_block(current_block + 1, timer.time_left())
             current_block += 1
 
-            process_block_allowance_with_reporting(current_block)
+            process_block_allowance_with_reporting(current_block, livefilling_supertensor)
+            # no precaching needed in live sampling
             if not current_block % 10 and report_callback:
                 report_callback(current_block, current_block-10)
             timer.check_time()
