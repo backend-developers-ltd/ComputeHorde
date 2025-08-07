@@ -7,12 +7,11 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from compute_horde import protocol_consts
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
-from compute_horde.fv_protocol import fv_protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import (
     V0JobCheated,
     V2JobRequest,
 )
-from compute_horde.fv_protocol.validator_requests import JobStatusUpdateMetadata
+from compute_horde.fv_protocol.validator_requests import JobStatusUpdate, JobStatusUpdateMetadata
 from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
@@ -199,7 +198,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 self.send_to_validator(job_request)
                 JobStatus.objects.create(
                     job=self,
-                    status=fv_protocol_consts.FaciValiJobStatus.SENT.value,
+                    status=JobStatusUpdate.Status.SENT.value,
                     stage=protocol_consts.JobStage.ACCEPTANCE.value,
                 )
 
@@ -301,7 +300,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="statuses")
-    status = models.CharField(choices=fv_protocol_consts.FaciValiJobStatus.choices())
+    status = models.CharField(choices=JobStatusUpdate.Status.choices())
     stage = models.CharField(
         choices=protocol_consts.JobStage.choices(), default=protocol_consts.JobStage.UNKNOWN.value, max_length=255
     )
@@ -329,17 +328,17 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
         - The HORDE_FAILED status is new and will not be accepted
         """
         status_display = {
-            fv_protocol_consts.FaciValiJobStatus.SENT.value: "Sent",
-            fv_protocol_consts.FaciValiJobStatus.RECEIVED.value: "Received",
-            fv_protocol_consts.FaciValiJobStatus.ACCEPTED.value: "Accepted",
-            fv_protocol_consts.FaciValiJobStatus.EXECUTOR_READY.value: "Executor Ready",
-            fv_protocol_consts.FaciValiJobStatus.STREAMING_READY.value: "Streaming Ready",
-            fv_protocol_consts.FaciValiJobStatus.VOLUMES_READY.value: "Volumes Ready",
-            fv_protocol_consts.FaciValiJobStatus.EXECUTION_DONE.value: "Execution Done",
-            fv_protocol_consts.FaciValiJobStatus.COMPLETED.value: "Completed",
-            fv_protocol_consts.FaciValiJobStatus.REJECTED.value: "Rejected",
-            fv_protocol_consts.FaciValiJobStatus.FAILED.value: "Failed",
-            fv_protocol_consts.FaciValiJobStatus.HORDE_FAILED.value: "Failed",
+            JobStatusUpdate.Status.SENT.value: "Sent",
+            JobStatusUpdate.Status.RECEIVED.value: "Received",
+            JobStatusUpdate.Status.ACCEPTED.value: "Accepted",
+            JobStatusUpdate.Status.EXECUTOR_READY.value: "Executor Ready",
+            JobStatusUpdate.Status.STREAMING_READY.value: "Streaming Ready",
+            JobStatusUpdate.Status.VOLUMES_READY.value: "Volumes Ready",
+            JobStatusUpdate.Status.EXECUTION_DONE.value: "Execution Done",
+            JobStatusUpdate.Status.COMPLETED.value: "Completed",
+            JobStatusUpdate.Status.REJECTED.value: "Rejected",
+            JobStatusUpdate.Status.FAILED.value: "Failed",
+            JobStatusUpdate.Status.HORDE_FAILED.value: "Failed",
         }
         return status_display[self.status]
 

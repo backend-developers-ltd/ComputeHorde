@@ -11,7 +11,6 @@ import tenacity
 import websockets
 from channels.layers import get_channel_layer
 from compute_horde import protocol_consts
-from compute_horde.fv_protocol import fv_protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import (
     Error,
     OrganicJobRequest,
@@ -416,7 +415,7 @@ class FacilitatorClient:
         await self.send_job_status_update(
             JobStatusUpdate(
                 uuid=job_request.uuid,
-                status=fv_protocol_consts.FaciValiJobStatus.RECEIVED,
+                status=JobStatusUpdate.Status.RECEIVED,
                 stage=protocol_consts.JobStage.ACCEPTANCE,
             )
         )
@@ -450,7 +449,7 @@ class FacilitatorClient:
         await self.send_job_status_update(
             JobStatusUpdate(
                 uuid=job_uuid,
-                status=fv_protocol_consts.FaciValiJobStatus.REJECTED,
+                status=JobStatusUpdate.Status.REJECTED,
                 stage=stage,
                 metadata=JobStatusUpdateMetadata(
                     comment=message,
@@ -475,7 +474,7 @@ class FacilitatorClient:
         await self.send_job_status_update(
             JobStatusUpdate(
                 uuid=job_uuid,
-                status=fv_protocol_consts.FaciValiJobStatus.FAILED,
+                status=JobStatusUpdate.Status.FAILED,
                 stage=stage,
                 metadata=JobStatusUpdateMetadata(
                     comment=message,
@@ -500,7 +499,7 @@ class FacilitatorClient:
         await self.send_job_status_update(
             JobStatusUpdate(
                 uuid=job_uuid,
-                status=fv_protocol_consts.FaciValiJobStatus.HORDE_FAILED,
+                status=JobStatusUpdate.Status.HORDE_FAILED,
                 stage=stage,
                 metadata=JobStatusUpdateMetadata(
                     comment=message,

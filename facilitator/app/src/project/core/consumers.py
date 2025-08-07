@@ -6,7 +6,6 @@ from typing import Annotated, ClassVar, Union
 
 import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
-from compute_horde.fv_protocol import fv_protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import Error, Response
 from compute_horde.fv_protocol.validator_requests import (
     JobStatusUpdate,
@@ -210,7 +209,7 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                         job.upload_results = upload_results
                     await job.asave()
                 elif (
-                    message.status == fv_protocol_consts.FaciValiJobStatus.STREAMING_READY
+                    message.status == JobStatusUpdate.Status.STREAMING_READY
                     and (streaming_details := message.metadata.streaming_details) is not None
                 ):
                     log.debug(f"received streaming details: {streaming_details}")
