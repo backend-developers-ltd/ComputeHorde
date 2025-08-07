@@ -25,7 +25,7 @@ def scan_blocks_and_calculate_allowance():
             with Lock(LockType.ALLOWANCE_FETCHING, 5.0, settings.DEFAULT_DB_ALIAS):
                 blocks.scan_blocks_and_calculate_allowance(
                     report_allowance_to_system_events.delay,
-                    PrecachingSuperTensor(DjangoCache()),
+                    PrecachingSuperTensor(cache=DjangoCache()),
                     supertensor(),
                 )
         except Locked:
