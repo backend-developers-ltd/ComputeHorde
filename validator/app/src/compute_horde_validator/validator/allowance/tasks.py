@@ -3,6 +3,8 @@ from django.conf import settings
 from django.db import transaction
 
 from compute_horde_validator.celery import app
+from compute_horde_validator.validator.allowance.utils.supertensor import PrecachingSuperTensor, supertensor
+from compute_horde_validator.validator.allowance.utils.supertensor_django_cache import DjangoCache
 from compute_horde_validator.validator.locks import Lock, Locked, LockType
 from compute_horde_validator.validator.models import SystemEvent, AllowanceMinerManifest
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
@@ -21,7 +23,11 @@ def scan_blocks_and_calculate_allowance():
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
         try:
             with Lock(LockType.ALLOWANCE_FETCHING, 5.0, settings.DEFAULT_DB_ALIAS):
-                blocks.scan_blocks_and_calculate_allowance(report_allowance_to_system_events.delay)
+                blocks.scan_blocks_and_calculate_allowance(
+                    report_allowance_to_system_events.delay,
+                    PrecachingSuperTensor(DjangoCache()),
+                    supertensor(),
+                )
         except Locked:
             logger.debug("Another thread already fetching blocks")
         except blocks.TimesUpError:
