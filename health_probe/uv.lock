@@ -403,7 +403,7 @@ wheels = [
 
 [[package]]
 name = "compute-horde-sdk"
-version = "0.0.12"
+version = "0.0.13"
 source = { directory = "../compute_horde_sdk" }
 dependencies = [
     { name = "aiohttp" },
