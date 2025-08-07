@@ -43,9 +43,9 @@ async def aget_current_block(timeout: float = 1.0) -> int:
 
 def get_current_block():
     try:
-        async_to_sync(aget_current_block)(timeout=0)
+        return async_to_sync(aget_current_block)(timeout=0)
     except BlockNotInCacheError:
-        return cache_current_block
+        return cache_current_block()
 
 
 def cache_current_block() -> int:
