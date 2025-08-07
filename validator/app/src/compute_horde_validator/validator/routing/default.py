@@ -16,6 +16,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_validator.validator import collateral
+from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
@@ -27,6 +28,7 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.routing.base import RoutingBase
 from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
+    JobRoute,
     NoMinerForExecutorType,
     NoMinerWithEnoughAllowance,
     NotEnoughTimeInCycle,
@@ -37,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 class Routing(RoutingBase):
-    async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> Miner:
+    async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute:
         if isinstance(request, V2JobRequest):
             return await _pick_miner_for_job_v2(request)
 
@@ -63,7 +65,7 @@ def _get_seconds_remaining_in_current_cycle(current_block: int) -> int:
 
 
 @async_synchronized
-async def _pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
+async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     """
     Goes through all miners with recent manifests and online executors of the given executor class.
     Filters miners based on compute time allowance and minimum collateral requirements.
@@ -80,12 +82,28 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     if settings.DEBUG_MINER_KEY:
         logger.debug(f"Using DEBUG_MINER_KEY for job {request.uuid}")
         miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
-        return miner
+        return JobRoute(
+            miner=AllowanceMiner(
+                address=miner.address,
+                ip_version=miner.ip_version,
+                port=miner.port,
+                hotkey_ss58=miner.hotkey,
+            ),
+            allowance_reservation_id=None,
+        )
 
     if request.on_trusted_miner:
         logger.debug(f"Using trusted miner for job {request.uuid}")
         miner, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
-        return miner
+        return JobRoute(
+            miner=AllowanceMiner(
+                address=miner.address,
+                ip_version=miner.ip_version,
+                port=miner.port,
+                hotkey_ss58=miner.hotkey,
+            ),
+            allowance_reservation_id=None,
+        )
 
     executor_seconds = (
         request.download_time_limit + request.execution_time_limit + request.upload_time_limit
@@ -238,7 +256,15 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
                 expires_at=timezone.now() + timedelta(seconds=reservation_time),
             )
             logger.info(f"Picked miner {manifest.miner.hotkey}")
-            return miner
+            return JobRoute(
+                miner=AllowanceMiner(
+                    address=miner.address,
+                    ip_version=miner.ip_version,
+                    port=miner.port,
+                    hotkey_ss58=miner.hotkey,
+                ),
+                allowance_reservation_id=None,
+            )
 
     logger.error("All miners are busy")
     raise AllMinersBusy()

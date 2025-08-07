@@ -398,8 +398,8 @@ class FacilitatorClient:
         )
 
         try:
-            miner = await routing().pick_miner_for_job_request(job_request)
-            logger.info(f"Selected miner {miner.hotkey} for job {job_request.uuid}")
+            job_route = await routing().pick_miner_for_job_request(job_request)
+            logger.info(f"Selected miner {job_route.miner.hotkey_ss58} for job {job_request.uuid}")
         except NoMinerForExecutorType:
             msg = f"No executor for job request: {job_request.uuid} ({job_request.executor_class})"
             logger.info(f"Rejecting job: {msg}")
@@ -471,7 +471,7 @@ class FacilitatorClient:
             logger.info(f"Submitting job {job_request.uuid} to worker")
             job_status_task = asyncio.create_task(self.handle_job_status_updates(job_request.uuid))
             await self.tasks_to_reap.put(job_status_task)
-            job = await execute_organic_job_request_on_worker(job_request, miner)
+            job = await execute_organic_job_request_on_worker(job_request, job_route)
             logger.info(f"Job {job_request.uuid} finished with status: {job.status}")
 
             if job.status == OrganicJob.Status.FAILED:

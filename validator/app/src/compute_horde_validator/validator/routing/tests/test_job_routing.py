@@ -100,8 +100,7 @@ def setup_db(miners, validator):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__picks_a_miner():
-    miner = await routing().pick_miner_for_job_request(JOB_REQUEST)
-    assert miner is not None
+    await routing().pick_miner_for_job_request(JOB_REQUEST)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -180,8 +179,9 @@ async def test_pick_miner_for_job__all_executors_busy(validator_keypair, miner_k
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__trusted_miner():
     job_request = JOB_REQUEST.__replace__(on_trusted_miner=True)
-    miner = await routing().pick_miner_for_job_request(job_request)
-    assert miner.hotkey == TRUSTED_MINER_FAKE_KEY
+    job_route = await routing().pick_miner_for_job_request(job_request)
+    assert job_route.miner.hotkey_ss58 == TRUSTED_MINER_FAKE_KEY
+    assert job_route.allowance_reservation_id is None
 
 
 @pytest.mark.django_db(transaction=True)
@@ -194,8 +194,8 @@ async def test_preliminary_reservation__prevents_double_select():
     # We have 5 miners
     for _ in range(5):
         job_request = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
-        miner = await routing().pick_miner_for_job_request(job_request)
-        picked_miners.add(miner.hotkey)
+        job_route = await routing().pick_miner_for_job_request(job_request)
+        picked_miners.add(job_route.miner.hotkey_ss58)
 
     # No miner is double-selected
     assert len(picked_miners) == 5
@@ -219,8 +219,8 @@ async def test_preliminary_reservation__minimum_collateral():
     # We have 4 miners who have enough collateral
     for _ in range(4):
         job_request = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
-        miner = await routing().pick_miner_for_job_request(job_request)
-        picked_miners.add(miner.hotkey)
+        job_route = await routing().pick_miner_for_job_request(job_request)
+        picked_miners.add(job_route.miner.hotkey_ss58)
 
     # No miner is double-selected
     assert len(picked_miners) == 4
@@ -243,8 +243,8 @@ async def test_preliminary_reservation__lifted_by_receipt(miners, validator):
     job_request_2 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()))
 
     # Pick miner for job
-    picked_miner = await routing().pick_miner_for_job_request(job_request_1)
-    assert picked_miner == miner
+    job_route = await routing().pick_miner_for_job_request(job_request_1)
+    assert job_route.miner.hotkey_ss58 == miner.hotkey
 
     # Create receipt noting that the job was finished
     await JobFinishedReceipt.objects.acreate(
@@ -260,8 +260,8 @@ async def test_preliminary_reservation__lifted_by_receipt(miners, validator):
     )
 
     # The same miner should be immediately pickable
-    picked_miner = await routing().pick_miner_for_job_request(job_request_2)
-    assert picked_miner == miner
+    job_route_2 = await routing().pick_miner_for_job_request(job_request_2)
+    assert job_route_2.miner.hotkey_ss58 == miner.hotkey
 
 
 @pytest.mark.django_db(transaction=True)
@@ -275,8 +275,8 @@ async def test_preliminary_reservation__lifted_after_timeout(miners, validator):
 
     with freeze_time() as now:
         # Pick miner for job
-        picked_miner = await routing().pick_miner_for_job_request(job_request_1)
-        assert picked_miner == miner
+        job_route = await routing().pick_miner_for_job_request(job_request_1)
+        assert job_route.miner.hotkey_ss58 == miner.hotkey
 
         # Wait for timeout
         now.tick(
@@ -284,8 +284,8 @@ async def test_preliminary_reservation__lifted_after_timeout(miners, validator):
         )
 
         # The same miner should be immediately pickable
-        picked_miner = await routing().pick_miner_for_job_request(job_request_2)
-        assert picked_miner == miner
+        job_route_2 = await routing().pick_miner_for_job_request(job_request_2)
+        assert job_route_2.miner.hotkey_ss58 == miner.hotkey
 
 
 @pytest.mark.django_db(transaction=True)
@@ -311,8 +311,7 @@ async def test_pick_miner_for_job__no_miner_with_enough_allowance():
 async def test_pick_miner_for_job__respects_allowance_check_feature_flag__enabled():
     await ComputeTimeAllowance.objects.all().aupdate(remaining_allowance=0)
     job_request = JOB_REQUEST.__replace__(execution_time_limit=101)
-    miner = await routing().pick_miner_for_job_request(job_request)
-    assert miner, "No miner was picked"
+    await routing().pick_miner_for_job_request(job_request)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -321,8 +320,7 @@ async def test_pick_miner_for_job__respects_allowance_check_feature_flag__enable
 async def test_pick_miner_for_job__respects_allowance_check_feature_flag__disabled():
     await ComputeTimeAllowance.objects.all().aupdate(remaining_allowance=0)
     job_request = JOB_REQUEST.__replace__(execution_time_limit=101)
-    miner = await routing().pick_miner_for_job_request(job_request)
-    assert miner, "No miner was picked"
+    await routing().pick_miner_for_job_request(job_request)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -333,8 +331,8 @@ async def test_pick_miner_for_job__miner_with_more_allowance_percentage_is_chose
     await ComputeTimeAllowance.objects.filter(miner=miners[0]).aupdate(remaining_allowance=75)
     await ComputeTimeAllowance.objects.filter(miner=miners[1]).aupdate(remaining_allowance=80)
 
-    chosen_miner = await routing().pick_miner_for_job_request(JOB_REQUEST)
-    assert chosen_miner == miners[1]
+    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+    assert job_route.miner.hotkey_ss58 == miners[1].hotkey
 
 
 @pytest.mark.django_db(transaction=True)
@@ -351,8 +349,8 @@ async def test_pick_miner_for_job__collateral_tiebreak_on_equal_allowance_percen
     await miner1.asave()
     await miner2.asave()
 
-    chosen_miner = await routing().pick_miner_for_job_request(JOB_REQUEST)
-    assert chosen_miner == miner2
+    job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
+    assert job_route.miner.hotkey_ss58 == miner2.hotkey
 
 
 @pytest.mark.django_db(transaction=True)
@@ -373,8 +371,7 @@ async def test_pick_miner_for_job__use_subtensor_for_block_on_cache_miss(
 async def test_cross_cycle_job__allowed_when_enabled(mock_get_seconds_remaining):
     mock_get_seconds_remaining.return_value = 5
     long_job = JOB_REQUEST.__replace__(execution_time_limit=90)
-    miner = await routing().pick_miner_for_job_request(long_job)
-    assert miner is not None
+    await routing().pick_miner_for_job_request(long_job)
 
 
 @pytest.mark.django_db(transaction=True)
