@@ -59,49 +59,22 @@ class JobDriver:
             try:
                 await self._execute()
 
-            except TimeoutError:
-                # TODO(error propagation): This is not quite right, only specific timeouts should result in job error.
-                # TODO(error propagation): ...wrap them into JobError with reason=TIMEOUT.
-                # TODO(error propagation): ...otherwise ANY uncaught timeout will result in a job error.
-                logger.error(f"Job timed out during {self.current_stage.value} stage")
-                await self.send_job_failed(
-                    reason=JobFailureReason.TIMEOUT,
-                    message=f"Job timed out during {self.current_stage.value} stage",
-                    execution_result=None,
-                )
-
             except JobError as e:
-                # TODO(error propagation): Raise executor errors as ExecutorError, keep JobError for job-related errors
-                # ...we don't want random errors here.
-                if e.execution_result:
-                    logger.warning(f"Job failed: {e}")
-                    await self.send_job_failed(
-                        reason=e.reason,
-                        message=e.error_message,
-                        execution_result=e.execution_result,
-                        context={"detail": e.error_detail},
-                    )
-                else:
-                    logger.warning(
-                        f"Generic executor failure: {e.reason.value} ({e.error_message})"
-                    )
-                    await self.send_horde_failed(
-                        reason=HordeFailureReason.GENERIC_EXECUTOR_FAILED,
-                        message=e.error_message,
-                        context={"detail": e.error_detail},
-                    )
+                logger.error(f"Job error: {e.reason}: {e.error_message}", exc_info=True)
+                await self.send_job_failed(e.reason, e.error_message, e.execution_result)
 
             except ExecutorError as e:
+                logger.error(f"Executor error: {e.reason}: {e.message}", exc_info=True)
+                await self.send_horde_failed(e.reason, e.message, e.context)
+
+            except TimeoutError:
+                logger.error("Uncaught timeout")
                 await self.send_horde_failed(
-                    reason=e.reason,
-                    message=e.message,
-                    context=e.context,
+                    reason=HordeFailureReason.UNCAUGHT_EXCEPTION,
+                    message="Timed out",
                 )
 
             except BaseException as e:
-                # Uncaught exceptions are mapped to horde failures.
-                # If they happen a lot, specific horde failure reasons should be defined for them and handled by the
-                # ExecutorError handler above.
                 await self.send_horde_failed(
                     reason=HordeFailureReason.UNCAUGHT_EXCEPTION,
                     message="Executor failed with unexpected exception",
@@ -234,17 +207,25 @@ class JobDriver:
             return_code = docker_process.returncode
 
         if return_code != 0:
-            raise JobError(
+            raise ExecutorError(
                 "CVE-2022-0492 check failed",
-                error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
+                reason=HordeFailureReason.SECURITY_CHECK_FAILED,
+                context={
+                    "return_code": return_code,
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                },
             )
 
         expected_output = "Contained: cannot escape via CVE-2022-0492"
         if expected_output not in stdout.decode():
-            raise JobError(
-                f'CVE-2022-0492 check failed: "{expected_output}" not in stdout.',
-                JobFailureReason.SECURITY_CHECK,
-                f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
+            raise ExecutorError(
+                message=f'CVE-HordeFailureReason-0492 check failed: "{expected_output}" not in stdout.',
+                reason=HordeFailureReason.SECURITY_CHECK_FAILED,
+                context={
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                },
             )
 
     async def run_nvidia_toolkit_version_check_or_fail(self):
@@ -271,16 +252,26 @@ class JobDriver:
             return_code = docker_process.returncode
 
         if return_code != 0:
-            raise JobError(
-                f"nvidia-container-toolkit check failed: exit code {return_code}",
-                error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
+            raise ExecutorError(
+                message=f"nvidia-container-toolkit check failed: exit code {return_code}",
+                reason=HordeFailureReason.SECURITY_CHECK_FAILED,
+                context={
+                    "return_code": return_code,
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                },
             )
 
         lines = stdout.decode().splitlines()
         if not lines:
-            raise JobError(
-                "nvidia-container-toolkit check failed: no output from nvidia-container-toolkit",
-                error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
+            raise ExecutorError(
+                message="nvidia-container-toolkit check failed: no output from nvidia-container-toolkit",
+                reason=HordeFailureReason.SECURITY_CHECK_FAILED,
+                context={
+                    "return_code": return_code,
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                },
             )
 
         version = lines[0].rpartition(" ")[2]
@@ -288,11 +279,15 @@ class JobDriver:
             packaging.version.parse(version) >= NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION
         )
         if not is_fixed_version:
-            raise JobError(
-                f"Outdated NVIDIA Container Toolkit detected:"
+            raise ExecutorError(
+                message=f"Outdated NVIDIA Container Toolkit detected:"
                 f'{version}" not >= {NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION}',
-                JobFailureReason.SECURITY_CHECK,
-                f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}',
+                reason=HordeFailureReason.SECURITY_CHECK_FAILED,
+                context={
+                    "return_code": return_code,
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                },
             )
 
     async def fail_if_execution_unsuccessful(self):
@@ -302,13 +297,13 @@ class JobDriver:
             raise JobError(
                 "Job container timed out during execution",
                 reason=JobFailureReason.TIMEOUT,
+                execution_result=self.runner.execution_result,
             )
 
         if self.runner.execution_result.return_code != 0:
             raise JobError(
                 f"Job container exited with non-zero exit code: {self.runner.execution_result.return_code}",
                 reason=JobFailureReason.NONZERO_EXIT_CODE,
-                error_detail=f"exit code: {self.runner.execution_result.return_code}",
                 execution_result=self.runner.execution_result,
             )
 
@@ -344,7 +339,6 @@ class JobDriver:
             V0HordeFailedRequest(
                 job_uuid=self.miner_client.job_uuid,
                 reported_by=JobParticipantType.EXECUTOR,
-                stage=self.current_stage,
                 reason=reason,
                 message=message,
                 context=context,

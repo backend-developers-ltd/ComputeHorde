@@ -400,7 +400,6 @@ class FacilitatorClient:
             await self.send_horde_failed(
                 job_uuid=job_request.uuid,
                 message="Uncaught exception during handling of job",
-                stage=protocol_consts.JobStage.UNKNOWN,  # TODO(error propagation): fill this in
                 reported_by=protocol_consts.JobParticipantType.VALIDATOR,
                 reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
                 context={"exception_type": type(e).__qualname__},
@@ -487,7 +486,6 @@ class FacilitatorClient:
         self,
         job_uuid: str,
         message: str,
-        stage: protocol_consts.JobStage,
         reported_by: protocol_consts.JobParticipantType,
         reason: protocol_consts.HordeFailureReason,
         context: dict[str, JsonValue] | None = None,
@@ -501,7 +499,6 @@ class FacilitatorClient:
                     horde_failure_details=HordeFailureDetails(
                         reported_by=reported_by,
                         reason=reason,
-                        stage=stage,
                         message=message,
                         context=context,
                     ),

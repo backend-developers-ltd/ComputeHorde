@@ -49,11 +49,13 @@ class JobError(Exception):
         reason: protocol_consts.JobFailureReason = protocol_consts.JobFailureReason.UNKNOWN,
         error_detail: str | None = None,
         execution_result: ExecutionResult | None = None,
+        context: dict[str, JsonValue] | None = None,
     ):
         self.error_message = message
         self.reason = reason
         self.error_detail = error_detail
         self.execution_result = execution_result
+        self.context = context
 
 
 class ExecutorError(Exception):

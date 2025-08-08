@@ -12,11 +12,9 @@ from compute_horde.miner_client.organic import (
     OrganicJobError,
     OrganicMinerClient,
 )
-from compute_horde.protocol_consts import MinerFailureReason as FailureReason
+from compute_horde.protocol_consts import HordeFailureReason
 from compute_horde.protocol_messages import (
-    V0DeclineJobRequest,
     V0InitialJobRequest,
-    V0JobFailedRequest,
     V0JobRequest,
     V0StreamingJobReadyRequest,
 )
@@ -65,7 +63,10 @@ async def run_streaming_job(options, wait_timeout: int = 300):
         try:
             await exit_stack.enter_async_context(client)
         except TransportConnectionError as exc:
-            raise OrganicJobError(FailureReason.MINER_CONNECTION_FAILED) from exc
+            raise OrganicJobError(
+                f"Could not connect to trusted miner: {exc}",
+                HordeFailureReason.MINER_CONNECTION_FAILED,
+            ) from exc
 
         job_timer = Timer(timeout=job_details.total_job_timeout)
 
@@ -95,9 +96,9 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(FailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
-            if isinstance(initial_response, V0DeclineJobRequest):
-                raise OrganicJobError(FailureReason.JOB_DECLINED, initial_response)
+                raise OrganicJobError(
+                    "Initial response timed out", HordeFailureReason.INITIAL_RESPONSE_TIMED_OUT
+                ) from exc
 
             await client.notify_job_accepted(initial_response)
 
@@ -107,7 +108,10 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
+                raise OrganicJobError(
+                    "Executor readiness timed out",
+                    HordeFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT,
+                ) from exc
 
             await client.notify_executor_ready(exec_ready_response)
 
@@ -130,7 +134,10 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
+                raise OrganicJobError(
+                    "Streaming readiness timed out",
+                    HordeFailureReason.STREAMING_JOB_READY_TIMED_OUT,
+                ) from exc
 
             # Check received streaming job executor ready response
             assert isinstance(streaming_job_ready_response, V0StreamingJobReadyRequest)
@@ -171,14 +178,15 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     client.job_finished_future,
                     timeout=job_timer.time_left(),
                 )
-                if isinstance(final_response, V0JobFailedRequest):
-                    raise OrganicJobError(FailureReason.JOB_FAILED, final_response)
 
                 logger.info(f"Job finished: {final_response}")
 
             except TimeoutError as exc:
-                raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
+                raise OrganicJobError(
+                    "Final response timed out", HordeFailureReason.FINAL_RESPONSE_TIMED_OUT
+                ) from exc
         except Exception:
+            # TODO(post error propagation): this whole try...except does nothing, remove it
             raise
 
 

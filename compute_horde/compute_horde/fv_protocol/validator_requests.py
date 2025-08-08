@@ -77,7 +77,6 @@ class JobFailureDetails(BaseModel):
 class HordeFailureDetails(BaseModel):
     reported_by: JobParticipantType
     reason: HordeFailureReason
-    stage: JobStage
     message: str | None = None
     context: JsonValue = None
 
@@ -100,15 +99,12 @@ class JobStatusMetadata(BaseModel, extra="allow"):
     streaming_details: StreamingServerDetails | None = None
 
     @classmethod
-    def from_uncaught_exception(
-        cls, reported_by: JobParticipantType, stage: JobStage, exception: Exception
-    ) -> Self:
+    def from_uncaught_exception(cls, reported_by: JobParticipantType, exception: Exception) -> Self:
         return cls(
             comment="Uncaught exception",
             horde_failure_details=HordeFailureDetails(
                 reported_by=reported_by,
                 reason=HordeFailureReason.UNCAUGHT_EXCEPTION,
-                stage=stage,
                 message="Uncaught exception",
                 context={"exception_type": type(exception).__qualname__},
             ),

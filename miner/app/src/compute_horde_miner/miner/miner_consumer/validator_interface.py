@@ -10,6 +10,7 @@ from typing import Protocol, assert_never
 import bittensor
 from compute_horde import protocol_consts
 from compute_horde.executor_class import EXECUTOR_CLASS
+from compute_horde.protocol_consts import HordeFailureReason, JobParticipantType
 from compute_horde.protocol_messages import (
     GenericError,
     V0AcceptJobRequest,
@@ -432,11 +433,13 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             job.status = AcceptedJob.Status.FAILED
             await job.asave()
             self.pending_jobs.pop(msg.job_uuid)
-            logger.info(f"Declining job {msg.job_uuid}: executor failed to start")
+            logger.info(f"Failing job {msg.job_uuid}: executor failed to start")
             await self.send(
-                V0DeclineJobRequest(
+                V0HordeFailedRequest(
                     job_uuid=msg.job_uuid,
-                    reason=protocol_consts.JobRejectionReason.EXECUTOR_FAILURE,
+                    reported_by=JobParticipantType.MINER,
+                    reason=HordeFailureReason.EXECUTOR_SPINUP_FAILED,
+                    message="Executor failed to start",
                 ).model_dump_json()
             )
 

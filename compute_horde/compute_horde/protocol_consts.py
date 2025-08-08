@@ -1,4 +1,3 @@
-import enum
 import sys
 
 if sys.version_info >= (3, 11):  # noqa: UP036
@@ -28,6 +27,8 @@ class JobStatus(StrEnum):
     """
     Job status common between the validator, facilitator, and the SDK.
     """
+
+    UNKNOWN = "unknown"
 
     SENT = "sent"
     RECEIVED = "received"
@@ -61,15 +62,22 @@ class JobStatus(StrEnum):
     def is_failed(self) -> bool:
         return self in {self.REJECTED, self.FAILED}
 
+    @classmethod
+    def _missing_(cls, value):
+        return cls.UNKNOWN
+
 
 class JobStage(StrEnum):
     UNKNOWN = "unknown"
+
     # ↓ Facilitator, validator
     ACCEPTANCE = "acceptance"
     ROUTING = "routing"
+
     # ↓ Miner
     RESERVATION = "reservation"
     EXECUTOR_SPINUP = "executor_spinup"
+
     # ↓ Executor
     EXECUTOR_STARTUP = "executor_startup"
     VOLUME_DOWNLOAD = "volume_download"
@@ -83,41 +91,58 @@ class JobStage(StrEnum):
         """Return Django-compatible choices tuple for model fields."""
         return [(status.value, status.value) for status in cls]
 
+    @classmethod
+    def _missing_(cls, value):
+        return cls.UNKNOWN
+
     def __repr__(self):
         return self.value
 
 
-class MinerFailureReason(enum.Enum):
-    """
-    Legacy vali/miner/executor failure reasons
-    Pulled from the organic job miner client
-    TODO: Explode this into horde/job failure reasons
-    """
-
-    MINER_CONNECTION_FAILED = enum.auto()
-    INITIAL_RESPONSE_TIMED_OUT = enum.auto()
-    EXECUTOR_READINESS_RESPONSE_TIMED_OUT = enum.auto()
-    VOLUMES_TIMED_OUT = enum.auto()
-    VOLUMES_FAILED = enum.auto()
-    EXECUTION_TIMED_OUT = enum.auto()
-    EXECUTION_FAILED = enum.auto()
-    FINAL_RESPONSE_TIMED_OUT = enum.auto()
-    JOB_DECLINED = enum.auto()
-    EXECUTOR_FAILED = enum.auto()
-    STREAMING_JOB_READY_TIMED_OUT = enum.auto()
-    JOB_FAILED = enum.auto()
-    STREAMING_FAILED = enum.auto()
-
-
 class HordeFailureReason(StrEnum):
+    # TODO(post error propagation): remove "unknown"
     UNKNOWN = "unknown"
+
+    # Something sent a "GenericError"
+    GENERIC_ERROR = "generic_error"
+
+    # ↓ Generic reasons for "except Exception" and "except TimeoutError"
     UNCAUGHT_EXCEPTION = "uncaught_exception"
-    STREAMING_SETUP_FAILED = "streaming_setup_failed"
-    JOB_IMAGE_MISSING = "job_image_missing"
-    SECURITY_CHECK_FAILED = "security_check_failed"
-    GENERIC_STREAMING_SETUP_FAILED = "generic_streaming_setup_failed"
+    UNCAUGHT_TIMEOUT = "uncaught_timeout"
+
+    # Received a legacy V0ExecutorFailed or V0StreamingJobNotReady TODO(post error propagation): remove these
     GENERIC_EXECUTOR_FAILED = "generic_executor_failed"
-    UPSTREAM_CONNECTION_ERROR = "upstream_connection_error"
+    GENERIC_STREAMING_SETUP_FAILED = "generic_streaming_setup_failed"
+
+    # Validator couldn't connect to a miner
+    MINER_CONNECTION_FAILED = "miner_connection_failed"
+
+    # ↓ Validator timeouts when waiting for a miner response
+    # Note: miner not sending a message in time is not a job failure
+    INITIAL_RESPONSE_TIMED_OUT = "initial_response_timed_out"
+    EXECUTOR_READINESS_RESPONSE_TIMED_OUT = "executor_readiness_response_timed_out"
+    VOLUMES_TIMED_OUT = "volumes_timed_out"
+    STREAMING_JOB_READY_TIMED_OUT = "streaming_job_ready_timed_out"
+    EXECUTION_TIMED_OUT = "execution_timed_out"
+    FINAL_RESPONSE_TIMED_OUT = "final_response_timed_out"
+
+    # Miner noticed that the executor failed to spin up
+    EXECUTOR_SPINUP_FAILED = "executor_spinup_failed"
+
+    # Executor failed the security check, or could not run it for some reason.
+    SECURITY_CHECK_FAILED = "security_check_failed"
+
+    # ↓ Unknown TODO(error propagation): find out if these are needed for backwards compatibility
+    STREAMING_FAILED = "streaming_failed"
+    STREAMING_SETUP_FAILED = "streaming_setup_failed"
+    JOB_FAILED = "job_failed"
+    VOLUMES_FAILED = "volumes_failed"
+    EXECUTION_FAILED = "execution_failed"
+    JOB_DECLINED = "job_declined"
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.UNKNOWN
 
     def __repr__(self):
         return self.value
@@ -125,11 +150,17 @@ class HordeFailureReason(StrEnum):
 
 class JobFailureReason(StrEnum):
     UNKNOWN = "unknown"
-    TIMEOUT = "TIMEOUT"
-    # TODO(post error propagation): security check failure is a horde failure, remove it
-    SECURITY_CHECK = "SECURITY_CHECK"
-    HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
-    NONZERO_EXIT_CODE = "NONZERO_EXIT_STATUS"
+    TIMEOUT = "timeout"
+    NONZERO_EXIT_CODE = "nonzero_exit_code"
+    DOWNLOAD_FAILED = "download_failed"
+    UPLOAD_FAILED = "upload_failed"
+
+    # TODO(error propagation): this may be too specific?
+    HUGGINGFACE_DOWNLOAD = "huggingface_download"
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.UNKNOWN
 
     def __repr__(self):
         return self.value
@@ -140,13 +171,12 @@ class JobRejectionReason(StrEnum):
     BUSY = "busy"
     INVALID_SIGNATURE = "invalid_signature"
     NO_MINER_FOR_JOB = "no_miner_for_job"
-    EXECUTOR_FAILURE = "executor_failure"
-    MINER_BLACKLISTED = (
-        "miner_blacklisted"  # This is a legacy thing - consumers don't select miners anymore
-    )
     NOT_ENOUGH_TIME_IN_CYCLE = "not_enough_time_in_cycle"
     VALIDATOR_BLACKLISTED = "validator_blacklisted"
-    UNSAFE_VOLUME = "unsafe_volume"
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.UNKNOWN
 
     def __repr__(self):
         return self.value

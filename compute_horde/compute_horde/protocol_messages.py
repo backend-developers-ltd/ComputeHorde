@@ -95,7 +95,6 @@ class V0DeclineJobRequest(BaseModel):
     message_type: Literal["V0DeclineJobRequest"] = "V0DeclineJobRequest"
     job_uuid: str
     reason: protocol_consts.JobRejectionReason = protocol_consts.JobRejectionReason.UNKNOWN
-    rejected_by: protocol_consts.JobParticipantType = protocol_consts.JobParticipantType.UNKNOWN
     message: str = ""
     receipts: list[Receipt] = Field(default_factory=list)
     context: dict[str, JsonValue] | None = None
@@ -233,7 +232,6 @@ class V0HordeFailedRequest(BaseModel):
     message_type: Literal["V0HordeFailedRequest"] = "V0HordeFailedRequest"
     job_uuid: str
     reported_by: protocol_consts.JobParticipantType
-    stage: protocol_consts.JobStage
     reason: protocol_consts.HordeFailureReason
     message: str
     context: dict[str, JsonValue] | None = None

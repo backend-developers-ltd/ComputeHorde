@@ -110,7 +110,6 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
                 self.executor_token,
                 V0HordeFailedRequest(
                     job_uuid=msg.job_uuid,
-                    stage=protocol_consts.JobStage.UNKNOWN,
                     reported_by=protocol_consts.JobParticipantType.EXECUTOR,
                     reason=protocol_consts.HordeFailureReason.UNKNOWN,
                     message="Legacy executor failure (V0ExecutorFailedRequest)",
@@ -183,9 +182,8 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
                 self.executor_token,
                 V0HordeFailedRequest(
                     job_uuid=str(self.job.job_uuid),
-                    stage=protocol_consts.JobStage.UNKNOWN,
                     reported_by=protocol_consts.JobParticipantType.EXECUTOR,
-                    reason=protocol_consts.HordeFailureReason.GENERIC_EXECUTOR_FAILED,
+                    reason=protocol_consts.HordeFailureReason.GENERIC_ERROR,
                     message=msg.details or "No error details provided",
                 ),
             )
