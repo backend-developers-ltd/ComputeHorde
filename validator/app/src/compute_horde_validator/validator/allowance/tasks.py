@@ -24,7 +24,7 @@ def scan_blocks_and_calculate_allowance():
         try:
             with Lock(LockType.ALLOWANCE_FETCHING, 5.0, settings.DEFAULT_DB_ALIAS):
                 blocks.scan_blocks_and_calculate_allowance(
-                    report_allowance_to_system_events.delay,
+                    report_allowance_checkpoint.delay,
                     PrecachingSuperTensor(cache=DjangoCache()),
                     supertensor(),
                 )
@@ -35,8 +35,10 @@ def scan_blocks_and_calculate_allowance():
 
 
 @app.task()
-def report_allowance_to_system_events(block_number_lt: int, block_number_gte: int):
-    return
+def report_allowance_checkpoint(block_number_lt: int, block_number_gte: int):
+    """
+    Purely for monitoring purposes. No business logic here.
+    """
     blocks.report_checkpoint(block_number_lt, block_number_gte)
 
 
