@@ -11,7 +11,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V0JobCheated,
     V2JobRequest,
 )
-from compute_horde.fv_protocol.validator_requests import JobStatusMetadata, JobStatusUpdate
+from compute_horde.fv_protocol.validator_requests import JobStatusMetadata
 from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
@@ -198,8 +198,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
                 self.send_to_validator(job_request)
                 JobStatus.objects.create(
                     job=self,
-                    status=JobStatusUpdate.Status.SENT.value,
-                    stage=protocol_consts.JobStage.ACCEPTANCE.value,
+                    status=protocol_consts.JobStatus.SENT.value,
                 )
 
     def report_cheated(self, signature: Signature) -> None:
@@ -256,7 +255,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
     def is_completed(self) -> bool:
         # TODO: TIMEOUTS - Status updates from validator should include a timeout until next update. Job is failed if timeout is reached.
-        return self.status.status in JobStatus.FINAL_STATUS_VALUES
+        return self.status.status in protocol_consts.JobStatus.end_states()
 
     @property
     def elapsed(self) -> timedelta:
@@ -300,10 +299,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="statuses")
-    status = models.CharField(choices=JobStatusUpdate.Status.choices())
-    stage = models.CharField(
-        choices=protocol_consts.JobStage.choices(), default=protocol_consts.JobStage.UNKNOWN.value, max_length=255
-    )
+    status = models.CharField(choices=protocol_consts.JobStatus.choices())
     metadata = models.JSONField(blank=True, default=dict)
     created_at = models.DateTimeField(default=now)
 
@@ -328,17 +324,17 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
         - The HORDE_FAILED status is new and will not be accepted
         """
         status_display = {
-            JobStatusUpdate.Status.SENT.value: "Sent",
-            JobStatusUpdate.Status.RECEIVED.value: "Received",
-            JobStatusUpdate.Status.ACCEPTED.value: "Accepted",
-            JobStatusUpdate.Status.EXECUTOR_READY.value: "Executor Ready",
-            JobStatusUpdate.Status.STREAMING_READY.value: "Streaming Ready",
-            JobStatusUpdate.Status.VOLUMES_READY.value: "Volumes Ready",
-            JobStatusUpdate.Status.EXECUTION_DONE.value: "Execution Done",
-            JobStatusUpdate.Status.COMPLETED.value: "Completed",
-            JobStatusUpdate.Status.REJECTED.value: "Rejected",
-            JobStatusUpdate.Status.FAILED.value: "Failed",
-            JobStatusUpdate.Status.HORDE_FAILED.value: "Failed",
+            protocol_consts.JobStatus.SENT.value: "Sent",
+            protocol_consts.JobStatus.RECEIVED.value: "Received",
+            protocol_consts.JobStatus.ACCEPTED.value: "Accepted",
+            protocol_consts.JobStatus.EXECUTOR_READY.value: "Executor Ready",
+            protocol_consts.JobStatus.STREAMING_READY.value: "Streaming Ready",
+            protocol_consts.JobStatus.VOLUMES_READY.value: "Volumes Ready",
+            protocol_consts.JobStatus.EXECUTION_DONE.value: "Execution Done",
+            protocol_consts.JobStatus.COMPLETED.value: "Completed",
+            protocol_consts.JobStatus.REJECTED.value: "Rejected",
+            protocol_consts.JobStatus.FAILED.value: "Failed",
+            protocol_consts.JobStatus.HORDE_FAILED.value: "Failed",
         }
         return status_display[self.status]
 

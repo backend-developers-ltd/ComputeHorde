@@ -131,7 +131,6 @@ class JobStatusUpdateMetadata:
 class ComputeHordeJobStatusEntry:
     created_at: datetime
     status: ComputeHordeJobStatus
-    stage: str
     metadata: JobStatusUpdateMetadata | None = None
 
 

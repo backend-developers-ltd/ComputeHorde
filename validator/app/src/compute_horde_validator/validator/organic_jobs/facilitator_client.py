@@ -28,6 +28,7 @@ from compute_horde.fv_protocol.validator_requests import (
     V0Heartbeat,
     V0MachineSpecsUpdate,
 )
+from compute_horde.protocol_consts import JobStatus
 from compute_horde_core.signature import SignedRequest, verify_signature
 from django.conf import settings
 from pydantic import BaseModel, JsonValue
@@ -169,7 +170,7 @@ class FacilitatorClient:
                     await self.handle_connection(ws)
                 except websockets.ConnectionClosed as exc:
                     self.ws = None
-                    logger.warning("validator connection closed: %s, reconnecting...", exc)
+                    logger.warning("Facilitator connection closed: %s, reconnecting...", exc)
                 except asyncio.exceptions.CancelledError:
                     self.ws = None
                     logger.warning("Facilitator client received cancel, stopping")
@@ -280,7 +281,7 @@ class FacilitatorClient:
                 try:
                     envelope = _JobStatusChannelEnvelope.model_validate(msg)
                     logger.debug(
-                        f"Received job status update for job {job_uuid}: status={envelope.payload.status} stage={envelope.payload.stage}"
+                        f"Received job status update for job {job_uuid}: status={envelope.payload.status}"
                     )
                     task = asyncio.create_task(self.send_job_status_update(envelope.payload))
                     await self.tasks_to_reap.put(task)
@@ -384,7 +385,6 @@ class FacilitatorClient:
             await self.send_job_rejected(
                 job_uuid=job_request.uuid,
                 message=e.message,
-                stage=protocol_consts.JobStage.ACCEPTANCE,
                 rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
                 reason=protocol_consts.JobRejectionReason.INVALID_SIGNATURE,
             )
@@ -392,7 +392,6 @@ class FacilitatorClient:
             await self.send_job_rejected(
                 job_uuid=job_request.uuid,
                 message="Job could not be routed to a miner",
-                stage=protocol_consts.JobStage.ROUTING,
                 rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
                 reason=protocol_consts.JobRejectionReason.UNKNOWN,
                 context={"exception_type": type(e).__qualname__},
@@ -415,8 +414,7 @@ class FacilitatorClient:
         await self.send_job_status_update(
             JobStatusUpdate(
                 uuid=job_request.uuid,
-                status=JobStatusUpdate.Status.RECEIVED,
-                stage=protocol_consts.JobStage.ACCEPTANCE,
+                status=JobStatus.RECEIVED,
             )
         )
 
@@ -441,7 +439,6 @@ class FacilitatorClient:
         self,
         job_uuid: str,
         message: str,
-        stage: protocol_consts.JobStage,
         rejected_by: protocol_consts.JobParticipantType,
         reason: protocol_consts.JobRejectionReason,
         context: dict[str, JsonValue] | None = None,
@@ -449,8 +446,7 @@ class FacilitatorClient:
         await self.send_job_status_update(
             JobStatusUpdate(
                 uuid=job_uuid,
-                status=JobStatusUpdate.Status.REJECTED,
-                stage=stage,
+                status=JobStatus.REJECTED,
                 metadata=JobStatusMetadata(
                     comment=message,
                     job_rejection_details=JobRejectionDetails(
@@ -474,12 +470,12 @@ class FacilitatorClient:
         await self.send_job_status_update(
             JobStatusUpdate(
                 uuid=job_uuid,
-                status=JobStatusUpdate.Status.FAILED,
-                stage=stage,
+                status=JobStatus.FAILED,
                 metadata=JobStatusMetadata(
                     comment=message,
                     job_failure_details=JobFailureDetails(
                         reason=reason,
+                        stage=stage,
                         message=message,
                         context=context,
                     ),
@@ -499,13 +495,13 @@ class FacilitatorClient:
         await self.send_job_status_update(
             JobStatusUpdate(
                 uuid=job_uuid,
-                status=JobStatusUpdate.Status.HORDE_FAILED,
-                stage=stage,
+                status=JobStatus.HORDE_FAILED,
                 metadata=JobStatusMetadata(
                     comment=message,
                     horde_failure_details=HordeFailureDetails(
                         reported_by=reported_by,
                         reason=reason,
+                        stage=stage,
                         message=message,
                         context=context,
                     ),

@@ -6,6 +6,7 @@ from typing import Annotated, ClassVar, Union
 
 import structlog
 from channels.generic.websocket import AsyncWebsocketConsumer
+from compute_horde import protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import Error, Response
 from compute_horde.fv_protocol.validator_requests import (
     JobStatusUpdate,
@@ -116,7 +117,11 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
 
             handler = self.MESSAGE_HANDLERS[type(message)]
             log.debug("selected message handler", handler=handler)
-            await handler(self, message)
+            try:
+                await handler(self, message)
+            except Exception as exc:
+                log.exception("message handler failed", exc=exc)
+                
 
     async def authenticate(self, message: V0AuthenticationRequest) -> None:
         """Check some authentication details and store ss58 address in the scope"""
@@ -199,7 +204,6 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                 await JobStatus.objects.acreate(
                     job=job,
                     status=message.status.value,
-                    stage=message.stage.value,
                     metadata=metadata,
                 )
                 if message.status.is_successful() and (miner_response := message.metadata.miner_response) is not None:
@@ -209,7 +213,7 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                         job.upload_results = upload_results
                     await job.asave()
                 elif (
-                    message.status == JobStatusUpdate.Status.STREAMING_READY
+                    message.status == protocol_consts.JobStatus.STREAMING_READY
                     and (streaming_details := message.metadata.streaming_details) is not None
                 ):
                     log.debug(f"received streaming details: {streaming_details}")

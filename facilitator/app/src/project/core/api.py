@@ -47,7 +47,7 @@ class DefaultModelPagination(PageNumberPagination):
 class JobStatusEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = JobStatus
-        fields = ["status", "stage", "metadata", "created_at"]
+        fields = ["status", "metadata", "created_at"]
         read_only_fields = fields
 
 

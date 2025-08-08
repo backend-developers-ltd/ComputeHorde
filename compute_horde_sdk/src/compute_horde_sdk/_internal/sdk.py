@@ -215,16 +215,6 @@ class ComputeHordeJob:
         self.status_history = status_history or []
 
     @property
-    def current_stage(self) -> str | None:
-        """
-        Return the latest known stage of the job.
-        Use `refresh_from_facilitator` to pull the latest info.
-        """
-        if not self.status_history:
-            return None
-        return self.status_history[-1].stage
-
-    @property
     def current_status(self) -> ComputeHordeJobStatus:
         """
         Return the latest known status of the job.

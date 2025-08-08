@@ -24,6 +24,44 @@ class JobParticipantType(StrEnum):
         return self.value
 
 
+class JobStatus(StrEnum):
+    """
+    Job status common between the validator, facilitator, and the SDK.
+    """
+
+    SENT = "sent"
+    RECEIVED = "received"
+    ACCEPTED = "accepted"
+
+    EXECUTOR_READY = "executor_ready"
+    STREAMING_READY = "streaming_ready"
+    VOLUMES_READY = "volumes_ready"
+    EXECUTION_DONE = "execution_done"
+
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+    FAILED = "failed"
+    HORDE_FAILED = "horde_failed"
+
+    @classmethod
+    def choices(cls):
+        """Return Django-compatible choices tuple for model fields."""
+        return [(status.value, status.value) for status in cls]
+
+    @classmethod
+    def end_states(cls) -> set["JobStatus"]:
+        return {cls.COMPLETED, cls.REJECTED, cls.FAILED}
+
+    def is_in_progress(self) -> bool:
+        return self not in self.end_states()
+
+    def is_successful(self) -> bool:
+        return self == self.COMPLETED
+
+    def is_failed(self) -> bool:
+        return self in {self.REJECTED, self.FAILED}
+
+
 class JobStage(StrEnum):
     UNKNOWN = "unknown"
     # ↓ Facilitator, validator
@@ -34,8 +72,8 @@ class JobStage(StrEnum):
     EXECUTOR_SPINUP = "executor_spinup"
     # ↓ Executor
     EXECUTOR_STARTUP = "executor_startup"
-    STREAMING_STARTUP = "streaming_startup"
     VOLUME_DOWNLOAD = "volume_download"
+    STREAMING_STARTUP = "streaming_startup"
     EXECUTION = "execution"
     RESULT_UPLOAD = "result_upload"
     CLOSURE = "closure"

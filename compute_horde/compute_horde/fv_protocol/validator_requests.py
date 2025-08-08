@@ -1,10 +1,16 @@
-from enum import StrEnum
 from typing import Any, Literal, Self
 
 import bittensor
 from pydantic import BaseModel, JsonValue
 
-from compute_horde import protocol_consts
+from compute_horde.protocol_consts import (
+    HordeFailureReason,
+    JobFailureReason,
+    JobParticipantType,
+    JobRejectionReason,
+    JobStage,
+    JobStatus,
+)
 
 
 class V0Heartbeat(BaseModel, extra="forbid"):
@@ -52,14 +58,15 @@ class JobResultDetails(BaseModel, extra="allow"):
 
 
 class JobRejectionDetails(BaseModel):
-    rejected_by: protocol_consts.JobParticipantType
-    reason: protocol_consts.JobRejectionReason
+    rejected_by: JobParticipantType
+    reason: JobRejectionReason
     message: str | None = None
     context: JsonValue = None
 
 
 class JobFailureDetails(BaseModel):
-    reason: protocol_consts.JobFailureReason
+    reason: JobFailureReason
+    stage: JobStage
     message: str | None = None
     context: JsonValue = None
     docker_process_exit_status: int | None = None
@@ -68,8 +75,9 @@ class JobFailureDetails(BaseModel):
 
 
 class HordeFailureDetails(BaseModel):
-    reported_by: protocol_consts.JobParticipantType
-    reason: protocol_consts.HordeFailureReason
+    reported_by: JobParticipantType
+    reason: HordeFailureReason
+    stage: JobStage
     message: str | None = None
     context: JsonValue = None
 
@@ -93,13 +101,14 @@ class JobStatusMetadata(BaseModel, extra="allow"):
 
     @classmethod
     def from_uncaught_exception(
-        cls, reported_by: protocol_consts.JobParticipantType, exception: Exception
+        cls, reported_by: JobParticipantType, stage: JobStage, exception: Exception
     ) -> Self:
         return cls(
             comment="Uncaught exception",
             horde_failure_details=HordeFailureDetails(
                 reported_by=reported_by,
-                reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
+                reason=HordeFailureReason.UNCAUGHT_EXCEPTION,
+                stage=stage,
                 message="Uncaught exception",
                 context={"exception_type": type(exception).__qualname__},
             ),
@@ -112,49 +121,10 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
     Message sent from validator to facilitator when the job's state changes.
     """
 
-    class Status(StrEnum):
-        """
-        Job status common between the validator, facilitator, and the SDK.
-        """
-
-        SENT = "sent"
-        RECEIVED = "received"
-        ACCEPTED = "accepted"
-
-        EXECUTOR_READY = "executor_ready"
-        STREAMING_READY = "streaming_ready"
-        VOLUMES_READY = "volumes_ready"
-        EXECUTION_DONE = "execution_done"
-
-        COMPLETED = "completed"
-        REJECTED = "rejected"
-        FAILED = "failed"
-        HORDE_FAILED = "horde_failed"
-
-        @classmethod
-        def choices(cls):
-            """Return Django-compatible choices tuple for model fields."""
-            return [(status.value, status.value) for status in cls]
-
-        @classmethod
-        def end_states(cls) -> set["JobStatusUpdate.Status"]:
-            return {cls.COMPLETED, cls.REJECTED, cls.FAILED}
-
-        def is_in_progress(self) -> bool:
-            return self not in self.end_states()
-
-        def is_successful(self) -> bool:
-            return self == self.COMPLETED
-
-        def is_failed(self) -> bool:
-            return self in {self.REJECTED, self.FAILED}
-
     message_type: Literal["V0JobStatusUpdate"] = "V0JobStatusUpdate"
     uuid: str
-    status: Status
+    status: JobStatus
     metadata: JobStatusMetadata | None = None
-    # TODO(post error propagation): no "None" default
-    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
 
 
 class V0MachineSpecsUpdate(BaseModel, extra="forbid"):
