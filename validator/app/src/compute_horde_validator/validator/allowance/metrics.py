@@ -35,6 +35,14 @@ VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION = prometheus_client.Histogram(
     unit="seconds",
 )
 
+VALIDATOR_ALLOWANCE_CHECKPOINT = prometheus_client.Gauge(
+    "block_allowance_checkpoint",
+    "Total allowance per miner-validator-executorClass triplet",
+    labelnames=["miner_hotkey", "validator_hotkey", "executor_class", "block_number"],
+    namespace="validator",
+    unit="seconds",
+)
+
 
 F = TypeVar("F", bound=Callable[..., Any])
 
