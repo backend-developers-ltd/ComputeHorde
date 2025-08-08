@@ -259,7 +259,7 @@ def scan_blocks_and_calculate_allowance(
             # TODO process_block_allowance_with_reporting never throws, but logs errors appropriately. maybe it should
             # be retried? otherwise random failures will leave holes until they are backfilled
             process_block_allowance_with_reporting(block_number, backfilling_supertensor)
-            if not block_number % 10 and report_callback:
+            if not block_number % 100 and report_callback:
                 report_callback(block_number, block_number-10)
             timer.check_time()
 
@@ -269,8 +269,8 @@ def scan_blocks_and_calculate_allowance(
 
             process_block_allowance_with_reporting(current_block, livefilling_supertensor)
             # no precaching needed in live sampling
-            if not current_block % 10 and report_callback:
-                report_callback(current_block, current_block-10)
+            if not current_block % 100 and report_callback:
+                report_callback(current_block, current_block-100)
             timer.check_time()
 
     except TimesUpError:
