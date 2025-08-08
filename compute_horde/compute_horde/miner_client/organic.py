@@ -104,7 +104,8 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
     Note that the waiting on the response futures should properly be handled with timeouts
     (with ``asyncio.timeout()``, ``asyncio.wait_for()`` etc.).
-    The futures will throw an appropriate exception when the miner reports an issue
+    The futures will throw an appropriate exception when the job handling is interrupted by
+    anything upstream.
     """
 
     def __init__(
@@ -291,7 +292,8 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
                 logger.warning(f"Received {msg} from {self.miner_name} but future was already set")
 
         elif isinstance(msg, V0JobFailedRequest | V0HordeFailedRequest | V0DeclineJobRequest):
-            # On error, consider the remaining stages as failed and throw the wrapped error:
+            # On an upstream during job handling, consider the remaining stages as failed, effectively locking the miner
+            # client. Awaiting anything will throw the associated exception.
             exc: Exception
 
             if isinstance(msg, V0DeclineJobRequest):
@@ -706,7 +708,7 @@ async def execute_organic_job_on_miner(
                 raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
 
         except Exception as e:
-            logger.info(f"Job failed with {type(e).__name__}: {e}")
+            logger.warning(f"Job failed with {type(e).__name__}: {e}")
             await client.send_job_finished_receipt_message(
                 started_timestamp=timer.start_time.timestamp(),
                 time_took_seconds=timer.passed_time(),

@@ -91,12 +91,11 @@ class V0InitialJobRequest(BaseModel):
 
 # miner.vc -> validator
 class V0DeclineJobRequest(BaseModel):
-    # TODO(post error propagation): rejected_by should not be optional
-    # TODO(post error propagation): message should not be optional
+    # TODO(post error propagation): message, reason and rejected_by should not be optional
     message_type: Literal["V0DeclineJobRequest"] = "V0DeclineJobRequest"
     job_uuid: str
-    rejected_by: protocol_consts.JobParticipantType = protocol_consts.JobParticipantType.UNKNOWN
     reason: protocol_consts.JobRejectionReason = protocol_consts.JobRejectionReason.UNKNOWN
+    rejected_by: protocol_consts.JobParticipantType = protocol_consts.JobParticipantType.UNKNOWN
     message: str = ""
     receipts: list[Receipt] = Field(default_factory=list)
     context: dict[str, JsonValue] | None = None
@@ -174,9 +173,8 @@ class V0JobRequest(BaseModel):
 
 # executor -> miner.ec -> miner.vc -> validator
 class V0JobFailedRequest(BaseModel):
-    # TODO(post error propagation): make stage and failure reason non-optional
+    # TODO(post error propagation): make message, stage and failure reason non-optional
     # TODO(post error propagation): remove aliases after all participants are updated
-    # TODO(post error propagation): message should not be optional
     message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
     job_uuid: str
     stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN

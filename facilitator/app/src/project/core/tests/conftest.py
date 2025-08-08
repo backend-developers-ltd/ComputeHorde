@@ -10,8 +10,8 @@ from bittensor_wallet import Wallet
 from channels.testing import WebsocketCommunicator
 from compute_horde.fv_protocol.validator_requests import (
     JobResultDetails,
+    JobStatusMetadata,
     JobStatusUpdate,
-    JobStatusUpdateMetadata,
     V0AuthenticationRequest,
 )
 from compute_horde_core.signature import Signature
@@ -152,7 +152,7 @@ def job_status_update(job):
     return JobStatusUpdate(
         uuid=str(job.uuid),
         status="accepted",
-        metadata=JobStatusUpdateMetadata(
+        metadata=JobStatusMetadata(
             comment="some comment",
             miner_response=JobResultDetails(
                 job_uuid=str(job.uuid),

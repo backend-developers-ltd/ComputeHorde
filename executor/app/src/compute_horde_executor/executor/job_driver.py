@@ -55,6 +55,17 @@ class JobDriver:
             try:
                 await self._execute()
 
+            except TimeoutError:
+                # TODO(error propagation): This is not quite right, only specific timeouts should result in job error.
+                # TODO(error propagation): ...wrap them into JobError with reason=TIMEOUT.
+                # TODO(error propagation): ...otherwise ANY uncaught timeout will result in a job error.
+                logger.error(f"Job timed out during {self.current_stage} stage")
+                await self.send_job_failed(
+                    reason=protocol_consts.JobFailureReason.TIMEOUT,
+                    message=f"Job timed out during {self.current_stage} stage",
+                    execution_result=None,
+                )
+
             except JobError as e:
                 # TODO(error propagation): Raise executor errors as ExecutorError, keep JobError for job-related errors
                 # ...we don't want random errors here.
@@ -81,17 +92,6 @@ class JobDriver:
                     reason=e.reason,
                     message=e.message,
                     context=e.context,
-                )
-
-            except TimeoutError:
-                # TODO(error propagation): This is not right, only specific timeouts should result in job error.
-                # TODO(error propagation): ...wrap them into JobError with reason=TIMEOUT.
-                # TODO(error propagation): ...otherwise any uncaught timeout will result in a job error.
-                logger.error(f"Job timed out during {self.current_stage} stage")
-                await self.send_job_failed(
-                    reason=protocol_consts.JobFailureReason.TIMEOUT,
-                    message=f"Job timed out during {self.current_stage} stage",
-                    execution_result=None,
                 )
 
             except BaseException as e:

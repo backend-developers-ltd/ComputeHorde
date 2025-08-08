@@ -22,8 +22,8 @@ from compute_horde.fv_protocol.validator_requests import (
     HordeFailureDetails,
     JobFailureDetails,
     JobRejectionDetails,
+    JobStatusMetadata,
     JobStatusUpdate,
-    JobStatusUpdateMetadata,
     V0AuthenticationRequest,
     V0Heartbeat,
     V0MachineSpecsUpdate,
@@ -451,7 +451,7 @@ class FacilitatorClient:
                 uuid=job_uuid,
                 status=JobStatusUpdate.Status.REJECTED,
                 stage=stage,
-                metadata=JobStatusUpdateMetadata(
+                metadata=JobStatusMetadata(
                     comment=message,
                     job_rejection_details=JobRejectionDetails(
                         rejected_by=rejected_by,
@@ -476,7 +476,7 @@ class FacilitatorClient:
                 uuid=job_uuid,
                 status=JobStatusUpdate.Status.FAILED,
                 stage=stage,
-                metadata=JobStatusUpdateMetadata(
+                metadata=JobStatusMetadata(
                     comment=message,
                     job_failure_details=JobFailureDetails(
                         reason=reason,
@@ -501,7 +501,7 @@ class FacilitatorClient:
                 uuid=job_uuid,
                 status=JobStatusUpdate.Status.HORDE_FAILED,
                 stage=stage,
-                metadata=JobStatusUpdateMetadata(
+                metadata=JobStatusMetadata(
                     comment=message,
                     horde_failure_details=HordeFailureDetails(
                         reported_by=reported_by,

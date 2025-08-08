@@ -79,7 +79,7 @@ class AbstractMinerClient(Generic[FromMinerType, ToMinerType], metaclass=abc.ABC
     async def send_model(
         self, model: ToMinerType, error_event_callback: ErrorCallback | None = None
     ) -> None:
-        logger.debug("Sending model to miner: %s", model)
+        logger.debug(f"Sending model {model} to miner {self.miner_name}")
         await self.send(model.model_dump_json(), error_event_callback)
 
     async def send(

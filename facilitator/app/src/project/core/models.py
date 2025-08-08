@@ -11,7 +11,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     V0JobCheated,
     V2JobRequest,
 )
-from compute_horde.fv_protocol.validator_requests import JobStatusUpdate, JobStatusUpdateMetadata
+from compute_horde.fv_protocol.validator_requests import JobStatusMetadata, JobStatusUpdate
 from compute_horde_core.output_upload import (
     MultiUpload,
     SingleFileUpload,
@@ -317,9 +317,9 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
         return self.get_status_display()
 
     @property
-    def meta(self) -> JobStatusUpdateMetadata | None:
+    def meta(self) -> JobStatusMetadata | None:
         if self.metadata:
-            return JobStatusUpdateMetadata.model_validate(self.metadata)
+            return JobStatusMetadata.model_validate(self.metadata)
 
     def get_legacy_status_display(self) -> str:
         """

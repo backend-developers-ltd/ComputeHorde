@@ -308,19 +308,11 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         if isinstance(msg, V0JobAcceptedReceiptRequest):
             if self.verify_receipt_payload(msg.payload, msg.signature):
                 await self.handle_job_accepted_receipt(msg)
-            else:
-                logger.error(
-                    f"Received invalid job accepted receipt from validator (job={msg.payload.job_uuid!r})"
-                )
             return
 
         if isinstance(msg, V0JobFinishedReceiptRequest):
             if self.verify_receipt_payload(msg.payload, msg.signature):
                 await self.handle_job_finished_receipt(msg)
-            else:
-                logger.error(
-                    f"Received invalid job finished receipt from validator (job={msg.payload.job_uuid!r})"
-                )
             return
 
         if isinstance(msg, GenericError):

@@ -80,7 +80,7 @@ class StreamingServerDetails(BaseModel, extra="forbid"):
     streaming_server_port: int | None = None
 
 
-class JobStatusUpdateMetadata(BaseModel, extra="allow"):
+class JobStatusMetadata(BaseModel, extra="allow"):
     """This is really a "payload" attached to a status update."""
 
     # TODO: "comment" is probably unnecessary? payloads below should contain details if they need to
@@ -152,9 +152,9 @@ class JobStatusUpdate(BaseModel, extra="forbid"):
     message_type: Literal["V0JobStatusUpdate"] = "V0JobStatusUpdate"
     uuid: str
     status: Status
+    metadata: JobStatusMetadata | None = None
     # TODO(post error propagation): no "None" default
     stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
-    metadata: JobStatusUpdateMetadata | None = None
 
 
 class V0MachineSpecsUpdate(BaseModel, extra="forbid"):

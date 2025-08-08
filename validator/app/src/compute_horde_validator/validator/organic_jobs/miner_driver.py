@@ -12,8 +12,8 @@ from compute_horde.fv_protocol.validator_requests import (
     JobFailureDetails,
     JobRejectionDetails,
     JobResultDetails,
+    JobStatusMetadata,
     JobStatusUpdate,
-    JobStatusUpdateMetadata,
     StreamingServerDetails,
 )
 from compute_horde.miner_client.organic import (
@@ -64,7 +64,7 @@ def status_update_from_job(
         artifacts=job.artifacts,
         upload_results=job.upload_results,
     )
-    metadata = JobStatusUpdateMetadata(
+    metadata = JobStatusMetadata(
         comment=job.comment,
         miner_response=miner_response,
     )
@@ -209,9 +209,9 @@ async def drive_organic_job(
                 logger.warning("Could not update miner allowance for job %s", job.job_uuid)
 
     miner_client.notify_job_accepted = job_accepted_callback  # type: ignore[method-assign]
-    miner_client.notify_executor_ready = status_callback(JobStatusUpdate.Status.EXECUTOR_READY) # type: ignore[method-assign]
-    miner_client.notify_volumes_ready = status_callback(JobStatusUpdate.Status.VOLUMES_READY) # type: ignore[method-assign]
-    miner_client.notify_execution_done = status_callback(JobStatusUpdate.Status.EXECUTION_DONE) # type: ignore[method-assign]
+    miner_client.notify_executor_ready = status_callback(JobStatusUpdate.Status.EXECUTOR_READY)  # type: ignore[method-assign]
+    miner_client.notify_volumes_ready = status_callback(JobStatusUpdate.Status.VOLUMES_READY)  # type: ignore[method-assign]
+    miner_client.notify_execution_done = status_callback(JobStatusUpdate.Status.EXECUTION_DONE)  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
 
     async def notify_streaming_ready(msg: V0StreamingJobReadyRequest) -> None:
@@ -290,7 +290,7 @@ async def drive_organic_job(
             JobStatusUpdate(
                 uuid=str(job.job_uuid),
                 status=JobStatusUpdate.Status.REJECTED,
-                metadata=JobStatusUpdateMetadata(
+                metadata=JobStatusMetadata(
                     comment=job_rejection.msg.message,
                     job_rejection_details=JobRejectionDetails(
                         rejected_by=job_rejection.msg.rejected_by,
@@ -315,7 +315,7 @@ async def drive_organic_job(
             JobStatusUpdate(
                 uuid=str(job.job_uuid),
                 status=JobStatusUpdate.Status.FAILED,
-                metadata=JobStatusUpdateMetadata(
+                metadata=JobStatusMetadata(
                     comment=job_failure.msg.message,
                     job_failure_details=JobFailureDetails(
                         reason=job_failure.msg.reason,
@@ -342,7 +342,7 @@ async def drive_organic_job(
             JobStatusUpdate(
                 uuid=str(job.job_uuid),
                 status=JobStatusUpdate.Status.HORDE_FAILED,
-                metadata=JobStatusUpdateMetadata(
+                metadata=JobStatusMetadata(
                     comment=horde_failure.msg.message,
                     horde_failure_details=HordeFailureDetails(
                         reported_by=horde_failure.msg.reported_by,
@@ -552,7 +552,7 @@ async def drive_organic_job(
                 uuid=str(job.job_uuid),
                 status=JobStatusUpdate.Status.HORDE_FAILED,
                 stage=protocol_consts.JobStage.UNKNOWN,  # TODO(error propagation): fill this in
-                metadata=JobStatusUpdateMetadata.from_uncaught_exception(
+                metadata=JobStatusMetadata.from_uncaught_exception(
                     reported_by=protocol_consts.JobParticipantType.VALIDATOR,
                     exception=exc,
                 ),

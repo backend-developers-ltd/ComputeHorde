@@ -12,7 +12,7 @@ from compute_horde.miner_client.organic import (
     OrganicJobError,
     OrganicMinerClient,
 )
-from compute_horde.protocol_consts import MinerFailureReason
+from compute_horde.protocol_consts import MinerFailureReason as FailureReason
 from compute_horde.protocol_messages import (
     V0DeclineJobRequest,
     V0InitialJobRequest,
@@ -65,7 +65,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
         try:
             await exit_stack.enter_async_context(client)
         except TransportConnectionError as exc:
-            raise OrganicJobError(MinerFailureReason.MINER_CONNECTION_FAILED) from exc
+            raise OrganicJobError(FailureReason.MINER_CONNECTION_FAILED) from exc
 
         job_timer = Timer(timeout=job_details.total_job_timeout)
 
@@ -95,9 +95,9 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(MinerFailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
+                raise OrganicJobError(FailureReason.INITIAL_RESPONSE_TIMED_OUT) from exc
             if isinstance(initial_response, V0DeclineJobRequest):
-                raise OrganicJobError(MinerFailureReason.JOB_DECLINED, initial_response)
+                raise OrganicJobError(FailureReason.JOB_DECLINED, initial_response)
 
             await client.notify_job_accepted(initial_response)
 
@@ -107,9 +107,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(
-                    MinerFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT
-                ) from exc
+                raise OrganicJobError(FailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT) from exc
 
             await client.notify_executor_ready(exec_ready_response)
 
@@ -132,7 +130,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(MinerFailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
+                raise OrganicJobError(FailureReason.STREAMING_JOB_READY_TIMED_OUT) from exc
 
             # Check received streaming job executor ready response
             assert isinstance(streaming_job_ready_response, V0StreamingJobReadyRequest)
@@ -174,12 +172,12 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     timeout=job_timer.time_left(),
                 )
                 if isinstance(final_response, V0JobFailedRequest):
-                    raise OrganicJobError(MinerFailureReason.JOB_FAILED, final_response)
+                    raise OrganicJobError(FailureReason.JOB_FAILED, final_response)
 
                 logger.info(f"Job finished: {final_response}")
 
             except TimeoutError as exc:
-                raise OrganicJobError(MinerFailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
+                raise OrganicJobError(FailureReason.FINAL_RESPONSE_TIMED_OUT) from exc
         except Exception:
             raise
 

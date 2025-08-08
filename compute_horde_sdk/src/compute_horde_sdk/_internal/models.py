@@ -94,7 +94,6 @@ class ComputeHordeJobResult:
 
 @dataclass
 class ComputeHordeJobRejection:
-    # TODO(error propagation): these should be enums
     rejected_by: str
     reason: str
     message: str | None = None
@@ -103,7 +102,6 @@ class ComputeHordeJobRejection:
 
 @dataclass
 class ComputeHordeJobFailure:
-    # TODO(error propagation): these should be enums
     reason: str
     message: str | None = None
     context: JsonValue = None
@@ -111,7 +109,6 @@ class ComputeHordeJobFailure:
 
 @dataclass
 class ComputeHordeHordeFailure:
-    # TODO(error propagation): these should be enums
     reported_by: str
     reason: str
     message: str | None = None
@@ -134,7 +131,6 @@ class JobStatusUpdateMetadata:
 class ComputeHordeJobStatusEntry:
     created_at: datetime
     status: ComputeHordeJobStatus
-    # TODO(error propagation): this should be an enum
     stage: str
     metadata: JobStatusUpdateMetadata | None = None
 
@@ -146,8 +142,8 @@ class FacilitatorJobStatusesResponse(pydantic.BaseModel):
 class FacilitatorJobResponse(pydantic.BaseModel):
     """
     Note: stdout/stderr/artifacts/upload_results are considered deprecated.
-    Instead, use the `status_history` field to get the success or failure status of the job.
-    The status update entry will have an appropriate payload.
+    Instead, use the `status_history` list - if it makes sense for the latest status to contain the execution results,
+    they will be available as the payload of the last status update entry.
     """
 
     uuid: str
@@ -178,7 +174,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
 
     @property
     def latest_status(self) -> ComputeHordeJobStatus:
-        # Faci creates an initial status, so there should be at least one entry
+        # Faci creates an initial status, so there should always be at least one entry
         return self.status_history[-1].status
 
 
