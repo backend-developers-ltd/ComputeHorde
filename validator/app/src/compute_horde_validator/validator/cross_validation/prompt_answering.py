@@ -108,7 +108,6 @@ async def answer_prompts(
         return False
 
     except Exception as e:
-        # TODO(error propagation): there should be many more "except" cases before this
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.FAILURE,

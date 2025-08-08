@@ -1,7 +1,7 @@
 import pytest
-from compute_horde import protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import V0JobCheated
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
+from compute_horde.protocol_consts import JobRejectionReason
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
@@ -30,7 +30,7 @@ pytestmark = [
 ]
 
 
-@pytest.mark.parametrize("reason", [*protocol_consts.JobRejectionReason])
+@pytest.mark.parametrize("reason", [*JobRejectionReason])
 async def test_miner_is_blacklisted__after_rejecting_job(
     job_request, another_job_request, faci_transport, miner_transport, execute_scenario, reason
 ):
@@ -58,9 +58,7 @@ async def test_miner_is_blacklisted__after_rejecting_job(
 
     assert miner_rejected.status == "rejected"
     assert miner_rejected.metadata.comment.startswith(
-        "Miner failed to excuse"
-        if reason == protocol_consts.JobRejectionReason.BUSY
-        else "Miner declined job"
+        "Miner failed to excuse" if reason == JobRejectionReason.BUSY else "Miner declined job"
     )
     assert miner_rejected.metadata.miner_response is not None
 

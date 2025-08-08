@@ -2,7 +2,12 @@ import logging
 from functools import cached_property
 from typing import assert_never
 
-from compute_horde import protocol_consts
+from compute_horde.protocol_consts import (
+    HordeFailureReason,
+    JobFailureReason,
+    JobFailureStage,
+    JobParticipantType,
+)
 from compute_horde.protocol_messages import (
     ExecutorToMinerMessage,
     GenericError,
@@ -110,8 +115,8 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
                 self.executor_token,
                 V0HordeFailedRequest(
                     job_uuid=msg.job_uuid,
-                    reported_by=protocol_consts.JobParticipantType.EXECUTOR,
-                    reason=protocol_consts.HordeFailureReason.UNKNOWN,
+                    reported_by=JobParticipantType.EXECUTOR,
+                    reason=HordeFailureReason.UNKNOWN,
                     message="Legacy executor failure (V0ExecutorFailedRequest)",
                 ),
             )
@@ -139,8 +144,8 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
                 self.executor_token,
                 V0JobFailedRequest(
                     job_uuid=msg.job_uuid,
-                    stage=protocol_consts.JobStage.STREAMING_STARTUP,
-                    reason=protocol_consts.JobFailureReason.UNKNOWN,
+                    stage=JobFailureStage.STREAMING_STARTUP,
+                    reason=JobFailureReason.UNKNOWN,
                     message="Legacy streaming failure (V0StreamingJobNotReadyRequest)",
                 ),
             )
@@ -182,8 +187,8 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
                 self.executor_token,
                 V0HordeFailedRequest(
                     job_uuid=str(self.job.job_uuid),
-                    reported_by=protocol_consts.JobParticipantType.EXECUTOR,
-                    reason=protocol_consts.HordeFailureReason.GENERIC_ERROR,
+                    reported_by=JobParticipantType.EXECUTOR,
+                    reason=HordeFailureReason.GENERIC_ERROR,
                     message=msg.details or "No error details provided",
                 ),
             )

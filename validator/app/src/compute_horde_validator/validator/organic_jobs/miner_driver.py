@@ -15,11 +15,11 @@ from compute_horde.fv_protocol.validator_requests import (
     StreamingServerDetails,
 )
 from compute_horde.miner_client.organic import (
+    JobDriverError,
     MinerRejectedJob,
     MinerReportedHordeFailed,
     MinerReportedJobFailed,
     OrganicJobDetails,
-    OrganicJobError,
     execute_organic_job_on_miner,
 )
 from compute_horde.protocol_consts import (
@@ -56,7 +56,6 @@ logger = logging.getLogger(__name__)
 
 def status_update_from_job(job: OrganicJob, status: JobStatus) -> JobStatusUpdate:
     miner_response = JobResultDetails(
-        job_uuid=str(job.job_uuid),
         docker_process_stdout=job.stdout,
         docker_process_stderr=job.stderr,
         artifacts=job.artifacts,
@@ -134,9 +133,7 @@ def status_update_from_horde_failure(
     )
 
 
-def status_update_from_organic_job_error(
-    job: OrganicJob, error: OrganicJobError
-) -> JobStatusUpdate:
+def status_update_from_organic_job_error(job: OrganicJob, error: JobDriverError) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
         comment=error.message,
         horde_failure_details=HordeFailureDetails(
@@ -364,20 +361,20 @@ async def drive_organic_job(
         await notify_callback(status_update_from_job(job, JobStatus.COMPLETED))
         return True
 
-    except MinerRejectedJob as job_rejection:
+    except MinerRejectedJob as rejection:
         # The only valid reason for rejection is being busy and providing the receipts to prove it
-        if job_rejection.msg.reason != JobRejectionReason.BUSY:
-            comment = job_rejection.msg.message
+        if rejection.msg.reason != JobRejectionReason.BUSY:
+            comment = rejection.msg.message
             status = (
                 OrganicJob.Status.FAILED
             )  # As far as the validator is concerned, the job is as good as failed
             system_event_subtype = SystemEvent.EventSubType.JOB_REJECTED
-        else:  # job_rejection.msg.reason == JobRejectionReason.BUSY
+        else:  # rejection.msg.reason == JobRejectionReason.BUSY
             job_request_time = (
                 await JobStartedReceipt.objects.aget(job_uuid=job.job_uuid)
             ).timestamp
             valid_excuses = await job_excuses.filter_valid_excuse_receipts(
-                receipts_to_check=job_rejection.msg.receipts or [],
+                receipts_to_check=rejection.msg.receipts or [],
                 check_time=job_request_time,
                 declined_job_uuid=str(job.job_uuid),
                 declined_job_executor_class=ExecutorClass(job.executor_class),
@@ -406,34 +403,34 @@ async def drive_organic_job(
         job.status = status
         await job.asave()
         await save_event(subtype=system_event_subtype, long_description=comment)
-        status_update = status_update_from_rejection(job, job_rejection, comment)
+        status_update = status_update_from_rejection(job, rejection, comment)
         await notify_callback(status_update)
 
-    except MinerReportedJobFailed as job_failure:
+    except MinerReportedJobFailed as failure:
         job.status = OrganicJob.Status.FAILED
-        job.comment = job_failure.msg.message
+        job.comment = failure.msg.message
         await job.asave()
         await save_event(
             # TODO(error propagation): map reason to event type
             subtype=SystemEvent.EventSubType.FAILURE,
-            long_description=job_failure.msg.message,
+            long_description=failure.msg.message,
         )
-        status_update = status_update_from_job_failure(job, job_failure)
+        status_update = status_update_from_job_failure(job, failure)
         await notify_callback(status_update)
 
-    except MinerReportedHordeFailed as horde_failure:
+    except MinerReportedHordeFailed as failure:
         job.status = OrganicJob.Status.FAILED
-        job.comment = horde_failure.msg.message
+        job.comment = failure.msg.message
         await job.asave()
         await save_event(
             # TODO(error propagation): map reason to event type
             subtype=SystemEvent.EventSubType.FAILURE,
-            long_description=horde_failure.msg.message,
+            long_description=failure.msg.message,
         )
-        status_update = status_update_from_horde_failure(job, horde_failure)
+        status_update = status_update_from_horde_failure(job, failure)
         await notify_callback(status_update)
 
-    except OrganicJobError as exc:
+    except JobDriverError as exc:
         comment = exc.message
         job.status = OrganicJob.Status.FAILED
         job.comment = comment

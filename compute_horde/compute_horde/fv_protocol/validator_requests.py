@@ -6,9 +6,9 @@ from pydantic import BaseModel, JsonValue
 from compute_horde.protocol_consts import (
     HordeFailureReason,
     JobFailureReason,
+    JobFailureStage,
     JobParticipantType,
     JobRejectionReason,
-    JobStage,
     JobStatus,
 )
 
@@ -48,9 +48,6 @@ class V0AuthenticationRequest(BaseModel, extra="forbid"):
 
 
 class JobResultDetails(BaseModel, extra="allow"):
-    # TODO(error propagation): this payload is an amalgam of a success and failure: don't use this for errors.
-    # TODO(post error propagation): job_uuid is redundant,
-    job_uuid: str
     docker_process_stderr: str
     docker_process_stdout: str
     artifacts: dict[str, str] | None = None
@@ -66,7 +63,7 @@ class JobRejectionDetails(BaseModel):
 
 class JobFailureDetails(BaseModel):
     reason: JobFailureReason
-    stage: JobStage
+    stage: JobFailureStage
     message: str | None = None
     context: JsonValue = None
     docker_process_exit_status: int | None = None

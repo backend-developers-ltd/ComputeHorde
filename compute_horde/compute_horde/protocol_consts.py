@@ -67,24 +67,14 @@ class JobStatus(StrEnum):
         return cls.UNKNOWN
 
 
-class JobStage(StrEnum):
+class JobFailureStage(StrEnum):
     UNKNOWN = "unknown"
 
-    # ↓ Facilitator, validator
-    ACCEPTANCE = "acceptance"
-    ROUTING = "routing"
-
-    # ↓ Miner
-    RESERVATION = "reservation"
-    EXECUTOR_SPINUP = "executor_spinup"
-
-    # ↓ Executor
     EXECUTOR_STARTUP = "executor_startup"
     VOLUME_DOWNLOAD = "volume_download"
     STREAMING_STARTUP = "streaming_startup"
     EXECUTION = "execution"
     RESULT_UPLOAD = "result_upload"
-    CLOSURE = "closure"
 
     @classmethod
     def choices(cls):

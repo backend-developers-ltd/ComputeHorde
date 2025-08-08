@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-from compute_horde import protocol_consts
+from compute_horde.protocol_consts import JobFailureReason
 from compute_horde.protocol_messages import V0InitialJobRequest
 from compute_horde.transport import StubTransport
 from compute_horde_core.certificate import generate_certificate_at
@@ -432,7 +432,7 @@ def test_huggingface_volume_failure():
             "docker_process_exit_status": None,
             "docker_process_stdout": "",
             "docker_process_stderr": "",
-            "error_type": protocol_consts.JobFailureReason.HUGGINGFACE_DOWNLOAD.value,
+            "error_type": JobFailureReason.HUGGINGFACE_DOWNLOAD.value,
             "error_detail": "Failed to download model from Hugging Face after 3 retries: Download failed: Download failed",
             "timeout": False,
             "job_uuid": job_uuid,

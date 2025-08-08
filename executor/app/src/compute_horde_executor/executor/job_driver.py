@@ -5,8 +5,8 @@ import packaging.version
 from compute_horde.protocol_consts import (
     HordeFailureReason,
     JobFailureReason,
+    JobFailureStage,
     JobParticipantType,
-    JobStage,
 )
 from compute_horde.protocol_messages import (
     V0HordeFailedRequest,
@@ -48,7 +48,7 @@ class JobDriver:
         self.startup_time_limit = startup_time_limit
         self.specs: MachineSpecs | None = None
         self.deadline = Timer()
-        self.current_stage = JobStage.UNKNOWN
+        self.current_stage = JobFailureStage.UNKNOWN
 
     @property
     def time_left(self) -> float:
@@ -61,23 +61,22 @@ class JobDriver:
 
             except JobError as e:
                 logger.error(f"Job error: {e.reason}: {e.error_message}", exc_info=True)
-                await self.send_job_failed(e.reason, e.error_message, e.execution_result)
+                await self.send_job_failed(e.error_message, e.reason, e.execution_result)
 
             except ExecutorError as e:
                 logger.error(f"Executor error: {e.reason}: {e.message}", exc_info=True)
-                await self.send_horde_failed(e.reason, e.message, e.context)
+                await self.send_horde_failed(e.message, e.reason, e.context)
 
             except TimeoutError:
-                logger.error("Uncaught timeout")
+                logger.error("Unhandled timeout")
                 await self.send_horde_failed(
-                    reason=HordeFailureReason.UNCAUGHT_EXCEPTION,
-                    message="Timed out",
+                    "Unhandled timeout", HordeFailureReason.UNCAUGHT_TIMEOUT
                 )
 
             except BaseException as e:
                 await self.send_horde_failed(
-                    reason=HordeFailureReason.UNCAUGHT_EXCEPTION,
-                    message="Executor failed with unexpected exception",
+                    "Executor failed with unexpected exception",
+                    HordeFailureReason.UNCAUGHT_EXCEPTION,
                     context={"exception_type": type(e).__qualname__},
                 )
                 raise
@@ -141,14 +140,14 @@ class JobDriver:
             f"Extending deadline by +{seconds:.2f}s to {self.deadline.time_left():.2f}s: {reason}"
         )
 
-    def _enter_stage(self, stage: JobStage) -> None:
+    def _enter_stage(self, stage: JobFailureStage) -> None:
         self.current_stage = stage
         logger.debug(
             f"Entering stage {stage.value} with {self.deadline.time_left():.2f}s time left"
         )
 
     async def _startup_stage(self) -> V0InitialJobRequest:
-        self._enter_stage(JobStage.EXECUTOR_STARTUP)
+        self._enter_stage(JobFailureStage.EXECUTOR_STARTUP)
         self.specs = get_machine_specs()
         await self.run_security_checks_or_fail()
         initial_job_request = await self.miner_client.initial_msg
@@ -163,7 +162,7 @@ class JobDriver:
         return initial_job_request
 
     async def _download_stage(self):
-        self._enter_stage(JobStage.VOLUME_DOWNLOAD)
+        self._enter_stage(JobFailureStage.VOLUME_DOWNLOAD)
         logger.debug("Waiting for full payload")
         full_job_request = await self.miner_client.full_payload
         logger.debug("Full payload received")
@@ -172,7 +171,7 @@ class JobDriver:
         await self.miner_client.send_volumes_ready()
 
     async def _execution_stage(self):
-        self._enter_stage(JobStage.EXECUTION)
+        self._enter_stage(JobFailureStage.EXECUTION)
         async with self.runner.start_job():
             if self.runner.is_streaming_job:
                 assert self.runner.executor_certificate is not None, (
@@ -183,7 +182,7 @@ class JobDriver:
         await self.miner_client.send_execution_done()
 
     async def _upload_stage(self):
-        self._enter_stage(JobStage.RESULT_UPLOAD)
+        self._enter_stage(JobFailureStage.RESULT_UPLOAD)
         job_result = await self.runner.upload_results()
         job_result.specs = self.specs
         await self.miner_client.send_result(job_result)
@@ -220,7 +219,7 @@ class JobDriver:
         expected_output = "Contained: cannot escape via CVE-2022-0492"
         if expected_output not in stdout.decode():
             raise ExecutorError(
-                message=f'CVE-HordeFailureReason-0492 check failed: "{expected_output}" not in stdout.',
+                f'CVE-HordeFailureReason-0492 check failed: "{expected_output}" not in stdout.',
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
                     "stdout": stdout.decode(),
@@ -253,7 +252,7 @@ class JobDriver:
 
         if return_code != 0:
             raise ExecutorError(
-                message=f"nvidia-container-toolkit check failed: exit code {return_code}",
+                f"nvidia-container-toolkit check failed: exit code {return_code}",
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
                     "return_code": return_code,
@@ -265,7 +264,7 @@ class JobDriver:
         lines = stdout.decode().splitlines()
         if not lines:
             raise ExecutorError(
-                message="nvidia-container-toolkit check failed: no output from nvidia-container-toolkit",
+                "nvidia-container-toolkit check failed: no output from nvidia-container-toolkit",
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
                     "return_code": return_code,
@@ -280,7 +279,7 @@ class JobDriver:
         )
         if not is_fixed_version:
             raise ExecutorError(
-                message=f"Outdated NVIDIA Container Toolkit detected:"
+                f"Outdated NVIDIA Container Toolkit detected:"
                 f'{version}" not >= {NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION}',
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
@@ -309,8 +308,8 @@ class JobDriver:
 
     async def send_job_failed(
         self,
-        reason: JobFailureReason,
         message: str,
+        reason: JobFailureReason,
         execution_result: ExecutionResult | None,
         context: dict[str, JsonValue] | None = None,
     ):
@@ -330,10 +329,7 @@ class JobDriver:
         )
 
     async def send_horde_failed(
-        self,
-        reason: HordeFailureReason,
-        message: str,
-        context: dict[str, JsonValue] | None = None,
+        self, message: str, reason: HordeFailureReason, context: dict[str, JsonValue] | None = None
     ):
         await self.miner_client.send_horde_failed(
             V0HordeFailedRequest(

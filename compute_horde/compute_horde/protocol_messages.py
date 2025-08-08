@@ -8,8 +8,14 @@ from compute_horde_core.volume import Volume
 from pydantic import AliasChoices, BaseModel, Field, JsonValue
 from typing_extensions import deprecated
 
-from compute_horde import protocol_consts
 from compute_horde.base.docker import DockerRunOptionsPreset
+from compute_horde.protocol_consts import (
+    HordeFailureReason,
+    JobFailureReason,
+    JobFailureStage,
+    JobParticipantType,
+    JobRejectionReason,
+)
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
@@ -94,8 +100,8 @@ class V0DeclineJobRequest(BaseModel):
     # TODO(post error propagation): message, reason and rejected_by should not be optional
     message_type: Literal["V0DeclineJobRequest"] = "V0DeclineJobRequest"
     job_uuid: str
-    reason: protocol_consts.JobRejectionReason = protocol_consts.JobRejectionReason.UNKNOWN
     message: str = ""
+    reason: JobRejectionReason = JobRejectionReason.UNKNOWN
     receipts: list[Receipt] = Field(default_factory=list)
     context: dict[str, JsonValue] | None = None
 
@@ -176,15 +182,15 @@ class V0JobFailedRequest(BaseModel):
     # TODO(post error propagation): remove aliases after all participants are updated
     message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
     job_uuid: str
-    stage: protocol_consts.JobStage = protocol_consts.JobStage.UNKNOWN
+    message: str = Field(default="", validation_alias=AliasChoices("message", "error_detail"))
+    reason: JobFailureReason = Field(
+        default=JobFailureReason.UNKNOWN,
+        validation_alias=AliasChoices("reason", "error_type"),
+    )
+    stage: JobFailureStage = JobFailureStage.UNKNOWN
     docker_process_exit_status: int | None = None
     docker_process_stdout: str | None = None
     docker_process_stderr: str | None = None
-    reason: protocol_consts.JobFailureReason = Field(
-        default=protocol_consts.JobFailureReason.UNKNOWN,
-        validation_alias=AliasChoices("reason", "error_type"),
-    )
-    message: str = Field(default="", validation_alias=AliasChoices("message", "error_detail"))
     context: dict[str, JsonValue] | None = None
 
 
@@ -231,9 +237,9 @@ class V0MachineSpecsRequest(BaseModel):
 class V0HordeFailedRequest(BaseModel):
     message_type: Literal["V0HordeFailedRequest"] = "V0HordeFailedRequest"
     job_uuid: str
-    reported_by: protocol_consts.JobParticipantType
-    reason: protocol_consts.HordeFailureReason
+    reported_by: JobParticipantType
     message: str
+    reason: HordeFailureReason
     context: dict[str, JsonValue] | None = None
 
 

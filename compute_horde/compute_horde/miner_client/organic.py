@@ -14,14 +14,13 @@ from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
 from pydantic import TypeAdapter
 
-from compute_horde import protocol_consts
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     ErrorCallback,
 )
-from compute_horde.protocol_consts import HordeFailureReason
+from compute_horde.protocol_consts import HordeFailureReason, JobParticipantType
 from compute_horde.protocol_messages import (
     GenericError,
     MinerToValidatorMessage,
@@ -251,8 +250,8 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             # for now, pretend we received a horde failure.
             mapped_msg = V0HordeFailedRequest(
                 job_uuid=msg.job_uuid,
-                reported_by=protocol_consts.JobParticipantType.MINER,
-                reason=protocol_consts.HordeFailureReason.GENERIC_STREAMING_SETUP_FAILED,
+                reported_by=JobParticipantType.MINER,
+                reason=HordeFailureReason.GENERIC_STREAMING_SETUP_FAILED,
                 message="Executor reported legacy V0StreamingJobNotReadyRequest message",
             )
             await self.handle_message(mapped_msg)
@@ -262,8 +261,8 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             # for now, pretend we received a horde failure.
             mapped_msg = V0HordeFailedRequest(
                 job_uuid=msg.job_uuid,
-                reported_by=protocol_consts.JobParticipantType.MINER,
-                reason=protocol_consts.HordeFailureReason.GENERIC_EXECUTOR_FAILED,
+                reported_by=JobParticipantType.MINER,
+                reason=HordeFailureReason.GENERIC_EXECUTOR_FAILED,
                 message="Executor reported legacy V0ExecutorFailedRequest message",
             )
             await self.handle_message(mapped_msg)
@@ -471,7 +470,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         await self.transport.send(self.generate_authentication_message().model_dump_json())
 
 
-class OrganicJobError(Exception):
+class JobDriverError(Exception):
     def __init__(
         self,
         message: str,
@@ -545,7 +544,7 @@ async def execute_organic_job_on_miner(
         try:
             await exit_stack.enter_async_context(client)
         except TransportConnectionError as exc:
-            raise OrganicJobError(
+            raise JobDriverError(
                 f"Miner connection error: {exc}",
                 reason=HordeFailureReason.MINER_CONNECTION_FAILED,
             ) from exc
@@ -573,7 +572,7 @@ async def execute_organic_job_on_miner(
                     timeout=reservation_time_limit,
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(
+                raise JobDriverError(
                     "Timed out waiting for initial response from miner",
                     HordeFailureReason.INITIAL_RESPONSE_TIMED_OUT,
                 ) from exc
@@ -597,7 +596,7 @@ async def execute_organic_job_on_miner(
                     timeout=readiness_time_limit,
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(
+                raise JobDriverError(
                     "Timed out waiting for executor readiness",
                     HordeFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT,
                 ) from exc
@@ -644,7 +643,7 @@ async def execute_organic_job_on_miner(
                 )
                 logger.debug(f"Volume download done with {deadline.time_left():.2f}s left")
             except TimeoutError as exc:
-                raise OrganicJobError(
+                raise JobDriverError(
                     "Timed out waiting for volume preparation",
                     HordeFailureReason.VOLUMES_TIMED_OUT,
                 ) from exc
@@ -664,7 +663,7 @@ async def execute_organic_job_on_miner(
                         timeout=deadline.time_left(),
                     )
                 except TimeoutError as exc:
-                    raise OrganicJobError(
+                    raise JobDriverError(
                         "Timed out waiting for streaming readiness",
                         HordeFailureReason.STREAMING_JOB_READY_TIMED_OUT,
                     ) from exc
@@ -685,7 +684,7 @@ async def execute_organic_job_on_miner(
                 )
                 logger.debug(f"Execution done with {deadline.time_left():.2f}s left")
             except TimeoutError as exc:
-                raise OrganicJobError(
+                raise JobDriverError(
                     "Timed out waiting for execution completion",
                     HordeFailureReason.EXECUTION_TIMED_OUT,
                 ) from exc
@@ -719,7 +718,7 @@ async def execute_organic_job_on_miner(
                     final_response.upload_results or {},
                 )
             except TimeoutError as exc:
-                raise OrganicJobError(
+                raise JobDriverError(
                     "Timed out waiting for final job response",
                     HordeFailureReason.FINAL_RESPONSE_TIMED_OUT,
                 ) from exc

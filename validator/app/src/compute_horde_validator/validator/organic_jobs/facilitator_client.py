@@ -10,7 +10,6 @@ import pydantic
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
-from compute_horde import protocol_consts
 from compute_horde.fv_protocol.facilitator_requests import (
     Error,
     OrganicJobRequest,
@@ -28,7 +27,14 @@ from compute_horde.fv_protocol.validator_requests import (
     V0Heartbeat,
     V0MachineSpecsUpdate,
 )
-from compute_horde.protocol_consts import JobStatus
+from compute_horde.protocol_consts import (
+    HordeFailureReason,
+    JobFailureReason,
+    JobFailureStage,
+    JobParticipantType,
+    JobRejectionReason,
+    JobStatus,
+)
 from compute_horde_core.signature import SignedRequest, verify_signature
 from django.conf import settings
 from pydantic import BaseModel, JsonValue
@@ -53,7 +59,7 @@ logger = logging.getLogger(__name__)
 class JobRequestVerificationFailed(Exception):
     def __init__(self, message: str):
         self.message = message
-        super().__init__(message, protocol_consts.JobRejectionReason.INVALID_SIGNATURE)
+        super().__init__(message, JobRejectionReason.INVALID_SIGNATURE)
 
 
 async def verify_request_or_fail(job_request: SignedRequest) -> None:
@@ -385,23 +391,23 @@ class FacilitatorClient:
             await self.send_job_rejected(
                 job_uuid=job_request.uuid,
                 message=e.message,
-                rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
-                reason=protocol_consts.JobRejectionReason.INVALID_SIGNATURE,
+                rejected_by=JobParticipantType.VALIDATOR,
+                reason=JobRejectionReason.INVALID_SIGNATURE,
             )
         except routing.JobRoutingException as e:
             await self.send_job_rejected(
                 job_uuid=job_request.uuid,
                 message="Job could not be routed to a miner",
-                rejected_by=protocol_consts.JobParticipantType.VALIDATOR,
-                reason=protocol_consts.JobRejectionReason.UNKNOWN,
+                rejected_by=JobParticipantType.VALIDATOR,
+                reason=JobRejectionReason.UNKNOWN,
                 context={"exception_type": type(e).__qualname__},
             )
         except Exception as e:
             await self.send_horde_failed(
                 job_uuid=job_request.uuid,
                 message="Uncaught exception during handling of job",
-                reported_by=protocol_consts.JobParticipantType.VALIDATOR,
-                reason=protocol_consts.HordeFailureReason.UNCAUGHT_EXCEPTION,
+                reported_by=JobParticipantType.VALIDATOR,
+                reason=HordeFailureReason.UNCAUGHT_EXCEPTION,
                 context={"exception_type": type(e).__qualname__},
             )
 
@@ -438,8 +444,8 @@ class FacilitatorClient:
         self,
         job_uuid: str,
         message: str,
-        rejected_by: protocol_consts.JobParticipantType,
-        reason: protocol_consts.JobRejectionReason,
+        rejected_by: JobParticipantType,
+        reason: JobRejectionReason,
         context: dict[str, JsonValue] | None = None,
     ) -> None:
         await self.send_job_status_update(
@@ -462,8 +468,8 @@ class FacilitatorClient:
         self,
         job_uuid: str,
         message: str,
-        stage: protocol_consts.JobStage,
-        reason: protocol_consts.JobFailureReason,
+        stage: JobFailureStage,
+        reason: JobFailureReason,
         context: dict[str, JsonValue] | None = None,
     ) -> None:
         await self.send_job_status_update(
@@ -486,8 +492,8 @@ class FacilitatorClient:
         self,
         job_uuid: str,
         message: str,
-        reported_by: protocol_consts.JobParticipantType,
-        reason: protocol_consts.HordeFailureReason,
+        reported_by: JobParticipantType,
+        reason: HordeFailureReason,
         context: dict[str, JsonValue] | None = None,
     ) -> None:
         await self.send_job_status_update(

@@ -155,8 +155,6 @@ def job_status_update(job):
         metadata=JobStatusMetadata(
             comment="some comment",
             miner_response=JobResultDetails(
-                job_uuid=str(job.uuid),
-                message_type="some-type",
                 docker_process_stderr="some stderr",
                 docker_process_stdout="some stdout",
                 artifacts={},

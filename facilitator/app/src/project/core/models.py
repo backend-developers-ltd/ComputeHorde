@@ -231,7 +231,6 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
         if validator and validator.id in validator_ids:
             log.debug("selected (targeted) validator", validator=validator)
             return validator
-        # TODO(error propagation): "unknown validator" and "validator not connected" are different errors
         raise Validator.DoesNotExist
 
     @property
