@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import math
 from datetime import timedelta
@@ -16,7 +17,13 @@ from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_validator.validator import collateral
-from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
+from compute_horde_validator.validator.allowance.types import (
+    CannotReserveAllowanceException,
+    NotEnoughAllowanceException,
+)
+from compute_horde_validator.validator.allowance.types import (
+    Miner as AllowanceMiner,
+)
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
@@ -67,58 +74,149 @@ def _get_seconds_remaining_in_current_cycle(current_block: int) -> int:
 @async_synchronized
 async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     """
-    Goes through all miners with recent manifests and online executors of the given executor class.
-    Filters miners based on compute time allowance and minimum collateral requirements.
-    Creates a preliminary reservation for the selected miner and returns the miner with:
-    - Highest percentage of remaining allowance
-    - Highest collateral as a tiebreaker
-    - Available executors (less ongoing jobs than online executor count)
-    - Sufficient remaining time in the current cycle
+    Picks a miner for a job request using the allowance-based routing system.
+    1. Calculates the required executor-seconds for the job.
+    2. Fetches the current block number.
+    3. Finds miners with sufficient allowance for the job.
+    4. Iterates through the suitable miners and attempts to reserve one.
+    5. Returns a JobRoute with the selected miner and reservation ID upon success.
     """
-
     executor_class = request.executor_class
-    logger.info(f"Picking a miner for job {request.uuid} with executor class {executor_class}")
+    logger.info(
+        f"Picking a miner for job {request.uuid} with executor class {executor_class} using allowance-based routing."
+    )
 
+    # Handle debug and trusted miner modes first
     if settings.DEBUG_MINER_KEY:
         logger.debug(f"Using DEBUG_MINER_KEY for job {request.uuid}")
-        miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
-        return JobRoute(
-            miner=AllowanceMiner(
-                address=miner.address,
-                ip_version=miner.ip_version,
-                port=miner.port,
-                hotkey_ss58=miner.hotkey,
-            ),
-            allowance_reservation_id=None,
+        miner_model, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
+        miner = AllowanceMiner(
+            address=miner_model.address,
+            port=miner_model.port,
+            ip_version=miner_model.ip_version,
+            hotkey_ss58=miner_model.hotkey,
         )
+        return JobRoute(miner=miner, allowance_reservation_id=None)
 
     if request.on_trusted_miner:
-        logger.debug(f"Using trusted miner for job {request.uuid}")
-        miner, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
-        return JobRoute(
-            miner=AllowanceMiner(
-                address=miner.address,
-                ip_version=miner.ip_version,
-                port=miner.port,
-                hotkey_ss58=miner.hotkey,
-            ),
-            allowance_reservation_id=None,
+        logger.debug(f"Using TRUSTED_MINER for job {request.uuid}")
+        miner_model, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
+        miner = AllowanceMiner(
+            address=miner_model.address,
+            port=miner_model.port,
+            ip_version=miner_model.ip_version,
+            hotkey_ss58=miner_model.hotkey,
         )
+        return JobRoute(miner=miner, allowance_reservation_id=None)
 
+    # Calculate total executor-seconds required for the job
     executor_seconds = (
         request.download_time_limit + request.execution_time_limit + request.upload_time_limit
     )
 
-    block: int | None = None
+    # Get the current block number, which is required for allowance calculations
     try:
-        block = (await MetagraphSnapshot.aget_latest()).block
+        current_block = (await MetagraphSnapshot.aget_latest()).block
     except Exception as exc:
         logger.warning(f"Failed to get latest metagraph snapshot: {exc}")
-        block = await aget_current_block()
-    assert block is not None, "Failed to get current block from cache or subtensor."
+        current_block = await aget_current_block()
+
+    # Check if allowance-based routing is enabled
+    if await aget_config("DYNAMIC_CHECK_ALLOWANCE_WHILE_ROUTING"):
+        # Import locally to avoid circular import
+        from compute_horde_validator.validator.allowance.default import (
+            allowance as allowance_service,
+        )
+
+        # 1. Find miners with enough allowance
+        try:
+            suitable_miners = await asyncio.to_thread(
+                allowance_service().find_miners_with_allowance,
+                allowance_seconds=executor_seconds,
+                executor_class=executor_class,
+                job_start_block=current_block,
+            )
+        except NotEnoughAllowanceException as e:
+            logger.warning(
+                f"Could not find any miners with enough allowance for job {request.uuid}: {e}"
+            )
+            raise AllMinersBusy(f"No miners with enough allowance: {e}") from e
+
+        if not suitable_miners:
+            logger.warning(
+                f"find_miners_with_allowance returned an empty list for job {request.uuid}."
+            )
+            raise AllMinersBusy("No miners available for the job.")
+
+        # 2. Iterate and try to reserve a miner
+        for miner_hotkey, _ in suitable_miners:
+            try:
+                # 3. Reserve allowance for this miner
+                reservation_id, _ = await asyncio.to_thread(
+                    allowance_service().reserve_allowance,
+                    miner=miner_hotkey,
+                    executor_class=executor_class,
+                    allowance_seconds=executor_seconds,
+                    job_start_block=current_block,
+                )
+
+                # Successfully reserved a miner, fetch its details
+                try:
+                    miner_model = await Miner.objects.aget(hotkey=miner_hotkey)
+                except Miner.DoesNotExist:
+                    logger.warning(
+                        f"Miner {miner_hotkey} from allowance module not found in validator DB, undoing reservation and skipping."
+                    )
+                    await asyncio.to_thread(
+                        allowance_service().undo_allowance_reservation, reservation_id
+                    )
+                    continue
+
+                miner = AllowanceMiner(
+                    address=miner_model.address,
+                    port=miner_model.port,
+                    ip_version=miner_model.ip_version,
+                    hotkey_ss58=miner_model.hotkey,
+                )
+                logger.info(
+                    f"Successfully reserved miner {miner_hotkey} for job {request.uuid} with reservation ID {reservation_id}"
+                )
+                return JobRoute(miner=miner, allowance_reservation_id=reservation_id)
+
+            except CannotReserveAllowanceException:
+                logger.debug(
+                    f"Failed to reserve miner {miner_hotkey} for job {request.uuid}, trying next one."
+                )
+                continue  # Try the next miner in the list
+
+        # If the loop completes without returning, all suitable miners failed to be reserved
+        logger.error(f"All suitable miners were busy or failed to reserve for job {request.uuid}.")
+        raise AllMinersBusy("Could not reserve any of the suitable miners.")
+
+    else:
+        # Fall back to the old logic when allowance checking is disabled
+        logger.warning("Allowance-based routing disabled, falling back to old logic.")
+        return await _pick_miner_for_job_v2_legacy(request)
+
+
+async def _pick_miner_for_job_v2_legacy(request: V2JobRequest) -> JobRoute:
+    """
+    Legacy implementation for when allowance checking is disabled.
+    This maintains the old behavior for backward compatibility.
+    """
+    executor_class = request.executor_class
+    executor_seconds = (
+        request.download_time_limit + request.execution_time_limit + request.upload_time_limit
+    )
+
+    try:
+        current_block = (await MetagraphSnapshot.aget_latest()).block
+    except Exception as exc:
+        logger.warning(f"Failed to get latest metagraph snapshot: {exc}")
+        current_block = await aget_current_block()
 
     if not await aget_config("DYNAMIC_ALLOW_CROSS_CYCLE_ORGANIC_JOBS"):
-        seconds_remaining_in_cycle = _get_seconds_remaining_in_current_cycle(block)
+        seconds_remaining_in_cycle = _get_seconds_remaining_in_current_cycle(current_block)
 
         seconds_required_in_cycle = (
             await aget_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME")
@@ -168,30 +266,27 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
 
     # filter/sort miners based on available allowance
     allowance_qs = ComputeTimeAllowance.objects.select_related("miner").filter(
-        cycle__start__lte=block,
-        cycle__stop__gt=block,
+        cycle__start__lte=current_block,
+        cycle__stop__gt=current_block,
         miner__hotkey__in=latest_miner_manifest.keys(),
         validator__hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address,
     )
-    if await aget_config("DYNAMIC_CHECK_ALLOWANCE_WHILE_ROUTING"):
-        allowance_qs = allowance_qs.filter(remaining_allowance__gt=executor_seconds)
-    else:
-        logger.warning("Allowance check disabled with dynamic config.")
+    allowance_qs = allowance_qs.filter(remaining_allowance__gt=executor_seconds)
 
-    allowances = [allowance async for allowance in allowance_qs.all()]
+    allowances = [allowance_obj async for allowance_obj in allowance_qs.all()]
 
     if not allowances:
         raise NoMinerWithEnoughAllowance()
 
     # prefer miners with more allowance
     allowances.sort(
-        key=lambda allowance: (
+        key=lambda allowance_obj: (
             # percentage of remaining allowance
-            (allowance.remaining_allowance / allowance.initial_allowance)
-            if allowance.initial_allowance
+            (allowance_obj.remaining_allowance / allowance_obj.initial_allowance)
+            if allowance_obj.initial_allowance
             else 0.0,
             # miner collateral as a tiebreaker
-            allowance.miner.collateral_wei,
+            allowance_obj.miner.collateral_wei,
         ),
         reverse=True,
     )
@@ -199,8 +294,8 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     minimum_collateral = await aget_config("DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI")
     contract_address = await collateral.get_collateral_contract_address_async()
 
-    for allowance in allowances:
-        miner = allowance.miner
+    for allowance_obj in allowances:
+        miner = allowance_obj.miner
         manifest = latest_miner_manifest[miner.hotkey]
         if contract_address and int(miner.collateral_wei) < minimum_collateral:
             logger.warning(
@@ -220,9 +315,9 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
 
         known_started_jobs: set[str] = {
             str(job_uuid)
-            async for job_uuid in JobStartedReceipt.objects.valid_at(timezone.now())
-            .filter(miner_hotkey=miner.hotkey)
-            .values_list("job_uuid", flat=True)
+            async for job_uuid in JobStartedReceipt.objects.filter(
+                miner_hotkey=miner.hotkey, timestamp__gte=timezone.now() - timedelta(hours=1)
+            ).values_list("job_uuid", flat=True)
         }
 
         known_finished_jobs: set[str] = {
