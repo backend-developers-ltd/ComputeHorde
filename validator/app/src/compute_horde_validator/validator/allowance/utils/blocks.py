@@ -16,7 +16,7 @@ from ...models import SystemEvent
 from ...models.allowance.internal import Block, BlockAllowance
 from ...models.allowance.internal import Neuron as NeuronModel
 from .. import settings
-from ..metrics import VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION
+from ..metrics import VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION, VALIDATOR_ALLOWANCE_CHECKPOINT
 from ..types import AllowanceException, NotEnoughAllowanceException, ss58_address
 from .manifests import get_manifest_drops, get_manifests
 from .supertensor import supertensor, SuperTensor
@@ -217,21 +217,29 @@ def report_checkpoint(block_number_lt: int, block_number_gte: int):
     allowances = BlockAllowance.objects.filter(
         block__block_number__lt=block_number_lt,
         block__block_number__gte=block_number_gte,
-    ).order_by("block__block_number", "validator_ss58", "miner_ss58", "executor_class")
-
-    by_block = defaultdict(list)
-    for allowance in allowances:
-        by_block[str(allowance.block.block_number)].append(model_to_dict(allowance))
-
-    SystemEvent.objects.create(
-        type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
-        subtype=SystemEvent.EventSubType.CHECKPOINT,
-        data={
-            "block_number_lt": block_number_lt,
-            "block_number_gte": block_number_gte,
-            "allowances": by_block,
-        },
+    ).values(
+        "miner_ss58",
+        "validator_ss58",
+        "executor_class",
+    ).annotate(
+        total_allowance=Sum("allowance")
+    ).filter(
+        total_allowance__gt=0
     )
+
+    for allowance in allowances:
+        VALIDATOR_ALLOWANCE_CHECKPOINT.labels(
+            allowance['miner_ss58'],
+            allowance['validator_ss58'],
+            allowance['executor_class'],
+            block_number_lt,
+        ).set(allowance['total_allowance'])
+        print(
+            f"Miner: {allowance['miner_ss58']}, "
+            f"Validator: {allowance['validator_ss58']}, "
+            f"Executor: {allowance['executor_class']}, "
+            f"Total Allowance: {allowance['total_allowance']}"
+        )
 
 
 def scan_blocks_and_calculate_allowance(
