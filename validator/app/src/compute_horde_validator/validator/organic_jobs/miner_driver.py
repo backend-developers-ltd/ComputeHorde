@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -136,6 +137,7 @@ async def execute_organic_job_request(
         streaming_details=job_request.streaming_details.model_dump()
         if job_request.streaming_details
         else None,
+        allowance_reservation_id=job_route.allowance_reservation_id,
     )
 
     miner_client = MINER_CLIENT_CLASS(
@@ -193,7 +195,29 @@ async def drive_organic_job(
     async def job_accepted_callback(msg: MinerToValidatorMessage) -> None:
         await status_callback(JobStatusUpdate.Status.ACCEPTED)(msg)
 
-        if isinstance(job_request, V2JobRequest):
+        # Handle allowance reservation spending for new allowance-based system
+        if job.allowance_reservation_id is not None:
+            try:
+                # Import locally to avoid circular import
+                from compute_horde_validator.validator.allowance.default import (
+                    allowance as allowance_service,
+                )
+
+                allowance_service().spend_allowance(job.allowance_reservation_id)
+                logger.info(
+                    "Successfully spent allowance for reservation %s for job %s",
+                    job.allowance_reservation_id,
+                    job.job_uuid,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to spend allowance for reservation %s for job %s: %s",
+                    job.allowance_reservation_id,
+                    job.job_uuid,
+                    e,
+                )
+        elif isinstance(job_request, V2JobRequest):
+            # Legacy allowance handling for backward compatibility
             executor_seconds = (
                 job_request.download_time_limit
                 + job_request.execution_time_limit
@@ -239,9 +263,11 @@ async def drive_organic_job(
         docker_image=job_request.docker_image,
         docker_run_options_preset="nvidia_all" if job_request.use_gpu else "none",
         docker_run_cmd=job_request.get_args(),
-        total_job_timeout=job_request.timeout
-        if isinstance(job_request, AdminJobRequest)
-        else OrganicJobDetails.total_job_timeout,
+        total_job_timeout=(
+            job_request.timeout
+            if isinstance(job_request, AdminJobRequest)
+            else OrganicJobDetails.total_job_timeout
+        ),
         volume=job_request.volume,
         output=job_request.output_upload,
         artifacts_dir=artifacts_dir,
@@ -283,6 +309,30 @@ async def drive_organic_job(
         return True
 
     except OrganicJobError as exc:
+        # Undo allowance reservation for any job failure
+        if job.allowance_reservation_id is not None:
+            try:
+                # Import locally to avoid circular import
+                from compute_horde_validator.validator.allowance.default import (
+                    allowance as allowance_service,
+                )
+
+                await asyncio.to_thread(
+                    allowance_service().undo_allowance_reservation, job.allowance_reservation_id
+                )
+                logger.info(
+                    "Successfully undid allowance reservation %s for failed job %s",
+                    job.allowance_reservation_id,
+                    job.job_uuid,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to undo allowance reservation %s for failed job %s: %s",
+                    job.allowance_reservation_id,
+                    job.job_uuid,
+                    e,
+                )
+
         if exc.reason == FailureReason.MINER_CONNECTION_FAILED:
             comment = f"Miner connection error: {exc}"
             job.status = OrganicJob.Status.FAILED
