@@ -115,7 +115,7 @@ def status_update_from_horde_failure(
 ) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
         horde_failure_details=HordeFailureDetails(
-            reported_by=JobParticipantType.MINER,
+            reported_by=failure.msg.reported_by,
             reason=failure.msg.reason,
             message=failure.msg.message,
             context=failure.msg.context,
@@ -462,6 +462,6 @@ _event_subtype_map: dict[HordeFailureReason, str] = {
     HordeFailureReason.FINAL_RESPONSE_TIMED_OUT: SystemEvent.EventSubType.ERROR_VALIDATOR_REPORTED_TIMEOUT,
     HordeFailureReason.SECURITY_CHECK_FAILED: SystemEvent.EventSubType.ERROR_FAILED_SECURITY_CHECK,
     HordeFailureReason.STREAMING_FAILED: SystemEvent.EventSubType.GENERIC_ERROR,
-    HordeFailureReason.UNCAUGHT_EXCEPTION: SystemEvent.EventSubType.GENERIC_ERROR,
+    HordeFailureReason.UNHANDLED_EXCEPTION: SystemEvent.EventSubType.GENERIC_ERROR,
     HordeFailureReason.UNKNOWN: SystemEvent.EventSubType.GENERIC_ERROR,
 }

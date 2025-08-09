@@ -407,7 +407,7 @@ class FacilitatorClient:
                 job_uuid=job_request.uuid,
                 message="Uncaught exception during handling of job",
                 reported_by=JobParticipantType.VALIDATOR,
-                reason=HordeFailureReason.UNCAUGHT_EXCEPTION,
+                reason=HordeFailureReason.UNHANDLED_EXCEPTION,
                 context={"exception_type": type(e).__qualname__},
             )
 

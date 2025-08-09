@@ -198,9 +198,8 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                 return
 
             try:
-                # mode="json" serializes enums down to their values
                 # exclude="none" because most status updates will have most payloads empty - let's not store tons of Nones
-                metadata = message.metadata.model_dump(exclude_none=True, mode="json") if message.metadata else {}
+                metadata = message.metadata.model_dump(exclude_none=True) if message.metadata else {}
                 await JobStatus.objects.acreate(
                     job=job,
                     status=message.status.value,

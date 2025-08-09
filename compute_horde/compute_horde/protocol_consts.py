@@ -90,14 +90,16 @@ class JobStage(StrEnum):
 
 
 class HordeFailureReason(StrEnum):
+    # When we somehow fail to propagate the failure reason
     UNKNOWN = "unknown"
 
-    # Something sent a "GenericError"
+    # For a multitude of random issues that don't require their own specific reason.
+    # Make sure to provide a sensible message alongside the error.
     GENERIC_ERROR = "generic_error"
 
-    # ↓ Generic reasons for "except Exception" and "except TimeoutError"
-    UNCAUGHT_EXCEPTION = "uncaught_exception"
-    UNCAUGHT_TIMEOUT = "uncaught_timeout"
+    # ↓ "except Exception" and "except TimeoutError"
+    UNHANDLED_EXCEPTION = "unhandled_exception"
+    UNHANDLED_TIMEOUT = "unhandled_timeout"
 
     # Received a legacy V0StreamingNotReady TODO(post error propagation): remove these
     STREAMING_FAILED = "streaming_failed"
@@ -126,9 +128,14 @@ class HordeFailureReason(StrEnum):
 
 
 class JobFailureReason(StrEnum):
+    # When we somehow fail to propagate the failure reason
     UNKNOWN = "unknown"
+
+    # Exceeded one of the expected job timings
     TIMEOUT = "timeout"
-    NONZERO_EXIT_CODE = "nonzero_exit_code"
+
+    # Job container exited with a nonzero return code
+    NONZERO_RETURN_CODE = "nonzero_return_code"
     DOWNLOAD_FAILED = "download_failed"
     UPLOAD_FAILED = "upload_failed"
 

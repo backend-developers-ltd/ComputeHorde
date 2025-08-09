@@ -96,7 +96,7 @@ class JobStatusMetadata(BaseModel, extra="allow"):
         return cls(
             horde_failure_details=HordeFailureDetails(
                 reported_by=reported_by,
-                reason=HordeFailureReason.UNCAUGHT_EXCEPTION,
+                reason=HordeFailureReason.UNHANDLED_EXCEPTION,
                 message="Uncaught exception",
                 context={"exception_type": type(exception).__qualname__},
             ),

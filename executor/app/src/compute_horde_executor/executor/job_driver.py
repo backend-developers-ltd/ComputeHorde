@@ -70,14 +70,16 @@ class JobDriver:
             except TimeoutError:
                 logger.error("Unhandled timeout")
                 await self.send_horde_failed(
-                    "Unhandled timeout", HordeFailureReason.UNCAUGHT_TIMEOUT
+                    "Unhandled timeout",
+                    HordeFailureReason.UNHANDLED_TIMEOUT,
+                    context={"stage": self.current_stage},
                 )
 
             except BaseException as e:
                 await self.send_horde_failed(
                     "Executor failed with unexpected exception",
-                    HordeFailureReason.UNCAUGHT_EXCEPTION,
-                    context={"exception_type": type(e).__qualname__},
+                    HordeFailureReason.UNHANDLED_EXCEPTION,
+                    context={"stage": self.current_stage, "exception_type": type(e).__qualname__},
                 )
                 raise
 
@@ -90,9 +92,12 @@ class JobDriver:
     async def _execute(self):
         # This limit should be enough to receive the initial job request, which contains further timing details.
         self._set_deadline(self.startup_time_limit, "startup time limit")
-        async with asyncio.timeout(self.time_left):
-            initial_job_request = await self._startup_stage()
-            timing_details = initial_job_request.executor_timing
+        try:
+            async with asyncio.timeout(self.time_left):
+                initial_job_request = await self._startup_stage()
+                timing_details = initial_job_request.executor_timing
+        except TimeoutError as e:
+            raise ExecutorError("Timed out waiting for initial job details from miner") from e
 
         if timing_details:
             # With timing details, re-initialize the deadline with leeway
@@ -102,15 +107,17 @@ class JobDriver:
             # For single-timeout, this is the full timeout for the whole job
             self._set_deadline(initial_job_request.timeout_seconds, "single-timeout mode")
         else:
-            raise JobError(
+            raise ExecutorError(
                 "No timing received: either timeout_seconds or timing_details must be set"
             )
 
         # Download stage
         if timing_details:
             self._extend_deadline(timing_details.download_time_limit, "download time limit")
-        async with asyncio.timeout(self.time_left):
-            await self._download_stage()
+        try:
+            await asyncio.wait_for(self._download_stage(), self.time_left)
+        except TimeoutError as e:
+            raise JobError("Timed out during volume download", JobFailureReason.TIMEOUT) from e
 
         # Execution stage
         if timing_details:
@@ -119,14 +126,18 @@ class JobDriver:
                 self._extend_deadline(
                     timing_details.streaming_start_time_limit, "streaming start time limit"
                 )
-        async with asyncio.timeout(self.time_left):
-            await self._execution_stage()
+        try:
+            await asyncio.wait_for(self._execution_stage(), self.time_left)
+        except TimeoutError as e:
+            raise JobError("Timed out during job execution", JobFailureReason.TIMEOUT) from e
 
         # Upload stage
         if timing_details:
             self._extend_deadline(timing_details.upload_time_limit, "upload time limit")
-        async with asyncio.timeout(self.time_left):
-            await self._upload_stage()
+        try:
+            await asyncio.wait_for(self._upload_stage(), self.time_left)
+        except TimeoutError as e:
+            raise JobError("Timed out during upload", JobFailureReason.TIMEOUT) from e
 
         logger.debug(f"Finished with {self.time_left:.2f}s time left")
 
@@ -302,7 +313,7 @@ class JobDriver:
         if self.runner.execution_result.return_code != 0:
             raise JobError(
                 f"Job container exited with non-zero exit code: {self.runner.execution_result.return_code}",
-                reason=JobFailureReason.NONZERO_EXIT_CODE,
+                reason=JobFailureReason.NONZERO_RETURN_CODE,
                 execution_result=self.runner.execution_result,
             )
 

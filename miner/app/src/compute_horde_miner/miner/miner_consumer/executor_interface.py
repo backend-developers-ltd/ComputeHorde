@@ -188,8 +188,9 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
                 V0HordeFailedRequest(
                     job_uuid=str(self.job.job_uuid),
                     reported_by=JobParticipantType.EXECUTOR,
+                    message=msg.details
+                    or "Received GenericError from the executor with no details",
                     reason=HordeFailureReason.GENERIC_ERROR,
-                    message=msg.details or "No error details provided",
                 ),
             )
             return
