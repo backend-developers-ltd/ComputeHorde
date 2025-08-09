@@ -121,6 +121,7 @@ class ValidatorConsumer(AsyncWebsocketConsumer):
                 await handler(self, message)
             except Exception as exc:
                 log.exception("message handler failed", exc=exc)
+                raise
 
     async def authenticate(self, message: V0AuthenticationRequest) -> None:
         """Check some authentication details and store ss58 address in the scope"""
