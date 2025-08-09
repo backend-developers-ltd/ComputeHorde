@@ -4,11 +4,10 @@ from collections.abc import Callable, Iterable
 
 import bittensor_wallet
 from compute_horde.miner_client.organic import (
-    JobDriverError,
+    MinerRejectedJob,
     execute_organic_job_on_miner,
 )
 from compute_horde.protocol_consts import JobRejectionReason
-from compute_horde.protocol_messages import V0DeclineJobRequest
 from django.conf import settings
 from django.utils.timezone import now
 
@@ -74,15 +73,11 @@ async def generate_prompts(
             reservation_time_limit=await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT"),
             executor_startup_time_limit=await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
         )
-    except Exception as e:
-        if (
-            isinstance(e, JobDriverError)
-            and isinstance(e.received, V0DeclineJobRequest)
-            and e.received.reason == JobRejectionReason.BUSY
-        ):
+    except MinerRejectedJob as rejection:
+        if rejection.msg.reason == JobRejectionReason.BUSY:
             logger.info("Failed to run generate_prompts: trusted miner is busy")
             return
-
+    except Exception as e:
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_GENERATION,
             subtype=SystemEvent.EventSubType.FAILURE,

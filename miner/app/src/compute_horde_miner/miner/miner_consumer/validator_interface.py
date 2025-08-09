@@ -306,13 +306,11 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             return
 
         if isinstance(msg, V0JobAcceptedReceiptRequest):
-            if self.verify_receipt_payload(msg.payload, msg.signature):
-                await self.handle_job_accepted_receipt(msg)
+            await self.handle_job_accepted_receipt(msg)
             return
 
         if isinstance(msg, V0JobFinishedReceiptRequest):
-            if self.verify_receipt_payload(msg.payload, msg.signature):
-                await self.handle_job_finished_receipt(msg)
+            await self.handle_job_finished_receipt(msg)
             return
 
         if isinstance(msg, GenericError):
@@ -504,6 +502,10 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
         )
 
+        if not self.verify_receipt_payload(msg.payload, msg.signature):
+            logger.error("Receipt could not be verified")
+            return
+
         if settings.IS_LOCAL_MINER:
             return
 
@@ -526,6 +528,11 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             f" job_uuid={msg.payload.job_uuid} validator_hotkey={msg.payload.validator_hotkey}"
             f" time_took={msg.payload.time_took} score={msg.payload.score}"
         )
+
+        if not self.verify_receipt_payload(msg.payload, msg.signature):
+            logger.error("Receipt could not be verified")
+            return
+
         job = await AcceptedJob.objects.aget(job_uuid=msg.payload.job_uuid)
         job.time_took = msg.payload.time_took
         job.score = msg.payload.score

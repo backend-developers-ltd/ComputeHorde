@@ -12,7 +12,7 @@ from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
-from pydantic import TypeAdapter
+from pydantic import JsonValue, TypeAdapter
 
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.executor_class import EXECUTOR_CLASS
@@ -476,10 +476,12 @@ class JobDriverError(Exception):
         message: str,
         reason: HordeFailureReason,
         received: MinerToValidatorMessage | None = None,
+        context: dict[str, JsonValue] | None = None,
     ):
         self.message = message
         self.reason = reason
         self.received = received
+        self.context = context
 
     def __str__(self):
         s = f"Organic job failed, {self.reason=}"

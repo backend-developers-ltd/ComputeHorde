@@ -24,6 +24,7 @@ from compute_horde.miner_client.organic import (
 )
 from compute_horde.protocol_consts import (
     HordeFailureReason,
+    JobFailureReason,
     JobParticipantType,
     JobRejectionReason,
     JobStatus,
@@ -134,7 +135,7 @@ def status_update_from_organic_job_error(job: OrganicJob, error: JobDriverError)
             reported_by=JobParticipantType.VALIDATOR,
             reason=error.reason,
             message=error.message,
-            # context=error.context, # TODO(error propagation): context in OrganicJobError
+            context=error.context,
         ),
     )
     return JobStatusUpdate(
@@ -409,8 +410,9 @@ async def drive_organic_job(
         job.comment = failure.msg.message
         await job.asave()
         await save_event(
-            # TODO(error propagation): map reason to event type
-            subtype=SystemEvent.EventSubType.FAILURE,
+            subtype=_job_event_subtype_map.get(
+                failure.msg.reason, SystemEvent.EventSubType.GENERIC_JOB_FAILURE
+            ),
             long_description=failure.msg.message,
         )
         status_update = status_update_from_job_failure(job, failure)
@@ -421,8 +423,9 @@ async def drive_organic_job(
         job.comment = failure.msg.message
         await job.asave()
         await save_event(
-            # TODO(error propagation): map reason to event type
-            subtype=SystemEvent.EventSubType.FAILURE,
+            subtype=_horde_event_subtype_map.get(
+                failure.msg.reason, SystemEvent.EventSubType.GENERIC_ERROR
+            ),
             long_description=failure.msg.message,
         )
         status_update = status_update_from_horde_failure(job, failure)
@@ -434,7 +437,9 @@ async def drive_organic_job(
         job.comment = comment
         await job.asave()
         logger.warning(comment)
-        event_subtype = _event_subtype_map.get(exc.reason, SystemEvent.EventSubType.GENERIC_ERROR)
+        event_subtype = _horde_event_subtype_map.get(
+            exc.reason, SystemEvent.EventSubType.GENERIC_ERROR
+        )
         await save_event(subtype=event_subtype, long_description=comment)
         status_update = status_update_from_organic_job_error(job, exc)
         await notify_callback(status_update)
@@ -452,7 +457,15 @@ async def drive_organic_job(
     return False
 
 
-_event_subtype_map: dict[HordeFailureReason, str] = {
+_job_event_subtype_map: dict[JobFailureReason, str] = {
+    JobFailureReason.UNKNOWN: SystemEvent.EventSubType.GENERIC_ERROR,
+    JobFailureReason.TIMEOUT: SystemEvent.EventSubType.JOB_TIMEOUT,
+    JobFailureReason.NONZERO_RETURN_CODE: SystemEvent.EventSubType.JOB_PROCESS_NONZERO_EXIT_CODE,
+    JobFailureReason.DOWNLOAD_FAILED: SystemEvent.EventSubType.JOB_VOLUME_DOWNLOAD_FAILED,
+    JobFailureReason.UPLOAD_FAILED: SystemEvent.EventSubType.JOB_RESULT_UPLOAD_FAILED,
+}
+
+_horde_event_subtype_map: dict[HordeFailureReason, str] = {
     HordeFailureReason.MINER_CONNECTION_FAILED: SystemEvent.EventSubType.MINER_CONNECTION_ERROR,
     HordeFailureReason.INITIAL_RESPONSE_TIMED_OUT: SystemEvent.EventSubType.ERROR_VALIDATOR_REPORTED_TIMEOUT,
     HordeFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT: SystemEvent.EventSubType.ERROR_VALIDATOR_REPORTED_TIMEOUT,
