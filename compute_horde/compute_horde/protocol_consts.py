@@ -1,4 +1,5 @@
 import sys
+from typing import Any
 
 if sys.version_info >= (3, 11):  # noqa: UP036
     from enum import StrEnum
@@ -20,8 +21,9 @@ class JobParticipantType(StrEnum):
         """Return Django-compatible choices tuple for model fields."""
         return [(status.value, status.value) for status in cls]
 
-    def __repr__(self):
-        return self.value
+    @classmethod
+    def _missing_(cls, value: Any) -> "JobParticipantType":
+        return cls.UNKNOWN
 
 
 class JobStatus(StrEnum):
@@ -64,11 +66,11 @@ class JobStatus(StrEnum):
         return self in {self.REJECTED, self.FAILED}
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: Any) -> "JobStatus":
         return cls.UNKNOWN
 
 
-class JobFailureStage(StrEnum):
+class JobStage(StrEnum):
     UNKNOWN = "unknown"
 
     EXECUTOR_STARTUP = "executor_startup"
@@ -83,11 +85,8 @@ class JobFailureStage(StrEnum):
         return [(status.value, status.value) for status in cls]
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: Any) -> "JobStage":
         return cls.UNKNOWN
-
-    def __repr__(self):
-        return self.value
 
 
 class HordeFailureReason(StrEnum):
@@ -99,9 +98,6 @@ class HordeFailureReason(StrEnum):
     # ↓ Generic reasons for "except Exception" and "except TimeoutError"
     UNCAUGHT_EXCEPTION = "uncaught_exception"
     UNCAUGHT_TIMEOUT = "uncaught_timeout"
-
-    # Received a legacy V0ExecutorFailed TODO(post error propagation): remove these
-    GENERIC_EXECUTOR_FAILED = "generic_executor_failed"
 
     # Received a legacy V0StreamingNotReady TODO(post error propagation): remove these
     STREAMING_FAILED = "streaming_failed"
@@ -125,11 +121,8 @@ class HordeFailureReason(StrEnum):
     SECURITY_CHECK_FAILED = "security_check_failed"
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: Any) -> "HordeFailureReason":
         return cls.UNKNOWN
-
-    def __repr__(self):
-        return self.value
 
 
 class JobFailureReason(StrEnum):
@@ -143,11 +136,8 @@ class JobFailureReason(StrEnum):
     HUGGINGFACE_DOWNLOAD = "huggingface_download"
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: Any) -> "JobFailureReason":
         return cls.UNKNOWN
-
-    def __repr__(self):
-        return self.value
 
 
 class JobRejectionReason(StrEnum):
@@ -159,8 +149,5 @@ class JobRejectionReason(StrEnum):
     VALIDATOR_BLACKLISTED = "validator_blacklisted"
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: Any) -> "JobRejectionReason":
         return cls.UNKNOWN
-
-    def __repr__(self):
-        return self.value

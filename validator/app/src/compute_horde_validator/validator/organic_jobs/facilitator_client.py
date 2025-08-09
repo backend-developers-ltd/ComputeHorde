@@ -30,9 +30,9 @@ from compute_horde.fv_protocol.validator_requests import (
 from compute_horde.protocol_consts import (
     HordeFailureReason,
     JobFailureReason,
-    JobFailureStage,
     JobParticipantType,
     JobRejectionReason,
+    JobStage,
     JobStatus,
 )
 from compute_horde_core.signature import SignedRequest, verify_signature
@@ -467,7 +467,7 @@ class FacilitatorClient:
         self,
         job_uuid: str,
         message: str,
-        stage: JobFailureStage,
+        stage: JobStage,
         reason: JobFailureReason,
         context: dict[str, JsonValue] | None = None,
     ) -> None:

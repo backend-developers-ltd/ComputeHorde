@@ -12,9 +12,9 @@ from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.protocol_consts import (
     HordeFailureReason,
     JobFailureReason,
-    JobFailureStage,
     JobParticipantType,
     JobRejectionReason,
+    JobStage,
 )
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
@@ -97,7 +97,7 @@ class V0InitialJobRequest(BaseModel):
 
 # miner.vc -> validator
 class V0DeclineJobRequest(BaseModel):
-    # TODO(post error propagation): message, reason and rejected_by should not be optional
+    # TODO(post error propagation): message and reason should not be optional
     message_type: Literal["V0DeclineJobRequest"] = "V0DeclineJobRequest"
     job_uuid: str
     message: str = ""
@@ -187,7 +187,7 @@ class V0JobFailedRequest(BaseModel):
         default=JobFailureReason.UNKNOWN,
         validation_alias=AliasChoices("reason", "error_type"),
     )
-    stage: JobFailureStage = JobFailureStage.UNKNOWN
+    stage: JobStage = JobStage.UNKNOWN
     docker_process_exit_status: int | None = None
     docker_process_stdout: str | None = None
     docker_process_stderr: str | None = None

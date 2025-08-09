@@ -172,7 +172,7 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     status_history: list[ComputeHordeJobStatusEntry] = Field(default_factory=list)
 
     @property
-    def latest_status(self) -> ComputeHordeJobStatus:
+    def status(self) -> ComputeHordeJobStatus:
         # Faci creates an initial status, so there should always be at least one entry
         return self.status_history[-1].status
 

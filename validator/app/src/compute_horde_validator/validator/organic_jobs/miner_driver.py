@@ -463,6 +463,5 @@ _event_subtype_map: dict[HordeFailureReason, str] = {
     HordeFailureReason.SECURITY_CHECK_FAILED: SystemEvent.EventSubType.ERROR_FAILED_SECURITY_CHECK,
     HordeFailureReason.STREAMING_FAILED: SystemEvent.EventSubType.GENERIC_ERROR,
     HordeFailureReason.UNCAUGHT_EXCEPTION: SystemEvent.EventSubType.GENERIC_ERROR,
-    HordeFailureReason.GENERIC_EXECUTOR_FAILED: SystemEvent.EventSubType.GENERIC_ERROR,
     HordeFailureReason.UNKNOWN: SystemEvent.EventSubType.GENERIC_ERROR,
 }

@@ -5,8 +5,8 @@ from typing import assert_never
 from compute_horde.protocol_consts import (
     HordeFailureReason,
     JobFailureReason,
-    JobFailureStage,
     JobParticipantType,
+    JobStage,
 )
 from compute_horde.protocol_messages import (
     ExecutorToMinerMessage,
@@ -144,7 +144,7 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
                 self.executor_token,
                 V0JobFailedRequest(
                     job_uuid=msg.job_uuid,
-                    stage=JobFailureStage.STREAMING_STARTUP,
+                    stage=JobStage.STREAMING_STARTUP,
                     reason=JobFailureReason.UNKNOWN,
                     message="Legacy streaming failure (V0StreamingJobNotReadyRequest)",
                 ),

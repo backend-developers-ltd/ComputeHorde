@@ -6,9 +6,9 @@ from pydantic import BaseModel, JsonValue
 from compute_horde.protocol_consts import (
     HordeFailureReason,
     JobFailureReason,
-    JobFailureStage,
     JobParticipantType,
     JobRejectionReason,
+    JobStage,
     JobStatus,
 )
 
@@ -63,7 +63,7 @@ class JobRejectionDetails(BaseModel):
 
 class JobFailureDetails(BaseModel):
     reason: JobFailureReason
-    stage: JobFailureStage
+    stage: JobStage
     message: str
     context: JsonValue = None
     docker_process_exit_status: int | None = None

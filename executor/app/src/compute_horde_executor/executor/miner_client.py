@@ -51,7 +51,7 @@ class JobError(Exception):
         execution_result: ExecutionResult | None = None,
         context: dict[str, JsonValue] | None = None,
     ):
-        self.error_message = message
+        self.message = message
         self.reason = reason
         self.error_detail = error_detail
         self.execution_result = execution_result
@@ -62,7 +62,7 @@ class ExecutorError(Exception):
     def __init__(
         self,
         message: str,
-        reason: HordeFailureReason,
+        reason: HordeFailureReason = HordeFailureReason.GENERIC_ERROR,
         context: dict[str, JsonValue] | None = None,
     ) -> None:
         super().__init__(f"Job failed {reason=}, {message=})")

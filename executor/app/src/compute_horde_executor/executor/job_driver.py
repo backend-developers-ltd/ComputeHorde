@@ -5,8 +5,8 @@ import packaging.version
 from compute_horde.protocol_consts import (
     HordeFailureReason,
     JobFailureReason,
-    JobFailureStage,
     JobParticipantType,
+    JobStage,
 )
 from compute_horde.protocol_messages import (
     V0HordeFailedRequest,
@@ -48,7 +48,7 @@ class JobDriver:
         self.startup_time_limit = startup_time_limit
         self.specs: MachineSpecs | None = None
         self.deadline = Timer()
-        self.current_stage = JobFailureStage.UNKNOWN
+        self.current_stage = JobStage.UNKNOWN
 
     @property
     def time_left(self) -> float:
@@ -60,8 +60,8 @@ class JobDriver:
                 await self._execute()
 
             except JobError as e:
-                logger.error(f"Job error: {e.reason}: {e.error_message}", exc_info=True)
-                await self.send_job_failed(e.error_message, e.reason, e.execution_result)
+                logger.error(f"Job error: {e.reason}: {e.message}", exc_info=True)
+                await self.send_job_failed(e.message, e.reason, e.execution_result)
 
             except ExecutorError as e:
                 logger.error(f"Executor error: {e.reason}: {e.message}", exc_info=True)
@@ -140,14 +140,14 @@ class JobDriver:
             f"Extending deadline by +{seconds:.2f}s to {self.deadline.time_left():.2f}s: {reason}"
         )
 
-    def _enter_stage(self, stage: JobFailureStage) -> None:
+    def _enter_stage(self, stage: JobStage) -> None:
         self.current_stage = stage
         logger.debug(
             f"Entering stage {stage.value} with {self.deadline.time_left():.2f}s time left"
         )
 
     async def _startup_stage(self) -> V0InitialJobRequest:
-        self._enter_stage(JobFailureStage.EXECUTOR_STARTUP)
+        self._enter_stage(JobStage.EXECUTOR_STARTUP)
         self.specs = get_machine_specs()
         await self.run_security_checks_or_fail()
         initial_job_request = await self.miner_client.initial_msg
@@ -162,7 +162,7 @@ class JobDriver:
         return initial_job_request
 
     async def _download_stage(self):
-        self._enter_stage(JobFailureStage.VOLUME_DOWNLOAD)
+        self._enter_stage(JobStage.VOLUME_DOWNLOAD)
         logger.debug("Waiting for full payload")
         full_job_request = await self.miner_client.full_payload
         logger.debug("Full payload received")
@@ -171,7 +171,7 @@ class JobDriver:
         await self.miner_client.send_volumes_ready()
 
     async def _execution_stage(self):
-        self._enter_stage(JobFailureStage.EXECUTION)
+        self._enter_stage(JobStage.EXECUTION)
         async with self.runner.start_job():
             if self.runner.is_streaming_job:
                 assert self.runner.executor_certificate is not None, (
@@ -182,7 +182,7 @@ class JobDriver:
         await self.miner_client.send_execution_done()
 
     async def _upload_stage(self):
-        self._enter_stage(JobFailureStage.RESULT_UPLOAD)
+        self._enter_stage(JobStage.RESULT_UPLOAD)
         job_result = await self.runner.upload_results()
         job_result.specs = self.specs
         await self.miner_client.send_result(job_result)
