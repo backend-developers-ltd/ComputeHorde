@@ -100,7 +100,7 @@ async def test_pick_miner_for_job__picks_a_miner():
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__no_matching_executor_class():
-    with pytest.raises(routing.NoMinerForExecutorType):
+    with pytest.raises(routing.NoMinerForExecutorClass):
         await routing.pick_miner_for_job_request(
             JOB_REQUEST.__replace__(
                 executor_class=next(c for c in ExecutorClass if c != DEFAULT_EXECUTOR_CLASS)
@@ -112,7 +112,7 @@ async def test_pick_miner_for_job__no_matching_executor_class():
 @pytest.mark.asyncio
 async def test_pick_miner_for_job__no_online_executors():
     await MinerManifest.objects.all().aupdate(online_executor_count=0)
-    with pytest.raises(routing.NoMinerForExecutorType):
+    with pytest.raises(routing.NoMinerForExecutorClass):
         await routing.pick_miner_for_job_request(JOB_REQUEST)
 
 
@@ -126,7 +126,7 @@ async def test_pick_miner_for_job__miner_banned():
             expires_at=timezone.now() + timedelta(minutes=5),
         )
 
-    with pytest.raises(routing.NoMinerForExecutorType):
+    with pytest.raises(routing.NoMinerForExecutorClass):
         await routing.pick_miner_for_job_request(JOB_REQUEST)
 
 

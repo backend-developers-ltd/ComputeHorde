@@ -2,12 +2,28 @@ import asyncio
 import logging
 
 import packaging.version
-from compute_horde.protocol_messages import V0InitialJobRequest, V0JobFailedRequest
+from compute_horde.protocol_consts import (
+    HordeFailureReason,
+    JobFailureReason,
+    JobParticipantType,
+    JobStage,
+)
+from compute_horde.protocol_messages import (
+    FailureContext,
+    V0HordeFailedRequest,
+    V0InitialJobRequest,
+    V0JobFailedRequest,
+)
 from compute_horde.utils import MachineSpecs, Timer
 from django.conf import settings
 
 from compute_horde_executor.executor.job_runner import JobRunner
-from compute_horde_executor.executor.miner_client import JobError, MinerClient
+from compute_horde_executor.executor.miner_client import (
+    ExecutionResult,
+    ExecutorError,
+    JobError,
+    MinerClient,
+)
 from compute_horde_executor.executor.utils import get_machine_specs, temporary_process
 
 logger = logging.getLogger(__name__)
@@ -32,81 +48,96 @@ class JobDriver:
         self.startup_time_limit = startup_time_limit
         self.specs: MachineSpecs | None = None
         self.deadline = Timer()
-        self.current_stage = "pre-startup"
+        self.current_stage = JobStage.UNKNOWN
 
     @property
     def time_left(self) -> float:
         return self.deadline.time_left()
 
     async def execute(self):
-        try:
-            await self._do_execute()
-
-        except TimeoutError:
-            logger.warning(f"Job timed out during {self.current_stage} stage")
-            await self.miner_client.send_job_error(
-                JobError(
-                    f"Timed out during {self.current_stage} stage",
-                    error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
-                )
-            )
-
-        except JobError as e:
-            logger.warning(f"Job error: {e}")
-            await self.miner_client.send_job_error(e)
-
-        except BaseException as e:
-            logger.error(f"Unexpected error: {e}")
-            await self.miner_client.send_job_error(JobError(f"Unexpected error: {e}"))
-            raise
-
-        finally:
-            try:
-                await self.runner.clean()
-            except Exception as e:
-                logger.error(f"Job cleanup failed: {e}")
-
-    async def _do_execute(self):
         async with self.miner_client:  # TODO: Can this hang?
-            # This limit should be enough to receive the initial job request, which contains further timing details.
-            self._set_deadline(self.startup_time_limit, "startup time limit")
+            try:
+                await self._execute()
+
+            except JobError as e:
+                logger.error(f"Job error: {e.reason}: {e.message}", exc_info=True)
+                await self.send_job_failed(e.message, e.reason, e.execution_result, e.context)
+
+            except ExecutorError as e:
+                logger.error(f"Executor error: {e.reason}: {e.message}", exc_info=True)
+                await self.send_horde_failed(e.message, e.reason, e.context)
+
+            except TimeoutError:
+                logger.error("Unhandled timeout")
+                await self.send_horde_failed(
+                    "Unhandled timeout",
+                    HordeFailureReason.UNHANDLED_TIMEOUT,
+                    context={"stage": self.current_stage},
+                )
+
+            except BaseException as e:
+                await self.send_horde_failed(
+                    "Executor failed with unexpected exception",
+                    HordeFailureReason.UNHANDLED_EXCEPTION,
+                    context={"stage": self.current_stage, "exception_type": type(e).__qualname__},
+                )
+                raise
+
+            finally:
+                try:
+                    await self.runner.clean()
+                except Exception as e:
+                    logger.error(f"Job cleanup failed: {e}")
+
+    async def _execute(self):
+        # This limit should be enough to receive the initial job request, which contains further timing details.
+        self._set_deadline(self.startup_time_limit, "startup time limit")
+        try:
             async with asyncio.timeout(self.time_left):
                 initial_job_request = await self._startup_stage()
                 timing_details = initial_job_request.executor_timing
+        except TimeoutError as e:
+            raise ExecutorError("Timed out waiting for initial job details from miner") from e
 
-            if timing_details:
-                # With timing details, re-initialize the deadline with leeway
-                # It will be extended before each stage down the line
-                self._set_deadline(timing_details.allowed_leeway, "allowed leeway")
-            elif initial_job_request.timeout_seconds is not None:
-                # For single-timeout, this is the full timeout for the whole job
-                self._set_deadline(initial_job_request.timeout_seconds, "single-timeout mode")
-            else:
-                raise JobError(
-                    "No timing received: either timeout_seconds or timing_details must be set"
+        if timing_details:
+            # With timing details, re-initialize the deadline with leeway
+            # It will be extended before each stage down the line
+            self._set_deadline(timing_details.allowed_leeway, "allowed leeway")
+        elif initial_job_request.timeout_seconds is not None:
+            # For single-timeout, this is the full timeout for the whole job
+            self._set_deadline(initial_job_request.timeout_seconds, "single-timeout mode")
+        else:
+            raise ExecutorError(
+                "No timing received: either timeout_seconds or timing_details must be set"
+            )
+
+        # Download stage
+        if timing_details:
+            self._extend_deadline(timing_details.download_time_limit, "download time limit")
+        try:
+            await asyncio.wait_for(self._download_stage(), self.time_left)
+        except TimeoutError as e:
+            raise JobError("Download time exceeded", JobFailureReason.TIMEOUT) from e
+
+        # Execution stage
+        if timing_details:
+            self._extend_deadline(timing_details.execution_time_limit, "execution time limit")
+            if self.runner.is_streaming_job:
+                self._extend_deadline(
+                    timing_details.streaming_start_time_limit, "streaming start time limit"
                 )
+        try:
+            await asyncio.wait_for(self._execution_stage(), self.time_left)
+        except TimeoutError as e:
+            raise JobError("Execution time exceeded", JobFailureReason.TIMEOUT) from e
 
-            # Download stage
-            if timing_details:
-                self._extend_deadline(timing_details.download_time_limit, "download time limit")
-            async with asyncio.timeout(self.time_left):
-                await self._download_stage()
-
-            # Execution stage
-            if timing_details:
-                self._extend_deadline(timing_details.execution_time_limit, "execution time limit")
-                if self.runner.is_streaming_job:
-                    self._extend_deadline(
-                        timing_details.streaming_start_time_limit, "streaming start time limit"
-                    )
-            async with asyncio.timeout(self.time_left):
-                await self._execution_stage()
-
-            # Upload stage
-            if timing_details:
-                self._extend_deadline(timing_details.upload_time_limit, "upload time limit")
-            async with asyncio.timeout(self.time_left):
-                await self._upload_stage()
+        # Upload stage
+        if timing_details:
+            self._extend_deadline(timing_details.upload_time_limit, "upload time limit")
+        try:
+            await asyncio.wait_for(self._upload_stage(), self.time_left)
+        except TimeoutError as e:
+            raise JobError("Upload time exceeded", JobFailureReason.TIMEOUT) from e
 
         logger.debug(f"Finished with {self.time_left:.2f}s time left")
 
@@ -120,13 +151,14 @@ class JobDriver:
             f"Extending deadline by +{seconds:.2f}s to {self.deadline.time_left():.2f}s: {reason}"
         )
 
-    def _enter_stage(self, stage: str):
+    def _enter_stage(self, stage: JobStage) -> None:
         self.current_stage = stage
-        logger.debug(f"Entering stage {stage} with {self.deadline.time_left():.2f}s time left")
+        logger.debug(
+            f"Entering stage {stage.value} with {self.deadline.time_left():.2f}s time left"
+        )
 
     async def _startup_stage(self) -> V0InitialJobRequest:
-        self._enter_stage("startup")
-
+        self._enter_stage(JobStage.EXECUTOR_STARTUP)
         self.specs = get_machine_specs()
         await self.run_security_checks_or_fail()
         initial_job_request = await self.miner_client.initial_msg
@@ -141,8 +173,7 @@ class JobDriver:
         return initial_job_request
 
     async def _download_stage(self):
-        self._enter_stage("download")
-
+        self._enter_stage(JobStage.VOLUME_DOWNLOAD)
         logger.debug("Waiting for full payload")
         full_job_request = await self.miner_client.full_payload
         logger.debug("Full payload received")
@@ -151,8 +182,7 @@ class JobDriver:
         await self.miner_client.send_volumes_ready()
 
     async def _execution_stage(self):
-        self._enter_stage("execution")
-
+        self._enter_stage(JobStage.EXECUTION)
         async with self.runner.start_job():
             if self.runner.is_streaming_job:
                 assert self.runner.executor_certificate is not None, (
@@ -163,8 +193,7 @@ class JobDriver:
         await self.miner_client.send_execution_done()
 
     async def _upload_stage(self):
-        self._enter_stage("upload")
-
+        self._enter_stage(JobStage.RESULT_UPLOAD)
         job_result = await self.runner.upload_results()
         job_result.specs = self.specs
         await self.miner_client.send_result(job_result)
@@ -188,17 +217,25 @@ class JobDriver:
             return_code = docker_process.returncode
 
         if return_code != 0:
-            raise JobError(
+            raise ExecutorError(
                 "CVE-2022-0492 check failed",
-                error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
+                reason=HordeFailureReason.SECURITY_CHECK_FAILED,
+                context={
+                    "return_code": return_code,
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                },
             )
 
         expected_output = "Contained: cannot escape via CVE-2022-0492"
         if expected_output not in stdout.decode():
-            raise JobError(
-                f'CVE-2022-0492 check failed: "{expected_output}" not in stdout.',
-                V0JobFailedRequest.ErrorType.SECURITY_CHECK,
-                f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
+            raise ExecutorError(
+                f'CVE-HordeFailureReason-0492 check failed: "{expected_output}" not in stdout.',
+                reason=HordeFailureReason.SECURITY_CHECK_FAILED,
+                context={
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                },
             )
 
     async def run_nvidia_toolkit_version_check_or_fail(self):
@@ -225,16 +262,26 @@ class JobDriver:
             return_code = docker_process.returncode
 
         if return_code != 0:
-            raise JobError(
+            raise ExecutorError(
                 f"nvidia-container-toolkit check failed: exit code {return_code}",
-                error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
+                reason=HordeFailureReason.SECURITY_CHECK_FAILED,
+                context={
+                    "return_code": return_code,
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                },
             )
 
         lines = stdout.decode().splitlines()
         if not lines:
-            raise JobError(
+            raise ExecutorError(
                 "nvidia-container-toolkit check failed: no output from nvidia-container-toolkit",
-                error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}"',
+                reason=HordeFailureReason.SECURITY_CHECK_FAILED,
+                context={
+                    "return_code": return_code,
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                },
             )
 
         version = lines[0].rpartition(" ")[2]
@@ -242,11 +289,15 @@ class JobDriver:
             packaging.version.parse(version) >= NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION
         )
         if not is_fixed_version:
-            raise JobError(
+            raise ExecutorError(
                 f"Outdated NVIDIA Container Toolkit detected:"
                 f'{version}" not >= {NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION}',
-                V0JobFailedRequest.ErrorType.SECURITY_CHECK,
-                f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}',
+                reason=HordeFailureReason.SECURITY_CHECK_FAILED,
+                context={
+                    "return_code": return_code,
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                },
             )
 
     async def fail_if_execution_unsuccessful(self):
@@ -255,13 +306,48 @@ class JobDriver:
         if self.runner.execution_result.timed_out:
             raise JobError(
                 "Job container timed out during execution",
-                error_type=V0JobFailedRequest.ErrorType.TIMEOUT,
+                reason=JobFailureReason.TIMEOUT,
+                execution_result=self.runner.execution_result,
             )
 
         if self.runner.execution_result.return_code != 0:
             raise JobError(
                 f"Job container exited with non-zero exit code: {self.runner.execution_result.return_code}",
-                error_type=V0JobFailedRequest.ErrorType.NONZERO_EXIT_CODE,
-                error_detail=f"exit code: {self.runner.execution_result.return_code}",
+                reason=JobFailureReason.NONZERO_RETURN_CODE,
                 execution_result=self.runner.execution_result,
             )
+
+    async def send_job_failed(
+        self,
+        message: str,
+        reason: JobFailureReason,
+        execution_result: ExecutionResult | None,
+        context: FailureContext | None = None,
+    ):
+        await self.miner_client.send_job_failed(
+            V0JobFailedRequest(
+                job_uuid=self.miner_client.job_uuid,
+                stage=self.current_stage,
+                reason=reason,
+                message=message,
+                docker_process_exit_status=execution_result.return_code
+                if execution_result
+                else None,
+                docker_process_stdout=execution_result.stdout if execution_result else None,
+                docker_process_stderr=execution_result.stderr if execution_result else None,
+                context=context,
+            )
+        )
+
+    async def send_horde_failed(
+        self, message: str, reason: HordeFailureReason, context: FailureContext | None = None
+    ):
+        await self.miner_client.send_horde_failed(
+            V0HordeFailedRequest(
+                job_uuid=self.miner_client.job_uuid,
+                reported_by=JobParticipantType.EXECUTOR,
+                reason=reason,
+                message=message,
+                context=context,
+            )
+        )

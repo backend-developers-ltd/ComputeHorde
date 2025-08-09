@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from compute_horde.base.docker import DockerRunOptionsPreset
+from compute_horde.protocol_consts import JobFailureReason
 from compute_horde.protocol_messages import V0InitialJobRequest, V0JobRequest
 from compute_horde_core.certificate import (
     check_endpoint,
@@ -25,10 +26,16 @@ from compute_horde_core.volume import (
     HuggingfaceVolume,
     Volume,
     VolumeDownloader,
+    VolumeDownloadFailed,
 )
 from django.conf import settings
 
-from compute_horde_executor.executor.miner_client import ExecutionResult, JobError, JobResult
+from compute_horde_executor.executor.miner_client import (
+    ExecutionResult,
+    ExecutorError,
+    JobError,
+    JobResult,
+)
 from compute_horde_executor.executor.utils import temporary_process
 
 logger = logging.getLogger(__name__)
@@ -89,7 +96,7 @@ def preset_to_docker_run_args(preset: DockerRunOptionsPreset) -> list[str]:
     elif preset == "nvidia_all":
         return ["--runtime=nvidia", "--gpus", "all"]
     else:
-        raise JobError(f"Invalid preset: {preset}")
+        raise ExecutorError(f"Invalid preset: {preset}")
 
 
 def truncate(v: str) -> str:
@@ -188,9 +195,13 @@ class JobRunner:
                 return_code = docker_process.returncode
 
             if return_code != 0:
-                raise JobError(
-                    f"Failed to pull docker image: exit code {return_code}",
-                    error_detail=f'stdout="{stdout.decode()}"\nstderr="{stderr.decode()}',
+                raise ExecutorError(
+                    "Failed to pull docker image",
+                    context={
+                        "return_code": return_code,
+                        "stdout": truncate(stdout.decode()),
+                        "stderr": truncate(stderr.decode()),
+                    },
                 )
 
     async def prepare_full(self, full_job_request: V0JobRequest):
@@ -223,7 +234,7 @@ class JobRunner:
                 docker_run_cmd = ["python", "/script.py"]
 
         if not docker_image:
-            raise JobError("Could not determine Docker image to run")
+            raise ExecutorError("Could not determine Docker image to run")
 
         job_network = "none"
         # if streaming job create a local network for it to communicate with nginx
@@ -287,7 +298,7 @@ class JobRunner:
                         timeout=WAIT_FOR_NGINX_TIMEOUT,
                     )
                 except Exception as e:
-                    raise JobError(f"Failed to start Nginx: {e}") from e
+                    raise ExecutorError(f"Failed to start Nginx: {truncate(str(e))}") from e
 
                 assert self.executor_certificate is not None
                 # check that the job is ready to serve requests
@@ -295,10 +306,10 @@ class JobRunner:
                 logger.debug(f"Checking if streaming job is ready at http://{ip}/health")
                 job_ready = await check_endpoint(
                     f"http://{ip}/health",
-                    WAIT_FOR_STREAMING_JOB_TIMEOUT,  # TODO: TIMEOUTS - Remove timeout?
+                    WAIT_FOR_STREAMING_JOB_TIMEOUT,
                 )
                 if not job_ready:
-                    raise JobError("Streaming job health check failed")
+                    raise ExecutorError("Reached upper time limit for streaming job health check")
 
             yield
 
@@ -396,7 +407,8 @@ class JobRunner:
                 output_uploader.max_size_bytes = settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES
                 upload_results = await output_uploader.upload(self.output_volume_mount_dir)
             except OutputUploadFailed as ex:
-                raise JobError("Job failed during upload", error_detail=str(ex)) from ex
+                # TODO(error propagation): add some context
+                raise JobError("Upload failed", JobFailureReason.UPLOAD_FAILED) from ex
 
         return JobResult(
             exit_status=self.execution_result.return_code,
@@ -454,7 +466,10 @@ class JobRunner:
             if volume_downloader.handles_volume_type() is HuggingfaceVolume:
                 if volume.token is None:
                     volume.token = settings.HF_ACCESS_TOKEN
-            await volume_downloader.download(self.volume_mount_dir)
+            try:
+                await volume_downloader.download(self.volume_mount_dir)
+            except VolumeDownloadFailed as e:
+                raise JobError("Download failed", JobFailureReason.DOWNLOAD_FAILED) from e
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()
@@ -473,6 +488,6 @@ class JobRunner:
         late_volume = self.full_job_request.volume if self.full_job_request else None
 
         if initial_volume and late_volume:
-            raise JobError("Received multiple volumes")
+            raise ExecutorError("Received multiple volumes")
 
         return initial_volume or late_volume

@@ -16,8 +16,7 @@ from compute_horde_validator.validator.tasks import run_admin_job_request
 
 
 async def notify_job_status_update(msg: JobStatusUpdate):
-    comment = msg.metadata.comment if msg.metadata else ""
-    print(f"\njob status: {msg.status} {comment}")
+    print(f"\njob status: {msg.status}")
     if (
         msg.metadata
         and msg.metadata.miner_response
