@@ -57,14 +57,14 @@ class JobResultDetails(BaseModel, extra="allow"):
 class JobRejectionDetails(BaseModel):
     rejected_by: JobParticipantType
     reason: JobRejectionReason
-    message: str | None = None
+    message: str
     context: JsonValue = None
 
 
 class JobFailureDetails(BaseModel):
     reason: JobFailureReason
     stage: JobFailureStage
-    message: str | None = None
+    message: str
     context: JsonValue = None
     docker_process_exit_status: int | None = None
     docker_process_stdout: str | None = None
@@ -74,7 +74,7 @@ class JobFailureDetails(BaseModel):
 class HordeFailureDetails(BaseModel):
     reported_by: JobParticipantType
     reason: HordeFailureReason
-    message: str | None = None
+    message: str
     context: JsonValue = None
 
 

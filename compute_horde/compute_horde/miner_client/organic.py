@@ -251,7 +251,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
             mapped_msg = V0HordeFailedRequest(
                 job_uuid=msg.job_uuid,
                 reported_by=JobParticipantType.MINER,
-                reason=HordeFailureReason.GENERIC_STREAMING_SETUP_FAILED,
+                reason=HordeFailureReason.STREAMING_FAILED,
                 message="Executor reported legacy V0StreamingJobNotReadyRequest message",
             )
             await self.handle_message(mapped_msg)

@@ -7,7 +7,8 @@ else:
 
 
 class JobParticipantType(StrEnum):
-    UNKNOWN = "unknown"  # TODO(post error propagation): remove this
+    UNKNOWN = "unknown"
+
     SDK = "sdk"
     FACILITATOR = "facilitator"
     VALIDATOR = "validator"
@@ -90,7 +91,6 @@ class JobFailureStage(StrEnum):
 
 
 class HordeFailureReason(StrEnum):
-    # TODO(post error propagation): remove "unknown"
     UNKNOWN = "unknown"
 
     # Something sent a "GenericError"
@@ -100,9 +100,11 @@ class HordeFailureReason(StrEnum):
     UNCAUGHT_EXCEPTION = "uncaught_exception"
     UNCAUGHT_TIMEOUT = "uncaught_timeout"
 
-    # Received a legacy V0ExecutorFailed or V0StreamingJobNotReady TODO(post error propagation): remove these
+    # Received a legacy V0ExecutorFailed TODO(post error propagation): remove these
     GENERIC_EXECUTOR_FAILED = "generic_executor_failed"
-    GENERIC_STREAMING_SETUP_FAILED = "generic_streaming_setup_failed"
+
+    # Received a legacy V0StreamingNotReady TODO(post error propagation): remove these
+    STREAMING_FAILED = "streaming_failed"
 
     # Validator couldn't connect to a miner
     MINER_CONNECTION_FAILED = "miner_connection_failed"
@@ -121,14 +123,6 @@ class HordeFailureReason(StrEnum):
 
     # Executor failed the security check, or could not run it for some reason.
     SECURITY_CHECK_FAILED = "security_check_failed"
-
-    # ↓ Unknown TODO(error propagation): find out if these are needed for backwards compatibility
-    STREAMING_FAILED = "streaming_failed"
-    STREAMING_SETUP_FAILED = "streaming_setup_failed"
-    JOB_FAILED = "job_failed"
-    VOLUMES_FAILED = "volumes_failed"
-    EXECUTION_FAILED = "execution_failed"
-    JOB_DECLINED = "job_declined"
 
     @classmethod
     def _missing_(cls, value):
