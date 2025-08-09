@@ -94,37 +94,39 @@ class ComputeHordeJobResult:
 
 @dataclass
 class ComputeHordeJobRejection:
-    rejected_by: str
     reason: str
-    message: str | None = None
-    context: JsonValue = None
+    message: str
+    context: dict[str, JsonValue] | None = None
 
 
 @dataclass
 class ComputeHordeJobFailure:
     reason: str
-    message: str | None = None
-    context: JsonValue = None
+    message: str
+    context: dict[str, JsonValue] | None = None
 
 
 @dataclass
 class ComputeHordeHordeFailure:
-    reported_by: str
     reason: str
-    message: str | None = None
-    exception_type: str | None = None
-    context: JsonValue = None
+    message: str
+    reported_by: str
+    context: dict[str, JsonValue] | None = None
+
+
+@dataclass
+class StreamingServerDetails:
+    streaming_server_cert: str | None = None
+    streaming_server_address: str | None = None
+    streaming_server_port: int | None = None
 
 
 @dataclass
 class JobStatusUpdateMetadata:
-    comment: str | None = None
-    miner_response: dict[str, JsonValue] | None = None
-    # TODO(error propagation): create structs for these
-    job_rejection_details: dict[str, JsonValue] | None = None
-    job_failure_details: dict[str, JsonValue] | None = None
-    horde_failure_details: dict[str, JsonValue] | None = None
-    streaming_details: dict[str, JsonValue] | None = None
+    job_rejection_details: ComputeHordeJobRejection | None = None
+    job_failure_details: ComputeHordeJobFailure | None = None
+    horde_failure_details: ComputeHordeHordeFailure | None = None
+    streaming_details: StreamingServerDetails | None = None
 
 
 @dataclass

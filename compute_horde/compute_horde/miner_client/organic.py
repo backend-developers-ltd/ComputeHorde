@@ -12,7 +12,7 @@ from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
-from pydantic import JsonValue, TypeAdapter
+from pydantic import TypeAdapter
 
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.executor_class import EXECUTOR_CLASS
@@ -22,6 +22,7 @@ from compute_horde.miner_client.base import (
 )
 from compute_horde.protocol_consts import HordeFailureReason, JobParticipantType
 from compute_horde.protocol_messages import (
+    FailureContext,
     GenericError,
     MinerToValidatorMessage,
     UnauthorizedError,
@@ -476,7 +477,7 @@ class JobDriverError(Exception):
         message: str,
         reason: HordeFailureReason,
         received: MinerToValidatorMessage | None = None,
-        context: dict[str, JsonValue] | None = None,
+        context: FailureContext | None = None,
     ):
         self.message = message
         self.reason = reason

@@ -7,6 +7,7 @@ from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMess
 from compute_horde.protocol_consts import HordeFailureReason, JobFailureReason
 from compute_horde.protocol_messages import (
     ExecutorToMinerMessage,
+    FailureContext,
     GenericError,
     MinerToExecutorMessage,
     V0ExecutionDoneRequest,
@@ -23,7 +24,7 @@ from compute_horde.protocol_messages import (
 from compute_horde.transport import AbstractTransport, WSTransport
 from compute_horde.utils import MachineSpecs
 from django.conf import settings
-from pydantic import JsonValue, TypeAdapter
+from pydantic import TypeAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class JobError(Exception):
         reason: JobFailureReason = JobFailureReason.UNKNOWN,
         error_detail: str | None = None,
         execution_result: ExecutionResult | None = None,
-        context: dict[str, JsonValue] | None = None,
+        context: FailureContext | None = None,
     ):
         self.message = message
         self.reason = reason
@@ -63,7 +64,7 @@ class ExecutorError(Exception):
         self,
         message: str,
         reason: HordeFailureReason = HordeFailureReason.GENERIC_ERROR,
-        context: dict[str, JsonValue] | None = None,
+        context: FailureContext | None = None,
     ) -> None:
         super().__init__(f"Job failed {reason=}, {message=})")
         self.reason = reason

@@ -9,13 +9,13 @@ from compute_horde.protocol_consts import (
     JobStage,
 )
 from compute_horde.protocol_messages import (
+    FailureContext,
     V0HordeFailedRequest,
     V0InitialJobRequest,
     V0JobFailedRequest,
 )
 from compute_horde.utils import MachineSpecs, Timer
 from django.conf import settings
-from pydantic import JsonValue
 
 from compute_horde_executor.executor.job_runner import JobRunner
 from compute_horde_executor.executor.miner_client import (
@@ -61,7 +61,7 @@ class JobDriver:
 
             except JobError as e:
                 logger.error(f"Job error: {e.reason}: {e.message}", exc_info=True)
-                await self.send_job_failed(e.message, e.reason, e.execution_result)
+                await self.send_job_failed(e.message, e.reason, e.execution_result, e.context)
 
             except ExecutorError as e:
                 logger.error(f"Executor error: {e.reason}: {e.message}", exc_info=True)
@@ -117,7 +117,7 @@ class JobDriver:
         try:
             await asyncio.wait_for(self._download_stage(), self.time_left)
         except TimeoutError as e:
-            raise JobError("Timed out during volume download", JobFailureReason.TIMEOUT) from e
+            raise JobError("Download time exceeded", JobFailureReason.TIMEOUT) from e
 
         # Execution stage
         if timing_details:
@@ -129,7 +129,7 @@ class JobDriver:
         try:
             await asyncio.wait_for(self._execution_stage(), self.time_left)
         except TimeoutError as e:
-            raise JobError("Timed out during job execution", JobFailureReason.TIMEOUT) from e
+            raise JobError("Execution time exceeded", JobFailureReason.TIMEOUT) from e
 
         # Upload stage
         if timing_details:
@@ -137,7 +137,7 @@ class JobDriver:
         try:
             await asyncio.wait_for(self._upload_stage(), self.time_left)
         except TimeoutError as e:
-            raise JobError("Timed out during upload", JobFailureReason.TIMEOUT) from e
+            raise JobError("Upload time exceeded", JobFailureReason.TIMEOUT) from e
 
         logger.debug(f"Finished with {self.time_left:.2f}s time left")
 
@@ -322,7 +322,7 @@ class JobDriver:
         message: str,
         reason: JobFailureReason,
         execution_result: ExecutionResult | None,
-        context: dict[str, JsonValue] | None = None,
+        context: FailureContext | None = None,
     ):
         await self.miner_client.send_job_failed(
             V0JobFailedRequest(
@@ -340,7 +340,7 @@ class JobDriver:
         )
 
     async def send_horde_failed(
-        self, message: str, reason: HordeFailureReason, context: dict[str, JsonValue] | None = None
+        self, message: str, reason: HordeFailureReason, context: FailureContext | None = None
     ):
         await self.miner_client.send_horde_failed(
             V0HordeFailedRequest(

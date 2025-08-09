@@ -1,7 +1,7 @@
 from typing import Any, Literal, Self
 
 import bittensor
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel
 
 from compute_horde.protocol_consts import (
     HordeFailureReason,
@@ -11,6 +11,7 @@ from compute_horde.protocol_consts import (
     JobStage,
     JobStatus,
 )
+from compute_horde.protocol_messages import FailureContext
 
 
 class V0Heartbeat(BaseModel, extra="forbid"):
@@ -58,14 +59,14 @@ class JobRejectionDetails(BaseModel):
     rejected_by: JobParticipantType
     reason: JobRejectionReason
     message: str
-    context: JsonValue = None
+    context: FailureContext | None = None
 
 
 class JobFailureDetails(BaseModel):
     reason: JobFailureReason
     stage: JobStage
     message: str
-    context: JsonValue = None
+    context: FailureContext | None = None
     docker_process_exit_status: int | None = None
     docker_process_stdout: str | None = None
     docker_process_stderr: str | None = None
@@ -75,7 +76,7 @@ class HordeFailureDetails(BaseModel):
     reported_by: JobParticipantType
     reason: HordeFailureReason
     message: str
-    context: JsonValue = None
+    context: FailureContext | None = None
 
 
 class StreamingServerDetails(BaseModel, extra="forbid"):

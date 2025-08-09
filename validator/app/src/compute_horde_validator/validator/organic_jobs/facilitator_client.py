@@ -35,9 +35,10 @@ from compute_horde.protocol_consts import (
     JobStage,
     JobStatus,
 )
+from compute_horde.protocol_messages import FailureContext
 from compute_horde_core.signature import SignedRequest, verify_signature
 from django.conf import settings
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel
 
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
@@ -446,7 +447,7 @@ class FacilitatorClient:
         message: str,
         rejected_by: JobParticipantType,
         reason: JobRejectionReason,
-        context: dict[str, JsonValue] | None = None,
+        context: FailureContext | None = None,
     ) -> None:
         await self.send_job_status_update(
             JobStatusUpdate(
@@ -469,7 +470,7 @@ class FacilitatorClient:
         message: str,
         stage: JobStage,
         reason: JobFailureReason,
-        context: dict[str, JsonValue] | None = None,
+        context: FailureContext | None = None,
     ) -> None:
         await self.send_job_status_update(
             JobStatusUpdate(
@@ -492,7 +493,7 @@ class FacilitatorClient:
         message: str,
         reported_by: JobParticipantType,
         reason: HordeFailureReason,
-        context: dict[str, JsonValue] | None = None,
+        context: FailureContext | None = None,
     ) -> None:
         await self.send_job_status_update(
             JobStatusUpdate(

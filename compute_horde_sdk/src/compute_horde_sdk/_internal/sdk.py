@@ -16,7 +16,6 @@ import pydantic
 import tenacity
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509 import Certificate
-from pydantic import JsonValue
 
 from compute_horde_core.certificate import generate_certificate, serialize_certificate
 from compute_horde_core.executor_class import ExecutorClass
@@ -30,6 +29,9 @@ from compute_horde_core.signature import (
 
 from .exceptions import ComputeHordeError, ComputeHordeJobTimeoutError, ComputeHordeNotFoundError
 from .models import (
+    ComputeHordeHordeFailure,
+    ComputeHordeJobFailure,
+    ComputeHordeJobRejection,
     ComputeHordeJobResult,
     ComputeHordeJobStatus,
     ComputeHordeJobStatusEntry,
@@ -225,11 +227,10 @@ class ComputeHordeJob:
         return self.status_history[-1].status
 
     @property
-    def error(self) -> dict[str, JsonValue] | None:
+    def error(self) -> ComputeHordeJobRejection | ComputeHordeJobFailure | ComputeHordeHordeFailure | None:
         """
         If the job finished with some error, returns the error details.
         """
-        # TODO(error propagation): structs for the error types
         if not self.status_history:
             return None
         last_status = self.status_history[-1]

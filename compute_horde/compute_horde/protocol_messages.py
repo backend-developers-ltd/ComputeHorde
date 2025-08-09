@@ -1,5 +1,5 @@
 import enum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypeAlias
 
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
@@ -27,6 +27,9 @@ from compute_horde.utils import MachineSpecs
 # NOTE:
 # miner.ec = Miner's executor consumer
 # miner.vc = Miner's validator consumer
+
+
+FailureContext: TypeAlias = dict[str, JsonValue] | None
 
 
 # executor <-> miner.ec <-> miner.vc <-> validator
@@ -103,7 +106,7 @@ class V0DeclineJobRequest(BaseModel):
     message: str = ""
     reason: JobRejectionReason = JobRejectionReason.UNKNOWN
     receipts: list[Receipt] = Field(default_factory=list)
-    context: dict[str, JsonValue] | None = None
+    context: FailureContext | None = None
 
 
 # miner.vc -> validator
@@ -191,7 +194,7 @@ class V0JobFailedRequest(BaseModel):
     docker_process_exit_status: int | None = None
     docker_process_stdout: str | None = None
     docker_process_stderr: str | None = None
-    context: dict[str, JsonValue] | None = None
+    context: FailureContext | None = None
 
 
 # executor -> miner.ec -> miner.vc -> validator
@@ -240,7 +243,7 @@ class V0HordeFailedRequest(BaseModel):
     reported_by: JobParticipantType
     message: str
     reason: HordeFailureReason
-    context: dict[str, JsonValue] | None = None
+    context: FailureContext | None = None
 
 
 ValidatorToMinerMessage = Annotated[
