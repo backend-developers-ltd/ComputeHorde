@@ -132,9 +132,6 @@ class JobFailureReason(StrEnum):
     DOWNLOAD_FAILED = "download_failed"
     UPLOAD_FAILED = "upload_failed"
 
-    # TODO(error propagation): this may be too specific?
-    HUGGINGFACE_DOWNLOAD = "huggingface_download"
-
     @classmethod
     def _missing_(cls, value: Any) -> "JobFailureReason":
         return cls.UNKNOWN
