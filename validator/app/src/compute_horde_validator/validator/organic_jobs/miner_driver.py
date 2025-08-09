@@ -54,20 +54,18 @@ from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 logger = logging.getLogger(__name__)
 
 
-def status_update_from_job(job: OrganicJob, status: JobStatus) -> JobStatusUpdate:
-    miner_response = JobResultDetails(
-        docker_process_stdout=job.stdout,
-        docker_process_stderr=job.stderr,
-        artifacts=job.artifacts,
-        upload_results=job.upload_results,
-    )
+def status_update_from_success(job: OrganicJob) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
-        comment=job.comment,
-        miner_response=miner_response,
+        miner_response=JobResultDetails(
+            docker_process_stdout=job.stdout,
+            docker_process_stderr=job.stderr,
+            artifacts=job.artifacts,
+            upload_results=job.upload_results,
+        ),
     )
     return JobStatusUpdate(
         uuid=str(job.job_uuid),
-        status=status,
+        status=JobStatus.COMPLETED,
         metadata=metadata,
     )
 
@@ -77,7 +75,6 @@ def status_update_from_rejection(
 ) -> JobStatusUpdate:
     comment = comment or rejection.msg.message
     metadata = JobStatusMetadata(
-        comment=comment,
         job_rejection_details=JobRejectionDetails(
             rejected_by=JobParticipantType.MINER,
             reason=rejection.msg.reason,
@@ -96,7 +93,6 @@ def status_update_from_job_failure(
     job: OrganicJob, failure: MinerReportedJobFailed
 ) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
-        comment=failure.msg.message,
         job_failure_details=JobFailureDetails(
             reason=failure.msg.reason,
             stage=failure.msg.stage,
@@ -118,7 +114,6 @@ def status_update_from_horde_failure(
     job: OrganicJob, failure: MinerReportedHordeFailed
 ) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
-        comment=failure.msg.message,
         horde_failure_details=HordeFailureDetails(
             reported_by=JobParticipantType.MINER,
             reason=failure.msg.reason,
@@ -135,7 +130,6 @@ def status_update_from_horde_failure(
 
 def status_update_from_organic_job_error(job: OrganicJob, error: JobDriverError) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
-        comment=error.message,
         horde_failure_details=HordeFailureDetails(
             reported_by=JobParticipantType.VALIDATOR,
             reason=error.reason,
@@ -271,7 +265,7 @@ async def drive_organic_job(
 
     def status_callback(status: JobStatus):
         async def relay(msg: MinerToValidatorMessage) -> None:
-            await notify_callback(status_update_from_job(job, status))
+            await notify_callback(JobStatusUpdate(uuid=str(job.job_uuid), status=status))
 
         return relay
 
@@ -295,23 +289,27 @@ async def drive_organic_job(
             else:
                 logger.warning("Could not update miner allowance for job %s", job.job_uuid)
 
+    async def streaming_ready_callback(msg: V0StreamingJobReadyRequest) -> None:
+        await notify_callback(
+            JobStatusUpdate(
+                uuid=str(job.job_uuid),
+                status=JobStatus.STREAMING_READY,
+                metadata=JobStatusMetadata(
+                    streaming_details=StreamingServerDetails(
+                        streaming_server_cert=msg.public_key,
+                        streaming_server_address=msg.ip,
+                        streaming_server_port=msg.port,
+                    ),
+                ),
+            )
+        )
+
     miner_client.notify_job_accepted = job_accepted_callback  # type: ignore[method-assign]
     miner_client.notify_executor_ready = status_callback(JobStatus.EXECUTOR_READY)  # type: ignore[method-assign]
     miner_client.notify_volumes_ready = status_callback(JobStatus.VOLUMES_READY)  # type: ignore[method-assign]
     miner_client.notify_execution_done = status_callback(JobStatus.EXECUTION_DONE)  # type: ignore[method-assign]
+    miner_client.notify_streaming_readiness = streaming_ready_callback  # type: ignore[method-assign]
     # TODO: remove method assignment above and properly handle notify_* cases
-
-    async def notify_streaming_ready(msg: V0StreamingJobReadyRequest) -> None:
-        status_update = status_update_from_job(job, JobStatus.STREAMING_READY)
-        if status_update.metadata is not None:
-            status_update.metadata.streaming_details = StreamingServerDetails(
-                streaming_server_cert=msg.public_key,
-                streaming_server_address=msg.ip,
-                streaming_server_port=msg.port,
-            )
-        await notify_callback(status_update)
-
-    miner_client.notify_streaming_readiness = notify_streaming_ready  # type: ignore[method-assign]
 
     artifacts_dir = job_request.artifacts_dir if isinstance(job_request, V2JobRequest) else None
     job_details = OrganicJobDetails(
@@ -358,7 +356,7 @@ async def drive_organic_job(
         await save_event(
             subtype=SystemEvent.EventSubType.SUCCESS, long_description=comment, success=True
         )
-        await notify_callback(status_update_from_job(job, JobStatus.COMPLETED))
+        await notify_callback(status_update_from_success(job))
         return True
 
     except MinerRejectedJob as rejection:

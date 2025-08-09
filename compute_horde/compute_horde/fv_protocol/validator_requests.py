@@ -85,10 +85,6 @@ class StreamingServerDetails(BaseModel, extra="forbid"):
 
 
 class JobStatusMetadata(BaseModel, extra="allow"):
-    """This is really a "payload" attached to a status update."""
-
-    # TODO: "comment" is probably unnecessary? payloads below should contain details if they need to
-    comment: str
     miner_response: JobResultDetails | None = None
     job_rejection_details: JobRejectionDetails | None = None
     job_failure_details: JobFailureDetails | None = None
@@ -98,7 +94,6 @@ class JobStatusMetadata(BaseModel, extra="allow"):
     @classmethod
     def from_uncaught_exception(cls, reported_by: JobParticipantType, exception: Exception) -> Self:
         return cls(
-            comment="Uncaught exception",
             horde_failure_details=HordeFailureDetails(
                 reported_by=reported_by,
                 reason=HordeFailureReason.UNCAUGHT_EXCEPTION,

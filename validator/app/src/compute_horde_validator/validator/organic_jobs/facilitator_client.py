@@ -453,7 +453,6 @@ class FacilitatorClient:
                 uuid=job_uuid,
                 status=JobStatus.REJECTED,
                 metadata=JobStatusMetadata(
-                    comment=message,
                     job_rejection_details=JobRejectionDetails(
                         rejected_by=rejected_by,
                         reason=reason,
@@ -477,7 +476,6 @@ class FacilitatorClient:
                 uuid=job_uuid,
                 status=JobStatus.FAILED,
                 metadata=JobStatusMetadata(
-                    comment=message,
                     job_failure_details=JobFailureDetails(
                         reason=reason,
                         stage=stage,
@@ -501,7 +499,6 @@ class FacilitatorClient:
                 uuid=job_uuid,
                 status=JobStatus.HORDE_FAILED,
                 metadata=JobStatusMetadata(
-                    comment=message,
                     horde_failure_details=HordeFailureDetails(
                         reported_by=reported_by,
                         reason=reason,
