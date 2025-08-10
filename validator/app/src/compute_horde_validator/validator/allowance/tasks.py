@@ -71,14 +71,14 @@ def evict_old_data():
         except Locked:
             logger.debug("Another thread already evicting")
             return
-        current_block = get_current_block()
+        current_block = supertensor().get_current_block()
         block_number = current_block - allowance_settings.BLOCK_EVICTION_THRESHOLD
         logger.info(f"Evicting data older than {block_number=} ({current_block}, "
                     f"{allowance_settings.BLOCK_EVICTION_THRESHOLD=})")
 
         removed, _ = BlockAllowance.objects.filter(block_id__lte=block_number).delete()
         logger.info(f"Removed {removed} BlockAllowances")
-        removed, _ = AllowanceMinerManifest.objects.filter(block_id__lte=block_number).delete()
+        removed, _ = AllowanceMinerManifest.objects.filter(block_number__lte=block_number).delete()
         logger.info(f"Removed {removed} AllowanceMinerManifests")
         removed, _ = Block.objects.filter(block_number__lte=block_number).delete()
         logger.info(f"Removed {removed} Blocks")
