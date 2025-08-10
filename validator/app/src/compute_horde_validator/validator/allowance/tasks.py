@@ -1,10 +1,9 @@
 from celery.utils.log import get_task_logger
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Subquery
+from django.db.models import Subquery, Q
 
 from . import settings as allowance_settings
-from compute_horde.blockchain.block_cache import get_current_block
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.allowance.utils.supertensor import PrecachingSuperTensor, supertensor
 from compute_horde_validator.validator.allowance.utils.supertensor_django_cache import DjangoCache
@@ -83,10 +82,11 @@ def evict_old_data():
         removed, _ = Block.objects.filter(block_number__lte=block_number).delete()
         logger.info(f"Removed {removed} Blocks")
         removed, _ = AllowanceBooking.objects.filter(
-            ~Subquery(
+            ~Q(id__in=Subquery(
                 BlockAllowance.objects.filter(
                     allowance_booking__isnull=False
                 ).values('allowance_booking_id')
-            )
+            ))
         ).delete()
+
         logger.info(f"Removed {removed} AllowanceBookings")
