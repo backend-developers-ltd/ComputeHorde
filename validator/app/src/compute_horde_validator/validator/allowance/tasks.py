@@ -1,12 +1,16 @@
 from celery.utils.log import get_task_logger
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Subquery
 
+from . import settings as allowance_settings
+from compute_horde.blockchain.block_cache import get_current_block
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator.allowance.utils.supertensor import PrecachingSuperTensor, supertensor
 from compute_horde_validator.validator.allowance.utils.supertensor_django_cache import DjangoCache
-from compute_horde_validator.validator.locks import Lock, Locked, LockType
-from compute_horde_validator.validator.models import SystemEvent, AllowanceMinerManifest
+from compute_horde_validator.validator.locks import Lock, Locked, LockType, get_advisory_lock
+from compute_horde_validator.validator.models import SystemEvent, AllowanceMinerManifest, BlockAllowance, Block, \
+    AllowanceBooking
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
 
 logger = get_task_logger(__name__)
@@ -59,5 +63,30 @@ def sync_manifests():
         )
 
 
-# clean up old allowance blocks
-# clean up old reservations - report system events if there are any expired ones (that were not undone)
+@app.task()
+def evict_old_data():
+    with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
+        try:
+            get_advisory_lock(LockType.ALLOWANCE_EVICTING)
+        except Locked:
+            logger.debug("Another thread already evicting")
+            return
+        current_block = get_current_block()
+        block_number = current_block - allowance_settings.BLOCK_EVICTION_THRESHOLD
+        logger.info(f"Evicting data older than {block_number=} ({current_block}, "
+                    f"{allowance_settings.BLOCK_EVICTION_THRESHOLD=})")
+
+        removed, _ = BlockAllowance.objects.filter(block_id__lte=block_number).delete()
+        logger.info(f"Removed {removed} BlockAllowances")
+        removed, _ = AllowanceMinerManifest.objects.filter(block_id__lte=block_number).delete()
+        logger.info(f"Removed {removed} AllowanceMinerManifests")
+        removed, _ = Block.objects.filter(block_number__lte=block_number).delete()
+        logger.info(f"Removed {removed} Blocks")
+        removed, _ = AllowanceBooking.objects.filter(
+            ~Subquery(
+                BlockAllowance.objects.filter(
+                    allowance_booking__isnull=False
+                ).values('allowance_booking_id')
+            )
+        ).delete()
+        logger.info(f"Removed {removed} AllowanceBookings")

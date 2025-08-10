@@ -708,6 +708,13 @@ CELERY_BEAT_SCHEDULE = {
             "expires": 6,
         },
     },
+    "evict_old_allowance_data": {
+        "task": "compute_horde_validator.validator.allowance.tasks.evict_old_data",
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "expires": 60,
+        },
+    }
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")

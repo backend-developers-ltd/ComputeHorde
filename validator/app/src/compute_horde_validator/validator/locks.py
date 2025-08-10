@@ -10,6 +10,7 @@ class LockType(enum.Enum):
     TRUSTED_MINER_LOCK = 3
     ALLOWANCE_BLOCK_INJECTION = 4
     ALLOWANCE_FETCHING = 5
+    ALLOWANCE_EVICTING = 6
 
 
 class Locked(Exception):

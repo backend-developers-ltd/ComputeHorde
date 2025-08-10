@@ -232,14 +232,7 @@ def report_checkpoint(block_number_lt: int, block_number_gte: int):
             allowance['miner_ss58'],
             allowance['validator_ss58'],
             allowance['executor_class'],
-            block_number_lt,
         ).set(allowance['total_allowance'])
-        print(
-            f"Miner: {allowance['miner_ss58']}, "
-            f"Validator: {allowance['validator_ss58']}, "
-            f"Executor: {allowance['executor_class']}, "
-            f"Total Allowance: {allowance['total_allowance']}"
-        )
 
 
 def scan_blocks_and_calculate_allowance(
@@ -260,7 +253,7 @@ def scan_blocks_and_calculate_allowance(
             # be retried? otherwise random failures will leave holes until they are backfilled
             process_block_allowance_with_reporting(block_number, backfilling_supertensor)
             if not block_number % 100 and report_callback:
-                report_callback(block_number, block_number-10)
+                report_callback(block_number, block_number-100)
             timer.check_time()
 
         while True:

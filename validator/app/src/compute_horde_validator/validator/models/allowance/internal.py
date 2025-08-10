@@ -46,6 +46,7 @@ class AllowanceMinerManifest(models.Model):
 
 
 class AllowanceBooking(models.Model):
+    creation_timestamp = models.DateTimeField(auto_now_add=True)
     is_reserved = models.BooleanField()
     is_spent = models.BooleanField()
     reservation_expiry_time = models.DateTimeField(null=True, blank=True)
