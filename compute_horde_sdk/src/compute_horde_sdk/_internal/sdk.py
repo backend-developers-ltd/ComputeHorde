@@ -196,7 +196,6 @@ class ComputeHordeJob:
         self,
         client: "ComputeHordeClient",
         uuid: str,
-        status: ComputeHordeJobStatus,
         result: ComputeHordeJobResult | None = None,
         streaming_public_cert: Certificate | None = None,
         streaming_private_key: RSAPrivateKey | None = None,
@@ -207,7 +206,6 @@ class ComputeHordeJob:
     ):
         self._client = client
         self.uuid = uuid
-        self.status = status
         self.result = result
         self.streaming_public_cert = streaming_public_cert
         self.streaming_private_key = streaming_private_key
@@ -217,13 +215,11 @@ class ComputeHordeJob:
         self.status_history = status_history or []
 
     @property
-    def current_status(self) -> ComputeHordeJobStatus:
+    def status(self) -> ComputeHordeJobStatus:
         """
         Return the latest known status of the job.
         Use `refresh_from_facilitator` to pull the latest info.
         """
-        if not self.status_history:
-            return self.status
         return self.status_history[-1].status
 
     @property
@@ -297,7 +293,6 @@ class ComputeHordeJob:
 
     async def refresh_from_facilitator(self) -> None:
         new_job = await self._client.get_job(self.uuid)
-        self.status = new_job.status
         self.result = new_job.result
         self.streaming_server_cert = new_job.streaming_server_cert
         self.streaming_server_address = new_job.streaming_server_address
@@ -331,7 +326,6 @@ class ComputeHordeJob:
         return cls(
             client,
             uuid=response.uuid,
-            status=response.status,
             result=result,
             status_history=response.status_history,
             streaming_public_cert=streaming_public_cert,
