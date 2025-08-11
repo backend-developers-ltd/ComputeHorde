@@ -94,13 +94,20 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
         client = OrganicMinerClient(...)
         async with client:
-            await client.send_model(V0InitialJobRequest(...))
-            msg = await client.miner_ready_or_declining_future
-            # handle msg
+            try:
+                await client.send_model(V0InitialJobRequest(...))
+                msg = await client.job_accepted_future
+                # handle msg
 
-            await client.send_model(V0JobRequest(...))
-            msg = client.miner_finished_or_failed_future
-            # handle msg
+                await client.send_model(V0JobRequest(...))
+                msg = client.job_finished_future
+                # handle msg
+            except MinerRejectedJob:
+                ...
+            except MinerReportedJobFailed:
+                ...
+            except MinerReportedHordeFailed:
+                ...
 
     Note that the waiting on the response futures should properly be handled with timeouts
     (with ``asyncio.timeout()``, ``asyncio.wait_for()`` etc.).
@@ -130,25 +137,13 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
         # for waiting on miner responses
         self.job_accepted_future: asyncio.Future[V0AcceptJobRequest] = loop.create_future()
-        self.job_accepted_timestamp: int = 0
-
         self.executor_ready_future: asyncio.Future[V0ExecutorReadyRequest] = loop.create_future()
-        self.executor_ready_timestamp: int = 0
-
         self.streaming_ready_future: asyncio.Future[V0StreamingJobReadyRequest] = (
             loop.create_future()
         )
-        self.streaming_ready_timestamp: int = 0
-
         self.volumes_ready_future: asyncio.Future[V0VolumesReadyRequest] = loop.create_future()
-        self.volumes_ready_timestamp: int = 0
-
         self.execution_done_future: asyncio.Future[V0ExecutionDoneRequest] = loop.create_future()
-        self.execution_done_timestamp: int = 0
-
         self.job_finished_future: asyncio.Future[V0JobFinishedRequest] = loop.create_future()
-        self.job_finished_timestamp: int = 0
-
         self.miner_machine_specs: MachineSpecs | None = None
 
         name = f"{miner_hotkey}({miner_address}:{miner_port})"
