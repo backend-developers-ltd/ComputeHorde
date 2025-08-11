@@ -116,7 +116,7 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
                 V0HordeFailedRequest(
                     job_uuid=msg.job_uuid,
                     reported_by=JobParticipantType.EXECUTOR,
-                    reason=HordeFailureReason.UNKNOWN,
+                    reason=HordeFailureReason.GENERIC_ERROR,
                     message="Legacy executor failure (V0ExecutorFailedRequest)",
                 ),
             )
