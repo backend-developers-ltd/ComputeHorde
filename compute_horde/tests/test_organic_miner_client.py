@@ -10,6 +10,7 @@ from compute_horde.miner_client.organic import (
     MinerReportedJobFailed,
     OrganicMinerClient,
 )
+from compute_horde.protocol_consts import HordeFailureReason, JobParticipantType
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
@@ -55,7 +56,12 @@ async def test_organic_miner_client__throws_when_horde_failed(keypair):
     miner_client = get_miner_client(keypair)
 
     initial_msg = V0AcceptJobRequest(job_uuid=JOB_UUID)
-    executor_msg = V0HordeFailedRequest(job_uuid=JOB_UUID)
+    executor_msg = V0HordeFailedRequest(
+        job_uuid=JOB_UUID,
+        reported_by=JobParticipantType.EXECUTOR,
+        message="Nope",
+        reason=HordeFailureReason.GENERIC_ERROR,
+    )
 
     await miner_client.handle_message(initial_msg)
     await miner_client.handle_message(executor_msg)
