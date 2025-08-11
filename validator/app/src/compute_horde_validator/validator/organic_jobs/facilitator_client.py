@@ -296,6 +296,9 @@ class FacilitatorClient:
                         return
                 except pydantic.ValidationError as exc:
                     logger.warning("Received malformed job status update: %s", exc)
+        except Exception:
+            logger.exception("Error in job status update listener", exc_info=True)
+            raise
         finally:
             logger.debug(f"Finished listening for job status updates for job {job_uuid}")
 
@@ -396,11 +399,17 @@ class FacilitatorClient:
                 reason=JobRejectionReason.INVALID_SIGNATURE,
             )
         except routing.JobRoutingException as e:
+            match e:
+                case routing.NotEnoughTimeInCycle():
+                    reason = JobRejectionReason.NOT_ENOUGH_TIME_IN_CYCLE
+                case _:
+                    reason = JobRejectionReason.NO_MINER_FOR_JOB
+
             await self.send_job_rejected(
                 job_uuid=job_request.uuid,
                 message="Job could not be routed to a miner",
                 rejected_by=JobParticipantType.VALIDATOR,
-                reason=JobRejectionReason.UNKNOWN,
+                reason=reason,
                 context={"exception_type": type(e).__qualname__},
             )
         except Exception as e:

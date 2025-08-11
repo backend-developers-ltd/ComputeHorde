@@ -59,7 +59,7 @@ def test_trigger_run_admin_job__should_trigger_job(bittensor):
 
     assert OrganicJob.objects.count() == 1
     job = OrganicJob.objects.filter(job_uuid=job_request.uuid).first()
-    assert "timed out waiting for initial response" in job.comment
+    assert "Timed out waiting for initial response" in job.comment
     assert job.status == OrganicJob.Status.FAILED
 
 
@@ -335,9 +335,9 @@ def test__run_synthetic_jobs__different_timings(
     ) as _run_synthetic_jobs:
         run_synthetic_jobs(wait_in_advance_blocks=3)
 
-    assert (
-        len([r for r in caplog.records if "Waiting for block " in r.error_detail]) == expected_logs
-    ), str([r.error_detail for r in caplog.records])
+    assert len([r for r in caplog.records if "Waiting for block " in r.message]) == expected_logs, (
+        str([r.message for r in caplog.records])
+    )
 
     if system_event:
         check_system_events(*system_event)

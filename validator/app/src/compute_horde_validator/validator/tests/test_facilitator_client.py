@@ -53,7 +53,7 @@ DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
 async def async_patch_all():
     with (
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
             return_value=True,
         ),
         patch("turbobt.Bittensor"),
@@ -321,7 +321,7 @@ async def test_facilitator_client__cheated_job():
         assert await MinerBlacklist.objects.acount() == 1
         assert (
             await MinerBlacklist.objects.aget(miner_id=miner.id)
-        ).error_type == MinerBlacklist.BlacklistReason.JOB_CHEATED
+        ).reason == MinerBlacklist.BlacklistReason.JOB_CHEATED
 
         await facilitator_client.process_miner_cheat_report(cheated_job_request)
         await job.arefresh_from_db()

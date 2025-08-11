@@ -75,6 +75,7 @@ def status_update_from_rejection(
     job: OrganicJob, rejection: MinerRejectedJob, comment: str | None = None
 ) -> JobStatusUpdate:
     comment = comment or rejection.msg.message
+    logger.warning(f"!!!!!!!!!!! {rejection.msg.reason=} {comment=}")
     metadata = JobStatusMetadata(
         job_rejection_details=JobRejectionDetails(
             rejected_by=JobParticipantType.MINER,

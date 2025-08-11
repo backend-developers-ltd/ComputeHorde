@@ -1,3 +1,5 @@
+from unittest.mock import Mock, patch
+
 import pytest
 from compute_horde.fv_protocol.facilitator_requests import V0JobCheated
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
@@ -30,9 +32,21 @@ pytestmark = [
 ]
 
 
-@pytest.mark.parametrize("reason", [*JobRejectionReason])
+@pytest.mark.parametrize(
+    "miner_reason",
+    [
+        JobRejectionReason.BUSY,
+        JobRejectionReason.INVALID_SIGNATURE,
+        JobRejectionReason.VALIDATOR_BLACKLISTED,
+    ],
+)
 async def test_miner_is_blacklisted__after_rejecting_job(
-    job_request, another_job_request, faci_transport, miner_transport, execute_scenario, reason
+    job_request,
+    another_job_request,
+    faci_transport,
+    miner_transport,
+    execute_scenario,
+    miner_reason,
 ):
     # Faci -> vali: V2 job request
     await faci_transport.add_message(job_request, send_before=0)
@@ -40,7 +54,7 @@ async def test_miner_is_blacklisted__after_rejecting_job(
     # Vali -> miner: initial job request
 
     # Miner -> vali: rejects job
-    accept_job_msg = V0DeclineJobRequest(job_uuid=job_request.uuid, reason=reason)
+    accept_job_msg = V0DeclineJobRequest(job_uuid=job_request.uuid, reason=miner_reason)
     await miner_transport.add_message(accept_job_msg, send_before=1)
 
     # Vali -> faci: job failed
@@ -57,13 +71,13 @@ async def test_miner_is_blacklisted__after_rejecting_job(
     vali_rejected = JobStatusUpdate.model_validate_json(faci_transport.sent[-1])
 
     assert miner_rejected.status == "rejected"
-    assert miner_rejected.metadata.comment.startswith(
-        "Miner failed to excuse" if reason == JobRejectionReason.BUSY else "Miner declined job"
-    )
-    assert miner_rejected.metadata.miner_response is not None
+    assert miner_rejected.metadata.job_rejection_details.reason == miner_reason
+    assert miner_rejected.metadata.miner_response is None
 
     assert vali_rejected.status == "rejected"
-    assert vali_rejected.metadata.comment.startswith("No executor for job request")
+    assert (
+        vali_rejected.metadata.job_rejection_details.reason == JobRejectionReason.NO_MINER_FOR_JOB
+    )
     assert vali_rejected.metadata.miner_response is None
 
 
@@ -74,9 +88,9 @@ async def test_miner_is_blacklisted__after_rejecting_job(
             0,
             [
                 ("received", ""),
-                ("failed", "timed out waiting for initial response"),
+                ("failed", "Timed out waiting for initial response"),
                 ("received", ""),
-                ("rejected", "No executor for job request"),
+                ("rejected", "Job could not be routed"),
             ],
         ),
         (
@@ -84,9 +98,9 @@ async def test_miner_is_blacklisted__after_rejecting_job(
             [
                 ("received", ""),
                 ("accepted", ""),
-                ("failed", "timed out while preparing executor"),
+                ("failed", "Timed out waiting for executor readiness"),
                 ("received", ""),
-                ("rejected", "No executor for job request"),
+                ("rejected", "Job could not be routed"),
             ],
         ),
         (
@@ -95,9 +109,9 @@ async def test_miner_is_blacklisted__after_rejecting_job(
                 ("received", ""),
                 ("accepted", ""),
                 ("executor_ready", ""),
-                ("failed", "timed out: FailureReason.VOLUMES_TIMED_OUT"),
+                ("failed", "Timed out waiting for volume preparation"),
                 ("received", ""),
-                ("rejected", "No executor for job request"),
+                ("rejected", "Job could not be routed"),
             ],
         ),
     ],
@@ -130,15 +144,14 @@ async def test_miner_is_blacklisted__after_timing_out(
 
     await faci_transport.add_message(
         another_job_request,
-        send_before={0: 2, 1: 3, 2: 4}[
-            timeout_stage
-        ],  # The further we go, the more status updates go to the facilitator.
+        # The further we go, the more status updates go to the facilitator.
+        send_before=timeout_stage + 2,
         sleep_before=0.2,
     )
 
     await execute_scenario(
-        until=lambda: len(faci_transport.sent)
-        >= len(expected_status_updates) + 1,  # +1 because auth message is also there
+        # +1 because the auth message is also there
+        until=lambda: len(faci_transport.sent) >= len(expected_status_updates) + 1,
         timeout_seconds=3,
     )
 
@@ -147,9 +160,15 @@ async def test_miner_is_blacklisted__after_timing_out(
         assert status_message.status == status, (
             f"Bad message received at step {i}, expected {status} but got {status_message.status}"
         )
-        assert comment in status_message.metadata.comment, (
-            f"Failed checking message {i}, expected {comment} in comment, got {status_message.metadata.comment}"
-        )
+        if comment:
+            details = (
+                status_message.metadata.job_rejection_details
+                or status_message.metadata.job_failure_details
+                or status_message.metadata.horde_failure_details
+            )
+            assert comment in details.message, (
+                f"Failed checking message {i}, expected {comment} in comment, got {details.message}"
+            )
 
 
 async def test_miner_is_blacklisted__after_failing_to_start_executor(
@@ -229,6 +248,10 @@ async def test_miner_is_blacklisted__after_failing_job(
 
 
 @patch_constance({"DYNAMIC_JOB_CHEATED_BLACKLIST_TIME_SECONDS": 5})
+@patch(
+    "compute_horde_validator.validator.organic_jobs.facilitator_client.slash_collateral_task",
+    Mock(),
+)
 async def test_miner_is_blacklisted__after_job_reported_cheated(
     job_request,
     another_job_request,

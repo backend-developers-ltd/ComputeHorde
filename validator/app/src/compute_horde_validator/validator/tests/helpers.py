@@ -47,7 +47,7 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-def get_miner_client(MINER_CLIENT, job_uuid: str):
+def get_miner_client(MINER_CLIENT, job_uuid: str) -> MinerClient:
     return MINER_CLIENT(
         miner_hotkey="miner_hotkey",
         miner_address="ignore",
@@ -101,9 +101,6 @@ class MockMinerClient(MinerClient):
 
     async def connect(self):
         return
-
-    async def handle_message(self, msg):
-        pass
 
     async def send_model(self, model, error_event_callback=None):
         self._sent_models.append(model)

@@ -1,8 +1,10 @@
 import uuid
+from functools import partial
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
+from compute_horde.protocol_consts import JobStatus
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
@@ -33,7 +35,7 @@ WEBSOCKET_TIMEOUT = 10
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
     (
-        "futures_result",
+        "messages_from_miner",
         "expected_job_status_updates",
         "organic_job_status",
         "dummy_job_factory",
@@ -42,98 +44,110 @@ WEBSOCKET_TIMEOUT = 10
     ),
     [
         (
-            (
-                None,
-                None,
-                None,
-                None,
-                None,
-            ),
-            ["failed"],
+            [],
+            [JobStatus.FAILED],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v2,
             False,
             False,
         ),
         (
-            (
+            [
                 V0DeclineJobRequest,
-                None,
-                None,
-                None,
-                None,
-            ),
-            ["rejected"],
+            ],
+            [JobStatus.REJECTED],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v2,
             False,
             False,
         ),
         (
-            (
+            [
                 V0AcceptJobRequest,
                 V0ExecutorFailedRequest,
-                None,
-                None,
-                None,
-            ),
-            ["accepted", "failed"],
+            ],
+            [JobStatus.ACCEPTED, JobStatus.FAILED],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v2,
             True,
             False,
         ),
         (
-            (
+            [
                 V0AcceptJobRequest,
                 V0ExecutorReadyRequest,
-                None,
-                None,
-                None,
-            ),
-            ["accepted", "executor_ready", "failed"],
+            ],
+            [JobStatus.ACCEPTED, JobStatus.EXECUTOR_READY, JobStatus.FAILED],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v2,
             True,
             False,
         ),
         (
-            (
+            [
                 V0AcceptJobRequest,
                 V0ExecutorReadyRequest,
                 V0VolumesReadyRequest,
                 V0ExecutionDoneRequest,
                 V0JobFailedRequest,
-            ),
-            ["accepted", "executor_ready", "volumes_ready", "execution_done", "failed"],
+            ],
+            [
+                JobStatus.ACCEPTED,
+                JobStatus.EXECUTOR_READY,
+                JobStatus.VOLUMES_READY,
+                JobStatus.EXECUTION_DONE,
+                JobStatus.FAILED,
+            ],
             OrganicJob.Status.FAILED,
             get_dummy_job_request_v2,
             True,
             False,
         ),
         (
-            (
+            [
                 V0AcceptJobRequest,
                 V0ExecutorReadyRequest,
                 V0VolumesReadyRequest,
                 V0ExecutionDoneRequest,
-                V0JobFinishedRequest,
-            ),
-            ["accepted", "executor_ready", "volumes_ready", "execution_done", "completed"],
+                partial(
+                    V0JobFinishedRequest,
+                    docker_process_stdout="mocked stdout",
+                    docker_process_stderr="mocked stderr",
+                    artifacts={},
+                ),
+            ],
+            [
+                JobStatus.ACCEPTED,
+                JobStatus.EXECUTOR_READY,
+                JobStatus.VOLUMES_READY,
+                JobStatus.EXECUTION_DONE,
+                JobStatus.COMPLETED,
+            ],
             OrganicJob.Status.COMPLETED,
             get_dummy_job_request_v2,
             True,
             True,
         ),
         (
-            (
+            [
                 V0AcceptJobRequest,
                 V0ExecutorReadyRequest,
                 V0VolumesReadyRequest,
                 V0ExecutionDoneRequest,
-                V0JobFinishedRequest,
-            ),
-            ["accepted", "executor_ready", "volumes_ready", "execution_done", "completed"],
+                partial(
+                    V0JobFinishedRequest,
+                    docker_process_stdout="mocked stdout",
+                    docker_process_stderr="mocked stderr",
+                    artifacts={},
+                ),
+            ],
+            [
+                JobStatus.ACCEPTED,
+                JobStatus.EXECUTOR_READY,
+                JobStatus.VOLUMES_READY,
+                JobStatus.EXECUTION_DONE,
+                JobStatus.COMPLETED,
+            ],
             OrganicJob.Status.COMPLETED,
             get_dummy_job_request_v2,
             True,
@@ -142,7 +156,7 @@ WEBSOCKET_TIMEOUT = 10
     ],
 )
 async def test_miner_driver(
-    futures_result,
+    messages_from_miner,
     expected_job_status_updates,
     organic_job_status,
     dummy_job_factory,
@@ -175,24 +189,9 @@ async def test_miner_driver(
         block=42,
     )
     miner_client = get_miner_client(MockMinerClient, job_uuid)
-    f0, f1, f2, f3, f4 = futures_result
-    if f0:
-        miner_client.job_accepted_future.set_result(f0(job_uuid=job_uuid))
-    if f1:
-        miner_client.executor_ready_future.set_result(f1(job_uuid=job_uuid))
-    if f2:
-        miner_client.volumes_ready_future.set_result(f2(job_uuid=job_uuid))
-    if f3:
-        miner_client.execution_done_future.set_result(f3(job_uuid=job_uuid))
-    if f4:
-        miner_client.job_finished_future.set_result(
-            f4(
-                job_uuid=job_uuid,
-                docker_process_stdout="mocked stdout",
-                docker_process_stderr="mocked stderr",
-                artifacts={},
-            )
-        )
+
+    for msg_factory in messages_from_miner:
+        await miner_client.handle_message(msg_factory(job_uuid=job_uuid))
 
     job_status_updates: list[JobStatusUpdate] = []
 

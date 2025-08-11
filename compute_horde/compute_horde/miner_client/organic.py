@@ -144,6 +144,7 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         self.volumes_ready_future: asyncio.Future[V0VolumesReadyRequest] = loop.create_future()
         self.execution_done_future: asyncio.Future[V0ExecutionDoneRequest] = loop.create_future()
         self.job_finished_future: asyncio.Future[V0JobFinishedRequest] = loop.create_future()
+
         self.miner_machine_specs: MachineSpecs | None = None
 
         name = f"{miner_hotkey}({miner_address}:{miner_port})"
