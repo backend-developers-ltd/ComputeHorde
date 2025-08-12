@@ -469,7 +469,9 @@ class JobRunner:
             try:
                 await volume_downloader.download(self.volume_mount_dir)
             except VolumeDownloadFailed as e:
-                raise JobError("Download failed", JobFailureReason.DOWNLOAD_FAILED) from e
+                raise JobError(
+                    f"Download failed: {str(e)}", JobFailureReason.DOWNLOAD_FAILED
+                ) from e
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()

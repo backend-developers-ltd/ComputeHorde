@@ -696,12 +696,13 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "timeout": False,
-            "docker_process_stdout": "",
-            "docker_process_stderr": "",
-            "error_type": None,
-            "error_detail": "Input volume too large",
+            "docker_process_stdout": None,
+            "docker_process_stderr": None,
+            "reason": "download_failed",
+            "stage": "volume_download",
+            "message": ContainsStr("Input volume too large"),
             "job_uuid": job_uuid,
+            "context": None,
         },
     ]
 
@@ -857,12 +858,13 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "timeout": False,
-            "docker_process_stdout": "",
-            "docker_process_stderr": "",
-            "error_type": None,
-            "error_detail": "Input volume too large",
+            "docker_process_stdout": None,
+            "docker_process_stderr": None,
+            "message": ContainsStr("Input volume too large"),
+            "reason": "download_failed",
+            "stage": "volume_download",
             "job_uuid": job_uuid,
+            "context": None,
         },
     ]
 
@@ -1126,12 +1128,13 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "timeout": False,
-            "docker_process_stdout": "",
-            "docker_process_stderr": "",
-            "error_type": None,
-            "error_detail": ContainsStr("Job failed during upload"),
+            "docker_process_stdout": None,
+            "docker_process_stderr": None,
+            "message": "Upload failed",
+            "reason": "upload_failed",
+            "stage": "result_upload",
             "job_uuid": job_uuid,
+            "context": None,
         },
     ]
 
