@@ -189,31 +189,6 @@ CONSTANCE_CONFIG = {
         "After this many blocks pass, a block can be considered final",
         int,
     ),
-    "DYNAMIC_COMMIT_REVEAL_WEIGHTS_ENABLED": (
-        True,
-        "This should be synced with the hyperparam",
-        bool,
-    ),
-    "DYNAMIC_COMMIT_REVEAL_WEIGHTS_INTERVAL": (
-        722,
-        "In blocks. This should be synced with the hyperparam",
-        int,
-    ),
-    "DYNAMIC_COMMIT_REVEAL_COMMIT_START_OFFSET": (
-        361,
-        "Do not commit weights for this many blocks from the start of the interval",
-        int,
-    ),
-    "DYNAMIC_COMMIT_REVEAL_COMMIT_END_BUFFER": (
-        15,
-        "Do not commit weights if there are less than this many blocks left in the commit window",
-        int,
-    ),
-    "DYNAMIC_COMMIT_REVEAL_REVEAL_END_BUFFER": (
-        15,
-        "Do not reveal weights if there are less than this many blocks left in the reveal window",
-        int,
-    ),
     "DYNAMIC_MAX_WEIGHT": (
         65535,
         "This should be synced with the hyperparam",
@@ -222,26 +197,6 @@ CONSTANCE_CONFIG = {
     "DYNAMIC_SYNTHETIC_JOBS_PLANNER_MAX_OVERSLEEP_BLOCKS": (
         3,
         "If the job running task wakes up late by this many blocks (or less), the jobs will still run",
-        int,
-    ),
-    "DYNAMIC_WEIGHT_REVEALING_TTL": (
-        120,
-        "in seconds",
-        int,
-    ),
-    "DYNAMIC_WEIGHT_REVEALING_HARD_TTL": (
-        125,
-        "in seconds",
-        int,
-    ),
-    "DYNAMIC_WEIGHT_REVEALING_ATTEMPTS": (
-        50,
-        "the number of attempts",
-        int,
-    ),
-    "DYNAMIC_WEIGHT_REVEALING_FAILURE_BACKOFF": (
-        5,
-        "in seconds",
         int,
     ),
     # llama params
@@ -624,13 +579,6 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(minutes=1).total_seconds(),
         },
     },
-    "reveal_scores": {
-        "task": "compute_horde_validator.validator.tasks.reveal_scores",
-        "schedule": timedelta(minutes=1),
-        "options": {
-            "expires": timedelta(minutes=1).total_seconds(),
-        },
-    },
     "send_events_to_facilitator": {
         "task": "compute_horde_validator.validator.tasks.send_events_to_facilitator",
         "schedule": timedelta(minutes=5),
@@ -827,6 +775,22 @@ DEBUG_USE_MOCK_BLOCK_NUMBER = env.bool("DEBUG_USE_MOCK_BLOCK_NUMBER", default=Fa
 STATS_COLLECTOR_URL = env.str(
     "STATS_COLLECTOR_URL", default="https://stats-collector.computehorde.io/stats_collector/v0/"
 )
+
+
+# PYLON
+PYLON_PORT = env.int("PYLON_PORT", default=8000)
+PYLON_ADDRESS = env.str("PYLON_ADDRESS", default="pylon")
+
+# commit window config for both validator and pylon
+COMMIT_NUM_EPOCHS_PER_CYLE = 2  # number of epochs in a commit cycle
+COMMIT_WEIGHTS_INTERVAL = COMMIT_NUM_EPOCHS_PER_CYLE * 361  # 722 blocks in a commit cycle
+COMMIT_WINDOW_END_BUFFER = env.int(
+    "COMMIT_WINDOW_END_BUFFER", default=15
+)  # Do not commit weights if there are less than this many blocks left in the commit window"
+COMMIT_WINDOW_START_OFFSET = env.int(
+    "COMMIT_WINDOW_START_OFFSET", default=361
+)  # Do not commit weights for this many blocks from the start of the interval"
+
 # if you need to hit a particular miner, without fetching their key, address or port from the blockchain
 DEBUG_MINER_KEY = env.str("DEBUG_MINER_KEY", default="")
 DEBUG_MINER_ADDRESS = env.str("DEBUG_MINER_ADDRESS", default="")
