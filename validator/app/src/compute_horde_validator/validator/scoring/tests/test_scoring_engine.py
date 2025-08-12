@@ -681,3 +681,33 @@ class TestMainHotkeyScoringEngine(TestCase):
                 result = engine._query_current_main_hotkeys(coldkeys=["coldkey1"], cycle_start=1000)
 
                 assert result == {}
+
+    @pytest.mark.django_db
+    def test_query_current_main_hotkeys_uses_existing_database_data(self):
+        """Test that when main hotkeys already exist in database, they are returned without external queries."""
+
+        # Create existing main hotkey records in the database
+        MinerMainHotkey.objects.create(coldkey="coldkey1", cycle_start=1000, main_hotkey="hotkey1")
+        MinerMainHotkey.objects.create(coldkey="coldkey2", cycle_start=1000, main_hotkey="hotkey3")
+
+        # Mock the external query function - it should not be called
+        with patch(
+            "compute_horde_validator.validator.scoring.engine.query_miner_main_hotkeys"
+        ) as mock_query:
+            mock_query.return_value = {}
+
+            engine = DefaultScoringEngine()
+            result = engine._query_current_main_hotkeys(
+                coldkeys=["coldkey1", "coldkey2"],
+                cycle_start=1000,
+            )
+
+            mock_query.assert_not_called()
+
+            assert "coldkey1" in result
+            assert result["coldkey1"].main_hotkey == "hotkey1"
+            assert result["coldkey1"].cycle_start == 1000
+
+            assert "coldkey2" in result
+            assert result["coldkey2"].main_hotkey == "hotkey3"
+            assert result["coldkey2"].cycle_start == 1000
