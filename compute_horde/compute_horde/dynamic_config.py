@@ -59,7 +59,7 @@ def sync_dynamic_config(config_url: str, namespace: SupportsSetAttr) -> None:
 
 
 def fetch_dynamic_configs_from_contract(
-    dynamic_configs: dict[str, type], contract_address: str, namespace: SupportsSetAttr
+    dynamic_configs: list[str], contract_address: str, namespace: SupportsSetAttr
 ) -> None:
     """
     Fetches dynamic configs from a smart contract and sets them to the provided namespace.
