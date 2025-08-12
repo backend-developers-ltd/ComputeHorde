@@ -23,6 +23,8 @@ else:
 
 logger = logging.getLogger(__name__)
 
+NGINX_IMAGE = "nginx:1.26-alpine"
+
 
 async def get_docker_container_ip(container_name: str, bridge_network: bool = False) -> str:
     query = (
@@ -87,7 +89,7 @@ async def start_nginx(
         f"{port}:443",  # expose nginx port
         "-v",
         f"{dir_path}:/etc/nginx/",
-        "nginx:1.26-alpine",
+        NGINX_IMAGE,
     ]
     process = await asyncio.create_subprocess_exec(*cmd)
     _stdout, _stderr = await process.communicate()

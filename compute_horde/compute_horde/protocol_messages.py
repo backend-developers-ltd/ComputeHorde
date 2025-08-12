@@ -61,6 +61,12 @@ class V0ExecutorManifestRequest(BaseModel):
         return sum(self.manifest.values())
 
 
+# validator -> miner.vc and miner.vc -> validator
+class V0MainHotkeyMessage(BaseModel):
+    message_type: Literal["V0MainHotkeyMessage"] = "V0MainHotkeyMessage"
+    main_hotkey: str | None = None
+
+
 # validator -> miner.vc -> miner.ec -> executor
 class V0InitialJobRequest(BaseModel):
     class ExecutorTimingDetails(BaseModel):
@@ -233,7 +239,8 @@ ValidatorToMinerMessage = Annotated[
     | V0InitialJobRequest
     | V0JobRequest
     | V0JobAcceptedReceiptRequest
-    | V0JobFinishedReceiptRequest,
+    | V0JobFinishedReceiptRequest
+    | V0MainHotkeyMessage,
     Field(discriminator="message_type"),
 ]
 
@@ -260,6 +267,7 @@ MinerToValidatorMessage = Annotated[
     GenericError
     | UnauthorizedError
     | V0ExecutorManifestRequest
+    | V0MainHotkeyMessage
     | V0DeclineJobRequest
     | V0AcceptJobRequest
     | V0ExecutorFailedRequest

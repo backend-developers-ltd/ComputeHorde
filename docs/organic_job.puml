@@ -127,7 +127,9 @@ rnote right of "Job driver" #aae: Extend deadline:\n**execution time limit**
 &rnote right of Executor #aae: Extend deadline:\n**execution time limit**
 group Execution stage
 
+Executor -> Executor: Vendor code (or default job runner):\nget_docker_run_args()\nget_docker_image()\nget_docker_run_cmd()\nbefore_start_job()
 Executor --> "Task/Subprocess": docker run
+Executor -> Executor: Vendor code (or default job runner):\nafter_start_job()
 activate "Task/Subprocess"
 "Task/Subprocess" -> "Task/Subprocess": Actual work
 loop streaming - until client terminates the job or timeout occurs
@@ -136,6 +138,7 @@ loop streaming - until client terminates the job or timeout occurs
 end
 "Task/Subprocess" -> Executor: stdout, stderr
 deactivate "Task/Subprocess"
+Executor -> Executor: Vendor code (or default job runner):\njob_cleanup()
 
 "Executor" -> "Job driver": V0ExecutionDone
 &"Job driver" -> Facilitator: ""V0JobStatusUpdate""\n(Execution done)

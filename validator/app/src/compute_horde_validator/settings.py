@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     "django_probes",
     "constance",
     "compute_horde.receipts",
+    "compute_horde.blockchain",
     "compute_horde_validator.validator",
     "compute_horde_validator.validator.admin_config.ValidatorAdminConfig",
     "rangefilter",
@@ -428,6 +429,16 @@ CONSTANCE_CONFIG = {
         "In both cases allowance will still be deducted.",
         bool,
     ),
+    "DYNAMIC_DANCING_BONUS": (
+        0.1,
+        "Bonus multiplier for the split distribution in dancing (10% = 0.1)",
+        float,
+    ),
+    "MAIN_HOTKEY_SHARE": (
+        0.8,
+        "Share of the total score that goes to the main hotkey (80% = 0.8)",
+        float,
+    ),
 }
 
 # Content Security Policy
@@ -573,6 +584,13 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(seconds=10).total_seconds(),
         },
     },
+    "sync_collaterals": {
+        "task": "compute_horde_validator.validator.tasks.sync_collaterals",
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
+    },
     "schedule_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
         "schedule": timedelta(minutes=1),
@@ -669,6 +687,13 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(minutes=5).total_seconds(),
         },
     },
+    # "update_block_cache": {
+    #     "task": "compute_horde.blockchain.tasks.update_block_cache",
+    #     "schedule": timedelta(seconds=6),
+    #     "options": {
+    #         "expires": 6,
+    #     },
+    # },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
@@ -760,6 +785,7 @@ LOGGING = {
 
 BITTENSOR_NETUID = env.int("BITTENSOR_NETUID")
 BITTENSOR_NETWORK = env.str("BITTENSOR_NETWORK")
+BITTENSOR_ARCHIVE_NETWORK = env.str("BITTENSOR_ARCHIVE_NETWORK", "archive")
 
 BITTENSOR_WALLET_DIRECTORY = env.path(
     "BITTENSOR_WALLET_DIRECTORY",

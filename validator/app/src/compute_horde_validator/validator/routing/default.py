@@ -3,7 +3,7 @@ import math
 from datetime import timedelta
 from typing import assert_never
 
-import bittensor
+from compute_horde.blockchain.block_cache import aget_current_block
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
@@ -16,59 +16,56 @@ from django.conf import settings
 from django.utils import timezone
 
 from compute_horde_validator.validator import collateral
+from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
     MetagraphSnapshot,
     Miner,
-    MinerBlacklist,
     MinerManifest,
     MinerPreliminaryReservation,
-    OrganicJob,
-    SystemEvent,
+)
+from compute_horde_validator.validator.routing.base import RoutingBase
+from compute_horde_validator.validator.routing.types import (
+    AllMinersBusy,
+    JobRoute,
+    NoMinerForExecutorType,
+    NoMinerWithEnoughAllowance,
+    NotEnoughTimeInCycle,
 )
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
 
 
-class JobRoutingException(Exception):
-    pass
+class Routing(RoutingBase):
+    async def pick_miner_for_job_request(self, request: OrganicJobRequest) -> JobRoute:
+        if isinstance(request, V2JobRequest):
+            return await _pick_miner_for_job_v2(request)
+
+        assert_never(request)
 
 
-class NoMinerForExecutorType(JobRoutingException):
-    pass
+_routing_instance: Routing | None = None
 
 
-class AllMinersBusy(JobRoutingException):
-    pass
+def routing() -> Routing:
+    global _routing_instance
+    if _routing_instance is None:
+        _routing_instance = Routing()
+    return _routing_instance
 
 
-class MinerIsBlacklisted(JobRoutingException):
-    pass
-
-
-class NotEnoughTimeInCycle(JobRoutingException):
-    pass
-
-
-class NoMinerWithEnoughAllowance(JobRoutingException):
-    pass
-
-
-async def pick_miner_for_job_request(request: OrganicJobRequest) -> Miner:
-    if settings.DEBUG_MINER_KEY:
-        miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
-        return miner
-
-    if isinstance(request, V2JobRequest):
-        return await pick_miner_for_job_v2(request)
-
-    assert_never(request)
+def _get_seconds_remaining_in_current_cycle(current_block: int) -> int:
+    cycle = get_cycle_containing_block(current_block, netuid=settings.BITTENSOR_NETUID)
+    time_remaining_in_cycle = (
+        cycle.stop - current_block
+    ) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
+    return math.floor(time_remaining_in_cycle.total_seconds())
 
 
 @async_synchronized
-async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
+async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
     """
     Goes through all miners with recent manifests and online executors of the given executor class.
     Filters miners based on compute time allowance and minimum collateral requirements.
@@ -82,10 +79,31 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
     executor_class = request.executor_class
     logger.info(f"Picking a miner for job {request.uuid} with executor class {executor_class}")
 
+    if settings.DEBUG_MINER_KEY:
+        logger.debug(f"Using DEBUG_MINER_KEY for job {request.uuid}")
+        miner, _ = await Miner.objects.aget_or_create(hotkey=settings.DEBUG_MINER_KEY)
+        return JobRoute(
+            miner=AllowanceMiner(
+                address=miner.address,
+                ip_version=miner.ip_version,
+                port=miner.port,
+                hotkey_ss58=miner.hotkey,
+            ),
+            allowance_reservation_id=None,
+        )
+
     if request.on_trusted_miner:
         logger.debug(f"Using trusted miner for job {request.uuid}")
         miner, _ = await Miner.objects.aget_or_create(hotkey=TRUSTED_MINER_FAKE_KEY)
-        return miner
+        return JobRoute(
+            miner=AllowanceMiner(
+                address=miner.address,
+                ip_version=miner.ip_version,
+                port=miner.port,
+                hotkey_ss58=miner.hotkey,
+            ),
+            allowance_reservation_id=None,
+        )
 
     executor_seconds = (
         request.download_time_limit + request.execution_time_limit + request.upload_time_limit
@@ -96,12 +114,11 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
         block = (await MetagraphSnapshot.aget_latest()).block
     except Exception as exc:
         logger.warning(f"Failed to get latest metagraph snapshot: {exc}")
-        async with bittensor.AsyncSubtensor(network=settings.BITTENSOR_NETWORK) as subtensor:
-            block = await subtensor.get_current_block()
+        block = await aget_current_block()
     assert block is not None, "Failed to get current block from cache or subtensor."
 
     if not await aget_config("DYNAMIC_ALLOW_CROSS_CYCLE_ORGANIC_JOBS"):
-        seconds_remaining_in_cycle = get_seconds_remaining_in_current_cycle(block)
+        seconds_remaining_in_cycle = _get_seconds_remaining_in_current_cycle(block)
 
         seconds_required_in_cycle = (
             await aget_config("DYNAMIC_ORGANIC_JOB_ALLOWED_LEEWAY_TIME")
@@ -239,63 +256,15 @@ async def pick_miner_for_job_v2(request: V2JobRequest) -> Miner:
                 expires_at=timezone.now() + timedelta(seconds=reservation_time),
             )
             logger.info(f"Picked miner {manifest.miner.hotkey}")
-            return miner
+            return JobRoute(
+                miner=AllowanceMiner(
+                    address=miner.address,
+                    ip_version=miner.ip_version,
+                    port=miner.port,
+                    hotkey_ss58=miner.hotkey,
+                ),
+                allowance_reservation_id=None,
+            )
 
     logger.error("All miners are busy")
     raise AllMinersBusy()
-
-
-async def report_miner_failed_job(job: OrganicJob) -> None:
-    if job.status != OrganicJob.Status.FAILED:
-        logger.info(
-            f"Not blacklisting miner: job {job.job_uuid} is not failed (status={job.status})"
-        )
-        return
-    if job.on_trusted_miner:
-        return
-
-    blacklist_time = await aget_config("DYNAMIC_JOB_FAILURE_BLACKLIST_TIME_SECONDS")
-    await blacklist_miner(job, MinerBlacklist.BlacklistReason.JOB_FAILED, blacklist_time)
-
-
-async def blacklist_miner(
-    job: OrganicJob, reason: MinerBlacklist.BlacklistReason, blacklist_time: int
-) -> None:
-    now = timezone.now()
-    blacklist_until = now + timedelta(seconds=blacklist_time)
-    miner = await Miner.objects.aget(id=job.miner_id)
-
-    msg = (
-        f"Blacklisting miner {miner.hotkey} "
-        f"until {blacklist_until.isoformat()} "
-        f"for failed job {job.job_uuid} "
-        f"({job.comment})"
-    )
-
-    await MinerBlacklist.objects.acreate(
-        miner=miner,
-        expires_at=blacklist_until,
-        reason=reason,
-        reason_details=job.comment,
-    )
-
-    await SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).acreate(
-        type=SystemEvent.EventType.MINER_ORGANIC_JOB_INFO,
-        subtype=SystemEvent.EventSubType.MINER_BLACKLISTED,
-        long_description=msg,
-        data={
-            "job_uuid": str(job.job_uuid),
-            "miner_hotkey": miner.hotkey,
-            "reason": reason,
-            "start_ts": now.isoformat(),
-            "end_ts": blacklist_until.isoformat(),
-        },
-    )
-
-
-def get_seconds_remaining_in_current_cycle(current_block: int) -> int:
-    cycle = get_cycle_containing_block(current_block, netuid=settings.BITTENSOR_NETUID)
-    time_remaining_in_cycle = (
-        cycle.stop - current_block
-    ) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
-    return math.floor(time_remaining_in_cycle.total_seconds())

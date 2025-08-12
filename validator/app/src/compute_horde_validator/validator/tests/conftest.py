@@ -203,6 +203,7 @@ def bittensor(mocker, validators):
         return_value=[
             MagicMock(
                 hotkey=f"hotkey_{i}",
+                coldkey=f"coldkey_{i}",
                 uid=i,
                 axon_info=Mock(
                     ip=ipaddress.IPv4Address("127.0.0.1"),

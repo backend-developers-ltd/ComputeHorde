@@ -156,7 +156,7 @@ class SkyJob:
     @cached_property
     def cluster_name(self) -> str:
         resources_token = str(uuid.uuid5(self.UUID_NAMESPACE, str(self._get_resources())))[:8]
-        return f"{self.PREFIX}{resources_token}"
+        return f"{self.PREFIX}{resources_token}-{str(uuid.uuid4())[:8]}"
 
     def submit(self, idle_minutes: int = 1) -> None:
         if self.submitted:
