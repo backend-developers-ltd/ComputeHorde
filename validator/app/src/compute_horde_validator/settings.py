@@ -853,6 +853,11 @@ DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
 )
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
+CONFIG_CONTRACT_ADDRESS = env.str(
+    "CONFIG_CONTRACT_ADDRESS", default="0x6034a34677b7c715EA97ED25Ee6B2A8DcB7c641E"
+)
+USE_CONTRACT_CONFIG = env.bool("USE_CONTRACT_CONFIG", default=True)
+
 
 # synthetic jobs are evenly distributed through the cycle, however
 # we start them from some offset because scheduling takes some time
