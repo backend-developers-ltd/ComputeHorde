@@ -3,6 +3,45 @@
 from django.db import migrations, models
 
 
+def forwards(apps, schema_editor):
+    JobStatus = apps.get_model("core", "JobStatus")
+    mapping = {
+        -2: "failed",
+        -1: "rejected",
+        0: "sent",
+        1: "received",
+        2: "accepted",
+        3: "executor_ready",
+        4: "volumes_ready",
+        5: "execution_done",
+        6: "completed",
+        7: "streaming_ready",
+    }
+
+    for old, new in mapping.items():
+        JobStatus.objects.filter(status=old).update(status=new)
+
+
+def backwards(apps, schema_editor):
+    JobStatus = apps.get_model("core", "JobStatus")
+    reverse_mapping = {
+        "failed": -2,
+        "rejected": -1,
+        "sent": 0,
+        "received": 1,
+        "accepted": 2,
+        "executor_ready": 3,
+        "volumes_ready": 4,
+        "execution_done": 5,
+        "completed": 6,
+        "streaming_ready": 7,
+        "unknown": -2,
+        "horde_failed": -2
+    }
+    for new, old in reverse_mapping.items():
+        JobStatus.objects.filter(status=new).update(status=old)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("core", "0051_job_streaming_client_cert_and_more"),
@@ -29,4 +68,5 @@ class Migration(migrations.Migration):
                 ]
             ),
         ),
+        migrations.RunPython(forwards, backwards),
     ]
