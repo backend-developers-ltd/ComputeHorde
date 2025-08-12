@@ -22,7 +22,6 @@ DOCKER_BUILDKIT=1 docker build \
   -t "${APP_NAME}" \
   --build-context compute-horde-sdk=../compute_horde_sdk \
   --build-context compute-horde=../compute_horde \
-  --build-arg ADDITIONAL_PACKAGES \
   --build-arg GITHUB_TOKEN \
   --build-arg HTTP_ASGI_APPLICATION_PATH \
   --label build_date_utc="$DATE_UTC" \

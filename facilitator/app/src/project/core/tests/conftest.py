@@ -1,6 +1,5 @@
 import base64
 import time
-from importlib import import_module
 
 import pytest
 import pytest_asyncio
@@ -16,17 +15,10 @@ from compute_horde.fv_protocol.validator_requests import (
 )
 from compute_horde.protocol_consts import JobStatus
 from compute_horde_core.signature import Signature
-from django.conf import settings
 from django.contrib.auth.models import User
 
 from ...asgi import application
 from ..models import Channel, Job, Validator
-
-for package in settings.ADDITIONAL_APPS:
-    module = import_module(f"{package}.tests.conftest")
-    for name in dir(module):
-        if not name.startswith("_"):
-            locals()[name] = getattr(module, name)
 
 
 @pytest_asyncio.fixture

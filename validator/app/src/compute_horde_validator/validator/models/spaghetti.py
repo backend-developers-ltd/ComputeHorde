@@ -164,6 +164,7 @@ class MetagraphSnapshot(models.Model):
 
     uids = ArrayField(models.IntegerField())
     hotkeys = ArrayField(models.CharField(max_length=255))
+    coldkeys = ArrayField(models.CharField(max_length=255), null=True, blank=True)
 
     # current active miners
     serving_hotkeys = ArrayField(models.CharField(max_length=255))
@@ -220,6 +221,7 @@ class Miner(models.Model):
     objects = MinerQueryset.as_manager()
 
     hotkey = models.CharField(max_length=255, unique=True)
+    coldkey = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     uid = models.IntegerField(null=True)
@@ -323,7 +325,7 @@ class SyntheticJobBatch(models.Model):
 
 class MinerManifest(models.Model):
     miner = models.ForeignKey(Miner, on_delete=models.CASCADE)
-    batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE)
+    batch = models.ForeignKey(SyntheticJobBatch, on_delete=models.CASCADE, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     executor_class = models.CharField(max_length=255)
     executor_count = models.IntegerField(
@@ -340,6 +342,11 @@ class MinerManifest(models.Model):
             UniqueConstraint(
                 fields=["miner", "batch", "executor_class"], name="unique_miner_manifest"
             ),
+        ]
+        indexes = [
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["miner", "created_at"]),
+            models.Index(fields=["batch", "created_at"]),
         ]
 
 

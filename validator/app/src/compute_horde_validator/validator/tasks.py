@@ -28,9 +28,10 @@ from bt_ddos_shield.turbobt import ShieldedBittensor
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
-from compute_horde.dynamic_config import sync_dynamic_config
+from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
 from compute_horde.subtensor import TEMPO, get_cycle_containing_block
 from compute_horde.transport.base import TransportConnectionError
 from compute_horde.utils import MIN_VALIDATOR_STAKE, turbobt_get_validators
@@ -65,6 +66,7 @@ from compute_horde_validator.validator.organic_jobs.miner_driver import (
     drive_organic_job,
     execute_organic_job_request,
 )
+from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.s3 import (
     download_prompts_from_s3_url,
     generate_upload_url,
@@ -81,8 +83,8 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 
 from . import eviction
 from .dynamic_config import aget_config
-from .models import AdminJobRequest, MetagraphSnapshot
-from .scoring import score_batches
+from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
+from .scoring import create_scoring_engine
 
 if False:
     import torch
@@ -730,6 +732,94 @@ def _get_subtensor_for_setting_scores(network):
         return bittensor.subtensor(network=network)
 
 
+def _get_cycles_for_scoring(current_block: int) -> tuple[int, int]:
+    """
+    Determine current and previous cycle start blocks for scoring.
+
+    Args:
+        current_block: Current block number
+
+    Returns:
+        Tuple of (current_cycle_start, previous_cycle_start)
+    """
+    cycle_number = (current_block - 723) // 722
+    current_cycle_start = 722 * cycle_number
+
+    previous_cycle_start = 722 * (cycle_number - 1) if cycle_number > 0 else 0
+
+    logger.info(
+        f"Using test cycle calculation: current_block={current_block}, "
+        f"cycle_number={cycle_number}, current_cycle_start={current_cycle_start}, "
+        f"previous_cycle_start={previous_cycle_start}"
+    )
+
+    return current_cycle_start, previous_cycle_start
+
+
+def _score_cycles(current_block: int) -> dict[str, float]:
+    """
+    Score cycles.
+
+    Args:
+        current_block: Current block number
+
+    Returns:
+        Dictionary mapping hotkey to score
+    """
+    try:
+        current_cycle_start, previous_cycle_start = _get_cycles_for_scoring(current_block)
+
+        if current_cycle_start is None or previous_cycle_start is None:
+            logger.error("Could not determine cycles for scoring")
+            return {}
+
+        if previous_cycle_start < 0:
+            logger.warning("Previous cycle start is negative, using 0")
+            previous_cycle_start = 0
+
+        engine = create_scoring_engine()
+
+        logger.info(
+            f"Calculating scores for cycles: current={current_cycle_start}, previous={previous_cycle_start}"
+        )
+
+        scores = engine.calculate_scores_for_cycles(
+            current_cycle_start=current_cycle_start,
+            previous_cycle_start=previous_cycle_start,
+        )
+
+        if scores:
+            _mark_cycle_as_scored(current_cycle_start)
+
+        return scores
+
+    except Exception as e:
+        logger.error(f"Failed to score cycles directly: {e}")
+        return {}
+
+
+def _mark_cycle_as_scored(current_cycle_start: int):
+    """
+    Mark the current cycle as scored by updating any related batches.
+
+    Args:
+        current_cycle_start: Current cycle start block
+    """
+    try:
+        batches_updated = SyntheticJobBatch.objects.filter(
+            cycle__start=current_cycle_start,
+            scored=False,
+        ).update(scored=True)
+
+        if batches_updated > 0:
+            logger.info(
+                f"Marked {batches_updated} batches as scored for cycle {current_cycle_start}"
+            )
+
+    except Exception as e:
+        logger.warning(f"Failed to mark cycle {current_cycle_start} as scored: {e}")
+
+
 def normalize_batch_scores(
     hotkey_scores: dict[str, float],
     neurons: list[turbobt.Neuron],
@@ -916,7 +1006,11 @@ def set_scores(bittensor: turbobt.Bittensor):
                 ", ".join(str(batch.id) for batch in batches),
             )
 
-            hotkey_scores = score_batches(batches)
+            hotkey_scores = _score_cycles(current_block.number)
+
+            if not hotkey_scores:
+                logger.warning("No scores calculated, skipping weight setting")
+                return
 
             uids, weights = normalize_batch_scores(
                 hotkey_scores,
@@ -1255,6 +1349,7 @@ def save_metagraph_snapshot(
             "stake": subnet_state["total_stake"],
             "uids": [neuron.uid for neuron in neurons],
             "hotkeys": [neuron.hotkey for neuron in neurons],
+            "coldkeys": [neuron.coldkey for neuron in neurons],
             "serving_hotkeys": [
                 neuron.hotkey
                 for neuron in neurons
@@ -1309,7 +1404,13 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
     existing_hotkeys = {m.hotkey for m in miners}
     new_hotkeys = set(current_hotkeys) - existing_hotkeys
     if len(new_hotkeys) > 0:
-        new_miners = Miner.objects.bulk_create([Miner(hotkey=hotkey) for hotkey in new_hotkeys])
+        new_miners = []
+        hotkey_to_neuron = {neuron.hotkey: neuron for neuron in neurons}
+        for hotkey in new_hotkeys:
+            neuron = hotkey_to_neuron.get(hotkey)
+            coldkey = neuron.coldkey if neuron else None
+            new_miners.append(Miner(hotkey=hotkey, coldkey=coldkey))
+        new_miners = Miner.objects.bulk_create(new_miners)
         miners.extend(new_miners)
         logger.info(f"Created new neurons: {new_hotkeys}")
 
@@ -1335,6 +1436,7 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
                 )
                 or miner.port != neuron.axon_info.port
                 or miner.ip_version != neuron.axon_info.ip.version
+                or miner.coldkey != neuron.coldkey
             )
         ):
             miner.uid = neuron.uid
@@ -1345,9 +1447,14 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
             )
             miner.port = neuron.axon_info.port
             miner.ip_version = neuron.axon_info.ip.version
+            miner.coldkey = neuron.coldkey
             miners_to_update.append(miner)
-    Miner.objects.bulk_update(miners_to_update, fields=["uid", "address", "port", "ip_version"])
-    logger.info(f"Updated axon infos for {len(miners_to_update)} miners")
+
+    if miners_to_update:
+        Miner.objects.bulk_update(
+            miners_to_update, fields=["uid", "address", "port", "ip_version", "coldkey"]
+        )
+        logger.info(f"Updated axon infos and null coldkeys for {len(miners_to_update)} miners")
 
     data = {
         "block": block.number,
@@ -1382,35 +1489,33 @@ def sync_metagraph(bittensor: turbobt.Bittensor) -> None:
             snapshot_type=MetagraphSnapshot.SnapshotType.CYCLE_START,
         )
 
-        hotkeys_to_sync = [neuron.hotkey for neuron in neurons]
 
-        try:
-            sync_collaterals(bittensor, hotkeys_to_sync, block)
-        except Exception as e:
-            msg = f"Error while syncing collaterals: {e}"
-            logger.warning(msg)
-            SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
-                type=SystemEvent.EventType.COLLATERAL_SYNCING,
-                subtype=SystemEvent.EventSubType.FAILURE,
-                long_description=msg,
-                data={"block": current_cycle.start},
-            )
-
-
-def sync_collaterals(
-    bittensor: turbobt.Bittensor,
-    hotkeys: list[str],
-    block: turbobt.Block,
-) -> None:
+@app.task
+@bittensor_client
+def sync_collaterals(bittensor: turbobt.Bittensor) -> None:
     """
     Synchronizes miner evm addresses and collateral amounts.
 
-    :param hotkeys: Hotkeys to sync collaterals for.
-    :type hotkeys: Iterable[str]
-    :param block: Block number for querying the collateral contract.
-    :type block: int
     :return: None
     """
+    # Get current metagraph data
+    try:
+        neurons, subnet_state, block = async_to_sync(_get_metagraph_for_sync)(bittensor)
+        if not block:
+            logger.warning("Could not get current block for collateral sync")
+            return
+
+        hotkeys = [neuron.hotkey for neuron in neurons]
+    except Exception as e:
+        msg = f"Error getting metagraph data for collateral sync: {e}"
+        logger.warning(msg)
+        SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).create(
+            type=SystemEvent.EventType.COLLATERAL_SYNCING,
+            subtype=SystemEvent.EventSubType.FAILURE,
+            long_description=msg,
+            data={"error": str(e)},
+        )
+        return
     associations = async_to_sync(collateral.get_evm_key_associations)(
         subtensor=bittensor.subtensor,
         netuid=settings.BITTENSOR_NETUID,
@@ -1626,8 +1731,7 @@ async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycl
     miners = [m async for m in Miner.objects.filter(hotkey__in=miners_hotkeys)]
     validators = [m async for m in Miner.objects.filter(hotkey__in=validators_hotkeys)]
 
-    # Scrape manifests from miners
-    manifests_dict = await get_manifests_from_miners(miners)
+    manifests_dict = await _get_latest_manifests(miners)
     # logger.debug(f"miners: {miners}, validators: {validators}, manifests: {manifests_dict}")
     if not manifests_dict:
         msg = "No manifests fetched - skipping compute time allowances"
@@ -1692,6 +1796,15 @@ async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycl
 
 @app.task
 def fetch_dynamic_config() -> None:
+    if settings.USE_CONTRACT_CONFIG:
+        dynamic_configs = get_dynamic_config_types_from_settings()
+        fetch_dynamic_configs_from_contract(
+            dynamic_configs,
+            settings.CONFIG_CONTRACT_ADDRESS,
+            namespace=config,
+        )
+        return
+
     # if same key exists in both places, common config wins
     sync_dynamic_config(
         config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/validator-config-{settings.DYNAMIC_CONFIG_ENV}.json",
@@ -2011,11 +2124,11 @@ def evict_old_data():
 
 
 async def execute_organic_job_request_on_worker(
-    job_request: OrganicJobRequest, miner: Miner
+    job_request: OrganicJobRequest, job_route: JobRoute
 ) -> OrganicJob:
     timeout = await aget_config("ORGANIC_JOB_CELERY_WAIT_TIMEOUT")
     future_result: AsyncResult[None] = _execute_organic_job_on_worker.apply_async(
-        args=(job_request.model_dump(), miner.hotkey),
+        args=(job_request.model_dump(), job_route.model_dump()),
         expires=timeout,
     )
     # Note - thread sensitive is essential, otherwise the wait will block the sync thread.
@@ -2025,10 +2138,10 @@ async def execute_organic_job_request_on_worker(
 
 
 @app.task
-def _execute_organic_job_on_worker(job_request: JsonValue, miner_hotkey: str) -> None:
+def _execute_organic_job_on_worker(job_request: JsonValue, job_route: JsonValue) -> None:
     request: OrganicJobRequest = TypeAdapter(OrganicJobRequest).validate_python(job_request)
-    miner = Miner.objects.get(hotkey=miner_hotkey)
-    async_to_sync(execute_organic_job_request)(request, miner)
+    route: JobRoute = TypeAdapter(JobRoute).validate_python(job_route)
+    async_to_sync(execute_organic_job_request)(request, route)
 
 
 @app.task
@@ -2057,3 +2170,116 @@ def slash_collateral_task(job_uuid: str) -> None:
             else:
                 job.slashed = True
                 job.save()
+
+
+async def _get_latest_manifests(miners: list[Miner]) -> dict[str, dict[ExecutorClass, int]]:
+    """
+    Get manifests from periodic polling data stored in MinerManifest table.
+    """
+    if not miners:
+        return {}
+
+    miner_hotkeys = [miner.hotkey for miner in miners]
+
+    latest_manifests = [
+        m
+        async for m in MinerManifest.objects.filter(miner__hotkey__in=miner_hotkeys)
+        .distinct("miner__hotkey", "executor_class")
+        .order_by("miner__hotkey", "executor_class", "-created_at")
+        .values("miner__hotkey", "executor_class", "online_executor_count")
+    ]
+
+    manifests_dict: dict[str, dict[ExecutorClass, int]] = {}
+
+    for manifest_record in latest_manifests:
+        hotkey = manifest_record["miner__hotkey"]
+        executor_class = ExecutorClass(manifest_record["executor_class"])
+        online_count = manifest_record["online_executor_count"]
+
+        if hotkey not in manifests_dict:
+            manifests_dict[hotkey] = {}
+
+        manifests_dict[hotkey][executor_class] = online_count
+
+    return manifests_dict
+
+
+@app.task
+def poll_miner_manifests() -> None:
+    """
+    Poll all miners for their manifests and update the MinerManifest table.
+    This runs independently of synthetic job batches.
+    """
+    async_to_sync(_poll_miner_manifests)()
+
+
+async def _poll_miner_manifests() -> None:
+    """
+    Poll miners connected to this validator for their manifests and update the database.
+    """
+    try:
+        metagraph = await MetagraphSnapshot.objects.aget(id=MetagraphSnapshot.SnapshotType.LATEST)
+        serving_hotkeys = metagraph.get_serving_hotkeys()
+
+        if not serving_hotkeys:
+            logger.info("No serving miners in metagraph, skipping manifest polling")
+            return
+
+        miners = [m async for m in Miner.objects.filter(hotkey__in=serving_hotkeys)]
+
+        if not miners:
+            logger.info("No serving miners found in database, skipping manifest polling")
+            return
+
+        logger.info(f"Polling manifests from {len(miners)} serving miners")
+
+    except MetagraphSnapshot.DoesNotExist:
+        logger.warning("No metagraph snapshot found, skipping manifest polling")
+        return
+
+    manifests_dict = await get_manifests_from_miners(miners, timeout=30)
+
+    manifest_records = []
+
+    for miner in miners:
+        manifest = manifests_dict.get(miner.hotkey, {})
+
+        if manifest:
+            for executor_class, executor_count in manifest.items():
+                manifest_records.append(
+                    MinerManifest(
+                        miner=miner,
+                        batch=None,
+                        executor_class=executor_class,
+                        executor_count=executor_count,
+                        online_executor_count=executor_count,
+                    )
+                )
+            logger.debug(f"Stored manifest for {miner.hotkey}: {manifest}")
+        else:
+            last_manifests = [
+                m
+                async for m in MinerManifest.objects.filter(
+                    miner=miner,
+                )
+                .distinct("executor_class")
+                .order_by("executor_class", "-created_at")
+            ]
+
+            if last_manifests:
+                for last_manifest in last_manifests:
+                    manifest_records.append(
+                        MinerManifest(
+                            miner=miner,
+                            batch=None,
+                            executor_class=last_manifest.executor_class,
+                            executor_count=last_manifest.executor_count,
+                            online_executor_count=0,
+                        )
+                    )
+            logger.warning(f"No manifest received from {miner.hotkey}, marked as offline")
+
+    if manifest_records:
+        await MinerManifest.objects.abulk_create(manifest_records)
+        logger.info(f"Stored {len(manifest_records)} manifests")
+    logger.info(f"Manifest polling complete: {len(manifest_records)} manifests stored")

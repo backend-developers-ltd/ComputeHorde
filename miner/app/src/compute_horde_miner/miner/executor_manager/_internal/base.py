@@ -2,6 +2,7 @@ import abc
 import asyncio
 import datetime as dt
 import logging
+import warnings
 from typing import Any
 
 from asgiref.sync import sync_to_async
@@ -12,9 +13,6 @@ from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
 from compute_horde_miner.miner.dynamic_config import aget_config
-from compute_horde_miner.miner.executor_manager._internal.selector import (
-    HistoricalRandomMinerSelector,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +46,7 @@ class ReservedExecutor:
 
 
 class ExecutorClassPool:
-    POOL_CLEANUP_PERIOD = 10
+    POOL_CLEANUP_PERIOD = 1
 
     def __init__(self, manager, executor_class: ExecutorClass, executor_count: int):
         self.manager = manager
@@ -56,6 +54,7 @@ class ExecutorClassPool:
         self._count = executor_count
         self._executors: list[ReservedExecutor] = []
         self._reservation_lock = asyncio.Lock()
+        self._pool_cleanup_lock = asyncio.Lock()
         self._pool_cleanup_task = asyncio.create_task(self._pool_cleanup_loop())
         self._reservation_futures: dict[str, asyncio.Future[None]] = {}
 
@@ -72,6 +71,14 @@ class ExecutorClassPool:
         return self._reservation_futures[token]
 
     async def reserve_executor(self, token: str, timeout: float) -> object:
+        if self.get_availability() == 0:
+            logger.debug(
+                "No executor available, forcing pool cleanup, current list is:\n %s",
+                "\n".join(str(r) for r in self._executors),
+            )
+            async with self._pool_cleanup_lock:
+                await self._pool_cleanup()
+
         async with self._reservation_lock:
             if self.get_availability() == 0:
                 logger.debug(
@@ -109,7 +116,9 @@ class ExecutorClassPool:
         # TODO: this is a basic working logic - pool cleanup should be more robust
         while True:
             try:
-                await self._pool_cleanup()
+                if self._executors:
+                    async with self._pool_cleanup_lock:
+                        await self._pool_cleanup()
             except Exception as exc:
                 logger.error("Error during pool cleanup", exc_info=exc)
             await asyncio.sleep(self.POOL_CLEANUP_PERIOD)
@@ -147,7 +156,6 @@ class ExecutorClassPool:
 class BaseExecutorManager(metaclass=abc.ABCMeta):
     def __init__(self):
         self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
-        self.selector = HistoricalRandomMinerSelector(settings.CLUSTER_SECRET)
 
     @abc.abstractmethod
     async def start_new_executor(self, token, executor_class, timeout):
@@ -219,12 +227,12 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
 
     async def is_active(self) -> bool:
         """Check if the Miner is an active one for configured Cluster"""
-        selected = await self.selector.active(
-            settings.CLUSTER_HOTKEYS,
+        warnings.warn(
+            "is_active() method is deprecated.",
+            DeprecationWarning,
+            stacklevel=2,
         )
-        my_address = settings.BITTENSOR_WALLET().hotkey.ss58_address  # type: str
-
-        return selected == my_address
+        return True
 
     @sync_to_async(thread_sensitive=False)
     def is_peak(self) -> bool:
@@ -235,3 +243,16 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         current_block = subtensor.get_current_block()
         peak_cycle = get_peak_cycle(current_block, settings.BITTENSOR_NETUID)
         return current_block in peak_cycle
+
+    async def get_main_hotkey(self) -> str | None:
+        """
+        Get the main hotkey for this coldkey.
+        By default, returns the miner's own hotkey as the main hotkey.
+        Miners can override this to implement main hotkey selection.
+
+        Returns:
+            The main hotkey for this coldkey, or None if no main hotkey
+        """
+        # Get the miner's own hotkey
+        my_hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address  # type: str
+        return my_hotkey

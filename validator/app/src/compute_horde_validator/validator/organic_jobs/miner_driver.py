@@ -50,6 +50,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
+from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
 logger = logging.getLogger(__name__)
@@ -179,9 +180,11 @@ async def _get_current_block() -> int:
     return (await MetagraphSnapshot.aget_latest()).block
 
 
-async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Miner) -> OrganicJob:
+async def execute_organic_job_request(
+    job_request: OrganicJobRequest, job_route: JobRoute
+) -> OrganicJob:
     if (
-        miner.hotkey == settings.DEBUG_MINER_KEY
+        job_route.miner.hotkey_ss58 == settings.DEBUG_MINER_KEY
         and settings.DEBUG_MINER_ADDRESS
         and settings.DEBUG_MINER_PORT
     ):
@@ -189,15 +192,15 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
         miner_port = settings.DEBUG_MINER_PORT
         ip_type = 4
         on_trusted_miner = False
-    elif miner.hotkey == TRUSTED_MINER_FAKE_KEY:
+    elif job_route.miner.hotkey_ss58 == TRUSTED_MINER_FAKE_KEY:
         miner_ip = settings.TRUSTED_MINER_ADDRESS
         miner_port = settings.TRUSTED_MINER_PORT
         ip_type = 4
         on_trusted_miner = True
     else:
-        miner_ip = miner.address
-        miner_port = miner.port
-        ip_type = miner.ip_version
+        miner_ip = job_route.miner.address
+        miner_port = job_route.miner.port
+        ip_type = job_route.miner.ip_version
         on_trusted_miner = False
 
     if settings.DEBUG_USE_MOCK_BLOCK_NUMBER:
@@ -205,6 +208,7 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
     else:
         block = await _get_current_block()
 
+    miner = await Miner.objects.aget(hotkey=job_route.miner.hotkey_ss58)
     job = await OrganicJob.objects.acreate(
         job_uuid=str(job_request.uuid),
         miner=miner,
@@ -221,7 +225,7 @@ async def execute_organic_job_request(job_request: OrganicJobRequest, miner: Min
     )
 
     miner_client = MinerClient(
-        miner_hotkey=miner.hotkey,
+        miner_hotkey=job_route.miner.hotkey_ss58,
         miner_address=job.miner_address,
         miner_port=job.miner_port,
         job_uuid=str(job.job_uuid),

@@ -7,6 +7,8 @@ import pathlib
 import shlex
 import shutil
 import tempfile
+from abc import ABC, abstractmethod
+from asyncio.subprocess import Process
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -118,7 +120,7 @@ def network_name(docker_objects_infix: str) -> str:
     return f"ch-{docker_objects_infix}"
 
 
-class JobRunner:
+class BaseJobRunner(ABC):
     def __init__(self):
         self.initial_job_request: V0InitialJobRequest | None = None
         self.full_job_request: V0JobRequest | None = None
@@ -207,6 +209,42 @@ class JobRunner:
     async def prepare_full(self, full_job_request: V0JobRequest):
         self.full_job_request = full_job_request
 
+    @abstractmethod
+    async def get_docker_image(self) -> str:
+        """
+        Return the docker image name to run by the executor.
+        """
+
+    @abstractmethod
+    async def get_docker_run_args(self) -> list[str]:
+        """
+        Return the list of arguments to pass to the `docker run` command, e.g. `["--rm", "--name", "container_name"]`.
+        Returned arguments should not include volumes and docker image name.
+        """
+
+    @abstractmethod
+    async def get_docker_run_cmd(self) -> list[str]:
+        """
+        Return a cmd to pass to the docker container, e.g. `self.full_job_request.docker_run_cmd`.
+        The return value of this method is appended after the image name in the `docker run` command.
+        """
+
+    @abstractmethod
+    async def job_cleanup(self, job_process: Process):
+        """
+        Perform any cleanup necessary after the job is finished.
+        """
+
+    async def before_start_job(self):
+        """
+        Perform any action necessary just before the job process is started.
+        """
+
+    async def after_start_job(self):
+        """
+        Perform any action necessary just after the job process is started.
+        """
+
     @asynccontextmanager
     async def start_job(self) -> AsyncGenerator[None, Any]:
         """
@@ -216,35 +254,7 @@ class JobRunner:
             "Call prepare_initial() and prepare_full() first"
         )
         assert self.full_job_request is not None, "Call prepare_initial() and prepare_full() first"
-
-        docker_run_options = preset_to_docker_run_args(
-            self.full_job_request.docker_run_options_preset
-        )
-
-        docker_image = self.full_job_request.docker_image
         extra_volume_flags = []
-        docker_run_cmd = self.full_job_request.docker_run_cmd
-
-        if self.full_job_request.raw_script:
-            raw_script_path = self.temp_dir / "script.py"
-            raw_script_path.write_text(self.full_job_request.raw_script)
-            extra_volume_flags = ["-v", f"{raw_script_path.absolute().as_posix()}:/script.py"]
-
-            if not docker_run_cmd:
-                docker_run_cmd = ["python", "/script.py"]
-
-        if not docker_image:
-            raise ExecutorError("Could not determine Docker image to run")
-
-        job_network = "none"
-        # if streaming job create a local network for it to communicate with nginx
-        if self.is_streaming_job:
-            logger.debug("Spinning up local network for streaming job")
-            job_network = self.job_network_name
-            process = await asyncio.create_subprocess_exec(
-                "docker", "network", "create", "--internal", self.job_network_name
-            )
-            await process.wait()
 
         if self.full_job_request.artifacts_dir:
             extra_volume_flags += [
@@ -255,12 +265,7 @@ class JobRunner:
         self.cmd = [
             "docker",
             "run",
-            *docker_run_options,
-            "--name",
-            self.job_container_name,
-            "--rm",
-            "--network",
-            job_network,
+            *await self.get_docker_run_args(),
             "-v",
             f"{self.volume_mount_dir.as_posix()}/:/volume/",
             "-v",
@@ -268,100 +273,19 @@ class JobRunner:
             "-v",
             f"{self.specs_volume_mount_dir.as_posix()}/:/specs/",
             *extra_volume_flags,
-            docker_image,
-            *docker_run_cmd,
+            await self.get_docker_image(),
+            *await self.get_docker_run_cmd(),
         ]
-
+        await self.before_start_job()
         # TODO: TIMEOUTS - This doesn't kill the docker container, just the docker process that communicates with it.
         async with temporary_process(
             *self.cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         ) as job_process:
-            if self.is_streaming_job:
-                logger.debug("Spinning up nginx for streaming job")
-                await asyncio.sleep(1)
-                try:
-                    # the job container ip is needed to proxy the request to the job container
-                    job_ip = await get_docker_container_ip(self.job_container_name)
-                    # update the nginx conf with the job container ip
-                    nginx_conf = NGINX_CONF.replace("CONTAINER", f"{job_ip}:{JOB_CONTAINER_PORT}")
-                    assert self.nginx_dir_path is not None, (
-                        "nginx dir path is None. Call prepare_initial() first."
-                    )
-                    await start_nginx(
-                        nginx_conf,
-                        port=settings.NGINX_PORT,
-                        dir_path=self.nginx_dir_path,
-                        job_network=self.job_network_name,
-                        container_name=self.nginx_container_name,
-                        timeout=WAIT_FOR_NGINX_TIMEOUT,
-                    )
-                except Exception as e:
-                    raise ExecutorError(f"Failed to start Nginx: {truncate(str(e))}") from e
-
-                assert self.executor_certificate is not None
-                # check that the job is ready to serve requests
-                ip = await get_docker_container_ip(self.nginx_container_name, bridge_network=True)
-                logger.debug(f"Checking if streaming job is ready at http://{ip}/health")
-                job_ready = await check_endpoint(
-                    f"http://{ip}/health",
-                    WAIT_FOR_STREAMING_JOB_TIMEOUT,
-                )
-                if not job_ready:
-                    raise ExecutorError("Reached upper time limit for streaming job health check")
-
+            await self.after_start_job()
             yield
-
-            try:
-                # Support for the legacy single-timeout
-                docker_process_timeout = (
-                    self.initial_job_request.executor_timing.execution_time_limit
-                    if self.initial_job_request.executor_timing
-                    else self.initial_job_request.timeout_seconds
-                )
-                logger.debug(
-                    f"Waiting {docker_process_timeout} seconds for job container to finish"
-                )
-                result = await asyncio.wait_for(
-                    job_process.communicate(),
-                    timeout=docker_process_timeout,
-                )
-                logger.debug(f"Job container exited with return code {job_process.returncode}")
-                self.execution_result = ExecutionResult(
-                    timed_out=False,
-                    return_code=job_process.returncode,
-                    stdout=result[0].decode(),
-                    stderr=result[1].decode(),
-                )
-
-            except TimeoutError:
-                logger.debug("Job container timed out")
-                stdout = (await job_process.stdout.read()).decode() if job_process.stdout else ""
-                stderr = (await job_process.stderr.read()).decode() if job_process.stderr else ""
-                self.execution_result = ExecutionResult(
-                    timed_out=True,
-                    return_code=None,
-                    stdout=stdout,
-                    stderr=stderr,
-                )
-
-            if self.is_streaming_job:
-                # stop the associated nginx server
-                try:
-                    await asyncio.sleep(1)
-                    process = await asyncio.create_subprocess_exec(
-                        "docker",
-                        "stop",
-                        self.nginx_container_name,
-                    )
-                    try:
-                        await asyncio.wait_for(process.wait(), DOCKER_STOP_TIMEOUT_SECONDS)
-                    except TimeoutError:
-                        process.kill()
-                        raise
-                except Exception as e:
-                    logger.error(f"Failed to stop Nginx: {e}")
+            await self.job_cleanup(job_process)
 
     async def upload_results(self) -> JobResult:
         assert self.execution_result is not None, "No execution result"
@@ -493,3 +417,157 @@ class JobRunner:
             raise ExecutorError("Received multiple volumes")
 
         return initial_volume or late_volume
+
+
+class DefaultJobRunner(BaseJobRunner):
+    """
+    Default implementation of a job runner.
+    The image and run args are taken from a job request.
+    The job runner is prepared to handle the streaming jobs
+    by automatically creating and managing a docker network and Nginx instance.
+    """
+
+    async def get_docker_image(self) -> str:
+        assert self.full_job_request is not None, (
+            "Full job request must be set. Call prepare_full() first."
+        )
+        assert self.initial_job_request is not None, (
+            "Initial job request must be set. Call prepare_initial() first."
+        )
+        return self.full_job_request.docker_image
+
+    async def get_docker_run_args(self) -> list[str]:
+        assert self.full_job_request is not None, (
+            "Full job request must be set. Call prepare_full() first."
+        )
+        assert self.initial_job_request is not None, (
+            "Initial job request must be set. Call prepare_initial() first."
+        )
+        preset_run_options = preset_to_docker_run_args(
+            self.full_job_request.docker_run_options_preset
+        )
+
+        job_network = "none"
+        # if streaming job - create a local network for it to communicate with nginx
+        if self.is_streaming_job:
+            logger.debug("Spinning up local network for streaming job")
+            job_network = self.job_network_name
+            process = await asyncio.create_subprocess_exec(
+                "docker", "network", "create", "--internal", self.job_network_name
+            )
+            await process.wait()
+
+        extra_volume_flags = []
+        if self.full_job_request.raw_script:
+            raw_script_path = self.temp_dir / "script.py"
+            raw_script_path.write_text(self.full_job_request.raw_script)
+            extra_volume_flags = ["-v", f"{raw_script_path.absolute().as_posix()}:/script.py"]
+
+        return [
+            *preset_run_options,
+            "--name",
+            self.job_container_name,
+            "--rm",
+            "--network",
+            job_network,
+            *extra_volume_flags,
+        ]
+
+    async def get_docker_run_cmd(self) -> list[str]:
+        assert self.full_job_request is not None, (
+            "Full job request must be set. Call prepare_full() first."
+        )
+        assert self.initial_job_request is not None, (
+            "Initial job request must be set. Call prepare_initial() first."
+        )
+        cmd = self.full_job_request.docker_run_cmd
+        if not cmd and self.full_job_request.raw_script:
+            cmd = ["python", "/script.py"]
+        return cmd
+
+    async def after_start_job(self):
+        if not self.is_streaming_job:
+            return
+        logger.debug("Spinning up nginx for streaming job")
+        await asyncio.sleep(1)
+        try:
+            # the job container ip is needed to proxy the request to the job container
+            job_ip = await get_docker_container_ip(self.job_container_name)
+            # update the nginx conf with the job container ip
+            nginx_conf = NGINX_CONF.replace("CONTAINER", f"{job_ip}:{JOB_CONTAINER_PORT}")
+            assert self.nginx_dir_path is not None, (
+                "nginx dir path is None. Call prepare_initial() first."
+            )
+            await start_nginx(
+                nginx_conf,
+                port=settings.NGINX_PORT,
+                dir_path=self.nginx_dir_path,
+                job_network=self.job_network_name,
+                container_name=self.nginx_container_name,
+                timeout=WAIT_FOR_NGINX_TIMEOUT,
+            )
+        except Exception as e:
+            raise ExecutorError(f"Failed to start Nginx: {truncate(str(e))}") from e
+
+        assert self.executor_certificate is not None
+        # check that the job is ready to serve requests
+        ip = await get_docker_container_ip(self.nginx_container_name, bridge_network=True)
+        logger.debug(f"Checking if streaming job is ready at http://{ip}/health")
+        job_ready = await check_endpoint(
+            f"http://{ip}/health",
+            WAIT_FOR_STREAMING_JOB_TIMEOUT,  # TODO: TIMEOUTS - Remove timeout?
+        )
+        if not job_ready:
+            raise JobError("Streaming job health check failed")
+
+    async def job_cleanup(self, job_process: Process):
+        assert self.initial_job_request is not None, (
+            "Initial job request must be set. Call prepare_initial() first."
+        )
+        try:
+            # Support for the legacy single-timeout
+            docker_process_timeout = (
+                self.initial_job_request.executor_timing.execution_time_limit
+                if self.initial_job_request.executor_timing
+                else self.initial_job_request.timeout_seconds
+            )
+            logger.debug(f"Waiting {docker_process_timeout} seconds for job container to finish")
+            result = await asyncio.wait_for(
+                job_process.communicate(),
+                timeout=docker_process_timeout,
+            )
+            logger.debug(f"Job container exited with return code {job_process.returncode}")
+            self.execution_result = ExecutionResult(
+                timed_out=False,
+                return_code=job_process.returncode,
+                stdout=result[0].decode(),
+                stderr=result[1].decode(),
+            )
+
+        except TimeoutError:
+            logger.debug("Job container timed out")
+            stdout = (await job_process.stdout.read()).decode() if job_process.stdout else ""
+            stderr = (await job_process.stderr.read()).decode() if job_process.stderr else ""
+            self.execution_result = ExecutionResult(
+                timed_out=True,
+                return_code=None,
+                stdout=stdout,
+                stderr=stderr,
+            )
+
+        if self.is_streaming_job:
+            # stop the associated nginx server
+            try:
+                await asyncio.sleep(1)
+                process = await asyncio.create_subprocess_exec(
+                    "docker",
+                    "stop",
+                    self.nginx_container_name,
+                )
+                try:
+                    await asyncio.wait_for(process.wait(), DOCKER_STOP_TIMEOUT_SECONDS)
+                except TimeoutError:
+                    process.kill()
+                    raise
+            except Exception as e:
+                logger.error(f"Failed to stop Nginx: {e}")

@@ -1,3 +1,5 @@
+from typing import Any
+
 INSTALLED_APPS = [
     "compute_horde.blockchain",
     "compute_horde.receipts",
@@ -11,3 +13,4 @@ COMPUTE_HORDE_VALIDATOR_ACTIVE_FIELD = "active"
 
 BITTENSOR_NETUID = 49
 BITTENSOR_NETWORK = "local"
+CONSTANCE_CONFIG: dict[str, tuple[Any, str, type]] = {}

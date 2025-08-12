@@ -25,6 +25,7 @@ from compute_horde.protocol_messages import (
     V0JobFinishedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
+    V0MainHotkeyMessage,
     V0StreamingJobReadyRequest,
     V0VolumesReadyRequest,
     ValidatorAuthForMiner,
@@ -320,6 +321,9 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
 
         assert_never(msg)
 
+        if isinstance(msg, V0MainHotkeyMessage):
+            await self.handle_main_hotkey_request(msg)
+
     async def handle_initial_job_request(self, msg: V0InitialJobRequest):
         validator_blacklisted = await ValidatorBlacklist.objects.filter(
             validator=self.validator
@@ -554,6 +558,22 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         )
 
         (await current_store()).store([created_receipt.to_receipt()])
+
+    async def handle_main_hotkey_request(self, msg: V0MainHotkeyMessage):
+        logger.info(f"Received main hotkey request from validator {self.validator_key}")
+
+        if not self.validator_authenticated:
+            logger.warning(
+                f"Received main hotkey request from unauthenticated validator {self.validator_key}"
+            )
+            await self.send(GenericError(details="Unauthenticated validator").model_dump_json())
+            return
+
+        # Get main hotkey from executor manager
+        main_hotkey = await current.executor_manager.get_main_hotkey()
+
+        await self.send(V0MainHotkeyMessage(main_hotkey=main_hotkey).model_dump_json())
+        logger.info(f"Sent main hotkey to validator {self.validator_key}: {main_hotkey}")
 
     async def _executor_ready(self, msg: V0ExecutorReadyRequest):
         logger.debug(f"_executor_ready for {msg}")

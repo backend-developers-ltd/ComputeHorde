@@ -19,3 +19,4 @@ media/
 .nox/
 __pycache__
 /receipts
+_ignore_*

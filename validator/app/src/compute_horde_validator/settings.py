@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     "django_probes",
     "constance",
     "compute_horde.receipts",
+    "compute_horde.blockchain",
     "compute_horde_validator.validator",
     "compute_horde_validator.validator.admin_config.ValidatorAdminConfig",
     "rangefilter",
@@ -428,6 +429,16 @@ CONSTANCE_CONFIG = {
         "In both cases allowance will still be deducted.",
         bool,
     ),
+    "DYNAMIC_DANCING_BONUS": (
+        0.1,
+        "Bonus multiplier for the split distribution in dancing (10% = 0.1)",
+        float,
+    ),
+    "MAIN_HOTKEY_SHARE": (
+        0.8,
+        "Share of the total score that goes to the main hotkey (80% = 0.8)",
+        float,
+    ),
 }
 
 # Content Security Policy
@@ -573,6 +584,13 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(seconds=10).total_seconds(),
         },
     },
+    "sync_collaterals": {
+        "task": "compute_horde_validator.validator.tasks.sync_collaterals",
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
+    },
     "schedule_synthetic_jobs": {
         "task": "compute_horde_validator.validator.tasks.schedule_synthetic_jobs",
         "schedule": timedelta(minutes=1),
@@ -662,6 +680,20 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(minutes=1).total_seconds(),
         },
     },
+    "poll_miner_manifests": {
+        "task": "compute_horde_validator.validator.tasks.poll_miner_manifests",
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
+    },
+    # "update_block_cache": {
+    #     "task": "compute_horde.blockchain.tasks.update_block_cache",
+    #     "schedule": timedelta(seconds=6),
+    #     "options": {
+    #         "expires": 6,
+    #     },
+    # },
 }
 if env.bool("DEBUG_RUN_BEAT_VERY_OFTEN", default=False):
     CELERY_BEAT_SCHEDULE["run_synthetic_jobs"]["schedule"] = crontab(minute="*")
@@ -753,6 +785,7 @@ LOGGING = {
 
 BITTENSOR_NETUID = env.int("BITTENSOR_NETUID")
 BITTENSOR_NETWORK = env.str("BITTENSOR_NETWORK")
+BITTENSOR_ARCHIVE_NETWORK = env.str("BITTENSOR_ARCHIVE_NETWORK", "archive")
 
 BITTENSOR_WALLET_DIRECTORY = env.path(
     "BITTENSOR_WALLET_DIRECTORY",
@@ -792,7 +825,7 @@ FACILITATOR_URI = env.str(
 DEBUG_CONNECT_FACILITATOR_WEBHOOK = env.str("DEBUG_CONNECT_FACILITATOR_WEBHOOK", default=None)
 DEBUG_USE_MOCK_BLOCK_NUMBER = env.bool("DEBUG_USE_MOCK_BLOCK_NUMBER", default=False)
 STATS_COLLECTOR_URL = env.str(
-    "STATS_COLLECTOR_URL", default="https://facilitator.computehorde.io/stats_collector/v0/"
+    "STATS_COLLECTOR_URL", default="https://stats-collector.computehorde.io/stats_collector/v0/"
 )
 # if you need to hit a particular miner, without fetching their key, address or port from the blockchain
 DEBUG_MINER_KEY = env.str("DEBUG_MINER_KEY", default="")
@@ -820,6 +853,11 @@ DEBUG_OVERRIDE_SYNTHETIC_JOBS_FLOW_VERSION = env.int(
 )
 
 DYNAMIC_CONFIG_ENV = env.str("DYNAMIC_CONFIG_ENV", default="prod")
+CONFIG_CONTRACT_ADDRESS = env.str(
+    "CONFIG_CONTRACT_ADDRESS", default="0x6034a34677b7c715EA97ED25Ee6B2A8DcB7c641E"
+)
+USE_CONTRACT_CONFIG = env.bool("USE_CONTRACT_CONFIG", default=True)
+
 
 # synthetic jobs are evenly distributed through the cycle, however
 # we start them from some offset because scheduling takes some time

@@ -83,7 +83,6 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
     SystemEvent,
 )
-from compute_horde_validator.validator.scoring import get_executor_counts
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
@@ -1557,6 +1556,20 @@ async def _adjust_miner_max_executors_per_class(ctx: BatchContext) -> None:
                 ctx.executors[hotkey][executor_class] = allowed_count
 
 
+def get_executor_counts(batch: SyntheticJobBatch | None) -> dict[str, dict[ExecutorClass, int]]:
+    """In a given batch, get the number of online executors per miner per executor class"""
+    if not batch:
+        return {}
+
+    result: dict[str, dict[ExecutorClass, int]] = defaultdict(lambda: defaultdict(int))
+
+    for manifest in MinerManifest.objects.select_related("miner").filter(batch_id=batch.id):
+        executor_class = ExecutorClass(manifest.executor_class)
+        result[manifest.miner.hotkey][executor_class] += manifest.online_executor_count
+
+    return result
+
+
 @sync_to_async
 def _limit_non_peak_executors_per_class(ctx: BatchContext) -> None:
     peak_cycle = get_peak_cycle(ctx.batch.block, netuid=settings.BITTENSOR_NETUID)
@@ -2163,21 +2176,6 @@ def _db_persist_critical(ctx: BatchContext) -> None:
 @sync_to_async
 def _db_persist(ctx: BatchContext) -> None:
     start_time = time.time()
-
-    miner_manifests: list[MinerManifest] = []
-    for miner in ctx.miners.values():
-        for executor_class, count in ctx.executors[miner.hotkey].items():
-            online_executor_count = ctx.online_executor_count[miner.hotkey].get(executor_class, 0)
-            miner_manifests.append(
-                MinerManifest(
-                    miner=miner,
-                    batch=ctx.batch,
-                    executor_class=executor_class,
-                    executor_count=count,
-                    online_executor_count=online_executor_count,
-                )
-            )
-    MinerManifest.objects.bulk_create(miner_manifests)
 
     # TODO: refactor into nicer abstraction
     synthetic_jobs_map: dict[str, SyntheticJob] = {
