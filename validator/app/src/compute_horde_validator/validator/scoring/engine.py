@@ -250,12 +250,41 @@ class DefaultScoringEngine(ScoringEngine):
         if not coldkeys:
             return {}
 
-        miners: list[Miner] = list(Miner.objects.filter(coldkey__in=coldkeys).select_related())
+        result = {}
+
+        existing_main_hotkeys = MinerMainHotkey.objects.filter(
+            coldkey__in=coldkeys, cycle_start=cycle_start
+        )
+
+        coldkeys_with_existing_data = set()
+        for existing_record in existing_main_hotkeys:
+            result[existing_record.coldkey] = MainHotkeyInfo(
+                coldkey=existing_record.coldkey,
+                cycle_start=cycle_start,
+                main_hotkey=existing_record.main_hotkey,
+            )
+            coldkeys_with_existing_data.add(existing_record.coldkey)
+            logger.debug(
+                f"Found existing main hotkey for {existing_record.coldkey}: {existing_record.main_hotkey}"
+            )
+
+        # Find coldkeys that still need to be queried
+        coldkeys_to_query = [ck for ck in coldkeys if ck not in coldkeys_with_existing_data]
+
+        if not coldkeys_to_query:
+            return result
+
+        miners: list[Miner] = list(
+            Miner.objects.filter(coldkey__in=coldkeys_to_query).select_related()
+        )
+
+        if not miners:
+            logger.warning(f"No miners found for coldkeys that need querying: {coldkeys_to_query}")
+            return result
 
         main_hotkeys = query_miner_main_hotkeys(miners)
 
-        result = {}
-        for coldkey in coldkeys:
+        for coldkey in coldkeys_to_query:
             # Find all miners for this coldkey
             miners_for_coldkey = [miner for miner in miners if miner.coldkey == coldkey]
 
