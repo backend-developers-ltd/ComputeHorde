@@ -18,7 +18,7 @@ from structlog import get_logger
 
 from .authentication import JWTAuthentication
 from .middleware.signature_middleware import require_signature
-from .models import Job, JobCreationDisabledError, JobFeedback
+from .models import Job, JobCreationDisabledError, JobFeedback, JobStatus
 from .schemas import MuliVolumeAllowedVolume
 
 logger = get_logger(__name__)
@@ -44,7 +44,19 @@ class DefaultModelPagination(PageNumberPagination):
     max_page_size = 256
 
 
+class JobStatusEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobStatus
+        fields = ["status", "metadata", "created_at"]
+        read_only_fields = fields
+
+
 class JobSerializer(serializers.HyperlinkedModelSerializer):
+    """
+    - status/stdout/stderr/artifacts/uploads are used by pre-error-propagation SDK
+    - newer SDKs should use status_history instead
+    """
+
     class Meta:
         model = Job
         fields = (
@@ -75,6 +87,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "streaming_server_cert",
             "streaming_server_address",
             "streaming_server_port",
+            "status_history",
         )
         read_only_fields = ("created_at",)
 
@@ -94,9 +107,13 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
     last_update = serializers.SerializerMethodField()
     stdout = serializers.SerializerMethodField()
     stderr = serializers.SerializerMethodField()
+    status_history = JobStatusEntrySerializer(many=True, read_only=True, source="statuses")
 
     def get_status(self, obj):
-        return obj.status.get_status_display()
+        # Legacy status field has the "uppercase" enum values
+        # for older SDK.
+        # TODO: Remove this when nobody is using it any more.
+        return obj.status.get_legacy_status_display()
 
     def get_stdout(self, obj):
         meta = obj.status.meta

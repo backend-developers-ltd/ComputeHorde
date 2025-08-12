@@ -3,9 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from compute_horde.protocol_messages import (
-    V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
-    V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
 )
 
@@ -23,8 +21,6 @@ from compute_horde_miner.miner.miner_consumer.validator_interface import MinerVa
             "_streaming_job_ready",
             {"public_key": "test-key", "port": 8080},
         ),
-        (V0StreamingJobNotReadyRequest, "_streaming_job_failed_to_prepare", {}),
-        (V0ExecutorFailedRequest, "_executor_failed_to_prepare", {}),
     ],
 )
 async def test_executor_token_setting(message_class, handler_method, extra_params):

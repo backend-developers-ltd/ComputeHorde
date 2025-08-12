@@ -1,13 +1,21 @@
 import enum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypeAlias
 
 from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.output_upload import OutputUpload
 from compute_horde_core.streaming import StreamingDetails
 from compute_horde_core.volume import Volume
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, JsonValue
+from typing_extensions import deprecated
 
 from compute_horde.base.docker import DockerRunOptionsPreset
+from compute_horde.protocol_consts import (
+    HordeFailureReason,
+    JobFailureReason,
+    JobParticipantType,
+    JobRejectionReason,
+    JobStage,
+)
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
@@ -19,6 +27,9 @@ from compute_horde.utils import MachineSpecs
 # NOTE:
 # miner.ec = Miner's executor consumer
 # miner.vc = Miner's validator consumer
+
+
+FailureContext: TypeAlias = dict[str, JsonValue] | None
 
 
 # executor <-> miner.ec <-> miner.vc <-> validator
@@ -89,16 +100,13 @@ class V0InitialJobRequest(BaseModel):
 
 # miner.vc -> validator
 class V0DeclineJobRequest(BaseModel):
-    class Reason(enum.Enum):
-        NOT_SPECIFIED = "not_specified"
-        BUSY = "busy"
-        EXECUTOR_FAILURE = "executor_failure"
-        VALIDATOR_BLACKLISTED = "validator_blacklisted"
-
+    # TODO(post error propagation): message and reason should not be optional
     message_type: Literal["V0DeclineJobRequest"] = "V0DeclineJobRequest"
     job_uuid: str
-    reason: Reason = Reason.NOT_SPECIFIED
+    message: str = ""
+    reason: JobRejectionReason = JobRejectionReason.UNKNOWN
     receipts: list[Receipt] = Field(default_factory=list)
+    context: FailureContext | None = None
 
 
 # miner.vc -> validator
@@ -108,6 +116,7 @@ class V0AcceptJobRequest(BaseModel):
 
 
 # executor -> miner.ec -> miner.vc -> validator
+@deprecated("Use V0HordeFailedRequest instead")
 class V0ExecutorFailedRequest(BaseModel):
     message_type: Literal["V0ExecutorFailedRequest"] = "V0ExecutorFailedRequest"
     job_uuid: str
@@ -115,6 +124,7 @@ class V0ExecutorFailedRequest(BaseModel):
 
 
 # executor -> miner.ec -> miner.vc -> validator
+@deprecated("Use V0HordeFailedRequest / V0JobFailedRequest instead")
 class V0StreamingJobNotReadyRequest(BaseModel):
     message_type: Literal["V0StreamingJobNotReadyRequest"] = "V0StreamingJobNotReadyRequest"
     job_uuid: str
@@ -171,20 +181,20 @@ class V0JobRequest(BaseModel):
 
 # executor -> miner.ec -> miner.vc -> validator
 class V0JobFailedRequest(BaseModel):
-    class ErrorType(enum.StrEnum):
-        TIMEOUT = "TIMEOUT"
-        SECURITY_CHECK = "SECURITY_CHECK"
-        HUGGINGFACE_DOWNLOAD = "HUGGINGFACE_DOWNLOAD"
-        NONZERO_EXIT_CODE = "NONZERO_EXIT_STATUS"
-
+    # TODO(post error propagation): make message, stage and failure reason non-optional
+    # TODO(post error propagation): remove aliases after all participants are updated
     message_type: Literal["V0JobFailedRequest"] = "V0JobFailedRequest"
     job_uuid: str
+    message: str = Field(default="", validation_alias=AliasChoices("message", "error_detail"))
+    reason: JobFailureReason = Field(
+        default=JobFailureReason.UNKNOWN,
+        validation_alias=AliasChoices("reason", "error_type"),
+    )
+    stage: JobStage = JobStage.UNKNOWN
     docker_process_exit_status: int | None = None
-    docker_process_stdout: str
-    docker_process_stderr: str
-    error_type: ErrorType | None = None
-    error_detail: str | None = None
-    timeout: bool = False
+    docker_process_stdout: str | None = None
+    docker_process_stderr: str | None = None
+    context: FailureContext | None = None
 
 
 # executor -> miner.ec -> miner.vc -> validator
@@ -226,6 +236,16 @@ class V0MachineSpecsRequest(BaseModel):
     specs: MachineSpecs
 
 
+# executor -> miner.ec -> miner.vc -> validator
+class V0HordeFailedRequest(BaseModel):
+    message_type: Literal["V0HordeFailedRequest"] = "V0HordeFailedRequest"
+    job_uuid: str
+    reported_by: JobParticipantType
+    message: str
+    reason: HordeFailureReason
+    context: FailureContext | None = None
+
+
 ValidatorToMinerMessage = Annotated[
     GenericError
     | ValidatorAuthForMiner
@@ -251,7 +271,8 @@ ExecutorToMinerMessage = Annotated[
     | V0ExecutionDoneRequest
     | V0JobFailedRequest
     | V0JobFinishedRequest
-    | V0MachineSpecsRequest,
+    | V0MachineSpecsRequest
+    | V0HordeFailedRequest,
     Field(discriminator="message_type"),
 ]
 
@@ -269,6 +290,7 @@ MinerToValidatorMessage = Annotated[
     | V0VolumesReadyRequest
     | V0ExecutionDoneRequest
     | V0JobFinishedRequest
-    | V0MachineSpecsRequest,
+    | V0MachineSpecsRequest
+    | V0HordeFailedRequest,
     Field(discriminator="message_type"),
 ]

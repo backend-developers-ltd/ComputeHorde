@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-from compute_horde.protocol_messages import V0InitialJobRequest, V0JobFailedRequest
+from compute_horde.protocol_messages import V0InitialJobRequest
 from compute_horde.transport import StubTransport
 from compute_horde_core.certificate import generate_certificate_at
 from pytest_httpx import HTTPXMock
@@ -366,81 +366,6 @@ def test_huggingface_volume():
     ]
 
 
-def test_huggingface_volume_failure():
-    # Arrange
-    repo_id = "huggingface/model"
-    revision = "main"
-
-    with patch(
-        "huggingface_hub.snapshot_download", side_effect=mock_download_failure
-    ) as mock_snapshot_download:
-        command = CommandTested(
-            iter(
-                [
-                    json.dumps(
-                        {
-                            "message_type": "V0InitialJobRequest",
-                            "executor_class": "spin_up-4min.gpu-24gb",
-                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                            "timeout_seconds": 10,
-                            "volume_type": "huggingface_volume",
-                            "job_uuid": job_uuid,
-                            "job_started_receipt_payload": {
-                                "job_uuid": job_uuid,
-                                "miner_hotkey": "miner_hotkey",
-                                "validator_hotkey": "validator_hotkey",
-                                "timestamp": "2025-01-01T00:00:00+00:00",
-                                "executor_class": "spin_up-4min.gpu-24gb",
-                                "is_organic": True,
-                                "ttl": 5,
-                            },
-                            "job_started_receipt_signature": "blah",
-                        }
-                    ),
-                    json.dumps(
-                        {
-                            "message_type": "V0JobRequest",
-                            "executor_class": "spin_up-4min.gpu-24gb",
-                            "docker_image": "backenddevelopersltd/compute-horde-job-echo:v0-latest",
-                            "docker_run_cmd": [],
-                            "docker_run_options_preset": "none",
-                            "volume": {
-                                "volume_type": "huggingface_volume",
-                                "repo_id": repo_id,
-                                "revision": revision,
-                            },
-                            "job_uuid": job_uuid,
-                        }
-                    ),
-                ]
-            )
-        )
-
-        # Act
-        command.handle(startup_time_limit=10)
-
-    # Assert
-    assert [json.loads(msg) for msg in command.miner_client.transport.sent_messages] == [
-        {
-            "message_type": "V0ExecutorReadyRequest",
-            "executor_token": None,
-            "job_uuid": job_uuid,
-        },
-        {
-            "message_type": "V0JobFailedRequest",
-            "docker_process_exit_status": None,
-            "docker_process_stdout": "",
-            "docker_process_stderr": "",
-            "error_type": V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD.value,
-            "error_detail": "Failed to download model from Hugging Face after 3 retries: Download failed: Download failed",
-            "timeout": False,
-            "job_uuid": job_uuid,
-        },
-    ]
-
-    assert mock_snapshot_download.call_count == 3
-
-
 def test_huggingface_volume_fail_and_retry():
     # Arrange
     repo_id = "huggingface/model"
@@ -771,12 +696,13 @@ def test_zip_url_too_big_volume_should_fail(httpx_mock: HTTPXMock, settings):
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "timeout": False,
-            "docker_process_stdout": "",
-            "docker_process_stderr": "",
-            "error_type": None,
-            "error_detail": "Input volume too large",
+            "docker_process_stdout": None,
+            "docker_process_stderr": None,
+            "reason": "download_failed",
+            "stage": "volume_download",
+            "message": ContainsStr("Input volume too large"),
             "job_uuid": job_uuid,
+            "context": None,
         },
     ]
 
@@ -932,12 +858,13 @@ def test_zip_url_too_big_volume_without_content_length_should_fail(httpx_mock: H
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "timeout": False,
-            "docker_process_stdout": "",
-            "docker_process_stderr": "",
-            "error_type": None,
-            "error_detail": "Input volume too large",
+            "docker_process_stdout": None,
+            "docker_process_stderr": None,
+            "message": ContainsStr("Input volume too large"),
+            "reason": "download_failed",
+            "stage": "volume_download",
             "job_uuid": job_uuid,
+            "context": None,
         },
     ]
 
@@ -1201,12 +1128,13 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
         {
             "message_type": "V0JobFailedRequest",
             "docker_process_exit_status": None,
-            "timeout": False,
-            "docker_process_stdout": "",
-            "docker_process_stderr": "",
-            "error_type": None,
-            "error_detail": ContainsStr("Job failed during upload"),
+            "docker_process_stdout": None,
+            "docker_process_stderr": None,
+            "message": "Upload failed",
+            "reason": "upload_failed",
+            "stage": "result_upload",
             "job_uuid": job_uuid,
+            "context": None,
         },
     ]
 
@@ -1738,7 +1666,11 @@ def test_multi_volume(httpx_mock: HTTPXMock, tmp_path):
     assert request2.method == "GET"
 
 
-def test_artifacts():
+def test_artifacts(caplog):
+    # Temporarily change logging level. This test produces huge amount of outputs,
+    # which GitHub Actions runner is not able to handle, resulting in a timeout.
+    caplog.set_level(logging.CRITICAL)
+
     original_JobRunner_prepare = JobRunner.prepare_initial
 
     async def patch_JobRunner_prepare_initial(

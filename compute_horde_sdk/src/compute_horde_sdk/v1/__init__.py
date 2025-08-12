@@ -11,6 +11,10 @@ from compute_horde_sdk._internal.exceptions import (
 from compute_horde_sdk._internal.models import (
     ComputeHordeJobStatus,
     ComputeHordeJobResult,
+    ComputeHordeJobRejection,
+    ComputeHordeJobFailure,
+    ComputeHordeHordeFailure,
+    ComputeHordeJobStatusEntry,
     InputVolume,
     HTTPInputVolume,
     HuggingfaceInputVolume,

@@ -65,12 +65,12 @@ def test_debug_run_organic_job_command__job_timeout(bittensor):
     output = buf.getvalue()
     assert "done processing" in output
     assert "status: failed" in output
-    assert "timed out" in output
+    assert "initial_response_timed_out" in output
     assert "Picked miner: hotkey: miner_client to run the job" in output
 
     check_system_events(
         SystemEvent.EventType.MINER_ORGANIC_JOB_FAILURE,
-        SystemEvent.EventSubType.JOB_NOT_STARTED,
+        SystemEvent.EventSubType.ERROR_VALIDATOR_REPORTED_TIMEOUT,
         1,
     )
 
