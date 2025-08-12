@@ -319,10 +319,11 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             # Nothing to do here - this doesn't tell us whether the job is dead.
             return
 
-        assert_never(msg)
-
         if isinstance(msg, V0MainHotkeyMessage):
             await self.handle_main_hotkey_request(msg)
+            return
+
+        assert_never(msg)
 
     async def handle_initial_job_request(self, msg: V0InitialJobRequest):
         validator_blacklisted = await ValidatorBlacklist.objects.filter(

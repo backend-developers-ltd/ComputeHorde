@@ -210,17 +210,16 @@ class MinerExecutorConsumer(BaseConsumer[ExecutorToMinerMessage], ExecutorInterf
             )
 
             self._maybe_job.status = AcceptedJob.Status.FAILED
-            self._maybe_job.error_type = V0JobFailedRequest.ErrorType.EXECUTOR_DISCONNECTED
+            self._maybe_job.error_type = HordeFailureReason.EXECUTOR_DISCONNECTED
             self._maybe_job.error_detail = (
                 f"Executor disconnected while job was running (code: {close_code})"
             )
             await self._maybe_job.asave()
 
-            failure_msg = V0JobFailedRequest(
+            failure_msg = V0HordeFailedRequest(
                 job_uuid=str(self._maybe_job.job_uuid),
-                error_type=V0JobFailedRequest.ErrorType.EXECUTOR_DISCONNECTED,
-                error_detail=self._maybe_job.error_detail,
-                docker_process_stdout="",
-                docker_process_stderr="",
+                reported_by=JobParticipantType.MINER,
+                message=self._maybe_job.error_detail,
+                reason=HordeFailureReason.EXECUTOR_DISCONNECTED,
             )
-            await self.send_executor_failed(self.executor_token, failure_msg)
+            await self.send_horde_failed(self.executor_token, failure_msg)

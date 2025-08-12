@@ -40,6 +40,7 @@ from compute_horde.protocol_messages import (
     V0JobFinishedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
+    V0MainHotkeyMessage,
     V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
     V0VolumesReadyRequest,
@@ -313,6 +314,11 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
 
         elif isinstance(msg, V0MachineSpecsRequest):
             await self.handle_machine_specs_request(msg)
+
+        elif isinstance(msg, V0MainHotkeyMessage):
+            logger.info(
+                "Received a V0MainHotkeyMessage: unexpected for an organic job miner client"
+            )
 
         else:
             assert_never(msg)

@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from compute_horde.protocol_consts import HordeFailureReason
 from compute_horde.protocol_messages import V0JobFailedRequest
 
 from compute_horde_miner.miner.miner_consumer.executor_interface import MinerExecutorConsumer
@@ -44,10 +45,10 @@ async def test_disconnect_sends_failure_notification_for_active_statuses(status)
     failure_msg = call_args[0][1]
     assert isinstance(failure_msg, V0JobFailedRequest)
     assert failure_msg.job_uuid == "test-job-uuid"
-    assert failure_msg.error_type == V0JobFailedRequest.ErrorType.EXECUTOR_DISCONNECTED
-    assert failure_msg.error_detail == error_detail
-    assert failure_msg.docker_process_stdout == ""
-    assert failure_msg.docker_process_stderr == ""
+    assert failure_msg.reason == HordeFailureReason.EXECUTOR_DISCONNECTED
+    assert failure_msg.message == error_detail
+    assert failure_msg.docker_process_stdout is None
+    assert failure_msg.docker_process_stderr is None
 
 
 @pytest.mark.asyncio

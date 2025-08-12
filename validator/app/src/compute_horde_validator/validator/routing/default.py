@@ -48,6 +48,7 @@ class Routing(RoutingBase):
 
 _routing_instance: Routing | None = None
 
+
 def routing() -> Routing:
     global _routing_instance
     if _routing_instance is None:

@@ -48,12 +48,10 @@ from compute_horde_validator.validator.models import (
     ValidatorWhitelist,
 )
 from compute_horde_validator.validator.organic_jobs import blacklist
+from compute_horde_validator.validator.organic_jobs.blacklist import report_miner_failed_job
 from compute_horde_validator.validator.routing.default import routing
 from compute_horde_validator.validator.routing.types import (
-    AllMinersBusy,
-    MinerIsBlacklisted,
-    NoMinerForExecutorType,
-    NoMinerWithEnoughAllowance,
+    JobRoutingException,
     NotEnoughTimeInCycle,
 )
 from compute_horde_validator.validator.tasks import (
@@ -406,9 +404,9 @@ class FacilitatorClient:
                 rejected_by=JobParticipantType.VALIDATOR,
                 reason=JobRejectionReason.INVALID_SIGNATURE,
             )
-        except routing.JobRoutingException as e:
+        except JobRoutingException as e:
             match e:
-                case routing.NotEnoughTimeInCycle():
+                case NotEnoughTimeInCycle():
                     reason = JobRejectionReason.NOT_ENOUGH_TIME_IN_CYCLE
                 case _:
                     reason = JobRejectionReason.NO_MINER_FOR_JOB
@@ -453,7 +451,7 @@ class FacilitatorClient:
         )
 
         if job.status == OrganicJob.Status.FAILED:
-            await routing.report_miner_failed_job(job)
+            await report_miner_failed_job(job)
 
     async def send_job_status_update(self, status_update: JobStatusUpdate) -> None:
         await self.send_model(status_update)

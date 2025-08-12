@@ -119,6 +119,9 @@ class HordeFailureReason(StrEnum):
     # Miner noticed that the executor failed to spin up
     EXECUTOR_SPINUP_FAILED = "executor_spinup_failed"
 
+    # Executor disconnected unexpectedly
+    EXECUTOR_DISCONNECTED = "executor_disconnected"
+
     # Executor failed the security check, or could not run it for some reason.
     SECURITY_CHECK_FAILED = "security_check_failed"
 
