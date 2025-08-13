@@ -53,7 +53,7 @@ DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
 async def async_patch_all():
     with (
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
             return_value=True,
         ),
         patch("turbobt.Bittensor"),
@@ -272,7 +272,7 @@ class FacilitatorJobStatusUpdatesWsV2Retries(FacilitatorWs):
     ],
 )
 @patch(
-    "compute_horde_validator.validator.organic_jobs.miner_driver.MINER_CLIENT_CLASS",
+    "compute_horde_validator.validator.organic_jobs.miner_driver.MinerClient",
     MockSuccessfulMinerClient,
 )
 async def test_facilitator_client__job_completed(ws_server_cls):
@@ -315,7 +315,7 @@ async def test_facilitator_client__cheated_job():
         )
         assert job.cheated is False
 
-        await facilitator_client.report_miner_cheated_job(cheated_job_request)
+        await facilitator_client.process_miner_cheat_report(cheated_job_request)
         await job.arefresh_from_db()
         assert job.cheated is True
         assert await MinerBlacklist.objects.acount() == 1
@@ -323,7 +323,7 @@ async def test_facilitator_client__cheated_job():
             await MinerBlacklist.objects.aget(miner_id=miner.id)
         ).reason == MinerBlacklist.BlacklistReason.JOB_CHEATED
 
-        await facilitator_client.report_miner_cheated_job(cheated_job_request)
+        await facilitator_client.process_miner_cheat_report(cheated_job_request)
         await job.arefresh_from_db()
         assert job.cheated is True
         # do not blacklist second time
@@ -337,7 +337,7 @@ async def test_facilitator_client__cheated_job():
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.skip(reason="Validator-side job retry is disabled for now")
 @patch(
-    "compute_horde_validator.validator.organic_jobs.miner_driver.MINER_CLIENT_CLASS",
+    "compute_horde_validator.validator.organic_jobs.miner_driver.MinerClient",
     MockFaillingMinerClient,
 )
 async def test_facilitator_client__failed_job_retries():
@@ -397,7 +397,7 @@ class FacilitatorExpectMachineSpecsWs(FacilitatorWs):
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch(
-    "compute_horde_validator.validator.organic_jobs.miner_driver.MINER_CLIENT_CLASS",
+    "compute_horde_validator.validator.organic_jobs.miner_driver.MinerClient",
     MockSuccessfulMinerClient,
 )
 async def test_wait_for_specs(specs_msg: dict):
@@ -421,7 +421,7 @@ async def test_wait_for_specs(specs_msg: dict):
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch(
-    "compute_horde_validator.validator.organic_jobs.miner_driver.MINER_CLIENT_CLASS",
+    "compute_horde_validator.validator.organic_jobs.miner_driver.MinerClient",
     MockSuccessfulMinerClient,
 )
 async def test_routing_to_trusted_miner():

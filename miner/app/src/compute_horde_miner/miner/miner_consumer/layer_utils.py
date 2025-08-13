@@ -6,13 +6,12 @@ import pydantic
 from channels.generic.websocket import AsyncWebsocketConsumer
 from compute_horde.protocol_messages import (
     V0ExecutionDoneRequest,
-    V0ExecutorFailedRequest,
     V0ExecutorReadyRequest,
+    V0HordeFailedRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
-    V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
     V0VolumesReadyRequest,
 )
@@ -63,15 +62,6 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
     async def _executor_ready(self, msg: V0ExecutorReadyRequest): ...
 
     @log_errors_explicitly
-    async def executor_failed_to_prepare(self, event: dict[str, Any]):
-        payload = self.validate_event("executor_failed_to_prepare", V0ExecutorFailedRequest, event)
-        if payload:
-            await self._executor_failed_to_prepare(payload)
-
-    @abc.abstractmethod
-    async def _executor_failed_to_prepare(self, msg: V0ExecutorFailedRequest): ...
-
-    @log_errors_explicitly
     async def streaming_job_ready(self, event: dict[str, Any]):
         payload = self.validate_event("streaming_job_ready", V0StreamingJobReadyRequest, event)
         if payload:
@@ -79,17 +69,6 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
 
     @abc.abstractmethod
     async def _streaming_job_ready(self, msg: V0StreamingJobReadyRequest): ...
-
-    @log_errors_explicitly
-    async def streaming_job_failed_to_prepare(self, event: dict[str, Any]):
-        payload = self.validate_event(
-            "streaming_job_failed_to_prepare", V0StreamingJobNotReadyRequest, event
-        )
-        if payload:
-            await self._streaming_job_failed_to_prepare(payload)
-
-    @abc.abstractmethod
-    async def _streaming_job_failed_to_prepare(self, msg: V0StreamingJobNotReadyRequest): ...
 
     @log_errors_explicitly
     async def executor_finished(self, event: dict[str, Any]):
@@ -110,13 +89,22 @@ class ValidatorInterfaceMixin(BaseMixin, abc.ABC):
     async def _executor_finished(self, msg: V0JobFinishedRequest): ...
 
     @log_errors_explicitly
-    async def executor_failed(self, event: dict[str, Any]):
-        payload = self.validate_event("executor_failed", V0JobFailedRequest, event)
+    async def job_failed(self, event: dict[str, Any]):
+        payload = self.validate_event("job_failed", V0JobFailedRequest, event)
         if payload:
-            await self._executor_failed(payload)
+            await self._job_failed(payload)
 
     @abc.abstractmethod
-    async def _executor_failed(self, msg: V0JobFailedRequest): ...
+    async def _job_failed(self, msg: V0JobFailedRequest): ...
+
+    @log_errors_explicitly
+    async def horde_failed(self, event: dict[str, Any]):
+        payload = self.validate_event("horde_failed", V0HordeFailedRequest, event)
+        if payload:
+            await self._horde_failed(payload)
+
+    @abc.abstractmethod
+    async def _horde_failed(self, msg: V0HordeFailedRequest): ...
 
     async def send_job_request(self, executor_token, job_request: V0JobRequest):
         await self.channel_layer.group_send(
@@ -156,32 +144,12 @@ class ExecutorInterfaceMixin(BaseMixin):
             {"type": "executor.ready", **msg.model_dump()},
         )
 
-    async def send_executor_failed_to_prepare(
-        self, executor_token: str, msg: V0ExecutorFailedRequest
-    ):
-        group_name = ValidatorInterfaceMixin.group_name(executor_token)
-        msg = msg.model_copy(update={"executor_token": executor_token})
-        await self.channel_layer.group_send(
-            group_name,
-            {"type": "executor.failed_to_prepare", **msg.model_dump()},
-        )
-
     async def send_streaming_job_ready(self, executor_token: str, msg: V0StreamingJobReadyRequest):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
         msg = msg.model_copy(update={"executor_token": executor_token})
         await self.channel_layer.group_send(
             group_name,
             {"type": "streaming_job.ready", **msg.model_dump()},
-        )
-
-    async def send_streaming_job_failed_to_prepare(
-        self, executor_token: str, msg: V0StreamingJobNotReadyRequest
-    ):
-        group_name = ValidatorInterfaceMixin.group_name(executor_token)
-        msg = msg.model_copy(update={"executor_token": executor_token})
-        await self.channel_layer.group_send(
-            group_name,
-            {"type": "streaming_job.failed_to_prepare", **msg.model_dump()},
         )
 
     async def send_volumes_ready(self, executor_token: str, msg: V0VolumesReadyRequest):
@@ -212,11 +180,18 @@ class ExecutorInterfaceMixin(BaseMixin):
             {"type": "executor.finished", **msg.model_dump()},
         )
 
-    async def send_executor_failed(self, executor_token: str, msg: V0JobFailedRequest):
+    async def send_horde_failed(self, executor_token: str, msg: V0HordeFailedRequest):
         group_name = ValidatorInterfaceMixin.group_name(executor_token)
         await self.channel_layer.group_send(
             group_name,
-            {"type": "executor.failed", **msg.model_dump()},
+            {"type": "horde.failed", **msg.model_dump()},
+        )
+
+    async def send_job_failed(self, executor_token: str, msg: V0JobFailedRequest):
+        group_name = ValidatorInterfaceMixin.group_name(executor_token)
+        await self.channel_layer.group_send(
+            group_name,
+            {"type": "job.failed", **msg.model_dump()},
         )
 
     @abc.abstractmethod

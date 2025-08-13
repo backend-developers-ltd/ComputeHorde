@@ -58,7 +58,7 @@ async def main() -> None:
 
         # Validate job completion and output.
         expected_artifacts = {"/artifacts/stuff": b"Hello, World!\n"}
-        if job.status != "Completed" or job.result.artifacts != expected_artifacts:
+        if job.status != "completed" or job.result.artifacts != expected_artifacts:
             raise RuntimeError(
                 f"Job failed: status={job.status}, artifacts={job.result.artifacts}"
             )

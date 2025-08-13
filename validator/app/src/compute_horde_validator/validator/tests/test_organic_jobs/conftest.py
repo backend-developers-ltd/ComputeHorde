@@ -136,7 +136,7 @@ async def miner_transports():
         return OrganicMinerClient(*args, **kwargs, transport=next(transports_iter))
 
     with patch(
-        "compute_horde_validator.validator.organic_jobs.miner_driver.MINER_CLIENT_CLASS",
+        "compute_horde_validator.validator.organic_jobs.miner_driver.MinerClient",
         fake_miner_client_factory,
     ):
         yield transports
@@ -194,7 +194,7 @@ def execute_scenario(faci_transport, miner_transports, validator_keypair):
         patch.object(FacilitatorClient, "heartbeat", AsyncMock()),
         patch.object(FacilitatorClient, "wait_for_specs", AsyncMock()),
         patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request",
+            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
             AsyncMock(),
         ),
     ):

@@ -29,13 +29,14 @@ TEST_JOB_UUID2 = "a9c0ccd4-0900-46b1-b8ff-9a958157c2f5"
 TEST_DOCKER_IMAGE = "example-com/test-image"
 
 
-def get_job_response(uuid: str = TEST_JOB_UUID, status: str = "Accepted", **kwargs):
+def get_job_response(uuid: str = TEST_JOB_UUID, status: str | list[str] = "accepted", **kwargs):
+    statuses = [status] if isinstance(status, str) else status
+
     return {
         "uuid": uuid,
         "executor_class": "spin_up_4min__gpu_24gb",
         "created_at": "2025-01-29T14:32:46Z",
-        "last_update": "2025-01-29T14:32:46Z",
-        "status": status,
+        "last_update": f"2025-01-29T14:{32 + len(statuses)}:46Z",
         "docker_image": TEST_DOCKER_IMAGE,
         "args": ["--test", "yes"],
         "env": {},
@@ -50,6 +51,13 @@ def get_job_response(uuid: str = TEST_JOB_UUID, status: str = "Accepted", **kwar
         "volumes": [],
         "uploads": [],
         "target_validator_hotkey": "abcd1234",
+        "status_history": [
+            {
+                "status": s,
+                "created_at": f"2025-01-29T14:{32 + i}:46Z",
+            }
+            for i, s in enumerate(statuses, start=1)
+        ],
         **kwargs,
     }
 
@@ -129,7 +137,15 @@ def job(apiver_module, compute_horde_client) -> "ComputeHordeJob":
     return apiver_module.ComputeHordeJob(
         compute_horde_client,
         TEST_JOB_UUID,
-        apiver_module.ComputeHordeJobStatus.ACCEPTED,
+        status_history=[
+            apiver_module.ComputeHordeJobStatusEntry(
+                created_at=INITIAL_FROZEN_TIME, status=apiver_module.ComputeHordeJobStatus.SENT
+            ),
+            apiver_module.ComputeHordeJobStatusEntry(
+                created_at=INITIAL_FROZEN_TIME + timedelta(seconds=1),
+                status=apiver_module.ComputeHordeJobStatus.ACCEPTED,
+            ),
+        ],
     )
 
 
@@ -139,7 +155,7 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
         url=TEST_FACILITATOR_URL + "/api/v1/job-docker/",
         json=get_job_response(
             info=TEST_JOB_UUID,
-            status="Sent",
+            status="sent",
         ),
     )
 
@@ -165,11 +181,11 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
     )
 
     assert job.uuid == TEST_JOB_UUID
-    assert job.status == "Sent"
+    assert job.status == "sent"
     assert_signature(httpx_mock.get_request())
 
-    httpx_mock.add_response(json=get_job_response(status="Accepted"))
-    httpx_mock.add_response(json=get_job_response(status="Completed"))
+    httpx_mock.add_response(json=get_job_response(status="accepted"))
+    httpx_mock.add_response(json=get_job_response(status="completed"))
 
     await job.wait()
 
@@ -179,9 +195,9 @@ async def test_job_e2e(apiver_module, httpx_mock, keypair, async_sleep_mock):
 @pytest.mark.asyncio
 async def test_get_jobs(apiver_module, compute_horde_client, httpx_mock):
     job1_uuid = "7b522daa-e807-4094-8d96-99b9a863f960"
-    job1_status = "Accepted"
+    job1_status = "accepted"
     job2_uuid = "6b6b4ef2-5174-4a45-ae2f-8bfae3915168"
-    job2_status = "Failed"
+    job2_status = "failed"
     httpx_mock.add_response(
         json={
             "count": 2,
@@ -230,9 +246,9 @@ async def test_get_jobs__malformed_response(apiver_module, compute_horde_client,
 @pytest.mark.asyncio
 async def test_iter_jobs(apiver_module, compute_horde_client, httpx_mock):
     job1_uuid = "7b522daa-e807-4094-8d96-99b9a863f960"
-    job1_status = "Accepted"
+    job1_status = "accepted"
     job2_uuid = "6b6b4ef2-5174-4a45-ae2f-8bfae3915168"
-    job2_status = "Failed"
+    job2_status = "failed"
     httpx_mock.add_response(
         json={
             "count": 11,
@@ -284,7 +300,7 @@ async def test_iter_jobs__malformed_response(apiver_module, compute_horde_client
 @pytest.mark.asyncio
 async def test_get_job(compute_horde_client, httpx_mock):
     job_uuid = TEST_JOB_UUID
-    job_status = "Accepted"
+    job_status = "accepted"
     httpx_mock.add_response(json=get_job_response(uuid=job_uuid, status=job_status))
 
     job = await compute_horde_client.get_job(job_uuid)
@@ -322,7 +338,7 @@ async def test_create_job(apiver_module, compute_horde_client, httpx_mock):
     httpx_mock.add_response(
         json=get_job_response(
             uuid=TEST_JOB_UUID,
-            status="Accepted",
+            status="accepted",
             docker_image="my-image",
             args=["--arg1", "value1"],
             env={"ENV_VAR": "value"},
@@ -444,7 +460,7 @@ async def test_create_job__malformed_response(apiver_module, compute_horde_clien
         )
 
 
-@pytest.mark.parametrize("final_status", ["Completed", "Failed", "Rejected"])
+@pytest.mark.parametrize("final_status", ["completed", "failed", "rejected"])
 @pytest.mark.asyncio
 async def test_job_wait__various_end_states(
     apiver_module,
@@ -463,7 +479,14 @@ async def test_job_wait__various_end_states(
 @pytest.mark.asyncio
 async def test_wait_for_job__immediate_completion(apiver_module, compute_horde_client, async_sleep_mock):
     job = apiver_module.ComputeHordeJob(
-        compute_horde_client, TEST_JOB_UUID, apiver_module.ComputeHordeJobStatus.COMPLETED
+        compute_horde_client,
+        TEST_JOB_UUID,
+        status_history=[
+            apiver_module.ComputeHordeJobStatusEntry(
+                status=apiver_module.ComputeHordeJobStatus.COMPLETED,
+                created_at=INITIAL_FROZEN_TIME,
+            ),
+        ],
     )
 
     await job.wait()
@@ -472,9 +495,7 @@ async def test_wait_for_job__immediate_completion(apiver_module, compute_horde_c
 
 
 @pytest.mark.asyncio
-async def test_wait_for_job__timeout(apiver_module, job, httpx_mock, async_sleep_mock):
-    httpx_mock.add_response(json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"))
-
+async def test_wait_for_job__timeout(apiver_module, job, async_sleep_mock):
     with pytest.raises(apiver_module.ComputeHordeJobTimeoutError) as e:
         await job.wait(timeout=0)
 
@@ -514,7 +535,7 @@ async def test_http_connection_error_is_retried__fail(
 async def test_http_connection_error_is_retried__success(compute_horde_client, httpx_mock, exc_class, async_sleep_mock):
     for _ in range(HTTP_RETRY_MAX_ATTEMPTS - 1):
         httpx_mock.add_exception(exc_class("some error message"))
-    httpx_mock.add_response(json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"))
+    httpx_mock.add_response(json=get_job_response(uuid=TEST_JOB_UUID, status="accepted"))
 
     await compute_horde_client.get_job(TEST_JOB_UUID)
 
@@ -534,7 +555,7 @@ async def test_http_too_many_requests_is_retried__fail(
 async def test_http_too_many_requests_is_retried__success(compute_horde_client, httpx_mock, async_sleep_mock):
     for _ in range(HTTP_RETRY_MAX_ATTEMPTS - 1):
         httpx_mock.add_response(status_code=429)
-    httpx_mock.add_response(json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"))
+    httpx_mock.add_response(json=get_job_response(uuid=TEST_JOB_UUID, status="accepted"))
     await compute_horde_client.get_job(TEST_JOB_UUID)
 
 
@@ -544,11 +565,11 @@ async def test_run_until_complete__happy_path(
 ):
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
-        json=get_job_response(info=TEST_JOB_UUID, status="Sent"),
+        json=get_job_response(info=TEST_JOB_UUID, status="sent"),
     )
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
-        json=get_job_response(status="Completed"),
+        json=get_job_response(status="completed"),
     )
 
     job = await compute_horde_client.run_until_complete(job_spec)
@@ -564,20 +585,20 @@ async def helper_run_until_complete__job_attempt_callback(
     # 1st attempt
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
-        json=get_job_response(uuid=TEST_JOB_UUID, status="Sent", info=TEST_JOB_UUID),
+        json=get_job_response(uuid=TEST_JOB_UUID, status="sent", info=TEST_JOB_UUID),
     )
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
-        json=get_job_response(uuid=TEST_JOB_UUID, status="Failed"),
+        json=get_job_response(uuid=TEST_JOB_UUID, status="failed"),
     )
     # 2nd attempt
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
-        json=get_job_response(uuid=TEST_JOB_UUID2, status="Sent", info=TEST_JOB_UUID2),
+        json=get_job_response(uuid=TEST_JOB_UUID2, status="sent", info=TEST_JOB_UUID2),
     )
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID2}/",
-        json=get_job_response(uuid=TEST_JOB_UUID2, status="Completed"),
+        json=get_job_response(uuid=TEST_JOB_UUID2, status="completed"),
     )
 
     await compute_horde_client.run_until_complete(job_spec, job_attempt_callback=job_attempt_callback)
@@ -632,11 +653,11 @@ async def test_run_until_complete__attempts__finite(
     for _ in range(max_attempts):
         httpx_mock.add_response(
             url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
-            json=get_job_response(info=TEST_JOB_UUID, status="Sent"),
+            json=get_job_response(info=TEST_JOB_UUID, status="sent"),
         )
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
-        json=get_job_response(status="Failed"),
+        json=get_job_response(status="failed"),
         is_reusable=True,
     )
     jobs = []
@@ -652,12 +673,12 @@ async def test_run_until_complete__attempts__infinite(compute_horde_client, job_
     # i.e. should not stop on its own, should not raise ComputeHordeJobTimeoutError
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
-        json=get_job_response(info=TEST_JOB_UUID, status="Sent"),
+        json=get_job_response(info=TEST_JOB_UUID, status="sent"),
         is_reusable=True,
     )
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
-        json=get_job_response(status="Failed"),
+        json=get_job_response(status="failed"),
         is_reusable=True,
     )
     jobs = []
@@ -686,16 +707,16 @@ async def test_run_until_complete__timeout(
 ):
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
-        json=get_job_response(info=TEST_JOB_UUID, status="Sent"),
+        json=get_job_response(info=TEST_JOB_UUID, status="sent"),
     )
     # Each refresh_from_facilitator() call is preceded by a 3s sleep,
     # so the number of http calls mocked is adjusted here.
     # If the number of http calls does not match, httpx_mock should scream at us.
     # Don't use `is_reusable=True` here, we want httpx_mock to scream. :)
-    for _ in range(1 + timeout // 3):
+    for _ in range(timeout // 3):
         httpx_mock.add_response(
             url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
-            json=get_job_response(status="Sent"),
+            json=get_job_response(status="sent"),
         )
 
     with pytest.raises(apiver_module.ComputeHordeJobTimeoutError):
@@ -715,7 +736,7 @@ async def test_lazy_authentication_flow(apiver_module, compute_horde_client, htt
 
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
-        json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"),
+        json=get_job_response(uuid=TEST_JOB_UUID, status="accepted"),
     )
 
     job = await compute_horde_client.get_job(TEST_JOB_UUID)
@@ -726,7 +747,7 @@ async def test_lazy_authentication_flow(apiver_module, compute_horde_client, htt
     assert "Authorization" in job_request.headers
     assert job_request.headers["Authorization"] == "Bearer test_token"
     assert job.uuid == TEST_JOB_UUID
-    assert job.status == "Accepted"
+    assert job.status == "accepted"
 
 
 @pytest.mark.asyncio
@@ -746,7 +767,7 @@ async def test_retry_on_token_expire(apiver_module, compute_horde_client, httpx_
     # Retry: successful response for the retried job request.
     httpx_mock.add_response(
         url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
-        json=get_job_response(uuid=TEST_JOB_UUID, status="Accepted"),
+        json=get_job_response(uuid=TEST_JOB_UUID, status="accepted"),
     )
 
     job = await compute_horde_client.get_job(TEST_JOB_UUID)
@@ -764,7 +785,7 @@ async def test_retry_on_token_expire(apiver_module, compute_horde_client, httpx_
 
     # Validate that the job response is successful.
     assert job.uuid == TEST_JOB_UUID
-    assert job.status == "Accepted"
+    assert job.status == "accepted"
 
 
 @pytest.mark.asyncio
@@ -780,7 +801,7 @@ async def test_create_and_wait_for_streaming_job(
         url=f"{TEST_FACILITATOR_URL}/api/v1/job-docker/",
         json=get_job_response(
             uuid=TEST_JOB_UUID,
-            status="Sent",
+            status="sent",
             streaming_server_cert=None,
             streaming_server_address=None,
             streaming_server_port=None,
@@ -792,7 +813,7 @@ async def test_create_and_wait_for_streaming_job(
         url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
         json=get_job_response(
             uuid=TEST_JOB_UUID,
-            status="Streaming Ready",
+            status=["sent", "streaming_ready"],
             streaming_server_cert=streaming_server_cert,
             streaming_server_address=streaming_server_address,
             streaming_server_port=streaming_server_port,
@@ -802,7 +823,7 @@ async def test_create_and_wait_for_streaming_job(
         url=f"{TEST_FACILITATOR_URL}/api/v1/jobs/{TEST_JOB_UUID}/",
         json=get_job_response(
             uuid=TEST_JOB_UUID,
-            status="Completed",
+            status=["sent", "streaming_ready", "completed"],
             streaming_server_cert=streaming_server_cert,
             streaming_server_address=streaming_server_address,
             streaming_server_port=streaming_server_port,
@@ -823,7 +844,7 @@ async def test_create_and_wait_for_streaming_job(
 
     job = await compute_horde_client.create_job(job_spec)
     assert job.uuid == TEST_JOB_UUID
-    assert job.status == "Sent"
+    assert job.status == apiver_module.ComputeHordeJobStatus.SENT
 
     # Wait for streaming readiness
     await job.wait_for_streaming(timeout=10)

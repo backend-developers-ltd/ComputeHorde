@@ -6,11 +6,11 @@ import bittensor_wallet
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.miner_client.organic import (
+    MinerRejectedJob,
     OrganicJobDetails,
-    OrganicJobError,
     execute_organic_job_on_miner,
 )
-from compute_horde.protocol_messages import V0DeclineJobRequest
+from compute_horde.protocol_consts import JobRejectionReason
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.db import transaction
@@ -92,15 +92,22 @@ async def answer_prompts(
             reservation_time_limit=await aget_config("DYNAMIC_EXECUTOR_RESERVATION_TIME_LIMIT"),
             executor_startup_time_limit=await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
         )
-    except Exception as e:
-        if (
-            isinstance(e, OrganicJobError)
-            and isinstance(e.received, V0DeclineJobRequest)
-            and e.received.reason == V0DeclineJobRequest.Reason.BUSY
-        ):
+
+    except MinerRejectedJob as rejection:
+        if rejection.msg.reason == JobRejectionReason.BUSY:
+            # Skip sending the system event
             logger.info("Failed to run answer_prompts: trusted miner is busy")
             return False
+        await SystemEvent.objects.acreate(
+            type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
+            subtype=SystemEvent.EventSubType.JOB_REJECTED,
+            long_description=f"Trusted miner failed to run prompt answering job: {rejection!r}",
+            data={},
+        )
+        logger.warning("Failed to run answer_prompts: trusted miner rejected job", exc_info=True)
+        return False
 
+    except Exception as e:
         await SystemEvent.objects.acreate(
             type=SystemEvent.EventType.LLM_PROMPT_ANSWERING,
             subtype=SystemEvent.EventSubType.FAILURE,

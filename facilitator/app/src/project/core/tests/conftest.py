@@ -8,11 +8,12 @@ from bittensor import Keypair
 from bittensor_wallet import Wallet
 from channels.testing import WebsocketCommunicator
 from compute_horde.fv_protocol.validator_requests import (
+    JobResultDetails,
     JobStatusMetadata,
     JobStatusUpdate,
-    MinerResponse,
     V0AuthenticationRequest,
 )
+from compute_horde.protocol_consts import JobStatus
 from compute_horde_core.signature import Signature
 from django.contrib.auth.models import User
 
@@ -143,12 +144,9 @@ async def ignore_job_request(communicator, job):
 def job_status_update(job):
     return JobStatusUpdate(
         uuid=str(job.uuid),
-        status="accepted",
+        status=JobStatus.ACCEPTED,
         metadata=JobStatusMetadata(
-            comment="some comment",
-            miner_response=MinerResponse(
-                job_uuid=str(job.uuid),
-                message_type="some-type",
+            miner_response=JobResultDetails(
                 docker_process_stderr="some stderr",
                 docker_process_stdout="some stdout",
                 artifacts={},

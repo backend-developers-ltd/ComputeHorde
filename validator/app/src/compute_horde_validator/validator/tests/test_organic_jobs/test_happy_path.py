@@ -133,5 +133,5 @@ async def test_miner_can_be_selected_after_finishing_job(
     assert j2_finished_msg.status == "completed"
 
     # Check that the same miner did both jobs
-    assert miner.hotkey in j1_finished_msg.metadata.comment
-    assert miner.hotkey in j2_finished_msg.metadata.comment
+    jobs = [j async for j in OrganicJob.objects.select_related("miner")]
+    assert jobs[0].miner.hotkey == jobs[1].miner.hotkey == miner.hotkey

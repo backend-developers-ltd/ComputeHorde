@@ -47,7 +47,7 @@ def get_keypair():
     return settings.BITTENSOR_WALLET().get_hotkey()
 
 
-def get_miner_client(MINER_CLIENT, job_uuid: str):
+def get_miner_client(MINER_CLIENT, job_uuid: str) -> MinerClient:
     return MINER_CLIENT(
         miner_hotkey="miner_hotkey",
         miner_address="ignore",
@@ -102,9 +102,6 @@ class MockMinerClient(MinerClient):
     async def connect(self):
         return
 
-    async def handle_message(self, msg):
-        pass
-
     async def send_model(self, model, error_event_callback=None):
         self._sent_models.append(model)
 
@@ -122,15 +119,11 @@ class MockMinerClient(MinerClient):
 class MockSuccessfulMinerClient(MockMinerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.miner_accepting_or_declining_future.set_result(
-            V0AcceptJobRequest(job_uuid=self.job_uuid)
-        )
-        self.executor_ready_or_failed_future.set_result(
-            V0ExecutorReadyRequest(job_uuid=self.job_uuid)
-        )
+        self.job_accepted_future.set_result(V0AcceptJobRequest(job_uuid=self.job_uuid))
+        self.executor_ready_future.set_result(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
         self.volumes_ready_future.set_result(V0VolumesReadyRequest(job_uuid=self.job_uuid))
         self.execution_done_future.set_result(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
-        self.miner_finished_or_failed_future.set_result(
+        self.job_finished_future.set_result(
             V0JobFinishedRequest(
                 job_uuid=self.job_uuid,
                 docker_process_stdout="",
@@ -143,13 +136,9 @@ class MockSuccessfulMinerClient(MockMinerClient):
 class MockFaillingMinerClient(MockMinerClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.miner_accepting_or_declining_future.set_result(
-            V0AcceptJobRequest(job_uuid=self.job_uuid)
-        )
-        self.executor_ready_or_failed_future.set_result(
-            V0ExecutorReadyRequest(job_uuid=self.job_uuid)
-        )
-        self.miner_finished_or_failed_future.set_result(
+        self.job_accepted_future.set_result(V0AcceptJobRequest(job_uuid=self.job_uuid))
+        self.executor_ready_future.set_result(V0ExecutorReadyRequest(job_uuid=self.job_uuid))
+        self.job_finished_future.set_result(
             V0JobFailedRequest(
                 job_uuid=self.job_uuid,
                 docker_process_stdout="",

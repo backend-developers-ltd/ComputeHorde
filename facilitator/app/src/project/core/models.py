@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from compute_horde import protocol_consts
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     V0JobCheated,
@@ -195,7 +196,10 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
             if is_new:
                 job_request = self.as_job_request().model_dump()
                 self.send_to_validator(job_request)
-                JobStatus.objects.create(job=self, status=JobStatus.Status.SENT)
+                JobStatus.objects.create(
+                    job=self,
+                    status=protocol_consts.JobStatus.SENT.value,
+                )
 
     def report_cheated(self, signature: Signature) -> None:
         """
@@ -250,7 +254,7 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
     def is_completed(self) -> bool:
         # TODO: TIMEOUTS - Status updates from validator should include a timeout until next update. Job is failed if timeout is reached.
-        return self.status.status in JobStatus.FINAL_STATUS_VALUES
+        return self.status.status in protocol_consts.JobStatus.end_states()
 
     @property
     def elapsed(self) -> timedelta:
@@ -293,27 +297,8 @@ class Job(ExportModelOperationsMixin("job"), models.Model):
 
 
 class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
-    class Status(models.IntegerChoices):
-        # These correspond to JobStatusUpdate.Status
-        FAILED = -2
-        REJECTED = -1
-        SENT = 0
-        RECEIVED = 1
-        ACCEPTED = 2
-        EXECUTOR_READY = 3
-        VOLUMES_READY = 4
-        EXECUTION_DONE = 5
-        COMPLETED = 6
-        STREAMING_READY = 7
-
-    FINAL_STATUS_VALUES = (
-        Status.COMPLETED,
-        Status.REJECTED,
-        Status.FAILED,
-    )
-
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="statuses")
-    status = models.SmallIntegerField(choices=Status.choices)
+    status = models.CharField(choices=protocol_consts.JobStatus.choices())
     metadata = models.JSONField(blank=True, default=dict)
     created_at = models.DateTimeField(default=now)
 
@@ -330,6 +315,27 @@ class JobStatus(ExportModelOperationsMixin("job_status"), models.Model):
     def meta(self) -> JobStatusMetadata | None:
         if self.metadata:
             return JobStatusMetadata.model_validate(self.metadata)
+
+    def get_legacy_status_display(self) -> str:
+        """
+        Job serializer uses this for the legacy "status" field.
+        - Older SDK clients require the human-readable label
+        - The HORDE_FAILED status is new and will not be accepted
+        """
+        status_display = {
+            protocol_consts.JobStatus.SENT.value: "Sent",
+            protocol_consts.JobStatus.RECEIVED.value: "Received",
+            protocol_consts.JobStatus.ACCEPTED.value: "Accepted",
+            protocol_consts.JobStatus.EXECUTOR_READY.value: "Executor Ready",
+            protocol_consts.JobStatus.STREAMING_READY.value: "Streaming Ready",
+            protocol_consts.JobStatus.VOLUMES_READY.value: "Volumes Ready",
+            protocol_consts.JobStatus.EXECUTION_DONE.value: "Execution Done",
+            protocol_consts.JobStatus.COMPLETED.value: "Completed",
+            protocol_consts.JobStatus.REJECTED.value: "Rejected",
+            protocol_consts.JobStatus.FAILED.value: "Failed",
+            protocol_consts.JobStatus.HORDE_FAILED.value: "Failed",
+        }
+        return status_display[self.status]
 
 
 class JobFeedback(models.Model):

@@ -5,9 +5,11 @@ import zipfile
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Literal
 
 import pydantic
+from pydantic import Field, JsonValue
 
 from compute_horde_core import output_upload as compute_horde_output_upload
 from compute_horde_core import volume as compute_horde_volume
@@ -28,23 +30,24 @@ class ComputeHordeJobStatus(StrEnum):
     Status of a ComputeHorde job.
     """
 
-    SENT = "Sent"
-    RECEIVED = "Received"
-    ACCEPTED = "Accepted"
-    REJECTED = "Rejected"
-    STREAMING_READY = "Streaming Ready"
-    EXECUTOR_READY = "Executor Ready"
-    VOLUMES_READY = "Volumes Ready"
-    EXECUTION_DONE = "Execution Done"
-    COMPLETED = "Completed"
-    FAILED = "Failed"
+    SENT = "sent"
+    RECEIVED = "received"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    STREAMING_READY = "streaming_ready"
+    EXECUTOR_READY = "executor_ready"
+    VOLUMES_READY = "volumes_ready"
+    EXECUTION_DONE = "execution_done"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    HORDE_FAILED = "horde_failed"
 
     @classmethod
     def end_states(cls) -> set["ComputeHordeJobStatus"]:
         """
         Determines which job statuses mean that the job will not be updated anymore.
         """
-        return {cls.COMPLETED, cls.FAILED, cls.REJECTED}
+        return {cls.COMPLETED, cls.FAILED, cls.REJECTED, cls.HORDE_FAILED}
 
     def is_in_progress(self) -> bool:
         """
@@ -62,7 +65,7 @@ class ComputeHordeJobStatus(StrEnum):
 
     def is_failed(self) -> bool:
         """Check if the job has failed."""
-        return self in (self.FAILED, self.REJECTED)
+        return self in (self.FAILED, self.REJECTED, self.HORDE_FAILED)
 
 
 @dataclass
@@ -89,12 +92,66 @@ class ComputeHordeJobResult:
         self.upload_results[OUTPUT_MOUNT_PATH_PREFIX + path] = result
 
 
+@dataclass
+class ComputeHordeJobRejection:
+    reason: str
+    message: str
+    context: dict[str, JsonValue] | None = None
+
+
+@dataclass
+class ComputeHordeJobFailure:
+    reason: str
+    message: str
+    context: dict[str, JsonValue] | None = None
+
+
+@dataclass
+class ComputeHordeHordeFailure:
+    reason: str
+    message: str
+    reported_by: str
+    context: dict[str, JsonValue] | None = None
+
+
+@dataclass
+class StreamingServerDetails:
+    streaming_server_cert: str | None = None
+    streaming_server_address: str | None = None
+    streaming_server_port: int | None = None
+
+
+@dataclass
+class JobStatusUpdateMetadata:
+    job_rejection_details: ComputeHordeJobRejection | None = None
+    job_failure_details: ComputeHordeJobFailure | None = None
+    horde_failure_details: ComputeHordeHordeFailure | None = None
+    streaming_details: StreamingServerDetails | None = None
+
+
+@dataclass
+class ComputeHordeJobStatusEntry:
+    created_at: datetime
+    status: ComputeHordeJobStatus
+    metadata: JobStatusUpdateMetadata | None = None
+
+
+class FacilitatorJobStatusesResponse(pydantic.BaseModel):
+    results: list[ComputeHordeJobStatusEntry]
+
+
 class FacilitatorJobResponse(pydantic.BaseModel):
+    """
+    Note: stdout/stderr/artifacts/upload_results are considered deprecated.
+    Instead, use the `status_history` list - if it makes sense for the latest status to contain the execution results,
+    they will be available as the payload of the last status update entry.
+    """
+
     uuid: str
     executor_class: str
     created_at: str
     # last_update: str
-    status: ComputeHordeJobStatus
+    # status: str
     docker_image: str
     args: list[str]
     env: dict[str, str]
@@ -109,11 +166,17 @@ class FacilitatorJobResponse(pydantic.BaseModel):
     # volumes: list = []
     # uploads: list = []
     # target_validator_hotkey: str
-    artifacts: dict[str, str] = {}
-    upload_results: dict[str, str] = {}
+    artifacts: dict[str, str] = Field(default_factory=dict)
+    upload_results: dict[str, str] = Field(default_factory=dict)
     streaming_server_cert: str | None = None
     streaming_server_address: str | None = None
     streaming_server_port: int | None = None
+    status_history: list[ComputeHordeJobStatusEntry] = Field(default_factory=list)
+
+    @property
+    def status(self) -> ComputeHordeJobStatus:
+        # Faci creates an initial status, so there should always be at least one entry
+        return self.status_history[-1].status
 
 
 class FacilitatorJobsResponse(pydantic.BaseModel):

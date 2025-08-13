@@ -16,18 +16,22 @@ from compute_horde_validator.validator.tasks import run_admin_job_request
 
 
 async def notify_job_status_update(msg: JobStatusUpdate):
-    comment = msg.metadata.comment if msg.metadata else ""
-    print(f"\njob status: {msg.status} {comment}")
-    if (
-        msg.metadata
-        and msg.metadata.miner_response
-        and (
+    print(f"\njob status: {msg.status}")
+    if msg.metadata:
+        if details := (
+            msg.metadata.job_rejection_details
+            or msg.metadata.job_failure_details
+            or msg.metadata.horde_failure_details
+        ):
+            print(f"reason: {details.reason}")
+            print(f"message: {details.message}")
+
+        if msg.metadata.miner_response and (
             msg.metadata.miner_response.docker_process_stderr != ""
             or msg.metadata.miner_response.docker_process_stdout != ""
-        )
-    ):
-        print(f"stderr: {msg.metadata.miner_response.docker_process_stderr}")
-        print(f"stdout: {msg.metadata.miner_response.docker_process_stdout}")
+        ):
+            print(f"stderr: {msg.metadata.miner_response.docker_process_stderr}")
+            print(f"stdout: {msg.metadata.miner_response.docker_process_stdout}")
 
 
 class Command(BaseCommand):
