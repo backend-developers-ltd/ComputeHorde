@@ -902,7 +902,7 @@ def set_scores(bittensor: turbobt.Bittensor):
                         resp = await client.set_weights(weights_dict)
                         # wait_for_inclusion=True,
                         # wait_for_finalization=False,
-                        logger.info(f"Commiting weights via pylon: {resp}")
+                        logger.info(f"Committing weights via pylon: {resp}")
 
                 async_to_sync(set_weights_via_pylon)()
                 logger.info("Successfully broadcasted latest weights to pylon client")
