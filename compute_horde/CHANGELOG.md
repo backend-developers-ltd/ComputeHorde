@@ -2,6 +2,11 @@
 
 <!-- towncrier release notes start -->
 
+## [0.0.26](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.26) - 2025-08-13
+
+No significant changes.
+
+
 ## [0.0.25](https://github.com/backend-developers-ltd/ComputeHorde/releases/tag/library-v0.0.25) - 2025-07-09
 
 
