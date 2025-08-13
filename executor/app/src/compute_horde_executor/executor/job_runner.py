@@ -1,4 +1,3 @@
-import aiodocker
 import asyncio
 import base64
 import json
@@ -14,6 +13,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import aiodocker
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.protocol_messages import V0InitialJobRequest, V0JobFailedRequest, V0JobRequest
 from compute_horde_core.certificate import (
@@ -33,7 +33,10 @@ from compute_horde_core.volume import (
 from django.conf import settings
 
 from compute_horde_executor.executor.miner_client import ExecutionResult, JobError, JobResult
-from compute_horde_executor.executor.utils import get_docker_container_outputs, docker_container_wrapper
+from compute_horde_executor.executor.utils import (
+    docker_container_wrapper,
+    get_docker_container_outputs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +88,7 @@ WAIT_FOR_STREAMING_JOB_TIMEOUT = 25
 WAIT_FOR_NGINX_TIMEOUT = 10
 
 
-def preset_to_docker_run_args(preset: DockerRunOptionsPreset) -> dict[str]:
+def preset_to_docker_run_args(preset: DockerRunOptionsPreset) -> dict[str, Any]:
     if settings.DEBUG_NO_GPU_MODE:
         return {}
     elif preset == "none":
@@ -99,7 +102,7 @@ def preset_to_docker_run_args(preset: DockerRunOptionsPreset) -> dict[str]:
                     "Count": -1,  # All GPUs
                     "Capabilities": [["gpu"]],
                 }
-            ]
+            ],
         }
     else:
         raise JobError(f"Invalid preset: {preset}")
@@ -228,7 +231,7 @@ class BaseJobRunner(ABC):
         """
 
     @abstractmethod
-    async def get_docker_run_args(self) -> dict[str]:
+    async def get_docker_run_args(self) -> dict[str, Any]:
         """
         Return a dictionary of keyword arguments to pass to aiodocker.Docker().containers.create().
         Should typically contain the keys "name", and "HostConfig" but should not include volumes
@@ -274,9 +277,7 @@ class BaseJobRunner(ABC):
         # Add volume mounts
         if "Binds" not in docker_kwargs["HostConfig"]:
             docker_kwargs["HostConfig"]["Binds"] = []
-        docker_kwargs["HostConfig"]["Binds"].append(
-            f"{self.volume_mount_dir.as_posix()}:/volume/"
-        )
+        docker_kwargs["HostConfig"]["Binds"].append(f"{self.volume_mount_dir.as_posix()}:/volume/")
         docker_kwargs["HostConfig"]["Binds"].append(
             f"{self.output_volume_mount_dir.as_posix()}:/output/"
         )
@@ -367,7 +368,6 @@ class BaseJobRunner(ABC):
                     f"{self.temp_dir.as_posix()}/:/{root_for_remove.as_posix()}/",
                 ]
             },
-
         ) as docker_container:
             result = await docker_container.wait()
             return_code = result["StatusCode"]
@@ -457,7 +457,7 @@ class DefaultJobRunner(BaseJobRunner):
         )
         return self.full_job_request.docker_image
 
-    async def get_docker_run_args(self) -> dict[str]:
+    async def get_docker_run_args(self) -> dict[str, Any]:
         assert self.full_job_request is not None, (
             "Full job request must be set. Call prepare_full() first."
         )
@@ -466,12 +466,12 @@ class DefaultJobRunner(BaseJobRunner):
         )
 
         # Build keyword arguments to be passed to aiodocker.Docker().containers.create()
-        docker_kwargs = {"name": self.job_container_name, "auto_remove": True, "HostConfig": {}}
-        
+        docker_kwargs: dict[str, Any] = {"name": self.job_container_name, "auto_remove": True}
+
         # NVIDIA environment
-        docker_kwargs["HostConfig"].update(preset_to_docker_run_args(
+        docker_kwargs["HostConfig"] = preset_to_docker_run_args(
             self.full_job_request.docker_run_options_preset
-        ))
+        )
 
         job_network = "none"
         # if streaming job - create a local network for it to communicate with nginx
@@ -480,11 +480,13 @@ class DefaultJobRunner(BaseJobRunner):
             job_network = self.job_network_name
             async with aiodocker.Docker() as client:
                 try:
-                    await client.networks.create({
-                        "Name": self.job_network_name,
-                        "CheckDuplicate": True,
-                        "Internal": True,
-                    })
+                    await client.networks.create(
+                        {
+                            "Name": self.job_network_name,
+                            "CheckDuplicate": True,
+                            "Internal": True,
+                        }
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to create network {job_network}: {e}")
         docker_kwargs["HostConfig"]["NetworkMode"] = job_network
@@ -492,7 +494,9 @@ class DefaultJobRunner(BaseJobRunner):
         if self.full_job_request.raw_script:
             raw_script_path = self.temp_dir / "script.py"
             raw_script_path.write_text(self.full_job_request.raw_script)
-            docker_kwargs["HostConfig"]["Binds"] = [f"{raw_script_path.absolute().as_posix()}:/script.py"]
+            docker_kwargs["HostConfig"]["Binds"] = [
+                f"{raw_script_path.absolute().as_posix()}:/script.py"
+            ]
 
         return docker_kwargs
 
@@ -580,6 +584,7 @@ class DefaultJobRunner(BaseJobRunner):
             )
 
         if self.is_streaming_job:
+
             async def _stop_nginx():
                 async with aiodocker.Docker() as client:
                     container = await client.containers.get(self.nginx_container_name)

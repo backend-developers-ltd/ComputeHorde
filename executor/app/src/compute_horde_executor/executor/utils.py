@@ -1,5 +1,3 @@
-import aiodocker
-import asyncio
 import csv
 import logging
 import re
@@ -7,8 +5,8 @@ import shutil
 import subprocess
 import typing
 from contextlib import asynccontextmanager
-from typing import List
 
+import aiodocker
 from compute_horde.utils import MachineSpecs
 
 logger = logging.getLogger(__name__)
@@ -25,28 +23,30 @@ def run_cmd(cmd):
 
 async def run_nvidia_smi():
     async with aiodocker.Docker() as client:
-        container = await client.containers.create({
-            "Image": "ubuntu",
-            "Cmd": [
-                "nvidia-smi",
-                "--query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem,uuid,serial",
-                "--format=csv"
-            ],
-            "HostConfig": {
-                "Runtime": "nvidia",
-                "DeviceRequests": [
-                    {
-                        "Driver": "nvidia",
-                        "Count": -1,
-                        "Capabilities": [["gpu"]],
-                    }
+        container = await client.containers.create(
+            {
+                "Image": "ubuntu",
+                "Cmd": [
+                    "nvidia-smi",
+                    "--query-gpu=name,driver_version,name,memory.total,compute_cap,power.limit,clocks.gr,clocks.mem,uuid,serial",
+                    "--format=csv",
                 ],
+                "HostConfig": {
+                    "Runtime": "nvidia",
+                    "DeviceRequests": [
+                        {
+                            "Driver": "nvidia",
+                            "Count": -1,
+                            "Capabilities": [["gpu"]],
+                        }
+                    ],
+                },
             }
-        })
+        )  # type: aiodocker.containers.DockerContainer
         await container.start()
         result = await container.wait()
         stdout, stderr = await get_docker_container_outputs(container)
-        await container.remove(force=True)
+        await container.delete(force=True)
 
         if result["StatusCode"] != 0:
             raise RuntimeError(
@@ -140,7 +140,7 @@ async def get_machine_specs() -> MachineSpecs:
 async def docker_container_wrapper(
     image: str,
     name: str = None,
-    command: List[str] = None,
+    command: list[str] = None,
     clean_exit_timeout: float = 1.0,
     auto_remove: bool = False,
     **container_kwargs,

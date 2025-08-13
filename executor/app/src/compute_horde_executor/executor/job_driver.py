@@ -8,7 +8,11 @@ from django.conf import settings
 
 from compute_horde_executor.executor.job_runner import BaseJobRunner
 from compute_horde_executor.executor.miner_client import JobError, MinerClient
-from compute_horde_executor.executor.utils import get_docker_container_outputs, get_machine_specs, docker_container_wrapper
+from compute_horde_executor.executor.utils import (
+    docker_container_wrapper,
+    get_docker_container_outputs,
+    get_machine_specs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +189,9 @@ class JobDriver:
             await self.run_nvidia_toolkit_version_check_or_fail()
 
     async def run_cve_2022_0492_check_or_fail(self):
-        async with docker_container_wrapper(image=CVE_2022_0492_IMAGE, auto_remove=True) as docker_container:
+        async with docker_container_wrapper(
+            image=CVE_2022_0492_IMAGE, auto_remove=True
+        ) as docker_container:
             results = await docker_container.wait()
             return_code = results["StatusCode"]
             stdout, stderr = await get_docker_container_outputs(docker_container)
@@ -221,7 +227,7 @@ class JobDriver:
             results = await docker_container.wait()
             return_code = results["StatusCode"]
             stdout, stderr = await get_docker_container_outputs(docker_container)
-        
+
         if return_code != 0:
             raise JobError(
                 f"nvidia-container-toolkit check failed: exit code {return_code}",
