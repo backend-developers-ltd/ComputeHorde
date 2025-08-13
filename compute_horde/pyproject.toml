@@ -7,7 +7,7 @@ readme = "README.md"
 requires-python = "==3.11.*"
 dependencies = [
     "pydantic<3,>=2.3",
-    "bittensor>=9.3.0,<9.4",
+    "bittensor>=9.9.0,<10.0",
     "websockets>=14.0,<15.0",
     "more-itertools>=10.2.0",
     "requests>=2.32.2",
