@@ -5,8 +5,11 @@ from django.contrib.auth.models import User
 from compute_horde_validator.validator.apps import maybe_create_default_admin
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test__maybe_create_default_admin__missing_envvar():
+    # Clear any existing superusers first
+    User.objects.filter(is_superuser=True).delete()
+
     settings.DEFAULT_ADMIN_PASSWORD = None
     assert not User.objects.filter(is_superuser=True).exists()
 
@@ -15,8 +18,11 @@ def test__maybe_create_default_admin__missing_envvar():
     assert not User.objects.filter(is_superuser=True).exists()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test__maybe_create_default_admin__create_superuser():
+    # Clear any existing superusers first
+    User.objects.filter(is_superuser=True).delete()
+
     settings.DEFAULT_ADMIN_PASSWORD = "test"
     assert not User.objects.filter(is_superuser=True).exists()
 
@@ -26,8 +32,11 @@ def test__maybe_create_default_admin__create_superuser():
     assert User.objects.filter(is_superuser=True).count() == 1
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test__maybe_create_default_admin__user_exists():
+    # Clear any existing superusers first
+    User.objects.filter(is_superuser=True).delete()
+
     created_user = User.objects.create_superuser(
         username="admin", email="test@admin.com", password="test"
     )
