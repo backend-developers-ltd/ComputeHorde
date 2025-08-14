@@ -10,10 +10,8 @@ from compute_horde_core.executor_class import ExecutorClass
 from django.db import transaction
 from django.db.models import Min, Q
 
-from compute_horde_validator.validator.locks import Lock, LockType
-from compute_horde_validator.validator.tasks import get_single_manifest
-
 from ...dynamic_config import get_miner_max_executors_per_class
+from ...locks import Lock, LockType
 from ...models.allowance.internal import AllowanceMinerManifest, BlockAllowance, MinerAddress
 from .. import settings
 from ..types import ss58_address
@@ -201,6 +199,9 @@ async def fetch_manifests_from_miners(
     ]
 
     try:
+        # workaround for circular imports through `validator/tasks.py`
+        from ...tasks import get_single_manifest
+
         logger.info(f"Scraping manifests for {len(miner_clients)} miners")
         tasks = [
             asyncio.create_task(
