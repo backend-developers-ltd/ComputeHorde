@@ -24,7 +24,6 @@ from compute_horde.protocol_messages import (
     V0JobFailedRequest,
     V0StreamingJobReadyRequest,
 )
-from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.db.models import F
@@ -41,6 +40,7 @@ from compute_horde_validator.validator.models import (
     SystemEvent,
 )
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
+from compute_horde_validator.validator.receipts.default import Receipts
 from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
 
@@ -311,10 +311,18 @@ async def drive_organic_job(
             and isinstance(exc.received, V0DeclineJobRequest)
             and exc.received.reason == V0DeclineJobRequest.Reason.BUSY
         ):
-            # Check when the job was requested to validate excuses against that timestamp
-            job_request_time = (
-                await JobStartedReceipt.objects.aget(job_uuid=job.job_uuid)
-            ).timestamp
+            job_started_receipt = await Receipts().get_job_started_receipt_by_uuid(
+                str(job.job_uuid)
+            )
+            if job_started_receipt is None:
+                logger.error(f"No job started receipt found for job {job.job_uuid}")
+                job.status = OrganicJob.Status.FAILED
+                job.comment = f"No job started receipt found for job {job.job_uuid}"
+                await job.asave()
+                await notify_callback(status_update_from_job(job, JobStatusUpdate.Status.FAILED))
+                return False
+            job_request_time = job_started_receipt.timestamp
+
             valid_excuses = await job_excuses.filter_valid_excuse_receipts(
                 receipts_to_check=exc.received.receipts or [],
                 check_time=job_request_time,

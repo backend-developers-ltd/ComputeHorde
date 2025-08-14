@@ -2,122 +2,97 @@
 
 This module provides an interface for managing receipts in the validator.
 
-## Basic Usage
+## Public Interface
+
+### Receipts
+
+The main service class `Receipts` implements the `ReceiptsBase` interface and provides these key methods:
+
+#### Core Methods
+
+- **`scrape_receipts_from_miners(miner_hotkeys, start_block, end_block)`** - Fetch receipts from miners for a block range
+- **`create_job_finished_receipt(job_uuid, miner_hotkey, validator_hotkey, time_started, time_took_us, score_str)`** - Create a new job finished receipt
+- **`create_job_started_receipt(job_uuid, miner_hotkey, validator_hotkey, executor_class, is_organic, ttl)`** - Create a new job started receipt
+- **`get_job_started_receipt_by_uuid(job_uuid)`** - Retrieve a specific job started receipt
+- **`get_valid_job_started_receipts_for_miner(miner_hotkey, at_time)`** - Get valid receipts for a miner at a specific time
+- **`get_job_finished_receipts_for_miner(miner_hotkey, job_uuids)`** - Get finished receipts for specific jobs from a miner
+- **`get_completed_job_receipts_for_block_range(start_block, end_block)`** - Get all completed job receipts within a block range
+
+## Usage Examples
+
+### Basic Receipt Creation
 
 ```python
 from compute_horde_validator.validator.receipts import Receipts
 
-# Create receipts manager
 receipts = Receipts()
 
-# Get completed job receipts for scoring
-completed_receipts = receipts.get_completed_job_receipts_for_block_range(
-    start_block=1000, 
-    end_block=2000
+# Create a job started receipt
+payload, signature = await receipts.create_job_started_receipt(
+    job_uuid="job-123",
+    miner_hotkey="miner-key",
+    validator_hotkey="validator-key",
+    executor_class="spin_up-4min.gpu-24gb",
+    is_organic=True,
+    ttl=300
 )
 
 # Create a job finished receipt
-receipt = receipts.create_job_finished_receipt(
+finished_receipt = receipts.create_job_finished_receipt(
     job_uuid="job-123",
-    miner_hotkey="miner_hotkey",
-    validator_hotkey="validator_hotkey",
-    time_started=1640995200,
+    miner_hotkey="miner-key",
+    validator_hotkey="validator-key",
+    time_started=datetime.now(),
     time_took_us=5000000,
     score_str="0.85"
 )
-
-# Save the receipt
-receipts.save_receipt(receipt.to_receipt())
-
-# Scrape receipts from miners
-scraped_receipts = await receipts.scrape_receipts_from_miners(["miner1", "miner2"])
 ```
 
-## Core Functionality
-
-### Receipts Retrieval
-
-The primary method for retrieve methods in given block range:
+### Receipt Retrieval
 
 ```python
-# Get completed job receipts for scoring
-completed_receipts = manager.get_completed_job_receipts_for_block_range(
-    start_block=1000, 
-    end_block=2000
+# Get a specific job started receipt
+receipt = await receipts.get_job_started_receipt_by_uuid("job-123")
+if receipt:
+    print(f"Job started at: {receipt.timestamp}")
+    print(f"Miner: {receipt.miner_hotkey}")
+
+# Get valid receipts for a miner
+valid_receipts = await receipts.get_valid_job_started_receipts_for_miner(
+    miner_hotkey="miner-key",
+    at_time=datetime.now()
 )
-```
 
-### Receipt Creation
-
-The module can create receipts for completed jobs:
-
-```python
-# Create job finished receipt
-receipt = receipts.create_job_finished_receipt(
-    job_uuid="job-123",
-    miner_hotkey="miner_hotkey",
-    validator_hotkey="validator_hotkey",
-    time_started=1640995200,  # Unix timestamp
-    time_took_us=5000000,     # 5 seconds in microseconds
-    score_str="0.85"
+# Get finished receipts for specific jobs
+finished_receipts = await receipts.get_job_finished_receipts_for_miner(
+    miner_hotkey="miner-key",
+    job_uuids=["job-123", "job-456"]
 )
 ```
 
 ### Receipt Scraping
 
-The module can scrape receipts from miners:
-
 ```python
-# Scrape receipts from specific miners
-scraped_receipts = await receipts.scrape_receipts_from_miners([
-    "miner_hotkey_1",
-    "miner_hotkey_2"
-], start_block=1000, end_block=2000)
-```
-
-### Receipt Persistence
-
-The module provides methods to save and retrieve receipts:
-
-```python
-# Save a receipt to the database
-receipts.save_receipt(receipt)
-
-# Get a receipt by job UUID
-receipt = receipts.get_receipt_by_job_uuid("job-123")
-```
-
-## Integration with compute_horde
-
-The receipts module uses the `compute_horde.receipts` module internally for:
-- Receipt models and schemas
-- Receipt validation and serialization
-- Receipt transfer functionality
-- Database models and migrations
-
-## Integration with Scoring
-
-The receipts module is designed to work seamlessly with the scoring system:
-
-1. **Block-based filtering**: Provides method to get receipts for specific block ranges
-2. **Completed job receipts**: Specialized method for getting receipts of completed jobs
-3. **Scoring data extraction**: Receipts contain all necessary data for scoring calculations
-4. **Performance metrics**: Job finished receipts include timing and score information
-
-## Error Handling
-
-The module provides specific exceptions for different error scenarios:
-
-```python
-from compute_horde_validator.validator.receipts.exceptions import (
-    ReceiptsConfigurationError,
-    ReceiptsScrapingError,
-    ReceiptsGenerationError,
+# Scrape receipts from miners for a block range
+scraped_receipts = await receipts.scrape_receipts_from_miners(
+    miner_hotkeys=["miner1", "miner2"],
+    start_block=1000,
+    end_block=2000
 )
+```
 
-try:
-    receipt = receipts.create_job_finished_receipt(...)
-except ReceiptsGenerationError as e:
-    # Handle generation error
-    pass
+## Background Tasks
+
+### Receipt Scraping Task
+
+The module includes a Celery task for periodic receipt scraping:
+
+**Task Name**: `scrape_receipts_from_miners`
+
+**Purpose**: Automatically fetch and process receipts from miners across the network
+
+**Manual Execution**:
+```bash
+# Run the task manually (if needed)
+celery -A compute_horde_validator call compute_horde_validator.validator.receipts.tasks.scrape_receipts_from_miners
 ```

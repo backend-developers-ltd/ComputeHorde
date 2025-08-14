@@ -40,6 +40,8 @@ TASK_QUEUE_MAP = {
     "compute_horde_validator.validator.tasks.fetch_dynamic_config": DEFAULT_QUEUE,
     # Metagraph Sync
     "compute_horde_validator.validator.tasks.sync_metagraph": "metagraph",
+    # Receipts
+    "compute_horde_validator.validator.receipts.tasks.scrape_receipts_from_miners": DEFAULT_QUEUE,
 }
 
 CELERY_TASK_QUEUES = list(set(TASK_QUEUE_MAP.values()))
