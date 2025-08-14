@@ -120,6 +120,8 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         )
         raise AllMinersBusy(f"No miners with enough allowance: {e}") from e
 
+    miners = {miner.hotkey_ss58: miner for miner in await sync_to_async(allowance().miners)()}
+
     # 2. Iterate and try to reserve a miner
     for miner_hotkey, _ in suitable_miners:
         try:
@@ -131,14 +133,12 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
                 job_start_block=current_block,
             )
 
-            miner_model = await Miner.objects.aget(hotkey=miner_hotkey)
-            assert miner_model is not None
-
-            miner = AllowanceMiner(
-                address=miner_model.address,
-                port=miner_model.port,
-                ip_version=miner_model.ip_version,
-                hotkey_ss58=miner_model.hotkey,
+            miner = miners[miner_hotkey]
+            await Miner.objects.aget_or_create(
+                address=miner.address,
+                ip_version=miner.ip_version,
+                port=miner.port,
+                hotkey=miner.hotkey_ss58,
             )
             logger.info(
                 f"Successfully reserved miner {miner_hotkey} for job {request.uuid} with reservation ID {reservation_id}"
