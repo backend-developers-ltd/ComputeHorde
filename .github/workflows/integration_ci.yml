@@ -29,6 +29,10 @@ jobs:
         with:
           version: "0.6.x"
           enable-cache: true
+      - name: Pull us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest
+        run: docker pull us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest
+      - name: Pull alpine image
+        run: docker pull alpine:3.19
       - name: Start all services
         run: local_stack/run_and_await_readiness.sh /tmp/integration_test_logs/
 

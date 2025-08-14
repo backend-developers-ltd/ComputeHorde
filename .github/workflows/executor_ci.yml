@@ -89,6 +89,10 @@ jobs:
       - name: Build backenddevelopersltd/compute-horde-streaming-job-test:v0-latest image
         run: docker build . -t backenddevelopersltd/compute-horde-streaming-job-test:v0-latest
         working-directory: ./executor/app/src/compute_horde_executor/executor/tests/integration/docker_image_for_streaming_job_tests
+      - name: Pull us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest
+        run: docker pull us-central1-docker.pkg.dev/twistlock-secresearch/public/can-ctr-escape-cve-2022-0492:latest
+      - name: Pull alpine image
+        run: docker pull alpine:3.19
       - name: Run unit tests
         run: nox -vs test
       - name: Executor Test Results
