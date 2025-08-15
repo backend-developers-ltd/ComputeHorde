@@ -53,6 +53,7 @@ class V2JobRequest(SignedRequest, BaseModel, extra="forbid"):
     # !!! all fields below are included in the signed json payload
     executor_class: ExecutorClass
     docker_image: str
+    job_namespace: str = ""
     args: list[str]
     env: dict[str, str]
     use_gpu: bool
