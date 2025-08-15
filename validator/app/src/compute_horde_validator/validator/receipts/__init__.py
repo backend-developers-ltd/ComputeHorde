@@ -4,14 +4,13 @@ Receipts module for validator.
 This module provides receipts management functionality for the validator.
 """
 
-from .exceptions import ReceiptsConfigurationError, ReceiptsGenerationError, ReceiptsScrapingError
-from .interface import ReceiptsBase
-from .manager import Receipts
+from . import tasks as _tasks  # noqa: F401
+from .base import ReceiptsBase
+from .default import Receipts
+from .types import ReceiptsGenerationError
 
 __all__ = [
     "ReceiptsBase",
     "Receipts",
-    "ReceiptsConfigurationError",
     "ReceiptsGenerationError",
-    "ReceiptsScrapingError",
 ]

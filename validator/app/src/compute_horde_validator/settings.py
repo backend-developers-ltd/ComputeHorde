@@ -687,6 +687,13 @@ CELERY_BEAT_SCHEDULE = {
             "expires": timedelta(minutes=5).total_seconds(),
         },
     },
+    "scrape_receipts_from_miners": {
+        "task": "compute_horde_validator.validator.receipts.tasks.scrape_receipts_from_miners",
+        "schedule": timedelta(minutes=30),
+        "options": {
+            "expires": timedelta(minutes=5).total_seconds(),
+        },
+    },
     # "update_block_cache": {
     #     "task": "compute_horde.blockchain.tasks.update_block_cache",
     #     "schedule": timedelta(seconds=6),
