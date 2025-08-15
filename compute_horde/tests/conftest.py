@@ -4,6 +4,7 @@ import bittensor
 import pytest
 import responses
 from bittensor import Keypair
+from unittest import mock
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts.schemas import (
@@ -98,3 +99,14 @@ def receipts(validator_keypair, miner_keypair):
 def mocked_responses():
     with responses.RequestsMock() as rsps:
         yield rsps
+
+
+@pytest.fixture(autouse=True)
+def disable_subtensor():
+    from compute_horde.blockchain.block_cache import _clear_subtensor_cache
+    _clear_subtensor_cache()
+
+    def throw(*args, **kwargs):
+        raise RuntimeError("Please don't do that")
+    with mock.patch.object(bittensor, "subtensor", new=throw):
+        yield

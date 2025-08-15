@@ -57,16 +57,25 @@ async def test_block_cache_aget_current_block_timeout():
 
 
 def test_block_cache_get_current_block_in_cache():
-    cache.set(settings.COMPUTE_HORDE_BLOCK_CACHE_KEY, 123)
+    mock_subtensor = MagicMock()
+    with patch("bittensor.subtensor", return_value=mock_subtensor):
+        cache.set(settings.COMPUTE_HORDE_BLOCK_CACHE_KEY, 123)
 
-    current_block = get_current_block()
+        current_block = get_current_block()
 
-    assert current_block == 123
+        assert current_block == 123
+
+        mock_subtensor.assert_not_called()
 
 
-def test_block_cache_get_current_block_timeout():
-    with pytest.raises(BlockNotInCacheError):
-        get_current_block()
+def test_block_cache_get_current_block_timeout(monkeypatch):
+    mock_subtensor = MagicMock()
+    with patch("bittensor.subtensor", return_value=mock_subtensor):
+        mock_subtensor.get_current_block.return_value = 123
+
+        assert get_current_block() == 123
+
+        mock_subtensor.get_current_block.assert_called_once()
 
 
 def test_tasks_update_block_cache(celery):
