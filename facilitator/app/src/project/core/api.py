@@ -54,6 +54,7 @@ class JobSerializer(serializers.HyperlinkedModelSerializer):
             "last_update",
             "status",
             "docker_image",
+            "job_namespace",
             "args",
             "env",
             "use_gpu",
@@ -122,6 +123,7 @@ class DockerJobSerializer(JobSerializer):
             set(JobSerializer.Meta.fields)
             - {
                 "docker_image",
+                "job_namespace",
                 "executor_class",
                 "args",
                 "env",
