@@ -15,20 +15,23 @@ from compute_horde_validator.validator.allowance.utils import blocks, manifests
 logger = get_task_logger(__name__)
 
 
+LOCK_WAIT_TIMEOUT = 5.0
+
+
 @app.task(
     time_limit=blocks.MAX_RUN_TIME + 30,
 )
-def scan_blocks_and_calculate_allowance():
+def scan_blocks_and_calculate_allowance(backfilling_supertensor: PrecachingSuperTensor | None = None):
     # TODO: write tests and add to celery beat config
     if not AllowanceMinerManifest.objects.exists():
         logger.warning("No miner manifests found, skipping allowance calculation")
         return
     with transaction.atomic(using=settings.DEFAULT_DB_ALIAS):
         try:
-            with Lock(LockType.ALLOWANCE_FETCHING, 5.0, settings.DEFAULT_DB_ALIAS):
+            with Lock(LockType.ALLOWANCE_FETCHING, LOCK_WAIT_TIMEOUT, settings.DEFAULT_DB_ALIAS):
                 blocks.scan_blocks_and_calculate_allowance(
                     report_allowance_checkpoint.delay,
-                    PrecachingSuperTensor(cache=DjangoCache()),
+                    backfilling_supertensor or PrecachingSuperTensor(cache=DjangoCache()),
                     supertensor(),
                 )
         except Locked:
