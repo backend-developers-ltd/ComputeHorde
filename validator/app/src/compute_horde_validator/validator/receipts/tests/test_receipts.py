@@ -116,7 +116,7 @@ async def test_scrape_receipts_from_miners_integration():
 
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, "127.0.0.1", 7001)
+        site = web.TCPSite(runner, "127.0.0.1", port=7001)
         await site.start()
 
         try:
@@ -149,7 +149,9 @@ async def test_scrape_receipts_from_miners_integration():
 async def test_scrape_receipts_network_failure_handling():
     await sync_to_async(Miner.objects.create)(hotkey="hk1", address="127.0.0.1", port=7004)
     t0 = make_aware(dt.datetime(2025, 1, 1, 0, 0, 0))
+    t1 = make_aware(dt.datetime(2025, 1, 1, 1, 0, 0))
     await sync_to_async(Block.objects.create)(block_number=1000, creation_timestamp=t0)
+    await sync_to_async(Block.objects.create)(block_number=2000, creation_timestamp=t1)
 
     async def mock_failing_handler(request):
         """Mock handler that always raises an exception."""
@@ -219,12 +221,11 @@ async def test_scrape_receipts_invalid_miner_endpoints():
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_get_valid_job_started_receipts_for_miner():
+def test_get_valid_job_started_receipts_for_miner():
     miner_hotkey = "test_miner_hotkey"
     validator_hotkey = "test_validator_hotkey"
 
-    valid_receipt = await sync_to_async(JobStartedReceipt.objects.create)(
+    valid_receipt = JobStartedReceipt.objects.create(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -236,7 +237,7 @@ async def test_get_valid_job_started_receipts_for_miner():
         ttl=300,
     )
 
-    await sync_to_async(JobStartedReceipt.objects.create)(
+    JobStartedReceipt.objects.create(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -248,7 +249,7 @@ async def test_get_valid_job_started_receipts_for_miner():
         ttl=300,
     )
 
-    await sync_to_async(JobStartedReceipt.objects.create)(
+    JobStartedReceipt.objects.create(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey="other_miner",
         validator_hotkey=validator_hotkey,
@@ -260,7 +261,7 @@ async def test_get_valid_job_started_receipts_for_miner():
         ttl=300,
     )
 
-    result = await Receipts().get_valid_job_started_receipts_for_miner(
+    result = Receipts().get_valid_job_started_receipts_for_miner(
         miner_hotkey, make_aware(dt.datetime.now())
     )
 
@@ -270,15 +271,14 @@ async def test_get_valid_job_started_receipts_for_miner():
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_get_job_finished_receipts_for_miner():
+def test_get_job_finished_receipts_for_miner():
     job_uuid1 = str(uuid.uuid4())
     job_uuid2 = str(uuid.uuid4())
     job_uuid3 = str(uuid.uuid4())
     miner_hotkey = "test_miner_hotkey"
     validator_hotkey = "test_validator_hotkey"
 
-    await sync_to_async(JobFinishedReceipt.objects.create)(
+    JobFinishedReceipt.objects.create(
         job_uuid=job_uuid1,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -290,7 +290,7 @@ async def test_get_job_finished_receipts_for_miner():
         score_str="0.8",
     )
 
-    await sync_to_async(JobFinishedReceipt.objects.create)(
+    JobFinishedReceipt.objects.create(
         job_uuid=job_uuid2,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -302,7 +302,7 @@ async def test_get_job_finished_receipts_for_miner():
         score_str="0.9",
     )
 
-    await sync_to_async(JobFinishedReceipt.objects.create)(
+    JobFinishedReceipt.objects.create(
         job_uuid=job_uuid3,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -315,7 +315,7 @@ async def test_get_job_finished_receipts_for_miner():
     )
 
     requested_jobs = [job_uuid1, job_uuid2]
-    result = await Receipts().get_job_finished_receipts_for_miner(miner_hotkey, requested_jobs)
+    result = Receipts().get_job_finished_receipts_for_miner(miner_hotkey, requested_jobs)
 
     assert len(result) == 2
     job_uuids = {str(r.job_uuid) for r in result}
@@ -323,13 +323,12 @@ async def test_get_job_finished_receipts_for_miner():
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_get_job_started_receipt_by_uuid():
+def test_get_job_started_receipt_by_uuid():
     job_uuid = str(uuid.uuid4())
     miner_hotkey = "test_miner_hotkey"
     validator_hotkey = "test_validator_hotkey"
 
-    await sync_to_async(JobStartedReceipt.objects.create)(
+    JobStartedReceipt.objects.create(
         job_uuid=job_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -341,7 +340,7 @@ async def test_get_job_started_receipt_by_uuid():
         ttl=300,
     )
 
-    result = await Receipts().get_job_started_receipt_by_uuid(job_uuid)
+    result = Receipts().get_job_started_receipt_by_uuid(job_uuid)
 
     assert result is not None
     assert str(result.job_uuid) == job_uuid
@@ -349,7 +348,7 @@ async def test_get_job_started_receipt_by_uuid():
     assert result.validator_hotkey == validator_hotkey
 
     non_existent_uuid = str(uuid.uuid4())
-    result = await Receipts().get_job_started_receipt_by_uuid(non_existent_uuid)
+    result = Receipts().get_job_started_receipt_by_uuid(non_existent_uuid)
     assert result is None
 
 

@@ -83,7 +83,7 @@ class ReceiptsBase(ABC):
         pass
 
     @abstractmethod
-    async def get_valid_job_started_receipts_for_miner(
+    def get_valid_job_started_receipts_for_miner(
         self, miner_hotkey: str, at_time: datetime.datetime
     ) -> list[JobStartedReceipt]:
         """
@@ -99,7 +99,7 @@ class ReceiptsBase(ABC):
         pass
 
     @abstractmethod
-    async def get_job_finished_receipts_for_miner(
+    def get_job_finished_receipts_for_miner(
         self, miner_hotkey: str, job_uuids: list[str]
     ) -> list[JobFinishedReceipt]:
         """
@@ -115,7 +115,7 @@ class ReceiptsBase(ABC):
         pass
 
     @abstractmethod
-    async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
+    def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
         """
         Get a job started receipt by UUID.
 

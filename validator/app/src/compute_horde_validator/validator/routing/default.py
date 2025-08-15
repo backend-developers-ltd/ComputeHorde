@@ -3,6 +3,7 @@ import math
 from datetime import timedelta
 from typing import assert_never
 
+from asgiref.sync import sync_to_async
 from compute_horde.blockchain.block_cache import aget_current_block
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
@@ -220,7 +221,7 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
 
         known_started_jobs: set[str] = {
             str(job_uuid)
-            for receipt in await Receipts().get_valid_job_started_receipts_for_miner(
+            for receipt in await sync_to_async(Receipts().get_valid_job_started_receipts_for_miner)(
                 miner.hotkey, timezone.now()
             )
             for job_uuid in [receipt.job_uuid]
@@ -228,7 +229,7 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
 
         known_finished_jobs: set[str] = {
             str(job_uuid)
-            for receipt in await Receipts().get_job_finished_receipts_for_miner(
+            for receipt in await sync_to_async(Receipts().get_job_finished_receipts_for_miner)(
                 miner.hotkey, list(known_started_jobs | preliminary_reservation_jobs)
             )
             for job_uuid in [receipt.job_uuid]
