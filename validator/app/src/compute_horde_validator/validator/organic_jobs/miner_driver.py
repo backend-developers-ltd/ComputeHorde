@@ -248,7 +248,7 @@ async def drive_organic_job(
 
         if job.allowance_reservation_id is not None:
             try:
-                allowance().spend_allowance(job.allowance_reservation_id)
+                await sync_to_async(allowance().spend_allowance)(job.allowance_reservation_id)
                 logger.info(
                     "Successfully spent allowance for reservation %s for job %s",
                     job.allowance_reservation_id,
@@ -262,7 +262,10 @@ async def drive_organic_job(
                     e,
                 )
 
-        comment = f"Miner {miner_client.miner_name} finished: {stdout=} {stderr=}"
+        comment = (
+            f"Miner {miner_client.miner_name} hotkey={job.miner.hotkey} "
+            f"finished: {stdout=} {stderr=}"
+        )
         job.stdout = stdout
         job.stderr = stderr
         job.artifacts = artifacts
