@@ -162,6 +162,13 @@ async def docker_container_wrapper(
     client = aiodocker.Docker()
     container = None
 
+    # Pull image if it doesn't exist
+    try:
+        await client.images.inspect(image)
+    except aiodocker.exceptions.DockerError:
+        async for _line in client.images.pull(image, stream=True):
+            logger.debug(_line)
+
     # Configure and run the Docker container
     config = {"Image": image, **container_kwargs}
     if command:
