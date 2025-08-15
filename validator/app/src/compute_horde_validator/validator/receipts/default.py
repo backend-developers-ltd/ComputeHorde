@@ -46,12 +46,8 @@ class Receipts(ReceiptsBase):
             return []
 
         try:
-            start_ts = await sync_to_async(self._get_block_timestamp, thread_sensitive=True)(
-                start_block
-            )
-            end_ts = await sync_to_async(self._get_block_timestamp, thread_sensitive=True)(
-                end_block
-            )
+            start_ts = await self._get_block_timestamp(start_block)
+            end_ts = await self._get_block_timestamp(end_block)
 
             start_page = LocalFilesystemPagedReceiptStore.current_page_at(start_ts)
             end_page = LocalFilesystemPagedReceiptStore.current_page_at(end_ts)
@@ -169,12 +165,12 @@ class Receipts(ReceiptsBase):
         except Exception as e:
             raise ReceiptsGenerationError(f"Failed to create job started receipt: {e}") from e
 
-    async def get_valid_job_started_receipts_for_miner(
+    def get_valid_job_started_receipts_for_miner(
         self, miner_hotkey: str, at_time: datetime.datetime
     ) -> list[JobStartedReceipt]:
         try:
             qs = JobStartedReceipt.objects.valid_at(at_time).filter(miner_hotkey=miner_hotkey)
-            receipts: list[JobStartedReceipt] = [r async for r in qs.all()]
+            receipts: list[JobStartedReceipt] = [r for r in qs.all()]
 
             logger.debug(
                 "Retrieved %s valid job started receipts for miner %s at %s",
@@ -189,7 +185,7 @@ class Receipts(ReceiptsBase):
             logger.error("Failed to get valid job started receipts for miner: %s", e)
             return []
 
-    async def get_job_finished_receipts_for_miner(
+    def get_job_finished_receipts_for_miner(
         self, miner_hotkey: str, job_uuids: list[str]
     ) -> list[JobFinishedReceipt]:
         try:
@@ -198,7 +194,7 @@ class Receipts(ReceiptsBase):
             qs = JobFinishedReceipt.objects.filter(
                 miner_hotkey=miner_hotkey, job_uuid__in=job_uuids
             )
-            receipts: list[JobFinishedReceipt] = [r async for r in qs.all()]
+            receipts: list[JobFinishedReceipt] = [r for r in qs.all()]
 
             logger.debug(
                 "Retrieved %s job finished receipts for miner %s (jobs: %s)",
@@ -213,9 +209,9 @@ class Receipts(ReceiptsBase):
             logger.error("Failed to get job finished receipts for miner: %s", e)
             return []
 
-    async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
+    def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
         try:
-            django_receipt = await JobStartedReceipt.objects.aget(job_uuid=job_uuid)
+            django_receipt = JobStartedReceipt.objects.get(job_uuid=job_uuid)
             logger.debug(
                 "Retrieved JobStartedReceipt for job %s (miner: %s, validator: %s)",
                 job_uuid,
@@ -242,12 +238,8 @@ class Receipts(ReceiptsBase):
             return []
 
         try:
-            start_timestamp = await sync_to_async(self._get_block_timestamp, thread_sensitive=True)(
-                start_block
-            )
-            end_timestamp = await sync_to_async(self._get_block_timestamp, thread_sensitive=True)(
-                end_block
-            )
+            start_timestamp = await self._get_block_timestamp(start_block)
+            end_timestamp = await self._get_block_timestamp(end_block)
 
             finished_receipts_qs = JobFinishedReceipt.objects.filter(
                 timestamp__gte=start_timestamp,
@@ -298,9 +290,9 @@ class Receipts(ReceiptsBase):
             receipts.append(receipt_data.to_receipt())
         return receipts
 
-    def _get_block_timestamp(self, block_number: int) -> datetime.datetime:
+    async def _get_block_timestamp(self, block_number: int) -> datetime.datetime:
         try:
-            block = Block.objects.get(block_number=block_number)
+            block = await Block.objects.aget(block_number=block_number)
             return block.creation_timestamp
         except Exception as db_ex:
             logger.debug(
@@ -310,7 +302,7 @@ class Receipts(ReceiptsBase):
             )
 
         try:
-            ts = supertensor().get_block_timestamp(block_number)
+            ts = await supertensor().get_block_timestamp(block_number)
             if isinstance(ts, datetime.datetime):
                 return ts
             else:

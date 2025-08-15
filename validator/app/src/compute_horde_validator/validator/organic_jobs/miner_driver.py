@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import assert_never
 
+from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
 from compute_horde.fv_protocol.validator_requests import (
@@ -311,7 +312,7 @@ async def drive_organic_job(
             and isinstance(exc.received, V0DeclineJobRequest)
             and exc.received.reason == V0DeclineJobRequest.Reason.BUSY
         ):
-            job_started_receipt = await Receipts().get_job_started_receipt_by_uuid(
+            job_started_receipt = await sync_to_async(Receipts().get_job_started_receipt_by_uuid)(
                 str(job.job_uuid)
             )
             if job_started_receipt is None:
