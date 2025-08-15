@@ -33,13 +33,26 @@ class SimulationTransport(AbstractTransport):
     async def send(self, message: str) -> None:
         async with self.receive_condition:
             self.sent.append(message)
+            self.logger.debug(
+                "Transport %s sent count=%d message=%s", self.name, len(self.sent), message
+            )
             self.receive_condition.notify_all()
 
         self.logger.debug(f"Sent message: {message}")
 
     async def receive(self) -> str:
+        receive_at = 0
+        sleep_before = 0.0
+        message = ""
+        side_effect = None
         if len(self.to_receive):
             receive_at, sleep_before, message, side_effect = self.to_receive.popleft()
+            self.logger.debug(
+                "Transport %s popped queued message (will deliver when sent>=%d): %s",
+                self.name,
+                receive_at,
+                message,
+            )
         else:
             self.logger.debug("No more messages to receive")
             await asyncio.Future()
@@ -49,7 +62,13 @@ class SimulationTransport(AbstractTransport):
 
         await asyncio.sleep(sleep_before)
 
-        self.logger.debug(f"Received message: {message}")
+        self.logger.debug(
+            "Transport %s delivering message after %d sent (sleep_before=%s): %s",
+            self.name,
+            len(self.sent),
+            sleep_before,
+            message,
+        )
         self.received.append(message)
 
         if asyncio.iscoroutinefunction(side_effect):
@@ -85,3 +104,10 @@ class SimulationTransport(AbstractTransport):
 
         self.receive_at_counter += send_before
         self.to_receive.append((self.receive_at_counter, sleep_before, message, side_effect))
+        self.logger.debug(
+            "Transport %s scheduled message at sent>=%d (delta=%d): %s",
+            self.name,
+            self.receive_at_counter,
+            send_before,
+            message,
+        )
