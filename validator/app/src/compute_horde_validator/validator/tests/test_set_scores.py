@@ -100,20 +100,20 @@ def test_normalize_scores():
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__no_batches_found(settings, bittensor):
-    bittensor.blocks.head.return_value.number = 361
-
-    set_scores()
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
+def test_set_scores__no_batches_found(settings, bittensor, mock_pylon_client):
+    with patch("compute_horde_validator.validator.tasks.pylon_client", mock_pylon_client):
+        mock_pylon_client.override("get_latest_block", 361)
+        set_scores()
+        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__too_early(settings, bittensor):
-    bittensor.blocks.head.return_value.number = 359
-
-    setup_db()
-    set_scores()
-    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
+def test_set_scores__too_early(settings, bittensor, mock_pylon_client):
+    with patch("compute_horde_validator.validator.tasks.pylon_client", mock_pylon_client):
+        mock_pylon_client.override("get_latest_block", 359)
+        setup_db()
+        set_scores()
+        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -262,10 +262,9 @@ def test_set_scores__weight_commit_success(
     expected_weights_committed,
 ):
     current_block = 1084 + cycle_number * 722
-    bittensor.blocks.head.return_value.number = current_block
 
-    with patch("compute_horde_validator.validator.tasks.PylonClient") as MockPylonClient:
-        MockPylonClient.return_value = mock_pylon_client
+    with patch("compute_horde_validator.validator.tasks.pylon_client", mock_pylon_client):
+        mock_pylon_client.override("get_latest_block", current_block)
 
         setup_db(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score)
         with override_config(
@@ -300,13 +299,9 @@ def test_set_scores__weight_commit_success(
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__weight_commit_failure(settings, bittensor, mock_pylon_client):
     """Test that pylon client failures are properly handled."""
-    bittensor.blocks.head.return_value.number = 1084
-
-    with patch("compute_horde_validator.validator.tasks.PylonClient") as MockPylonClient:
-        MockPylonClient.return_value = mock_pylon_client
-        mock_pylon_client.override(
-            "set_weights", {"detail": "Internal Server Error"}, status_code=500
-        )
+    with patch("compute_horde_validator.validator.tasks.pylon_client", mock_pylon_client):
+        mock_pylon_client.override("get_latest_block", 1084)
+        mock_pylon_client.mock.set_weights.side_effect = Exception("Internal Server Error")
         setup_db()
         set_scores()
 
@@ -326,10 +321,8 @@ def test_set_scores__weight_commit_failure(settings, bittensor, mock_pylon_clien
 def test_set_scores__commit__too_early_or_too_late(
     bittensor, current_block: int, mock_pylon_client
 ):
-    bittensor.blocks.head.return_value.number = current_block
-
-    with patch("compute_horde_validator.validator.tasks.PylonClient") as MockPylonClient:
-        MockPylonClient.return_value = mock_pylon_client
+    with patch("compute_horde_validator.validator.tasks.pylon_client", mock_pylon_client):
+        mock_pylon_client.override("get_latest_block", current_block)
 
         setup_db()
         set_scores()
@@ -342,15 +335,11 @@ def test_set_scores__commit__too_early_or_too_late(
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__multiple_starts(settings, bittensor, mock_pylon_client):
-    bittensor.blocks.head.return_value.number = 1234
-
     # to ensure the other tasks will be run at the same time
     settings.CELERY_TASK_ALWAYS_EAGER = False
     threads = 5
 
-    with patch("compute_horde_validator.validator.tasks.PylonClient") as MockPylonClient:
-        MockPylonClient.return_value = mock_pylon_client
-
+    with patch("compute_horde_validator.validator.tasks.pylon_client", mock_pylon_client):
         setup_db()
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as pool:
