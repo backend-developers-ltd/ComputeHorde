@@ -22,5 +22,8 @@ cd "${PROJECT_DIR}/app/"
 [[ -L "Dockerfile" ]] && unlink Dockerfile
 [[ -L "src/entrypoint.sh" ]] && unlink src/entrypoint.sh
 
+# make sure folder exists for docker mounting
+mkdir -p ~/.bittensor/wallets
+
 # Ensure that the script returns zero for the CI
 exit 0
