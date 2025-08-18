@@ -426,10 +426,10 @@ class FacilitatorClient:
             e = HordeError.wrap_unhandled(e)
             await self.send_horde_failed(
                 job_uuid=job_request.uuid,
-                message="Uncaught exception during handling of job",
                 reported_by=JobParticipantType.VALIDATOR,
-                reason=HordeFailureReason.UNHANDLED_EXCEPTION,
-                context={"exception_type": type(e).__qualname__},
+                message=e.message,
+                reason=e.reason,
+                context=e.context,
             )
 
     async def _process_job_request(self, job_request: OrganicJobRequest) -> None:
