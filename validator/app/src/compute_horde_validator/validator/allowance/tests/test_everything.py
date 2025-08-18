@@ -40,6 +40,16 @@ from .utils_for_tests import (
 )
 
 
+@pytest.fixture
+def configure_logs(caplog):
+    with (
+        caplog.at_level(logging.CRITICAL, logger="transport"),
+        caplog.at_level(logging.CRITICAL, logger="compute_horde.miner_client.base"),
+        caplog.at_level(logging.CRITICAL, logger="compute_horde.miner_client.organic"),
+    ):
+        yield
+
+
 def test_job_too_long():
     with set_block_number(1000):
         with pytest.raises(AllowanceException) as e1:
@@ -172,7 +182,7 @@ def assert_error_messages(block_number: int, highest_available: float):
 
 @pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-def test_complete(caplog):
+def test_complete(caplog, configure_logs):
     with set_block_number(1000):
         manifests.sync_manifests()
         blocks.process_block_allowance_with_reporting(1000, supertensor_=supertensor(), live=True)
@@ -419,7 +429,7 @@ def test_complete(caplog):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-def test_blocks_out_of_order():
+def test_blocks_out_of_order(configure_logs):
     for block_number in [1000, 1011, 1025, 1050, 1075, 1100]:
         with set_block_number(block_number):
             sync_manifests()
@@ -441,7 +451,7 @@ def test_blocks_out_of_order():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-def test_allowance_reservation_corner_cases():
+def test_allowance_reservation_corner_cases(configure_logs):
     """Test all corner cases of reserve_allowance, undo_allowance_reservation, and spend_allowance methods."""
 
     # Set up initial state with some blocks and allowances
