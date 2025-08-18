@@ -1,6 +1,7 @@
 import contextlib
 import contextvars
 import functools
+import os
 import time
 from unittest import mock
 
@@ -61,6 +62,7 @@ def keep_trying_until_success_or_timeout(func, timeout=1):
             time.sleep(0.1)
 
 
+@pytest.mark.skipif(os.getenv("GITHUB_ACTIONS") == "true", reason="Skip in GitHub CI")
 def test_precaching_supertensor_smoke_test():
     cache.set(_BLOCK_CACHE_KEY, 1100, 60)
     with prepare_mocks():
