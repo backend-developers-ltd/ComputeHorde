@@ -18,7 +18,7 @@ def test_blocks_scan_blocks_calls_process_for_missing_blocks_and_times_out(monke
     missing_blocks = [1000, 1001, 1002]
     back_st = mock.MagicMock()
 
-    def process_block_allowance_with_reporting_side_effect(block_number, st):
+    def process_block_allowance_with_reporting_side_effect(block_number, st, *a, **kw):
         if st == back_st:
             supertensor().block_number += 1  # type: ignore
         elif st == supertensor():
@@ -46,7 +46,7 @@ def test_blocks_scan_blocks_calls_process_for_missing_blocks_and_times_out(monke
             mock.call(1000, back_st),
             mock.call(1001, back_st),
             mock.call(1002, back_st),
-            mock.call(1004, supertensor()),
+            mock.call(1004, supertensor(), live=True),
         ]
 
 
