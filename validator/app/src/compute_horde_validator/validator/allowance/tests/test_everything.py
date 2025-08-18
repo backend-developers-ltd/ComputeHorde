@@ -175,9 +175,9 @@ def assert_error_messages(block_number: int, highest_available: float):
 def test_complete(caplog):
     with set_block_number(1000):
         manifests.sync_manifests()
-        blocks.process_block_allowance_with_reporting(1000, supertensor_=supertensor())
+        blocks.process_block_allowance_with_reporting(1000, supertensor_=supertensor(), live=True)
     with set_block_number(1001):
-        blocks.process_block_allowance_with_reporting(1001, supertensor_=supertensor())
+        blocks.process_block_allowance_with_reporting(1001, supertensor_=supertensor(), live=True)
         resp = allowance().find_miners_with_allowance(
             1.0, ExecutorClass.always_on__llm__a6000, 1001
         )
@@ -190,7 +190,9 @@ def test_complete(caplog):
     )
     for block_number in range(1002, 1006):
         with set_block_number(block_number):
-            blocks.process_block_allowance_with_reporting(block_number, supertensor_=supertensor())
+            blocks.process_block_allowance_with_reporting(
+                block_number, supertensor_=supertensor(), live=True
+            )
 
     with set_block_number(1004):
         assert "deregging_miner_247" in [n.hotkey_ss58 for n in allowance().neurons(block=1004)]
@@ -208,7 +210,9 @@ def test_complete(caplog):
     )
     for block_number in range(1006, 1011):
         with set_block_number(block_number):
-            blocks.process_block_allowance_with_reporting(block_number, supertensor_=supertensor())
+            blocks.process_block_allowance_with_reporting(
+                block_number, supertensor_=supertensor(), live=True
+            )
 
     with set_block_number(1010):
         assert "deregging_miner_247" not in [n.hotkey_ss58 for n in allowance().neurons(block=1010)]
