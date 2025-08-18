@@ -59,7 +59,6 @@ class JobDriver:
                 await self._execute()
 
             except JobError as e:
-                e.add_context({"stage": self.current_stage})
                 logger.error(str(e), exc_info=True)
                 await self.send_job_failed(e.message, e.reason, e.context)
 
