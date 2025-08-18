@@ -186,7 +186,7 @@ class SuperTensor(BaseSuperTensor):
         return self._wallet
 
     def get_current_block(self) -> int:
-        return get_current_block()
+        return get_current_block() - 5
 
 
 N_THREADS = 10
