@@ -167,6 +167,7 @@ class SuperTensor(BaseSuperTensor):
         bittensor = bittensor_context.get()
         async with bittensor.block(block_num) as block:
             ret: datetime.datetime = await block.get_timestamp()
+            logger.debug(f"Block {block_num} timestamp: {ret}")
             return ret
 
     @make_sync
