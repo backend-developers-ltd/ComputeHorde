@@ -409,7 +409,7 @@ EXECUTOR_MANAGER_CLASS_PATH = env.str(
     default="compute_horde_miner.miner.executor_manager.v1:DockerExecutorManager",
 )
 
-# ========= Docker and dev executor manager related settings =========
+# ========= Docker, Remote Docker and dev executor manager related settings =========
 
 DEFAULT_EXECUTOR_CLASS = (
     env.str("DEFAULT_EXECUTOR_CLASS", None) or executor_class.DEFAULT_EXECUTOR_CLASS
@@ -417,13 +417,16 @@ DEFAULT_EXECUTOR_CLASS = (
 ADDRESS_FOR_EXECUTORS = env.str("ADDRESS_FOR_EXECUTORS", default="")
 PORT_FOR_EXECUTORS = env.int("PORT_FOR_EXECUTORS")
 
-# ========= Docker executor manager only related settings =========
+# ========= Docker and Remote Docker executor manager only related settings =========
 
 EXECUTOR_IMAGE = env.str(
     "EXECUTOR_IMAGE", default="backenddevelopersltd/compute-horde-executor:v1-latest"
 )
 DEBUG_SKIP_PULLING_EXECUTOR_IMAGE = env.bool("DEBUG_SKIP_PULLING_EXECUTOR_IMAGE", default=False)
 # Path pointing to the file containing custom job runner classes.
+
+# ========= Docker executor manager only related settings =========
+
 CUSTOM_JOB_RUNNERS_PATH = ""
 if "CUSTOM_JOB_RUNNERS_PATH" in os.environ:
     CUSTOM_JOB_RUNNERS_PATH = str(env.path("CUSTOM_JOB_RUNNERS_PATH"))
@@ -436,7 +439,13 @@ if CUSTOM_JOB_RUNNER_CLASS_NAME and not CUSTOM_JOB_RUNNERS_PATH:
         "CUSTOM_JOB_RUNNERS_PATH must be set if CUSTOM_JOB_RUNNER_CLASS_NAME is set."
     )
 
-# ========= Docker and dev executor manager related settings end here =========
+# ========= Remote Docker executor manager only related settings =========
+
+# In most cases, it should be in the vendor directory, which is mounted at /root/vendor/.
+# Example: /root/vendor/remote-config.yaml
+REMOTE_DOCKER_EXECUTORS_CONFIG_PATH = env.str("REMOTE_DOCKER_EXECUTORS_CONFIG_PATH", default="")
+
+# ========= Docker, Remote Docker and dev executor manager related settings end here =========
 
 LOCAL_RECEIPTS_ROOT = env.path("LOCAL_RECEIPTS_ROOT", default=root("..", "..", "receipts"))
 

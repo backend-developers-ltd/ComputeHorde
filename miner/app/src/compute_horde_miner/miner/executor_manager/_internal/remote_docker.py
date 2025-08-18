@@ -1,27 +1,19 @@
 import asyncio
 import logging
-import subprocess
-import os
-import json
-from contextlib import asynccontextmanager
 from collections import deque
+from contextlib import asynccontextmanager
 from datetime import timedelta
 
 import asyncssh
 import yaml
-
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
-from compute_horde.executor_class import ExecutorClass
-from compute_horde_miner.miner.executor_manager.v1 import (
-    DEFAULT_EXECUTOR_CLASS,
+from compute_horde_miner.miner.executor_manager._internal.base import (
     BaseExecutorManager,
     ExecutorUnavailable,
 )
-
-from compute_horde_miner.miner.executor_manager._internal import base
-
-base.MAX_EXECUTOR_TIMEOUT = timedelta(minutes=20).total_seconds()
 
 PULLING_TIMEOUT = 300
 DOCKER_STOP_TIMEOUT = 5
@@ -49,11 +41,11 @@ class RemoteServers:
 
     @property
     def configs(self):
-        config_path = os.environ.get("REMOTE_EXECUTORS_CONFIG")
+        config_path = settings.REMOTE_DOCKER_EXECUTORS_CONFIG_PATH
         if not config_path:
-            raise RuntimeError("aaaaaaaaaaa")
+            raise RuntimeError("REMOTE_DOCKER_EXECUTORS_CONFIG_PATH is not configured")
 
-        with open(config_path, "r") as fp:
+        with open(config_path) as fp:
             new_config = yaml.safe_load(fp)
 
         # Update the server queue based on the new config
@@ -69,12 +61,10 @@ class RemoteServers:
 
     def _update_server_queue(self, executor_class_str, new_config):
         # Remove servers that are no longer in the config
+        # TODO: What is this? It is not used anywhere.
+        #       May be this is related to the bug: server removed from the config is not removed from servers queue.
         self._server_queue = deque(
-            [
-                server
-                for server in self._server_queues[executor_class_str]
-                if server in new_config
-            ]
+            [server for server in self._server_queues[executor_class_str] if server in new_config]
         )
         self._reserved_servers = {
             server for server in self._reserved_servers if server in new_config
@@ -91,9 +81,8 @@ class RemoteServers:
     def reserve_server(self, executor_class_str: str):
         while self._server_queues[executor_class_str]:
             server_name = self._server_queues[executor_class_str].popleft()
-            if (
-                server_name in self._configs[executor_class_str]
-            ):  # Double-check if the server is still in config
+            # Double-check if the server is still in config
+            if server_name in self._configs[executor_class_str]:
                 self._reserved_servers.add(server_name)
                 return server_name, self._configs[executor_class_str][server_name]
 
@@ -107,6 +96,7 @@ class RemoteServers:
                 return
 
 
+# TODO: move this to __init__ of RemoteDockerExecutorManager
 remote_servers = RemoteServers()
 
 
@@ -140,21 +130,17 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
         if settings.ADDRESS_FOR_EXECUTORS:
             address = settings.ADDRESS_FOR_EXECUTORS
         else:
-            raise RuntimeError("ADDRESS_FOR_EXECUTORS is required")
+            raise RuntimeError("ADDRESS_FOR_EXECUTORS is not configured")
 
         try:
-            server_name, server_config = remote_servers.reserve_server(
-                str(executor_class)
-            )
+            server_name, server_config = remote_servers.reserve_server(str(executor_class))
         except ExecutorUnavailable:
             logger.error("No available servers to reserve")
             raise
         try:
             if not settings.DEBUG_SKIP_PULLING_EXECUTOR_IMAGE:
                 async with self._connect(server_config) as conn:
-                    process = await conn.create_process(
-                        "docker pull " + settings.EXECUTOR_IMAGE
-                    )
+                    process = await conn.create_process("docker pull " + settings.EXECUTOR_IMAGE)
                     try:
                         await asyncio.wait_for(process.wait(), timeout=PULLING_TIMEOUT)
                         if process.returncode:
@@ -177,9 +163,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
                 "-v /var/run/docker.sock:/var/run/docker.sock -v /tmp:/tmp "
                 f"{settings.EXECUTOR_IMAGE} python manage.py run_executor {args}"
             )
-            return RemoteDockerExecutor(
-                process_executor, token, conn, server_name, server_config
-            )
+            return RemoteDockerExecutor(process_executor, token, conn, server_name, server_config)
         except Exception:
             remote_servers.release_server(server_name)
             raise
@@ -210,9 +194,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
 
     async def wait_for_executor(self, executor, timeout):
         try:
-            result = await asyncio.wait_for(
-                executor.process_executor.wait(), timeout=timeout
-            )
+            result = await asyncio.wait_for(executor.process_executor.wait(), timeout=timeout)
             if result is not None:
                 remote_servers.release_server(executor.server_name)
                 try:
