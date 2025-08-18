@@ -189,6 +189,10 @@ def process_block_allowance(
                     block_duration,
                 )
 
+                if block_duration > 12.5:
+                    logger.warning(f"Block {finalized_block.block_number} duration is {block_duration} seconds")
+                    block_duration = 12.0
+
                 for neuron in neurons:
                     for validator in validators:
                         for executor_class in ExecutorClass:
