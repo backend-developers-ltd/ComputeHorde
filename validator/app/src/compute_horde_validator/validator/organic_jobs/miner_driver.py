@@ -437,8 +437,8 @@ async def drive_organic_job(
         await notify_callback(status_update)
 
     except Exception as e:
-        e = HordeError.wrap_unhandled(e)
         sentry_sdk.capture_exception(e)
+        e = HordeError.wrap_unhandled(e)
         comment = str(e)
         logger.warning(comment)
         job.status = OrganicJob.Status.FAILED

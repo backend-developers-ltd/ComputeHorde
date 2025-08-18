@@ -304,9 +304,8 @@ class FacilitatorClient:
                         return
                 except pydantic.ValidationError as exc:
                     logger.warning("Received malformed job status update: %s", exc)
-        except asyncio.CancelledError:
-            raise
         except Exception as e:
+            # Nothing that gets thrown here is expected.
             sentry_sdk.capture_exception(e)
             logger.exception("Error in job status update listener", exc_info=True)
         finally:
