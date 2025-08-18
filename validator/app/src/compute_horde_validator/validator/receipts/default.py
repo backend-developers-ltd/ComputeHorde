@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import logging
+import time
 
 import aiohttp
 from asgiref.sync import sync_to_async
@@ -10,18 +11,21 @@ from compute_horde.receipts.models import (
     JobStartedReceipt,
 )
 from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStartedReceiptPayload
-from compute_horde.receipts.store.local import LocalFilesystemPagedReceiptStore
-from compute_horde.receipts.transfer import ReceiptsTransfer
+from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
+from compute_horde.receipts.transfer import ReceiptsTransfer, TransferResult
 from compute_horde.utils import sign_blob
 from django.conf import settings
+from django.utils import timezone
 
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
-from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.dynamic_config import aget_config
+from compute_horde_validator.validator.models import MetagraphSnapshot, Miner
 from compute_horde_validator.validator.models.allowance.internal import Block
 from compute_horde_validator.validator.receipts.base import ReceiptsBase
 from compute_horde_validator.validator.receipts.types import (
     ReceiptsGenerationError,
 )
+from prometheus_client import Counter, Gauge, Histogram
 
 logger = logging.getLogger(__name__)
 
@@ -31,70 +35,295 @@ class Receipts(ReceiptsBase):
     Default implementation of receipts manager.
     """
 
-    async def scrape_receipts_from_miners(
-        self, miner_hotkeys: list[str], start_block: int, end_block: int
-    ) -> list[Receipt]:
-        if not miner_hotkeys:
-            logger.info("No miner hotkeys provided for scraping")
-            return []
-        if start_block >= end_block:
-            logger.warning(
-                "Invalid block range provided: start_block (%s) >= end_block (%s)",
-                start_block,
-                end_block,
-            )
-            return []
+    async def run_receipts_transfer(
+        self,
+        daemon: bool,
+        debug_miner_hotkey: str | None,
+        debug_miner_ip: str | None,
+        debug_miner_port: int | None,
+    ) -> None:
+        class TransferIsDisabled(Exception):
+            pass
 
-        try:
-            start_ts = await self._get_block_timestamp(start_block)
-            end_ts = await self._get_block_timestamp(end_block)
+        # Metrics mirror the management command ones (declared locally to avoid duplicate registration)
+        m_receipts = Counter(
+            "receipttransfer_receipts_total",
+            documentation="Number of transferred receipts",
+        )
+        m_miners = Gauge(
+            "receipttransfer_miners",
+            documentation="Number of miners to transfer from",
+        )
+        m_successful_transfers = Counter(
+            "receipttransfer_successful_transfers_total",
+            documentation="Number of transfers that didn't explicitly fail. (this includes 404s though)",
+        )
+        m_line_errors = Counter(
+            "receipttransfer_line_errors_total",
+            labelnames=["exc_type"],
+            documentation="Number of invalid lines in received pages",
+        )
+        m_transfer_errors = Counter(
+            "receipttransfer_transfer_errors_total",
+            labelnames=["exc_type"],
+            documentation="Number of completely failed page transfers",
+        )
+        m_transfer_duration = Histogram(
+            "receipttransfer_transfer_duration",
+            documentation="Total time to transfer latest page deltas from all miners",
+        )
+        m_catchup_pages_left = Gauge(
+            "receipttransfer_catchup_pages_left",
+            documentation="Pages waiting for catch-up",
+        )
 
-            start_page = LocalFilesystemPagedReceiptStore.current_page_at(start_ts)
-            end_page = LocalFilesystemPagedReceiptStore.current_page_at(end_ts)
-            if end_page < start_page:
-                logger.warning(
-                    "Computed page range is empty: start_page=%s end_page=%s",
-                    start_page,
-                    end_page,
-                )
-                return []
-            pages = list(range(start_page, end_page + 1))
+        # Select miners source identical to the command's logic
+        if (debug_miner_hotkey, debug_miner_ip, debug_miner_port) != (None, None, None):
+            if None in {debug_miner_hotkey, debug_miner_ip, debug_miner_port}:
+                raise ValueError("Either none or all of explicit miner details must be provided")
+            miner = [debug_miner_hotkey, debug_miner_ip, debug_miner_port]
+            logger.info(f"Will fetch receipts from explicit miner: {miner}")
 
-            miners = await self._fetch_miners(miner_hotkeys)
-            miner_infos: list[tuple[str, str, int]] = [
-                (m[0], m[1], m[2]) for m in miners if m[1] and m[2] and m[1] != "0.0.0.0"
-            ]
-            if not miner_infos:
-                logger.info("No valid miner endpoints resolved for scraping")
-                return []
+            async def miners() -> list[tuple[str, str, int]]:
+                return [tuple(miner)]  # type: ignore[return-value]
 
-            semaphore = asyncio.Semaphore(25)
-            async with aiohttp.ClientSession() as session:
+        elif settings.DEBUG_FETCH_RECEIPTS_FROM_MINERS:
+            debug_miners = settings.DEBUG_FETCH_RECEIPTS_FROM_MINERS
+            logger.info(f"Will fetch receipts from {len(debug_miners)} debug miners")
+
+            async def miners() -> list[tuple[str, str, int]]:
+                return debug_miners
+
+        else:
+            logger.info("Will fetch receipts from metagraph snapshot miners")
+
+            async def miners() -> list[tuple[str, str, int]]:
+                snapshot = await MetagraphSnapshot.aget_latest()
+                serving_hotkeys = snapshot.serving_hotkeys
+                serving_miners = [
+                    m async for m in Miner.objects.filter(hotkey__in=serving_hotkeys)
+                ]
+                return [(m.hotkey, m.address, m.port) for m in serving_miners]
+
+        cutoff = timezone.now() - datetime.timedelta(hours=5)
+
+        async def _throw_if_disabled() -> None:
+            try:
+                if await aget_config("DYNAMIC_RECEIPT_TRANSFER_ENABLED"):
+                    return
+            except KeyError:
+                logger.warning("DYNAMIC_RECEIPT_TRANSFER_ENABLED dynamic config is not set up!")
+            raise TransferIsDisabled
+
+        def _push_common_metrics(result: TransferResult) -> None:
+            from collections import defaultdict
+
+            n_line_errors: defaultdict[type[Exception], int] = defaultdict(int)
+            for line_error in result.line_errors:
+                n_line_errors[type(line_error)] += 1
+            for exc_type, exc_count in n_line_errors.items():
+                m_line_errors.labels(exc_type=exc_type.__name__).inc(exc_count)
+
+            n_transfer_errors: defaultdict[type[Exception], int] = defaultdict(int)
+            for transfer_error in result.transfer_errors:
+                n_transfer_errors[type(transfer_error)] += 1
+            for exc_type, exc_count in n_transfer_errors.items():
+                m_transfer_errors.labels(exc_type=exc_type.__name__).inc(exc_count)
+
+            m_receipts.inc(result.n_receipts)
+            m_successful_transfers.inc(result.n_successful_transfers)
+
+        async def catch_up(
+            pages: list[int],
+            miners_fn,
+            session: aiohttp.ClientSession,
+            semaphore: asyncio.Semaphore,
+        ) -> None:
+            for idx, page in enumerate(pages):
+                await _throw_if_disabled()
+
+                m_catchup_pages_left.set(len(pages) - idx)
+                start_time = time.monotonic()
+                current_loop_miners = await miners_fn()
                 result = await ReceiptsTransfer.transfer(
-                    miners=miner_infos,
-                    pages=pages,
+                    miners=current_loop_miners,
+                    pages=[page],
                     session=session,
                     semaphore=semaphore,
                     request_timeout=3.0,
                 )
+                elapsed = time.monotonic() - start_time
+
                 logger.info(
-                    "Scrape finished: receipts=%s successful_transfers=%s transfer_errors=%s line_errors=%s",
-                    result.n_receipts,
-                    result.n_successful_transfers,
-                    len(result.transfer_errors),
-                    len(result.line_errors),
+                    f"Catching up: "
+                    f"{page=} ({idx + 1}/{len(pages)}) "
+                    f"receipts={result.n_receipts} "
+                    f"{elapsed=:.3f} "
+                    f"successful_transfers={result.n_successful_transfers} "
+                    f"transfer_errors={len(result.transfer_errors)} "
+                    f"line_errors={len(result.line_errors)} "
                 )
 
-            receipts = await self._fetch_receipts_for_range(start_ts, end_ts, miner_hotkeys)
-            return receipts
-        except Exception as ex:
-            logger.error(
-                "Failed to scrape receipts for block range %s-%s: %s",
-                start_block,
-                end_block,
-                ex,
+                _push_common_metrics(result)
+            m_catchup_pages_left.set(0)
+
+        async def keep_up(
+            miners_fn,
+            session: aiohttp.ClientSession,
+            semaphore: asyncio.Semaphore,
+        ) -> None:
+            while True:
+                await _throw_if_disabled()
+                interval: int = await aget_config("DYNAMIC_RECEIPT_TRANSFER_INTERVAL")
+
+                start_time = time.monotonic()
+                current_page = LocalFilesystemPagedReceiptStore.current_page()
+                pages = list(reversed(range(current_page - N_ACTIVE_PAGES + 1, current_page + 1)))
+                current_loop_miners = await miners_fn()
+                result = await ReceiptsTransfer.transfer(
+                    miners=current_loop_miners,
+                    pages=pages,
+                    session=session,
+                    semaphore=semaphore,
+                    request_timeout=1.0,
+                )
+                elapsed = time.monotonic() - start_time
+
+                logger.info(
+                    f"Keeping up: "
+                    f"{pages=} "
+                    f"receipts={result.n_receipts} "
+                    f"{elapsed=:.3f} "
+                    f"successful_transfers={result.n_successful_transfers} "
+                    f"transfer_errors={len(result.transfer_errors)} "
+                    f"line_errors={len(result.line_errors)} "
+                )
+
+                _push_common_metrics(result)
+                m_miners.set(len(current_loop_miners))
+                m_transfer_duration.observe(elapsed)
+
+                if elapsed < interval:
+                    time.sleep(interval - elapsed)
+
+        async def run_once(cutoff_ts: datetime.datetime) -> None:
+            catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff_ts)
+            current_page = LocalFilesystemPagedReceiptStore.current_page()
+            async with aiohttp.ClientSession() as session:
+                await catch_up(
+                    pages=list(reversed(range(catchup_cutoff_page, current_page + 1))),
+                    miners_fn=miners,
+                    session=session,
+                    semaphore=asyncio.Semaphore(50),
+                )
+
+        async def run_in_loop(cutoff_ts: datetime.datetime) -> None:
+            catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff_ts)
+            current_page = LocalFilesystemPagedReceiptStore.current_page()
+            async with aiohttp.ClientSession() as session:
+                await catch_up(
+                    pages=list(reversed(range(current_page - N_ACTIVE_PAGES + 1, current_page + 1))),
+                    miners_fn=miners,
+                    session=session,
+                    semaphore=asyncio.Semaphore(50),
+                )
+                await asyncio.gather(
+                    catch_up(
+                        pages=list(
+                            reversed(range(catchup_cutoff_page, current_page - N_ACTIVE_PAGES + 1))
+                        ),
+                        miners_fn=miners,
+                        session=session,
+                        semaphore=asyncio.Semaphore(10),
+                    ),
+                    keep_up(
+                        miners_fn=miners,
+                        session=session,
+                        semaphore=asyncio.Semaphore(50),
+                    ),
+                )
+
+        if daemon:
+            while True:
+                try:
+                    await run_in_loop(cutoff)
+                except TransferIsDisabled:
+                    logger.info("Transfer is currently disabled. Sleeping for a minute.")
+                    await asyncio.sleep(60)
+        else:
+            await run_once(cutoff)
+
+    async def transfer_receipts_from_miners(
+        self,
+        miner_hotkeys: list[str],
+        pages: list[int],
+        semaphore_limit: int = 50,
+        request_timeout: float = 3.0,
+    ) -> TransferResult:
+        if not miner_hotkeys or not pages:
+            return TransferResult(0, 0, [], [])
+
+        miners = await self._fetch_miners(miner_hotkeys)
+        miner_infos: list[tuple[str, str, int]] = [
+            (m[0], m[1], m[2]) for m in miners if m[1] and m[2] and m[1] != "0.0.0.0"
+        ]
+        if not miner_infos:
+            return TransferResult(0, 0, [], [])
+
+        semaphore = asyncio.Semaphore(semaphore_limit)
+        async with aiohttp.ClientSession() as session:
+            return await ReceiptsTransfer.transfer(
+                miners=miner_infos,
+                pages=pages,
+                session=session,
+                semaphore=semaphore,
+                request_timeout=request_timeout,
             )
-            return []
+
+    async def run_full_transfer_cycle(
+        self,
+        miner_hotkeys: list[str],
+        cutoff_hours: int = 5,
+        n_active_pages: int = 2,
+        active_semaphore_limit: int = 50,
+        catchup_semaphore_limit: int = 10,
+        active_timeout: float = 1.0,
+        catchup_timeout: float = 3.0,
+    ) -> tuple[TransferResult, TransferResult]:
+        # Compute page windows
+        cutoff_ts = timezone.now() - datetime.timedelta(hours=cutoff_hours)
+        catchup_cutoff_page = LocalFilesystemPagedReceiptStore.current_page_at(cutoff_ts)
+        current_page = LocalFilesystemPagedReceiptStore.current_page()
+
+        active_pages = list(reversed(range(current_page - n_active_pages + 1, current_page + 1)))
+        catchup_pages = list(
+            reversed(range(catchup_cutoff_page, max(catchup_cutoff_page, current_page - n_active_pages + 1)))
+        )
+
+        miners = await self._fetch_miners(miner_hotkeys)
+        miner_infos: list[tuple[str, str, int]] = [
+            (m[0], m[1], m[2]) for m in miners if m[1] and m[2] and m[1] != "0.0.0.0"
+        ]
+        if not miner_infos:
+            return TransferResult(0, 0, [], []), TransferResult(0, 0, [], [])
+
+        async with aiohttp.ClientSession() as session:
+            active_result = await ReceiptsTransfer.transfer(
+                miners=miner_infos,
+                pages=active_pages,
+                session=session,
+                semaphore=asyncio.Semaphore(active_semaphore_limit),
+                request_timeout=active_timeout,
+            )
+            catchup_result = await ReceiptsTransfer.transfer(
+                miners=miner_infos,
+                pages=catchup_pages,
+                session=session,
+                semaphore=asyncio.Semaphore(catchup_semaphore_limit),
+                request_timeout=catchup_timeout,
+            )
+
+        return active_result, catchup_result
 
     def create_job_finished_receipt(
         self,
