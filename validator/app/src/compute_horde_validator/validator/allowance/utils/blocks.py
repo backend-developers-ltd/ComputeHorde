@@ -14,7 +14,13 @@ from ...models import SystemEvent
 from ...models.allowance.internal import Block, BlockAllowance
 from ...models.allowance.internal import Neuron as NeuronModel
 from .. import settings
-from ..metrics import VALIDATOR_ALLOWANCE_CHECKPOINT, VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION
+from ..metrics import (
+    VALIDATOR_ALLOWANCE_CHECKPOINT,
+    VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION,
+    VALIDATOR_BLOCK_DURATION,
+    VALIDATOR_MINER_MANIFEST_REPORT,
+    VALIDATOR_STAKE_SHARE_REPORT,
+)
 from ..types import AllowanceException, NotEnoughAllowanceException, ss58_address
 from .manifests import get_manifest_drops, get_manifests
 from .supertensor import SuperTensor, supertensor
@@ -103,7 +109,17 @@ def save_neurons(neurons: list[turbobt.Neuron], block: int):
     )
 
 
-def process_block_allowance(block_number: int, supertensor_: SuperTensor):
+def process_block_allowance(
+    block_number: int,
+    supertensor_: SuperTensor,
+) -> dict[
+    int,
+    tuple[
+        dict[ss58_address, float],
+        dict[tuple[ss58_address, ExecutorClass], int],
+        float,
+    ],
+]:
     """
     Only call this once the block is already minted
     """
@@ -139,6 +155,15 @@ def process_block_allowance(block_number: int, supertensor_: SuperTensor):
                 prev_block.save()
                 finalized_blocks.append(prev_block)
 
+        result: dict[
+            int,
+            tuple[
+                dict[ss58_address, float],
+                dict[tuple[ss58_address, ExecutorClass], int],
+                float,
+            ],
+        ] = {}
+
         for finalized_block in finalized_blocks:
             assert finalized_block.end_timestamp is not None
 
@@ -154,6 +179,16 @@ def process_block_allowance(block_number: int, supertensor_: SuperTensor):
                 drops = get_manifest_drops(finalized_block.block_number, hotkeys_from_metagraph)
                 new_block_allowances = []
 
+                block_duration = (
+                    finalized_block.end_timestamp - finalized_block.creation_timestamp
+                ).total_seconds()
+
+                result[finalized_block.block_number] = (
+                    {v.hotkey: get_stake_share(validators, v) for v in validators},
+                    manifests,
+                    block_duration,
+                )
+
                 for neuron in neurons:
                     for validator in validators:
                         for executor_class in ExecutorClass:
@@ -163,10 +198,7 @@ def process_block_allowance(block_number: int, supertensor_: SuperTensor):
                                     allowance=(
                                         manifests.get((neuron.hotkey, executor_class), 0.0)
                                         * get_stake_share(validators, validator)
-                                        * (
-                                            finalized_block.end_timestamp
-                                            - finalized_block.creation_timestamp
-                                        ).total_seconds()
+                                        * block_duration
                                     ),
                                     miner_ss58=neuron.hotkey,
                                     validator_ss58=validator.hotkey,
@@ -182,16 +214,33 @@ def process_block_allowance(block_number: int, supertensor_: SuperTensor):
                         f"Created {len(new_block_allowances)} block allowances for block "
                         f"{finalized_block.block_number}"
                     )
+        return result
 
 
-def process_block_allowance_with_reporting(block_number: int, supertensor_: SuperTensor):
+def process_block_allowance_with_reporting(
+    block_number: int, supertensor_: SuperTensor, live=False
+):
     """
     Only call this once the block is already minted
     """
     try:
         start = time.time()
-        process_block_allowance(block_number, supertensor_)
+        data = process_block_allowance(block_number, supertensor_)
         end = time.time()
+        if live and data:
+            stake_shares, manifests, duration = data[max(data.keys())]
+
+            for validator_ss58, stake_share in stake_shares.items():
+                VALIDATOR_STAKE_SHARE_REPORT.labels(validator_ss58).set(stake_share)
+
+            for miner_exec_class, count in manifests.items():
+                miner_hotkey, executor_class = miner_exec_class
+                VALIDATOR_MINER_MANIFEST_REPORT.labels(miner_hotkey, executor_class.value).set(
+                    count
+                )
+
+            VALIDATOR_BLOCK_DURATION.set(duration)
+
     except Exception as e:
         logger.error(
             f"Error processing block allowance for block {block_number}: {e!r}", exc_info=True
@@ -260,7 +309,9 @@ def scan_blocks_and_calculate_allowance(
             wait_for_block(current_block + 1, timer.time_left())
             current_block += 1
 
-            process_block_allowance_with_reporting(current_block, livefilling_supertensor)
+            process_block_allowance_with_reporting(
+                current_block, livefilling_supertensor, live=True
+            )
             # no precaching needed in live sampling
             if not current_block % 100 and report_callback:
                 report_callback(current_block, current_block - 100)
