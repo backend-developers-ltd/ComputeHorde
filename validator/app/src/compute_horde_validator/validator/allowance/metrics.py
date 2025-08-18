@@ -43,6 +43,29 @@ VALIDATOR_ALLOWANCE_CHECKPOINT = prometheus_client.Gauge(
     unit="seconds",
 )
 
+VALIDATOR_STAKE_SHARE_REPORT = prometheus_client.Gauge(
+    "stake_share",
+    "the fraction of stake for each validator",
+    labelnames=["validator_hotkey"],
+    namespace="validator",
+    unit="fraction",
+)
+
+VALIDATOR_MINER_MANIFEST_REPORT = prometheus_client.Gauge(
+    "miner_manifest",
+    "miner manifest",
+    labelnames=["miner_hotkey", "executor_class"],
+    namespace="validator",
+    unit="count",
+)
+
+VALIDATOR_BLOCK_DURATION = prometheus_client.Gauge(
+    "block_duration",
+    "block duration",
+    namespace="validator",
+    unit="seconds",
+)
+
 
 F = TypeVar("F", bound=Callable[..., Any])
 
