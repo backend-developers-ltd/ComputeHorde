@@ -50,6 +50,7 @@ def configure_logs(caplog):
         yield
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_job_too_long():
     with set_block_number(1000):
         with pytest.raises(AllowanceException) as e1:
@@ -66,6 +67,7 @@ def test_job_too_long():
 
 
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_empty():
     with set_block_number(1000):
         with pytest.raises(NotEnoughAllowanceException) as e1:
@@ -102,6 +104,7 @@ def test_empty():
 
 
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_block_without_manifests():
     with set_block_number(1000):
         blocks.process_block_allowance_with_reporting(1000, supertensor_=supertensor())
