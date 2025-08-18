@@ -13,6 +13,7 @@ from queue import Queue
 from typing import Any, TypeVar, assert_never
 
 import bittensor_wallet
+import tenacity
 import turbobt
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
@@ -32,6 +33,15 @@ logger = logging.getLogger(__name__)
 
 class SuperTensorTimeout(TimeoutError):
     pass
+
+
+# Tenacity retry policy: up to 3 attempts, only on SuperTensorTimeout, with small backoff
+RETRY_ON_TIMEOUT = tenacity.retry(
+    reraise=True,
+    retry=tenacity.retry_if_exception_type(SuperTensorTimeout),
+    stop=tenacity.stop_after_attempt(3),
+    wait=tenacity.wait_exponential(multiplier=0.1, min=0.1, max=0.8),
+)
 
 
 T = TypeVar("T")
@@ -137,39 +147,49 @@ class SuperTensor(BaseSuperTensor):
 
         self._neuron_list_cache: deque[tuple[int, list[turbobt.Neuron]]] = deque(maxlen=15)
 
-    def list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
+    def _list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
         cache = dict(self._neuron_list_cache)
         if hit := cache.get(block_number):
             return hit
-        result: list[turbobt.Neuron] = self.real_list_neurons(block_number)
+        result: list[turbobt.Neuron] = self._real_list_neurons(block_number)
         self._neuron_list_cache.append((block_number, result))
         return result
 
+    @RETRY_ON_TIMEOUT
+    def list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
+        return self._list_neurons(block_number)
+
     @archive_fallback
     @make_sync
-    async def real_list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
+    async def _real_list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
         bittensor = bittensor_context.get()
         subnet = subnet_context.get()
         async with bittensor.block(block_number):
             result: list[turbobt.Neuron] = await subnet.list_neurons()
             return result
 
+    @RETRY_ON_TIMEOUT
     @archive_fallback
     @make_sync
     async def list_validators(self, block_number: int) -> list[turbobt.Neuron]:
-        return [n for n in self.list_neurons(block_number) if n.stake >= 1000]
+        return [n for n in self._list_neurons(block_number) if n.stake >= 1000]
         # TODO: yes this is reimplementing `subnet.list_validators()` but since turbobt doesn't support caching yet
         # (or i don't know how to use it) it's just too time consuming to be doing it properly
 
     @archive_fallback
     @make_sync
-    async def get_block_timestamp(self, block_num) -> datetime.datetime:
+    async def _get_block_timestamp(self, block_num) -> datetime.datetime:
         bittensor = bittensor_context.get()
         async with bittensor.block(block_num) as block:
             ret: datetime.datetime = await block.get_timestamp()
             logger.debug(f"Block {block_num} timestamp: {ret}")
             return ret
 
+    @RETRY_ON_TIMEOUT
+    def get_block_timestamp(self, block_number: int) -> datetime.datetime:
+        return self._get_block_timestamp(block_number)
+
+    @RETRY_ON_TIMEOUT
     @make_sync
     async def get_shielded_neurons(self) -> list[turbobt.Neuron]:
         # instantiate ShieldedBittensor lazily and keep the reference
@@ -228,6 +248,10 @@ class InMemoryCache(BaseCache):
 
     def get_block_timestamp(self, block_number: int) -> datetime.datetime | None:
         return self._block_timestamp_cache.get(block_number)
+
+
+class PrecachingSuperTensorCacheMiss(Exception):
+    pass
 
 
 class PrecachingSuperTensor(SuperTensor):
@@ -328,27 +352,28 @@ class PrecachingSuperTensor(SuperTensor):
         if self.highest_block_submitted is None:
             self.highest_block_submitted = block_number - 1
 
-    def list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
+    def _list_neurons(self, block_number: int) -> list[turbobt.Neuron]:
         self.set_starting_block(block_number)
         neurons = self.cache.get_neurons(block_number)
         if neurons is not None:
             return neurons
         elif self.throw_on_cache_miss:
-            raise SuperTensorTimeout(f"Cache miss for block {block_number}")
+            raise PrecachingSuperTensorCacheMiss(f"Cache miss for block {block_number}")
         else:
             logger.debug(f"Cache miss for block {block_number}")
-            return super().list_neurons(block_number)
+            return super()._list_neurons(block_number)
 
+    @RETRY_ON_TIMEOUT
     def get_block_timestamp(self, block_number: int) -> datetime.datetime:
         self.set_starting_block(block_number)
         timestamp = self.cache.get_block_timestamp(block_number)
         if timestamp is not None:
             return timestamp
         elif self.throw_on_cache_miss:
-            raise SuperTensorTimeout(f"Cache miss for block {block_number}")
+            raise PrecachingSuperTensorCacheMiss(f"Cache miss for block {block_number}")
         else:
             logger.debug(f"Cache miss for block {block_number}")
-            return super().get_block_timestamp(block_number)
+            return super()._get_block_timestamp(block_number)
 
 
 _supertensor_instance: SuperTensor | None = None

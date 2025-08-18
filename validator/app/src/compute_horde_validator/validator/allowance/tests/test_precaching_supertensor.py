@@ -56,7 +56,7 @@ def keep_trying_until_success_or_timeout(func, timeout=1):
     while True:
         try:
             return func()
-        except supertensor.SuperTensorTimeout:
+        except supertensor.PrecachingSuperTensorCacheMiss:
             if time.time() - start_time > timeout:
                 raise
             time.sleep(0.1)
@@ -69,14 +69,14 @@ def test_precaching_supertensor_smoke_test():
         precaching_supertensor = supertensor.PrecachingSuperTensor(
             cache=DjangoCache(), throw_on_cache_miss=True
         )
-        with pytest.raises(supertensor.SuperTensorTimeout):
+        with pytest.raises(supertensor.PrecachingSuperTensorCacheMiss):
             precaching_supertensor.list_neurons(1001)
         keep_trying_until_success_or_timeout(
             functools.partial(precaching_supertensor.get_block_timestamp, 1001)
         )
         precaching_supertensor.list_neurons(1001)
 
-        with pytest.raises(supertensor.SuperTensorTimeout):
+        with pytest.raises(supertensor.PrecachingSuperTensorCacheMiss):
             precaching_supertensor.get_block_timestamp(1012)
 
         for i in range(1012, 1030):
