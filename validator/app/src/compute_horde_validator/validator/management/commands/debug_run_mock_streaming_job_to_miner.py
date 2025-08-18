@@ -7,8 +7,8 @@ import uuid
 import requests
 import uvloop
 from asgiref.sync import async_to_sync
+from compute_horde.job_errors import HordeError
 from compute_horde.miner_client.organic import (
-    JobDriverError,
     OrganicJobDetails,
     OrganicMinerClient,
 )
@@ -63,7 +63,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
         try:
             await exit_stack.enter_async_context(client)
         except TransportConnectionError as exc:
-            raise JobDriverError(
+            raise HordeError(
                 f"Could not connect to trusted miner: {exc}",
                 HordeFailureReason.MINER_CONNECTION_FAILED,
             ) from exc
@@ -96,7 +96,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
-                raise JobDriverError(
+                raise HordeError(
                     "Initial response timed out", HordeFailureReason.INITIAL_RESPONSE_TIMED_OUT
                 ) from exc
 
@@ -108,7 +108,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
-                raise JobDriverError(
+                raise HordeError(
                     "Executor readiness timed out",
                     HordeFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT,
                 ) from exc
@@ -134,7 +134,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                     timeout=min(job_timer.time_left(), wait_timeout),
                 )
             except TimeoutError as exc:
-                raise JobDriverError(
+                raise HordeError(
                     "Streaming readiness timed out",
                     HordeFailureReason.STREAMING_JOB_READY_TIMED_OUT,
                 ) from exc
@@ -182,7 +182,7 @@ async def run_streaming_job(options, wait_timeout: int = 300):
                 logger.info(f"Job finished: {final_response}")
 
             except TimeoutError as exc:
-                raise JobDriverError(
+                raise HordeError(
                     "Final response timed out", HordeFailureReason.FINAL_RESPONSE_TIMED_OUT
                 ) from exc
         except Exception:

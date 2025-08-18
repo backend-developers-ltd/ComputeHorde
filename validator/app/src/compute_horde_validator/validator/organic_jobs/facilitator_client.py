@@ -7,6 +7,7 @@ from typing import Any, Literal
 import bittensor_wallet
 import httpx
 import pydantic
+import sentry_sdk
 import tenacity
 import websockets
 from channels.layers import get_channel_layer
@@ -27,6 +28,7 @@ from compute_horde.fv_protocol.validator_requests import (
     V0Heartbeat,
     V0MachineSpecsUpdate,
 )
+from compute_horde.job_errors import HordeError
 from compute_horde.protocol_consts import (
     HordeFailureReason,
     JobFailureReason,
@@ -302,9 +304,11 @@ class FacilitatorClient:
                         return
                 except pydantic.ValidationError as exc:
                     logger.warning("Received malformed job status update: %s", exc)
-        except Exception:
-            logger.exception("Error in job status update listener", exc_info=True)
+        except asyncio.CancelledError:
             raise
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            logger.exception("Error in job status update listener", exc_info=True)
         finally:
             logger.debug(f"Finished listening for job status updates for job {job_uuid}")
 
@@ -419,6 +423,8 @@ class FacilitatorClient:
                 context={"exception_type": type(e).__qualname__},
             )
         except Exception as e:
+            sentry_sdk.capture_exception(e)
+            e = HordeError.wrap_unhandled(e)
             await self.send_horde_failed(
                 job_uuid=job_request.uuid,
                 message="Uncaught exception during handling of job",

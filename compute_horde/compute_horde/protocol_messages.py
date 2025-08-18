@@ -29,7 +29,7 @@ from compute_horde.utils import MachineSpecs
 # miner.vc = Miner's validator consumer
 
 
-FailureContext: TypeAlias = dict[str, JsonValue] | None
+FailureContext: TypeAlias = dict[str, JsonValue]
 
 
 # executor <-> miner.ec <-> miner.vc <-> validator

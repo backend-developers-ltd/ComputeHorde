@@ -4,10 +4,9 @@ from dataclasses import dataclass
 
 import pydantic
 from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
-from compute_horde.protocol_consts import HordeFailureReason, JobFailureReason
+from compute_horde.protocol_consts import JobFailureReason
 from compute_horde.protocol_messages import (
     ExecutorToMinerMessage,
-    FailureContext,
     GenericError,
     MinerToExecutorMessage,
     V0ExecutionDoneRequest,
@@ -41,35 +40,6 @@ class ExecutionResult:
 
     stdout: str
     stderr: str
-
-
-class JobError(Exception):
-    def __init__(
-        self,
-        message: str,
-        reason: JobFailureReason = JobFailureReason.UNKNOWN,
-        error_detail: str | None = None,
-        execution_result: ExecutionResult | None = None,
-        context: FailureContext | None = None,
-    ):
-        self.message = message
-        self.reason = reason
-        self.error_detail = error_detail
-        self.execution_result = execution_result
-        self.context = context
-
-
-class ExecutorError(Exception):
-    def __init__(
-        self,
-        message: str,
-        reason: HordeFailureReason = HordeFailureReason.GENERIC_ERROR,
-        context: FailureContext | None = None,
-    ) -> None:
-        super().__init__(f"Job failed {reason=}, {message=})")
-        self.reason = reason
-        self.message = message
-        self.context = context
 
 
 class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMessage]):
