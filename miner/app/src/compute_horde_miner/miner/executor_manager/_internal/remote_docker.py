@@ -1,0 +1,249 @@
+import asyncio
+import logging
+import subprocess
+import os
+import json
+from contextlib import asynccontextmanager
+from collections import deque
+from datetime import timedelta
+
+import asyncssh
+import yaml
+
+from django.conf import settings
+
+from compute_horde.executor_class import ExecutorClass
+from compute_horde_miner.miner.executor_manager.v1 import (
+    DEFAULT_EXECUTOR_CLASS,
+    BaseExecutorManager,
+    ExecutorUnavailable,
+)
+
+from compute_horde_miner.miner.executor_manager._internal import base
+
+base.MAX_EXECUTOR_TIMEOUT = timedelta(minutes=20).total_seconds()
+
+PULLING_TIMEOUT = 300
+DOCKER_STOP_TIMEOUT = 5
+
+logger = logging.getLogger(__name__)
+
+
+class RemoteDockerExecutor:
+    def __init__(self, process_executor, token, conn, server_name, server_config):
+        self.process_executor = process_executor
+        self.token = token
+        self.conn = conn
+        self.server_name = server_name
+        self.server_config = server_config
+
+
+class RemoteServers:
+    def __init__(self):
+        self._configs = {}
+        self._server_queues = {
+            str(DEFAULT_EXECUTOR_CLASS): deque(),
+            str(ExecutorClass.always_on__llm__a6000): deque(),
+        }
+        self._reserved_servers = set()
+
+    @property
+    def configs(self):
+        config_path = os.environ.get("REMOTE_EXECUTORS_CONFIG")
+        if not config_path:
+            raise RuntimeError("aaaaaaaaaaa")
+
+        with open(config_path, "r") as fp:
+            new_config = yaml.safe_load(fp)
+
+        # Update the server queue based on the new config
+        for executor_class_str in self._server_queues:
+            executor_class_configs = {}
+            for server_name, server_config in new_config.items():
+                if server_config["executor_class"] == executor_class_str:
+                    executor_class_configs[server_name] = server_config
+            self._update_server_queue(executor_class_str, executor_class_configs)
+            self._configs[executor_class_str] = executor_class_configs
+
+        return self._configs
+
+    def _update_server_queue(self, executor_class_str, new_config):
+        # Remove servers that are no longer in the config
+        self._server_queue = deque(
+            [
+                server
+                for server in self._server_queues[executor_class_str]
+                if server in new_config
+            ]
+        )
+        self._reserved_servers = {
+            server for server in self._reserved_servers if server in new_config
+        }
+
+        # Add new servers that are not in the queue and not reserved
+        new_servers = (
+            set(new_config.keys())
+            - set(self._server_queues[executor_class_str])
+            - self._reserved_servers
+        )
+        self._server_queues[executor_class_str].extend(new_servers)
+
+    def reserve_server(self, executor_class_str: str):
+        while self._server_queues[executor_class_str]:
+            server_name = self._server_queues[executor_class_str].popleft()
+            if (
+                server_name in self._configs[executor_class_str]
+            ):  # Double-check if the server is still in config
+                self._reserved_servers.add(server_name)
+                return server_name, self._configs[executor_class_str][server_name]
+
+        raise ExecutorUnavailable()
+
+    def release_server(self, server_name):
+        for executor_class_str, configs in self._configs.items():
+            if server_name in configs and server_name in self._reserved_servers:
+                self._reserved_servers.remove(server_name)
+                self._server_queues[executor_class_str].append(server_name)
+                return
+
+
+remote_servers = RemoteServers()
+
+
+class RemoteDockerExecutorManager(BaseExecutorManager):
+    async def is_active(self) -> bool:
+        return True
+
+    @asynccontextmanager
+    async def _connect(self, server_config):
+        async with asyncssh.connect(
+            server_config["host"],
+            username=server_config["username"],
+            client_keys=[server_config["key"]],
+            known_hosts=None,
+            connect_timeout=15,
+            keepalive_interval=30,
+        ) as conn:
+            yield conn
+
+    async def _connect_no_context(self, server_config):
+        return await asyncssh.connect(
+            server_config["host"],
+            username=server_config["username"],
+            client_keys=[server_config["key"]],
+            known_hosts=None,
+            connect_timeout=15,
+            keepalive_interval=30,
+        )
+
+    async def start_new_executor(self, token, executor_class, timeout):
+        if settings.ADDRESS_FOR_EXECUTORS:
+            address = settings.ADDRESS_FOR_EXECUTORS
+        else:
+            raise RuntimeError("ADDRESS_FOR_EXECUTORS is required")
+
+        try:
+            server_name, server_config = remote_servers.reserve_server(
+                str(executor_class)
+            )
+        except ExecutorUnavailable:
+            logger.error("No available servers to reserve")
+            raise
+        try:
+            if not settings.DEBUG_SKIP_PULLING_EXECUTOR_IMAGE:
+                async with self._connect(server_config) as conn:
+                    process = await conn.create_process(
+                        "docker pull " + settings.EXECUTOR_IMAGE
+                    )
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=PULLING_TIMEOUT)
+                        if process.returncode:
+                            logger.error(
+                                f"Pulling executor container failed with returncode={process.returncode}"
+                            )
+                            raise ExecutorUnavailable("Failed to pull executor image")
+                    except TimeoutError:
+                        process.kill()
+                        logger.error(
+                            "Pulling executor container timed out, pulling it from shell might provide more details"
+                        )
+                        raise ExecutorUnavailable("Failed to pull executor image")
+
+            conn = await self._connect_no_context(server_config)
+            args = " ".join(await self.get_executor_cmdline_args())
+            process_executor = await conn.create_process(
+                f"docker run -e MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS} "
+                f"-e EXECUTOR_TOKEN={token} --name {token} "
+                "-v /var/run/docker.sock:/var/run/docker.sock -v /tmp:/tmp "
+                f"{settings.EXECUTOR_IMAGE} python manage.py run_executor {args}"
+            )
+            return RemoteDockerExecutor(
+                process_executor, token, conn, server_name, server_config
+            )
+        except Exception:
+            remote_servers.release_server(server_name)
+            raise
+
+    async def kill_executor(self, executor):
+        async with self._connect(executor.server_config) as conn:
+            process = await conn.create_process(f"docker stop {executor.token}")
+            try:
+                await asyncio.wait_for(process.wait(), timeout=DOCKER_STOP_TIMEOUT)
+            except TimeoutError:
+                pass
+
+            process = await conn.create_process(f"docker stop {executor.token}-job")
+            try:
+                await asyncio.wait_for(process.wait(), timeout=DOCKER_STOP_TIMEOUT)
+            except TimeoutError:
+                pass
+
+        try:
+            executor.process_executor.kill()
+        except OSError:
+            pass
+        remote_servers.release_server(executor.server_name)
+        try:
+            executor.conn.close()
+        except Exception:
+            pass
+
+    async def wait_for_executor(self, executor, timeout):
+        try:
+            result = await asyncio.wait_for(
+                executor.process_executor.wait(), timeout=timeout
+            )
+            if result is not None:
+                remote_servers.release_server(executor.server_name)
+                try:
+                    executor.conn.close()
+                except Exception:
+                    pass
+            return result
+        except TimeoutError:
+            pass
+
+    async def get_manifest(self):
+        manifest = {}
+        configs = remote_servers.configs
+        for executor_class in [
+            DEFAULT_EXECUTOR_CLASS,
+            ExecutorClass.always_on__llm__a6000,
+        ]:
+            executor_class_configs = configs[str(executor_class)]
+            #            if executor_class == DEFAULT_EXECUTOR_CLASS and len(executor_class_configs) > 1:
+            #                manifest[executor_class] = len(executor_class_configs) - 1
+            if True:
+                if len(executor_class_configs) > 0:
+                    manifest[executor_class] = len(executor_class_configs)
+        return manifest
+
+    async def reserve_executor_class(self, token, executor_class, timeout):
+        return await super().reserve_executor_class(
+            token, executor_class, int(timedelta(minutes=20).total_seconds())
+        )
+
+    async def get_executor_class_pool(self, executor_class):
+        pool = await super().get_executor_class_pool(executor_class)
+        pool.set_count(len(remote_servers.configs[str(executor_class)]))
+        return pool
