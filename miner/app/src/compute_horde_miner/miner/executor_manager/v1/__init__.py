@@ -18,6 +18,10 @@ from compute_horde_miner.miner.executor_manager._internal.docker import (
     DockerExecutor,
     DockerExecutorManager,
 )
+from compute_horde_miner.miner.executor_manager._internal.remote_docker import (
+    RemoteDockerExecutor,
+    RemoteDockerExecutorManager,
+)
 
 __all__ = [
     "DEFAULT_EXECUTOR_CLASS",
@@ -33,4 +37,6 @@ __all__ = [
     "DockerExecutor",
     "DockerExecutorManager",
     "DevExecutorManager",
+    "RemoteDockerExecutorManager",
+    "RemoteDockerExecutor",
 ]
