@@ -61,9 +61,7 @@ class RemoteServers:
 
     def _update_server_queue(self, executor_class_str, new_config):
         # Remove servers that are no longer in the config
-        # TODO: What is this? It is not used anywhere.
-        #       May be this is related to the bug: server removed from the config is not removed from servers queue.
-        self._server_queue = deque(
+        self._server_queues[executor_class_str] = deque(
             [server for server in self._server_queues[executor_class_str] if server in new_config]
         )
         self._reserved_servers = {
