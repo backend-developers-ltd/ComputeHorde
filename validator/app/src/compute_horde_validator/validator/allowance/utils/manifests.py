@@ -11,9 +11,9 @@ from django.db import transaction
 from django.db.models import Min, Q
 
 from compute_horde_validator.validator.clean_me_up import get_single_manifest
-from compute_horde_validator.validator.locks import Lock, LockType
 
 from ...dynamic_config import get_miner_max_executors_per_class_sync
+from ...locks import Lock, LockType
 from ...models.allowance.internal import AllowanceMinerManifest, BlockAllowance, MinerAddress
 from .. import settings
 from ..types import ss58_address
