@@ -25,6 +25,7 @@ from compute_horde.protocol_messages import (
 )
 from compute_horde.utils import ValidatorInfo
 from compute_horde_core.signature import Signature
+from constance.base import Config
 from django.conf import settings
 from pydantic import TypeAdapter
 
@@ -390,8 +391,6 @@ def check_system_events(
 
 
 def patch_constance(config_overlay: dict):
-    from constance.base import Config
-
     old_getattr = Config.__getattr__
 
     def new_getattr(s, key):
