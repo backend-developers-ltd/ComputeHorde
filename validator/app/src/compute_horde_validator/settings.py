@@ -351,12 +351,6 @@ CONSTANCE_CONFIG = {
         "across all validators) and will receive 'DYNAMIC_BURN_PARTITION' fraction of all the burn.",
         float,
     ),
-    "DYNAMIC_ROUTING_PRELIMINARY_RESERVATION_TIME_SECONDS": (
-        10.0,
-        "How long to initially reserve an executor for during job routing request. This should last only long enough "
-        "for the job flow to create and store a job started receipt.",
-        float,
-    ),
     "ORGANIC_JOB_CELERY_WAIT_TIMEOUT": (
         600,
         "How long to wait for Celery to execute the organic job",
@@ -372,17 +366,6 @@ CONSTANCE_CONFIG = {
         5_000_000_000_000_000,  # 0.005 tao
         "Amount (in Wei) of collateral to be slashed if a miner cheats on a job",
         int,
-    ),
-    "DYNAMIC_ALLOW_CROSS_CYCLE_ORGANIC_JOBS": (
-        True,
-        "Whether organic jobs can be scheduled to run for longer than the current cycle",
-        bool,
-    ),
-    "DYNAMIC_CHECK_ALLOWANCE_WHILE_ROUTING": (
-        True,
-        "Whether to check for remaining allowance while picking a miner for an organic job. "
-        "In both cases allowance will still be deducted.",
-        bool,
     ),
     "DYNAMIC_DANCING_BONUS": (
         0.1,
