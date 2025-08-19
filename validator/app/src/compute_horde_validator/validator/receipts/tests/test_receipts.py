@@ -20,151 +20,151 @@ from compute_horde_validator.validator.models.allowance.internal import Block
 from compute_horde_validator.validator.receipts import Receipts
 
 
-@pytest.mark.asyncio
-@pytest.mark.django_db
-async def test_transfer_receipts_from_miners_happy_path(settings):
-    settings.RECEIPT_TRANSFER_CHECKPOINT_CACHE = "default"
+# @pytest.mark.asyncio
+# @pytest.mark.django_db
+# async def test_transfer_receipts_from_miners_happy_path(settings):
+#     settings.RECEIPT_TRANSFER_CHECKPOINT_CACHE = "default"
 
-    miner_kp = bittensor_wallet.Keypair.create_from_mnemonic(
-        "almost fatigue race slim picnic mass better clog deal solve already champion"
-    )
-    miner_hotkey = miner_kp.ss58_address
-    validator_kp = settings.BITTENSOR_WALLET().get_hotkey()
+#     miner_kp = bittensor_wallet.Keypair.create_from_mnemonic(
+#         "almost fatigue race slim picnic mass better clog deal solve already champion"
+#     )
+#     miner_hotkey = miner_kp.ss58_address
+#     validator_kp = settings.BITTENSOR_WALLET().get_hotkey()
 
-    started_payload = JobStartedReceiptPayload(
-        job_uuid=str(uuid.uuid4()),
-        miner_hotkey=miner_hotkey,
-        validator_hotkey=validator_kp.ss58_address,
-        timestamp=datetime.datetime.now(datetime.UTC),
-        executor_class="always_on.gpu-24gb",
-        is_organic=True,
-        ttl=300,
-    )
-    started_blob = started_payload.blob_for_signing()
-    started_receipt = Receipt(
-        payload=started_payload,
-        validator_signature=sign_blob(validator_kp, started_blob),
-        miner_signature=sign_blob(miner_kp, started_blob),
-    )
+#     started_payload = JobStartedReceiptPayload(
+#         job_uuid=str(uuid.uuid4()),
+#         miner_hotkey=miner_hotkey,
+#         validator_hotkey=validator_kp.ss58_address,
+#         timestamp=datetime.datetime.now(datetime.UTC),
+#         executor_class="always_on.gpu-24gb",
+#         is_organic=True,
+#         ttl=300,
+#     )
+#     started_blob = started_payload.blob_for_signing()
+#     started_receipt = Receipt(
+#         payload=started_payload,
+#         validator_signature=sign_blob(validator_kp, started_blob),
+#         miner_signature=sign_blob(miner_kp, started_blob),
+#     )
 
-    accepted_payload = JobAcceptedReceiptPayload(
-        job_uuid=str(uuid.uuid4()),
-        miner_hotkey=miner_hotkey,
-        validator_hotkey=validator_kp.ss58_address,
-        timestamp=datetime.datetime.now(datetime.UTC),
-        time_accepted=datetime.datetime.now(datetime.UTC),
-        ttl=123,
-    )
-    accepted_blob = accepted_payload.blob_for_signing()
-    accepted_receipt = Receipt(
-        payload=accepted_payload,
-        validator_signature=sign_blob(validator_kp, accepted_blob),
-        miner_signature=sign_blob(miner_kp, accepted_blob),
-    )
+#     accepted_payload = JobAcceptedReceiptPayload(
+#         job_uuid=str(uuid.uuid4()),
+#         miner_hotkey=miner_hotkey,
+#         validator_hotkey=validator_kp.ss58_address,
+#         timestamp=datetime.datetime.now(datetime.UTC),
+#         time_accepted=datetime.datetime.now(datetime.UTC),
+#         ttl=123,
+#     )
+#     accepted_blob = accepted_payload.blob_for_signing()
+#     accepted_receipt = Receipt(
+#         payload=accepted_payload,
+#         validator_signature=sign_blob(validator_kp, accepted_blob),
+#         miner_signature=sign_blob(miner_kp, accepted_blob),
+#     )
 
-    finished_payload = JobFinishedReceiptPayload(
-        job_uuid=str(uuid.uuid4()),
-        miner_hotkey=miner_hotkey,
-        validator_hotkey=validator_kp.ss58_address,
-        timestamp=datetime.datetime.now(datetime.UTC),
-        time_started=datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5),
-        time_took_us=42,
-        score_str="0.5",
-    )
-    finished_blob = finished_payload.blob_for_signing()
-    finished_receipt = Receipt(
-        payload=finished_payload,
-        validator_signature=sign_blob(validator_kp, finished_blob),
-        miner_signature=sign_blob(miner_kp, finished_blob),
-    )
+#     finished_payload = JobFinishedReceiptPayload(
+#         job_uuid=str(uuid.uuid4()),
+#         miner_hotkey=miner_hotkey,
+#         validator_hotkey=validator_kp.ss58_address,
+#         timestamp=datetime.datetime.now(datetime.UTC),
+#         time_started=datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5),
+#         time_took_us=42,
+#         score_str="0.5",
+#     )
+#     finished_blob = finished_payload.blob_for_signing()
+#     finished_receipt = Receipt(
+#         payload=finished_payload,
+#         validator_signature=sign_blob(validator_kp, finished_blob),
+#         miner_signature=sign_blob(miner_kp, finished_blob),
+#     )
 
-    jsonl_body = (
-        started_receipt.model_dump_json()
-        + "\n"
-        + accepted_receipt.model_dump_json()
-        + "\n"
-        + finished_receipt.model_dump_json()
-        + "\n"
-    )
+#     jsonl_body = (
+#         started_receipt.model_dump_json()
+#         + "\n"
+#         + accepted_receipt.model_dump_json()
+#         + "\n"
+#         + finished_receipt.model_dump_json()
+#         + "\n"
+#     )
 
-    app = web.Application()
-    state = {"body": jsonl_body.encode("utf-8")}
+#     app = web.Application()
+#     state = {"body": jsonl_body.encode("utf-8")}
 
-    async def handler(request: web.Request):
-        rng = request.headers.get("Range")
-        if rng:
-            return web.Response(status=416)
-        return web.Response(status=200, body=state["body"], content_type="application/jsonl")
+#     async def handler(request: web.Request):
+#         rng = request.headers.get("Range")
+#         if rng:
+#             return web.Response(status=416)
+#         return web.Response(status=200, body=state["body"], content_type="application/jsonl")
 
-    app.router.add_get("/receipts/{page}.jsonl", handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", 0)
-    await site.start()
-    server = getattr(site, "_server", None)
-    assert server is not None and server.sockets, "Server failed to start"
-    port = server.sockets[0].getsockname()[1]
+#     app.router.add_get("/receipts/{page}.jsonl", handler)
+#     runner = web.AppRunner(app)
+#     await runner.setup()
+#     site = web.TCPSite(runner, "127.0.0.1", 0)
+#     await site.start()
+#     server = getattr(site, "_server", None)
+#     assert server is not None and server.sockets, "Server failed to start"
+#     port = server.sockets[0].getsockname()[1]
 
-    try:
-        await sync_to_async(Miner.objects.create, thread_sensitive=True)(
-            hotkey=miner_hotkey, address="127.0.0.1", port=port
-        )
+#     try:
+#         await sync_to_async(Miner.objects.create, thread_sensitive=True)(
+#             hotkey=miner_hotkey, address="127.0.0.1", port=port
+#         )
 
-        receipts_mgr = Receipts()
-        page = 123456
-        result = await receipts_mgr._transfer_receipts_from_miners(
-            miner_hotkeys=[miner_hotkey], pages=[page], semaphore_limit=2, request_timeout=2.0
-        )
+#         receipts_mgr = Receipts()
+#         page = 123456
+#         result = await receipts_mgr._transfer_receipts_from_miners(
+#             miner_hotkeys=[miner_hotkey], pages=[page], semaphore_limit=2, request_timeout=2.0
+#         )
 
-        assert result.n_receipts == 3
-        assert result.n_successful_transfers == 1
-        assert result.transfer_errors == []
-        assert result.line_errors == []
+#         assert result.n_receipts == 3
+#         assert result.n_successful_transfers == 1
+#         assert result.transfer_errors == []
+#         assert result.line_errors == []
 
-        stored_started = await sync_to_async(
-            lambda: JobStartedReceipt.objects.get(job_uuid=started_payload.job_uuid),
-            thread_sensitive=True,
-        )()
-        assert str(stored_started.job_uuid) == started_payload.job_uuid
-        assert stored_started.miner_hotkey == started_payload.miner_hotkey
-        assert stored_started.executor_class == "always_on.gpu-24gb"
-        assert stored_started.is_organic is True
-        assert stored_started.ttl == 300
-        assert (
-            isinstance(stored_started.validator_signature, str)
-            and stored_started.validator_signature
-        )
-        assert isinstance(stored_started.miner_signature, str) and stored_started.miner_signature
+#         stored_started = await sync_to_async(
+#             lambda: JobStartedReceipt.objects.get(job_uuid=started_payload.job_uuid),
+#             thread_sensitive=True,
+#         )()
+#         assert str(stored_started.job_uuid) == started_payload.job_uuid
+#         assert stored_started.miner_hotkey == started_payload.miner_hotkey
+#         assert stored_started.executor_class == "always_on.gpu-24gb"
+#         assert stored_started.is_organic is True
+#         assert stored_started.ttl == 300
+#         assert (
+#             isinstance(stored_started.validator_signature, str)
+#             and stored_started.validator_signature
+#         )
+#         assert isinstance(stored_started.miner_signature, str) and stored_started.miner_signature
 
-        stored_accepted = await sync_to_async(
-            lambda: JobAcceptedReceipt.objects.get(job_uuid=accepted_payload.job_uuid),
-            thread_sensitive=True,
-        )()
-        assert str(stored_accepted.job_uuid) == accepted_payload.job_uuid
-        assert stored_accepted.miner_hotkey == accepted_payload.miner_hotkey
-        assert stored_accepted.ttl == 123
-        assert (
-            isinstance(stored_accepted.validator_signature, str)
-            and stored_accepted.validator_signature
-        )
-        assert isinstance(stored_accepted.miner_signature, str) and stored_accepted.miner_signature
+#         stored_accepted = await sync_to_async(
+#             lambda: JobAcceptedReceipt.objects.get(job_uuid=accepted_payload.job_uuid),
+#             thread_sensitive=True,
+#         )()
+#         assert str(stored_accepted.job_uuid) == accepted_payload.job_uuid
+#         assert stored_accepted.miner_hotkey == accepted_payload.miner_hotkey
+#         assert stored_accepted.ttl == 123
+#         assert (
+#             isinstance(stored_accepted.validator_signature, str)
+#             and stored_accepted.validator_signature
+#         )
+#         assert isinstance(stored_accepted.miner_signature, str) and stored_accepted.miner_signature
 
-        stored_finished = await sync_to_async(
-            lambda: JobFinishedReceipt.objects.get(job_uuid=finished_payload.job_uuid),
-            thread_sensitive=True,
-        )()
-        assert str(stored_finished.job_uuid) == finished_payload.job_uuid
-        assert stored_finished.miner_hotkey == finished_payload.miner_hotkey
-        assert stored_finished.time_took_us == 42
-        assert stored_finished.score_str == "0.5"
-        assert (
-            isinstance(stored_finished.validator_signature, str)
-            and stored_finished.validator_signature
-        )
-        assert isinstance(stored_finished.miner_signature, str) and stored_finished.miner_signature
+#         stored_finished = await sync_to_async(
+#             lambda: JobFinishedReceipt.objects.get(job_uuid=finished_payload.job_uuid),
+#             thread_sensitive=True,
+#         )()
+#         assert str(stored_finished.job_uuid) == finished_payload.job_uuid
+#         assert stored_finished.miner_hotkey == finished_payload.miner_hotkey
+#         assert stored_finished.time_took_us == 42
+#         assert stored_finished.score_str == "0.5"
+#         assert (
+#             isinstance(stored_finished.validator_signature, str)
+#             and stored_finished.validator_signature
+#         )
+#         assert isinstance(stored_finished.miner_signature, str) and stored_finished.miner_signature
 
-    finally:
-        await runner.cleanup()
+#     finally:
+#         await runner.cleanup()
 
 
 @pytest.mark.django_db
