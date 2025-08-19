@@ -1,6 +1,6 @@
 import enum
 
-from django.db import connection
+from django.db import connection, connections
 from django.db.utils import OperationalError
 
 
@@ -10,6 +10,7 @@ class LockType(enum.Enum):
     TRUSTED_MINER_LOCK = 3
     ALLOWANCE_BLOCK_INJECTION = 4
     ALLOWANCE_FETCHING = 5
+    ALLOWANCE_EVICTING = 6
 
 
 class Locked(Exception):
@@ -46,12 +47,15 @@ class Lock:
     `timeout_seconds`.
     """
 
-    def __init__(self, type_: LockType, timeout_seconds: float):
+    def __init__(self, type_: LockType, timeout_seconds: float, connection_name: str | None = None):
         self.type = type_
         self.timeout_seconds = timeout_seconds
+        self.connection_name = connection_name
 
     def __enter__(self):
-        cursor = connection.cursor()
+        cursor = (
+            connections[self.connection_name] if self.connection_name else connection
+        ).cursor()
         cursor.execute("SET LOCAL statement_timeout = %s", [f"{self.timeout_seconds:.3f}s"])
         # this changed the timeout for the whole transaction, tread carefully. Preferably use it with a separate
         # db connection than the one you will use for actual stuff

@@ -35,6 +35,40 @@ VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION = prometheus_client.Histogram(
     unit="seconds",
 )
 
+VALIDATOR_ALLOWANCE_CHECKPOINT = prometheus_client.Gauge(
+    "block_allowance_checkpoint",
+    "Total allowance per miner-validator-executorClass triplet",
+    labelnames=["miner_hotkey", "validator_hotkey", "executor_class"],
+    namespace="validator",
+    unit="seconds",
+)
+
+VALIDATOR_STAKE_SHARE_REPORT = prometheus_client.Gauge(
+    "stake_share",
+    "the fraction of stake for each validator",
+    labelnames=["validator_hotkey"],
+    namespace="validator",
+    unit="fraction",
+    multiprocess_mode="liveall",
+)
+
+VALIDATOR_MINER_MANIFEST_REPORT = prometheus_client.Gauge(
+    "miner_manifest",
+    "miner manifest",
+    labelnames=["miner_hotkey", "executor_class"],
+    namespace="validator",
+    unit="count",
+    multiprocess_mode="liveall",
+)
+
+VALIDATOR_BLOCK_DURATION = prometheus_client.Gauge(
+    "block_duration",
+    "block duration",
+    namespace="validator",
+    unit="seconds",
+    multiprocess_mode="liveall",
+)
+
 
 F = TypeVar("F", bound=Callable[..., Any])
 
