@@ -17,6 +17,7 @@ from compute_horde.receipts.transfer import ReceiptsTransfer, TransferResult
 from compute_horde.utils import sign_blob
 from django.conf import settings
 from django.utils import timezone
+from prometheus_client import Counter, Gauge, Histogram
 
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.dynamic_config import aget_config
@@ -26,7 +27,6 @@ from compute_horde_validator.validator.receipts.base import ReceiptsBase
 from compute_horde_validator.validator.receipts.types import (
     ReceiptsGenerationError,
 )
-from prometheus_client import Counter, Gauge, Histogram
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +59,12 @@ class Receipts(ReceiptsBase):
         debug_miner_port: int | None,
     ) -> None:
         metrics = _Metrics(
-            receipts=Counter("receipttransfer_receipts_total", documentation="Number of transferred receipts"),
-            miners=Gauge("receipttransfer_miners", documentation="Number of miners to transfer from"),
+            receipts=Counter(
+                "receipttransfer_receipts_total", documentation="Number of transferred receipts"
+            ),
+            miners=Gauge(
+                "receipttransfer_miners", documentation="Number of miners to transfer from"
+            ),
             successful_transfers=Counter(
                 "receipttransfer_successful_transfers_total",
                 documentation="Number of transfers that didn't explicitly fail. (this includes 404s though)",
@@ -85,7 +89,9 @@ class Receipts(ReceiptsBase):
             ),
         )
 
-        mode, explicit_miner = await self._determine_miners_mode(debug_miner_hotkey, debug_miner_ip, debug_miner_port)
+        mode, explicit_miner = await self._determine_miners_mode(
+            debug_miner_hotkey, debug_miner_ip, debug_miner_port
+        )
         cutoff = timezone.now() - datetime.timedelta(hours=5)
 
         if daemon:
@@ -107,7 +113,15 @@ class Receipts(ReceiptsBase):
         if (debug_miner_hotkey, debug_miner_ip, debug_miner_port) != (None, None, None):
             if None in {debug_miner_hotkey, debug_miner_ip, debug_miner_port}:
                 raise ValueError("Either none or all of explicit miner details must be provided")
-            miner = (debug_miner_hotkey, debug_miner_ip, int(debug_miner_port))  # type: ignore[arg-type]
+            # All values are guaranteed non-None here due to the check above.
+            assert debug_miner_hotkey is not None
+            assert debug_miner_ip is not None
+            assert debug_miner_port is not None
+            miner: tuple[str, str, int] = (
+                debug_miner_hotkey,
+                debug_miner_ip,
+                int(debug_miner_port),
+            )
             logger.info(f"Will fetch receipts from explicit miner: {list(miner)}")
             return "explicit", miner
         if settings.DEBUG_FETCH_RECEIPTS_FROM_MINERS:
@@ -117,7 +131,9 @@ class Receipts(ReceiptsBase):
         logger.info("Will fetch receipts from metagraph snapshot miners")
         return "metagraph", None
 
-    async def _list_miners(self, mode: str, explicit_miner: tuple[str, str, int] | None) -> list[tuple[str, str, int]]:
+    async def _list_miners(
+        self, mode: str, explicit_miner: tuple[str, str, int] | None
+    ) -> list[tuple[str, str, int]]:
         if mode == "explicit":
             assert explicit_miner is not None
             return [explicit_miner]
@@ -273,7 +289,9 @@ class Receipts(ReceiptsBase):
             )
             await asyncio.gather(
                 self._catch_up(
-                    pages=list(reversed(range(catchup_cutoff_page, current_page - N_ACTIVE_PAGES + 1))),
+                    pages=list(
+                        reversed(range(catchup_cutoff_page, current_page - N_ACTIVE_PAGES + 1))
+                    ),
                     mode=mode,
                     explicit_miner=explicit_miner,
                     session=session,
@@ -333,7 +351,11 @@ class Receipts(ReceiptsBase):
 
         active_pages = list(reversed(range(current_page - n_active_pages + 1, current_page + 1)))
         catchup_pages = list(
-            reversed(range(catchup_cutoff_page, max(catchup_cutoff_page, current_page - n_active_pages + 1)))
+            reversed(
+                range(
+                    catchup_cutoff_page, max(catchup_cutoff_page, current_page - n_active_pages + 1)
+                )
+            )
         )
 
         miners = await self._fetch_miners(miner_hotkeys)
@@ -434,6 +456,7 @@ class Receipts(ReceiptsBase):
         self, miner_hotkey: str, at_time: datetime.datetime
     ) -> list[JobStartedReceipt]:
         try:
+
             def _query() -> list[JobStartedReceipt]:
                 qs = JobStartedReceipt.objects.valid_at(at_time).filter(miner_hotkey=miner_hotkey)
                 return list(qs.all())
@@ -466,7 +489,9 @@ class Receipts(ReceiptsBase):
                 )
                 return list(qs.all())
 
-            receipts: list[JobFinishedReceipt] = await sync_to_async(_query, thread_sensitive=True)()
+            receipts: list[JobFinishedReceipt] = await sync_to_async(
+                _query, thread_sensitive=True
+            )()
 
             logger.debug(
                 "Retrieved %s job finished receipts for miner %s (jobs: %s)",
@@ -483,9 +508,9 @@ class Receipts(ReceiptsBase):
 
     async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
         try:
-            django_receipt = await sync_to_async(JobStartedReceipt.objects.get, thread_sensitive=True)(
-                job_uuid=job_uuid
-            )
+            django_receipt = await sync_to_async(
+                JobStartedReceipt.objects.get, thread_sensitive=True
+            )(job_uuid=job_uuid)
             logger.debug(
                 "Retrieved JobStartedReceipt for job %s (miner: %s, validator: %s)",
                 job_uuid,
@@ -549,9 +574,7 @@ class Receipts(ReceiptsBase):
 
         return await sync_to_async(_query, thread_sensitive=True)()
 
-    async def _fetch_receipts_for_range(
-        self, start_block: int, end_block: int
-    ) -> list[Receipt]:
+    async def _fetch_receipts_for_range(self, start_block: int, end_block: int) -> list[Receipt]:
         """Fetch JobFinished receipts for blocks in [start_block, end_block)."""
 
         start_ts = await self._get_block_timestamp(start_block)

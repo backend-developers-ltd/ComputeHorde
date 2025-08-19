@@ -1,16 +1,11 @@
 import datetime
 import uuid
 
-import pytest
-from asgiref.sync import sync_to_async
 import bittensor_wallet
+import pytest
 from aiohttp import web
+from asgiref.sync import sync_to_async
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
-from django.utils import timezone
-
-from compute_horde_validator.validator.models import Miner
-from compute_horde_validator.validator.models.allowance.internal import Block
-from compute_horde_validator.validator.receipts import Receipts
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
     JobFinishedReceiptPayload,
@@ -18,12 +13,16 @@ from compute_horde.receipts.schemas import (
     Receipt,
 )
 from compute_horde.utils import sign_blob
+from django.utils import timezone
+
+from compute_horde_validator.validator.models import Miner
+from compute_horde_validator.validator.models.allowance.internal import Block
+from compute_horde_validator.validator.receipts import Receipts
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db
 async def test_transfer_receipts_from_miners_happy_path(settings):
-
     settings.RECEIPT_TRANSFER_CHECKPOINT_CACHE = "default"
 
     miner_kp = bittensor_wallet.Keypair.create_from_mnemonic(

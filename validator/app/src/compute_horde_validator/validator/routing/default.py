@@ -3,7 +3,6 @@ import math
 from datetime import timedelta
 from typing import assert_never
 
-from asgiref.sync import sync_to_async
 from compute_horde.blockchain.block_cache import aget_current_block
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
