@@ -513,6 +513,7 @@ class ComputeHordeClient:
             "target_validator_hotkey": self.compute_horde_validator_hotkey,
             "executor_class": job_spec.executor_class,
             "docker_image": job_spec.docker_image,
+            "job_namespace": job_spec.job_namespace,
             "args": job_spec.args or [],  # type: ignore
             "env": job_spec.env or {},  # type: ignore
             "use_gpu": True,
