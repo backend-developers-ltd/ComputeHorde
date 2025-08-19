@@ -3,10 +3,10 @@ import logging
 from collections import deque
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from typing import Any, TypeAlias, TypedDict
 
 import asyncssh
 import yaml
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
@@ -21,8 +21,26 @@ DOCKER_STOP_TIMEOUT = 5
 logger = logging.getLogger(__name__)
 
 
+class _ServerConfig(TypedDict):
+    host: str
+    key: str
+    username: str
+    executor_class: str
+
+
+_ServerNameToConfig: TypeAlias = dict[str, _ServerConfig]
+_Configs: TypeAlias = dict[str, _ServerNameToConfig]
+
+
 class RemoteDockerExecutor:
-    def __init__(self, process_executor, token, conn, server_name, server_config):
+    def __init__(
+        self,
+        process_executor: Any,
+        token: str,
+        conn: Any,
+        server_name: str,
+        server_config: _ServerConfig,
+    ) -> None:
         self.process_executor = process_executor
         self.token = token
         self.conn = conn
@@ -31,13 +49,15 @@ class RemoteDockerExecutor:
 
 
 class RemoteServers:
-    def __init__(self):
-        self._configs = {}
-        self._server_queues = {str(executor_class): deque() for executor_class in ExecutorClass}
-        self._reserved_servers = set()
+    def __init__(self) -> None:
+        self._configs: _Configs = {}
+        self._server_queues: dict[str, deque[str]] = {
+            str(executor_class): deque() for executor_class in ExecutorClass
+        }
+        self._reserved_servers: set[str] = set()
 
     @property
-    def configs(self):
+    def configs(self) -> _Configs:
         config_path = settings.REMOTE_DOCKER_EXECUTORS_CONFIG_PATH
         if not config_path:
             raise RuntimeError("REMOTE_DOCKER_EXECUTORS_CONFIG_PATH is not configured")
@@ -56,7 +76,9 @@ class RemoteServers:
 
         return self._configs
 
-    def _update_server_queue(self, executor_class_str, new_config):
+    def _update_server_queue(
+        self, executor_class_str: str, new_config: _ServerNameToConfig
+    ) -> None:
         # Remove servers that are no longer in the config
         self._server_queues[executor_class_str] = deque(
             [server for server in self._server_queues[executor_class_str] if server in new_config]
@@ -73,7 +95,7 @@ class RemoteServers:
         )
         self._server_queues[executor_class_str].extend(new_servers)
 
-    def reserve_server(self, executor_class_str: str):
+    def reserve_server(self, executor_class_str: str) -> tuple[str, _ServerConfig]:
         while self._server_queues[executor_class_str]:
             server_name = self._server_queues[executor_class_str].popleft()
             # Double-check if the server is still in config
@@ -83,7 +105,7 @@ class RemoteServers:
 
         raise ExecutorUnavailable()
 
-    def release_server(self, server_name):
+    def release_server(self, server_name: str) -> None:
         for executor_class_str, configs in self._configs.items():
             if server_name in configs and server_name in self._reserved_servers:
                 self._reserved_servers.remove(server_name)
@@ -92,7 +114,7 @@ class RemoteServers:
 
 
 class RemoteDockerExecutorManager(BaseExecutorManager):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.remote_servers = RemoteServers()
 
@@ -100,7 +122,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
         return True
 
     @asynccontextmanager
-    async def _connect(self, server_config):
+    async def _connect(self, server_config: _ServerConfig) -> Any:
         async with asyncssh.connect(
             server_config["host"],
             username=server_config["username"],
@@ -111,7 +133,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
         ) as conn:
             yield conn
 
-    async def _connect_no_context(self, server_config):
+    async def _connect_no_context(self, server_config: _ServerConfig) -> Any:
         return await asyncssh.connect(
             server_config["host"],
             username=server_config["username"],
@@ -121,7 +143,9 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
             keepalive_interval=30,
         )
 
-    async def start_new_executor(self, token, executor_class, timeout):
+    async def start_new_executor(
+        self, token: str, executor_class: ExecutorClass, timeout: float
+    ) -> RemoteDockerExecutor:
         if settings.ADDRESS_FOR_EXECUTORS:
             address = settings.ADDRESS_FOR_EXECUTORS
         else:
@@ -163,7 +187,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
             self.remote_servers.release_server(server_name)
             raise
 
-    async def kill_executor(self, executor):
+    async def kill_executor(self, executor: RemoteDockerExecutor) -> None:
         async with self._connect(executor.server_config) as conn:
             process = await conn.create_process(f"docker stop {executor.token}")
             try:
@@ -187,7 +211,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
         except Exception:
             pass
 
-    async def wait_for_executor(self, executor, timeout):
+    async def wait_for_executor(self, executor: RemoteDockerExecutor, timeout: float) -> Any:
         try:
             result = await asyncio.wait_for(executor.process_executor.wait(), timeout=timeout)
             if result is not None:
@@ -200,27 +224,23 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
         except TimeoutError:
             pass
 
-    async def get_manifest(self):
+    async def get_manifest(self) -> dict[ExecutorClass, int]:
         manifest = {}
         configs = self.remote_servers.configs
-        for executor_class in [
-            DEFAULT_EXECUTOR_CLASS,
-            ExecutorClass.always_on__llm__a6000,
-        ]:
-            executor_class_configs = configs[str(executor_class)]
-            #            if executor_class == DEFAULT_EXECUTOR_CLASS and len(executor_class_configs) > 1:
-            #                manifest[executor_class] = len(executor_class_configs) - 1
-            if True:
-                if len(executor_class_configs) > 0:
-                    manifest[executor_class] = len(executor_class_configs)
+        for executor_class in ExecutorClass:
+            executor_class_configs = configs.get(str(executor_class), ())
+            if len(executor_class_configs) > 0:
+                manifest[executor_class] = len(executor_class_configs)
         return manifest
 
-    async def reserve_executor_class(self, token, executor_class, timeout):
+    async def reserve_executor_class(
+        self, token: str, executor_class: ExecutorClass, timeout: float
+    ):
         return await super().reserve_executor_class(
             token, executor_class, int(timedelta(minutes=20).total_seconds())
         )
 
-    async def get_executor_class_pool(self, executor_class):
+    async def get_executor_class_pool(self, executor_class: ExecutorClass):
         pool = await super().get_executor_class_pool(executor_class)
         pool.set_count(len(self.remote_servers.configs[str(executor_class)]))
         return pool
