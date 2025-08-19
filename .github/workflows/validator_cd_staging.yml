@@ -36,6 +36,7 @@ jobs:
 
           echo "${{ secrets.DOCKERHUB_KEY }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
+          docker push "${IMAGE_NAME}"
           docker push "${SHA_IMAGE_NAME}"
       - name: Get current date
         id: date
