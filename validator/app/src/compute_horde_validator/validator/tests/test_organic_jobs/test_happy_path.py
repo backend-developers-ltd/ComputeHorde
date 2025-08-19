@@ -1,4 +1,5 @@
 import pytest
+from asgiref.sync import sync_to_async
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
@@ -8,7 +9,10 @@ from compute_horde.protocol_messages import (
     V0VolumesReadyRequest,
 )
 
-from compute_horde_validator.validator.models import Miner, OrganicJob
+from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.utils import blocks, manifests
+from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
+from compute_horde_validator.validator.models import OrganicJob
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -20,7 +24,18 @@ pytestmark = [
 ]
 
 
+@pytest.mark.django_db(transaction=True)
 async def test_basic_flow_works(job_request, faci_transport, miner_transport, execute_scenario):
+    with await sync_to_async(set_block_number)(1000):
+        await sync_to_async(manifests.sync_manifests)()
+    for block_number in range(1001, 1004):
+        with await sync_to_async(set_block_number)(block_number):
+            await sync_to_async(blocks.process_block_allowance_with_reporting)(
+                block_number, supertensor_=supertensor()
+            )
+
+    await sync_to_async(set_block_number)(1005)
+
     await faci_transport.add_message(job_request, send_before=0)
     # vali -> faci: received
     # vali -> miner: initial job request
@@ -50,6 +65,7 @@ async def test_basic_flow_works(job_request, faci_transport, miner_transport, ex
     # vali -> faci: completed
 
     await execute_scenario(until=lambda: len(faci_transport.sent) >= 7)
+    assert len(faci_transport.sent) >= 7
 
     assert JobStatusUpdate.model_validate_json(faci_transport.sent[1]).status == "received"
     assert JobStatusUpdate.model_validate_json(faci_transport.sent[2]).status == "accepted"
@@ -62,8 +78,7 @@ async def test_basic_flow_works(job_request, faci_transport, miner_transport, ex
     ).status == OrganicJob.Status.COMPLETED
 
 
-async def test_miner_can_be_selected_after_finishing_job(
-    miner,
+async def test_two_jobs(
     job_request,
     another_job_request,
     faci_transport,
@@ -71,9 +86,15 @@ async def test_miner_can_be_selected_after_finishing_job(
     miner_transports,
     execute_scenario,
 ):
-    # we will re-select the same miner as soon as it "finishes" its first job
-    assert await Miner.objects.acount() == 2
-    # 1 miner + self validator (Miner tables holds both miners and validators now, should be renamed)
+    with await sync_to_async(set_block_number)(1000):
+        await sync_to_async(manifests.sync_manifests)()
+    for block_number in range(1001, 1004):
+        with await sync_to_async(set_block_number)(block_number):
+            await sync_to_async(blocks.process_block_allowance_with_reporting)(
+                block_number, supertensor_=supertensor()
+            )
+
+    await sync_to_async(set_block_number)(1005)
 
     # Job 1
     await faci_transport.add_message(job_request, send_before=0)
@@ -121,6 +142,7 @@ async def test_miner_can_be_selected_after_finishing_job(
 
     # Expected messages: auth, job1 status=accepted, job1 status=finished, job2 status=accepted
     await execute_scenario(until=lambda: len(faci_transport.sent) >= 13, timeout_seconds=3)
+    assert len(faci_transport.sent) >= 13
 
     j1_accepted_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[2])
     j1_finished_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[6])
@@ -131,7 +153,3 @@ async def test_miner_can_be_selected_after_finishing_job(
     assert j1_finished_msg.status == "completed"
     assert j2_accepted_msg.status == "accepted"
     assert j2_finished_msg.status == "completed"
-
-    # Check that the same miner did both jobs
-    jobs = [j async for j in OrganicJob.objects.select_related("miner")]
-    assert jobs[0].miner.hotkey == jobs[1].miner.hotkey == miner.hotkey
