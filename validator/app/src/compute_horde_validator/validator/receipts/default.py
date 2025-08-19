@@ -601,7 +601,7 @@ class Receipts(ReceiptsBase):
             )
 
         try:
-            ts = await supertensor().get_block_timestamp(block_number)
+            ts = supertensor().get_block_timestamp(block_number)
             if isinstance(ts, datetime.datetime):
                 return ts
             else:
