@@ -53,9 +53,39 @@ jobs:
         run: cp ./envs/dev/.env.template .env
       - name: Run mypy
         run: nox -vs type_check
+  list-test-dirs:
+    runs-on: ubuntu-latest
+    outputs:
+      test-dirs: ${{ steps.list-dirs.outputs.test-dirs }}
+    steps:
+      - uses: actions/checkout@v3
+      - id: list-dirs
+        run: |
+          set -euo pipefail
+          cd validator/app/src
+          # Collect immediate subdirectories inside main tests package (e.g. test_cross_validation, test_organic_jobs, etc.)
+          SUBDIRS=$(find compute_horde_validator/validator/tests -mindepth 1 -maxdepth 1 -type d -printf '%p ' || true)
+          # Collect individual test files at root of tests
+          TEST_FILES=$(find compute_horde_validator/validator/tests -maxdepth 1 -type f -name 'test_*.py' -printf '%p ' || true)
+          # (Optional) collect any *nested* tests directories one level below feature directories (pattern */tests) if they exist
+          FEATURE_TEST_DIRS=$(find compute_horde_validator/validator -mindepth 2 -maxdepth 2 -type d -name 'tests' -printf '%p ' || true)
+          ALL_ITEMS="$SUBDIRS $TEST_FILES $FEATURE_TEST_DIRS"
+          # Fallback: if no granular items found, run the whole test suite directory once
+          if [ -z "$(echo $ALL_ITEMS | tr -d ' ')" ]; then
+            ALL_ITEMS="compute_horde_validator/validator/tests"
+          fi
+          # Turn space-separated list into JSON array
+          echo "Discovered test targets: $ALL_ITEMS"
+          echo "test-dirs=$(echo $ALL_ITEMS | jq -R -s -c 'split(" ") | map(select(length > 0))')" >> $GITHUB_OUTPUT
   test:
+    needs:
+      - list-test-dirs
     timeout-minutes: 30
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test-dir: ${{ fromJson(needs.list-test-dirs.outputs.test-dirs) }}
     defaults:
       run:
         working-directory: ./validator
@@ -76,8 +106,8 @@ jobs:
         run: ./setup-dev.sh
       - name: Run dockerized services
         run: docker compose up -d --wait
-      - name: Run unit tests
-        run: nox -vs test
+      - name: Run unit tests (${{ matrix.test-dir }})
+        run: nox -vs test -- ${{ matrix.test-dir }}
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
