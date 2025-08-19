@@ -1,7 +1,9 @@
 import asyncio
 import datetime
+import tempfile
 from contextlib import contextmanager
 from functools import lru_cache
+from pathlib import Path
 from unittest import mock
 from unittest.mock import patch
 
@@ -57,7 +59,10 @@ def cmbm(block_number):
 
 @lru_cache
 def wallet():
-    wallet_ = bittensor_wallet.Wallet(name="test_mock_validator")
+    # Use an isolated temp directory for test wallets to avoid reading any real/local keyfiles
+    wallets_root = Path(tempfile.gettempdir()) / "compute_horde_test_wallets"
+    wallets_root.mkdir(parents=True, exist_ok=True)
+    wallet_ = bittensor_wallet.Wallet(name="test_mock_validator", path=str(wallets_root))
     wallet_.regenerate_coldkey(
         mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
         use_password=False,

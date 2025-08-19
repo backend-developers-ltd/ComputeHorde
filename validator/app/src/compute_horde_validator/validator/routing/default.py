@@ -219,21 +219,15 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             .values_list("job_uuid", flat=True)
         }
 
-        known_started_jobs: set[str] = {
-            str(job_uuid)
-            for receipt in await sync_to_async(Receipts().get_valid_job_started_receipts_for_miner)(
-                miner.hotkey, timezone.now()
-            )
-            for job_uuid in [receipt.job_uuid]
-        }
+        started_receipts = await Receipts().get_valid_job_started_receipts_for_miner(
+            miner.hotkey, timezone.now()
+        )
+        known_started_jobs: set[str] = {str(receipt.job_uuid) for receipt in started_receipts}
 
-        known_finished_jobs: set[str] = {
-            str(job_uuid)
-            for receipt in await sync_to_async(Receipts().get_job_finished_receipts_for_miner)(
-                miner.hotkey, list(known_started_jobs | preliminary_reservation_jobs)
-            )
-            for job_uuid in [receipt.job_uuid]
-        }
+        finished_receipts = await Receipts().get_job_finished_receipts_for_miner(
+            miner.hotkey, list(known_started_jobs | preliminary_reservation_jobs)
+        )
+        known_finished_jobs: set[str] = {str(receipt.job_uuid) for receipt in finished_receipts}
 
         maybe_ongoing_jobs = (
             preliminary_reservation_jobs | known_started_jobs

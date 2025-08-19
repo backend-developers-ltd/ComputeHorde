@@ -1,6 +1,5 @@
 import datetime
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
@@ -16,123 +15,6 @@ class ReceiptsBase(ABC):
     """
 
     @abstractmethod
-    async def transfer_receipts_from_miners(
-        self,
-        miner_hotkeys: list[str],
-        pages: list[int],
-        semaphore_limit: int = 50,
-        request_timeout: float = 3.0,
-    ) -> TransferResult:
-        """
-        Transfer receipts from miners for specific pages.
-        
-        Args:
-            miner_hotkeys: List of miner hotkeys to transfer from
-            pages: List of page numbers to transfer
-            semaphore_limit: Maximum concurrent requests
-            request_timeout: Timeout for each request in seconds
-            
-        Returns:
-            TransferResult with transfer statistics
-        """
-        pass
-
-    @abstractmethod
-    async def run_full_transfer_cycle(
-        self,
-        miner_hotkeys: list[str],
-        cutoff_hours: int = 5,
-        n_active_pages: int = 2,
-        active_semaphore_limit: int = 50,
-        catchup_semaphore_limit: int = 10,
-        active_timeout: float = 1.0,
-        catchup_timeout: float = 3.0,
-    ) -> tuple[TransferResult, TransferResult]:
-        """
-        Run a full transfer cycle: catch up on active pages, then run catch-up and keep-up in parallel.
-        """
-        pass
-
-    @abstractmethod
-    async def get_valid_job_started_receipts_for_miner(
-        self, miner_hotkey: str, at_time: datetime.datetime
-    ) -> list[JobStartedReceipt]:
-        """
-        Get valid job started receipts for a miner at a specific time.
-        
-        Args:
-            miner_hotkey: Hotkey of the miner
-            at_time: Time to check validity at
-            
-        Returns:
-            List of valid JobStartedReceipt objects
-        """
-        pass
-
-    @abstractmethod
-    async def get_job_finished_receipts_for_miner(
-        self, miner_hotkey: str, job_uuids: list[str]
-    ) -> list[JobFinishedReceipt]:
-        """
-        Get job finished receipts for a miner and specific job UUIDs.
-        
-        Args:
-            miner_hotkey: Hotkey of the miner
-            job_uuids: List of job UUIDs to get receipts for
-            
-        Returns:
-            List of JobFinishedReceipt objects
-        """
-        pass
-
-    @abstractmethod
-    async def get_job_started_receipt_by_uuid(
-        self, job_uuid: str
-    ) -> JobStartedReceipt | None:
-        """
-        Get a job started receipt by UUID.
-        
-        Args:
-            job_uuid: UUID of the job
-            
-        Returns:
-            JobStartedReceipt if found, None otherwise
-        """
-        pass
-
-    @abstractmethod
-    async def get_completed_job_receipts_for_block_range(
-        self, start_block: int, end_block: int
-    ) -> list[Receipt]:
-        """
-        Get all receipts for jobs that were completed between the specified blocks.
-        
-        Args:
-            start_block: Start block (inclusive)
-            end_block: End block (exclusive)
-            
-        Returns:
-            List of receipts for completed jobs in the block range
-        """
-        pass
-
-    @abstractmethod
-    async def _fetch_receipts_for_range(
-        self, start_block: int, end_block: int
-    ) -> list[Receipt]:
-        """
-        Fetch receipts for a block range from local storage.
-        
-        Args:
-            start_block: Start block (inclusive)
-            end_block: End block (exclusive)
-            
-        Returns:
-            List of receipts for the block range
-        """
-        pass
-
-    @abstractmethod
     async def run_receipts_transfer(
         self,
         daemon: bool,
@@ -141,8 +23,7 @@ class ReceiptsBase(ABC):
         debug_miner_port: int | None,
     ) -> None:
         """
-        Run the receipts transfer loop (or a single iteration) using the same logic
-        that was previously implemented in the management command.
+        Run the receipts transfer loop (or a single iteration).
 
         Args:
             daemon: If True, run indefinitely; otherwise perform a single transfer
@@ -164,7 +45,7 @@ class ReceiptsBase(ABC):
     ) -> tuple[JobStartedReceiptPayload, str]:
         """
         Create a job started receipt.
-        
+
         Args:
             job_uuid: UUID of the job
             miner_hotkey: Hotkey of the miner
@@ -172,7 +53,7 @@ class ReceiptsBase(ABC):
             executor_class: Executor class for the job
             is_organic: Whether the job is organic
             ttl: Time to live for the receipt
-            
+
         Returns:
             Tuple of (payload, signature)
         """
@@ -190,7 +71,7 @@ class ReceiptsBase(ABC):
     ) -> JobFinishedReceipt:
         """
         Create a job finished receipt.
-        
+
         Args:
             job_uuid: UUID of the job
             miner_hotkey: Hotkey of the miner
@@ -198,8 +79,112 @@ class ReceiptsBase(ABC):
             time_started: When the job started
             time_took_us: How long the job took in microseconds
             score_str: Score string for the job
-            
+
         Returns:
             Created JobFinishedReceipt
+        """
+        pass
+
+    @abstractmethod
+    async def get_valid_job_started_receipts_for_miner(
+        self, miner_hotkey: str, at_time: datetime.datetime
+    ) -> list[JobStartedReceipt]:
+        """
+        Get valid job started receipts for a miner at a specific time.
+
+        Args:
+            miner_hotkey: Hotkey of the miner
+            at_time: Time to check validity at
+
+        Returns:
+            List of valid JobStartedReceipt objects
+        """
+        pass
+
+    @abstractmethod
+    async def get_job_finished_receipts_for_miner(
+        self, miner_hotkey: str, job_uuids: list[str]
+    ) -> list[JobFinishedReceipt]:
+        """
+        Get job finished receipts for a miner and specific job UUIDs.
+
+        Args:
+            miner_hotkey: Hotkey of the miner
+            job_uuids: List of job UUIDs to get receipts for
+
+        Returns:
+            List of JobFinishedReceipt objects
+        """
+        pass
+
+    @abstractmethod
+    async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
+        """
+        Get a job started receipt by UUID.
+
+        Args:
+            job_uuid: UUID of the job
+
+        Returns:
+            JobStartedReceipt if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def get_completed_job_receipts_for_block_range(
+        self, start_block: int, end_block: int
+    ) -> list[Receipt]:
+        """
+        Get all receipts for jobs that were completed between the specified blocks.
+
+        Args:
+            start_block: Start block (inclusive)
+            end_block: End block (exclusive)
+
+        Returns:
+            List of receipts for completed jobs in the block range
+        """
+        pass
+
+    @abstractmethod
+    async def _transfer_receipts_from_miners(
+        self,
+        miner_hotkeys: list[str],
+        pages: list[int],
+        semaphore_limit: int = 50,
+        request_timeout: float = 3.0,
+    ) -> TransferResult:
+        """
+        Private helper: transfer receipts from miners for specific pages.
+        """
+        pass
+
+    @abstractmethod
+    async def _run_full_transfer_cycle(
+        self,
+        miner_hotkeys: list[str],
+        cutoff_hours: int = 5,
+        n_active_pages: int = 2,
+        active_semaphore_limit: int = 50,
+        catchup_semaphore_limit: int = 10,
+        active_timeout: float = 1.0,
+        catchup_timeout: float = 3.0,
+    ) -> tuple[TransferResult, TransferResult]:
+        """
+        Private helper: run a full transfer cycle for tests or internal orchestration.
+        """
+        pass
+
+    @abstractmethod
+    async def _fetch_receipts_for_range(self, start_block: int, end_block: int) -> list[Receipt]:
+        """
+        Fetch receipts for a block range from local storage.
+
+        Args:
+            start_block: Start block (inclusive)
+            end_block: End block (exclusive)
+
+        Returns:
+            List of receipts for the block range
         """
         pass
