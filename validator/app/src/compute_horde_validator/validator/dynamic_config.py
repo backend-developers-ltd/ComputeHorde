@@ -71,6 +71,18 @@ async def get_miner_max_executors_per_class() -> dict[ExecutorClass, int]:
     return result
 
 
+def get_miner_max_executors_per_class_sync() -> dict[ExecutorClass, int]:
+    miner_max_executors_per_class: str = config.DYNAMIC_MINER_MAX_EXECUTORS_PER_CLASS
+    result = {
+        executor_class: count
+        for executor_class, count in executor_class_value_map_parser(
+            miner_max_executors_per_class, value_parser=int
+        ).items()
+        if count >= 0
+    }
+    return result
+
+
 async def get_default_executor_limits_for_missed_peak() -> dict[ExecutorClass, int]:
     default_limits: str = await aget_config("DYNAMIC_DEFAULT_EXECUTOR_LIMITS_FOR_MISSED_PEAK")
     return executor_class_value_map_parser(default_limits, value_parser=int)
