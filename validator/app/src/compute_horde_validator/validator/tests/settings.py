@@ -37,6 +37,8 @@ def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:  # type: ignore
     return wallet
 
 
+DEFAULT_ADMIN_PASSWORD = "fake_admin_password"
+
 AWS_ACCESS_KEY_ID = "fake_access_key_id"
 AWS_SECRET_ACCESS_KEY = "fake_secret_access_key"
 
