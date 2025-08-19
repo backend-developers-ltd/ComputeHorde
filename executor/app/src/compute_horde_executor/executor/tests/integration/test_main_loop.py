@@ -1146,9 +1146,9 @@ def test_output_upload_failed(httpx_mock: HTTPXMock, tmp_path):
         },
         {
             "message_type": "V0JobFailedRequest",
-            "docker_process_exit_status": None,
-            "docker_process_stdout": None,
-            "docker_process_stderr": None,
+            "docker_process_exit_status": 0,
+            "docker_process_stdout": payload,
+            "docker_process_stderr": "",
             "message": "Upload failed",
             "reason": "upload_failed",
             "stage": "result_upload",

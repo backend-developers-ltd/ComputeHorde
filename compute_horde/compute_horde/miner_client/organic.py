@@ -16,13 +16,13 @@ from pydantic import TypeAdapter
 
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.executor_class import EXECUTOR_CLASS
+from compute_horde.job_errors import HordeError
 from compute_horde.miner_client.base import (
     AbstractMinerClient,
     ErrorCallback,
 )
 from compute_horde.protocol_consts import HordeFailureReason, JobParticipantType
 from compute_horde.protocol_messages import (
-    FailureContext,
     GenericError,
     MinerToValidatorMessage,
     UnauthorizedError,
@@ -473,27 +473,6 @@ class OrganicMinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorT
         await self.transport.send(self.generate_authentication_message().model_dump_json())
 
 
-class JobDriverError(Exception):
-    def __init__(
-        self,
-        message: str,
-        reason: HordeFailureReason,
-        received: MinerToValidatorMessage | None = None,
-        context: FailureContext | None = None,
-    ):
-        self.message = message
-        self.reason = reason
-        self.received = received
-        self.context = context
-
-    def __str__(self):
-        s = f"Organic job failed, {self.reason=}"
-        return s
-
-    def __repr__(self):
-        return f"{type(self).__name__}: {str(self)}"
-
-
 @dataclass
 class OrganicJobDetails:
     @dataclass
@@ -549,7 +528,7 @@ async def execute_organic_job_on_miner(
         try:
             await exit_stack.enter_async_context(client)
         except TransportConnectionError as exc:
-            raise JobDriverError(
+            raise HordeError(
                 f"Miner connection error: {exc}",
                 reason=HordeFailureReason.MINER_CONNECTION_FAILED,
             ) from exc
@@ -577,7 +556,7 @@ async def execute_organic_job_on_miner(
                     timeout=reservation_time_limit,
                 )
             except TimeoutError as exc:
-                raise JobDriverError(
+                raise HordeError(
                     "Timed out waiting for initial response from miner",
                     HordeFailureReason.INITIAL_RESPONSE_TIMED_OUT,
                 ) from exc
@@ -601,7 +580,7 @@ async def execute_organic_job_on_miner(
                     timeout=readiness_time_limit,
                 )
             except TimeoutError as exc:
-                raise JobDriverError(
+                raise HordeError(
                     "Timed out waiting for executor readiness",
                     HordeFailureReason.EXECUTOR_READINESS_RESPONSE_TIMED_OUT,
                 ) from exc
@@ -648,7 +627,7 @@ async def execute_organic_job_on_miner(
                 )
                 logger.debug(f"Volume download done with {deadline.time_left():.2f}s left")
             except TimeoutError as exc:
-                raise JobDriverError(
+                raise HordeError(
                     "Timed out waiting for volume preparation",
                     HordeFailureReason.VOLUMES_TIMED_OUT,
                 ) from exc
@@ -668,7 +647,7 @@ async def execute_organic_job_on_miner(
                         timeout=deadline.time_left(),
                     )
                 except TimeoutError as exc:
-                    raise JobDriverError(
+                    raise HordeError(
                         "Timed out waiting for streaming readiness",
                         HordeFailureReason.STREAMING_JOB_READY_TIMED_OUT,
                     ) from exc
@@ -689,7 +668,7 @@ async def execute_organic_job_on_miner(
                 )
                 logger.debug(f"Execution done with {deadline.time_left():.2f}s left")
             except TimeoutError as exc:
-                raise JobDriverError(
+                raise HordeError(
                     "Timed out waiting for execution completion",
                     HordeFailureReason.EXECUTION_TIMED_OUT,
                 ) from exc
@@ -723,7 +702,7 @@ async def execute_organic_job_on_miner(
                     final_response.upload_results or {},
                 )
             except TimeoutError as exc:
-                raise JobDriverError(
+                raise HordeError(
                     "Timed out waiting for final job response",
                     HordeFailureReason.FINAL_RESPONSE_TIMED_OUT,
                 ) from exc

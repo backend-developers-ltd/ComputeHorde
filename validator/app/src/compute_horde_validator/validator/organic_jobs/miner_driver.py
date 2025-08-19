@@ -3,6 +3,7 @@ import time
 from collections.abc import Awaitable, Callable
 from functools import partial
 
+import sentry_sdk
 from channels.layers import get_channel_layer
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
 from compute_horde.fv_protocol.validator_requests import (
@@ -14,8 +15,8 @@ from compute_horde.fv_protocol.validator_requests import (
     JobStatusUpdate,
     StreamingServerDetails,
 )
+from compute_horde.job_errors import HordeError
 from compute_horde.miner_client.organic import (
-    JobDriverError,
     MinerRejectedJob,
     MinerReportedHordeFailed,
     MinerReportedJobFailed,
@@ -130,7 +131,7 @@ def status_update_from_horde_failure(
     )
 
 
-def status_update_from_organic_job_error(job: OrganicJob, error: JobDriverError) -> JobStatusUpdate:
+def status_update_from_organic_job_error(job: OrganicJob, error: HordeError) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
         horde_failure_details=HordeFailureDetails(
             reported_by=JobParticipantType.VALIDATOR,
@@ -435,27 +436,21 @@ async def drive_organic_job(
         status_update = status_update_from_horde_failure(job, failure)
         await notify_callback(status_update)
 
-    except JobDriverError as exc:
-        comment = exc.message
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        e = HordeError.wrap_unhandled(e)
+        comment = str(e)
+        logger.warning(comment)
         job.status = OrganicJob.Status.FAILED
         job.comment = comment
         await job.asave()
-        logger.warning(comment)
+
         event_subtype = _horde_event_subtype_map.get(
-            exc.reason, SystemEvent.EventSubType.GENERIC_ERROR
+            e.reason, SystemEvent.EventSubType.GENERIC_ERROR
         )
         await save_event(subtype=event_subtype, long_description=comment)
-        status_update = status_update_from_organic_job_error(job, exc)
-        await notify_callback(status_update)
 
-    except Exception as exc:
-        comment = f"Unexpected error while handling organic job: {type(exc).__qualname__} ({exc})"
-        job.status = OrganicJob.Status.FAILED
-        job.comment = comment
-        await job.asave()
-        logger.exception(comment, exc_info=True)
-        await save_event(subtype=SystemEvent.EventSubType.GENERIC_ERROR, long_description=comment)
-        status_update = status_update_from_generic_exception(job, exc)
+        status_update = status_update_from_organic_job_error(job, e)
         await notify_callback(status_update)
 
     return False

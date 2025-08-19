@@ -2,6 +2,8 @@ import asyncio
 import logging
 
 import packaging.version
+import sentry_sdk
+from compute_horde.job_errors import HordeError, JobError
 from compute_horde.protocol_consts import (
     HordeFailureReason,
     JobFailureReason,
@@ -19,9 +21,6 @@ from django.conf import settings
 
 from compute_horde_executor.executor.job_runner import BaseJobRunner
 from compute_horde_executor.executor.miner_client import (
-    ExecutionResult,
-    ExecutorError,
-    JobError,
     MinerClient,
 )
 from compute_horde_executor.executor.utils import get_machine_specs, temporary_process
@@ -60,28 +59,15 @@ class JobDriver:
                 await self._execute()
 
             except JobError as e:
-                logger.error(f"Job error: {e.reason}: {e.message}", exc_info=True)
-                await self.send_job_failed(e.message, e.reason, e.execution_result, e.context)
+                logger.error(str(e), exc_info=True)
+                await self.send_job_failed(e.message, e.reason, e.context)
 
-            except ExecutorError as e:
-                logger.error(f"Executor error: {e.reason}: {e.message}", exc_info=True)
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
+                e = HordeError.wrap_unhandled(e)
+                e.add_context({"stage": self.current_stage})
+                logger.exception(str(e), exc_info=True)
                 await self.send_horde_failed(e.message, e.reason, e.context)
-
-            except TimeoutError:
-                logger.error("Unhandled timeout")
-                await self.send_horde_failed(
-                    "Unhandled timeout",
-                    HordeFailureReason.UNHANDLED_TIMEOUT,
-                    context={"stage": self.current_stage},
-                )
-
-            except BaseException as e:
-                await self.send_horde_failed(
-                    "Executor failed with unexpected exception",
-                    HordeFailureReason.UNHANDLED_EXCEPTION,
-                    context={"stage": self.current_stage, "exception_type": type(e).__qualname__},
-                )
-                raise
 
             finally:
                 try:
@@ -97,7 +83,7 @@ class JobDriver:
                 initial_job_request = await self._startup_stage()
                 timing_details = initial_job_request.executor_timing
         except TimeoutError as e:
-            raise ExecutorError("Timed out waiting for initial job details from miner") from e
+            raise HordeError("Timed out waiting for initial job details from miner") from e
 
         if timing_details:
             # With timing details, re-initialize the deadline with leeway
@@ -107,7 +93,7 @@ class JobDriver:
             # For single-timeout, this is the full timeout for the whole job
             self._set_deadline(initial_job_request.timeout_seconds, "single-timeout mode")
         else:
-            raise ExecutorError(
+            raise HordeError(
                 "No timing received: either timeout_seconds or timing_details must be set"
             )
 
@@ -217,7 +203,7 @@ class JobDriver:
             return_code = docker_process.returncode
 
         if return_code != 0:
-            raise ExecutorError(
+            raise HordeError(
                 "CVE-2022-0492 check failed",
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
@@ -229,7 +215,7 @@ class JobDriver:
 
         expected_output = "Contained: cannot escape via CVE-2022-0492"
         if expected_output not in stdout.decode():
-            raise ExecutorError(
+            raise HordeError(
                 f'CVE-HordeFailureReason-0492 check failed: "{expected_output}" not in stdout.',
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
@@ -262,7 +248,7 @@ class JobDriver:
             return_code = docker_process.returncode
 
         if return_code != 0:
-            raise ExecutorError(
+            raise HordeError(
                 f"nvidia-container-toolkit check failed: exit code {return_code}",
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
@@ -274,7 +260,7 @@ class JobDriver:
 
         lines = stdout.decode().splitlines()
         if not lines:
-            raise ExecutorError(
+            raise HordeError(
                 "nvidia-container-toolkit check failed: no output from nvidia-container-toolkit",
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
@@ -289,7 +275,7 @@ class JobDriver:
             packaging.version.parse(version) >= NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION
         )
         if not is_fixed_version:
-            raise ExecutorError(
+            raise HordeError(
                 f"Outdated NVIDIA Container Toolkit detected:"
                 f'{version}" not >= {NVIDIA_CONTAINER_TOOLKIT_MINIMUM_SAFE_VERSION}',
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
@@ -307,23 +293,21 @@ class JobDriver:
             raise JobError(
                 "Job container timed out during execution",
                 reason=JobFailureReason.TIMEOUT,
-                execution_result=self.runner.execution_result,
             )
 
         if self.runner.execution_result.return_code != 0:
             raise JobError(
                 f"Job container exited with non-zero exit code: {self.runner.execution_result.return_code}",
                 reason=JobFailureReason.NONZERO_RETURN_CODE,
-                execution_result=self.runner.execution_result,
             )
 
     async def send_job_failed(
         self,
         message: str,
         reason: JobFailureReason,
-        execution_result: ExecutionResult | None,
         context: FailureContext | None = None,
     ):
+        execution_result = self.runner.execution_result
         await self.miner_client.send_job_failed(
             V0JobFailedRequest(
                 job_uuid=self.miner_client.job_uuid,

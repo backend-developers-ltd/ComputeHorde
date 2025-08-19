@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from compute_horde.base.docker import DockerRunOptionsPreset
+from compute_horde.job_errors import HordeError, JobError
 from compute_horde.protocol_consts import JobFailureReason
 from compute_horde.protocol_messages import V0InitialJobRequest, V0JobRequest
 from compute_horde_core.certificate import (
@@ -34,8 +35,6 @@ from django.conf import settings
 
 from compute_horde_executor.executor.miner_client import (
     ExecutionResult,
-    ExecutorError,
-    JobError,
     JobResult,
 )
 from compute_horde_executor.executor.utils import temporary_process
@@ -98,7 +97,7 @@ def preset_to_docker_run_args(preset: DockerRunOptionsPreset) -> list[str]:
     elif preset == "nvidia_all":
         return ["--runtime=nvidia", "--gpus", "all"]
     else:
-        raise ExecutorError(f"Invalid preset: {preset}")
+        raise HordeError(f"Invalid preset: {preset}")
 
 
 def truncate(v: str) -> str:
@@ -197,7 +196,7 @@ class BaseJobRunner(ABC):
                 return_code = docker_process.returncode
 
             if return_code != 0:
-                raise ExecutorError(
+                raise HordeError(
                     "Failed to pull docker image",
                     context={
                         "return_code": return_code,
@@ -414,7 +413,7 @@ class BaseJobRunner(ABC):
         late_volume = self.full_job_request.volume if self.full_job_request else None
 
         if initial_volume and late_volume:
-            raise ExecutorError("Received multiple volumes")
+            raise HordeError("Received multiple volumes")
 
         return initial_volume or late_volume
 
@@ -507,7 +506,7 @@ class DefaultJobRunner(BaseJobRunner):
                 timeout=WAIT_FOR_NGINX_TIMEOUT,
             )
         except Exception as e:
-            raise ExecutorError(f"Failed to start Nginx: {truncate(str(e))}") from e
+            raise HordeError(f"Failed to start Nginx: {truncate(str(e))}") from e
 
         assert self.executor_certificate is not None
         # check that the job is ready to serve requests
@@ -518,7 +517,7 @@ class DefaultJobRunner(BaseJobRunner):
             WAIT_FOR_STREAMING_JOB_TIMEOUT,  # TODO: TIMEOUTS - Remove timeout?
         )
         if not job_ready:
-            raise JobError("Streaming job health check failed")
+            raise JobError("Streaming job health check failed", JobFailureReason.TIMEOUT)
 
     async def job_cleanup(self, job_process: Process):
         assert self.initial_job_request is not None, (

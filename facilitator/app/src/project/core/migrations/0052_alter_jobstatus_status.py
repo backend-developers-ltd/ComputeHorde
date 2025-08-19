@@ -36,7 +36,7 @@ def backwards(apps, schema_editor):
         "completed": 6,
         "streaming_ready": 7,
         "unknown": -2,
-        "horde_failed": -2
+        "horde_failed": -2,
     }
     for new, old in reverse_mapping.items():
         JobStatus.objects.filter(status=new).update(status=old)
