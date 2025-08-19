@@ -208,7 +208,9 @@ class BaseJobRunner(ABC):
                 stdout = ""
                 stderr = ""
                 try:
-                    async for _line in client.images.pull(self.initial_job_request.docker_image, stream=True):
+                    async for _line in client.images.pull(
+                        self.initial_job_request.docker_image, stream=True
+                    ):
                         line_str = json.dumps(_line)
                         if "error" in _line:
                             stderr += line_str + "\n"
