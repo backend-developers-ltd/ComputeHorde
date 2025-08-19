@@ -15,7 +15,6 @@ from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
     Cycle,
-    MetagraphSnapshot,
     Miner,
     MinerManifest,
     SyntheticJobBatch,
@@ -62,20 +61,16 @@ def compute_time_allowance(cycle, miner, validator):
     )
 
 
-# NOTE: Currently this is here to make sure job routing can read current block.
-#       Other fields are not used now.
 @pytest.fixture(autouse=True)
-def metagraph_snapshot(cycle):
-    return MetagraphSnapshot.objects.create(
-        id=MetagraphSnapshot.SnapshotType.LATEST,
-        block=cycle.start,
-        alpha_stake=[],
-        tao_stake=[],
-        stake=[],
-        uids=[],
-        hotkeys=[],
-        serving_hotkeys=[],
-    )
+def patch_pylon_client(cycle, mock_pylon_client):
+    with patch(
+        "compute_horde_validator.validator.routing.default.pylon_client",
+        return_value=mock_pylon_client,
+    ):
+        mock_pylon_client.override("get_latest_block", cycle.start)
+        metagraph_data = {"block": cycle.start, "block_hash": "0x123", "neurons": {}}
+        mock_pylon_client.override("get_metagraph", metagraph_data)
+        yield mock_pylon_client
 
 
 @pytest.fixture(autouse=True)
