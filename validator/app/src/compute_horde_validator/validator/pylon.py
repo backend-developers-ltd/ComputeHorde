@@ -1,3 +1,5 @@
+import ipaddress
+
 from django.conf import settings
 from pylon_client import Hotkey, Neuron, PylonClient
 
@@ -24,5 +26,7 @@ def get_serving_hotkeys(neurons: list[Neuron]) -> list[Hotkey]:
         list[Hotkey]: List of Hotkey objects.
     """
     return [
-        neuron.hotkey for neuron in neurons if neuron.axon_info and neuron.axon_info.ip != "0.0.0.0"
+        neuron.hotkey
+        for neuron in neurons
+        if neuron.axon_info and neuron.axon_info.ip != ipaddress.IPv4Address("0.0.0.0")
     ]

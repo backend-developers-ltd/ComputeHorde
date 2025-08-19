@@ -1,5 +1,4 @@
 import concurrent.futures
-import os
 import uuid
 from unittest.mock import patch
 
@@ -8,7 +7,6 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from constance.test.pytest import override_config
 from django.test import override_settings
 from django.utils.timezone import now
-from pylon_client import PylonClient
 
 from compute_horde_validator.validator.models import (
     Cycle,
@@ -28,13 +26,6 @@ from .helpers import (
     NUM_NEURONS,
     check_system_events,
 )
-
-
-@pytest.fixture
-def mock_pylon_client():
-    """Create a mock PylonClient with built-in mocking capabilities."""
-    mock_data_path = os.path.join(os.path.dirname(__file__), "pylon_mock_data.json")
-    return PylonClient(mock_data_path=mock_data_path)
 
 
 @pytest.fixture(autouse=True)

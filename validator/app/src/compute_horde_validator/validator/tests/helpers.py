@@ -1,4 +1,5 @@
 import glob
+import ipaddress
 import logging
 import numbers
 import os
@@ -28,6 +29,7 @@ from compute_horde_core.signature import Signature
 from constance.base import Config
 from django.conf import settings
 from pydantic import TypeAdapter
+from pylon_client import AxonInfo, Neuron
 
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
@@ -37,6 +39,31 @@ NUM_NEURONS = 5
 
 
 logger = logging.getLogger(__name__)
+
+
+def mock_pylon_neuron(uid: int, hotkey: str, stake: float, serving: bool = True) -> Neuron:
+    return Neuron(
+        uid=uid,
+        coldkey=f"coldkey_{uid}",
+        hotkey=hotkey,
+        active=True,
+        axon_info=AxonInfo(
+            ip=ipaddress.IPv4Address("127.0.0.1" if serving else "0.0.0.0"),
+            port=8080,
+            protocol=4,
+        ),
+        stake=stake,
+        rank=0.1,
+        emission=0.01,
+        incentive=0.1,
+        consensus=0.9,
+        trust=0.9,
+        validator_trust=0.9,
+        dividends=0.01,
+        last_update=12340,
+        validator_permit=("validator" in hotkey),
+        pruning_score=0,
+    )
 
 
 def throw_error(*args):

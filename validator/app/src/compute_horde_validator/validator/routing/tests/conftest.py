@@ -1,8 +1,10 @@
 import logging
+import os
 from unittest.mock import patch
 
 import bittensor_wallet
 import pytest
+from pylon_client import PylonClient
 from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job_request
@@ -85,3 +87,9 @@ def miner_keypair():
     return bittensor_wallet.Keypair.create_from_mnemonic(
         "almost fatigue race slim picnic mass better clog deal solve already champion"
     )
+
+
+@pytest.fixture
+def mock_pylon_client():
+    mock_data_path = os.path.join(os.path.dirname(__file__), "../../tests/pylon_mock_data.json")
+    return PylonClient(mock_data_path=mock_data_path)
