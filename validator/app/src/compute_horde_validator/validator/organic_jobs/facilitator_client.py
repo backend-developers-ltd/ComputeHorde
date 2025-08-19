@@ -307,7 +307,7 @@ class FacilitatorClient:
         except Exception as e:
             # Nothing that gets thrown here is expected.
             sentry_sdk.capture_exception(e)
-            logger.exception("Error in job status update listener", exc_info=True)
+            logger.warning("Error in job status update listener", exc_info=True)
         finally:
             logger.debug(f"Finished listening for job status updates for job {job_uuid}")
 
