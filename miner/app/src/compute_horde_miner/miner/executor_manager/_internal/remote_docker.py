@@ -33,10 +33,7 @@ class RemoteDockerExecutor:
 class RemoteServers:
     def __init__(self):
         self._configs = {}
-        self._server_queues = {
-            str(DEFAULT_EXECUTOR_CLASS): deque(),
-            str(ExecutorClass.always_on__llm__a6000): deque(),
-        }
+        self._server_queues = {str(executor_class): deque() for executor_class in ExecutorClass}
         self._reserved_servers = set()
 
     @property
@@ -94,11 +91,11 @@ class RemoteServers:
                 return
 
 
-# TODO: move this to __init__ of RemoteDockerExecutorManager
-remote_servers = RemoteServers()
-
-
 class RemoteDockerExecutorManager(BaseExecutorManager):
+    def __init__(self):
+        super().__init__()
+        self.remote_servers = RemoteServers()
+
     async def is_active(self) -> bool:
         return True
 
@@ -131,7 +128,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
             raise RuntimeError("ADDRESS_FOR_EXECUTORS is not configured")
 
         try:
-            server_name, server_config = remote_servers.reserve_server(str(executor_class))
+            server_name, server_config = self.remote_servers.reserve_server(str(executor_class))
         except ExecutorUnavailable:
             logger.error("No available servers to reserve")
             raise
@@ -163,7 +160,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
             )
             return RemoteDockerExecutor(process_executor, token, conn, server_name, server_config)
         except Exception:
-            remote_servers.release_server(server_name)
+            self.remote_servers.release_server(server_name)
             raise
 
     async def kill_executor(self, executor):
@@ -184,7 +181,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
             executor.process_executor.kill()
         except OSError:
             pass
-        remote_servers.release_server(executor.server_name)
+        self.remote_servers.release_server(executor.server_name)
         try:
             executor.conn.close()
         except Exception:
@@ -194,7 +191,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
         try:
             result = await asyncio.wait_for(executor.process_executor.wait(), timeout=timeout)
             if result is not None:
-                remote_servers.release_server(executor.server_name)
+                self.remote_servers.release_server(executor.server_name)
                 try:
                     executor.conn.close()
                 except Exception:
@@ -205,7 +202,7 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
 
     async def get_manifest(self):
         manifest = {}
-        configs = remote_servers.configs
+        configs = self.remote_servers.configs
         for executor_class in [
             DEFAULT_EXECUTOR_CLASS,
             ExecutorClass.always_on__llm__a6000,
@@ -225,5 +222,5 @@ class RemoteDockerExecutorManager(BaseExecutorManager):
 
     async def get_executor_class_pool(self, executor_class):
         pool = await super().get_executor_class_pool(executor_class)
-        pool.set_count(len(remote_servers.configs[str(executor_class)]))
+        pool.set_count(len(self.remote_servers.configs[str(executor_class)]))
         return pool
