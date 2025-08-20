@@ -76,7 +76,19 @@ jobs:
           fi
           # Turn space-separated list into JSON array
           echo "Discovered test targets: $ALL_ITEMS"
-          echo "test-dirs=$(echo $ALL_ITEMS | jq -R -s -c 'split(" ") | map(select(length > 0))')" >> $GITHUB_OUTPUT
+          PREFIX="compute_horde_validator/validator/"
+          JSON_ITEMS=()
+          for ITEM in $ALL_ITEMS; do
+            [ -z "$ITEM" ] && continue
+            SHORT="$ITEM"
+            if [[ "$ITEM" == $PREFIX* ]]; then
+              SHORT="${ITEM#$PREFIX}"
+            fi
+            JSON_ITEMS+=("{\"path\":\"$ITEM\",\"name\":\"$SHORT\"}")
+          done
+          MATRIX_JSON="["$(IFS=,; echo "${JSON_ITEMS[*]}")"]"
+          echo "Matrix JSON: $MATRIX_JSON"
+          echo "test-dirs=$MATRIX_JSON" >> $GITHUB_OUTPUT
   test:
     needs:
       - list-test-dirs
@@ -85,7 +97,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test-dir: ${{ fromJson(needs.list-test-dirs.outputs.test-dirs) }}
+        test: ${{ fromJson(needs.list-test-dirs.outputs.test-dirs) }}
     defaults:
       run:
         working-directory: ./validator
@@ -106,8 +118,8 @@ jobs:
         run: ./setup-dev.sh
       - name: Run dockerized services
         run: docker compose up -d --wait
-      - name: Run unit tests (${{ matrix.test-dir }})
-        run: nox -vs test -- ${{ matrix.test-dir }}
+      - name: Run unit tests (${{ matrix.test.name }})
+        run: nox -vs test -- ${{ matrix.test.path }}
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
