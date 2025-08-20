@@ -23,6 +23,7 @@ from compute_horde.fv_protocol.validator_requests import (
 from django.conf import settings
 from django.utils import timezone
 
+from compute_horde_validator.validator.allowance.types import Miner as AllowanceMiner
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
     Cycle,
@@ -36,6 +37,7 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.organic_jobs.facilitator_client import (
     FacilitatorClient,
 )
+from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.utils import MACHINE_SPEC_CHANNEL, TRUSTED_MINER_FAKE_KEY
 
 from .helpers import (
@@ -51,12 +53,27 @@ DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
 
 @asynccontextmanager
 async def async_patch_all():
+    async def mock_routing_pick_miner(request):
+        # TODO: simplify mocking?
+        return JobRoute(
+            miner=AllowanceMiner(
+                address="fakehost",
+                ip_version=4,
+                port=1234,
+                hotkey_ss58=TRUSTED_MINER_FAKE_KEY,
+            ),
+            allowance_reservation_id=None,
+        )
+
     with (
         patch(
             "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
             return_value=True,
         ),
-        patch("turbobt.Bittensor"),
+        patch(
+            "compute_horde_validator.validator.routing.default._pick_miner_for_job_v2",
+            side_effect=mock_routing_pick_miner,
+        ),
     ):
         yield
 
@@ -70,9 +87,16 @@ async def setup_db(n: int = 1):
         created_at=now,
     )
     miners = [
-        await Miner.objects.acreate(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18))
+        await Miner.objects.acreate(hotkey=f"hotkey_{i}", collateral_wei=Decimal(10**18))
         for i in range(0, n)
     ]
+    # Update first miner to be the trusted miner for facilitator tests
+    miners[0].hotkey = TRUSTED_MINER_FAKE_KEY
+    miners[0].address = "fakehost"
+    miners[0].ip_version = 4
+    miners[0].port = 1234
+    await miners[0].asave()
+
     validator = await Miner.objects.acreate(hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address)
     for i, miner in enumerate(miners):
         await MinerManifest.objects.acreate(
@@ -262,6 +286,10 @@ class FacilitatorJobStatusUpdatesWsV2Retries(FacilitatorWs):
                 self.condition.notify()
 
 
+@pytest.mark.override_config(
+    DYNAMIC_CHECK_ALLOWANCE_WHILE_ROUTING=False,
+    DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=0,
+)
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.parametrize(
@@ -418,6 +446,10 @@ async def test_wait_for_specs(specs_msg: dict):
             await reap_tasks(task)
 
 
+@pytest.mark.override_config(
+    DYNAMIC_CHECK_ALLOWANCE_WHILE_ROUTING=False,
+    DYNAMIC_MINIMUM_COLLATERAL_AMOUNT_WEI=0,
+)
 @pytest.mark.asyncio
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @patch(
