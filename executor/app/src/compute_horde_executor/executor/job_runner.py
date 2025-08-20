@@ -498,6 +498,13 @@ class DefaultJobRunner(BaseJobRunner):
                 f"{raw_script_path.absolute().as_posix()}:/script.py"
             ]
 
+        docker_kwargs["Env"] = []
+        if self.full_job_request.docker_run_env:
+            for key, value in self.full_job_request.docker_run_env.items():
+                if "=" in key:
+                    raise ValueError(f"'=' found in environment variable: {key!r}")
+                docker_kwargs["Env"].extend(("-e", f"{key}={value}"))
+
         return docker_kwargs
 
     async def get_docker_run_cmd(self) -> list[str]:

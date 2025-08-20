@@ -42,6 +42,10 @@ jobs:
         working-directory: ./local_stack
         run: uv run ./send_simple_job.py 5
 
+      - name: test_simple_job_with_env
+        working-directory: ./local_stack
+        run: uv run ./send_simple_job.py --with-env 5
+
       - name: Upload integration test logs
         uses: actions/upload-artifact@v4
         if: always()
