@@ -1,3 +1,4 @@
+import asyncio
 import ipaddress
 import logging
 import uuid
@@ -6,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, create_autospec, patch
 
 import bittensor_wallet
 import pytest
+import pytest_asyncio
 import turbobt
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
@@ -153,14 +155,14 @@ def run_uuid():
 
 # NOTE: Use this fixture when you need to find dangling asyncio tasks. It is currently commented
 #       because redis channels layers keeps dangling tasks, that makes the tests fail -_-
-# @pytest_asyncio.fixture(autouse=True)
-# async def check_still_running_tasks():
-#     yield
-#     tasks = asyncio.all_tasks()
-#     if len(tasks) > 1:
-#         raise ValueError(
-#             "\n" + "\n".join(f"{task.get_name()}: {task.get_coro()}" for task in tasks)
-#         )
+@pytest_asyncio.fixture(autouse=True)
+async def check_still_running_tasks():
+    yield
+    tasks = asyncio.all_tasks()
+    if len(tasks) > 1:
+        raise ValueError(
+            "\n" + "\n".join(f"{task.get_name()}: {task.get_coro()}" for task in tasks)
+        )
 
 
 @pytest.fixture
