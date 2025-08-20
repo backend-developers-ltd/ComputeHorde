@@ -28,7 +28,7 @@ from compute_horde_validator.validator.tasks import (
     trigger_run_admin_job_request,
 )
 
-from .helpers import (
+from ..helpers import (
     MockMinerClient,
     check_system_events,
 )

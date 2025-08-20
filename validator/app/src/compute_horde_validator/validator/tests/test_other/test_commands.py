@@ -8,7 +8,7 @@ from django.core import management
 
 from compute_horde_validator.validator.models import AdminJobRequest, Miner, OrganicJob, SystemEvent
 
-from .helpers import (
+from ..helpers import (
     MockMinerClient,
     MockSuccessfulMinerClient,
     check_system_events,
