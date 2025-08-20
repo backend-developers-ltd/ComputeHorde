@@ -416,6 +416,7 @@ DEFAULT_EXECUTOR_CLASS = (
 )
 ADDRESS_FOR_EXECUTORS = env.str("ADDRESS_FOR_EXECUTORS", default="")
 PORT_FOR_EXECUTORS = env.int("PORT_FOR_EXECUTORS")
+HOTKEYS_FOR_MAIN_HOTKEY_SELECTION = env.list("HOTKEYS_FOR_MAIN_HOTKEY_SELECTION", default=[])
 
 # ========= Docker and Remote Docker executor manager only related settings =========
 

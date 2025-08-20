@@ -114,8 +114,8 @@ class RemoteServers:
 
 
 class RemoteDockerExecutorManager(BaseExecutorManager):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         self.remote_servers = RemoteServers()
 
     async def is_active(self) -> bool:
