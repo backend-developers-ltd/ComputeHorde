@@ -29,7 +29,7 @@ from compute_horde_core.signature import Signature
 from constance.base import Config
 from django.conf import settings
 from pydantic import TypeAdapter
-from pylon_client import AxonInfo, Neuron
+from pylon_client import AxonInfo, Neuron, PylonClient
 
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
@@ -64,6 +64,11 @@ def mock_pylon_neuron(uid: int, hotkey: str, stake: float, serving: bool = True)
         validator_permit=("validator" in hotkey),
         pruning_score=0,
     )
+
+
+def mocked_pylon_client():
+    mock_data_path = os.path.join(os.path.dirname(__file__), "pylon_mock_data.json")
+    return PylonClient(mock_data_path=mock_data_path)
 
 
 def throw_error(*args):

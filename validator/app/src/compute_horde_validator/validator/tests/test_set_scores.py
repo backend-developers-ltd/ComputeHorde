@@ -1,6 +1,5 @@
 import concurrent.futures
 import uuid
-from unittest.mock import patch
 
 import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
@@ -91,24 +90,18 @@ def test_normalize_scores():
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__no_batches_found(settings, bittensor, mock_pylon_client):
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
-    ):
-        mock_pylon_client.override("get_latest_block", 361)
-        set_scores()
-        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
+def test_set_scores__no_batches_found(settings, bittensor, patch_pylon_client):
+    patch_pylon_client.override("get_latest_block", 361)
+    set_scores()
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__too_early(settings, bittensor, mock_pylon_client):
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
-    ):
-        mock_pylon_client.override("get_latest_block", 359)
-        setup_db()
-        set_scores()
-        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
+def test_set_scores__too_early(settings, bittensor, patch_pylon_client):
+    patch_pylon_client.override("get_latest_block", 359)
+    setup_db()
+    set_scores()
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 0
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
@@ -248,7 +241,7 @@ def test_set_scores__too_early(settings, bittensor, mock_pylon_client):
 def test_set_scores__weight_commit_success(
     settings,
     bittensor,
-    mock_pylon_client,
+    patch_pylon_client,
     cycle_number,
     burn_rate,
     burn_partition,
@@ -258,97 +251,85 @@ def test_set_scores__weight_commit_success(
 ):
     current_block = 1084 + cycle_number * 722
 
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
+    patch_pylon_client.override("get_latest_block", current_block)
+
+    setup_db(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score)
+    with override_config(
+        DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
+        DYNAMIC_BURN_RATE=burn_rate,
+        DYNAMIC_BURN_PARTITION=burn_partition,
     ):
-        mock_pylon_client.override("get_latest_block", current_block)
+        set_scores()
 
-        setup_db(cycle_number=cycle_number, hotkey_to_score=hotkey_to_score)
-        with override_config(
-            DYNAMIC_BURN_TARGET_SS58ADDRESSES=burn_targets,
-            DYNAMIC_BURN_RATE=burn_rate,
-            DYNAMIC_BURN_PARTITION=burn_partition,
-        ):
-            set_scores()
+    # Verify pylon client was called with correct weights
+    patch_pylon_client.mock.set_weights.assert_called_once()
+    actual_weights = patch_pylon_client.mock.set_weights.call_args.kwargs.get("weights", {})
 
-        # Verify pylon client was called with correct weights
-        mock_pylon_client.mock.set_weights.assert_called_once()
-        actual_weights = mock_pylon_client.mock.set_weights.call_args.kwargs.get("weights", {})
+    expected_weights_set = expected_weights_committed
+    for uid, w in expected_weights_set.items():
+        actual_w = actual_weights.get(uid)
+        if actual_w is not None and ((w - actual_w) / w < 0.001):
+            expected_weights_set[uid] = actual_w
 
-        expected_weights_set = expected_weights_committed
-        for uid, w in expected_weights_set.items():
-            actual_w = actual_weights.get(uid)
-            if actual_w is not None and ((w - actual_w) / w < 0.001):
-                expected_weights_set[uid] = actual_w
+    # Verify database state - Weights object should still be created
+    from_db = Weights.objects.get()
+    assert from_db.block == current_block
 
-        # Verify database state - Weights object should still be created
-        from_db = Weights.objects.get()
-        assert from_db.block == current_block
-
-        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
-        check_system_events(
-            SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
-            SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
-            1,
-        )
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
+        1,
+    )
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__weight_commit_failure(settings, bittensor, mock_pylon_client):
+def test_set_scores__weight_commit_failure(settings, bittensor, patch_pylon_client):
     """Test that pylon client failures are properly handled."""
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
-    ):
-        mock_pylon_client.override("get_latest_block", 1084)
-        mock_pylon_client.mock.set_weights.side_effect = Exception("Internal Server Error")
-        setup_db()
-        set_scores()
+    patch_pylon_client.override("get_latest_block", 1084)
+    patch_pylon_client.mock.set_weights.side_effect = Exception("Internal Server Error")
+    setup_db()
+    set_scores()
 
-        # Verify pylon client was called
-        mock_pylon_client.mock.set_weights.assert_called_once()
+    # Verify pylon client was called
+    patch_pylon_client.mock.set_weights.assert_called_once()
 
-        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
-        check_system_events(
-            SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-            SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
-            1,
-        )
+    assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
+    check_system_events(
+        SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
+        SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
+        1,
+    )
 
 
 @pytest.mark.parametrize("current_block", [723, 999, 1082, 1430, 1443])
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__commit__too_early_or_too_late(
-    bittensor, current_block: int, mock_pylon_client
+    bittensor, current_block: int, patch_pylon_client
 ):
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
-    ):
-        mock_pylon_client.override("get_latest_block", current_block)
+    patch_pylon_client.override("get_latest_block", current_block)
 
-        setup_db()
-        set_scores()
+    setup_db()
+    set_scores()
 
-        mock_pylon_client.mock.set_weights.assert_not_called()
+    patch_pylon_client.mock.set_weights.assert_not_called()
 
-        assert not Weights.objects.exists()
-        assert not SystemEvent.objects.exists()
+    assert not Weights.objects.exists()
+    assert not SystemEvent.objects.exists()
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__multiple_starts(settings, bittensor, mock_pylon_client):
+def test_set_scores__multiple_starts(settings, bittensor, patch_pylon_client):
     # to ensure the other tasks will be run at the same time
     settings.CELERY_TASK_ALWAYS_EAGER = False
     threads = 5
 
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
-    ):
-        setup_db()
+    setup_db()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as pool:
-            for _ in range(threads):
-                pool.submit(set_scores)
-        mock_pylon_client.mock.set_weights.assert_called_once()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as pool:
+        for _ in range(threads):
+            pool.submit(set_scores)
+    patch_pylon_client.mock.set_weights.assert_called_once()
 
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
 

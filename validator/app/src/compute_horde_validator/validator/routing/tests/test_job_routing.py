@@ -53,16 +53,6 @@ pytestmark = [
 
 
 @pytest.fixture(autouse=True)
-def patch_pylon_client(mock_pylon_client):
-    with patch(
-        "compute_horde_validator.validator.routing.default.pylon_client",
-        return_value=mock_pylon_client,
-    ):
-        mock_pylon_client.override("get_latest_block", 1)
-        yield mock_pylon_client
-
-
-@pytest.fixture(autouse=True)
 def miners():
     return [
         Miner.objects.create(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18)) for i in range(5)
@@ -75,7 +65,7 @@ def validator(settings):
 
 
 @pytest.fixture(autouse=True)
-def setup_db(miners, validator, patch_pylon_client):
+def setup_db(miners, validator, patch_pylon_client):  # noqa
     now = timezone.now()
     cycle = Cycle.objects.create(start=1, stop=2)
     batch = SyntheticJobBatch.objects.create(block=1, created_at=now, cycle=cycle)
@@ -95,6 +85,7 @@ def setup_db(miners, validator, patch_pylon_client):
 
     metagraph_data = {"block": 1, "block_hash": "0x123", "neurons": {n.hotkey: n for n in neurons}}
     patch_pylon_client.override("get_metagraph", metagraph_data)
+    patch_pylon_client.override("get_latest_block", 1)
 
     for miner in miners:
         ComputeTimeAllowance.objects.create(

@@ -1,6 +1,5 @@
 import ipaddress
 import logging
-import os
 import uuid
 from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, Mock, create_autospec, patch
@@ -10,11 +9,10 @@ import pytest
 import turbobt
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde_core.executor_class import ExecutorClass
-from pylon_client import PylonClient
 from pytest_mock import MockerFixture
 
 from ..organic_jobs.miner_driver import execute_organic_job_request
-from .helpers import MockNeuron, MockSyntheticMinerClient
+from .helpers import MockNeuron, MockSyntheticMinerClient, mocked_pylon_client
 
 logger = logging.getLogger(__name__)
 
@@ -153,10 +151,13 @@ def run_uuid():
     return str(uuid.uuid4())
 
 
-@pytest.fixture
-def mock_pylon_client():
-    mock_data_path = os.path.join(os.path.dirname(__file__), "pylon_mock_data.json")
-    return PylonClient(mock_data_path=mock_data_path)
+@pytest.fixture()
+def patch_pylon_client():
+    mock_pylon_client = mocked_pylon_client()
+    with patch(
+        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
+    ):
+        yield mock_pylon_client
 
 
 # NOTE: Use this fixture when you need to find dangling asyncio tasks. It is currently commented

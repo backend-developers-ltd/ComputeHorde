@@ -22,6 +22,8 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.organic_jobs.facilitator_client import FacilitatorClient
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
+from ..helpers import mocked_pylon_client
+
 
 @pytest.fixture
 def miner(miner_keypair):
@@ -62,14 +64,15 @@ def compute_time_allowance(cycle, miner, validator):
 
 
 @pytest.fixture(autouse=True)
-def patch_pylon_client(cycle, mock_pylon_client):
+def patch_pylon_client(cycle):
+    mock_pylon_client = mocked_pylon_client()
+    mock_pylon_client.override("get_latest_block", cycle.start)
+    metagraph_data = {"block": cycle.start, "block_hash": "0x123", "neurons": {}}
+    mock_pylon_client.override("get_metagraph", metagraph_data)
     with patch(
         "compute_horde_validator.validator.routing.default.pylon_client",
         return_value=mock_pylon_client,
     ):
-        mock_pylon_client.override("get_latest_block", cycle.start)
-        metagraph_data = {"block": cycle.start, "block_hash": "0x123", "neurons": {}}
-        mock_pylon_client.override("get_metagraph", metagraph_data)
         yield mock_pylon_client
 
 

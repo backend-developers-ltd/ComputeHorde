@@ -52,17 +52,13 @@ def setup_db():
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_allowances_skip(mock_pylon_client):
+def test_set_allowances_skip(patch_pylon_client):
     cycle, metagraph = setup_db()
     cycle.set_compute_time_allowance = True
     cycle.save()
 
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client",
-        return_value=mock_pylon_client,
-    ):
-        mock_pylon_client.override("get_metagraph", metagraph)
-        set_compute_time_allowances()
+    patch_pylon_client.override("get_metagraph", metagraph)
+    set_compute_time_allowances()
 
     cycle.refresh_from_db()
     assert cycle.set_compute_time_allowance is True
@@ -74,19 +70,15 @@ def test_set_allowances_skip(mock_pylon_client):
     mock_get_manifests_from_miners,
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_allowances_success(mock_pylon_client):
+def test_set_allowances_success(patch_pylon_client):
     cycle, metagraph = setup_db()
     with (
-        patch(
-            "compute_horde_validator.validator.tasks.pylon_client",
-            return_value=mock_pylon_client,
-        ),
         patch(
             "compute_horde_validator.validator.tasks._set_compute_time_allowances",
             AsyncMock(return_value=True),
         ),
     ):
-        mock_pylon_client.override("get_metagraph", metagraph)
+        patch_pylon_client.override("get_metagraph", metagraph)
         set_compute_time_allowances()
 
     cycle.refresh_from_db()
@@ -94,19 +86,15 @@ def test_set_allowances_success(mock_pylon_client):
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_allowances_failure(mock_pylon_client):
+def test_set_allowances_failure(patch_pylon_client):
     cycle, metagraph = setup_db()
     with (
-        patch(
-            "compute_horde_validator.validator.tasks.pylon_client",
-            return_value=mock_pylon_client,
-        ),
         patch(
             "compute_horde_validator.validator.tasks._set_compute_time_allowances",
             AsyncMock(return_value=False),
         ),
     ):
-        mock_pylon_client.override("get_metagraph", metagraph)
+        patch_pylon_client.override("get_metagraph", metagraph)
         set_compute_time_allowances()
 
     cycle.refresh_from_db()
@@ -115,19 +103,15 @@ def test_set_allowances_failure(mock_pylon_client):
 
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_allowances_exception(mock_pylon_client):
+def test_set_allowances_exception(patch_pylon_client):
     cycle, metagraph = setup_db()
     with (
-        patch(
-            "compute_horde_validator.validator.tasks.pylon_client",
-            return_value=mock_pylon_client,
-        ),
         patch(
             "compute_horde_validator.validator.tasks._set_compute_time_allowances",
             side_effect=Exception("Test exception"),
         ),
     ):
-        mock_pylon_client.override("get_metagraph", metagraph)
+        patch_pylon_client.override("get_metagraph", metagraph)
         set_compute_time_allowances()
 
     cycle.refresh_from_db()
@@ -191,19 +175,16 @@ async def asetup_db(num_miners: int = 3, num_validators: int = 2):
 @patch("compute_horde_validator.validator.tasks.MIN_VALIDATOR_STAKE", 1000.0)
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
-async def test_set_compute_time_allowances_success(mock_pylon_client):
+async def test_set_compute_time_allowances_success(patch_pylon_client):
     num_miners, num_validators = 5, 3
     cycle, metagraph = await asetup_db(num_miners, num_validators)
     logger.info(
         f"Cycle: {cycle}, Metagraph block: {metagraph.block}, neurons: {len(metagraph.neurons)}"
     )
 
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
-    ):
-        mock_pylon_client.override("get_metagraph", metagraph)
-        is_set = await _set_compute_time_allowances(metagraph, cycle)
-        assert is_set is True
+    patch_pylon_client.override("get_metagraph", metagraph)
+    is_set = await _set_compute_time_allowances(metagraph, cycle)
+    assert is_set is True
 
     allowance_values = [
         cta.initial_allowance
@@ -236,7 +217,7 @@ async def test_set_compute_time_allowances_success(mock_pylon_client):
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
-async def test_set_compute_time_allowances_failure_no_serving_hotkeys(mock_pylon_client):
+async def test_set_compute_time_allowances_failure_no_serving_hotkeys(patch_pylon_client):
     cycle, _ = await asetup_db()
     # Create metagraph with no serving miners (all have 0.0.0.0 IPs)
     neurons = {
@@ -261,11 +242,8 @@ async def test_set_compute_time_allowances_failure_no_serving_hotkeys(mock_pylon
     }
     metagraph = Metagraph(block=720, block_hash="0x123", neurons=neurons)
 
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
-    ):
-        mock_pylon_client.override("get_metagraph", metagraph)
-        is_set = await _set_compute_time_allowances(metagraph, cycle)
+    patch_pylon_client.override("get_metagraph", metagraph)
+    is_set = await _set_compute_time_allowances(metagraph, cycle)
     assert is_set is False
     assert await ComputeTimeAllowance.objects.acount() == 0
     assert await SystemEvent.objects.acount() == 1
@@ -279,14 +257,11 @@ async def test_set_compute_time_allowances_failure_no_serving_hotkeys(mock_pylon
 )
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 @pytest.mark.asyncio
-async def test_set_compute_time_allowances_failure_no_manifests(mock_pylon_client):
+async def test_set_compute_time_allowances_failure_no_manifests(patch_pylon_client):
     cycle, metagraph = await asetup_db(num_miners=0)
 
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
-    ):
-        mock_pylon_client.override("get_metagraph", metagraph)
-        is_set = await _set_compute_time_allowances(metagraph, cycle)
+    patch_pylon_client.override("get_metagraph", metagraph)
+    is_set = await _set_compute_time_allowances(metagraph, cycle)
     assert is_set is False
     assert await ComputeTimeAllowance.objects.acount() == 0
     assert await SystemEvent.objects.acount() == 1
