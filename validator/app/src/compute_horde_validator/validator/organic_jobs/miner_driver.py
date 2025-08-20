@@ -73,7 +73,7 @@ def status_update_from_success(job: OrganicJob) -> JobStatusUpdate:
     )
 
 
-def status_update_from_rejection(
+def status_update_from_miner_rejection(
     job: OrganicJob, rejection: MinerRejectedJob, comment: str | None = None
 ) -> JobStatusUpdate:
     comment = comment or rejection.msg.message
@@ -92,7 +92,7 @@ def status_update_from_rejection(
     )
 
 
-def status_update_from_job_failure(
+def status_update_from_miner_job_failure(
     job: OrganicJob, failure: MinerReportedJobFailed
 ) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
@@ -113,7 +113,7 @@ def status_update_from_job_failure(
     )
 
 
-def status_update_from_horde_failure(
+def status_update_from_miner_horde_failure(
     job: OrganicJob, failure: MinerReportedHordeFailed
 ) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
@@ -126,12 +126,12 @@ def status_update_from_horde_failure(
     )
     return JobStatusUpdate(
         uuid=str(job.job_uuid),
-        status=JobStatus.FAILED,
+        status=JobStatus.HORDE_FAILED,
         metadata=metadata,
     )
 
 
-def status_update_from_organic_job_error(job: OrganicJob, error: HordeError) -> JobStatusUpdate:
+def status_update_from_horde_error(job: OrganicJob, error: HordeError) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
         horde_failure_details=HordeFailureDetails(
             reported_by=JobParticipantType.VALIDATOR,
@@ -143,18 +143,6 @@ def status_update_from_organic_job_error(job: OrganicJob, error: HordeError) -> 
     return JobStatusUpdate(
         uuid=str(job.job_uuid),
         status=JobStatus.FAILED,
-        metadata=metadata,
-    )
-
-
-def status_update_from_generic_exception(job: OrganicJob, exc: Exception) -> JobStatusUpdate:
-    metadata = JobStatusMetadata.from_uncaught_exception(
-        reported_by=JobParticipantType.VALIDATOR,
-        exception=exc,
-    )
-    return JobStatusUpdate(
-        uuid=str(job.job_uuid),
-        status=JobStatus.HORDE_FAILED,
         metadata=metadata,
     )
 
@@ -407,7 +395,7 @@ async def drive_organic_job(
         job.status = status
         await job.asave()
         await save_event(subtype=system_event_subtype, long_description=comment)
-        status_update = status_update_from_rejection(job, rejection, comment)
+        status_update = status_update_from_miner_rejection(job, rejection, comment)
         await notify_callback(status_update)
 
     except MinerReportedJobFailed as failure:
@@ -420,7 +408,7 @@ async def drive_organic_job(
             ),
             long_description=failure.msg.message,
         )
-        status_update = status_update_from_job_failure(job, failure)
+        status_update = status_update_from_miner_job_failure(job, failure)
         await notify_callback(status_update)
 
     except MinerReportedHordeFailed as failure:
@@ -433,7 +421,7 @@ async def drive_organic_job(
             ),
             long_description=failure.msg.message,
         )
-        status_update = status_update_from_horde_failure(job, failure)
+        status_update = status_update_from_miner_horde_failure(job, failure)
         await notify_callback(status_update)
 
     except Exception as e:
@@ -450,7 +438,7 @@ async def drive_organic_job(
         )
         await save_event(subtype=event_subtype, long_description=comment)
 
-        status_update = status_update_from_organic_job_error(job, e)
+        status_update = status_update_from_horde_error(job, e)
         await notify_callback(status_update)
 
     return False
