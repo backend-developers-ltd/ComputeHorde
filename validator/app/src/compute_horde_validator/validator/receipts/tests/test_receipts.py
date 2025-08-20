@@ -21,7 +21,7 @@ from compute_horde_validator.validator.receipts import Receipts
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_transfer_receipts_from_miners_happy_path(settings):
     settings.RECEIPT_TRANSFER_CHECKPOINT_CACHE = "default"
 
@@ -167,7 +167,7 @@ async def test_transfer_receipts_from_miners_happy_path(settings):
         await runner.cleanup()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_create_job_started_receipt_returns_payload_and_signature(settings):
     receipts = Receipts()
 
@@ -197,7 +197,7 @@ def test_create_job_started_receipt_returns_payload_and_signature(settings):
     assert payload.timestamp.tzinfo is datetime.UTC
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_create_job_finished_receipt_returns_expected_values(settings):
     receipts = Receipts()
 
@@ -231,7 +231,7 @@ def test_create_job_finished_receipt_returns_expected_values(settings):
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_get_valid_job_started_receipts_for_miner_filters_correctly(settings):
     miner_hotkey = "miner_hotkey_valid"
     other_miner = "miner_hotkey_other"
@@ -239,7 +239,7 @@ async def test_get_valid_job_started_receipts_for_miner_filters_correctly(settin
 
     base_ts = datetime.datetime.now(datetime.UTC)
 
-    await sync_to_async(JobStartedReceipt.objects.create, thread_sensitive=True)(
+    await JobStartedReceipt.objects.acreate(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -250,7 +250,7 @@ async def test_get_valid_job_started_receipts_for_miner_filters_correctly(settin
         ttl=60,
     )
 
-    await sync_to_async(JobStartedReceipt.objects.create, thread_sensitive=True)(
+    await JobStartedReceipt.objects.acreate(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -261,7 +261,7 @@ async def test_get_valid_job_started_receipts_for_miner_filters_correctly(settin
         ttl=30,
     )
 
-    await sync_to_async(JobStartedReceipt.objects.create, thread_sensitive=True)(
+    await JobStartedReceipt.objects.acreate(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=other_miner,
         validator_hotkey=validator_hotkey,
@@ -287,7 +287,7 @@ async def test_get_valid_job_started_receipts_for_miner_filters_correctly(settin
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_get_job_finished_receipts_for_miner_filters_by_uuid(settings):
     miner_hotkey = "miner_hotkey_finished"
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
@@ -296,7 +296,7 @@ async def test_get_job_finished_receipts_for_miner_filters_by_uuid(settings):
     wanted_uuid = str(uuid.uuid4())
     other_uuid = str(uuid.uuid4())
 
-    await sync_to_async(JobFinishedReceipt.objects.create, thread_sensitive=True)(
+    await JobFinishedReceipt.objects.acreate(
         job_uuid=wanted_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -307,7 +307,7 @@ async def test_get_job_finished_receipts_for_miner_filters_by_uuid(settings):
         score_str="0.5",
     )
 
-    await sync_to_async(JobFinishedReceipt.objects.create, thread_sensitive=True)(
+    await JobFinishedReceipt.objects.acreate(
         job_uuid=other_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -331,13 +331,13 @@ async def test_get_job_finished_receipts_for_miner_filters_by_uuid(settings):
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_get_job_started_receipt_by_uuid_returns_instance_or_none(settings):
     receipts = Receipts()
     job_uuid_present = str(uuid.uuid4())
     job_uuid_missing = str(uuid.uuid4())
 
-    await sync_to_async(JobStartedReceipt.objects.create, thread_sensitive=True)(
+    await JobStartedReceipt.objects.acreate(
         job_uuid=job_uuid_present,
         miner_hotkey="miner_xyz",
         validator_hotkey=settings.BITTENSOR_WALLET().get_hotkey().ss58_address,
@@ -357,7 +357,7 @@ async def test_get_job_started_receipt_by_uuid_returns_instance_or_none(settings
 
 
 @pytest.mark.asyncio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_get_completed_job_receipts_for_block_range_returns_only_in_range(settings):
     receipts = Receipts()
 
@@ -378,7 +378,7 @@ async def test_get_completed_job_receipts_for_block_range_returns_only_in_range(
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
 
     in_uuid = str(uuid.uuid4())
-    await sync_to_async(JobFinishedReceipt.objects.create, thread_sensitive=True)(
+    await JobFinishedReceipt.objects.acreate(
         job_uuid=in_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -390,7 +390,7 @@ async def test_get_completed_job_receipts_for_block_range_returns_only_in_range(
         score_str="1.0",
     )
 
-    await sync_to_async(JobFinishedReceipt.objects.create, thread_sensitive=True)(
+    await JobFinishedReceipt.objects.acreate(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -402,7 +402,7 @@ async def test_get_completed_job_receipts_for_block_range_returns_only_in_range(
         score_str="0.1",
     )
 
-    await sync_to_async(JobFinishedReceipt.objects.create, thread_sensitive=True)(
+    await JobFinishedReceipt.objects.acreate(
         job_uuid=str(uuid.uuid4()),
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
