@@ -16,8 +16,6 @@ jobs:
         working-directory: ./compute_horde
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
         uses: actions/setup-python@v5
         with:
@@ -40,8 +38,6 @@ jobs:
         working-directory: ./compute_horde
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
         uses: actions/setup-python@v5
         with:
@@ -63,8 +59,6 @@ jobs:
         working-directory: ./compute_horde
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
         uses: actions/setup-python@v5
         with:
