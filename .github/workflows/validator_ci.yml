@@ -58,38 +58,29 @@ jobs:
     outputs:
       test-dirs: ${{ steps.list-dirs.outputs.test-dirs }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - id: list-dirs
         run: |
           set -euo pipefail
-          cd validator/app/src
-          # Collect immediate subdirectories inside main tests package (e.g. test_cross_validation, test_organic_jobs, etc.)
-          SUBDIRS=$(find compute_horde_validator/validator/tests -mindepth 1 -maxdepth 1 -type d -printf '%p ' || true)
-          # Collect individual test files at root of tests
-          TEST_FILES=$(find compute_horde_validator/validator/tests -maxdepth 1 -type f -name 'test_*.py' -printf '%p ' || true)
-          # (Optional) collect any *nested* tests directories one level below feature directories (pattern */tests) if they exist
-          FEATURE_TEST_DIRS=$(find compute_horde_validator/validator -mindepth 2 -maxdepth 2 -type d -name 'tests' -printf '%p ' || true)
-          ALL_ITEMS="$SUBDIRS $TEST_FILES $FEATURE_TEST_DIRS"
-          # Fallback: if no granular items found, run the whole test suite directory once
-          if [ -z "$(echo $ALL_ITEMS | tr -d ' ')" ]; then
-            ALL_ITEMS="compute_horde_validator/validator/tests"
-          fi
-          # Turn space-separated list into JSON array
-          echo "Discovered test targets: $ALL_ITEMS"
-          PREFIX="compute_horde_validator/validator/"
-          SHORT_ITEMS=()
-          for ITEM in $ALL_ITEMS; do
-            [ -z "$ITEM" ] && continue
-            if [[ "$ITEM" == $PREFIX* ]]; then
-              SHORT_ITEMS+=("${ITEM#$PREFIX}")
-            else
-              # Should not happen, but keep original
-              SHORT_ITEMS+=("$ITEM")
-            fi
+          shopt -s nullglob
+          cd validator/app/src/compute_horde_validator/validator
+          targets=()
+          for f in tests/test_*.py; do
+            targets+=("$f")
           done
-          MATRIX_JSON=$(printf '%s\n' "${SHORT_ITEMS[@]}" | jq -R -s -c 'split("\n") | map(select(length>0))')
-          echo "Matrix JSON (short names): $MATRIX_JSON"
-          echo "test-dirs=$MATRIX_JSON" >> $GITHUB_OUTPUT
+          for d in tests/*/ ; do
+            targets+=("${d%/}")
+          done
+          for d in */tests ; do
+            targets+=("$d")
+          done
+          if [ ${#targets[@]} -eq 0 ]; then
+            targets=("tests")
+          fi
+          echo "Discovered test targets: ${targets[*]}"
+          json=$(printf '%s\n' "${targets[@]}" | jq -Rsc 'split("\n") | map(select(length>0))')
+          echo "Matrix JSON (short names): $json"
+          echo "test-dirs=$json" >> $GITHUB_OUTPUT
   test:
     needs:
       - list-test-dirs
