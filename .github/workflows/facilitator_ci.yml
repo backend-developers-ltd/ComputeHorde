@@ -16,8 +16,6 @@ jobs:
         working-directory: ./facilitator
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
         uses: actions/setup-python@v5
         with:
@@ -45,8 +43,6 @@ jobs:
           private-key: ${{ secrets.APP_PEM }}
           owner: ${{ github.repository_owner }}
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
         uses: actions/setup-python@v5
         with:
