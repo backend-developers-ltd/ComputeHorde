@@ -5,6 +5,8 @@ from typing import Any, Protocol
 import requests
 from pydantic import BaseModel
 
+from compute_horde.smart_contracts import map_contract
+
 logger = logging.getLogger(__name__)
 
 
@@ -54,3 +56,30 @@ def sync_dynamic_config(config_url: str, namespace: SupportsSetAttr) -> None:
                 if param_item.reason:
                     msg += f", reason={param_item.reason}"
                 logger.info(msg)
+
+
+def fetch_dynamic_configs_from_contract(
+    dynamic_configs: list[str], contract_address: str, namespace: SupportsSetAttr
+) -> None:
+    """
+    Fetches dynamic configs from a smart contract and sets them to the provided namespace.
+
+    :param dynamic_configs: List of dynamic config keys to fetch
+    :param contract_address: Address of the smart contract to fetch configs from
+    :param namespace: An object where the config values will be set as attributes
+    """
+    contract_dynamic_configs = map_contract.get_dynamic_configs_from_contract(
+        dynamic_configs, contract_address
+    )
+
+    for key, value in contract_dynamic_configs.items():
+        try:
+            setattr(namespace, key, value)
+        except AttributeError:
+            logger.warning(f"Failed to set dynamic config {key}={value}")
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch dynamic config {key} from contract {contract_address}: {e}"
+            )
+        else:
+            logger.info(f"Set dynamic config {key}={value}. From contract: {contract_address}")

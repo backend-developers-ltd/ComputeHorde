@@ -28,9 +28,10 @@ from bt_ddos_shield.turbobt import ShieldedBittensor
 from celery import shared_task
 from celery.result import AsyncResult, allow_join_result
 from celery.utils.log import get_task_logger
-from compute_horde.dynamic_config import sync_dynamic_config
+from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
 from compute_horde.miner_client.organic import OrganicMinerClient
+from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
 from compute_horde.subtensor import TEMPO, get_cycle_containing_block
 from compute_horde.transport.base import TransportConnectionError
 from compute_horde.utils import MIN_VALIDATOR_STAKE, turbobt_get_validators
@@ -1008,8 +1009,7 @@ def set_scores(bittensor: turbobt.Bittensor):
             hotkey_scores = _score_cycles(current_block.number)
 
             if not hotkey_scores:
-                logger.warning("No scores calculated, skipping weight setting")
-                return
+                logger.warning("No scores calculated")
 
             uids, weights = normalize_batch_scores(
                 hotkey_scores,
@@ -1795,6 +1795,15 @@ async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycl
 
 @app.task
 def fetch_dynamic_config() -> None:
+    if settings.USE_CONTRACT_CONFIG:
+        dynamic_configs = get_dynamic_config_types_from_settings()
+        fetch_dynamic_configs_from_contract(
+            dynamic_configs,
+            settings.CONFIG_CONTRACT_ADDRESS,
+            namespace=config,
+        )
+        return
+
     # if same key exists in both places, common config wins
     sync_dynamic_config(
         config_url=f"https://raw.githubusercontent.com/backend-developers-ltd/compute-horde-dynamic-config/master/validator-config-{settings.DYNAMIC_CONFIG_ENV}.json",
