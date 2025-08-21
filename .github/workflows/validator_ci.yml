@@ -53,9 +53,43 @@ jobs:
         run: cp ./envs/dev/.env.template .env
       - name: Run mypy
         run: nox -vs type_check
+  list-test-dirs:
+    runs-on: ubuntu-latest
+    outputs:
+      test-dirs: ${{ steps.list-dirs.outputs.test-dirs }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list-dirs
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          cd validator/app/src/compute_horde_validator/validator
+          targets=()
+          for f in tests/test_*.py; do
+            targets+=("$f")
+          done
+          for d in tests/*/ ; do
+            targets+=("${d%/}")
+          done
+          for d in */tests ; do
+            targets+=("$d")
+          done
+          if [ ${#targets[@]} -eq 0 ]; then
+            targets=("tests")
+          fi
+          echo "Discovered test targets: ${targets[*]}"
+          json=$(printf '%s\n' "${targets[@]}" | jq -Rsc 'split("\n") | map(select(length>0))')
+          echo "Matrix JSON (short names): $json"
+          echo "test-dirs=$json" >> $GITHUB_OUTPUT
   test:
+    needs:
+      - list-test-dirs
     timeout-minutes: 30
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.list-test-dirs.outputs.test-dirs) }}
     defaults:
       run:
         working-directory: ./validator
@@ -76,8 +110,8 @@ jobs:
         run: ./setup-dev.sh
       - name: Run dockerized services
         run: docker compose up -d --wait
-      - name: Run unit tests
-        run: nox -vs test
+      - name: Run unit tests (${{ matrix.target }})
+        run: nox -vs test -- compute_horde_validator/validator/${{ matrix.target }}
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
