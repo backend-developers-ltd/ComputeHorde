@@ -1,5 +1,6 @@
 import os
 import pathlib
+from functools import lru_cache
 
 import bittensor_wallet
 
@@ -25,6 +26,7 @@ BITTENSOR_WALLET_HOTKEY_NAME = "default"
 STATS_COLLECTOR_URL = "http://fakehost:8000"
 
 
+@lru_cache
 def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:  # type: ignore
     if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
         raise RuntimeError("Wallet not configured")
@@ -32,6 +34,16 @@ def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:  # type: ignore
         name=BITTENSOR_WALLET_NAME,
         hotkey=BITTENSOR_WALLET_HOTKEY_NAME,
         path=str(BITTENSOR_WALLET_DIRECTORY),
+    )
+    wallet.regenerate_coldkey(
+        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
+        use_password=False,
+        overwrite=True,
+    )
+    wallet.regenerate_hotkey(
+        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
+        use_password=False,
+        overwrite=True,
     )
     wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
     return wallet
