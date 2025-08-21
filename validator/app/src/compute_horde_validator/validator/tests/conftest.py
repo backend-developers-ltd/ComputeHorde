@@ -76,6 +76,7 @@ def wallet():
         use_password=False,
         overwrite=True,
     )
+    wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
     return wallet
 
 
