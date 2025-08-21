@@ -292,40 +292,6 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
-  pylon:
-    image: backenddevelopersltd/bittensor-pylon:v1-latest
-    restart: unless-stopped
-    healthcheck:
-      test: curl -fsS http://0.0.0.0:8000/health || exit 1
-    env_file: ./.env
-    environment:
-      - AM_I_A_VALIDATOR=true
-      # Override specific variables to ensure consistency with validator
-      - BITTENSOR_NETWORK=${BITTENSOR_NETWORK}
-      - BITTENSOR_NETUID=${BITTENSOR_NETUID}
-      - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
-      - BITTENSOR_WALLET_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
-      - BITTENSOR_WALLET_PATH=/app/wallets
-      - SENTRY_DSN=${SENTRY_DSN}
-      - SENTRY_ENVIRONMENT=${ENV:-prod}
-      - COMMIT_CYCLE_LENGTH=${COMMIT_NUM_EPOCHS_PER_CYLE:-60}
-      - COMMIT_WINDOW_START_OFFSET=${COMMIT_WINDOW_START_OFFSET:-0}
-      - COMMIT_WINDOW_END_BUFFER=${COMMIT_WINDOW_END_BUFFER:-0}
-      - WEIGHT_COMMIT_CHECK_INTERVAL=${WEIGHT_COMMIT_CHECK_INTERVAL:-60}
-      - FETCH_HYPERPARAMS_INTERVAL=${FETCH_HYPERPARAMS_INTERVAL:-60}
-      - FETCH_METAGRAPH_INTERVAL=${FETCH_METAGRAPH_INTERVAL:-10}
-      - METAGRAPH_CACHE_TTL=${METAGRAPH_CACHE_TTL:-600}
-      - METAGRAPH_CACHE_MAXSIZE=${METAGRAPH_CACHE_MAXSIZE:-1000}
-    volumes:
-      - ${HOST_WALLET_DIR:-~/.bittensor}:/app/wallets
-      - pylon_data:/app/data
-    ports:
-      - ${PYLON_PORT}:8000
-    logging:
-      <<: *logging
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-
   nginx:
     image: backenddevelopersltd/compute-horde-validator-nginx:v0-latest
     restart: unless-stopped
@@ -361,4 +327,3 @@ volumes:
   redis:
   db:
   static:
-  pylon_data:
