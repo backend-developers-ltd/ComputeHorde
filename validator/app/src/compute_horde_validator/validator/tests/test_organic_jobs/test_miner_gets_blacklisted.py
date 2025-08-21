@@ -201,7 +201,7 @@ async def test_miner_is_blacklisted__after_failing_to_start_executor(
     rejected_status_msg = JobStatusUpdate.model_validate_json(faci_transport.sent[5])
 
     assert accepted_status_msg.status == "accepted"
-    assert failed_status_msg.status == "failed"
+    assert failed_status_msg.status == "horde_failed"
     assert rejected_status_msg.status == "rejected"
 
 
