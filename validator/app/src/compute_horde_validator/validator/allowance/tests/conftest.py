@@ -15,6 +15,9 @@ def basic_mocks():
         raise RuntimeError("Don't do that")
 
     with (
+        mock.patch.object(
+            supertensor.SuperTensor, "__orig__init__", supertensor.SuperTensor.__init__, create=True
+        ),
         mock.patch.object(supertensor.SuperTensor, "__init__", throw),
         mock.patch.object(
             settings, "MANIFEST_FETCHING_TIMEOUT", mockchain.MANIFEST_FETCHING_TIMEOUT

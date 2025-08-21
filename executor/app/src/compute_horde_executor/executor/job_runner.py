@@ -15,7 +15,9 @@ from typing import Any
 
 import aiodocker
 from compute_horde.base.docker import DockerRunOptionsPreset
-from compute_horde.protocol_messages import V0InitialJobRequest, V0JobFailedRequest, V0JobRequest
+from compute_horde.job_errors import HordeError, JobError
+from compute_horde.protocol_consts import JobFailureReason
+from compute_horde.protocol_messages import V0InitialJobRequest, V0JobRequest
 from compute_horde_core.certificate import (
     check_endpoint,
     generate_certificate_at,
@@ -32,7 +34,10 @@ from compute_horde_core.volume import (
 )
 from django.conf import settings
 
-from compute_horde_executor.executor.miner_client import ExecutionResult, JobError, JobResult
+from compute_horde_executor.executor.miner_client import (
+    ExecutionResult,
+    JobResult,
+)
 from compute_horde_executor.executor.utils import (
     docker_container_wrapper,
     get_docker_container_outputs,
@@ -105,7 +110,7 @@ def preset_to_docker_run_args(preset: DockerRunOptionsPreset) -> dict[str, Any]:
             ],
         }
     else:
-        raise JobError(f"Invalid preset: {preset}")
+        raise HordeError(f"Invalid preset: {preset}")
 
 
 def truncate(v: str) -> str:
@@ -216,10 +221,13 @@ class BaseJobRunner(ABC):
                             stderr += line_str + "\n"
                         else:
                             stdout += line_str + "\n"
-                except Exception as e:
-                    raise JobError(
-                        f"Failed to pull docker image: {e}",
-                        error_detail=f'stdout="{stdout}"\nstderr="{stderr}',
+                except Exception:
+                    raise HordeError(
+                        "Failed to pull docker image",
+                        context={
+                            "stdout": truncate(stdout),
+                            "stderr": truncate(stderr),
+                        },
                     )
 
     async def prepare_full(self, full_job_request: V0JobRequest):
@@ -344,7 +352,8 @@ class BaseJobRunner(ABC):
                 output_uploader.max_size_bytes = settings.OUTPUT_ZIP_UPLOAD_MAX_SIZE_BYTES
                 upload_results = await output_uploader.upload(self.output_volume_mount_dir)
             except OutputUploadFailed as ex:
-                raise JobError("Job failed during upload", error_detail=str(ex)) from ex
+                # TODO(error propagation): add some context
+                raise JobError("Upload failed", JobFailureReason.UPLOAD_FAILED) from ex
 
         return JobResult(
             exit_status=self.execution_result.return_code,
@@ -386,7 +395,7 @@ class BaseJobRunner(ABC):
         except Exception as e:
             logger.error(f"Failed to remove temp dir {self.temp_dir}: {e}")
 
-    async def _unpack_volume(self, volume: Volume | None):
+    async def download_volume(self):
         assert str(self.volume_mount_dir) not in {"~", "/"}
         for path in self.volume_mount_dir.glob("*"):
             if path.is_file():
@@ -394,6 +403,7 @@ class BaseJobRunner(ABC):
             elif path.is_dir():
                 shutil.rmtree(path)
 
+        volume = await self.get_job_volume()
         if volume is not None:
             # TODO(mlech): Refactor this to not treat `HuggingfaceVolume` with a special care
             volume_downloader = VolumeDownloader.for_volume(volume)
@@ -401,20 +411,12 @@ class BaseJobRunner(ABC):
             if volume_downloader.handles_volume_type() is HuggingfaceVolume:
                 if volume.token is None:
                     volume.token = settings.HF_ACCESS_TOKEN
-                try:
-                    await volume_downloader.download(self.volume_mount_dir)
-                except VolumeDownloadFailed as exc:
-                    logger.error(f"Failed to download model from Hugging Face: {exc}")
-                    raise JobError(
-                        str(exc),
-                        V0JobFailedRequest.ErrorType.HUGGINGFACE_DOWNLOAD,
-                        exc.error_detail,
-                    ) from exc
-            else:
-                try:
-                    await volume_downloader.download(self.volume_mount_dir)
-                except VolumeDownloadFailed as exc:
-                    raise JobError(str(exc)) from exc
+            try:
+                await volume_downloader.download(self.volume_mount_dir)
+            except VolumeDownloadFailed as e:
+                raise JobError(
+                    f"Download failed: {str(e)}", JobFailureReason.DOWNLOAD_FAILED
+                ) from e
 
         chmod_proc = await asyncio.create_subprocess_exec(
             "chmod", "-R", "777", self.temp_dir.as_posix()
@@ -433,12 +435,9 @@ class BaseJobRunner(ABC):
         late_volume = self.full_job_request.volume if self.full_job_request else None
 
         if initial_volume and late_volume:
-            raise JobError("Received multiple volumes")
+            raise HordeError("Received multiple volumes")
 
         return initial_volume or late_volume
-
-    async def unpack_volume(self):
-        await self._unpack_volume(await self.get_job_volume())
 
 
 class DefaultJobRunner(BaseJobRunner):
@@ -535,7 +534,7 @@ class DefaultJobRunner(BaseJobRunner):
                 timeout=WAIT_FOR_NGINX_TIMEOUT,
             )
         except Exception as e:
-            raise JobError(f"Failed to start Nginx: {e}") from e
+            raise HordeError(f"Failed to start Nginx: {truncate(str(e))}") from e
 
         assert self.executor_certificate is not None
         # check that the job is ready to serve requests
@@ -546,7 +545,7 @@ class DefaultJobRunner(BaseJobRunner):
             WAIT_FOR_STREAMING_JOB_TIMEOUT,  # TODO: TIMEOUTS - Remove timeout?
         )
         if not job_ready:
-            raise JobError("Streaming job health check failed")
+            raise JobError("Streaming job health check failed", JobFailureReason.TIMEOUT)
 
     async def job_cleanup(self, container: aiodocker.containers.DockerContainer):
         assert self.initial_job_request is not None, (

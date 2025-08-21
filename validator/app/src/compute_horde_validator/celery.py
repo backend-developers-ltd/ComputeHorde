@@ -40,6 +40,11 @@ TASK_QUEUE_MAP = {
     "compute_horde_validator.validator.tasks.fetch_dynamic_config": DEFAULT_QUEUE,
     # Metagraph Sync
     "compute_horde_validator.validator.tasks.sync_metagraph": "metagraph",
+    "compute_horde_validator.validator.allowance.tasks.report_allowance_to_system_events": "metagraph",
+    "compute_horde_validator.validator.allowance.tasks.sync_manifests": "metagraph",
+    "compute_horde_validator.validator.allowance.tasks.scan_blocks_and_calculate_allowance": "metagraph",
+    "compute_horde.blockchain.tasks.update_block_cache": "metagraph",
+    "compute_horde_validator.validator.allowance.tasks.evict_old_data": "metagraph",
 }
 
 CELERY_TASK_QUEUES = list(set(TASK_QUEUE_MAP.values()))

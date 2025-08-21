@@ -1,15 +1,23 @@
+import datetime
 import json
+import logging
 import pathlib
 import random
+from unittest import mock
 
 import pytest
 from compute_horde_core.executor_class import ExecutorClass
+from freezegun import freeze_time
 
+from ...models import AllowanceBooking, AllowanceMinerManifest, Block, BlockAllowance
+from .. import tasks
 from ..default import allowance
 from ..metrics import (
+    VALIDATOR_ALLOWANCE_CHECKPOINT,
     VALIDATOR_RESERVE_ALLOWANCE_DURATION,
     VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION,
 )
+from ..tasks import evict_old_data
 from ..types import (
     AllowanceException,
     CannotReserveAllowanceException,
@@ -19,17 +27,30 @@ from ..types import (
 )
 from ..utils import blocks, manifests
 from ..utils.manifests import sync_manifests
-from .mockchain import MINER_HOTKEYS, manifest_responses, set_block_number
+from ..utils.supertensor import supertensor
+from .mockchain import MINER_HOTKEYS, manifest_responses, set_block_number, wallet
 from .utils_for_tests import (
     LF,
     Matcher,
     allowance_dict,
     assert_metric_observed,
     assert_system_events,
+    get_metric_values_by_remaining_labels,
     inject_blocks_with_allowances,
 )
 
 
+@pytest.fixture
+def configure_logs(caplog):
+    with (
+        caplog.at_level(logging.CRITICAL, logger="transport"),
+        caplog.at_level(logging.CRITICAL, logger="compute_horde.miner_client.base"),
+        caplog.at_level(logging.CRITICAL, logger="compute_horde.miner_client.organic"),
+    ):
+        yield
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_job_too_long():
     with set_block_number(1000):
         with pytest.raises(AllowanceException) as e1:
@@ -46,6 +67,7 @@ def test_job_too_long():
 
 
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_empty():
     with set_block_number(1000):
         with pytest.raises(NotEnoughAllowanceException) as e1:
@@ -82,9 +104,10 @@ def test_empty():
 
 
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_block_without_manifests():
     with set_block_number(1000):
-        blocks.process_block_allowance_with_reporting(1000)
+        blocks.process_block_allowance_with_reporting(1000, supertensor_=supertensor())
         with pytest.raises(NotEnoughAllowanceException) as e1:
             allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1000)
         assert e1.value.to_dict() == {
@@ -107,7 +130,7 @@ def test_block_without_manifests():
         }
 
     with set_block_number(1001):
-        blocks.process_block_allowance_with_reporting(1001)
+        blocks.process_block_allowance_with_reporting(1001, supertensor_=supertensor())
 
         with pytest.raises(NotEnoughAllowanceException) as e3:
             allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001)
@@ -160,14 +183,14 @@ def assert_error_messages(block_number: int, highest_available: float):
     }, "reserve_allowance returned wrong error message"
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-def test_complete():
+def test_complete(caplog, configure_logs):
     with set_block_number(1000):
         manifests.sync_manifests()
-        blocks.process_block_allowance_with_reporting(1000)
+        blocks.process_block_allowance_with_reporting(1000, supertensor_=supertensor(), live=True)
     with set_block_number(1001):
-        blocks.process_block_allowance_with_reporting(1001)
+        blocks.process_block_allowance_with_reporting(1001, supertensor_=supertensor(), live=True)
         resp = allowance().find_miners_with_allowance(
             1.0, ExecutorClass.always_on__llm__a6000, 1001
         )
@@ -180,7 +203,9 @@ def test_complete():
     )
     for block_number in range(1002, 1006):
         with set_block_number(block_number):
-            blocks.process_block_allowance_with_reporting(block_number)
+            blocks.process_block_allowance_with_reporting(
+                block_number, supertensor_=supertensor(), live=True
+            )
 
     with set_block_number(1004):
         assert "deregging_miner_247" in [n.hotkey_ss58 for n in allowance().neurons(block=1004)]
@@ -198,7 +223,9 @@ def test_complete():
     )
     for block_number in range(1006, 1011):
         with set_block_number(block_number):
-            blocks.process_block_allowance_with_reporting(block_number)
+            blocks.process_block_allowance_with_reporting(
+                block_number, supertensor_=supertensor(), live=True
+            )
 
     with set_block_number(1010):
         assert "deregging_miner_247" not in [n.hotkey_ss58 for n in allowance().neurons(block=1010)]
@@ -278,11 +305,31 @@ def test_complete():
     assert len(resp) - len(new_resp) == 82  # some manifests dropped
     for hotkey, allowance_ in new_resp:
         assert LF(dict(resp)[hotkey]) == allowance_, hotkey  # but nothing else should have changed
-    for block_number in range(1011, 1101):
-        with set_block_number(block_number):
-            if not block_number % 25:
+
+    for block_number in range(1011, 1102):
+        if not block_number % 25:
+            with set_block_number(block_number):
                 sync_manifests()
-            blocks.process_block_allowance_with_reporting(block_number)
+                with (
+                    freeze_time(datetime.datetime(2025, 1, 1, 12, 0, 0)) as freezer,
+                    mock.patch.object(blocks.time, "sleep", lambda s: freezer.tick(s)),  # type: ignore
+                    caplog.at_level(
+                        logging.CRITICAL,
+                        logger="compute_horde_validator.validator.allowance.utils.blocks",
+                    ),
+                ):
+                    tasks.scan_blocks_and_calculate_allowance(supertensor(), keep_running=False)
+    assert get_metric_values_by_remaining_labels(
+        VALIDATOR_ALLOWANCE_CHECKPOINT,
+        {
+            "validator_hotkey": wallet().get_hotkey().ss58_address,
+            "executor_class": ExecutorClass.always_on__llm__a6000.value,
+        },
+    ) == allowance_dict(
+        json.loads((pathlib.Path(__file__).parent / "allowance_after_100_blocks.json").read_text())
+    )
+
+    assert len(get_metric_values_by_remaining_labels(VALIDATOR_ALLOWANCE_CHECKPOINT, {})) == 2898
     allowance_after_100_blocks = allowance().find_miners_with_allowance(
         1.0, ExecutorClass.always_on__llm__a6000, 1101
     )
@@ -361,10 +408,31 @@ def test_complete():
 
     assert blocks_ == list(range(379, 1100))
 
+    assert BlockAllowance.objects.count() == 5041428
+    assert AllowanceMinerManifest.objects.count() == 4593
+    assert Block.objects.count() == 1101
+    assert AllowanceBooking.objects.count() == 1
+
+    with set_block_number(2906):
+        evict_old_data()
+
+    assert BlockAllowance.objects.count() == 1626900
+    assert AllowanceMinerManifest.objects.count() == 4593
+    assert Block.objects.count() == 360
+    assert AllowanceBooking.objects.count() == 1
+
+    with set_block_number(4000):
+        evict_old_data()
+
+    assert BlockAllowance.objects.count() == 0
+    assert AllowanceMinerManifest.objects.count() == 0
+    assert Block.objects.count() == 0
+    assert AllowanceBooking.objects.count() == 0
+
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-def test_blocks_out_of_order():
+def test_blocks_out_of_order(configure_logs):
     for block_number in [1000, 1011, 1025, 1050, 1075, 1100]:
         with set_block_number(block_number):
             sync_manifests()
@@ -372,7 +440,7 @@ def test_blocks_out_of_order():
     random.Random(42).shuffle(block_numbers)
     for block_number in block_numbers:
         with set_block_number(block_number):
-            blocks.process_block_allowance_with_reporting(block_number)
+            blocks.process_block_allowance_with_reporting(block_number, supertensor_=supertensor())
 
     with set_block_number(1101):
         allowance_after_100_blocks = allowance().find_miners_with_allowance(
@@ -386,17 +454,17 @@ def test_blocks_out_of_order():
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
-def test_allowance_reservation_corner_cases():
+def test_allowance_reservation_corner_cases(configure_logs):
     """Test all corner cases of reserve_allowance, undo_allowance_reservation, and spend_allowance methods."""
 
     # Set up initial state with some blocks and allowances
     with set_block_number(1000):
         manifests.sync_manifests()
-        blocks.process_block_allowance_with_reporting(1000)
+        blocks.process_block_allowance_with_reporting(1000, supertensor_=supertensor())
 
     for block_number in range(1001, 1006):
         with set_block_number(block_number):
-            blocks.process_block_allowance_with_reporting(block_number)
+            blocks.process_block_allowance_with_reporting(block_number, supertensor_=supertensor())
 
     with set_block_number(1005):
         # Get miners with available allowance

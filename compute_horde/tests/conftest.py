@@ -1,4 +1,5 @@
 import datetime
+from unittest import mock
 
 import bittensor
 import pytest
@@ -98,3 +99,16 @@ def receipts(validator_keypair, miner_keypair):
 def mocked_responses():
     with responses.RequestsMock() as rsps:
         yield rsps
+
+
+@pytest.fixture(autouse=True)
+def disable_subtensor():
+    from compute_horde.blockchain.block_cache import _clear_subtensor_cache
+
+    _clear_subtensor_cache()
+
+    def throw(*args, **kwargs):
+        raise RuntimeError("Please don't do that")
+
+    with mock.patch.object(bittensor, "subtensor", new=throw):
+        yield

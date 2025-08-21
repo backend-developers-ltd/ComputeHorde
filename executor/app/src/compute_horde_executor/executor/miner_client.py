@@ -4,18 +4,19 @@ from dataclasses import dataclass
 
 import pydantic
 from compute_horde.miner_client.base import AbstractMinerClient, UnsupportedMessageReceived
+from compute_horde.protocol_consts import JobFailureReason
 from compute_horde.protocol_messages import (
     ExecutorToMinerMessage,
     GenericError,
     MinerToExecutorMessage,
     V0ExecutionDoneRequest,
     V0ExecutorReadyRequest,
+    V0HordeFailedRequest,
     V0InitialJobRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
-    V0StreamingJobNotReadyRequest,
     V0StreamingJobReadyRequest,
     V0VolumesReadyRequest,
 )
@@ -39,20 +40,6 @@ class ExecutionResult:
 
     stdout: str
     stderr: str
-
-
-class JobError(Exception):
-    def __init__(
-        self,
-        error_message: str,
-        error_type: V0JobFailedRequest.ErrorType | None = None,
-        error_detail: str | None = None,
-        execution_result: ExecutionResult | None = None,
-    ):
-        self.error_message = error_message
-        self.error_type = error_type
-        self.error_detail = error_detail
-        self.execution_result = execution_result
 
 
 class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMessage]):
@@ -139,25 +126,11 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
     async def send_execution_done(self):
         await self.send_model(V0ExecutionDoneRequest(job_uuid=self.job_uuid))
 
-    async def send_job_error(self, job_error: JobError):
-        error_detail = job_error.error_message
-        if job_error.error_detail:
-            error_detail += f": {job_error.error_detail}"
+    async def send_job_failed(self, job_failed_msg: V0JobFailedRequest):
+        await self.send_model(job_failed_msg)
 
-        msg = V0JobFailedRequest(
-            job_uuid=self.job_uuid,
-            error_type=job_error.error_type,
-            error_detail=error_detail,
-            docker_process_stdout="",
-            docker_process_stderr="",
-        )
-
-        if job_error.execution_result:
-            msg.docker_process_stdout = job_error.execution_result.stdout
-            msg.docker_process_stderr = job_error.execution_result.stderr
-            msg.docker_process_exit_status = job_error.execution_result.return_code
-
-        await self.send_model(msg)
+    async def send_horde_failed(self, horde_failed_msg: V0HordeFailedRequest):
+        await self.send_model(horde_failed_msg)
 
     async def send_result(self, job_result: "JobResult"):
         if job_result.specs:
@@ -184,13 +157,6 @@ class MinerClient(AbstractMinerClient[MinerToExecutorMessage, ExecutorToMinerMes
             )
         )
 
-    async def send_streaming_job_failed_to_prepare(self):
-        await self.send_model(
-            V0StreamingJobNotReadyRequest(
-                job_uuid=self.job_uuid,
-            )
-        )
-
 
 class JobResult(pydantic.BaseModel):
     exit_status: int | None
@@ -199,6 +165,6 @@ class JobResult(pydantic.BaseModel):
     stderr: str
     artifacts: dict[str, str]
     specs: MachineSpecs | None = None
-    error_type: V0JobFailedRequest.ErrorType | None = None
+    error_type: JobFailureReason | None = None
     error_detail: str | None = None
     upload_results: dict[str, str]

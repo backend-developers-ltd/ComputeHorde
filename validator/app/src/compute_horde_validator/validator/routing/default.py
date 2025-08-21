@@ -132,7 +132,7 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             logger.debug(
                 f"NotEnoughTimeInCycle: {seconds_remaining_in_cycle=} {seconds_required_in_cycle=}"
             )
-            raise NotEnoughTimeInCycle()
+            raise NotEnoughTimeInCycle(seconds_remaining_in_cycle, seconds_required_in_cycle)
 
     manifests_qs = (
         MinerManifest.objects.select_related("miner")
@@ -164,7 +164,7 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
 
     if not latest_miner_manifest:
         logger.error(f"Failed to find a miner with available executors of type {executor_class}")
-        raise NoMinerForExecutorType()
+        raise NoMinerForExecutorType(executor_class)
 
     # filter/sort miners based on available allowance
     allowance_qs = ComputeTimeAllowance.objects.select_related("miner").filter(

@@ -1,8 +1,50 @@
 """Models internal for the allowance module, not to be used by other modules."""
 
+from collections.abc import Iterable
+
 from compute_horde_core.executor_class import ExecutorClass
 from django.db import models
 from django.db.models import UniqueConstraint
+from django_prometheus.models import (
+    ExportModelOperationsMixin,
+    model_deletes,
+    model_inserts,
+    model_updates,
+)
+
+
+def BulkExportModelOperationsMixin(model_name):
+    # TODO: put me in a better place. like django_prometheus.models.
+    """
+    Extend ExportModelOperationsMixin with bulk operation support.
+    """
+
+    class BulkExportQuerySet(models.QuerySet):  # type: ignore
+        def bulk_create(self, objs: Iterable, *args, **kwargs):  # type: ignore
+            ret = super().bulk_create(objs, *args, **kwargs)
+            model_inserts.labels(model_name).inc(len(objs))  # type: ignore
+            return ret
+
+        def bulk_update(self, objs: Iterable, *args, **kwargs):  # type: ignore
+            ret = super().bulk_update(objs, *args, **kwargs)
+            model_updates.labels(model_name).inc(len(objs))  # type: ignore
+            return ret
+
+        def delete(self):
+            deleted, _rows_count = super().delete()
+            model_deletes.labels(model_name).inc(deleted)
+            return deleted, _rows_count
+
+    base_mixin_cls = ExportModelOperationsMixin(model_name)
+
+    class Mixin(base_mixin_cls, models.Model):  # type: ignore
+        class Meta:
+            abstract = True
+
+        objects = BulkExportQuerySet.as_manager()
+
+    Mixin.__qualname__ = f"BulkExportModelOperationsMixin('{model_name}')"
+    return Mixin
 
 
 class MinerAddress(models.Model):
@@ -18,7 +60,10 @@ class Neuron(models.Model):
     block = models.IntegerField()
 
 
-class AllowanceMinerManifest(models.Model):
+class AllowanceMinerManifest(  # type: ignore
+    BulkExportModelOperationsMixin("AllowanceMinerManifest"),  # type: ignore
+    models.Model,
+):
     miner_ss58address = models.TextField()
     block_number = models.BigIntegerField()
     success = models.BooleanField(help_text="Whether the manifest was successfully retrieved")
@@ -46,13 +91,14 @@ class AllowanceMinerManifest(models.Model):
         ]
 
 
-class AllowanceBooking(models.Model):
+class AllowanceBooking(BulkExportModelOperationsMixin("AllowanceBooking"), models.Model):  # type: ignore
+    creation_timestamp = models.DateTimeField(auto_now_add=True)
     is_reserved = models.BooleanField()
     is_spent = models.BooleanField()
     reservation_expiry_time = models.DateTimeField(null=True, blank=True)
 
 
-class Block(models.Model):
+class Block(BulkExportModelOperationsMixin("Block"), models.Model):  # type: ignore
     block_number = models.BigIntegerField(primary_key=True)
     creation_timestamp = models.DateTimeField()
     end_timestamp = models.DateTimeField(
@@ -63,7 +109,7 @@ class Block(models.Model):
     )
 
 
-class BlockAllowance(models.Model):
+class BlockAllowance(BulkExportModelOperationsMixin("BlockAllowance"), models.Model):  # type: ignore
     block = models.ForeignKey(Block, on_delete=models.CASCADE)
     allowance = models.FloatField()
     miner_ss58 = models.TextField()
