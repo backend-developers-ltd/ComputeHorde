@@ -21,7 +21,7 @@ BITTENSOR_NETUID = 49
 BITTENSOR_NETWORK = "test"
 
 BITTENSOR_WALLET_DIRECTORY = pathlib.Path("~").expanduser() / ".bittensor" / "wallets"
-BITTENSOR_WALLET_NAME = "test_miner"
+BITTENSOR_WALLET_NAME = "test_miner_miner"
 BITTENSOR_WALLET_HOTKEY_NAME = "default"
 
 

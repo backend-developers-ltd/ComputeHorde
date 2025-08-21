@@ -57,7 +57,7 @@ def cmbm(block_number):
 
 @lru_cache
 def wallet():
-    wallet_ = bittensor_wallet.Wallet(name="test_mock_validator")
+    wallet_ = bittensor_wallet.Wallet(name="test_allowance_validator")
     wallet_.regenerate_coldkey(
         mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
         use_password=False,

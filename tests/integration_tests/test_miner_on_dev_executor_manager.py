@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_miner_wallet():
-    wallet = bittensor.wallet(name="test_miner")
+    wallet = bittensor.wallet(name="test_integration_miner")
     wallet.regenerate_coldkey(
         mnemonic="marine oyster umbrella sail over speak emerge rude matrix glue argue learn",
         use_password=False,
@@ -43,7 +43,7 @@ def get_miner_wallet():
 
 
 def get_validator_wallet():
-    wallet = bittensor.wallet(name="test_validator")
+    wallet = bittensor.wallet(name="test_integration_validator")
     wallet.regenerate_coldkey(
         mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
         use_password=False,
@@ -119,7 +119,7 @@ class Test(ActiveSubnetworkBaseTest):
             "PORT_FOR_EXECUTORS": str(MINER_PORT),
             "DATABASE_SUFFIX": "_integration_test",
             "DEBUG_TURN_AUTHENTICATION_OFF": "1",
-            "BITTENSOR_WALLET_NAME": "test_miner",
+            "BITTENSOR_WALLET_NAME": "test_integration_miner",
         }
 
     @classmethod
@@ -129,7 +129,7 @@ class Test(ActiveSubnetworkBaseTest):
     @classmethod
     def validator_environ(cls) -> dict[str, str]:
         return {
-            "BITTENSOR_WALLET_NAME": "test_validator",
+            "BITTENSOR_WALLET_NAME": "test_integration_validator",
         }
 
     @pytest.mark.asyncio

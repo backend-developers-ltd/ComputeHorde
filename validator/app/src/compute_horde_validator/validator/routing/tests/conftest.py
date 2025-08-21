@@ -51,7 +51,7 @@ def _patch_collateral_contract_address(mocker: MockerFixture):
 
 @pytest.fixture(scope="session", autouse=True)
 def wallet():
-    wallet = bittensor_wallet.Wallet(name="test_validator")
+    wallet = bittensor_wallet.Wallet(name="test_routing_validator")
     wallet.regenerate_coldkey(
         mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
         use_password=False,

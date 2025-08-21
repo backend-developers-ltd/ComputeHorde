@@ -20,7 +20,7 @@ BITTENSOR_NETWORK = "local"
 CELERY_TASK_ALWAYS_EAGER = True
 
 BITTENSOR_WALLET_DIRECTORY = pathlib.Path("~").expanduser() / ".bittensor" / "wallets"
-BITTENSOR_WALLET_NAME = "test_validator"
+BITTENSOR_WALLET_NAME = "test_validator_validator"
 BITTENSOR_WALLET_HOTKEY_NAME = "default"
 
 STATS_COLLECTOR_URL = "http://fakehost:8000"

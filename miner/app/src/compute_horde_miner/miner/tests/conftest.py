@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="session")
 def validator_wallet():
-    wallet = bittensor.wallet(name="test_validator")
+    wallet = bittensor.wallet(name="test_miner_validator")
     wallet.regenerate_coldkey(
         mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
         use_password=False,
@@ -25,7 +25,7 @@ def validator_wallet():
 
 @pytest.fixture(scope="session", autouse=True)
 def miner_wallet():
-    wallet = bittensor.wallet(name="test_miner")
+    wallet = bittensor.wallet(name="test_miner_miner")
     wallet.regenerate_coldkey(
         mnemonic="marine oyster umbrella sail over speak emerge rude matrix glue argue learn",
         use_password=False,
