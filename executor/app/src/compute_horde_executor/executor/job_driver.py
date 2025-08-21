@@ -23,7 +23,11 @@ from compute_horde_executor.executor.job_runner import BaseJobRunner
 from compute_horde_executor.executor.miner_client import (
     MinerClient,
 )
-from compute_horde_executor.executor.utils import get_machine_specs, temporary_process
+from compute_horde_executor.executor.utils import (
+    docker_container_wrapper,
+    get_docker_container_outputs,
+    get_machine_specs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -144,8 +148,8 @@ class JobDriver:
         )
 
     async def _startup_stage(self) -> V0InitialJobRequest:
+        self.specs = await get_machine_specs()
         self._enter_stage(JobStage.EXECUTOR_STARTUP)
-        self.specs = get_machine_specs()
         await self.run_security_checks_or_fail()
         initial_job_request = await self.miner_client.initial_msg
         await self.runner.prepare_initial(initial_job_request)
@@ -190,17 +194,12 @@ class JobDriver:
             await self.run_nvidia_toolkit_version_check_or_fail()
 
     async def run_cve_2022_0492_check_or_fail(self):
-        # TODO: TIMEOUTS - This doesn't kill the docker container, just the docker process that communicates with it.
-        async with temporary_process(
-            "docker",
-            "run",
-            "--rm",
-            CVE_2022_0492_IMAGE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        ) as docker_process:
-            stdout, stderr = await docker_process.communicate()
-            return_code = docker_process.returncode
+        async with docker_container_wrapper(
+            image=CVE_2022_0492_IMAGE, auto_remove=True
+        ) as docker_container:
+            results = await docker_container.wait()
+            return_code = results["StatusCode"]
+            stdout, stderr = await get_docker_container_outputs(docker_container)
 
         if return_code != 0:
             raise HordeError(
@@ -214,38 +213,33 @@ class JobDriver:
             )
 
         expected_output = "Contained: cannot escape via CVE-2022-0492"
-        if expected_output not in stdout.decode():
+        if expected_output not in stdout:
             raise HordeError(
                 f'CVE-HordeFailureReason-0492 check failed: "{expected_output}" not in stdout.',
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
-                    "stdout": stdout.decode(),
-                    "stderr": stderr.decode(),
+                    "stdout": stdout,
+                    "stderr": stderr,
                 },
             )
 
     async def run_nvidia_toolkit_version_check_or_fail(self):
-        # TODO: TIMEOUTS - This doesn't kill the docker container, just the docker process that communicates with it.
-        async with temporary_process(
-            "docker",
-            "run",
-            "--rm",
-            "--privileged",
-            "-v",
-            "/:/host:ro",
-            "-v",
-            "/usr/bin:/usr/bin",
-            "-v",
-            "/usr/lib:/usr/lib",
-            "ubuntu:latest",
-            "bash",
-            "-c",
-            "nvidia-container-toolkit --version",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        ) as docker_process:
-            stdout, stderr = await docker_process.communicate()
-            return_code = docker_process.returncode
+        async with docker_container_wrapper(
+            image="ubuntu:latest",
+            command=["bash", "-c", "nvidia-container-toolkit --version"],
+            auto_remove=True,
+            HostConfig={
+                "Privileged": True,
+                "Binds": [
+                    "/:/host:ro",
+                    "/usr/bin:/usr/bin",
+                    "/usr/lib:/usr/lib",
+                ],
+            },
+        ) as docker_container:
+            results = await docker_container.wait()
+            return_code = results["StatusCode"]
+            stdout, stderr = await get_docker_container_outputs(docker_container)
 
         if return_code != 0:
             raise HordeError(
@@ -253,20 +247,20 @@ class JobDriver:
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
                     "return_code": return_code,
-                    "stdout": stdout.decode(),
-                    "stderr": stderr.decode(),
+                    "stdout": stdout,
+                    "stderr": stderr,
                 },
             )
 
-        lines = stdout.decode().splitlines()
+        lines = stdout.splitlines()
         if not lines:
             raise HordeError(
                 "nvidia-container-toolkit check failed: no output from nvidia-container-toolkit",
                 reason=HordeFailureReason.SECURITY_CHECK_FAILED,
                 context={
                     "return_code": return_code,
-                    "stdout": stdout.decode(),
-                    "stderr": stderr.decode(),
+                    "stdout": stdout,
+                    "stderr": stderr,
                 },
             )
 

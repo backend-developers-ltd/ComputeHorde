@@ -4,15 +4,16 @@ import json
 import logging
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import tempfile
 from abc import ABC, abstractmethod
-from asyncio.subprocess import Process
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import aiodocker
 from compute_horde.base.docker import DockerRunOptionsPreset
 from compute_horde.job_errors import HordeError, JobError
 from compute_horde.protocol_consts import JobFailureReason
@@ -37,7 +38,10 @@ from compute_horde_executor.executor.miner_client import (
     ExecutionResult,
     JobResult,
 )
-from compute_horde_executor.executor.utils import temporary_process
+from compute_horde_executor.executor.utils import (
+    docker_container_wrapper,
+    get_docker_container_outputs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,13 +93,22 @@ WAIT_FOR_STREAMING_JOB_TIMEOUT = 25
 WAIT_FOR_NGINX_TIMEOUT = 10
 
 
-def preset_to_docker_run_args(preset: DockerRunOptionsPreset) -> list[str]:
+def preset_to_docker_run_args(preset: DockerRunOptionsPreset) -> dict[str, Any]:
     if settings.DEBUG_NO_GPU_MODE:
-        return []
+        return {}
     elif preset == "none":
-        return []
+        return {}
     elif preset == "nvidia_all":
-        return ["--runtime=nvidia", "--gpus", "all"]
+        return {
+            "Runtime": "nvidia",
+            "DeviceRequests": [
+                {
+                    "Driver": "nvidia",
+                    "Count": -1,  # All GPUs
+                    "Capabilities": [["gpu"]],
+                }
+            ],
+        }
     else:
         raise HordeError(f"Invalid preset: {preset}")
 
@@ -155,21 +168,33 @@ class BaseJobRunner(ABC):
 
     async def cleanup_potential_old_jobs(self):
         logger.debug("Cleaning up potential old jobs")
-        await (
-            await asyncio.create_subprocess_shell(
-                f"docker kill $(docker ps -q --filter 'name={job_container_name('.*')}')"
-            )
-        ).communicate()
-        await (
-            await asyncio.create_subprocess_shell(
-                f"docker kill $(docker ps -q --filter 'name={nginx_container_name('.*')}')"
-            )
-        ).communicate()
-        await (
-            await asyncio.create_subprocess_shell(
-                f"docker network rm $(docker network ls -q --filter 'name={network_name('.*')}')"
-            )
-        ).communicate()
+
+        async with aiodocker.Docker() as client:
+            # Clean up -job and -nginx containers
+            job_pattern = re.compile(job_container_name(".*"))
+            nginx_pattern = re.compile(nginx_container_name(".*"))
+            containers = await client.containers.list(all=True)
+            for _container in containers:
+                info = await _container.show()
+                name = info.get("Name", "").lstrip("/")
+                if job_pattern.match(name) or nginx_pattern.match(name):
+                    try:
+                        # TODO: This only kills but potentially leaves behind a stopped container. also remove?
+                        await _container.kill()
+                    except Exception as e:
+                        logger.warning(f"Failed to kill container {name}: {e}")
+
+            # Clean up networks
+            network_pattern = re.compile(network_name(".*"))
+            networks = await client.networks.list()
+            for _network in networks:
+                name = _network.get("Name", "")
+                if network_pattern.match(name):
+                    network_obj = await client.networks.get(name)
+                    try:
+                        await network_obj.delete()
+                    except Exception as e:
+                        logger.warning(f"Failed to remove network {name}: {e}")
 
     async def prepare_initial(self, initial_job_request: V0InitialJobRequest):
         self.initial_job_request = initial_job_request
@@ -184,26 +209,26 @@ class BaseJobRunner(ABC):
 
         if self.initial_job_request.docker_image is not None:
             logger.debug(f"Pulling Docker image {self.initial_job_request.docker_image}")
-            # TODO: TIMEOUTS - Check if this actually kills the process on timeout
-            async with temporary_process(
-                "docker",
-                "pull",
-                self.initial_job_request.docker_image,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            ) as docker_process:
-                stdout, stderr = await docker_process.communicate()
-                return_code = docker_process.returncode
-
-            if return_code != 0:
-                raise HordeError(
-                    "Failed to pull docker image",
-                    context={
-                        "return_code": return_code,
-                        "stdout": truncate(stdout.decode()),
-                        "stderr": truncate(stderr.decode()),
-                    },
-                )
+            async with aiodocker.Docker() as client:
+                stdout = ""
+                stderr = ""
+                try:
+                    async for _line in client.images.pull(
+                        self.initial_job_request.docker_image, stream=True
+                    ):
+                        line_str = json.dumps(_line)
+                        if "error" in _line:
+                            stderr += line_str + "\n"
+                        else:
+                            stdout += line_str + "\n"
+                except Exception:
+                    raise HordeError(
+                        "Failed to pull docker image",
+                        context={
+                            "stdout": truncate(stdout),
+                            "stderr": truncate(stderr),
+                        },
+                    )
 
     async def prepare_full(self, full_job_request: V0JobRequest):
         self.full_job_request = full_job_request
@@ -215,10 +240,11 @@ class BaseJobRunner(ABC):
         """
 
     @abstractmethod
-    async def get_docker_run_args(self) -> list[str]:
+    async def get_docker_run_args(self) -> dict[str, Any]:
         """
-        Return the list of arguments to pass to the `docker run` command, e.g. `["--rm", "--name", "container_name"]`.
-        Returned arguments should not include volumes and docker image name.
+        Return a dictionary of keyword arguments to pass to aiodocker.Docker().containers.create().
+        Should typically contain the keys "name", and "HostConfig" but should not include volumes
+        and docker image names.
         """
 
     @abstractmethod
@@ -229,7 +255,7 @@ class BaseJobRunner(ABC):
         """
 
     @abstractmethod
-    async def job_cleanup(self, job_process: Process):
+    async def job_cleanup(self, container: aiodocker.containers.DockerContainer):
         """
         Perform any cleanup necessary after the job is finished.
         """
@@ -253,38 +279,34 @@ class BaseJobRunner(ABC):
             "Call prepare_initial() and prepare_full() first"
         )
         assert self.full_job_request is not None, "Call prepare_initial() and prepare_full() first"
-        extra_volume_flags = []
 
+        # Get docker args
+        docker_kwargs = await self.get_docker_run_args()
+
+        # Add volume mounts
+        if "Binds" not in docker_kwargs["HostConfig"]:
+            docker_kwargs["HostConfig"]["Binds"] = []
+        docker_kwargs["HostConfig"]["Binds"].append(f"{self.volume_mount_dir.as_posix()}:/volume/")
+        docker_kwargs["HostConfig"]["Binds"].append(
+            f"{self.output_volume_mount_dir.as_posix()}:/output/"
+        )
+        docker_kwargs["HostConfig"]["Binds"].append(
+            f"{self.specs_volume_mount_dir.as_posix()}:/specs/"
+        )
         if self.full_job_request.artifacts_dir:
-            extra_volume_flags += [
-                "-v",
-                f"{self.artifacts_mount_dir.as_posix()}/:{self.full_job_request.artifacts_dir}",
-            ]
+            docker_kwargs["HostConfig"]["Binds"].append(
+                f"{self.artifacts_mount_dir.as_posix()}/:{self.full_job_request.artifacts_dir}"
+            )
 
-        self.cmd = [
-            "docker",
-            "run",
-            *await self.get_docker_run_args(),
-            "-v",
-            f"{self.volume_mount_dir.as_posix()}/:/volume/",
-            "-v",
-            f"{self.output_volume_mount_dir.as_posix()}/:/output/",
-            "-v",
-            f"{self.specs_volume_mount_dir.as_posix()}/:/specs/",
-            *extra_volume_flags,
-            await self.get_docker_image(),
-            *await self.get_docker_run_cmd(),
-        ]
         await self.before_start_job()
-        # TODO: TIMEOUTS - This doesn't kill the docker container, just the docker process that communicates with it.
-        async with temporary_process(
-            *self.cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        ) as job_process:
+        async with docker_container_wrapper(
+            image=await self.get_docker_image(),
+            command=await self.get_docker_run_cmd(),
+            **docker_kwargs,
+        ) as docker_container:
             await self.after_start_job()
             yield
-            await self.job_cleanup(job_process)
+            await self.job_cleanup(docker_container)
 
     async def upload_results(self) -> JobResult:
         assert self.execution_result is not None, "No execution result"
@@ -347,26 +369,26 @@ class BaseJobRunner(ABC):
     async def clean(self):
         # remove input/output directories with docker, to deal with funky file permissions
         root_for_remove = pathlib.Path("/temp_dir/")
-        process = await asyncio.create_subprocess_exec(
-            "docker",
-            "run",
-            "--rm",
-            "-v",
-            f"{self.temp_dir.as_posix()}/:/{root_for_remove.as_posix()}/",
-            "alpine:3.19",
-            "sh",
-            "-c",
-            f"rm -rf {shlex.quote(root_for_remove.as_posix())}/*",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await process.communicate()
-        if process.returncode != 0:
+        async with docker_container_wrapper(
+            image="alpine:3.19",
+            command=["sh", "-c", f"rm -rf {shlex.quote(root_for_remove.as_posix())}/*"],
+            auto_remove=True,
+            HostConfig={
+                "Binds": [
+                    f"{self.temp_dir.as_posix()}/:/{root_for_remove.as_posix()}/",
+                ]
+            },
+        ) as docker_container:
+            result = await docker_container.wait()
+            return_code = result["StatusCode"]
+            stdout, stderr = await get_docker_container_outputs(docker_container)
+
+        if return_code != 0:
             logger.error(
-                f"Failed to clean up {self.temp_dir.as_posix()}/: process exited with return code {process.returncode}\n"
+                f"Failed to clean up {self.temp_dir.as_posix()}/: process exited with return code {return_code}\n"
                 "Stdout and stderr:\n"
-                f"{truncate(stdout.decode())}\n"
-                f"{truncate(stderr.decode())}\n"
+                f"{stdout}\n"
+                f"{stderr}\n"
             )
         try:
             shutil.rmtree(self.temp_dir)
@@ -435,14 +457,19 @@ class DefaultJobRunner(BaseJobRunner):
         )
         return self.full_job_request.docker_image
 
-    async def get_docker_run_args(self) -> list[str]:
+    async def get_docker_run_args(self) -> dict[str, Any]:
         assert self.full_job_request is not None, (
             "Full job request must be set. Call prepare_full() first."
         )
         assert self.initial_job_request is not None, (
             "Initial job request must be set. Call prepare_initial() first."
         )
-        preset_run_options = preset_to_docker_run_args(
+
+        # Build keyword arguments to be passed to aiodocker.Docker().containers.create()
+        docker_kwargs: dict[str, Any] = {"name": self.job_container_name, "auto_remove": True}
+
+        # NVIDIA environment
+        docker_kwargs["HostConfig"] = preset_to_docker_run_args(
             self.full_job_request.docker_run_options_preset
         )
 
@@ -451,26 +478,27 @@ class DefaultJobRunner(BaseJobRunner):
         if self.is_streaming_job:
             logger.debug("Spinning up local network for streaming job")
             job_network = self.job_network_name
-            process = await asyncio.create_subprocess_exec(
-                "docker", "network", "create", "--internal", self.job_network_name
-            )
-            await process.wait()
+            async with aiodocker.Docker() as client:
+                try:
+                    await client.networks.create(
+                        {
+                            "Name": self.job_network_name,
+                            "CheckDuplicate": True,
+                            "Internal": True,
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to create network {job_network}: {e}")
+        docker_kwargs["HostConfig"]["NetworkMode"] = job_network
 
-        extra_volume_flags = []
         if self.full_job_request.raw_script:
             raw_script_path = self.temp_dir / "script.py"
             raw_script_path.write_text(self.full_job_request.raw_script)
-            extra_volume_flags = ["-v", f"{raw_script_path.absolute().as_posix()}:/script.py"]
+            docker_kwargs["HostConfig"]["Binds"] = [
+                f"{raw_script_path.absolute().as_posix()}:/script.py"
+            ]
 
-        return [
-            *preset_run_options,
-            "--name",
-            self.job_container_name,
-            "--rm",
-            "--network",
-            job_network,
-            *extra_volume_flags,
-        ]
+        return docker_kwargs
 
     async def get_docker_run_cmd(self) -> list[str]:
         assert self.full_job_request is not None, (
@@ -519,7 +547,7 @@ class DefaultJobRunner(BaseJobRunner):
         if not job_ready:
             raise JobError("Streaming job health check failed", JobFailureReason.TIMEOUT)
 
-    async def job_cleanup(self, job_process: Process):
+    async def job_cleanup(self, container: aiodocker.containers.DockerContainer):
         assert self.initial_job_request is not None, (
             "Initial job request must be set. Call prepare_initial() first."
         )
@@ -532,21 +560,22 @@ class DefaultJobRunner(BaseJobRunner):
             )
             logger.debug(f"Waiting {docker_process_timeout} seconds for job container to finish")
             result = await asyncio.wait_for(
-                job_process.communicate(),
+                container.wait(),
                 timeout=docker_process_timeout,
             )
-            logger.debug(f"Job container exited with return code {job_process.returncode}")
+            return_code = result["StatusCode"]
+            stdout, stderr = await get_docker_container_outputs(container)
+            logger.debug(f"Job container exited with return code {return_code}")
             self.execution_result = ExecutionResult(
                 timed_out=False,
-                return_code=job_process.returncode,
-                stdout=result[0].decode(),
-                stderr=result[1].decode(),
+                return_code=return_code,
+                stdout=stdout,
+                stderr=stderr,
             )
 
         except TimeoutError:
             logger.debug("Job container timed out")
-            stdout = (await job_process.stdout.read()).decode() if job_process.stdout else ""
-            stderr = (await job_process.stderr.read()).decode() if job_process.stderr else ""
+            stdout, stderr = await get_docker_container_outputs(container)
             self.execution_result = ExecutionResult(
                 timed_out=True,
                 return_code=None,
@@ -555,18 +584,15 @@ class DefaultJobRunner(BaseJobRunner):
             )
 
         if self.is_streaming_job:
+
+            async def _stop_nginx():
+                async with aiodocker.Docker() as client:
+                    container = await client.containers.get(self.nginx_container_name)
+                    await container.stop()
+
             # stop the associated nginx server
             try:
                 await asyncio.sleep(1)
-                process = await asyncio.create_subprocess_exec(
-                    "docker",
-                    "stop",
-                    self.nginx_container_name,
-                )
-                try:
-                    await asyncio.wait_for(process.wait(), DOCKER_STOP_TIMEOUT_SECONDS)
-                except TimeoutError:
-                    process.kill()
-                    raise
+                await asyncio.wait_for(_stop_nginx(), DOCKER_STOP_TIMEOUT_SECONDS)
             except Exception as e:
                 logger.error(f"Failed to stop Nginx: {e}")
