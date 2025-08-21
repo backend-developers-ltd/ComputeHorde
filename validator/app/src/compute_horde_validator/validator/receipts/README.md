@@ -47,6 +47,7 @@ finished = receipts().create_job_finished_receipt(
     time_started: datetime.datetime,
     time_took_us: int,
     score_str: str,
+    block_numbers: list[int] | None = None,  # Optional: list of block numbers used to pay for the job
 )
 ```
 

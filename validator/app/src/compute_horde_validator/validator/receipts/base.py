@@ -68,6 +68,7 @@ class ReceiptsBase(ABC):
         time_started: datetime.datetime,
         time_took_us: int,
         score_str: str,
+        block_numbers: list[int] | None = None,
     ) -> JobFinishedReceipt:
         """
         Create a job finished receipt.
@@ -79,6 +80,7 @@ class ReceiptsBase(ABC):
             time_started: When the job started
             time_took_us: How long the job took in microseconds
             score_str: Score string for the job
+            block_numbers: List of block numbers used to pay for this job (optional, defaults to empty list)
 
         Returns:
             Created JobFinishedReceipt

@@ -186,6 +186,7 @@ def test_create_job_finished_receipt_returns_expected_values(settings):
     time_started = datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5)
     time_took_us = 1_234_567
     score_str = "0.987"
+    block_numbers = [100, 101, 102]
 
     finished = receipts().create_job_finished_receipt(
         job_uuid=job_uuid,
@@ -194,6 +195,7 @@ def test_create_job_finished_receipt_returns_expected_values(settings):
         time_started=time_started,
         time_took_us=time_took_us,
         score_str=score_str,
+        block_numbers=block_numbers,
     )
 
     assert finished.job_uuid == job_uuid
@@ -202,6 +204,97 @@ def test_create_job_finished_receipt_returns_expected_values(settings):
     assert finished.time_started == time_started
     assert finished.time_took_us == time_took_us
     assert finished.score_str == score_str
+    assert finished.block_numbers == block_numbers
+    assert isinstance(finished.timestamp, datetime.datetime) and finished.timestamp.tzinfo is datetime.UTC
+
+
+@pytest.mark.django_db(transaction=True)
+def test_create_job_finished_receipt_defaults_block_numbers_to_empty_list(settings):
+    """Test that block_numbers defaults to empty list when not provided."""
+    receipts = Receipts()
+
+    job_uuid = str(uuid.uuid4())
+    miner_hotkey = "miner_hotkey_2"
+    validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+    time_started = datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5)
+    time_took_us = 1_234_567
+    score_str = "0.987"
+
+    finished = receipts.create_job_finished_receipt(
+        job_uuid=job_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        time_started=time_started,
+        time_took_us=time_took_us,
+        score_str=score_str,
+        # block_numbers not provided
+    )
+
+    assert finished.block_numbers == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_job_finished_receipt_from_payload_with_block_numbers(settings):
+    """Test that from_payload correctly handles block numbers."""
+    from compute_horde.receipts.schemas import JobFinishedReceiptPayload
+    
+    # Create a payload with block numbers
+    payload = JobFinishedReceiptPayload(
+        job_uuid="12345678-1234-5678-9abc-def012345678",
+        miner_hotkey="miner_hotkey_123",
+        validator_hotkey="validator_hotkey_456",
+        timestamp=datetime.datetime.now(datetime.UTC),
+        time_started=datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5),
+        time_took_us=300000000,  # 5 minutes
+        score_str="1.0",
+        block_numbers=[100, 101, 102],
+    )
+    
+    # Create receipt using from_payload
+    receipt = JobFinishedReceipt.from_payload(
+        payload=payload,
+        validator_signature="validator_signature_123",
+        miner_signature="miner_signature_456",
+    )
+    
+    # Verify block numbers are correctly set
+    assert receipt.block_numbers == [100, 101, 102]
+    assert receipt.job_uuid == "12345678-1234-5678-9abc-def012345678"
+    assert receipt.miner_hotkey == "miner_hotkey_123"
+    assert receipt.validator_hotkey == "validator_hotkey_456"
+    assert receipt.validator_signature == "validator_signature_123"
+    assert receipt.miner_signature == "miner_signature_456"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_job_finished_receipt_from_payload_without_block_numbers(settings):
+    """Test that from_payload correctly handles missing block numbers."""
+    from compute_horde.receipts.schemas import JobFinishedReceiptPayload
+    
+    # Create a payload without block numbers (should default to empty list)
+    payload = JobFinishedReceiptPayload(
+        job_uuid="87654321-4321-8765-cba9-fed012345678",
+        miner_hotkey="miner_hotkey_789",
+        validator_hotkey="validator_hotkey_012",
+        timestamp=datetime.datetime.now(datetime.UTC),
+        time_started=datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5),
+        time_took_us=300000000,  # 5 minutes
+        score_str="0.8",
+        # block_numbers not specified, should default to empty list
+    )
+    
+    # Create receipt using from_payload
+    receipt = JobFinishedReceipt.from_payload(
+        payload=payload,
+        validator_signature="validator_signature_789",
+        miner_signature="miner_signature_012",
+    )
+    
+    # Verify block numbers default to empty list
+    assert receipt.block_numbers == []
+    assert receipt.job_uuid == "87654321-4321-8765-cba9-fed012345678"
+    assert receipt.miner_hotkey == "miner_hotkey_789"
+    assert receipt.validator_hotkey == "validator_hotkey_012"
 
 
 @pytest.mark.asyncio

@@ -149,7 +149,11 @@ class Receipts(ReceiptsBase):
         time_started: datetime.datetime,
         time_took_us: int,
         score_str: str,
+        block_numbers: list[int] | None = None,
     ) -> JobFinishedReceipt:
+        if block_numbers is None:
+            block_numbers = []
+
         payload = JobFinishedReceiptPayload(
             job_uuid=job_uuid,
             miner_hotkey=miner_hotkey,
@@ -158,6 +162,7 @@ class Receipts(ReceiptsBase):
             time_started=time_started,
             time_took_us=time_took_us,
             score_str=score_str,
+            block_numbers=block_numbers,
         )
 
         validator_kp = settings.BITTENSOR_WALLET().get_hotkey()
@@ -172,6 +177,7 @@ class Receipts(ReceiptsBase):
             time_started=time_started,
             time_took_us=time_took_us,
             score_str=score_str,
+            block_numbers=block_numbers,
         )
 
     def create_job_started_receipt(
