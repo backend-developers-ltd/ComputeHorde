@@ -37,7 +37,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
     create_and_run_synthetic_job_batch,
 )
 
-from .helpers import (
+from ..helpers import (
     check_system_events,
 )
 
