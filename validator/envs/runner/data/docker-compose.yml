@@ -318,7 +318,7 @@ services:
       - METAGRAPH_CACHE_MAXSIZE=${METAGRAPH_CACHE_MAXSIZE:-1000}
     volumes:
       - ${HOST_WALLET_DIR:-~/.bittensor}:/app/wallets
-      - pylon_data:/app/data
+      - ${HOST_PYLON_DB_DIR:-~/.pylon}:/app/db
     ports:
       - ${PYLON_PORT}:8000
     logging:
@@ -361,4 +361,3 @@ volumes:
   redis:
   db:
   static:
-  pylon_data:
