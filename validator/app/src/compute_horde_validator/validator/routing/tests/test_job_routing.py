@@ -59,8 +59,8 @@ def miners():
 
 
 @pytest.fixture(autouse=True)
-def validator(settings):
-    return Miner.objects.create(hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address)
+def validator(wallet):
+    return Miner.objects.create(hotkey=wallet.hotkey.ss58_address)
 
 
 @pytest.fixture(autouse=True)
