@@ -48,13 +48,13 @@ services:
       - FETCH_METAGRAPH_INTERVAL=${FETCH_METAGRAPH_INTERVAL:-10}
       - METAGRAPH_CACHE_TTL=${METAGRAPH_CACHE_TTL:-600}
       - METAGRAPH_CACHE_MAXSIZE=${METAGRAPH_CACHE_MAXSIZE:-1000}
+      - PYLON_DB_DIR=/app/db
     volumes:
       - ${HOST_WALLET_DIR:-~/.bittensor}:/app/wallets
-      - pylon_data:/app/data
+      - ${HOST_PYLON_DB_DIR:-~/.pylon}:/app/db
     ports:
       - ${PYLON_PORT}:8000
 
 volumes:
   redis_data:
   db_data:
-  pylon_data:
