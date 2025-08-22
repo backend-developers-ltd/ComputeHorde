@@ -377,37 +377,31 @@ async def drive_organic_job(
             job_started_receipt = await Receipts().get_job_started_receipt_by_uuid(
                 str(job.job_uuid)
             )
-            if job_started_receipt is None:
-                logger.error(f"No job started receipt found for job {job.job_uuid}")
+            job_request_time = job_started_receipt.timestamp
+            valid_excuses = await job_excuses.filter_valid_excuse_receipts(
+                receipts_to_check=rejection.msg.receipts or [],
+                check_time=job_request_time,
+                declined_job_uuid=str(job.job_uuid),
+                declined_job_executor_class=ExecutorClass(job.executor_class),
+                declined_job_is_synthetic=False,
+                minimum_validator_stake_for_excuse=await aget_config(
+                    "DYNAMIC_MINIMUM_VALIDATOR_STAKE_FOR_EXCUSE"
+                ),
+                miner_hotkey=job.miner.hotkey,
+            )
+            expected_executor_count = await job_excuses.get_expected_miner_executor_count(
+                check_time=job_request_time,
+                miner_hotkey=job.miner.hotkey,
+                executor_class=ExecutorClass(job.executor_class),
+            )
+            if len(valid_excuses) >= expected_executor_count:
+                comment = "Miner properly excused job"
+                status = OrganicJob.Status.EXCUSED
+                system_event_subtype = SystemEvent.EventSubType.JOB_EXCUSED
+            else:
                 comment = "Miner failed to excuse job"
                 status = OrganicJob.Status.FAILED
                 system_event_subtype = SystemEvent.EventSubType.JOB_REJECTED
-            else:
-                job_request_time = job_started_receipt.timestamp
-                valid_excuses = await job_excuses.filter_valid_excuse_receipts(
-                    receipts_to_check=rejection.msg.receipts or [],
-                    check_time=job_request_time,
-                    declined_job_uuid=str(job.job_uuid),
-                    declined_job_executor_class=ExecutorClass(job.executor_class),
-                    declined_job_is_synthetic=False,
-                    minimum_validator_stake_for_excuse=await aget_config(
-                        "DYNAMIC_MINIMUM_VALIDATOR_STAKE_FOR_EXCUSE"
-                    ),
-                    miner_hotkey=job.miner.hotkey,
-                )
-                expected_executor_count = await job_excuses.get_expected_miner_executor_count(
-                    check_time=job_request_time,
-                    miner_hotkey=job.miner.hotkey,
-                    executor_class=ExecutorClass(job.executor_class),
-                )
-                if len(valid_excuses) >= expected_executor_count:
-                    comment = "Miner properly excused job"
-                    status = OrganicJob.Status.EXCUSED
-                    system_event_subtype = SystemEvent.EventSubType.JOB_EXCUSED
-                else:
-                    comment = "Miner failed to excuse job"
-                    status = OrganicJob.Status.FAILED
-                    system_event_subtype = SystemEvent.EventSubType.JOB_REJECTED
 
         logger.info(comment)
         job.comment = comment

@@ -64,9 +64,11 @@ receipts: list[JobFinishedReceipt] = await Receipts().get_job_finished_receipts_
     miner_hotkey: str,
     job_uuids: list[str],
 )
+# Raises: No specific exceptions, returns empty list on errors
 
 # JobStarted by job UUID
-receipt: JobStartedReceipt | None = await Receipts().get_job_started_receipt_by_uuid(job_uuid: str)
+receipt: JobStartedReceipt = await Receipts().get_job_started_receipt_by_uuid(job_uuid: str)
+# Raises: JobStartedReceipt.DoesNotExist if receipt not found
 
 # Completed job receipts for a block range [start_block, end_block)
 receipts: list[Receipt] = await Receipts().get_completed_job_receipts_for_block_range(

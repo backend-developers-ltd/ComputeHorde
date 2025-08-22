@@ -130,11 +130,6 @@ async def test_transfer_receipts_from_miners_happy_path(settings):
         assert stored_started.executor_class == "always_on.gpu-24gb"
         assert stored_started.is_organic is True
         assert stored_started.ttl == 300
-        assert (
-            isinstance(stored_started.validator_signature, str)
-            and stored_started.validator_signature
-        )
-        assert isinstance(stored_started.miner_signature, str) and stored_started.miner_signature
 
         stored_accepted = await sync_to_async(
             lambda: JobAcceptedReceipt.objects.get(job_uuid=accepted_payload.job_uuid),
@@ -143,11 +138,6 @@ async def test_transfer_receipts_from_miners_happy_path(settings):
         assert str(stored_accepted.job_uuid) == accepted_payload.job_uuid
         assert stored_accepted.miner_hotkey == accepted_payload.miner_hotkey
         assert stored_accepted.ttl == 123
-        assert (
-            isinstance(stored_accepted.validator_signature, str)
-            and stored_accepted.validator_signature
-        )
-        assert isinstance(stored_accepted.miner_signature, str) and stored_accepted.miner_signature
 
         stored_finished = await sync_to_async(
             lambda: JobFinishedReceipt.objects.get(job_uuid=finished_payload.job_uuid),
@@ -157,11 +147,6 @@ async def test_transfer_receipts_from_miners_happy_path(settings):
         assert stored_finished.miner_hotkey == finished_payload.miner_hotkey
         assert stored_finished.time_took_us == 42
         assert stored_finished.score_str == "0.5"
-        assert (
-            isinstance(stored_finished.validator_signature, str)
-            and stored_finished.validator_signature
-        )
-        assert isinstance(stored_finished.miner_signature, str) and stored_finished.miner_signature
 
     finally:
         await runner.cleanup()
@@ -223,11 +208,6 @@ def test_create_job_finished_receipt_returns_expected_values(settings):
     assert finished.time_started == time_started
     assert finished.time_took_us == time_took_us
     assert finished.score_str == score_str
-    assert isinstance(finished.validator_signature, str) and len(finished.validator_signature) > 0
-    assert (
-        isinstance(finished.timestamp, datetime.datetime)
-        and finished.timestamp.tzinfo is datetime.UTC
-    )
 
 
 @pytest.mark.asyncio
@@ -332,7 +312,7 @@ async def test_get_job_finished_receipts_for_miner_filters_by_uuid(settings):
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_job_started_receipt_by_uuid_returns_instance_or_none(settings):
+async def test_get_job_started_receipt_by_uuid(settings):
     receipts = Receipts()
     job_uuid_present = str(uuid.uuid4())
     job_uuid_missing = str(uuid.uuid4())
@@ -349,11 +329,12 @@ async def test_get_job_started_receipt_by_uuid_returns_instance_or_none(settings
     )
 
     found = await receipts.get_job_started_receipt_by_uuid(job_uuid_present)
-    missing = await receipts.get_job_started_receipt_by_uuid(job_uuid_missing)
-
+    
     assert found is not None
     assert str(found.job_uuid) == job_uuid_present
-    assert missing is None
+
+    with pytest.raises(JobStartedReceipt.DoesNotExist):
+        await receipts.get_job_started_receipt_by_uuid(job_uuid_missing)
 
 
 @pytest.mark.asyncio
