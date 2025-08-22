@@ -8,6 +8,7 @@ import bittensor_wallet
 import pytest
 import turbobt
 from compute_horde.executor_class import EXECUTOR_CLASS
+from compute_horde.test_wallet import get_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pytest_mock import MockerFixture
 
@@ -65,18 +66,7 @@ def _patch_collateral_contract_address(mocker: MockerFixture):
 
 @pytest.fixture(scope="session", autouse=True)
 def wallet():
-    wallet = bittensor_wallet.Wallet(name="test_validator")
-    wallet.regenerate_coldkey(
-        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
-        use_password=False,
-        overwrite=True,
-    )
-    wallet.regenerate_hotkey(
-        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
-        use_password=False,
-        overwrite=True,
-    )
-    return wallet
+    return get_validator_wallet()
 
 
 @pytest.fixture

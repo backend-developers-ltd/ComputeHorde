@@ -49,22 +49,6 @@ def _patch_collateral_contract_address(mocker: MockerFixture):
         )
 
 
-@pytest.fixture(scope="session", autouse=True)
-def wallet():
-    wallet = bittensor_wallet.Wallet(name="test_validator")
-    wallet.regenerate_coldkey(
-        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
-        use_password=False,
-        overwrite=True,
-    )
-    wallet.regenerate_hotkey(
-        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
-        use_password=False,
-        overwrite=True,
-    )
-    return wallet
-
-
 @pytest.fixture(scope="function", autouse=True)
 def clear_cache():
     yield

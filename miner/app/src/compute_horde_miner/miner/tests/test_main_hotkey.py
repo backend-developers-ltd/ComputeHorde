@@ -17,7 +17,7 @@ async def test_main_hotkey_request_authenticated():
     """Test handling V0MainHotkeyRequest when validator is authenticated."""
     consumer = MagicMock()
     consumer.validator_authenticated = True
-    consumer.validator_key = "test_validator"
+    consumer.validator_key = "mock_validator"
     consumer.send = AsyncMock()
 
     expected_main_hotkey = "hotkey1"
@@ -29,7 +29,7 @@ async def test_main_hotkey_request_authenticated():
     ):
         real_consumer = MinerValidatorConsumer(MagicMock())
         real_consumer.validator_authenticated = True
-        real_consumer.validator_key = "test_validator"
+        real_consumer.validator_key = "mock_validator"
         real_consumer.send = AsyncMock()
 
         request = V0MainHotkeyMessage()
@@ -48,7 +48,7 @@ async def test_main_hotkey_request_unauthenticated():
     with patch("compute_horde_miner.miner.executor_manager.current.executor_manager", MagicMock()):
         real_consumer = MinerValidatorConsumer(MagicMock())
         real_consumer.validator_authenticated = False
-        real_consumer.validator_key = "test_validator"
+        real_consumer.validator_key = "mock_validator"
         real_consumer.send = AsyncMock()
 
         # Send main hotkey request
@@ -74,7 +74,7 @@ async def test_main_hotkey_request_none_response():
     ):
         real_consumer = MinerValidatorConsumer(MagicMock())
         real_consumer.validator_authenticated = True
-        real_consumer.validator_key = "test_validator"
+        real_consumer.validator_key = "mock_validator"
         real_consumer.send = AsyncMock()
 
         request = V0MainHotkeyMessage()
@@ -98,7 +98,7 @@ async def test_main_hotkey_request_empty_string_response():
     ):
         real_consumer = MinerValidatorConsumer(MagicMock())
         real_consumer.validator_authenticated = True
-        real_consumer.validator_key = "test_validator"
+        real_consumer.validator_key = "mock_validator"
         real_consumer.send = AsyncMock()
 
         request = V0MainHotkeyMessage()

@@ -1,18 +1,13 @@
 import uuid
 from datetime import UTC, datetime
 
-import bittensor
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStartedReceiptPayload
+from compute_horde.test_wallet import get_miner_wallet, get_validator_wallet
 
-miner_wallet = bittensor.wallet(name="test_wallet_miner")
-miner_wallet.create_if_non_existent(coldkey_use_password=False, hotkey_use_password=False)
-miner_hotkey = miner_wallet.get_hotkey()
-
-validator_wallet = bittensor.wallet(name="test_wallet_validator")
-validator_wallet.create_if_non_existent(coldkey_use_password=False, hotkey_use_password=False)
-validator_hotkey = validator_wallet.get_hotkey()
+miner_hotkey = get_miner_wallet().get_hotkey()
+validator_hotkey = get_validator_wallet().get_hotkey()
 
 # JobStartedReceipt
 
