@@ -1,0 +1,2 @@
+class TransferIsDisabled(Exception):
+    pass
