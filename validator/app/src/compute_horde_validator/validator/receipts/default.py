@@ -510,3 +510,13 @@ class Receipts(ReceiptsBase):
             return block.creation_timestamp
         except Block.DoesNotExist:
             return supertensor().get_block_timestamp(block_number)
+
+
+_receipts_instance: Receipts | None = None
+
+
+def receipts() -> Receipts:
+    global _receipts_instance
+    if _receipts_instance is None:
+        _receipts_instance = Receipts()
+    return _receipts_instance

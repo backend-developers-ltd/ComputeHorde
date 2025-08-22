@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.models.allowance.internal import Block
-from compute_horde_validator.validator.receipts import Receipts
+from compute_horde_validator.validator.receipts import receipts
 
 
 @pytest.mark.asyncio
@@ -110,9 +110,8 @@ async def test_transfer_receipts_from_miners_happy_path(settings):
             hotkey=miner_hotkey, address="127.0.0.1", port=port
         )
 
-        receipts_mgr = Receipts()
         page = 123456
-        result = await receipts_mgr._transfer_receipts_from_miners(
+        result = await receipts()._transfer_receipts_from_miners(
             miner_hotkeys=[miner_hotkey], pages=[page], semaphore_limit=2, request_timeout=2.0
         )
 
@@ -154,8 +153,6 @@ async def test_transfer_receipts_from_miners_happy_path(settings):
 
 @pytest.mark.django_db(transaction=True)
 def test_create_job_started_receipt_returns_payload_and_signature(settings):
-    receipts = Receipts()
-
     job_uuid = str(uuid.uuid4())
     miner_hotkey = "miner_hotkey_1"
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
@@ -163,7 +160,7 @@ def test_create_job_started_receipt_returns_payload_and_signature(settings):
     is_organic = True
     ttl = 300
 
-    payload, signature = receipts.create_job_started_receipt(
+    payload, signature = receipts().create_job_started_receipt(
         job_uuid=job_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -184,8 +181,6 @@ def test_create_job_started_receipt_returns_payload_and_signature(settings):
 
 @pytest.mark.django_db(transaction=True)
 def test_create_job_finished_receipt_returns_expected_values(settings):
-    receipts = Receipts()
-
     job_uuid = str(uuid.uuid4())
     miner_hotkey = "miner_hotkey_2"
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
@@ -193,7 +188,7 @@ def test_create_job_finished_receipt_returns_expected_values(settings):
     time_took_us = 1_234_567
     score_str = "0.987"
 
-    finished = receipts.create_job_finished_receipt(
+    finished = receipts().create_job_finished_receipt(
         job_uuid=job_uuid,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
@@ -252,8 +247,7 @@ async def test_get_valid_job_started_receipts_for_miner_filters_correctly(settin
         ttl=60,
     )
 
-    receipts = Receipts()
-    results = await receipts.get_valid_job_started_receipts_for_miner(
+    results = await receipts().get_valid_job_started_receipts_for_miner(
         miner_hotkey=miner_hotkey, at_time=base_ts
     )
 
@@ -298,8 +292,7 @@ async def test_get_job_finished_receipts_for_miner_filters_by_uuid(settings):
         score_str="0.6",
     )
 
-    receipts = Receipts()
-    results = await receipts.get_job_finished_receipts_for_miner(miner_hotkey, [wanted_uuid])
+    results = await receipts().get_job_finished_receipts_for_miner(miner_hotkey, [wanted_uuid])
 
     assert len(results) == 1
     r = results[0]
@@ -313,7 +306,6 @@ async def test_get_job_finished_receipts_for_miner_filters_by_uuid(settings):
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_get_job_started_receipt_by_uuid(settings):
-    receipts = Receipts()
     job_uuid_present = str(uuid.uuid4())
     job_uuid_missing = str(uuid.uuid4())
 
@@ -328,20 +320,18 @@ async def test_get_job_started_receipt_by_uuid(settings):
         ttl=60,
     )
 
-    found = await receipts.get_job_started_receipt_by_uuid(job_uuid_present)
-    
+    found = await receipts().get_job_started_receipt_by_uuid(job_uuid_present)
+
     assert found is not None
     assert str(found.job_uuid) == job_uuid_present
 
     with pytest.raises(JobStartedReceipt.DoesNotExist):
-        await receipts.get_job_started_receipt_by_uuid(job_uuid_missing)
+        await receipts().get_job_started_receipt_by_uuid(job_uuid_missing)
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_get_completed_job_receipts_for_block_range_returns_only_in_range(settings):
-    receipts = Receipts()
-
     # Setup block timestamps
     start_block = 100
     end_block = 105
@@ -395,7 +385,7 @@ async def test_get_completed_job_receipts_for_block_range_returns_only_in_range(
         score_str="0.2",
     )
 
-    receipts_list = await receipts.get_completed_job_receipts_for_block_range(
+    receipts_list = await receipts().get_completed_job_receipts_for_block_range(
         start_block, end_block
     )
 

@@ -83,7 +83,7 @@ from compute_horde_validator.validator.models import (
     SyntheticJobBatch,
     SystemEvent,
 )
-from compute_horde_validator.validator.receipts.default import Receipts
+from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.synthetic_jobs.generator import current
 from compute_horde_validator.validator.synthetic_jobs.generator.base import (
     BaseSyntheticJobGenerator,
@@ -927,8 +927,7 @@ def _generate_job_started_receipt(ctx: BatchContext, job: Job) -> None:
     ttl = job.get_spin_up_time() + job_timeout_seconds + spinup_leeway_seconds
     ttl_clamped = max(ttl_min, min(ttl_max, ttl))
 
-    receipts_service = Receipts()
-    payload, signature = receipts_service.create_job_started_receipt(
+    payload, signature = receipts().create_job_started_receipt(
         job_uuid=job.uuid,
         miner_hotkey=job.miner_hotkey,
         validator_hotkey=ctx.own_keypair.ss58_address,

@@ -1,7 +1,7 @@
 from asgiref.sync import async_to_sync
 from django.core.management import BaseCommand
 
-from compute_horde_validator.validator.receipts.default import Receipts
+from compute_horde_validator.validator.receipts.default import receipts
 
 
 class Command(BaseCommand):
@@ -42,7 +42,7 @@ class Command(BaseCommand):
         debug_miner_port: int | None,
         **kwargs,
     ):
-        await Receipts().run_receipts_transfer(
+        await receipts().run_receipts_transfer(
             daemon=daemon,
             debug_miner_hotkey=debug_miner_hotkey,
             debug_miner_ip=debug_miner_ip,

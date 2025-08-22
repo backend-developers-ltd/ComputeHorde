@@ -20,7 +20,7 @@ Default implementation lives in `compute_horde_validator.validator.receipts.defa
 - Run transfer loop (or once):
 
 ```python
-await Receipts().run_receipts_transfer(
+await receipts().run_receipts_transfer(
     daemon: bool,
     debug_miner_hotkey: str | None,
     debug_miner_ip: str | None,
@@ -31,7 +31,7 @@ await Receipts().run_receipts_transfer(
 - Create receipts:
 
 ```python
-payload, validator_signature = Receipts().create_job_started_receipt(
+payload, validator_signature = receipts().create_job_started_receipt(
     job_uuid: str,
     miner_hotkey: str,
     validator_hotkey: str,
@@ -40,7 +40,7 @@ payload, validator_signature = Receipts().create_job_started_receipt(
     ttl: int,
 )
 
-finished = Receipts().create_job_finished_receipt(
+finished = receipts().create_job_finished_receipt(
     job_uuid: str,
     miner_hotkey: str,
     validator_hotkey: str,
@@ -54,24 +54,24 @@ finished = Receipts().create_job_finished_receipt(
 
 ```python
 # All valid JobStarted for a miner at a timestamp
-receipts: list[JobStartedReceipt] = await Receipts().get_valid_job_started_receipts_for_miner(
+receipts: list[JobStartedReceipt] = await receipts().get_valid_job_started_receipts_for_miner(
     miner_hotkey: str,
     at_time: datetime.datetime,
 )
 
 # JobFinished for a miner and a set of job UUIDs
-receipts: list[JobFinishedReceipt] = await Receipts().get_job_finished_receipts_for_miner(
+receipts: list[JobFinishedReceipt] = await receipts().get_job_finished_receipts_for_miner(
     miner_hotkey: str,
     job_uuids: list[str],
 )
 # Raises: No specific exceptions, returns empty list on errors
 
 # JobStarted by job UUID
-receipt: JobStartedReceipt = await Receipts().get_job_started_receipt_by_uuid(job_uuid: str)
+receipt: JobStartedReceipt = await receipts().get_job_started_receipt_by_uuid(job_uuid: str)
 # Raises: JobStartedReceipt.DoesNotExist if receipt not found
 
 # Completed job receipts for a block range [start_block, end_block)
-receipts: list[Receipt] = await Receipts().get_completed_job_receipts_for_block_range(
+receipts: list[Receipt] = await receipts().get_completed_job_receipts_for_block_range(
     start_block: int,
     end_block: int,
 )

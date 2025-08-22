@@ -24,7 +24,7 @@ from compute_horde_validator.validator.models import (
     MinerManifest,
     MinerPreliminaryReservation,
 )
-from compute_horde_validator.validator.receipts.default import Receipts
+from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.base import RoutingBase
 from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
@@ -218,12 +218,12 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             .values_list("job_uuid", flat=True)
         }
 
-        started_receipts = await Receipts().get_valid_job_started_receipts_for_miner(
+        started_receipts = await receipts().get_valid_job_started_receipts_for_miner(
             miner.hotkey, timezone.now()
         )
         known_started_jobs: set[str] = {str(receipt.job_uuid) for receipt in started_receipts}
 
-        finished_receipts = await Receipts().get_job_finished_receipts_for_miner(
+        finished_receipts = await receipts().get_job_finished_receipts_for_miner(
             miner.hotkey, list(known_started_jobs | preliminary_reservation_jobs)
         )
         known_finished_jobs: set[str] = {str(receipt.job_uuid) for receipt in finished_receipts}
