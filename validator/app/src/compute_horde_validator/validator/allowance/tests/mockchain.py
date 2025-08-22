@@ -1,14 +1,13 @@
 import asyncio
 import datetime
 from contextlib import contextmanager
-from functools import lru_cache
 from unittest import mock
 from unittest.mock import patch
 
-import bittensor_wallet
 import turbobt
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.protocol_messages import V0ExecutorManifestRequest
+from compute_horde.test_wallet import get_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel
 
@@ -55,20 +54,8 @@ def cmbm(block_number):
     return block_number
 
 
-@lru_cache
 def wallet():
-    wallet_ = bittensor_wallet.Wallet(name="test_mock_validator")
-    wallet_.regenerate_coldkey(
-        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
-        use_password=False,
-        overwrite=True,
-    )
-    wallet_.regenerate_hotkey(
-        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
-        use_password=False,
-        overwrite=True,
-    )
-    return wallet_
+    return get_validator_wallet()
 
 
 VALIDATOR_HOTKEYS = {

@@ -38,15 +38,6 @@ def miner_keypair():
 
 
 @pytest.fixture
-def signature_wallet():
-    wallet = bittensor.wallet(name="test_signature")
-    # workaround the overwrite flag
-    wallet.regenerate_coldkey(seed="8" * 64, use_password=False, overwrite=True)
-    wallet.regenerate_hotkey(seed="9" * 64, use_password=False, overwrite=True)
-    return wallet
-
-
-@pytest.fixture
 def receipts(validator_keypair, miner_keypair):
     payload1 = JobStartedReceiptPayload(
         job_uuid="3342460e-4a99-438b-8757-795f4cb348dd",

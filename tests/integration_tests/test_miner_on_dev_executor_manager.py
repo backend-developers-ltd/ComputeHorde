@@ -12,7 +12,6 @@ import time
 import uuid
 import zipfile
 from unittest import mock
-import bittensor
 import logging
 
 import pytest
@@ -21,40 +20,17 @@ import websockets
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.test_base import ActiveSubnetworkBaseTest
+from compute_horde.test_wallet import (
+    MINER_WALLET_NAME,
+    VALIDATOR_WALLET_NAME,
+    get_miner_wallet,
+    get_validator_wallet,
+)
+
 
 MINER_PORT = 8045
 WEBSOCKET_TIMEOUT = 10
 logger = logging.getLogger(__name__)
-
-
-def get_miner_wallet():
-    wallet = bittensor.wallet(name="test_miner")
-    wallet.regenerate_coldkey(
-        mnemonic="marine oyster umbrella sail over speak emerge rude matrix glue argue learn",
-        use_password=False,
-        overwrite=True,
-    )
-    wallet.regenerate_hotkey(
-        mnemonic="radio busy purpose chicken nose soccer private bridge nephew float ten media",
-        use_password=False,
-        overwrite=True,
-    )
-    return wallet
-
-
-def get_validator_wallet():
-    wallet = bittensor.wallet(name="test_validator")
-    wallet.regenerate_coldkey(
-        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
-        use_password=False,
-        overwrite=True,
-    )
-    wallet.regenerate_hotkey(
-        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
-        use_password=False,
-        overwrite=True,
-    )
-    return wallet
 
 
 class Test(ActiveSubnetworkBaseTest):
@@ -128,7 +104,7 @@ class Test(ActiveSubnetworkBaseTest):
             "PORT_FOR_EXECUTORS": str(MINER_PORT),
             "DATABASE_SUFFIX": "_integration_test",
             "DEBUG_TURN_AUTHENTICATION_OFF": "1",
-            "BITTENSOR_WALLET_NAME": "test_miner",
+            "BITTENSOR_WALLET_NAME": MINER_WALLET_NAME,
         }
 
     @classmethod
@@ -138,7 +114,7 @@ class Test(ActiveSubnetworkBaseTest):
     @classmethod
     def validator_environ(cls) -> dict[str, str]:
         return {
-            "BITTENSOR_WALLET_NAME": "test_validator",
+            "BITTENSOR_WALLET_NAME": VALIDATOR_WALLET_NAME,
         }
 
     @pytest.mark.asyncio
