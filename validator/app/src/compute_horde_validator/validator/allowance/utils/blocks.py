@@ -23,7 +23,7 @@ from ..metrics import (
 )
 from ..types import AllowanceException, NotEnoughAllowanceException, ss58_address
 from .manifests import get_manifest_drops, get_manifests
-from .supertensor import SuperTensor, supertensor
+from .supertensor import SuperTensor, supertensor, SuperTensorError
 
 logger = get_task_logger(__name__)
 
@@ -233,24 +233,13 @@ def process_block_allowance_with_reporting(
         start = time.time()
         data = process_block_allowance(block_number, supertensor_)
         end = time.time()
-        if live and data:
-            stake_shares, manifests, duration = data[max(data.keys())]
-
-            for validator_ss58, stake_share in stake_shares.items():
-                VALIDATOR_STAKE_SHARE_REPORT.labels(validator_ss58).set(stake_share)
-
-            for miner_exec_class, count in manifests.items():
-                miner_hotkey, executor_class = miner_exec_class
-                VALIDATOR_MINER_MANIFEST_REPORT.labels(miner_hotkey, executor_class.value).set(
-                    count
-                )
-
-            VALIDATOR_BLOCK_DURATION.set(duration)
 
     except Exception as e:
-        logger.error(
-            f"Error processing block allowance for block {block_number}: {e!r}", exc_info=True
-        )
+        msg = f"Error processing block allowance for block {block_number}: {e!r}"
+        if isinstance(e, SuperTensorError):
+            logger.info(msg)
+        else:
+            logger.error(msg, exc_info=True)
         SystemEvent.objects.create(
             type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
             subtype=SystemEvent.EventSubType.FAILURE,
@@ -264,6 +253,20 @@ def process_block_allowance_with_reporting(
         logger.info(f"Block allowance processing for block {block_number} took {duration} seconds")
         # Record processing duration in Prometheus metric instead of SystemEvent
         VALIDATOR_BLOCK_ALLOWANCE_PROCESSING_DURATION.observe(duration)
+
+        if live and data:
+            stake_shares, manifests, duration = data[max(data.keys())]
+
+            for validator_ss58, stake_share in stake_shares.items():
+                VALIDATOR_STAKE_SHARE_REPORT.labels(validator_ss58).set(stake_share)
+
+            for miner_exec_class, count in manifests.items():
+                miner_hotkey, executor_class = miner_exec_class
+                VALIDATOR_MINER_MANIFEST_REPORT.labels(miner_hotkey, executor_class.value).set(
+                    count
+                )
+
+            VALIDATOR_BLOCK_DURATION.set(duration)
 
 
 def report_checkpoint(block_number_lt: int, block_number_gte: int):

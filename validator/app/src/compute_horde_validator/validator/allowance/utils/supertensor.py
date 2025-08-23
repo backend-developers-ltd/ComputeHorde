@@ -15,6 +15,7 @@ from typing import Any, TypeVar, assert_never
 import bittensor_wallet
 import tenacity
 import turbobt
+import websockets
 from bt_ddos_shield.shield_metagraph import ShieldMetagraphOptions
 from bt_ddos_shield.turbobt import ShieldedBittensor
 from compute_horde.blockchain.block_cache import get_current_block
@@ -31,7 +32,15 @@ subnet_context: contextvars.ContextVar[turbobt.subnet.SubnetReference] = context
 logger = logging.getLogger(__name__)
 
 
-class SuperTensorTimeout(TimeoutError):
+class SuperTensorError(Exception):
+    pass
+
+
+class SuperTensorTimeout(SuperTensorError, TimeoutError):
+    pass
+
+
+class CannotGetCurrentBlock(SuperTensorError):
     pass
 
 
@@ -206,7 +215,11 @@ class SuperTensor(BaseSuperTensor):
         return self._wallet
 
     def get_current_block(self) -> int:
-        return get_current_block() - 5
+        try:
+            current_block = get_current_block()
+        except websockets.exceptions.ConcurrencyError as ex:
+            raise CannotGetCurrentBlock("Cannot get current block from blockchain") from ex
+        return current_block - 5
 
 
 N_THREADS = 10
@@ -250,7 +263,7 @@ class InMemoryCache(BaseCache):
         return self._block_timestamp_cache.get(block_number)
 
 
-class PrecachingSuperTensorCacheMiss(Exception):
+class PrecachingSuperTensorCacheMiss(SuperTensorError):
     pass
 
 
