@@ -3,7 +3,6 @@ import math
 from datetime import timedelta
 from typing import assert_never
 
-from compute_horde.blockchain.block_cache import aget_current_block
 from compute_horde.executor_class import EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
@@ -20,11 +19,11 @@ from compute_horde_validator.validator.allowance.types import Miner as Allowance
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
-    MetagraphSnapshot,
     Miner,
     MinerManifest,
     MinerPreliminaryReservation,
 )
+from compute_horde_validator.validator.pylon import pylon_client
 from compute_horde_validator.validator.routing.base import RoutingBase
 from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
@@ -109,13 +108,8 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         request.download_time_limit + request.execution_time_limit + request.upload_time_limit
     )
 
-    block: int | None = None
-    try:
-        block = (await MetagraphSnapshot.aget_latest()).block
-    except Exception as exc:
-        logger.warning(f"Failed to get latest metagraph snapshot: {exc}")
-        block = await aget_current_block()
-    assert block is not None, "Failed to get current block from cache or subtensor."
+    block = pylon_client().get_latest_block()
+    assert block is not None, "Failed to get current block from pylon"
 
     if not await aget_config("DYNAMIC_ALLOW_CROSS_CYCLE_ORGANIC_JOBS"):
         seconds_remaining_in_cycle = _get_seconds_remaining_in_current_cycle(block)

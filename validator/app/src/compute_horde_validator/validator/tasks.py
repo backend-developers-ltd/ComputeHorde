@@ -39,6 +39,7 @@ from django.db import transaction
 from django.utils.timezone import now
 from numpy.typing import NDArray
 from pydantic import JsonValue, TypeAdapter
+from pylon_common.models import Metagraph
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator import collateral
@@ -63,7 +64,7 @@ from compute_horde_validator.validator.organic_jobs.miner_driver import (
     drive_organic_job,
     execute_organic_job_request,
 )
-from compute_horde_validator.validator.pylon import pylon_client
+from compute_horde_validator.validator.pylon import get_serving_hotkeys, pylon_client
 from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.s3 import (
     download_prompts_from_s3_url,
@@ -1271,17 +1272,23 @@ async def get_manifests_from_miners(
 
 @app.task
 def set_compute_time_allowances() -> None:
-    metagraph = MetagraphSnapshot.get_cycle_start()
-    current_cycle = Cycle.from_block(metagraph.block, netuid=settings.BITTENSOR_NETUID)
+    # Get current block to determine the cycle
+    current_block = pylon_client().get_latest_block()
+    current_cycle = Cycle.from_block(current_block, netuid=settings.BITTENSOR_NETUID)
     if current_cycle.set_compute_time_allowance:
         logger.debug(f"allowances already calculated for cycle {current_cycle}")
         return
+
+    # Get metagraph at cycle start block for consistent allowance calculation
+    cycle_start_metagraph = pylon_client().get_metagraph(block=current_cycle.start)
 
     set_success = False
     try:
         current_cycle.set_compute_time_allowance = True
         current_cycle.save()
-        set_success = async_to_sync(_set_compute_time_allowances)(metagraph, current_cycle)
+        set_success = async_to_sync(_set_compute_time_allowances)(
+            cycle_start_metagraph, current_cycle
+        )
 
     except Exception:
         msg = "Failed to set compute time allowances: {e}"
@@ -1298,7 +1305,7 @@ def set_compute_time_allowances() -> None:
         current_cycle.save()
 
 
-async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycle) -> bool:
+async def _set_compute_time_allowances(metagraph: Metagraph, cycle: Cycle) -> bool:
     """
     Calculate and save allowances for all validator-miner pairs at the beginning of a cycle.
     """
@@ -1308,14 +1315,15 @@ async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycl
         "cycle_stop": cycle.stop,
     }
 
-    miners_hotkeys = metagraph.get_serving_hotkeys()
+    metagraph = pylon_client().get_metagraph()
+    miners_hotkeys = get_serving_hotkeys(metagraph.get_neurons())
     if len(miners_hotkeys) == 0:
         msg = "No miners in the last metagraph snapshot - will NOT set compute time allowances"
         await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
         logger.warning(msg)
         return False
 
-    total_stake = metagraph.get_total_validator_stake()
+    total_stake = sum(neuron.stake for neuron in metagraph.get_neurons())
     if total_stake is None or total_stake <= 0.0:
         msg = "Total stake for last_metagraph snapshot is 0 - skipping compute time allowances"
         await save_compute_time_allowance_event(SystemEvent.EventSubType.GIVING_UP, msg, data)
@@ -1325,10 +1333,10 @@ async def _set_compute_time_allowances(metagraph: MetagraphSnapshot, cycle: Cycl
     # compute stake proportion for each validator
     hotkey_to_stake_proportion = {}
     validators_hotkeys = []
-    for hotkey, stake in zip(metagraph.hotkeys, metagraph.stake):
-        if stake > MIN_VALIDATOR_STAKE:
-            validators_hotkeys.append(hotkey)
-            hotkey_to_stake_proportion[hotkey] = stake / total_stake
+    for neuron in metagraph.get_neurons():
+        if neuron.stake >= MIN_VALIDATOR_STAKE:
+            validators_hotkeys.append(neuron.hotkey)
+            hotkey_to_stake_proportion[neuron.hotkey] = neuron.stake / total_stake
     logger.debug(f"Validator stake proportion: {hotkey_to_stake_proportion}")
     data["validator_stake_proportion"] = hotkey_to_stake_proportion
 

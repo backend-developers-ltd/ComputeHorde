@@ -7,6 +7,8 @@ from pytest_mock import MockerFixture
 
 from compute_horde_validator.validator.organic_jobs.miner_driver import execute_organic_job_request
 
+from ...tests.helpers import mocked_pylon_client
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,3 +71,13 @@ def miner_keypair():
     return bittensor_wallet.Keypair.create_from_mnemonic(
         "almost fatigue race slim picnic mass better clog deal solve already champion"
     )
+
+
+@pytest.fixture
+def patch_pylon_client():
+    mock_pylon_client = mocked_pylon_client()
+    with patch(
+        "compute_horde_validator.validator.routing.default.pylon_client",
+        return_value=mock_pylon_client,
+    ):
+        yield mock_pylon_client

@@ -18,7 +18,6 @@ from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
     Cycle,
-    MetagraphSnapshot,
     Miner,
     MinerBlacklist,
     MinerManifest,
@@ -32,6 +31,8 @@ from compute_horde_validator.validator.routing.types import (
     NotEnoughTimeInCycle,
 )
 from compute_horde_validator.validator.utils import TRUSTED_MINER_FAKE_KEY
+
+from ...tests.helpers import mock_pylon_neuron
 
 JOB_REQUEST = V2JobRequest(
     uuid=str(uuid.uuid4()),
@@ -64,7 +65,7 @@ def validator(settings):
 
 
 @pytest.fixture(autouse=True)
-def setup_db(miners, validator):
+def setup_db(miners, validator, patch_pylon_client):  # noqa
     now = timezone.now()
     cycle = Cycle.objects.create(start=1, stop=2)
     batch = SyntheticJobBatch.objects.create(block=1, created_at=now, cycle=cycle)
@@ -77,16 +78,15 @@ def setup_db(miners, validator):
             executor_count=5,
             online_executor_count=5,
         )
-    MetagraphSnapshot.objects.create(
-        id=MetagraphSnapshot.SnapshotType.LATEST,
-        block=1,
-        alpha_stake=[2000] + [0] * len(miners),
-        tao_stake=[2000] + [0] * len(miners),
-        stake=[2000] + [0] * len(miners),
-        uids=list(range(len(miners) + 1)),
-        hotkeys=[validator.hotkey] + [m.hotkey for m in miners],
-        serving_hotkeys=["miner_0", "miner_1"],
-    )
+
+    neurons = [mock_pylon_neuron(0, validator.hotkey, 2000)]  # validator
+    for i, miner in enumerate(miners):
+        neurons.append(mock_pylon_neuron(i + 1, miner.hotkey, 0, i < 2))
+
+    metagraph_data = {"block": 1, "block_hash": "0x123", "neurons": {n.hotkey: n for n in neurons}}
+    patch_pylon_client.override("get_metagraph", metagraph_data)
+    patch_pylon_client.override("get_latest_block", 1)
+
     for miner in miners:
         ComputeTimeAllowance.objects.create(
             cycle=cycle,
@@ -351,17 +351,6 @@ async def test_pick_miner_for_job__collateral_tiebreak_on_equal_allowance_percen
 
     job_route = await routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route.miner.hotkey_ss58 == miner2.hotkey
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-@patch("compute_horde_validator.validator.routing.default.aget_current_block")
-async def test_pick_miner_for_job__use_subtensor_for_block_on_cache_miss(
-    mocked_aget_current_block, miners
-):
-    mocked_aget_current_block.return_value = 1
-    await MetagraphSnapshot.objects.all().adelete()
-    await routing().pick_miner_for_job_request(JOB_REQUEST)
 
 
 @pytest.mark.django_db(transaction=True)
