@@ -5,10 +5,12 @@ import logging
 import warnings
 from typing import Any
 
+import bittensor
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import (
     MAX_EXECUTOR_TIMEOUT,
 )
+from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
@@ -154,8 +156,13 @@ class ExecutorClassPool:
 
 
 class BaseExecutorManager(metaclass=abc.ABCMeta):
-    def __init__(self):
+    def __init__(self, *, subtensor: bittensor.AsyncSubtensor | None = None):
         self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
+
+        if subtensor is None:
+            subtensor = bittensor.AsyncSubtensor(network=settings.BITTENSOR_NETWORK)
+
+        self._subtensor = subtensor
 
     @abc.abstractmethod
     async def start_new_executor(self, token, executor_class, timeout):
@@ -253,6 +260,32 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         Returns:
             The main hotkey for this coldkey, or None if no main hotkey
         """
-        # Get the miner's own hotkey
-        my_hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address  # type: str
-        return my_hotkey
+        my_hotkey: str = settings.BITTENSOR_WALLET().hotkey.ss58_address
+        hotkeys: list[str] = settings.HOTKEYS_FOR_MAIN_HOTKEY_SELECTION
+
+        if not hotkeys:
+            return my_hotkey
+
+        if my_hotkey not in hotkeys:
+            logger.warning(f"My hotkey {my_hotkey} not in hotkeys for main hotkey selection")
+
+        try:
+            current_block = await self._subtensor.get_current_block()
+        except Exception as e:
+            logger.error(f"Failed to get current block, using own hotkey as main hotkey: {e!r}")
+            return my_hotkey
+
+        cycle_number = _get_cycle_number(current_block, settings.BITTENSOR_NETUID)
+        return hotkeys[cycle_number % len(hotkeys)]
+
+
+def _get_cycle_number(block: int, netuid: int) -> int:
+    """
+    Returns the cycle number for the cycle containing the given block.
+    Assumes the cycle containing block 0 is cycle 0.
+    """
+    cycle = get_cycle_containing_block(block, netuid)
+    zero_cycle = get_cycle_containing_block(0, netuid)
+    cycle_interval = cycle.stop - cycle.start
+    cycle_number = (cycle.start - zero_cycle.start) // cycle_interval
+    return cycle_number
