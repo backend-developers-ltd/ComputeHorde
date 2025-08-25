@@ -6,7 +6,6 @@ from django.conf import settings
 from django.utils.timezone import now
 
 from .models import (
-    ComputeTimeAllowance,
     MinerBlacklist,
     MinerPreliminaryReservation,
     OrganicJob,
@@ -35,7 +34,6 @@ def evict_all() -> None:
     evict_system_events()
     evict_miner_blacklist()
     evict_miner_preliminary_reservations()
-    evict_compute_time_allowances()
 
 
 def evict_system_events() -> None:
@@ -82,9 +80,3 @@ def evict_miner_preliminary_reservations():
     logger.info("Evicting old expired miner preliminary reservations")
     cutoff = now() - MINER_PRELIMINARY_RESERVATION_RETENTION_PERIOD
     MinerPreliminaryReservation.objects.filter(expires_at__lt=cutoff).delete()
-
-
-def evict_compute_time_allowances():
-    logger.info("Evicting old compute time allowances")
-    cutoff = now() - COMPUTE_TIME_ALLOWANCE_RETENTION_PERIOD
-    ComputeTimeAllowance.objects.filter(created_at__lt=cutoff).delete()
