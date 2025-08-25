@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 import websockets
+from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
@@ -20,11 +21,12 @@ from compute_horde.fv_protocol.validator_requests import (
     V0AuthenticationRequest,
     V0MachineSpecsUpdate,
 )
-from django.conf import settings
 from django.utils import timezone
 
+from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.utils import blocks, manifests
+from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.models import (
-    ComputeTimeAllowance,
     Cycle,
     MetagraphSnapshot,
     Miner,
@@ -51,14 +53,23 @@ DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
 
 @asynccontextmanager
 async def async_patch_all():
-    with (
-        patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
-            return_value=True,
-        ),
-        patch("turbobt.Bittensor"),
-    ):
-        yield
+    with await sync_to_async(set_block_number)(1000):
+        await sync_to_async(manifests.sync_manifests)()
+    for block_number in range(1001, 1005):
+        with await sync_to_async(set_block_number)(block_number):
+            await sync_to_async(blocks.process_block_allowance_with_reporting)(
+                block_number, supertensor_=supertensor()
+            )
+
+    with await sync_to_async(set_block_number)(1006):
+        with (
+            patch(
+                "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
+                return_value=True,
+            ),
+            patch("turbobt.Bittensor"),
+        ):
+            yield
 
 
 async def setup_db(n: int = 1):
@@ -73,7 +84,6 @@ async def setup_db(n: int = 1):
         await Miner.objects.acreate(hotkey=f"miner_{i}", collateral_wei=Decimal(10**18))
         for i in range(0, n)
     ]
-    validator = await Miner.objects.acreate(hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address)
     for i, miner in enumerate(miners):
         await MinerManifest.objects.acreate(
             miner=miner,
@@ -81,13 +91,6 @@ async def setup_db(n: int = 1):
             created_at=now - timedelta(minutes=i * 2),
             executor_class=DEFAULT_EXECUTOR_CLASS,
             online_executor_count=5,
-        )
-        await ComputeTimeAllowance.objects.acreate(
-            cycle=cycle,
-            miner=miner,
-            validator=validator,
-            initial_allowance=1e10,
-            remaining_allowance=1e10,
         )
     await MetagraphSnapshot.objects.acreate(
         id=MetagraphSnapshot.SnapshotType.LATEST,

@@ -49,3 +49,5 @@ CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"
 CONSTANCE_DATABASE_CACHE_BACKEND = None
 
 DEBUG_MINER_KEY = None
+
+COMPUTE_HORDE_BLOCK_CACHE_KEY = "test-block-cache-key"
