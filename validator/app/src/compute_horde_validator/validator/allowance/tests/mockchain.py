@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 from contextlib import contextmanager
 from unittest import mock
@@ -311,10 +310,7 @@ def set_block_number(block_number_):
         for hotkey, manifest_request, delay in responses:
             if isinstance(manifest_request, V0ExecutorManifestRequest):
                 transport = SimulationTransport(f"sim_{hotkey}")
-                # Use asyncio.run to handle the async operation
-                asyncio.run(
-                    transport.add_message(manifest_request, send_before=1, sleep_before=delay)
-                )
+                transport.add_message_sync(manifest_request, send_before=1, sleep_before=delay)
                 transport_map[hotkey] = transport
 
         return transport_map
