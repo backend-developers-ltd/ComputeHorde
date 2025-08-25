@@ -5,10 +5,12 @@ import logging
 import warnings
 from typing import Any
 
+import bittensor
 from asgiref.sync import sync_to_async
 from compute_horde.executor_class import (
     MAX_EXECUTOR_TIMEOUT,
 )
+from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
@@ -154,8 +156,13 @@ class ExecutorClassPool:
 
 
 class BaseExecutorManager(metaclass=abc.ABCMeta):
-    def __init__(self):
+    def __init__(self, *, subtensor: bittensor.AsyncSubtensor | None = None):
         self._executor_class_pools: dict[ExecutorClass, ExecutorClassPool] = {}
+
+        if subtensor is None:
+            subtensor = bittensor.AsyncSubtensor(network=settings.BITTENSOR_NETWORK)
+
+        self._subtensor = subtensor
 
     @abc.abstractmethod
     async def start_new_executor(self, token, executor_class, timeout):
@@ -253,6 +260,43 @@ class BaseExecutorManager(metaclass=abc.ABCMeta):
         Returns:
             The main hotkey for this coldkey, or None if no main hotkey
         """
-        # Get the miner's own hotkey
-        my_hotkey = settings.BITTENSOR_WALLET().hotkey.ss58_address  # type: str
-        return my_hotkey
+        my_hotkey: str = settings.BITTENSOR_WALLET().hotkey.ss58_address
+        hotkeys: list[str] = settings.HOTKEYS_FOR_MAIN_HOTKEY_SELECTION
+
+        if not hotkeys:
+            return my_hotkey
+
+        if my_hotkey not in hotkeys:
+            logger.warning(f"My hotkey {my_hotkey} not in hotkeys for main hotkey selection")
+
+        current_block = await _get_current_block(self._subtensor)
+        if current_block is None:
+            return my_hotkey
+
+        cycle_number = _get_cycle_number(current_block, settings.BITTENSOR_NETUID)
+        return hotkeys[cycle_number % len(hotkeys)]
+
+
+async def _get_current_block(subtensor: bittensor.AsyncSubtensor) -> int | None:
+    # NOTE: bittensor.AsyncSubtensor auto-reconnects on connection failure,
+    # so we just do a simple retry here.
+    for attempt in range(3):
+        try:
+            block: int = await subtensor.get_current_block()
+            return block
+        except Exception as e:
+            logger.error(f"Failed to get current block on {attempt=}: {e!r}")
+            await asyncio.sleep(0.2 * 2**attempt)
+    return None
+
+
+def _get_cycle_number(block: int, netuid: int) -> int:
+    """
+    Returns the cycle number for the cycle containing the given block.
+    Assumes the cycle containing block 0 is cycle 0.
+    """
+    cycle = get_cycle_containing_block(block, netuid)
+    zero_cycle = get_cycle_containing_block(0, netuid)
+    cycle_interval = cycle.stop - cycle.start
+    cycle_number = (cycle.start - zero_cycle.start) // cycle_interval
+    return cycle_number

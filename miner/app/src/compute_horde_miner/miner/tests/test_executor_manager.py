@@ -42,8 +42,8 @@ class DummyExecutor:
 
 
 class DummyExecutorManager(BaseExecutorManager):
-    def __init__(self, manifest, runtime_offset=0):
-        super().__init__()
+    def __init__(self, manifest, runtime_offset=0, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.manifest = manifest
         self.executors = []
         self.runtime_offset = runtime_offset
