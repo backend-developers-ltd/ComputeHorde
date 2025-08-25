@@ -21,7 +21,7 @@ VALIDATOR_WALLET_HOTKEY = "default"
 
 
 @cache
-def get_misc_wallet() -> bittensor_wallet.Wallet:
+def get_test_misc_wallet() -> bittensor_wallet.Wallet:
     wallet = bittensor_wallet.Wallet(
         name=MISC_WALLET_NAME,
         hotkey=MISC_WALLET_HOTKEY,
@@ -41,7 +41,7 @@ def get_misc_wallet() -> bittensor_wallet.Wallet:
 
 
 @cache
-def get_miner_wallet() -> bittensor_wallet.Wallet:
+def get_test_miner_wallet() -> bittensor_wallet.Wallet:
     wallet = bittensor_wallet.Wallet(
         name=MINER_WALLET_NAME,
         hotkey=MINER_WALLET_HOTKEY,
@@ -61,7 +61,7 @@ def get_miner_wallet() -> bittensor_wallet.Wallet:
 
 
 @cache
-def get_validator_wallet() -> bittensor_wallet.Wallet:
+def get_test_validator_wallet() -> bittensor_wallet.Wallet:
     wallet = bittensor_wallet.Wallet(
         name=VALIDATOR_WALLET_NAME,
         hotkey=VALIDATOR_WALLET_HOTKEY,

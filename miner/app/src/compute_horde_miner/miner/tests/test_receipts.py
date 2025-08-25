@@ -2,7 +2,6 @@ from datetime import datetime
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
-import bittensor
 import pytest
 from compute_horde.protocol_messages import (
     JobFinishedReceiptPayload,
@@ -14,6 +13,10 @@ from compute_horde.protocol_messages import (
 )
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobAcceptedReceiptPayload
+from compute_horde.test_wallet import (
+    get_test_miner_wallet,
+    get_test_validator_wallet,
+)
 from compute_horde.utils import sign_blob
 from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
@@ -39,13 +42,14 @@ def job_uuid():
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_receipt_is_saved(
-    validator_wallet: bittensor.wallet,
-    miner_wallet: bittensor.wallet,
     mocker: MockerFixture,
     organic_job: bool,
     job_uuid: str,
     settings,
 ) -> None:
+    validator_wallet = get_test_validator_wallet()
+    miner_wallet = get_test_miner_wallet()
+
     executor = mocker.patch("compute_horde_miner.miner.miner_consumer.validator_interface.current")
     receipt_store_factory = mocker.patch(
         "compute_horde_miner.miner.miner_consumer.validator_interface.current_store"
@@ -69,7 +73,8 @@ async def test_receipt_is_saved(
 
     # 1. Authenticate to miner as test validator
     # 2. Send JobStarted and JobFinished receipts
-    async with fake_validator(validator_wallet) as fake_validator_channel:
+    async with fake_validator() as fake_validator_channel:
+        validator_wallet = get_test_validator_wallet()
         # Authenticate, otherwise the consumer will refuse to talk to us
         auth_payload = ValidatorAuthForMiner(
             validator_hotkey=validator_wallet.hotkey.ss58_address,

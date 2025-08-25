@@ -23,7 +23,7 @@ from compute_horde.fv_protocol.facilitator_requests import (
     to_json_array,
 )
 from compute_horde.fv_protocol.validator_requests import V0AuthenticationRequest
-from compute_horde.test_wallet import get_misc_wallet
+from compute_horde.test_wallet import get_test_misc_wallet
 
 
 @pytest.fixture
@@ -57,7 +57,7 @@ def test_hash_message_signature(sample_data, sample_signature):
 
 @freezegun.freeze_time("2024-06-20T01:02:03.456789")
 def test_bittensor_wallet_signer_sign(sample_data):
-    signature_wallet = get_misc_wallet()
+    signature_wallet = get_test_misc_wallet()
     signer = BittensorWalletSigner(signature_wallet)
     signature = signer.sign(sample_data)
 
@@ -98,7 +98,7 @@ def test_bittensor_wallet_verifier_verify_signature_timeout(sample_data, sample_
     ],
 )
 def test_bittensor_wallet__sign_n_verify(data):
-    signature_wallet = get_misc_wallet()
+    signature_wallet = get_test_misc_wallet()
     signer = BittensorWalletSigner(signature_wallet)
     verifier = BittensorWalletVerifier()
 

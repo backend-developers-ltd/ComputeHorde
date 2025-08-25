@@ -8,7 +8,6 @@ import bittensor_wallet
 import pytest
 import turbobt
 from compute_horde.executor_class import EXECUTOR_CLASS
-from compute_horde.test_wallet import get_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pytest_mock import MockerFixture
 
@@ -62,11 +61,6 @@ def _patch_collateral_contract_address(mocker: MockerFixture):
             f"compute_horde_validator.validator.collateral.{name}",
             return_value="0x7b89cb9B1D5B6A9F2296072885019D8Bfecc704A",
         )
-
-
-@pytest.fixture(scope="session", autouse=True)
-def wallet():
-    return get_validator_wallet()
 
 
 @pytest.fixture

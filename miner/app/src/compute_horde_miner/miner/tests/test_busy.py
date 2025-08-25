@@ -12,6 +12,10 @@ from compute_horde.protocol_messages import (
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
+from compute_horde.test_wallet import (
+    get_test_miner_wallet,
+    get_test_validator_wallet,
+)
 from compute_horde.utils import sign_blob
 from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
@@ -44,7 +48,9 @@ async def _authenticate(channel, validator, miner_hotkey):
     await channel.send_to(auth_payload.model_dump_json())
 
 
-async def _send_initial_job_request(validator_channel, validator_wallet, miner_wallet, job_uuid):
+async def _send_initial_job_request(validator_channel, job_uuid):
+    validator_wallet = get_test_validator_wallet()
+    miner_wallet = get_test_miner_wallet()
     job_started_receipt_payload = JobStartedReceiptPayload(
         job_uuid=job_uuid,
         is_organic=True,
@@ -70,7 +76,10 @@ async def _send_initial_job_request(validator_channel, validator_wallet, miner_w
     )
 
 
-async def test_receipt_stored_before_executor_reserved(job_uuid, validator_wallet, miner_wallet):
+async def test_receipt_stored_before_executor_reserved(job_uuid):
+    validator_wallet = get_test_validator_wallet()
+    miner_wallet = get_test_miner_wallet()
+
     receipt_created_before_executor_reserved = False
 
     async def _on_start_new_executor(*args, **kwargs):
@@ -82,19 +91,20 @@ async def test_receipt_stored_before_executor_reserved(job_uuid, validator_walle
         await Validator.objects.acreate(
             public_key=validator_wallet.hotkey.ss58_address, active=True
         )
-        async with fake_validator(validator_wallet) as validator_channel:
+        async with fake_validator() as validator_channel:
             await _authenticate(
                 validator_channel, validator_wallet, miner_wallet.hotkey.ss58_address
             )
-            await _send_initial_job_request(
-                validator_channel, validator_wallet, miner_wallet, job_uuid
-            )
+            await _send_initial_job_request(validator_channel, job_uuid)
 
         reserve_executor_class.assert_called()
         assert receipt_created_before_executor_reserved
 
 
-async def test_reject_as_busy_when_busy(job_uuid, validator_wallet, miner_wallet):
+async def test_reject_as_busy_when_busy(job_uuid):
+    validator_wallet = get_test_validator_wallet()
+    miner_wallet = get_test_miner_wallet()
+
     await Validator.objects.acreate(public_key=validator_wallet.hotkey.ss58_address, active=True)
 
     # Insert some receipts
@@ -139,15 +149,13 @@ async def test_reject_as_busy_when_busy(job_uuid, validator_wallet, miner_wallet
         reserve_executor_class.side_effect = AllExecutorsBusy()
         wait_for_executor_reservation.side_effect = AllExecutorsBusy()
 
-        async with fake_validator(validator_wallet) as validator_channel:
+        async with fake_validator() as validator_channel:
             await _authenticate(
                 validator_channel, validator_wallet, miner_wallet.hotkey.ss58_address
             )
             await validator_channel.receive_from()  # this gets the manifest
 
-            await _send_initial_job_request(
-                validator_channel, validator_wallet, miner_wallet, job_uuid
-            )
+            await _send_initial_job_request(validator_channel, job_uuid)
             response = await validator_channel.receive_json_from()
 
             assert response["message_type"] == "V0DeclineJobRequest"
