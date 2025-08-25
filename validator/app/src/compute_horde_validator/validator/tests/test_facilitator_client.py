@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 import websockets
+from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import (
@@ -23,6 +24,9 @@ from compute_horde.fv_protocol.validator_requests import (
 from django.conf import settings
 from django.utils import timezone
 
+from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
+from compute_horde_validator.validator.allowance.utils import blocks, manifests
+from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.models import (
     ComputeTimeAllowance,
     Cycle,
@@ -51,14 +55,23 @@ DYNAMIC_ORGANIC_JOB_MAX_RETRIES_OVERRIDE = 3
 
 @asynccontextmanager
 async def async_patch_all():
-    with (
-        patch(
-            "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
-            return_value=True,
-        ),
-        patch("turbobt.Bittensor"),
-    ):
-        yield
+    with await sync_to_async(set_block_number)(1000):
+        await sync_to_async(manifests.sync_manifests)()
+    for block_number in range(1001, 1005):
+        with await sync_to_async(set_block_number)(block_number):
+            await sync_to_async(blocks.process_block_allowance_with_reporting)(
+                block_number, supertensor_=supertensor()
+            )
+
+    with await sync_to_async(set_block_number)(1006):
+        with (
+            patch(
+                "compute_horde_validator.validator.organic_jobs.facilitator_client.verify_request_or_fail",
+                return_value=True,
+            ),
+            patch("turbobt.Bittensor"),
+        ):
+            yield
 
 
 async def setup_db(n: int = 1):

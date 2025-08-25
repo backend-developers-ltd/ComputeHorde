@@ -42,6 +42,7 @@ from compute_horde_core.signature import SignedRequest, verify_signature
 from django.conf import settings
 from pydantic import BaseModel
 
+from compute_horde_validator.validator.allowance.types import NotEnoughAllowanceException
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     MinerBlacklist,
@@ -52,10 +53,7 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.organic_jobs import blacklist
 from compute_horde_validator.validator.organic_jobs.blacklist import report_miner_failed_job
 from compute_horde_validator.validator.routing.default import routing
-from compute_horde_validator.validator.routing.types import (
-    JobRoutingException,
-    NotEnoughTimeInCycle,
-)
+from compute_horde_validator.validator.routing.types import JobRoutingException
 from compute_horde_validator.validator.tasks import (
     execute_organic_job_request_on_worker,
     slash_collateral_task,
@@ -407,18 +405,12 @@ class FacilitatorClient:
                 rejected_by=JobParticipantType.VALIDATOR,
                 reason=JobRejectionReason.INVALID_SIGNATURE,
             )
-        except JobRoutingException as e:
-            match e:
-                case NotEnoughTimeInCycle():
-                    reason = JobRejectionReason.NOT_ENOUGH_TIME_IN_CYCLE
-                case _:
-                    reason = JobRejectionReason.NO_MINER_FOR_JOB
-
+        except (NotEnoughAllowanceException, JobRoutingException) as e:
             await self.send_job_rejected(
                 job_uuid=job_request.uuid,
                 message="Job could not be routed to a miner",
                 rejected_by=JobParticipantType.VALIDATOR,
-                reason=reason,
+                reason=JobRejectionReason.NO_MINER_FOR_JOB,
                 context={"exception_type": type(e).__qualname__},
             )
         except Exception as e:
