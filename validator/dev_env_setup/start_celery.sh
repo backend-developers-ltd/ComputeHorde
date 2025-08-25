@@ -7,30 +7,37 @@ cd "$THIS_DIR"
 cd ../app/src
 ./manage.py migrate
 
-# Default concurrency = 2
 CELERY_CONCURRENCY=${CELERY_CONCURRENCY:-2}
-# Default loglevel = DEBUG
 CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-DEBUG}
 
-# below we define two workers types (each may have any concurrency);
-# each worker may have its own settings
-WORKERS="default weights jobs llm receipts organic_jobs metagraph"
+WORKERS="default weights jobs scores llm receipts organic_jobs metagraph"
 OPTIONS="-E -l $CELERY_LOGLEVEL --pidfile=/tmp/celery-validator-%n.pid --logfile=/tmp/celery-validator-%n.log"
 
-# shellcheck disable=SC2086
-celery -A compute_horde_validator multi start $WORKERS $OPTIONS \
+MAC_OPTS=""
+if [ "$(uname -s)" = "Darwin" ]; then
+  MAC_OPTS="-P solo -c 1"
+  # on mac os (at least on silicone) celery workers die with sigsev or sigabrt when connecting to postgres
+  # without these options
+fi
+
+# shellcheck disable=2086
+celery -A compute_horde_validator multi start $WORKERS $OPTIONS $MAC_OPTS \
     -Q:default default --autoscale:generic=$CELERY_CONCURRENCY \
     -Q:weights weights --autoscale:weights=$CELERY_CONCURRENCY \
     -Q:jobs jobs --autoscale:jobs=$CELERY_CONCURRENCY \
     -Q:scores scores --autoscale:scores=$CELERY_CONCURRENCY \
+    -Q:llm llm --autoscale:llm=$CELERY_CONCURRENCY \
     -Q:receipts receipts --autoscale:receipts=$CELERY_CONCURRENCY \
     -Q:metagraph metagraph --autoscale:metagraph=$CELERY_CONCURRENCY \
     -Q:organic_jobs organic_jobs --autoscale:receipts=$CELERY_CONCURRENCY
 
-# shellcheck disable=2064
-trap "celery multi stop $WORKERS $OPTIONS; exit 0" INT TERM
 
 tail -f /tmp/celery-validator-*.log &
+TAIL_PID=$!
+
+# shellcheck disable=2064
+trap "kill -TERM $TAIL_PID 2>/dev/null; celery multi stop $WORKERS $OPTIONS; wait $TAIL_PID 2>/dev/null; exit 0" INT TERM
+
 
 # check celery status periodically to exit if it crashed
 while true; do

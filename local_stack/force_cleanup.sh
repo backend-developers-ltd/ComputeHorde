@@ -24,8 +24,8 @@ get_descendants() {
   echo "$children"
 }
 
-# Find all PIDs matching the "python" keyword
-PIDS=$(ps aux | grep "python" | grep -v grep | awk '{print $2}')
+# Find all PIDs matching the "python", "celery"  and "tail" keywords
+PIDS=$(pgrep -f '(^|/)(python([0-9.]*|w)?|celery|tail)([[:space:]]|$)' | sort -u)
 
 # Iterate over each PID to find and kill the process, its parents, and its children
 for pid in $PIDS; do

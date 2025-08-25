@@ -40,7 +40,7 @@ jobs:
 
       - name: test_simple_job
         working-directory: ./local_stack
-        run: uv run ./send_simple_job.py 5
+        run: uv run ./send_several_subsequent_jobs.py 5
 
       - name: Upload integration test logs
         uses: actions/upload-artifact@v4

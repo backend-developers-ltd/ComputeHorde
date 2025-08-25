@@ -1,3 +1,8 @@
+"""
+This integration test uses a simpler job but tries to send subsequent jobs ASAP
+to detect miner cleanup problem regressions.
+"""
+
 import asyncio
 import pathlib
 import logging
@@ -44,7 +49,7 @@ async def main() -> None:
         compute_horde_job_spec = ComputeHordeJobSpec(
             executor_class=ExecutorClass.always_on__llm__a6000,
             job_namespace="SN123.0",
-            docker_image="alpine",
+            docker_image="alpine:latest",
             args=["sh", "-c", "echo 'Hello, World!' > /artifacts/stuff"],
             artifacts_dir="/artifacts",
             download_time_limit_sec=5,
