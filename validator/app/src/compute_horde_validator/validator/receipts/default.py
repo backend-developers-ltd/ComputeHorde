@@ -14,7 +14,7 @@ from compute_horde.receipts.models import (
 )
 from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStartedReceiptPayload
 from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
-from compute_horde.receipts.transfer import ReceiptsTransfer, TransferResult, MinerInfo
+from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer, TransferResult
 from compute_horde.utils import sign_blob
 from django.conf import settings
 from django.utils import timezone
@@ -24,6 +24,7 @@ from compute_horde_validator.validator.allowance.utils.supertensor import supert
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import MetagraphSnapshot, Miner
 from compute_horde_validator.validator.models.allowance.internal import Block
+
 from .base import ReceiptsBase
 from .types import TransferIsDisabled
 
@@ -366,7 +367,7 @@ class Receipts(ReceiptsBase):
                     semaphore=asyncio.Semaphore(50),
                 ),
             )
-    
+
     def _push_common_metrics(self, result: TransferResult) -> None:
         # Push line error counts grouped by the exception type
         n_line_errors: defaultdict[type[Exception], int] = defaultdict(int)
@@ -384,7 +385,7 @@ class Receipts(ReceiptsBase):
 
         self.metrics.receipts.inc(result.n_receipts)
         self.metrics.successful_transfers.inc(result.n_successful_transfers)
-    
+
     async def _throw_if_disabled(self) -> None:
         try:
             if await aget_config("DYNAMIC_RECEIPT_TRANSFER_ENABLED"):

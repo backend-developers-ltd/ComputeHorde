@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
-from compute_horde.receipts.transfer import TransferResult
 
 
 class ReceiptsBase(ABC):

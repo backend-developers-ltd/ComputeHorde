@@ -112,12 +112,11 @@ async def test_transfer_receipts_from_miners_happy_path(settings):
             hotkey=miner_hotkey, address="127.0.0.1", port=port
         )
 
-
         await receipts().run_receipts_transfer(
             daemon=False,
             debug_miner_hotkey=miner_hotkey,
             debug_miner_ip="127.0.0.1",
-            debug_miner_port=port
+            debug_miner_port=port,
         )
 
         stored_started = await sync_to_async(
