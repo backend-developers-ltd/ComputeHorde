@@ -6,7 +6,6 @@ from asgiref.sync import sync_to_async
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
 
-from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
 from compute_horde_validator.validator.allowance.types import NotEnoughAllowanceException
 from compute_horde_validator.validator.allowance.utils import blocks, manifests
