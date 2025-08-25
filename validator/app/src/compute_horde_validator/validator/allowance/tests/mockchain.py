@@ -7,7 +7,7 @@ from unittest.mock import patch
 import turbobt
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.protocol_messages import V0ExecutorManifestRequest
-from compute_horde.test_wallet import get_validator_wallet
+from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel
 
@@ -55,7 +55,7 @@ def cmbm(block_number):
 
 
 def wallet():
-    return get_validator_wallet()
+    return get_test_validator_wallet()
 
 
 VALIDATOR_HOTKEYS = {

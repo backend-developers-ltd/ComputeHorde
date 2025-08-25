@@ -5,7 +5,7 @@ import bittensor_wallet
 from compute_horde.test_wallet import (
     MINER_WALLET_HOTKEY,
     MINER_WALLET_NAME,
-    get_miner_wallet,
+    get_test_miner_wallet,
 )
 
 os.environ.update(
@@ -31,7 +31,7 @@ BITTENSOR_WALLET_HOTKEY_NAME = MINER_WALLET_HOTKEY
 
 
 def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:
-    return get_miner_wallet()
+    return get_test_miner_wallet()
 
 
 CONSTANCE_DATABASE_CACHE_BACKEND = None

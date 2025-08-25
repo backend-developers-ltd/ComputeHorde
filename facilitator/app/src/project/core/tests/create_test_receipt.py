@@ -4,10 +4,10 @@ from datetime import UTC, datetime
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStartedReceiptPayload
-from compute_horde.test_wallet import get_miner_wallet, get_validator_wallet
+from compute_horde.test_wallet import get_test_miner_wallet, get_test_validator_wallet
 
-miner_hotkey = get_miner_wallet().get_hotkey()
-validator_hotkey = get_validator_wallet().get_hotkey()
+miner_hotkey = get_test_miner_wallet().get_hotkey()
+validator_hotkey = get_test_validator_wallet().get_hotkey()
 
 # JobStartedReceipt
 

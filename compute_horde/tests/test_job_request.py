@@ -6,7 +6,7 @@ from compute_horde_core.volume import VolumeType, ZipUrlVolume
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.fv_protocol.facilitator_requests import V2JobRequest
-from compute_horde.test_wallet import get_misc_wallet
+from compute_horde.test_wallet import get_test_misc_wallet
 
 
 def test_signed_job_roundtrip():
@@ -30,7 +30,7 @@ def test_signed_job_roundtrip():
         streaming_start_time_limit=1,
     )
 
-    signature_wallet = get_misc_wallet()
+    signature_wallet = get_test_misc_wallet()
     signer = BittensorWalletSigner(signature_wallet)
     payload = job.json_for_signing()
     raw_signature = signer.sign(payload)

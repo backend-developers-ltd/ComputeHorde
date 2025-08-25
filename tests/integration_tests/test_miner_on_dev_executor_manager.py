@@ -23,8 +23,8 @@ from compute_horde.test_base import ActiveSubnetworkBaseTest
 from compute_horde.test_wallet import (
     MINER_WALLET_NAME,
     VALIDATOR_WALLET_NAME,
-    get_miner_wallet,
-    get_validator_wallet,
+    get_test_miner_wallet,
+    get_test_validator_wallet,
 )
 
 
@@ -52,7 +52,7 @@ class Test(ActiveSubnetworkBaseTest):
 
     @classmethod
     def miner_preparation_tasks(cls):
-        validator_key = get_validator_wallet().get_hotkey().ss58_address
+        validator_key = get_test_validator_wallet().get_hotkey().ss58_address
         db_shell_cmd = f"{sys.executable} miner/app/src/manage.py dbshell"
         for cmd in [
             f'echo "DROP DATABASE IF EXISTS compute_horde_miner_integration_test" | {db_shell_cmd}',
@@ -120,8 +120,8 @@ class Test(ActiveSubnetworkBaseTest):
     @pytest.mark.asyncio
     async def test_echo_image(self):
         job_uuid = str(uuid.uuid4())
-        miner_key = get_miner_wallet().get_hotkey().ss58_address
-        validator_wallet = get_validator_wallet()
+        miner_key = get_test_miner_wallet().get_hotkey().ss58_address
+        validator_wallet = get_test_validator_wallet()
         validator_key = validator_wallet.get_hotkey().ss58_address
 
         payload = "".join(
