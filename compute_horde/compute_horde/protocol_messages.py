@@ -180,6 +180,7 @@ class V0JobRequest(BaseModel):
     raw_script: str | None = None
     docker_run_options_preset: DockerRunOptionsPreset
     docker_run_cmd: list[str]
+    docker_run_env: dict[str, str] | None = None
     volume: Volume | None = None
     output_upload: OutputUpload | None = None
     artifacts_dir: str | None = None
