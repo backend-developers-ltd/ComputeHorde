@@ -54,13 +54,9 @@ def cmbm(block_number):
     return block_number
 
 
-def wallet():
-    return get_test_validator_wallet()
-
-
 VALIDATOR_HOTKEYS = {
     **{i: f"regular_validator_{i}" for i in range(NUM_VALIDATORS - 2) if i != 2},
-    2: wallet().get_hotkey().ss58_address,
+    2: get_test_validator_wallet().get_hotkey().ss58_address,
     # these validators will have a steadily increasing stake
     NUM_VALIDATORS - 2: f"stake_loosing_validator_{NUM_VALIDATORS - 2}",
     # this validator will occasionally get a stake lower than 1000
@@ -305,7 +301,7 @@ def set_block_number(block_number_):
             return get_block_timestamp(block_number)
 
         def wallet(self):
-            return wallet()
+            return get_test_validator_wallet()
 
     # Create transport map from manifest responses
     def create_transport_map():

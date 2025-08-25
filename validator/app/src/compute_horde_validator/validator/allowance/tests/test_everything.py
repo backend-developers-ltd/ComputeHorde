@@ -6,6 +6,7 @@ import random
 from unittest import mock
 
 import pytest
+from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from freezegun import freeze_time
 
@@ -28,7 +29,7 @@ from ..types import (
 from ..utils import blocks, manifests
 from ..utils.manifests import sync_manifests
 from ..utils.supertensor import supertensor
-from .mockchain import MINER_HOTKEYS, manifest_responses, set_block_number, wallet
+from .mockchain import MINER_HOTKEYS, manifest_responses, set_block_number
 from .utils_for_tests import (
     LF,
     Matcher,
@@ -322,7 +323,7 @@ def test_complete(caplog, configure_logs):
     assert get_metric_values_by_remaining_labels(
         VALIDATOR_ALLOWANCE_CHECKPOINT,
         {
-            "validator_hotkey": wallet().get_hotkey().ss58_address,
+            "validator_hotkey": get_test_validator_wallet().get_hotkey().ss58_address,
             "executor_class": ExecutorClass.always_on__llm__a6000.value,
         },
     ) == allowance_dict(
