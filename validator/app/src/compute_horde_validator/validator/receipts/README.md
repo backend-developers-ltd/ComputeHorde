@@ -1,123 +1,107 @@
-# Receipts Module
+### Receipts module: public interface
 
-This module provides an interface for managing receipts in the validator.
+This module manages receipt creation and transfer between validators and miners.
 
-## Basic Usage
+## CLI entry point
 
-```python
-from compute_horde_validator.validator.receipts import Receipts
+- **Command**: `python manage.py transfer_receipts`
+- **Args**:
+  - `--daemon` (flag): run continuously; otherwise runs a single transfer cycle
+  - `--debug-miner-hotkey <str>`: fetch only from this miner (debug)
+  - `--debug-miner-ip <str>`: debug miner IP
+  - `--debug-miner-port <int>`: debug miner port
 
-# Create receipts manager
-receipts = Receipts()
+When all three debug miner parameters are provided, transfer runs in explicit mode for that miner. If not provided and `DEBUG_FETCH_RECEIPTS_FROM_MINERS` is set in settings, transfer runs against those debug miners. Otherwise, miners are resolved from the latest metagraph snapshot.
 
-# Get completed job receipts for scoring
-completed_receipts = receipts.get_completed_job_receipts_for_block_range(
-    start_block=1000, 
-    end_block=2000
-)
+## Python API
 
-# Create a job finished receipt
-receipt = receipts.create_job_finished_receipt(
-    job_uuid="job-123",
-    miner_hotkey="miner_hotkey",
-    validator_hotkey="validator_hotkey",
-    time_started=1640995200,
-    time_took_us=5000000,
-    score_str="0.85"
-)
+Default implementation lives in `compute_horde_validator.validator.receipts.default.Receipts` and implements the abstract interface in `compute_horde_validator.validator.receipts.base.ReceiptsBase`.
 
-# Save the receipt
-receipts.save_receipt(receipt.to_receipt())
-
-# Scrape receipts from miners
-scraped_receipts = await receipts.scrape_receipts_from_miners(["miner1", "miner2"])
-```
-
-## Core Functionality
-
-### Receipts Retrieval
-
-The primary method for retrieve methods in given block range:
+- Run transfer loop (or once):
 
 ```python
-# Get completed job receipts for scoring
-completed_receipts = manager.get_completed_job_receipts_for_block_range(
-    start_block=1000, 
-    end_block=2000
+await receipts().run_receipts_transfer(
+    daemon: bool,
+    debug_miner_hotkey: str | None,
+    debug_miner_ip: str | None,
+    debug_miner_port: int | None,
 )
 ```
 
-### Receipt Creation
-
-The module can create receipts for completed jobs:
+- Create receipts:
 
 ```python
-# Create job finished receipt
-receipt = receipts.create_job_finished_receipt(
-    job_uuid="job-123",
-    miner_hotkey="miner_hotkey",
-    validator_hotkey="validator_hotkey",
-    time_started=1640995200,  # Unix timestamp
-    time_took_us=5000000,     # 5 seconds in microseconds
-    score_str="0.85"
+payload, validator_signature = receipts().create_job_started_receipt(
+    job_uuid: str,
+    miner_hotkey: str,
+    validator_hotkey: str,
+    executor_class: str,
+    is_organic: bool,
+    ttl: int,
+)
+
+finished = receipts().create_job_finished_receipt(
+    job_uuid: str,
+    miner_hotkey: str,
+    validator_hotkey: str,
+    time_started: datetime.datetime,
+    time_took_us: int,
+    score_str: str,
 )
 ```
 
-### Receipt Scraping
-
-The module can scrape receipts from miners:
+- Query receipts:
 
 ```python
-# Scrape receipts from specific miners
-scraped_receipts = await receipts.scrape_receipts_from_miners([
-    "miner_hotkey_1",
-    "miner_hotkey_2"
-], start_block=1000, end_block=2000)
-```
-
-### Receipt Persistence
-
-The module provides methods to save and retrieve receipts:
-
-```python
-# Save a receipt to the database
-receipts.save_receipt(receipt)
-
-# Get a receipt by job UUID
-receipt = receipts.get_receipt_by_job_uuid("job-123")
-```
-
-## Integration with compute_horde
-
-The receipts module uses the `compute_horde.receipts` module internally for:
-- Receipt models and schemas
-- Receipt validation and serialization
-- Receipt transfer functionality
-- Database models and migrations
-
-## Integration with Scoring
-
-The receipts module is designed to work seamlessly with the scoring system:
-
-1. **Block-based filtering**: Provides method to get receipts for specific block ranges
-2. **Completed job receipts**: Specialized method for getting receipts of completed jobs
-3. **Scoring data extraction**: Receipts contain all necessary data for scoring calculations
-4. **Performance metrics**: Job finished receipts include timing and score information
-
-## Error Handling
-
-The module provides specific exceptions for different error scenarios:
-
-```python
-from compute_horde_validator.validator.receipts.exceptions import (
-    ReceiptsConfigurationError,
-    ReceiptsScrapingError,
-    ReceiptsGenerationError,
+# All valid JobStarted for a miner at a timestamp
+receipts: list[JobStartedReceipt] = await receipts().get_valid_job_started_receipts_for_miner(
+    miner_hotkey: str,
+    at_time: datetime.datetime,
 )
 
-try:
-    receipt = receipts.create_job_finished_receipt(...)
-except ReceiptsGenerationError as e:
-    # Handle generation error
-    pass
+# JobFinished for a miner and a set of job UUIDs
+receipts: list[JobFinishedReceipt] = await receipts().get_job_finished_receipts_for_miner(
+    miner_hotkey: str,
+    job_uuids: list[str],
+)
+# Raises: No specific exceptions, returns empty list on errors
+
+# JobStarted by job UUID
+receipt: JobStartedReceipt = await receipts().get_job_started_receipt_by_uuid(job_uuid: str)
+# Raises: JobStartedReceipt.DoesNotExist if receipt not found
+
+# Completed job receipts for a block range [start_block, end_block)
+receipts: list[Receipt] = await receipts().get_completed_job_receipts_for_block_range(
+    start_block: int,
+    end_block: int,
+)
 ```
+
+## Miner selection modes
+
+- **explicit**: when all `debug_miner_*` are passed to `run_receipts_transfer`
+- **debug_settings**: when `settings.DEBUG_FETCH_RECEIPTS_FROM_MINERS` is non-empty
+- **metagraph**: default; miners are taken from `MetagraphSnapshot`
+
+## Configuration
+
+- **Dynamic config** (fetched via `aget_config`):
+  - `DYNAMIC_RECEIPT_TRANSFER_ENABLED: bool` — enable/disable transfer (default: `False`)
+  - `DYNAMIC_RECEIPT_TRANSFER_INTERVAL: int` — seconds between polling loops (default: `2`)
+
+- **Settings / env**:
+  - `DEBUG_FETCH_RECEIPTS_FROM_MINERS` — list of `"hotkey:ip:port"` values; in settings exposed as
+    `settings.DEBUG_FETCH_RECEIPTS_FROM_MINERS: list[tuple[str, str, int]]`
+  - `RECEIPT_TRANSFER_CHECKPOINT_CACHE` — cache key namespace used for checkpoints (default: `"receipts_checkpoints"`)
+
+## Metrics (Prometheus)
+
+- `receipttransfer_receipts_total` — number of transferred receipts
+- `receipttransfer_miners` — number of miners in the current loop
+- `receipttransfer_successful_transfers_total` — count of non-failed transfers
+- `receipttransfer_line_errors_total{exc_type}` — per-exception count of line errors
+- `receipttransfer_transfer_errors_total{exc_type}` — per-exception count of transfer errors
+- `receipttransfer_transfer_duration` — histogram of total loop duration
+- `receipttransfer_catchup_pages_left` — gauge of pages left to catch up
+
+

@@ -9,7 +9,6 @@ from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V2JobRequest,
 )
-from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import async_synchronized
 from django.conf import settings
@@ -25,6 +24,7 @@ from compute_horde_validator.validator.models import (
     MinerManifest,
     MinerPreliminaryReservation,
 )
+from compute_horde_validator.validator.receipts.default import receipts
 from compute_horde_validator.validator.routing.base import RoutingBase
 from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
@@ -218,20 +218,15 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
             .values_list("job_uuid", flat=True)
         }
 
-        known_started_jobs: set[str] = {
-            str(job_uuid)
-            async for job_uuid in JobStartedReceipt.objects.valid_at(timezone.now())
-            .filter(miner_hotkey=miner.hotkey)
-            .values_list("job_uuid", flat=True)
-        }
+        started_receipts = await receipts().get_valid_job_started_receipts_for_miner(
+            miner.hotkey, timezone.now()
+        )
+        known_started_jobs: set[str] = {str(receipt.job_uuid) for receipt in started_receipts}
 
-        known_finished_jobs: set[str] = {
-            str(job_uuid)
-            async for job_uuid in JobFinishedReceipt.objects.filter(
-                job_uuid__in=known_started_jobs | preliminary_reservation_jobs,
-                miner_hotkey=miner.hotkey,
-            ).values_list("job_uuid", flat=True)
-        }
+        finished_receipts = await receipts().get_job_finished_receipts_for_miner(
+            miner.hotkey, list(known_started_jobs | preliminary_reservation_jobs)
+        )
+        known_finished_jobs: set[str] = {str(receipt.job_uuid) for receipt in finished_receipts}
 
         maybe_ongoing_jobs = (
             preliminary_reservation_jobs | known_started_jobs
