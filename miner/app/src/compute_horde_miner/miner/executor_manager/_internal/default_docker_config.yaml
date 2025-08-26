@@ -1,0 +1,6 @@
+self:
+  executor_class: always_on.llm.a6000
+  host: localhost
+  ssh_port: 22
+  username: ""
+  key_path: ""
