@@ -13,17 +13,6 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-@contextlib.contextmanager
-def s3_client_context(**kwargs):
-    client = get_s3_client(**kwargs)
-    try:
-        yield client
-    finally:
-        # Ensure the client is properly closed
-        if hasattr(client, '_endpoint'):
-            client._endpoint.http_session.close()
-
-
 def get_s3_client(
     aws_access_key_id=None,
     aws_secret_access_key=None,
@@ -114,12 +103,11 @@ def download_prompts_from_s3_url(s3_url: str) -> list[str]:
 
 
 async def download_file_content(s3_url: str, client: httpx.AsyncClient | None = None) -> bytes:
-    if client is None:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(s3_url)
-            response.raise_for_status()
-            return response.content
+    if not client:
+        ctx = httpx.AsyncClient()
     else:
+        ctx = contextlib.nullcontext(client)  # type: ignore
+    async with ctx as client:
         response = await client.get(s3_url)
         response.raise_for_status()
         return response.content

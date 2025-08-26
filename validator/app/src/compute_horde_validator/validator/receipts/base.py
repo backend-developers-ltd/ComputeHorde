@@ -1,7 +1,6 @@
 import datetime
 from abc import ABC, abstractmethod
 
-from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
 from typing_extensions import deprecated
@@ -68,7 +67,6 @@ class ReceiptsBase(ABC):
         time_started: datetime.datetime,
         time_took_us: int,
         score_str: str,
-        block_numbers: list[int] | None = None,
     ) -> JobFinishedReceipt:
         """
         Create a job finished receipt.
@@ -80,7 +78,6 @@ class ReceiptsBase(ABC):
             time_started: When the job started
             time_took_us: How long the job took in microseconds
             score_str: Score string for the job
-            block_numbers: List of block numbers used to pay for this job (optional, defaults to empty list)
 
         Returns:
             Created JobFinishedReceipt
@@ -136,17 +133,20 @@ class ReceiptsBase(ABC):
         pass
 
     @abstractmethod
-    async def get_completed_job_receipts_for_block_range(
-        self, start_block: int, end_block: int
-    ) -> list[Receipt]:
+    async def get_finished_jobs_tuples_for_block_range(
+        self, start_block: int, end_block: int, executor_class: str
+    ) -> list[tuple[str, str, int, datetime.datetime | None, list[int]]]:
         """
-        Get all receipts for jobs that were completed between the specified blocks.
+        Get tuples for jobs finished between start_block (inclusive) and end_block (exclusive)
+        for a specific executor class. End time (finish timestamp) is used for filtering.
 
-        Args:
-            start_block: Start block (inclusive)
-            end_block: End block (exclusive)
-
-        Returns:
-            List of receipts for completed jobs in the block range
+        Returns a list of tuples with the following fields:
+            (
+                validator_hotkey: str,
+                miner_hotkey: str,
+                job_run_time_us: int,
+                block_start_time: datetime | None,
+                block_ids: list[int],
+            )
         """
         pass

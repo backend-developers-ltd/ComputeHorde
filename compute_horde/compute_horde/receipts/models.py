@@ -4,6 +4,8 @@ from typing import ClassVar, Self, TypeAlias, assert_never
 
 from compute_horde_core.executor_class import ExecutorClass
 from django.db import models
+from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts import ReceiptType
@@ -169,13 +171,16 @@ class JobFinishedReceipt(AbstractReceipt):
     time_started = models.DateTimeField()
     time_took_us = models.BigIntegerField()
     score_str = models.CharField(max_length=256)
-    block_numbers = models.JSONField(
-        default=list, help_text="List of block numbers used to pay for this job"
+    block_numbers = ArrayField(
+        base_field=models.PositiveIntegerField(),
+        default=list,
+        help_text="List of block numbers used to pay for this job",
     )
 
     class Meta:
-        indexes = [
-            models.Index(fields=["block_numbers"], name="jobfinishedreceipt_block_numbers_idx"),
+        constraints = AbstractReceipt.Meta.constraints
+        indexes = AbstractReceipt.Meta.indexes + [
+            GinIndex(fields=["block_numbers"], name="jobfinished_blocknums_gin"),
         ]
 
     def time_took(self):
@@ -183,86 +188,6 @@ class JobFinishedReceipt(AbstractReceipt):
 
     def score(self):
         return float(self.score_str)
-
-    def clean(self):
-        """Validate the model before saving."""
-        try:
-            super().clean()
-        except AttributeError:
-            # AbstractReceipt doesn't have a clean method, which is fine
-            pass
-
-        if not isinstance(self.block_numbers, list):
-            raise ValueError("block_numbers must be a list")
-
-        for block_num in self.block_numbers:
-            if not isinstance(block_num, int) or block_num < 0:
-                raise ValueError("block_numbers must contain non-negative integers")
-
-    def get_block_numbers(self) -> list[int]:
-        """Get the list of block numbers."""
-        return self.block_numbers or []
-
-    def set_block_numbers(self, block_numbers: list[int]) -> None:
-        """Set the block numbers, with validation."""
-        if not isinstance(block_numbers, list):
-            raise ValueError("block_numbers must be a list")
-
-        for block_num in block_numbers:
-            if not isinstance(block_num, int) or block_num < 0:
-                raise ValueError("block_numbers must contain non-negative integers")
-
-        self.block_numbers = block_numbers
-
-    def add_block_number(self, block_number: int) -> None:
-        """Add a single block number to the list."""
-        if not isinstance(block_number, int) or block_number < 0:
-            raise ValueError("block_number must be a non-negative integer")
-
-        if block_number not in self.block_numbers:
-            self.block_numbers.append(block_number)
-
-    def remove_block_number(self, block_number: int) -> None:
-        """Remove a block number from the list."""
-        if block_number in self.block_numbers:
-            self.block_numbers.remove(block_number)
-
-    def has_block_number(self, block_number: int) -> bool:
-        """Check if a block number exists in the list."""
-        return block_number in self.block_numbers
-
-    def get_total_block_count(self) -> int:
-        """Get the total number of block numbers."""
-        return len(self.block_numbers)
-
-    def get_sorted_block_numbers(self) -> list[int]:
-        """Get a sorted list of block numbers."""
-        return sorted(self.block_numbers)
-
-    @classmethod
-    def from_payload(
-        cls,
-        payload: JobFinishedReceiptPayload,
-        validator_signature: str,
-        miner_signature: str | None = None,
-    ) -> "JobFinishedReceipt":
-        receipt = cls(
-            job_uuid=payload.job_uuid,
-            miner_hotkey=payload.miner_hotkey,
-            validator_hotkey=payload.validator_hotkey,
-            validator_signature=validator_signature,
-            miner_signature=miner_signature,
-            timestamp=payload.timestamp,
-            time_started=payload.time_started,
-            time_took_us=payload.time_took_us,
-            score_str=payload.score_str,
-            block_numbers=payload.block_numbers,
-        )
-
-        # Validate the block numbers
-        receipt.clean()
-
-        return receipt
 
     def to_receipt(self) -> Receipt:
         if self.miner_signature is None:
@@ -294,6 +219,25 @@ class JobFinishedReceipt(AbstractReceipt):
 
         return cls.from_payload(
             receipt.payload, receipt.validator_signature, receipt.miner_signature
+        )
+    
+    @classmethod
+    def from_payload(
+        cls,
+        payload: JobFinishedReceiptPayload,
+        validator_signature: str,
+        miner_signature: str | None = None,
+    ) -> "JobFinishedReceipt":
+        return JobFinishedReceipt(
+            job_uuid=payload.job_uuid,
+            miner_hotkey=payload.miner_hotkey,
+            validator_signature=validator_signature,
+            miner_signature=miner_signature,
+            timestamp=payload.timestamp,
+            time_started=payload.time_started,
+            time_took_us=payload.time_took_us,
+            score_str=payload.score_str,
+            block_numbers=payload.block_numbers,
         )
 
 

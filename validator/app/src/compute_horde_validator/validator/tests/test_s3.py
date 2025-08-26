@@ -1,16 +1,14 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from moto import mock_aws
 
 from compute_horde_validator.validator.s3 import (
-    download_file_content,
     download_prompts_from_s3_url,
     generate_download_url,
     generate_upload_url,
     get_public_url,
     get_s3_client,
-    s3_client_context,
 )
 
 
@@ -21,15 +19,10 @@ def bucket_name():
 
 @pytest.fixture(autouse=True)
 def bucket(bucket_name: str):
-    mock = mock_aws()
-    mock.start()
-    
-    try:
-        with s3_client_context() as client:
-            client.create_bucket(Bucket=bucket_name)
+    with mock_aws():
+        client = get_s3_client()
+        client.create_bucket(Bucket=bucket_name)
         yield
-    finally:
-        mock.stop()
 
 
 def test_generate_upload_url(bucket_name: str):

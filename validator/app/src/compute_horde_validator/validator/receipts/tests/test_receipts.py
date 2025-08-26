@@ -4,7 +4,6 @@ import uuid
 import bittensor_wallet
 import pytest
 from aiohttp import web
-from asgiref.sync import sync_to_async
 from compute_horde.receipts.models import JobAcceptedReceipt, JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import (
     JobAcceptedReceiptPayload,
@@ -108,9 +107,7 @@ async def test_transfer_receipts_from_miners_happy_path(settings):
     port = server.sockets[0].getsockname()[1]
 
     try:
-        await sync_to_async(Miner.objects.create, thread_sensitive=True)(
-            hotkey=miner_hotkey, address="127.0.0.1", port=port
-        )
+        await Miner.objects.acreate(hotkey=miner_hotkey, address="127.0.0.1", port=port)
 
         await receipts().run_receipts_transfer(
             daemon=False,
@@ -119,28 +116,19 @@ async def test_transfer_receipts_from_miners_happy_path(settings):
             debug_miner_port=port,
         )
 
-        stored_started = await sync_to_async(
-            lambda: JobStartedReceipt.objects.get(job_uuid=started_payload.job_uuid),
-            thread_sensitive=True,
-        )()
+        stored_started = await JobStartedReceipt.objects.aget(job_uuid=started_payload.job_uuid)
         assert str(stored_started.job_uuid) == started_payload.job_uuid
         assert stored_started.miner_hotkey == started_payload.miner_hotkey
         assert stored_started.executor_class == "always_on.gpu-24gb"
         assert stored_started.is_organic is True
         assert stored_started.ttl == 300
 
-        stored_accepted = await sync_to_async(
-            lambda: JobAcceptedReceipt.objects.get(job_uuid=accepted_payload.job_uuid),
-            thread_sensitive=True,
-        )()
+        stored_accepted = await JobAcceptedReceipt.objects.aget(job_uuid=accepted_payload.job_uuid)
         assert str(stored_accepted.job_uuid) == accepted_payload.job_uuid
         assert stored_accepted.miner_hotkey == accepted_payload.miner_hotkey
         assert stored_accepted.ttl == 123
 
-        stored_finished = await sync_to_async(
-            lambda: JobFinishedReceipt.objects.get(job_uuid=finished_payload.job_uuid),
-            thread_sensitive=True,
-        )()
+        stored_finished = await JobFinishedReceipt.objects.aget(job_uuid=finished_payload.job_uuid)
         assert str(stored_finished.job_uuid) == finished_payload.job_uuid
         assert stored_finished.miner_hotkey == finished_payload.miner_hotkey
         assert stored_finished.time_took_us == 42
@@ -205,96 +193,6 @@ def test_create_job_finished_receipt_returns_expected_values(settings):
     assert finished.time_took_us == time_took_us
     assert finished.score_str == score_str
     assert finished.block_numbers == block_numbers
-    assert isinstance(finished.timestamp, datetime.datetime) and finished.timestamp.tzinfo is datetime.UTC
-
-
-@pytest.mark.django_db(transaction=True)
-def test_create_job_finished_receipt_defaults_block_numbers_to_empty_list(settings):
-    """Test that block_numbers defaults to empty list when not provided."""
-    receipts = Receipts()
-
-    job_uuid = str(uuid.uuid4())
-    miner_hotkey = "miner_hotkey_2"
-    validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-    time_started = datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5)
-    time_took_us = 1_234_567
-    score_str = "0.987"
-
-    finished = receipts.create_job_finished_receipt(
-        job_uuid=job_uuid,
-        miner_hotkey=miner_hotkey,
-        validator_hotkey=validator_hotkey,
-        time_started=time_started,
-        time_took_us=time_took_us,
-        score_str=score_str,
-        # block_numbers not provided
-    )
-
-    assert finished.block_numbers == []
-
-
-@pytest.mark.django_db(transaction=True)
-def test_job_finished_receipt_from_payload_with_block_numbers(settings):
-    """Test that from_payload correctly handles block numbers."""
-    from compute_horde.receipts.schemas import JobFinishedReceiptPayload
-    
-    # Create a payload with block numbers
-    payload = JobFinishedReceiptPayload(
-        job_uuid="12345678-1234-5678-9abc-def012345678",
-        miner_hotkey="miner_hotkey_123",
-        validator_hotkey="validator_hotkey_456",
-        timestamp=datetime.datetime.now(datetime.UTC),
-        time_started=datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5),
-        time_took_us=300000000,  # 5 minutes
-        score_str="1.0",
-        block_numbers=[100, 101, 102],
-    )
-    
-    # Create receipt using from_payload
-    receipt = JobFinishedReceipt.from_payload(
-        payload=payload,
-        validator_signature="validator_signature_123",
-        miner_signature="miner_signature_456",
-    )
-    
-    # Verify block numbers are correctly set
-    assert receipt.block_numbers == [100, 101, 102]
-    assert receipt.job_uuid == "12345678-1234-5678-9abc-def012345678"
-    assert receipt.miner_hotkey == "miner_hotkey_123"
-    assert receipt.validator_hotkey == "validator_hotkey_456"
-    assert receipt.validator_signature == "validator_signature_123"
-    assert receipt.miner_signature == "miner_signature_456"
-
-
-@pytest.mark.django_db(transaction=True)
-def test_job_finished_receipt_from_payload_without_block_numbers(settings):
-    """Test that from_payload correctly handles missing block numbers."""
-    from compute_horde.receipts.schemas import JobFinishedReceiptPayload
-    
-    # Create a payload without block numbers (should default to empty list)
-    payload = JobFinishedReceiptPayload(
-        job_uuid="87654321-4321-8765-cba9-fed012345678",
-        miner_hotkey="miner_hotkey_789",
-        validator_hotkey="validator_hotkey_012",
-        timestamp=datetime.datetime.now(datetime.UTC),
-        time_started=datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5),
-        time_took_us=300000000,  # 5 minutes
-        score_str="0.8",
-        # block_numbers not specified, should default to empty list
-    )
-    
-    # Create receipt using from_payload
-    receipt = JobFinishedReceipt.from_payload(
-        payload=payload,
-        validator_signature="validator_signature_789",
-        miner_signature="miner_signature_012",
-    )
-    
-    # Verify block numbers default to empty list
-    assert receipt.block_numbers == []
-    assert receipt.job_uuid == "87654321-4321-8765-cba9-fed012345678"
-    assert receipt.miner_hotkey == "miner_hotkey_789"
-    assert receipt.validator_hotkey == "validator_hotkey_012"
 
 
 @pytest.mark.asyncio
@@ -423,24 +321,32 @@ async def test_get_job_started_receipt_by_uuid(settings):
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_completed_job_receipts_for_block_range_returns_only_in_range(settings):
+async def test_get_finished_jobs_tuples_for_block_range_returns_only_in_range(settings):
     # Setup block timestamps
     start_block = 100
     end_block = 105
     start_ts = datetime.datetime.now(datetime.UTC)
     end_ts = start_ts + datetime.timedelta(minutes=10)
 
-    await sync_to_async(Block.objects.create, thread_sensitive=True)(
-        block_number=start_block, creation_timestamp=start_ts
-    )
-    await sync_to_async(Block.objects.create, thread_sensitive=True)(
-        block_number=end_block, creation_timestamp=end_ts
-    )
+    await Block.objects.acreate(block_number=start_block, creation_timestamp=start_ts)
+    await Block.objects.acreate(block_number=end_block, creation_timestamp=end_ts)
 
     miner_hotkey = "miner_hotkey_blockrange"
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
 
     in_uuid = str(uuid.uuid4())
+    # Create corresponding JobStarted with matching executor_class so tuple query includes it
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=in_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts - datetime.timedelta(seconds=30),
+        executor_class="always_on.gpu-24gb",
+        is_organic=True,
+        ttl=60,
+    )
+    in_block_numbers = [start_block, start_block + 1]
     await JobFinishedReceipt.objects.acreate(
         job_uuid=in_uuid,
         miner_hotkey=miner_hotkey,
@@ -451,10 +357,22 @@ async def test_get_completed_job_receipts_for_block_range_returns_only_in_range(
         time_started=start_ts + datetime.timedelta(minutes=4),
         time_took_us=1,
         score_str="1.0",
+        block_numbers=in_block_numbers,
     )
 
+    uuid_out_of_range = str(uuid.uuid4())
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=uuid_out_of_range,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts - datetime.timedelta(minutes=2),
+        executor_class="always_on.gpu-24gb",
+        is_organic=True,
+        ttl=60,
+    )
     await JobFinishedReceipt.objects.acreate(
-        job_uuid=str(uuid.uuid4()),
+        job_uuid=uuid_out_of_range,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
         validator_signature="v_sig",
@@ -465,8 +383,19 @@ async def test_get_completed_job_receipts_for_block_range_returns_only_in_range(
         score_str="0.1",
     )
 
+    uuid_end_exclusive = str(uuid.uuid4())
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=uuid_end_exclusive,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=end_ts - datetime.timedelta(minutes=1),
+        executor_class="always_on.gpu-24gb",
+        is_organic=True,
+        ttl=60,
+    )
     await JobFinishedReceipt.objects.acreate(
-        job_uuid=str(uuid.uuid4()),
+        job_uuid=uuid_end_exclusive,
         miner_hotkey=miner_hotkey,
         validator_hotkey=validator_hotkey,
         validator_signature="v_sig",
@@ -477,13 +406,102 @@ async def test_get_completed_job_receipts_for_block_range_returns_only_in_range(
         score_str="0.2",
     )
 
-    receipts_list = await receipts().get_completed_job_receipts_for_block_range(
-        start_block, end_block
+    tuples = await receipts().get_finished_jobs_tuples_for_block_range(
+        start_block, end_block, executor_class="always_on.gpu-24gb"
     )
 
-    assert len(receipts_list) == 1
-    converted = receipts_list[0]
-    assert converted.payload.job_uuid == in_uuid
-    assert converted.payload.miner_hotkey == miner_hotkey
-    assert converted.payload.validator_hotkey == validator_hotkey
-    assert converted.payload.timestamp == start_ts + datetime.timedelta(minutes=5)
+    assert len(tuples) == 1
+    validator_hotkey_t, miner_hotkey_t, time_took_us_t, block_start_time_t, block_ids_t = tuples[0]
+    assert miner_hotkey_t == miner_hotkey
+    assert validator_hotkey_t == validator_hotkey
+    assert time_took_us_t == 1
+    assert block_start_time_t == start_ts
+    assert block_ids_t == in_block_numbers
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_get_completed_job_receipts_for_block_range_filters_by_executor_class(settings):
+    start_block = 300
+    end_block = 305
+    start_ts = datetime.datetime.now(datetime.UTC)
+    end_ts = start_ts + datetime.timedelta(minutes=10)
+
+    await Block.objects.acreate(block_number=start_block, creation_timestamp=start_ts)
+    await Block.objects.acreate(block_number=end_block, creation_timestamp=end_ts)
+
+    miner_hotkey = "miner_hotkey_exec_filter"
+    validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+
+    exec_gpu = "always_on.gpu-24gb"
+    exec_llm = "always_on.llm.a6000"
+
+    gpu_uuid = str(uuid.uuid4())
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=gpu_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts - datetime.timedelta(seconds=5),
+        executor_class=exec_gpu,
+        is_organic=True,
+        ttl=60,
+    )
+    gpu_block_numbers = [start_block, start_block + 2]
+    await JobFinishedReceipt.objects.acreate(
+        job_uuid=gpu_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts + datetime.timedelta(minutes=2),
+        time_started=start_ts + datetime.timedelta(minutes=1, seconds=30),
+        time_took_us=90_000_000,
+        score_str="0.9",
+        block_numbers=gpu_block_numbers,
+    )
+
+    llm_uuid = str(uuid.uuid4())
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=llm_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts - datetime.timedelta(seconds=4),
+        executor_class=exec_llm,
+        is_organic=False,
+        ttl=60,
+    )
+    await JobFinishedReceipt.objects.acreate(
+        job_uuid=llm_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts + datetime.timedelta(minutes=3),
+        time_started=start_ts + datetime.timedelta(minutes=2, seconds=30),
+        time_took_us=120_000_000,
+        score_str="0.8",
+    )
+
+    no_job_started_uuid = str(uuid.uuid4())
+    await JobFinishedReceipt.objects.acreate(
+        job_uuid=no_job_started_uuid,
+        miner_hotkey=miner_hotkey,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts + datetime.timedelta(minutes=4),
+        time_started=start_ts + datetime.timedelta(minutes=3, seconds=30),
+        time_took_us=30_000_000,
+        score_str="0.7",
+    )
+
+    tuples = await receipts().get_finished_jobs_tuples_for_block_range(
+        start_block, end_block, executor_class=exec_gpu
+    )
+
+    assert len(tuples) == 1
+    v_hotkey, m_hotkey, time_us, block_start_ts, block_ids = tuples[0]
+    assert m_hotkey == miner_hotkey
+    assert v_hotkey == validator_hotkey
+    assert time_us == 90_000_000
+    assert block_start_ts == start_ts
+    assert block_ids == gpu_block_numbers

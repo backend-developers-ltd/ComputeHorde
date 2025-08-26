@@ -7,7 +7,6 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 import aiohttp
-from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import (
     JobFinishedReceipt,
     JobStartedReceipt,
@@ -17,6 +16,7 @@ from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPa
 from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer, TransferResult
 from compute_horde.utils import sign_blob
 from django.conf import settings
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
 from typing_extensions import deprecated
@@ -153,7 +153,6 @@ class Receipts(ReceiptsBase):
     ) -> JobFinishedReceipt:
         if block_numbers is None:
             block_numbers = []
-
         payload = JobFinishedReceiptPayload(
             job_uuid=job_uuid,
             miner_hotkey=miner_hotkey,
@@ -230,9 +229,22 @@ class Receipts(ReceiptsBase):
     async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt:
         return await JobStartedReceipt.objects.aget(job_uuid=job_uuid)
 
-    async def get_completed_job_receipts_for_block_range(
-        self, start_block: int, end_block: int
-    ) -> list[Receipt]:
+    async def get_finished_jobs_tuples_for_block_range(
+        self, start_block: int, end_block: int, executor_class: str
+    ) -> list[tuple[str, str, int, datetime.datetime | None, list[int]]]:
+        """
+        Returns tuples for jobs whose finish (receipt) timestamp falls within the
+        given block range [start_block, end_block), filtered by executor class.
+
+        Tuple format:
+            (
+                validator_hotkey: str,
+                miner_hotkey: str,
+                job_run_time_us: int,
+                block_start_time: datetime | None,
+                block_ids: list[int],
+            )
+        """
         if start_block >= end_block:
             logger.warning(
                 "Invalid block range provided: start_block (%s) >= end_block (%s)",
@@ -244,11 +256,48 @@ class Receipts(ReceiptsBase):
         start_timestamp = await self._get_block_timestamp(start_block)
         end_timestamp = await self._get_block_timestamp(end_block)
 
-        finished_receipts_qs = JobFinishedReceipt.objects.filter(
+        finished_qs = JobFinishedReceipt.objects.filter(
             timestamp__gte=start_timestamp,
             timestamp__lt=end_timestamp,
         )
-        return [receipt_data.to_receipt() async for receipt_data in finished_receipts_qs]
+
+        starts = JobStartedReceipt.objects.filter(
+            job_uuid=OuterRef("job_uuid"), executor_class=executor_class
+        )
+        finished_qs = finished_qs.filter(Exists(starts))
+
+        receipts: list[JobFinishedReceipt] = [receipt async for receipt in finished_qs]
+
+        earliest_block_numbers = {min(r.block_numbers) for r in receipts if r.block_numbers}
+        block_number_to_timestamp: dict[int, datetime.datetime] = {}
+        if earliest_block_numbers:
+            async for block in Block.objects.filter(block_number__in=earliest_block_numbers):
+                block_number_to_timestamp[block.block_number] = block.creation_timestamp
+
+            missing_blocks = earliest_block_numbers - set(block_number_to_timestamp.keys())
+            for block_number in missing_blocks:
+                block_number_to_timestamp[block_number] = await self._get_block_timestamp(
+                    block_number
+                )
+
+        result: list[tuple[str, str, int, datetime.datetime | None, list[int]]] = []
+        for r in receipts:
+            block_start_time: datetime.datetime | None = None
+            if r.block_numbers:
+                earliest = min(r.block_numbers)
+                block_start_time = block_number_to_timestamp.get(earliest)
+
+            result.append(
+                (
+                    r.validator_hotkey,
+                    r.miner_hotkey,
+                    r.time_took_us,
+                    block_start_time,
+                    r.block_numbers,
+                )
+            )
+
+        return result
 
     async def _catch_up(
         self,
