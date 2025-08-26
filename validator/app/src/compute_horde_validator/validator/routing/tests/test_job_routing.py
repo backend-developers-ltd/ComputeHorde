@@ -99,3 +99,19 @@ async def test_pick_miner_for_two_jobs(add_allowance):
     job_route2 = await routing().pick_miner_for_job_request(JOB_REQUEST)
     assert job_route2.allowance_reservation_id is not None
     assert job_route2.allowance_reservation_id != job_route1.allowance_reservation_id
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_pick_miner_for_two_long_jobs(add_allowance):
+    job_request1 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()), execution_time_limit=19)
+    job_route1 = await routing().pick_miner_for_job_request(job_request1)
+    assert job_route1.allowance_reservation_id is not None
+    await sync_to_async(allowance().spend_allowance)(job_route1.allowance_reservation_id)
+
+    job_request2 = JOB_REQUEST.__replace__(uuid=str(uuid.uuid4()), execution_time_limit=19)
+    job_route2 = await routing().pick_miner_for_job_request(job_request2)
+    assert job_route2.allowance_reservation_id is not None
+    assert job_route2.allowance_reservation_id != job_route1.allowance_reservation_id
+    assert job_route2.miner.hotkey_ss58 != job_route1.miner.hotkey_ss58
+    await sync_to_async(allowance().spend_allowance)(job_route2.allowance_reservation_id)
