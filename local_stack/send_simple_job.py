@@ -34,10 +34,6 @@ async def main() -> None:
         default=1,
         help="Number of jobs to send (default: 1)",
     )
-    parser.add_argument(
-        "--with-env",
-        action="store_true",
-    )
     args = parser.parse_args()
     job_count = args.job_count
 
@@ -45,18 +41,11 @@ async def main() -> None:
         logger.info(f"Sending job {i + 1}/{job_count}")
         logger.info(f"hotkey={wallet.hotkey.ss58_address}")
 
-        if args.with_env:
-            arg = 'echo "Hello, $USER!" > /artifacts/stuff'
-            env = {"USER": "World"}
-        else:
-            arg = 'echo "Hello, World!" > /artifacts/stuff'
-            env = {}
         compute_horde_job_spec = ComputeHordeJobSpec(
             executor_class=ExecutorClass.always_on__llm__a6000,
             job_namespace="SN123.0",
             docker_image="alpine",
-            args=["sh", "-c", arg],
-            env=env,
+            args=["sh", "-c", "echo 'Hello, World!' > /artifacts/stuff"],
             artifacts_dir="/artifacts",
             download_time_limit_sec=5,
             execution_time_limit_sec=10,

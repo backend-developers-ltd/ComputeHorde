@@ -115,7 +115,7 @@ async def main() -> None:
         streaming_job.streaming_private_key,
         streaming_job.streaming_server_cert
     )
-    
+
     max_terminate_retries = 3
     for attempt in range(1, max_terminate_retries + 1):
         try:
@@ -143,7 +143,8 @@ async def main() -> None:
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
         docker_image="alpine",
-        args=["sh", "-c", "echo 'Hello, World!' > /artifacts/stuff"],
+        args=["sh", "-c", 'echo "Hello, ${WHOM}!" > /artifacts/stuff'],
+        env={"WHOM": "World"},
         artifacts_dir="/artifacts",
         download_time_limit_sec=5,
         execution_time_limit_sec=10,
