@@ -398,6 +398,7 @@ class OrganicJob(JobBase):
     allowance_reservation_id = models.BigIntegerField(
         null=True, blank=True, help_text="ID of the allowance reservation for this job"
     )
+    allowance_blocks = ArrayField(models.BigIntegerField(), null=True, default=list)
 
     class Meta:
         indexes = [
