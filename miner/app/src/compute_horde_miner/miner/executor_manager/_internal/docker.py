@@ -1,9 +1,19 @@
 import asyncio
+import asyncio.subprocess
+import contextlib
+import dataclasses
 import logging
-import os
-import subprocess
+from collections import deque
+from collections.abc import AsyncGenerator
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Self, TypeAlias
 
-from compute_horde_core.certificate import get_docker_container_ip
+import aiodocker
+import asyncssh
+import pydantic
+import yaml
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 
 from compute_horde_miner.miner.executor_manager._internal.base import (
@@ -14,93 +24,194 @@ from compute_horde_miner.miner.executor_manager.executor_port_dispenser import (
     executor_port_dispenser,
 )
 
+SSH_CONNECT_TIMEOUT = 15
+SSH_KEEPALIVE_INTERVAL = 30
 PULLING_TIMEOUT = 300
 DOCKER_STOP_TIMEOUT = 5
 
 logger = logging.getLogger(__name__)
 
 
+class DockerExecutorConfigError(Exception):
+    pass
+
+
+class ServerConfig(pydantic.BaseModel):
+    executor_class: ExecutorClass
+    host: str
+    ssh_port: int
+    username: str
+    key_path: str
+
+    def is_local(self) -> bool:
+        return self.host in ("localhost", "127.0.0.1")
+
+
+ServerName: TypeAlias = str
+
+
+class NamedServerConfig(ServerConfig):
+    name: ServerName
+
+    @classmethod
+    def from_server_config(cls, server_config: ServerConfig, name: ServerName) -> Self:
+        return cls(**server_config.model_dump(), name=name)
+
+
+ServerConfigsPerClass: TypeAlias = dict[ExecutorClass, list[NamedServerConfig]]
+
+
+class ServerManager:
+    def __init__(self, path: str) -> None:
+        self._path: Path
+        if path == "__default__":
+            self._path = Path(__file__).parent.joinpath("default_docker_config.yaml")
+        else:
+            self._path = Path(path)
+
+        if not self._path.is_file():
+            raise DockerExecutorConfigError("configured path does not exist or is not a file")
+
+        self._server_queue: dict[ExecutorClass, deque[ServerName]] = {
+            executor_class: deque() for executor_class in ExecutorClass
+        }
+        self._reserved_servers: set[ServerName] = set()
+        self._cached_config: ServerConfigsPerClass | None = None
+        self._cached_config_at: datetime = datetime.min
+
+    def fetch_config(self) -> ServerConfigsPerClass:
+        elapsed = datetime.now() - self._cached_config_at
+        if self._cached_config is not None and elapsed > timedelta(minutes=5):
+            return self._cached_config
+
+        # TODO: We should probably read the the file asynchronously.
+        #       The cache helps, but it still can affect the asyncio loop.
+
+        with self._path.open() as f:
+            raw_config = yaml.safe_load(f)
+
+        try:
+            config = pydantic.TypeAdapter(dict[ServerName, ServerConfig]).validate_python(
+                raw_config
+            )
+        except pydantic.ValidationError as e:
+            raise DockerExecutorConfigError("invalid config") from e
+
+        configs_per_class: dict[ExecutorClass, list[NamedServerConfig]] = {}
+        for name, server_config in config.items():
+            named_config = NamedServerConfig.from_server_config(server_config, name)
+            configs_per_class.setdefault(server_config.executor_class, []).append(named_config)
+
+        self._cached_config = configs_per_class
+        self._cached_config_at = datetime.now()
+
+        return configs_per_class
+
+    def reserve_server(self, executor_class: ExecutorClass) -> NamedServerConfig:
+        fresh_config = self.fetch_config()
+        queue = self._server_queue[executor_class]
+
+        # add the new servers to the end of the queues
+        for server_config in fresh_config.get(executor_class, ()):
+            if not (server_config.name in queue or server_config.name in self._reserved_servers):
+                queue.append(server_config.name)
+
+        while queue:
+            server_name = queue.popleft()
+
+            # check if the server is still in the config
+            for server_config in fresh_config.get(executor_class, ()):
+                if server_name == server_config.name:
+                    self._reserved_servers.add(server_name)
+                    return server_config
+
+        raise ExecutorUnavailable()
+
+    def release_server(self, config: NamedServerConfig) -> None:
+        if config.name in self._reserved_servers:
+            self._reserved_servers.remove(config.name)
+            self._server_queue[config.executor_class].append(config.name)
+
+
+@dataclasses.dataclass
 class DockerExecutor:
-    def __init__(self, process_executor, token):
-        self.process_executor = process_executor
-        self.token = token  # used as container name
+    token: str
+    container_id: str
+    config: NamedServerConfig
 
 
 class DockerExecutorManager(BaseExecutorManager):
-    async def start_new_executor(self, token, executor_class, timeout):
-        if settings.ADDRESS_FOR_EXECUTORS:
-            address = settings.ADDRESS_FOR_EXECUTORS
-        else:
-            compose_project_name = os.getenv("COMPOSE_PROJECT_NAME", "root")
-            container_id = (
-                subprocess.check_output(
-                    ["docker", "ps", "-q", "--filter", f"name={compose_project_name}[_-]app[_-]1"]
-                )
-                .decode()
-                .strip()
-            )
-            address = await get_docker_container_ip(container_id)
-        if not settings.DEBUG_SKIP_PULLING_EXECUTOR_IMAGE:
-            process = await asyncio.create_subprocess_exec(
-                "docker", "pull", settings.EXECUTOR_IMAGE
-            )
-            try:
-                await asyncio.wait_for(process.communicate(), timeout=PULLING_TIMEOUT)
-                if process.returncode:
-                    logger.error(
-                        f"Pulling executor container failed with returncode={process.returncode}"
-                    )
-                    raise ExecutorUnavailable("Failed to pull executor image")
-            except TimeoutError:
-                process.kill()
-                logger.error(
-                    "Pulling executor container timed out, pulling it from shell might provide more details"
-                )
-                raise ExecutorUnavailable("Failed to pull executor image")
-        hf_args = (
-            []
-            if settings.HF_ACCESS_TOKEN is None
-            else ["-e", f"HF_ACCESS_TOKEN={settings.HF_ACCESS_TOKEN}"]
-        )
+    def __init__(self) -> None:
+        if not settings.ADDRESS_FOR_EXECUTORS:
+            raise DockerExecutorConfigError("ADDRESS_FOR_EXECUTORS is required!")
 
-        nginx_port = executor_port_dispenser.get_port()
+        super().__init__()
+        self._server_manager = ServerManager(settings.DOCKER_EXECUTORS_CONFIG_PATH)
 
-        volumes = [
+    async def start_new_executor(
+        self, token: str, executor_class: ExecutorClass, timeout: float
+    ) -> DockerExecutor:
+        server_config = self._server_manager.reserve_server(executor_class)
+
+        executor_image = settings.EXECUTOR_IMAGE
+        if ":" not in executor_image:
+            # aiodocker pulls all tags by default, so we need to specify the tag explicitly
+            executor_image += ":latest"
+
+        env = [
+            f"MINER_ADDRESS=ws://{settings.ADDRESS_FOR_EXECUTORS}:{settings.PORT_FOR_EXECUTORS}",
+            f"EXECUTOR_TOKEN={token}",
+        ]
+        if settings.HF_ACCESS_TOKEN is not None:
+            env.append(f"HF_ACCESS_TOKEN={settings.HF_ACCESS_TOKEN}")
+        if server_config.is_local():
+            nginx_port = executor_port_dispenser.get_port()
+            env.append(f"NGINX_PORT={nginx_port}")
+
+        binds = [
             # the executor must be able to spawn images on host
-            "-v",
             "/var/run/docker.sock:/var/run/docker.sock",
-            "-v",
             "/tmp:/tmp",
         ]
         if settings.CUSTOM_JOB_RUNNERS_PATH:
-            volumes = [
-                *volumes,
-                "-v",
-                f"{settings.CUSTOM_JOB_RUNNERS_PATH}:/root/src/compute_horde_miner/custom_job_runners.py",
-            ]
-        process_executor = await asyncio.create_subprocess_exec(
-            "docker",
-            "run",
-            "--rm",
-            "-e",
-            f"MINER_ADDRESS=ws://{address}:{settings.PORT_FOR_EXECUTORS}",
-            "-e",
-            f"EXECUTOR_TOKEN={token}",
-            "-e",
-            f"NGINX_PORT={nginx_port}",
-            *hf_args,
-            "--name",
-            token,
-            *volumes,
-            settings.EXECUTOR_IMAGE,
-            "python",
-            "manage.py",
-            "run_executor",
-            *(await self.get_executor_cmdline_args()),
-        )  # noqa: S607
-        return DockerExecutor(process_executor, token)
+            binds.append(
+                f"{settings.CUSTOM_JOB_RUNNERS_PATH}:/root/src/compute_horde_miner/custom_job_runners.py"
+            )
 
-    async def get_executor_cmdline_args(self):
+        cmdline_args = await self.get_executor_cmdline_args()
+
+        try:
+            async with tunneled_docker_client(server_config) as docker:
+                if not settings.DEBUG_SKIP_PULLING_EXECUTOR_IMAGE:
+                    try:
+                        await docker.images.pull(executor_image, timeout=PULLING_TIMEOUT)
+                    except TimeoutError as e:
+                        logger.error(
+                            "Pulling executor container timed out, pulling it from shell might provide more details"
+                        )
+                        raise ExecutorUnavailable("Failed to pull executor image") from e
+                    except aiodocker.exceptions.DockerError as e:
+                        logger.error("Failed to pull executor image: %r", e)
+                        raise ExecutorUnavailable("Failed to pull executor image") from e
+
+                container = await docker.containers.run(
+                    config={
+                        "Image": executor_image,
+                        "Cmd": ["python", "manage.py", "run_executor", *cmdline_args],
+                        "Env": env,
+                        "HostConfig": {
+                            "AutoRemove": settings.DEBUG_AUTO_REMOVE_EXECUTOR_CONTAINERS,
+                            "Binds": binds,
+                        },
+                    },
+                    name=token,
+                )
+                return DockerExecutor(token, container.id, server_config)
+        except Exception:
+            self._server_manager.release_server(server_config)
+            raise
+
+    async def get_executor_cmdline_args(self) -> list[str]:
         args = await super().get_executor_cmdline_args()
         if runner_cls := settings.CUSTOM_JOB_RUNNER_CLASS_NAME:
             args = [
@@ -110,36 +221,97 @@ class DockerExecutorManager(BaseExecutorManager):
             ]
         return args
 
-    async def kill_executor(self, executor):
+    async def kill_executor(self, executor: DockerExecutor) -> None:
         # kill executor container first so it would not be able to report anything - job simply timeouts
         logger.info("Stopping executor %s", executor.token)
 
-        process = await asyncio.create_subprocess_exec("docker", "stop", executor.token)
-        try:
-            await asyncio.wait_for(process.wait(), timeout=DOCKER_STOP_TIMEOUT)
-        except TimeoutError:
-            pass
+        async with tunneled_docker_client(executor.config) as docker:
+            try:
+                container = await docker.containers.get(executor.container_id)
+                await asyncio.wait_for(container.stop(), timeout=DOCKER_STOP_TIMEOUT)
+            except TimeoutError:
+                pass
+            except aiodocker.exceptions.DockerError as e:
+                if e.status != 404:
+                    raise
 
-        process = await asyncio.create_subprocess_exec("docker", "stop", f"{executor.token}-job")
-        try:
-            await asyncio.wait_for(process.wait(), timeout=DOCKER_STOP_TIMEOUT)
-        except TimeoutError:
-            pass
+            # find the job container
+            try:
+                container = await docker.containers.get(f"{executor.token}-job")
+                await asyncio.wait_for(container.stop(), timeout=DOCKER_STOP_TIMEOUT)
+            except TimeoutError:
+                pass
+            except aiodocker.exceptions.DockerError as e:
+                if e.status != 404:
+                    raise
 
-        try:
-            executor.process_executor.kill()
-        except OSError:
-            pass
+        self._server_manager.release_server(executor.config)
 
-    async def wait_for_executor(self, executor, timeout):
-        try:
-            return await asyncio.wait_for(executor.process_executor.wait(), timeout=timeout)
-        except TimeoutError:
-            pass
+    async def wait_for_executor(self, executor: DockerExecutor, timeout: float) -> int | None:
+        async with tunneled_docker_client(executor.config) as docker:
+            try:
+                container = await docker.containers.get(executor.container_id)
+                wait_result = await asyncio.wait_for(container.wait(), timeout=timeout)
+                exit_code: int | None = wait_result.get("StatusCode")
+                if exit_code is not None:
+                    self._server_manager.release_server(executor.config)
+                return exit_code
+            except TimeoutError:
+                return None
+            except aiodocker.exceptions.DockerError as e:
+                if e.status == 404:
+                    self._server_manager.release_server(executor.config)
+                    return None
+                else:
+                    raise
 
-    async def get_manifest(self):
-        return {settings.DEFAULT_EXECUTOR_CLASS: 1}
+    async def get_manifest(self) -> dict[ExecutorClass, int]:
+        fresh_config = self._server_manager.fetch_config()
+        return {
+            executor_class: len(server_configs)
+            for executor_class, server_configs in fresh_config.items()
+        }
 
     async def get_executor_public_address(self, executor: DockerExecutor) -> str | None:
-        ip: str = await get_docker_container_ip(executor.token)
-        return ip
+        if not executor.config.is_local():
+            return executor.config.host
+
+        # TODO: I am not sure if it is a good idea to return the container IP.
+        #       I kept it here because it was already here.
+        async with tunneled_docker_client(executor.config) as docker:
+            container = await docker.containers.get(executor.container_id)
+            container_data = await container.show()
+
+        networks = container_data.get("NetworkSettings", {}).get("Networks", {})
+        if "bridge" in networks:  # check for bridge network first
+            ip: str | None = networks["bridge"].get("IPAddress")
+            return ip
+        for network_data in networks.values():
+            ip = network_data.get("IPAddress")
+            if ip:
+                return ip
+
+        return None
+
+
+@contextlib.asynccontextmanager
+async def tunneled_docker_client(server_config: ServerConfig) -> AsyncGenerator[aiodocker.Docker]:
+    # TODO: how tf do I test this awesomeness? :D
+    if server_config.is_local():
+        # Skip tunneling if we're running locally
+        async with aiodocker.Docker() as docker:
+            yield docker
+    else:
+        async with asyncssh.connect(
+            host=server_config.host,
+            port=server_config.ssh_port,
+            username=server_config.username,
+            client_keys=[server_config.key_path],
+            known_hosts=None,
+            connect_timeout=SSH_CONNECT_TIMEOUT,
+            keepalive_interval=SSH_KEEPALIVE_INTERVAL,
+        ) as conn:
+            listener = await conn.forward_local_port_to_path("", 0, "/var/run/docker.sock")
+            local_port = listener.get_port()
+            async with aiodocker.Docker(url=f"tcp://localhost:{local_port}") as docker:
+                yield docker

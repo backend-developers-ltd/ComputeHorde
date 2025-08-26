@@ -409,7 +409,9 @@ EXECUTOR_MANAGER_CLASS_PATH = env.str(
     default="compute_horde_miner.miner.executor_manager.v1:DockerExecutorManager",
 )
 
-# ========= Docker and dev executor manager related settings =========
+# ========= START: executor manager related settings =========
+
+# ---- for all executor managers ----
 
 DEFAULT_EXECUTOR_CLASS = (
     env.str("DEFAULT_EXECUTOR_CLASS", None) or executor_class.DEFAULT_EXECUTOR_CLASS
@@ -417,7 +419,7 @@ DEFAULT_EXECUTOR_CLASS = (
 ADDRESS_FOR_EXECUTORS = env.str("ADDRESS_FOR_EXECUTORS", default="")
 PORT_FOR_EXECUTORS = env.int("PORT_FOR_EXECUTORS")
 
-# ========= Docker executor manager only related settings =========
+# ---- for docker executor manager only ----
 
 EXECUTOR_IMAGE = env.str(
     "EXECUTOR_IMAGE", default="backenddevelopersltd/compute-horde-executor:v1-latest"
@@ -436,7 +438,12 @@ if CUSTOM_JOB_RUNNER_CLASS_NAME and not CUSTOM_JOB_RUNNERS_PATH:
         "CUSTOM_JOB_RUNNERS_PATH must be set if CUSTOM_JOB_RUNNER_CLASS_NAME is set."
     )
 
-# ========= Docker and dev executor manager related settings end here =========
+DOCKER_EXECUTORS_CONFIG_PATH = env.str("DOCKER_EXECUTORS_CONFIG_PATH", default="__default__")
+DEBUG_AUTO_REMOVE_EXECUTOR_CONTAINERS = env.bool(
+    "DEBUG_AUTO_REMOVE_EXECUTOR_CONTAINERS", default=True
+)
+
+# ========= END: executor manager related settings =========
 
 LOCAL_RECEIPTS_ROOT = env.path("LOCAL_RECEIPTS_ROOT", default=root("..", "..", "receipts"))
 
