@@ -1,5 +1,6 @@
 from datetime import timedelta
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 from compute_horde_core.executor_class import ExecutorClass
@@ -29,10 +30,12 @@ def test_server_manager__non_file_path_should_raise(tmp_path: Path) -> None:
 
 def test_server_manager__invalid_config_should_raise(tmp_path: Path) -> None:
     invalid = tmp_path / "config.yaml"
-    invalid.write_text("""
-s1:
-s2:
-""")
+    invalid.write_text(
+        dedent("""
+            s1:
+            s2:
+            """)
+    )
     server_manager = ServerManager(invalid.as_posix())
     with pytest.raises(DockerExecutorConfigError):
         server_manager.fetch_config()
@@ -40,26 +43,28 @@ s2:
 
 def test_server_manager_roundrobin_queue(tmp_path: Path) -> None:
     config_path = tmp_path / "config.yaml"
-    config_path.write_text("""
-a:
-  executor_class: always_on.llm.a6000
-  host: "1.2.3.4"
-  ssh_port: 22
-  username: "user"
-  key_path: "/path/to/key"
-b:
-  executor_class: always_on.llm.a6000
-  host: "1.2.3.4"
-  ssh_port: 22
-  username: "user"
-  key_path: "/path/to/key"
-c:
-  executor_class: always_on.llm.a6000
-  host: "1.2.3.4"
-  ssh_port: 22
-  username: "user"
-  key_path: "/path/to/key"
-""")
+    config_path.write_text(
+        dedent("""
+            a:
+              executor_class: always_on.llm.a6000
+              host: "1.2.3.4"
+              ssh_port: 22
+              username: "user"
+              key_path: "/path/to/key"
+            b:
+              executor_class: always_on.llm.a6000
+              host: "1.2.3.4"
+              ssh_port: 22
+              username: "user"
+              key_path: "/path/to/key"
+            c:
+              executor_class: always_on.llm.a6000
+              host: "1.2.3.4"
+              ssh_port: 22
+              username: "user"
+              key_path: "/path/to/key"
+            """)
+    )
 
     server_manager = ServerManager(config_path.as_posix())
     got_servers = []
@@ -73,14 +78,16 @@ c:
 
 def test_server_manager_queues_are_updated_from_config(tmp_path: Path) -> None:
     config_path = tmp_path / "config.yaml"
-    config_path.write_text("""
-a:
-  executor_class: always_on.llm.a6000
-  host: "1.2.3.4"
-  ssh_port: 22
-  username: "user"
-  key_path: "/path/to/key"
-    """)
+    config_path.write_text(
+        dedent("""
+            a:
+              executor_class: always_on.llm.a6000
+              host: "1.2.3.4"
+              ssh_port: 22
+              username: "user"
+              key_path: "/path/to/key"
+            """)
+    )
 
     server_manager = ServerManager(config_path.as_posix(), cache_duration=timedelta(0))
 
@@ -92,14 +99,16 @@ a:
     assert set(got_servers_1) == {"a"}
 
     # remove old server, add new server
-    config_path.write_text("""
-b:
-  executor_class: always_on.llm.a6000
-  host: "1.2.3.4"
-  ssh_port: 22
-  username: "user"
-  key_path: "/path/to/key"
-    """)
+    config_path.write_text(
+        dedent("""
+            b:
+              executor_class: always_on.llm.a6000
+              host: "1.2.3.4"
+              ssh_port: 22
+              username: "user"
+              key_path: "/path/to/key"
+            """)
+    )
 
     got_servers_2 = []
     for _ in range(3):
