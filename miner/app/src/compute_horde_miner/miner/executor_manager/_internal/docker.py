@@ -44,7 +44,7 @@ class ServerConfig(pydantic.BaseModel):
     key_path: str
 
     def is_local(self) -> bool:
-        return self.host in ("localhost", "127.0.0.1")
+        return self.host in ("localhost", "127.0.0.1", "::1")
 
 
 ServerName: TypeAlias = str
@@ -252,16 +252,20 @@ class DockerExecutorManager(BaseExecutorManager):
             try:
                 container = await docker.containers.get(executor.container_id)
                 wait_result = await asyncio.wait_for(container.wait(), timeout=timeout)
+                self._server_manager.release_server(executor.config)
                 exit_code: int | None = wait_result.get("StatusCode")
-                if exit_code is not None:
-                    self._server_manager.release_server(executor.config)
+                if exit_code is None:
+                    # The container somehow exited without an exit code! This should never happen.
+                    logger.warning("Executor %s exited without an exit code!", executor.token)
+                    exit_code = 3
                 return exit_code
             except TimeoutError:
                 return None
             except aiodocker.exceptions.DockerError as e:
                 if e.status == 404:
                     self._server_manager.release_server(executor.config)
-                    return None
+                    # the container exited before, so we don't know the exit code
+                    return 0
                 else:
                     raise
 
@@ -279,8 +283,16 @@ class DockerExecutorManager(BaseExecutorManager):
         # TODO: I am not sure if it is a good idea to return the container IP.
         #       I kept it here because it was already here.
         async with tunneled_docker_client(executor.config) as docker:
-            container = await docker.containers.get(executor.container_id)
-            container_data = await container.show()
+            try:
+                container = await docker.containers.get(executor.container_id)
+                container_data = await container.show()
+            except aiodocker.exceptions.DockerError as e:
+                if e.status == 404:
+                    # the container has already exited, so we don't have any IP address
+                    # TODO: should we release the server here?
+                    return None
+                else:
+                    raise
 
         networks = container_data.get("NetworkSettings", {}).get("Networks", {})
         if "bridge" in networks:  # check for bridge network first
@@ -296,7 +308,6 @@ class DockerExecutorManager(BaseExecutorManager):
 
 @contextlib.asynccontextmanager
 async def tunneled_docker_client(server_config: ServerConfig) -> AsyncGenerator[aiodocker.Docker]:
-    # TODO: how tf do I test this awesomeness? :D
     if server_config.is_local():
         # Skip tunneling if we're running locally
         async with aiodocker.Docker() as docker:
