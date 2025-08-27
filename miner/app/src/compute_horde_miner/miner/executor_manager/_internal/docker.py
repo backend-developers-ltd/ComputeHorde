@@ -26,7 +26,7 @@ from compute_horde_miner.miner.executor_manager.executor_port_dispenser import (
 
 SSH_CONNECT_TIMEOUT = 15
 SSH_KEEPALIVE_INTERVAL = 30
-PULLING_TIMEOUT = 300
+PULLING_TIMEOUT = 300  # TODO: align with corresponding validator timeout
 DOCKER_STOP_TIMEOUT = 5
 
 logger = logging.getLogger(__name__)
@@ -84,9 +84,9 @@ class ServerManager:
         if datetime.now() - self._cached_config_at < self._cache_duration:
             return self._cached_config
 
-        # TODO: We should probably read the the file asynchronously.
+        # NOTE: We should probably read the file asynchronously.
         #       The cache helps, but it still can affect the asyncio loop.
-
+        #       Differing until it actually starts affecting the event loop.
         with self._path.open() as f:
             raw_config = yaml.safe_load(f)
 
@@ -182,6 +182,7 @@ class DockerExecutorManager(BaseExecutorManager):
 
         try:
             async with tunneled_docker_client(server_config) as docker:
+                # TODO: the executor image should already be on the server. Remove pulling from here?
                 if not settings.DEBUG_SKIP_PULLING_EXECUTOR_IMAGE:
                     try:
                         await docker.images.pull(executor_image, timeout=PULLING_TIMEOUT)
@@ -235,9 +236,9 @@ class DockerExecutorManager(BaseExecutorManager):
                 if e.status != 404:
                     raise
 
-            # find the job container
+            job_container_name = f"{executor.token}-job"
             try:
-                container = await docker.containers.get(f"{executor.token}-job")
+                container = await docker.containers.get(job_container_name)
                 await asyncio.wait_for(container.stop(), timeout=DOCKER_STOP_TIMEOUT)
             except TimeoutError:
                 pass
@@ -281,7 +282,7 @@ class DockerExecutorManager(BaseExecutorManager):
             return executor.config.host
 
         # TODO: I am not sure if it is a good idea to return the container IP.
-        #       I kept it here because it was already here.
+        #       Keeping it for now for backward compatibility.
         async with tunneled_docker_client(executor.config) as docker:
             try:
                 container = await docker.containers.get(executor.container_id)
