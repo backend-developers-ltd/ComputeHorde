@@ -1,5 +1,6 @@
 import uuid
 from pathlib import Path
+from textwrap import dedent
 from unittest.mock import patch
 
 import asyncssh
@@ -12,7 +13,7 @@ from compute_horde_miner.miner.executor_manager._internal.docker import (
     ServerConfig,
 )
 
-# NOTE: these tests require docker to be running locally.
+# NOTE: these tests use the local docker to run containers.
 
 
 @pytest.mark.asyncio
@@ -77,14 +78,16 @@ async def config_path(tmp_path: Path, local_proxy_ssh_server):
     key_path.write_text(asyncssh.generate_private_key("ssh-ed25519").export_private_key().decode())
 
     config_path = tmp_path / "config.yaml"
-    config_path.write_text(f"""
-remote-executor:
-  executor_class: always_on.llm.a6000
-  host: "127.0.0.1"
-  ssh_port: {local_proxy_ssh_server}
-  username: "nobody"
-  key_path: {key_path.as_posix()}
-""")
+    config_path.write_text(
+        dedent(f"""
+            remote-executor:
+              executor_class: always_on.llm.a6000
+              host: "127.0.0.1"
+              ssh_port: {local_proxy_ssh_server}
+              username: "nobody"
+              key_path: {key_path.as_posix()}
+            """)
+    )
     return config_path.as_posix()
 
 
@@ -111,3 +114,6 @@ async def test_docker_executor_manager_ssh_tunnel(settings, localhost_is_not_loc
         await executor_manager.wait_for_executor_reservation(
             token, ExecutorClass.always_on__llm__a6000
         )
+
+        exit_code = await executor_manager.wait_for_executor(executor, 10)
+        assert exit_code is not None
