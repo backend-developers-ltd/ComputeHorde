@@ -16,6 +16,45 @@ Most straightforward option is to use a "miner-runner" docker image which will l
 
 Alternatively, you can use `docker-compose` to launch all the necessary services manually. See [docker-compose.yml](envs/runner/data/docker-compose.yml) for reference.
 
+## Using the docker executor manager
+
+The default config of the docker executor manager runs executors in docker containers on the same machine as the miner (for `DEFAULT_EXECUTOR_CLASS`).
+It can be configured to run executors in docker containers on remote machines for different executor classes.
+To do this, follow these steps:
+
+1. Create a directory for your configuration, e.g., `/home/ubuntu/vendor`.
+2. Generate an SSH key pair in this directory for the executor manager to use to connect to the executors.
+   If your executor machines require different keys, you can put all the keys here.
+   The executor machines must accept SSH connections from the miner machine with the key configured below.
+3. Create a YAML file in the directory (i.e., `docker_config.yaml`) and configure your executor machines. For example:
+   ```yaml
+   executor-1:
+     executor_class: always_on.llm.a6000
+     host: "1.2.3.4"
+     ssh_port: 22
+     username: "ubuntu"
+     key_path: "/root/vendor/id_ed25519_miner"
+   
+   executor-2:
+     executor_class: always_on.llm.a6000
+     host: "1.1.1.1"
+     ssh_port: 22
+     username: "ubuntu"
+     key_path: "/root/vendor/id_ed25519_miner"
+   ```
+   The root keys are names of the executor machines, which can be anything you want.
+4. Update your `.env` file with the following variables:
+   ```
+   HOST_VENDOR_DIR=/home/ubuntu/vendor
+   DOCKER_EXECUTORS_CONFIG_PATH=/root/vendor/docker_config.yaml
+   ```
+5. (Optional) You can add `DEBUG_AUTO_REMOVE_EXECUTOR_CONTAINERS=False` in `.env` to skip removing containers automatically after they are stopped (i.e., for debugging purposes).
+6. Restart your miner.
+
+> [!NOTE]  
+> `HOST_VENDOR_DIR` will be mounted to `/root/vendor` inside the miner container.
+> So, `key_path` in the YAML config and `DOCKER_EXECUTORS_CONFIG_PATH` in `.env` should be relative to `/root/vendor`.
+
 ## Custom executor manager
 
 Miners are encouraged to optimize their setup by implementing their own executor manager. To use your custom code, follow these steps:
