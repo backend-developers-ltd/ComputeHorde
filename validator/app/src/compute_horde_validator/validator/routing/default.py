@@ -2,7 +2,6 @@ import logging
 from typing import assert_never
 
 from asgiref.sync import sync_to_async
-from compute_horde.blockchain.block_cache import aget_current_block
 from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V2JobRequest,
@@ -18,10 +17,8 @@ from compute_horde_validator.validator.allowance.types import (
 from compute_horde_validator.validator.allowance.types import (
     Miner as AllowanceMiner,
 )
-from compute_horde_validator.validator.models import (
-    MetagraphSnapshot,
-    Miner,
-)
+from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
+from compute_horde_validator.validator.models import Miner
 from compute_horde_validator.validator.routing.base import RoutingBase
 from compute_horde_validator.validator.routing.types import (
     AllMinersBusy,
@@ -83,11 +80,7 @@ async def _pick_miner_for_job_v2(request: V2JobRequest) -> JobRoute:
         request.download_time_limit + request.execution_time_limit + request.upload_time_limit
     )
 
-    try:
-        current_block = (await MetagraphSnapshot.aget_latest()).block
-    except Exception as exc:
-        logger.warning(f"Failed to get latest metagraph snapshot: {exc}")
-        current_block = await aget_current_block()
+    current_block = await sync_to_async(supertensor().get_current_block)()
 
     # 1. Find miners with enough allowance
     try:
