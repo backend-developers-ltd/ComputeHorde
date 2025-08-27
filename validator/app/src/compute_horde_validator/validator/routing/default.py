@@ -1,5 +1,4 @@
 import logging
-import math
 from typing import assert_never
 
 from asgiref.sync import sync_to_async
@@ -8,7 +7,6 @@ from compute_horde.fv_protocol.facilitator_requests import (
     OrganicJobRequest,
     V2JobRequest,
 )
-from compute_horde.subtensor import get_cycle_containing_block
 from compute_horde.utils import async_synchronized
 from django.conf import settings
 
@@ -50,14 +48,6 @@ def routing() -> Routing:
     if _routing_instance is None:
         _routing_instance = Routing()
     return _routing_instance
-
-
-def _get_seconds_remaining_in_current_cycle(current_block: int) -> int:
-    cycle = get_cycle_containing_block(current_block, netuid=settings.BITTENSOR_NETUID)
-    time_remaining_in_cycle = (
-        cycle.stop - current_block
-    ) * settings.BITTENSOR_APPROXIMATE_BLOCK_DURATION
-    return math.floor(time_remaining_in_cycle.total_seconds())
 
 
 @async_synchronized
