@@ -470,6 +470,15 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
             await self.send(GenericError(details=error_msg).model_dump_json())
             return
 
+        if msg.docker_run_env:
+            for key in msg.docker_run_env:
+                clean_key = key.replace("\0", "")
+                if not clean_key or "=" in clean_key:
+                    error_msg = f"{key!r} is not a valid environment variable"
+                    logger.error(error_msg)
+                    await self.send(GenericError(details=error_msg).model_dump_json())
+                    return
+
         await self.send_job_request(job.executor_token, msg)
         logger.debug(f"Passing job details to executor consumer job_uuid: {msg.job_uuid}")
         job.status = AcceptedJob.Status.RUNNING

@@ -183,6 +183,12 @@ class ComputeHordeJobSpec:
     If the limit is reached, the job will fail.
     """
 
+    def __post_init__(self) -> None:
+        self.env = {key.replace("\0", ""): value for key, value in self.env.items()}
+        for key in self.env:
+            if not key or "=" in key:
+                raise ValueError(f"{key!r} is not a valid environment variable")
+
 
 class ComputeHordeJob:
     """
