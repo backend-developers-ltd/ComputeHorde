@@ -1,5 +1,4 @@
 import pytest
-from asgiref.sync import sync_to_async
 from compute_horde.fv_protocol.validator_requests import JobStatusUpdate
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
@@ -9,9 +8,6 @@ from compute_horde.protocol_messages import (
     V0VolumesReadyRequest,
 )
 
-from compute_horde_validator.validator.allowance.tests.mockchain import set_block_number
-from compute_horde_validator.validator.allowance.utils import blocks, manifests
-from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.models import OrganicJob
 
 pytestmark = [
@@ -26,16 +22,6 @@ pytestmark = [
 
 @pytest.mark.django_db(transaction=True)
 async def test_basic_flow_works(job_request, faci_transport, miner_transport, execute_scenario):
-    with await sync_to_async(set_block_number)(1000):
-        await sync_to_async(manifests.sync_manifests)()
-    for block_number in range(1001, 1004):
-        with await sync_to_async(set_block_number)(block_number):
-            await sync_to_async(blocks.process_block_allowance_with_reporting)(
-                block_number, supertensor_=supertensor()
-            )
-
-    await sync_to_async(set_block_number)(1005)
-
     await faci_transport.add_message(job_request, send_before=0)
     # vali -> faci: received
     # vali -> miner: initial job request
@@ -86,16 +72,6 @@ async def test_two_jobs(
     miner_transports,
     execute_scenario,
 ):
-    with await sync_to_async(set_block_number)(1000):
-        await sync_to_async(manifests.sync_manifests)()
-    for block_number in range(1001, 1004):
-        with await sync_to_async(set_block_number)(block_number):
-            await sync_to_async(blocks.process_block_allowance_with_reporting)(
-                block_number, supertensor_=supertensor()
-            )
-
-    await sync_to_async(set_block_number)(1005)
-
     # Job 1
     await faci_transport.add_message(job_request, send_before=0)
 
