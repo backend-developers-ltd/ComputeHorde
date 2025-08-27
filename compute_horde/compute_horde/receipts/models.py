@@ -4,8 +4,6 @@ from typing import ClassVar, Self, TypeAlias, assert_never
 
 from compute_horde_core.executor_class import ExecutorClass
 from django.db import models
-from django.contrib.postgres.fields import ArrayField
-from django.contrib.postgres.indexes import GinIndex
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.receipts import ReceiptType
@@ -171,17 +169,10 @@ class JobFinishedReceipt(AbstractReceipt):
     time_started = models.DateTimeField()
     time_took_us = models.BigIntegerField()
     score_str = models.CharField(max_length=256)
-    block_numbers = ArrayField(
-        base_field=models.PositiveIntegerField(),
+    block_numbers = models.JSONField(
         default=list,
         help_text="List of block numbers used to pay for this job",
     )
-
-    class Meta:
-        constraints = AbstractReceipt.Meta.constraints
-        indexes = AbstractReceipt.Meta.indexes + [
-            GinIndex(fields=["block_numbers"], name="jobfinished_blocknums_gin"),
-        ]
 
     def time_took(self):
         return timedelta(microseconds=self.time_took_us)
@@ -220,7 +211,7 @@ class JobFinishedReceipt(AbstractReceipt):
         return cls.from_payload(
             receipt.payload, receipt.validator_signature, receipt.miner_signature
         )
-    
+
     @classmethod
     def from_payload(
         cls,
