@@ -62,7 +62,7 @@ ServerConfigsPerClass: TypeAlias = dict[ExecutorClass, list[NamedServerConfig]]
 
 
 class ServerManager:
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, cache_duration: timedelta = timedelta(minutes=5)) -> None:
         self._path: Path
         if path == "__default__":
             self._path = Path(__file__).parent.joinpath("default_docker_config.yaml")
@@ -76,12 +76,12 @@ class ServerManager:
             executor_class: deque() for executor_class in ExecutorClass
         }
         self._reserved_servers: set[ServerName] = set()
-        self._cached_config: ServerConfigsPerClass | None = None
+        self._cache_duration = cache_duration
+        self._cached_config: ServerConfigsPerClass = {}
         self._cached_config_at: datetime = datetime.min
 
     def fetch_config(self) -> ServerConfigsPerClass:
-        elapsed = datetime.now() - self._cached_config_at
-        if self._cached_config is not None and elapsed > timedelta(minutes=5):
+        if datetime.now() - self._cached_config_at < self._cache_duration:
             return self._cached_config
 
         # TODO: We should probably read the the file asynchronously.
