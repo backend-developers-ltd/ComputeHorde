@@ -1,14 +1,12 @@
-import asyncio
 import datetime
 from contextlib import contextmanager
-from functools import lru_cache
 from unittest import mock
 from unittest.mock import patch
 
-import bittensor_wallet
 import turbobt
 from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.protocol_messages import V0ExecutorManifestRequest
+from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel
 
@@ -55,25 +53,9 @@ def cmbm(block_number):
     return block_number
 
 
-@lru_cache
-def wallet():
-    wallet_ = bittensor_wallet.Wallet(name="test_mock_validator")
-    wallet_.regenerate_coldkey(
-        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
-        use_password=False,
-        overwrite=True,
-    )
-    wallet_.regenerate_hotkey(
-        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
-        use_password=False,
-        overwrite=True,
-    )
-    return wallet_
-
-
 VALIDATOR_HOTKEYS = {
     **{i: f"regular_validator_{i}" for i in range(NUM_VALIDATORS - 2) if i != 2},
-    2: wallet().get_hotkey().ss58_address,
+    2: get_test_validator_wallet().get_hotkey().ss58_address,
     # these validators will have a steadily increasing stake
     NUM_VALIDATORS - 2: f"stake_loosing_validator_{NUM_VALIDATORS - 2}",
     # this validator will occasionally get a stake lower than 1000
@@ -318,7 +300,7 @@ def set_block_number(block_number_):
             return get_block_timestamp(block_number)
 
         def wallet(self):
-            return wallet()
+            return get_test_validator_wallet()
 
     # Create transport map from manifest responses
     def create_transport_map():
@@ -328,10 +310,7 @@ def set_block_number(block_number_):
         for hotkey, manifest_request, delay in responses:
             if isinstance(manifest_request, V0ExecutorManifestRequest):
                 transport = SimulationTransport(f"sim_{hotkey}")
-                # Use asyncio.run to handle the async operation
-                asyncio.run(
-                    transport.add_message(manifest_request, send_before=1, sleep_before=delay)
-                )
+                transport.add_message_sync(manifest_request, send_before=1, sleep_before=delay)
                 transport_map[hotkey] = transport
 
         return transport_map

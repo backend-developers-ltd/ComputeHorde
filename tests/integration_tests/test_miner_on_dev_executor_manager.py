@@ -12,7 +12,6 @@ import time
 import uuid
 import zipfile
 from unittest import mock
-import bittensor
 import logging
 
 import pytest
@@ -21,40 +20,17 @@ import websockets
 
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.test_base import ActiveSubnetworkBaseTest
+from compute_horde.test_wallet import (
+    MINER_WALLET_NAME,
+    VALIDATOR_WALLET_NAME,
+    get_test_miner_wallet,
+    get_test_validator_wallet,
+)
+
 
 MINER_PORT = 8045
 WEBSOCKET_TIMEOUT = 10
 logger = logging.getLogger(__name__)
-
-
-def get_miner_wallet():
-    wallet = bittensor.wallet(name="test_miner")
-    wallet.regenerate_coldkey(
-        mnemonic="marine oyster umbrella sail over speak emerge rude matrix glue argue learn",
-        use_password=False,
-        overwrite=True,
-    )
-    wallet.regenerate_hotkey(
-        mnemonic="radio busy purpose chicken nose soccer private bridge nephew float ten media",
-        use_password=False,
-        overwrite=True,
-    )
-    return wallet
-
-
-def get_validator_wallet():
-    wallet = bittensor.wallet(name="test_validator")
-    wallet.regenerate_coldkey(
-        mnemonic="local ghost evil lizard decade own lecture absurd vote despair predict cage",
-        use_password=False,
-        overwrite=True,
-    )
-    wallet.regenerate_hotkey(
-        mnemonic="position chicken ugly key sugar expect another require cinnamon rubber rich veteran",
-        use_password=False,
-        overwrite=True,
-    )
-    return wallet
 
 
 class Test(ActiveSubnetworkBaseTest):
@@ -76,7 +52,7 @@ class Test(ActiveSubnetworkBaseTest):
 
     @classmethod
     def miner_preparation_tasks(cls):
-        validator_key = get_validator_wallet().get_hotkey().ss58_address
+        validator_key = get_test_validator_wallet().get_hotkey().ss58_address
         db_shell_cmd = f"{sys.executable} miner/app/src/manage.py dbshell"
         for cmd in [
             f'echo "DROP DATABASE IF EXISTS compute_horde_miner_integration_test" | {db_shell_cmd}',
@@ -95,7 +71,7 @@ class Test(ActiveSubnetworkBaseTest):
             subprocess.check_call(
                 args, env={**os.environ, "DATABASE_SUFFIX": "_integration_test"}
             )
-        if os.getenv('GITHUB_ACTIONS') == 'true':
+        if os.getenv("GITHUB_ACTIONS") == "true":
             # we change system files here so only do so in GitHub Actions
             # developer has to setup is machine correctly to run integration test
             nvidia_container_toolkit_mock = """#!/bin/bash
@@ -104,13 +80,22 @@ class Test(ActiveSubnetworkBaseTest):
             """
 
             # Write the script
-            with open('/tmp/nvidia-container-toolkit', 'w') as f:
+            with open("/tmp/nvidia-container-toolkit", "w") as f:
                 f.write(nvidia_container_toolkit_mock)
 
-            subprocess.check_call(['sudo', 'mv', '/tmp/nvidia-container-toolkit', '/bin/nvidia-container-toolkit'])
+            subprocess.check_call(
+                [
+                    "sudo",
+                    "mv",
+                    "/tmp/nvidia-container-toolkit",
+                    "/bin/nvidia-container-toolkit",
+                ]
+            )
 
             # Make it executable
-            subprocess.check_call(['sudo', 'chmod', '+x', '/bin/nvidia-container-toolkit'])
+            subprocess.check_call(
+                ["sudo", "chmod", "+x", "/bin/nvidia-container-toolkit"]
+            )
 
     @classmethod
     def miner_environ(cls) -> dict[str, str]:
@@ -119,7 +104,7 @@ class Test(ActiveSubnetworkBaseTest):
             "PORT_FOR_EXECUTORS": str(MINER_PORT),
             "DATABASE_SUFFIX": "_integration_test",
             "DEBUG_TURN_AUTHENTICATION_OFF": "1",
-            "BITTENSOR_WALLET_NAME": "test_miner",
+            "BITTENSOR_WALLET_NAME": MINER_WALLET_NAME,
         }
 
     @classmethod
@@ -129,14 +114,14 @@ class Test(ActiveSubnetworkBaseTest):
     @classmethod
     def validator_environ(cls) -> dict[str, str]:
         return {
-            "BITTENSOR_WALLET_NAME": "test_validator",
+            "BITTENSOR_WALLET_NAME": VALIDATOR_WALLET_NAME,
         }
 
     @pytest.mark.asyncio
     async def test_echo_image(self):
         job_uuid = str(uuid.uuid4())
-        miner_key = get_miner_wallet().get_hotkey().ss58_address
-        validator_wallet = get_validator_wallet()
+        miner_key = get_test_miner_wallet().get_hotkey().ss58_address
+        validator_wallet = get_test_validator_wallet()
         validator_key = validator_wallet.get_hotkey().ss58_address
 
         payload = "".join(

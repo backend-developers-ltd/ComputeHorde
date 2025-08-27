@@ -27,6 +27,7 @@ dependencies = [
     "django-business-metrics @ git+https://github.com/reef-technologies/django-business-metrics.git@9d08ddb3a9d26e8a7e478110d7c8c34c3aa03a01",
     "packaging>=24.2",
     "aiohttp>=3.12.0",
+    "aiodocker==0.24.0",
 ]
 
 [tool.uv.sources]

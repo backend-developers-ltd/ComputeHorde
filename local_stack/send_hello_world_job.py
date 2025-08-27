@@ -1,3 +1,9 @@
+"""
+The aim of this test is to check the whole communications pipeline, without any heavy computation done by the executor.
+It should test all valid cases of args/volumes/vars etc. passed from the consumer (sdk user) to the executor and back
+again.
+"""
+
 import asyncio
 import pathlib
 import random
@@ -142,7 +148,7 @@ async def main() -> None:
     compute_horde_job_spec = ComputeHordeJobSpec(
         executor_class=ExecutorClass.always_on__llm__a6000,
         job_namespace="SN123.0",
-        docker_image="alpine",
+        docker_image="alpine:latest",
         args=["sh", "-c", "echo 'Hello, World!' > /artifacts/stuff"],
         artifacts_dir="/artifacts",
         download_time_limit_sec=5,

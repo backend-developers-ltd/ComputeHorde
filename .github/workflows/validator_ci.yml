@@ -15,21 +15,18 @@ jobs:
       run:
         working-directory: ./validator
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
-          cache: "pip"
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.8.x"
           enable-cache: true
       - name: Install dependencies
-        run: python -m pip install --upgrade nox
+        run: uv tool install nox
       - name: Create dotenv file
         run: cp ./envs/dev/.env.template .env
       - name: Run linters
@@ -40,53 +37,81 @@ jobs:
       run:
         working-directory: ./validator
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
-          cache: "pip"
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.8.x"
           enable-cache: true
       - name: Install dependencies
-        run: python -m pip install --upgrade nox
+        run: uv tool install nox
       - name: Create dotenv file
         run: cp ./envs/dev/.env.template .env
       - name: Run mypy
         run: nox -vs type_check
+  list-test-dirs:
+    runs-on: ubuntu-latest
+    outputs:
+      test-dirs: ${{ steps.list-dirs.outputs.test-dirs }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list-dirs
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          cd validator/app/src/compute_horde_validator/validator
+          targets=()
+          for f in tests/test_*.py; do
+            targets+=("$f")
+          done
+          for d in tests/*/ ; do
+            targets+=("${d%/}")
+          done
+          for d in */tests ; do
+            targets+=("$d")
+          done
+          if [ ${#targets[@]} -eq 0 ]; then
+            targets=("tests")
+          fi
+          echo "Discovered test targets: ${targets[*]}"
+          json=$(printf '%s\n' "${targets[@]}" | jq -Rsc 'split("\n") | map(select(length>0))')
+          echo "Matrix JSON (short names): $json"
+          echo "test-dirs=$json" >> $GITHUB_OUTPUT
   test:
+    needs:
+      - list-test-dirs
     timeout-minutes: 30
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.list-test-dirs.outputs.test-dirs) }}
     defaults:
       run:
         working-directory: ./validator
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
-          cache: "pip"
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.8.x"
           enable-cache: true
       - name: Install dependencies
-        run: python -m pip install --upgrade nox
+        run: uv tool install nox
       - name: Prepare environment
         run: ./setup-dev.sh
       - name: Run dockerized services
         run: docker compose up -d --wait
-      - name: Run unit tests
-        run: nox -vs test
+      - name: Run unit tests (${{ matrix.target }})
+        run: nox -vs test -- compute_horde_validator/validator/${{ matrix.target }}
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()

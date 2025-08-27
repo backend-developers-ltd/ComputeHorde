@@ -4,7 +4,7 @@ requires-python = ">=3.10,<3.13"  # bittensor doesn't work on 3.13+
 keywords = []
 license = {text = "MIT"}
 readme = "README.md"
-version = "0.0.14"
+version = "0.0.16"
 authors = [
     {name = "Reef Technologies", email = "opensource@reef.pl"},
 ]

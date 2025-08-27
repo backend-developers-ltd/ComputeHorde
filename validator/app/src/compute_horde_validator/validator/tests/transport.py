@@ -66,6 +66,15 @@ class SimulationTransport(AbstractTransport):
         sleep_before: float = 0,
         side_effect: Callable[[], None | Awaitable[None]] | None = None,
     ) -> None:
+        self.add_message_sync(message, send_before, sleep_before, side_effect)
+
+    def add_message_sync(
+        self,
+        message: str | BaseModel,
+        send_before: int = 0,
+        sleep_before: float = 0,
+        side_effect: Callable[[], None | Awaitable[None]] | None = None,
+    ) -> None:
         """
         Add a message to be received after a certain number of sent messages.
         Receives the message immediately if send_before is 0.

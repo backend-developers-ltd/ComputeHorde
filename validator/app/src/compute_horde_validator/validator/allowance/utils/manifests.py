@@ -10,10 +10,8 @@ from compute_horde_core.executor_class import ExecutorClass
 from django.db import transaction
 from django.db.models import Min, Q
 
-from compute_horde_validator.validator.clean_me_up import get_single_manifest
-from compute_horde_validator.validator.locks import Lock, LockType
-
-from ...dynamic_config import get_miner_max_executors_per_class
+from ...dynamic_config import get_miner_max_executors_per_class_sync
+from ...locks import Lock, LockType
 from ...models.allowance.internal import AllowanceMinerManifest, BlockAllowance, MinerAddress
 from .. import settings
 from ..types import ss58_address
@@ -123,7 +121,7 @@ def event_loop():
 def sync_manifests():
     block = supertensor().get_current_block()
     neurons = supertensor().get_shielded_neurons()
-    max_executors_per_class = asyncio.run(get_miner_max_executors_per_class())
+    max_executors_per_class = get_miner_max_executors_per_class_sync()
     miners = [(n.hotkey, n.axon_info.ip, n.axon_info.port) for n in neurons if n.axon_info.port]
     new_manifests = event_loop().run_until_complete(fetch_manifests_from_miners(miners))
     with transaction.atomic():
@@ -201,6 +199,9 @@ async def fetch_manifests_from_miners(
     ]
 
     try:
+        # workaround for circular imports through `validator/tasks.py`
+        from ...clean_me_up import get_single_manifest
+
         logger.info(f"Scraping manifests for {len(miner_clients)} miners")
         tasks = [
             asyncio.create_task(

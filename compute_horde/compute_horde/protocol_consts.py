@@ -152,7 +152,6 @@ class JobRejectionReason(StrEnum):
     BUSY = "busy"
     INVALID_SIGNATURE = "invalid_signature"
     NO_MINER_FOR_JOB = "no_miner_for_job"
-    NOT_ENOUGH_TIME_IN_CYCLE = "not_enough_time_in_cycle"
     VALIDATOR_BLACKLISTED = "validator_blacklisted"
 
     @classmethod

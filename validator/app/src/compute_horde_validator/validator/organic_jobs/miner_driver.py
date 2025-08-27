@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from functools import partial
 
 import sentry_sdk
+from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest, V2JobRequest
 from compute_horde.fv_protocol.validator_requests import (
@@ -36,14 +37,13 @@ from compute_horde.protocol_messages import (
 )
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
-from django.db.models import F
 from pydantic import JsonValue
 
 from compute_horde_validator.validator import job_excuses
+from compute_horde_validator.validator.allowance.default import allowance
 from compute_horde_validator.validator.dynamic_config import aget_config
 from compute_horde_validator.validator.models import (
     AdminJobRequest,
-    ComputeTimeAllowance,
     MetagraphSnapshot,
     Miner,
     OrganicJob,
@@ -73,7 +73,7 @@ def status_update_from_success(job: OrganicJob) -> JobStatusUpdate:
     )
 
 
-def status_update_from_rejection(
+def status_update_from_miner_rejection(
     job: OrganicJob, rejection: MinerRejectedJob, comment: str | None = None
 ) -> JobStatusUpdate:
     comment = comment or rejection.msg.message
@@ -92,7 +92,7 @@ def status_update_from_rejection(
     )
 
 
-def status_update_from_job_failure(
+def status_update_from_miner_job_failure(
     job: OrganicJob, failure: MinerReportedJobFailed
 ) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
@@ -113,7 +113,7 @@ def status_update_from_job_failure(
     )
 
 
-def status_update_from_horde_failure(
+def status_update_from_miner_horde_failure(
     job: OrganicJob, failure: MinerReportedHordeFailed
 ) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
@@ -126,12 +126,12 @@ def status_update_from_horde_failure(
     )
     return JobStatusUpdate(
         uuid=str(job.job_uuid),
-        status=JobStatus.FAILED,
+        status=JobStatus.HORDE_FAILED,
         metadata=metadata,
     )
 
 
-def status_update_from_organic_job_error(job: OrganicJob, error: HordeError) -> JobStatusUpdate:
+def status_update_from_horde_error(job: OrganicJob, error: HordeError) -> JobStatusUpdate:
     metadata = JobStatusMetadata(
         horde_failure_details=HordeFailureDetails(
             reported_by=JobParticipantType.VALIDATOR,
@@ -143,18 +143,6 @@ def status_update_from_organic_job_error(job: OrganicJob, error: HordeError) -> 
     return JobStatusUpdate(
         uuid=str(job.job_uuid),
         status=JobStatus.FAILED,
-        metadata=metadata,
-    )
-
-
-def status_update_from_generic_exception(job: OrganicJob, exc: Exception) -> JobStatusUpdate:
-    metadata = JobStatusMetadata.from_uncaught_exception(
-        reported_by=JobParticipantType.VALIDATOR,
-        exception=exc,
-    )
-    return JobStatusUpdate(
-        uuid=str(job.job_uuid),
-        status=JobStatus.HORDE_FAILED,
         metadata=metadata,
     )
 
@@ -222,6 +210,7 @@ async def execute_organic_job_request(
         streaming_details=job_request.streaming_details.model_dump()
         if job_request.streaming_details
         else None,
+        allowance_reservation_id=job_route.allowance_reservation_id,
     )
 
     miner_client = MinerClient(
@@ -275,26 +264,6 @@ async def drive_organic_job(
 
         return relay
 
-    async def job_accepted_callback(msg: MinerToValidatorMessage) -> None:
-        await status_callback(JobStatus.ACCEPTED)(msg)
-
-        if isinstance(job_request, V2JobRequest):
-            executor_seconds = (
-                job_request.download_time_limit
-                + job_request.execution_time_limit
-                + job_request.upload_time_limit
-            )
-            rows_updated = await ComputeTimeAllowance.objects.filter(
-                cycle__start__lte=job.block,
-                cycle__stop__gt=job.block,
-                miner_id=job.miner_id,
-                validator__hotkey=settings.BITTENSOR_WALLET().hotkey.ss58_address,
-            ).aupdate(remaining_allowance=F("remaining_allowance") - executor_seconds)
-            if rows_updated:
-                logger.info("Updated miner allowance for job %s", job.job_uuid)
-            else:
-                logger.warning("Could not update miner allowance for job %s", job.job_uuid)
-
     async def streaming_ready_callback(msg: V0StreamingJobReadyRequest) -> None:
         await notify_callback(
             JobStatusUpdate(
@@ -310,7 +279,7 @@ async def drive_organic_job(
             )
         )
 
-    miner_client.notify_job_accepted = job_accepted_callback  # type: ignore[method-assign]
+    miner_client.notify_job_accepted = status_callback(JobStatus.ACCEPTED)  # type: ignore[method-assign]
     miner_client.notify_executor_ready = status_callback(JobStatus.EXECUTOR_READY)  # type: ignore[method-assign]
     miner_client.notify_volumes_ready = status_callback(JobStatus.VOLUMES_READY)  # type: ignore[method-assign]
     miner_client.notify_execution_done = status_callback(JobStatus.EXECUTION_DONE)  # type: ignore[method-assign]
@@ -350,7 +319,24 @@ async def drive_organic_job(
             executor_startup_time_limit=await aget_config("DYNAMIC_EXECUTOR_STARTUP_TIME_LIMIT"),
         )
 
-        comment = f"Miner {miner_client.miner_name} finished: {stdout=} {stderr=}"
+        if job.allowance_reservation_id is not None:
+            try:
+                await sync_to_async(allowance().spend_allowance)(job.allowance_reservation_id)
+                logger.info(
+                    "Successfully spent allowance for reservation %s for job %s",
+                    job.allowance_reservation_id,
+                    job.job_uuid,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to spend allowance for reservation %s for job %s: %s",
+                    job.allowance_reservation_id,
+                    job.job_uuid,
+                    e,
+                    exc_info=True,
+                )
+
+        comment = f"Miner {miner_client.miner_name} hotkey={job.miner.hotkey} finished: {stdout=} {stderr=}"
         job.stdout = stdout
         job.stderr = stderr
         job.artifacts = artifacts
@@ -408,7 +394,7 @@ async def drive_organic_job(
         job.status = status
         await job.asave()
         await save_event(subtype=system_event_subtype, long_description=comment)
-        status_update = status_update_from_rejection(job, rejection, comment)
+        status_update = status_update_from_miner_rejection(job, rejection, comment)
         await notify_callback(status_update)
 
     except MinerReportedJobFailed as failure:
@@ -421,7 +407,7 @@ async def drive_organic_job(
             ),
             long_description=failure.msg.message,
         )
-        status_update = status_update_from_job_failure(job, failure)
+        status_update = status_update_from_miner_job_failure(job, failure)
         await notify_callback(status_update)
 
     except MinerReportedHordeFailed as failure:
@@ -434,7 +420,7 @@ async def drive_organic_job(
             ),
             long_description=failure.msg.message,
         )
-        status_update = status_update_from_horde_failure(job, failure)
+        status_update = status_update_from_miner_horde_failure(job, failure)
         await notify_callback(status_update)
 
     except Exception as e:
@@ -451,8 +437,28 @@ async def drive_organic_job(
         )
         await save_event(subtype=event_subtype, long_description=comment)
 
-        status_update = status_update_from_organic_job_error(job, e)
+        status_update = status_update_from_horde_error(job, e)
         await notify_callback(status_update)
+
+    # Undo allowance reservation for any job failure
+    if job.allowance_reservation_id is not None:
+        try:
+            await sync_to_async(allowance().undo_allowance_reservation)(
+                job.allowance_reservation_id
+            )
+            logger.info(
+                "Successfully undid allowance reservation %s for failed job %s",
+                job.allowance_reservation_id,
+                job.job_uuid,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to undo allowance reservation %s for failed job %s: %s",
+                job.allowance_reservation_id,
+                job.job_uuid,
+                e,
+                exc_info=True,
+            )
 
     return False
 

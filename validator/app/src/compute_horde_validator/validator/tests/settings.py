@@ -2,6 +2,11 @@ import os
 import pathlib
 
 import bittensor_wallet
+from compute_horde.test_wallet import (
+    VALIDATOR_WALLET_HOTKEY,
+    VALIDATOR_WALLET_NAME,
+    get_test_validator_wallet,
+)
 
 os.environ.update(
     {
@@ -19,22 +24,14 @@ BITTENSOR_NETWORK = "local"
 CELERY_TASK_ALWAYS_EAGER = True
 
 BITTENSOR_WALLET_DIRECTORY = pathlib.Path("~").expanduser() / ".bittensor" / "wallets"
-BITTENSOR_WALLET_NAME = "test_validator"
-BITTENSOR_WALLET_HOTKEY_NAME = "default"
+BITTENSOR_WALLET_NAME = VALIDATOR_WALLET_NAME
+BITTENSOR_WALLET_HOTKEY_NAME = VALIDATOR_WALLET_HOTKEY
 
 STATS_COLLECTOR_URL = "http://fakehost:8000"
 
 
-def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:  # type: ignore
-    if not BITTENSOR_WALLET_NAME or not BITTENSOR_WALLET_HOTKEY_NAME:
-        raise RuntimeError("Wallet not configured")
-    wallet = bittensor_wallet.Wallet(
-        name=BITTENSOR_WALLET_NAME,
-        hotkey=BITTENSOR_WALLET_HOTKEY_NAME,
-        path=str(BITTENSOR_WALLET_DIRECTORY),
-    )
-    wallet.hotkey_file.get_keypair()  # this raises errors if the keys are inaccessible
-    return wallet
+def BITTENSOR_WALLET() -> bittensor_wallet.Wallet:
+    return get_test_validator_wallet()
 
 
 DEFAULT_ADMIN_PASSWORD = "fake_admin_password"
@@ -52,3 +49,5 @@ CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"
 CONSTANCE_DATABASE_CACHE_BACKEND = None
 
 DEBUG_MINER_KEY = None
+
+COMPUTE_HORDE_BLOCK_CACHE_KEY = "test-block-cache-key"

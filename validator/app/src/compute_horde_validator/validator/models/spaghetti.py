@@ -396,6 +396,9 @@ class OrganicJob(JobBase):
     )
     on_trusted_miner = models.BooleanField(default=False)
     streaming_details = models.JSONField(null=True, default=None)
+    allowance_reservation_id = models.BigIntegerField(
+        null=True, blank=True, help_text="ID of the allowance reservation for this job"
+    )
 
     class Meta:
         indexes = [
