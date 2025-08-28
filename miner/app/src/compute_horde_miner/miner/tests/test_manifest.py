@@ -1,6 +1,6 @@
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import json
 import pytest
 from django.test import AsyncClient
 
@@ -15,12 +15,10 @@ async def test_get_manifest_success():
     mock_executor_manager = AsyncMock()
     mock_executor_manager.get_manifest = AsyncMock(return_value=expected_manifest)
 
-    with patch(
-        "compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager
-    ):
+    with patch("compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager):
         request = MagicMock()
         response = await get_manifest(request)
-        
+
         assert response.status_code == 200
         data = json.loads(response.content)
         assert data["manifest"] == expected_manifest
@@ -33,12 +31,10 @@ async def test_get_manifest_empty_response():
     mock_executor_manager = AsyncMock()
     mock_executor_manager.get_manifest = AsyncMock(return_value={})
 
-    with patch(
-        "compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager
-    ):
+    with patch("compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager):
         request = MagicMock()
         response = await get_manifest(request)
-        
+
         assert response.status_code == 200
         data = json.loads(response.content)
         assert data["manifest"] == {}
@@ -51,12 +47,10 @@ async def test_get_manifest_exception():
     mock_executor_manager = AsyncMock()
     mock_executor_manager.get_manifest = AsyncMock(side_effect=Exception("Test error"))
 
-    with patch(
-        "compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager
-    ):
+    with patch("compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager):
         request = MagicMock()
         response = await get_manifest(request)
-        
+
         assert response.status_code == 500
         data = json.loads(response.content)
         assert "error" in data
@@ -71,13 +65,10 @@ async def test_get_manifest_url():
     mock_executor_manager = AsyncMock()
     mock_executor_manager.get_manifest = AsyncMock(return_value=expected_manifest)
 
-    with patch(
-        "compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager
-    ):
+    with patch("compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager):
         client = AsyncClient()
         response = await client.get("/v0.1/manifest")
-        
+
         assert response.status_code == 200
         data = json.loads(response.content)
         assert data["manifest"] == expected_manifest
-

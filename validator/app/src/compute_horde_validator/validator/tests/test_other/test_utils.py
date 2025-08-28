@@ -305,7 +305,7 @@ async def test_execute_synthetic_job(
     small_spin_up_times,
 ):
     job_uuid = None
-    
+
     async def interaction_callback(miner_client, after_job_sent):
         nonlocal job_uuid
         job_uuid = list(miner_client.ctx.job_uuids)[0]

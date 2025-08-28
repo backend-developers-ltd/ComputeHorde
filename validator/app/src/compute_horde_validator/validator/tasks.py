@@ -28,7 +28,6 @@ from celery.result import AsyncResult
 from celery.utils.log import get_task_logger
 from compute_horde.dynamic_config import fetch_dynamic_configs_from_contract, sync_dynamic_config
 from compute_horde.fv_protocol.facilitator_requests import OrganicJobRequest
-from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.smart_contracts.map_contract import get_dynamic_config_types_from_settings
 from compute_horde.subtensor import TEMPO, get_cycle_containing_block
 from compute_horde.utils import MIN_VALIDATOR_STAKE, turbobt_get_validators
@@ -1252,7 +1251,7 @@ async def get_manifests_from_miners(
     """
 
     logger.info(f"Scraping manifests for {len(miners)} miners")
-    tasks = [
+    manifest_tasks = [
         asyncio.create_task(
             get_single_manifest(
                 address=miner.address,
@@ -1260,11 +1259,11 @@ async def get_manifests_from_miners(
                 hotkey=miner.hotkey,
                 timeout=timeout,
             ),
-            name=f"{miner.hotkey}.get_manifest"
+            name=f"{miner.hotkey}.get_manifest",
         )
         for miner in miners
     ]
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*manifest_tasks)
 
     # Process results and build the manifest dictionary
     result_manifests = {}
@@ -1273,7 +1272,6 @@ async def get_manifests_from_miners(
             result_manifests[hotkey] = manifest
 
     return result_manifests
-
 
 
 @app.task
@@ -1895,4 +1893,3 @@ async def _poll_miner_manifests() -> None:
         await MinerManifest.objects.abulk_create(manifest_records)
         logger.info(f"Stored {len(manifest_records)} manifests")
     logger.info(f"Manifest polling complete: {len(manifest_records)} manifests stored")
-

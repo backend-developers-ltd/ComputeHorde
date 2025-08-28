@@ -5,7 +5,6 @@ import logging
 import operator
 from functools import reduce
 
-from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde_core.executor_class import ExecutorClass
 from django.db import transaction
 from django.db.models import Min, Q
@@ -195,7 +194,8 @@ async def fetch_manifests_from_miners(
                 address=miner[1],
                 port=miner[2],
                 hotkey=miner[0],
-                timeout=settings.MANIFEST_FETCHING_TIMEOUT),
+                timeout=settings.MANIFEST_FETCHING_TIMEOUT,
+            ),
             name=f"{miner[0]}.get_manifest",
         )
         for miner in miners

@@ -26,12 +26,12 @@ from compute_horde.protocol_messages import (
     ValidatorToMinerMessage,
 )
 from compute_horde.utils import ValidatorInfo
+from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_core.signature import Signature
 from constance.base import Config
 from django.conf import settings
 from pydantic import TypeAdapter
 
-from compute_horde_core.executor_class import ExecutorClass
 from compute_horde_validator.validator.models import SystemEvent
 from compute_horde_validator.validator.organic_jobs.miner_client import MinerClient
 from compute_horde_validator.validator.synthetic_jobs import batch_run
@@ -61,7 +61,7 @@ def get_miner_client(MINER_CLIENT, job_uuid: str) -> MinerClient:
 
 
 def create_mock_http_session(
-    manifest: dict, 
+    manifest: dict,
     wait_before: int = 0,
     wait_on_ports: dict[int, int] = None,
     fail_on_ports: list[int] = None,
@@ -77,20 +77,21 @@ def create_mock_http_session(
             total wait time will be this value + `wait_before`.
         fail_on_ports: The ports to fail on.
     """
+
     class MockResponse:
         def __init__(self, status, data):
             self.status = status
             self._data = data
-        
+
         async def json(self):
             return self._data
-        
+
         async def __aenter__(self):
             return self
-        
+
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             return None
-    
+
     class MockSession:
         def __init__(self, manifest, wait_before, wait_on_ports, fail_on_ports):
             self.manifest = manifest
@@ -110,7 +111,7 @@ def create_mock_http_session(
             # URL format: http://{address}:{port}/v0.1/manifest
             _, port = url.split("://")[1].split("/")[0].split(":")
             port = int(port)
-            
+
             # Fail on pre-defined ports
             if port in self.fail_on_ports:
                 return MockResponse(404, {"error": "Mock miner offline or unavailable"})
@@ -123,13 +124,13 @@ def create_mock_http_session(
                 await asyncio.sleep(self.wait_on_ports[port])
 
             return MockResponse(200, {"manifest": self.manifest})
-        
+
         async def __aenter__(self):
             return self
-        
+
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             return None
-    
+
     return MockSession(manifest, wait_before, wait_on_ports, fail_on_ports)
 
 

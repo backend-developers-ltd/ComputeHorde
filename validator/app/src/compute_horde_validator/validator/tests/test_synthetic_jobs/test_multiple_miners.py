@@ -554,9 +554,7 @@ async def flow_0(
 
 
 @pytest_asyncio.fixture
-async def flow_1(
-    transports: list[SimulationTransport], job_uuids: list[uuid.UUID]
-):
+async def flow_1(transports: list[SimulationTransport], job_uuids: list[uuid.UUID]):
     """
     Job timed out
     """
@@ -582,9 +580,7 @@ async def flow_1(
 
 
 @pytest_asyncio.fixture
-async def flow_2(
-    transports: list[SimulationTransport], job_uuids: list[uuid.UUID]
-):
+async def flow_2(transports: list[SimulationTransport], job_uuids: list[uuid.UUID]):
     """
     Job failed
     """
@@ -607,9 +603,7 @@ async def flow_2(
 
 
 @pytest_asyncio.fixture
-async def flow_3(
-    transports: list[SimulationTransport], job_uuids: list[uuid.UUID]
-):
+async def flow_3(transports: list[SimulationTransport], job_uuids: list[uuid.UUID]):
     """
     Job declined - no reason
     """
@@ -623,9 +617,7 @@ async def flow_3(
 
 
 @pytest_asyncio.fixture
-async def flow_4(
-    transports: list[SimulationTransport], job_uuids: list[uuid.UUID]
-):
+async def flow_4(transports: list[SimulationTransport], job_uuids: list[uuid.UUID]):
     """
     Job declined - busy, but no receipts provided.
     """

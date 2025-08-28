@@ -156,12 +156,12 @@ class TestMainHotkeyScoringEngine(TestCase):
 
     def _get_mock_http_responses(self):
         """Get a mock HTTP response for _query_single_miner."""
-        
+
         async def mock_http_response(miner):
             # Return the main hotkey based on the miner's hotkey
             # This matches the original test setup where each miner returns its own hotkey as main hotkey
             return miner.hotkey
-        
+
         return mock_http_response
 
     @pytest.mark.django_db(transaction=True)

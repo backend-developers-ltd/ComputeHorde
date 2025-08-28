@@ -1,5 +1,6 @@
 import asyncio
 import logging
+
 import aiohttp
 
 from compute_horde_validator.validator.models import Miner
@@ -70,7 +71,9 @@ async def _query_single_miner(miner: Miner) -> str | None:
                     if response.status == 200:
                         return data.get("main_hotkey")
                     else:
-                        logger.warning(f"HTTP {response.status} from {miner.hotkey}: {data['error']}")
+                        logger.warning(
+                            f"HTTP {response.status} from {miner.hotkey}: {data['error']}"
+                        )
                         return None
 
     except TimeoutError:

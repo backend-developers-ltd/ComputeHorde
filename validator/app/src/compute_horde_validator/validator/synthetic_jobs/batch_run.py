@@ -1,4 +1,3 @@
-import aiohttp
 import asyncio
 import logging
 import math
@@ -13,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol, assert_never
 
+import aiohttp
 import bittensor_wallet
 import httpx
 from asgiref.sync import sync_to_async

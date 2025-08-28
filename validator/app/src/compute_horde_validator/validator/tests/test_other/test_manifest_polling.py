@@ -37,24 +37,25 @@ class MinerConfig(TypedDict):
 
 def create_mock_http_session(miner_configs: list[MinerConfig]):
     """Create a mock HTTP session for testing."""
+
     class MockResponse:
         def __init__(self, status, data):
             self.status = status
             self._data = data
-        
+
         async def json(self):
             return self._data
-        
+
         async def __aenter__(self):
             return self
-        
+
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             return None
-    
+
     class MockSession:
         def __init__(self, miner_configs):
             self.miner_configs = miner_configs
-        
+
         async def get(self, url):
             # Get the miner config based on the URL
             # URL format: http://{address}:{port}/v0.1/manifest
@@ -63,7 +64,7 @@ def create_mock_http_session(miner_configs: list[MinerConfig]):
             # Find the hotkey for this address by looking up in neurons
             target_manifest = None
             for config in self.miner_configs:
-                if config["address"] == address and str(config["port"])== port:
+                if config["address"] == address and str(config["port"]) == port:
                     target_manifest = config["manifest"]
                     break
 
@@ -73,13 +74,13 @@ def create_mock_http_session(miner_configs: list[MinerConfig]):
             else:
                 # Return error response for unknown miners
                 return MockResponse(404, {"error": "Miner not found"})
-        
+
         async def __aenter__(self):
             return self
-        
+
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             return None
-    
+
     return MockSession(miner_configs)
 
 
@@ -157,7 +158,9 @@ async def test_get_manifests_from_miners():
     miners = []
     for config in miner_configs:
         miner = await Miner.objects.acreate(
-            hotkey=config["hotkey"], address=config["address"], port=config["port"],
+            hotkey=config["hotkey"],
+            address=config["address"],
+            port=config["port"],
         )
         miners.append(miner)
 
@@ -341,8 +344,8 @@ async def test_poll_miner_manifests_with_partial_transport_failures():
     )
 
     # Add miner manifest via HTTP view
-    # The missing entry for test_miner_2 will result in a non-200 response and 
-    # be interpreted by _poll_miner_manifests as a "transport failure", e.g. 
+    # The missing entry for test_miner_2 will result in a non-200 response and
+    # be interpreted by _poll_miner_manifests as a "transport failure", e.g.
     # an unresponsive/offline miner.
     miner_config = [
         {

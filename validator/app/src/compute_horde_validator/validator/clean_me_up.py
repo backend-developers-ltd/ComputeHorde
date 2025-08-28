@@ -1,6 +1,6 @@
 import asyncio
-import aiohttp
 
+import aiohttp
 from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
@@ -61,4 +61,3 @@ async def get_single_manifest(
         )
         logger.warning(msg)
         return hotkey, None
-

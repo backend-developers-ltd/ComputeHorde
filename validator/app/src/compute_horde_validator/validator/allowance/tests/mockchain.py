@@ -306,15 +306,13 @@ def set_block_number(block_number_):
     # Create mock HTTP responses from manifest responses
     def create_mock_http_responses():
         http_responses = {}
-        
+
         for hotkey, manifest_request, _ in responses:
             if isinstance(manifest_request, V0ExecutorManifestRequest):
                 # Convert the manifest to the HTTP response format
-                http_response = {
-                    "manifest": manifest_request.manifest
-                }
+                http_response = {"manifest": manifest_request.manifest}
                 http_responses[hotkey] = http_response
-        
+
         return http_responses
 
     # Create mock HTTP session
@@ -323,25 +321,25 @@ def set_block_number(block_number_):
             def __init__(self, status, data):
                 self.status = status
                 self._data = data
-            
+
             async def json(self):
                 return self._data
-            
+
             async def __aenter__(self):
                 return self
-            
+
             async def __aexit__(self, exc_type, exc_val, exc_tb):
                 return None
-        
+
         class MockSession:
             def __init__(self, http_responses):
                 self.http_responses = http_responses
-            
+
             async def get(self, url):
                 # Extract hotkey from URL by looking up the address in neurons
                 # URL format: http://{address}:{port}/v0.1/manifest
                 address = url.split("://")[1].split(":")[0]
-                
+
                 # Find the hotkey for this address by looking up in neurons
                 neurons = list_neurons(block_number_, with_shield=False)
                 target_hotkey = None
@@ -349,7 +347,7 @@ def set_block_number(block_number_):
                     if neuron.axon_info.ip == address:
                         target_hotkey = neuron.hotkey
                         break
-                
+
                 if target_hotkey and target_hotkey in http_responses:
                     # Find the delay for this hotkey
                     target_delay = 0
@@ -357,23 +355,23 @@ def set_block_number(block_number_):
                         if response_hotkey == target_hotkey:
                             target_delay = delay
                             break
-                    
+
                     # Simulate delay if specified
                     if target_delay > 0:
                         await asyncio.sleep(target_delay)
-                    
+
                     # Return successful response
                     return MockResponse(200, http_responses[target_hotkey])
                 else:
                     # Return error response for unknown miners
                     return MockResponse(404, {"error": "Miner not found"})
-            
+
             async def __aenter__(self):
                 return self
-            
+
             async def __aexit__(self, exc_type, exc_val, exc_tb):
                 return None
-        
+
         return MockSession(http_responses)
 
     http_responses = create_mock_http_responses()

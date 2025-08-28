@@ -6,7 +6,6 @@ from unittest.mock import patch
 import pytest
 from asgiref.sync import sync_to_async
 
-from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,

@@ -90,6 +90,7 @@ def _patch_generator_factory(
         job_generator_factory,
     )
 
+
 @pytest.fixture
 def manifest_message():
     return {DEFAULT_EXECUTOR_CLASS: 1}

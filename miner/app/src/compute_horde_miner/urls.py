@@ -5,7 +5,7 @@ from django.views.generic import RedirectView
 
 from .miner.business_metrics import metrics_manager
 from .miner.metrics import metrics_view
-from .miner.views import get_version, get_main_hotkey, get_manifest
+from .miner.views import get_main_hotkey, get_manifest, get_version
 
 urlpatterns = [
     path("admin/", site.urls),

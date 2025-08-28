@@ -1,6 +1,7 @@
 import os
 
 from django.http import JsonResponse
+
 from compute_horde_miner.miner.executor_manager import current
 
 
