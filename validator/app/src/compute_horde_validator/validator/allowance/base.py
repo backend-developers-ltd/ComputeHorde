@@ -111,6 +111,13 @@ class AllowanceBase(ABC):
         pass
 
     @abstractmethod
+    def get_current_block(self) -> int:
+        """
+        Return the current block number.
+        """
+        pass
+
+    @abstractmethod
     def get_manifests(self) -> dict[ss58_address, dict[ExecutorClass, int]]:
         """
         Return the latest manifests for all miners.
