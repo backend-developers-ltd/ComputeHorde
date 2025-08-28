@@ -29,7 +29,7 @@ from ..types import (
 from ..utils import blocks, manifests
 from ..utils.manifests import sync_manifests
 from ..utils.supertensor import supertensor
-from .mockchain import MINER_HOTKEYS, manifest_responses, set_block_number
+from .mockchain import MINER_HOTKEYS, VALIDATOR_HOTKEYS, manifest_responses, set_block_number
 from .utils_for_tests import (
     LF,
     Matcher,
@@ -608,3 +608,26 @@ def test_allowance_reservation_corner_cases(configure_logs):
             "highest_unspent_allowance": LF(4.749230769230769),
             "highest_unspent_allowance_ss58": Matcher(r".*"),
         }
+
+
+@pytest.mark.django_db(transaction=True)
+def test_manifests(configure_logs):
+    with set_block_number(1000):
+        sync_manifests()
+
+        miner_manifests = allowance().get_manifests()
+
+        for validator_hotkey in VALIDATOR_HOTKEYS.values():
+            executor_dict = miner_manifests.pop(validator_hotkey)
+            total_executor_count = sum(executor_count for executor_count in executor_dict.values())
+            # validators shouldn't have executors
+            assert total_executor_count == 0
+
+        for miner_hotkey in MINER_HOTKEYS.values():
+            executor_dict = miner_manifests.pop(miner_hotkey)
+            total_executor_count = sum(executor_count for executor_count in executor_dict.values())
+            # miners must have executors
+            assert total_executor_count != 0
+
+        # all manifests should have been accounted for
+        assert not miner_manifests
