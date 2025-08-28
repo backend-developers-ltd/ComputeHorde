@@ -49,11 +49,11 @@ class V2JobRequest(SignedRequest, BaseModel, extra="forbid"):
     message_type: Literal["V2JobRequest"] = "V2JobRequest"
 
     uuid: str
+    job_namespace: str = ""
 
     # !!! all fields below are included in the signed json payload
     executor_class: ExecutorClass
     docker_image: str
-    job_namespace: str = ""
     args: list[str]
     env: dict[str, str]
     use_gpu: bool
