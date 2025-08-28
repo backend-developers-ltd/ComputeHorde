@@ -1241,51 +1241,39 @@ async def get_manifests_from_miners(
     timeout: float = 30,
 ) -> dict[str, dict[ExecutorClass, int]]:
     """
-    Connect to multiple miner clients in parallel and retrieve their manifests.
+    Connect to multiple miners in parallel and retrieve their manifests via HTTP.
 
     Args:
-        miner_clients: List of OrganicMinerClient instances to connect to
+        miners: List of Miner instances to connect to
         timeout: Maximum time to wait for manifest retrieval in seconds
 
     Returns:
         Dictionary mapping miner hotkeys to their executor manifests
     """
 
-    miner_clients = [
-        OrganicMinerClient(
-            miner_hotkey=miner.hotkey,
-            miner_address=miner.address,
-            miner_port=miner.port,
-            job_uuid="ignore",
-            my_keypair=get_keypair(),
+    logger.info(f"Scraping manifests for {len(miners)} miners")
+    tasks = [
+        asyncio.create_task(
+            get_single_manifest(
+                address=miner.address,
+                port=miner.port,
+                hotkey=miner.hotkey,
+                timeout=timeout,
+            ),
+            name=f"{miner.hotkey}.get_manifest"
         )
         for miner in miners
     ]
+    results = await asyncio.gather(*tasks)
 
-    try:
-        logger.info(f"Scraping manifests for {len(miner_clients)} miners")
-        tasks = [
-            asyncio.create_task(
-                get_single_manifest(client, timeout), name=f"{client.miner_hotkey}.get_manifest"
-            )
-            for client in miner_clients
-        ]
-        results = await asyncio.gather(*tasks)
+    # Process results and build the manifest dictionary
+    result_manifests = {}
+    for hotkey, manifest in results:
+        if manifest is not None:
+            result_manifests[hotkey] = manifest
 
-        # Process results and build the manifest dictionary
-        result_manifests = {}
-        for hotkey, manifest in results:
-            if manifest is not None:
-                result_manifests[hotkey] = manifest
+    return result_manifests
 
-        return result_manifests
-
-    finally:
-        close_tasks = [
-            asyncio.create_task(client.close(), name=f"{client.miner_hotkey}.close")
-            for client in miner_clients
-        ]
-        await asyncio.gather(*close_tasks, return_exceptions=True)
 
 
 @app.task
@@ -1907,3 +1895,4 @@ async def _poll_miner_manifests() -> None:
         await MinerManifest.objects.abulk_create(manifest_records)
         logger.info(f"Stored {len(manifest_records)} manifests")
     logger.info(f"Manifest polling complete: {len(manifest_records)} manifests stored")
+

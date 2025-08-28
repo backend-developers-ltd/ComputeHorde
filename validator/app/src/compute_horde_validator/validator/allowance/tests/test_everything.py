@@ -289,7 +289,7 @@ def test_complete(caplog, configure_logs):
             [
                 {
                     "type": "COMPUTE_TIME_ALLOWANCE",
-                    "subtype": "MANIFEST_TIMEOUT",
+                    "subtype": "MANIFEST_ERROR",
                     "data": {"hotkey": "malforming_miner_249"},
                 },
                 {

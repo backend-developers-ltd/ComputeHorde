@@ -1,17 +1,6 @@
 import asyncio
 import logging
-import time
-
-from compute_horde.protocol_messages import (
-    GenericError,
-    MinerToValidatorMessage,
-    V0MainHotkeyMessage,
-    ValidatorAuthForMiner,
-)
-from compute_horde.transport import WSTransport
-from compute_horde.utils import sign_blob
-from django.conf import settings
-from pydantic import TypeAdapter
+import aiohttp
 
 from compute_horde_validator.validator.models import Miner
 
@@ -64,7 +53,7 @@ async def _query_miners(miners: list[Miner]) -> dict[str, str | None]:
 
 async def _query_single_miner(miner: Miner) -> str | None:
     """
-    Async helper to query a single miner.
+    Async helper to query a single miner via HTTP.
 
     Args:
         miner: Miner to query
@@ -72,33 +61,16 @@ async def _query_single_miner(miner: Miner) -> str | None:
     Returns:
         Main hotkey (or None)
     """
-    transport = None
     try:
-        transport = WSTransport(
-            f"main_hotkey_query_{miner.hotkey}",
-            f"ws://{miner.address}:{miner.port}/v0.1/validator_interface/{settings.BITTENSOR_WALLET().get_hotkey().ss58_address}",
-            max_retries=2,
-        )
-        await transport.start()
-
-        auth_msg = _create_auth_message(miner.hotkey)
-        await transport.send(auth_msg.model_dump_json())
-
-        request = V0MainHotkeyMessage()
-        await transport.send(request.model_dump_json())
-
-        async with asyncio.timeout(10):
-            while True:
-                response = await transport.receive()
-                if response:
-                    msg: MinerToValidatorMessage = TypeAdapter(
-                        MinerToValidatorMessage
-                    ).validate_json(response)
-
-                    if isinstance(msg, V0MainHotkeyMessage):
-                        return msg.main_hotkey
-                    elif isinstance(msg, GenericError):
-                        logger.warning(f"Error from {miner.hotkey}: {msg.details}")
+        async with aiohttp.ClientSession() as session:
+            url = f"http://{miner.address}:{miner.port}/v0.1/hotkey"
+            async with asyncio.timeout(10):
+                async with session.get(url) as response:
+                    data = await response.json()
+                    if response.status == 200:
+                        return data.get("main_hotkey")
+                    else:
+                        logger.warning(f"HTTP {response.status} from {miner.hotkey}: {data['error']}")
                         return None
 
     except TimeoutError:
@@ -107,29 +79,3 @@ async def _query_single_miner(miner: Miner) -> str | None:
     except Exception as e:
         logger.warning(f"Error querying main hotkey from {miner.hotkey}: {e}")
         return None
-    finally:
-        if transport:
-            await transport.stop()
-
-
-def _create_auth_message(miner_hotkey: str) -> ValidatorAuthForMiner:
-    """
-    Create authentication message for miner.
-
-    Args:
-        miner_hotkey: Miner hotkey
-
-    Returns:
-        Authentication message
-    """
-    wallet = settings.BITTENSOR_WALLET()
-    hotkey = wallet.get_hotkey()
-
-    msg = ValidatorAuthForMiner(
-        validator_hotkey=hotkey.ss58_address,
-        miner_hotkey=miner_hotkey,
-        timestamp=int(time.time()),
-        signature="",
-    )
-    msg.signature = sign_blob(hotkey, msg.blob_for_signing())
-    return msg

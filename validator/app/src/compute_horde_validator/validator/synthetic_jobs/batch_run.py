@@ -1,3 +1,4 @@
+import aiohttp
 import asyncio
 import logging
 import math
@@ -194,12 +195,10 @@ class MinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorToMinerM
             )
             return
 
+        # Note: Manifest is now queried via HTTP, not received via websocket
+        # TODO: Remove this once development is done
         if isinstance(msg, V0ExecutorManifestRequest):
-            if self.ctx.manifests[self.miner_hotkey] is None:
-                self.ctx.manifests[self.miner_hotkey] = msg.manifest
-                self.ctx.manifest_events[self.miner_hotkey].set()
-            else:
-                logger.warning("%s duplicate message: %s", self.miner_name, msg.message_type)
+            logger.warning("%s received unexpected manifest message via websocket", self.miner_name)
             return
 
         job_uuid = getattr(msg, "job_uuid", None)
@@ -491,7 +490,6 @@ class BatchContext:
 
     # TODO: now `manifests` and `executors` have similar shape due to the protocol change. Do we still need both?
     manifests: dict[str, dict[ExecutorClass, int] | None]
-    manifest_events: dict[str, asyncio.Event]
 
     # randomized, but order preserving list of job.uuid
     # used to go from indices returned by asyncio.gather() back to job.uuid
@@ -865,7 +863,6 @@ async def _init_context(
         job_generators={},
         online_executor_count={},
         manifests={},
-        manifest_events={},
         job_uuids=[],
         jobs={},
         active_validators=active_validators,
@@ -887,7 +884,6 @@ async def _init_context(
         ctx.job_generators[hotkey] = {}
         ctx.online_executor_count[hotkey] = defaultdict(int)
         ctx.manifests[hotkey] = None
-        ctx.manifest_events[hotkey] = asyncio.Event()
 
     return ctx
 
@@ -990,27 +986,31 @@ async def _get_miner_manifest(
 ) -> None:
     await start_barrier.wait()
 
-    client = ctx.clients[miner_hotkey]
+    miner = ctx.miners[miner_hotkey]
 
     async with asyncio.timeout(_GET_MANIFEST_TIMEOUT):
-        try:
-            await client.connect()
-        except TransportConnectionError as exc:
-            name = ctx.names[miner_hotkey]
-            logger.warning("%s connection error: %r", name, exc)
-            ctx.system_event(
-                type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
-                subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR,
-                description=repr(exc),
-                miner_hotkey=miner_hotkey,
-                func="connect",
-            )
-            return
+        async with aiohttp.ClientSession() as session:
+            url = f"http://{miner.address}:{miner.port}/v0.1/manifest"
+            async with await session.get(url) as response:
+                data = await response.json()
+                if response.status == 200:
+                    manifest = data.get("manifest", {})
+                else:
+                    name = ctx.names[miner_hotkey]
+                    data = await response.json()
+                    logger.warning(
+                        "%s HTTP connection error (%s): %s", name, response.status, data["error"]
+                    )
+                    ctx.system_event(
+                        type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+                        subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR,
+                        description=f"HTTP connection error ({response.status}): {data['error']}",
+                        miner_hotkey=miner_hotkey,
+                        func="connect",
+                    )
+                    return
 
-        await ctx.manifest_events[miner_hotkey].wait()
-
-    manifest = ctx.manifests[miner_hotkey]
-    assert manifest is not None
+    ctx.manifests[miner_hotkey] = manifest
 
     executors = ctx.executors[miner_hotkey]
     for executor_class, count in manifest.items():
@@ -2260,6 +2260,34 @@ def shuffled(list_: list[Any]) -> list[Any]:
     return random.sample(list_, len(list_))
 
 
+async def _connect_miner_client(ctx: BatchContext, miner_hotkey: str):
+    """
+    Connect to a miner client and handle connection errors.
+    """
+    client = ctx.clients[miner_hotkey]
+
+    try:
+        await client.connect()
+    except TransportConnectionError as exc:
+        name = ctx.names[miner_hotkey]
+        logger.warning("%s connection error: %r", name, exc)
+        ctx.system_event(
+            type=SystemEvent.EventType.MINER_SYNTHETIC_JOB_FAILURE,
+            subtype=SystemEvent.EventSubType.MINER_CONNECTION_ERROR,
+            description=repr(exc),
+            miner_hotkey=miner_hotkey,
+            func="connect",
+        )
+        return
+
+
+async def _connect_all_clients(ctx):
+    tasks = []
+    for hotkey in ctx.hotkeys:
+        tasks.append(_connect_miner_client(ctx, hotkey))
+    await asyncio.gather(*tasks)
+
+
 async def execute_synthetic_batch_run(
     serving_miners: list[Miner],
     active_validators: list[ValidatorInfo],
@@ -2281,6 +2309,9 @@ async def execute_synthetic_batch_run(
 
     try:
         ctx.loop_profiler = LoopProfiler(ctx)
+
+        # Connect to the miners.
+        await _connect_all_clients(ctx)
 
         await ctx.checkpoint_system_event("_multi_get_miner_manifest")
         await _multi_get_miner_manifest(ctx)

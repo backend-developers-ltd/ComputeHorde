@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 from asgiref.sync import sync_to_async
 
+from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde_validator.validator.models import (
     Cycle,
     Miner,
@@ -16,7 +17,7 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
-from ..helpers import check_system_events
+from ..helpers import check_system_events, mock_aiohttp_client_session
 from .helpers import check_synthetic_job
 from .mock_generator import (
     NOT_SCORED,
@@ -38,8 +39,7 @@ async def test_execute_miner_synthetic_jobs_success(
     transport: SimulationTransport,
     job_uuid: uuid.UUID,
 ):
-    await transport.add_message(manifest_message, send_before=1)
-    await transport.add_message(accept_job_message, send_before=1)
+    await transport.add_message(accept_job_message, send_before=2)
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(job_finish_message, send_before=2)
 
@@ -47,15 +47,16 @@ async def test_execute_miner_synthetic_jobs_success(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            [miner],
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=1,
-    )
+    async with mock_aiohttp_client_session(manifest_message):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                [miner],
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=1,
+        )
 
     await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, 1)
     await sync_to_async(check_system_events)(
@@ -76,8 +77,7 @@ async def test_execute_miner_synthetic_jobs_success_timeout(
     transport: SimulationTransport,
     job_uuid: uuid.UUID,
 ):
-    await transport.add_message(manifest_message, send_before=1)
-    await transport.add_message(accept_job_message, send_before=1)
+    await transport.add_message(accept_job_message, send_before=2)
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(job_finish_message, send_before=2, sleep_before=2)
 
@@ -85,15 +85,16 @@ async def test_execute_miner_synthetic_jobs_success_timeout(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            [miner],
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=3,
-    )
+    async with mock_aiohttp_client_session(manifest_message):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                [miner],
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=3,
+        )
 
     await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.FAILED, NOT_SCORED)
     await sync_to_async(check_system_events)(
@@ -112,8 +113,7 @@ async def test_execute_miner_synthetic_jobs_job_failed(
     transport: SimulationTransport,
     job_uuid: uuid.UUID,
 ):
-    await transport.add_message(manifest_message, send_before=1)
-    await transport.add_message(accept_job_message, send_before=1)
+    await transport.add_message(accept_job_message, send_before=2)
     await transport.add_message(executor_ready_message, send_before=0)
     await transport.add_message(job_failed_message, send_before=2)
 
@@ -121,15 +121,16 @@ async def test_execute_miner_synthetic_jobs_job_failed(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            [miner],
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=1,
-    )
+    async with mock_aiohttp_client_session(manifest_message):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                [miner],
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=1,
+        )
 
     await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.FAILED, NOT_SCORED)
     await sync_to_async(check_system_events)(
@@ -145,22 +146,22 @@ async def test_execute_miner_synthetic_jobs_job_declined(
     transport: SimulationTransport,
     job_uuid: uuid.UUID,
 ):
-    await transport.add_message(manifest_message, send_before=1)
-    await transport.add_message(decline_job_message, send_before=1)
+    await transport.add_message(decline_job_message, send_before=2)
 
     batch = await SyntheticJobBatch.objects.acreate(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            [miner],
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=1,
-    )
+    async with mock_aiohttp_client_session(manifest_message):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                [miner],
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=1,
+        )
 
     await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.FAILED, NOT_SCORED)
     await sync_to_async(check_system_events)(
@@ -177,15 +178,16 @@ async def test_execute_miner_synthetic_jobs_no_manifest(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            [miner],
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=1,
-    )
+    async with mock_aiohttp_client_session({}, wait_before=10):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                [miner],
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=1,
+        )
 
     assert not await SyntheticJob.objects.aexists()
     await sync_to_async(check_system_events)(

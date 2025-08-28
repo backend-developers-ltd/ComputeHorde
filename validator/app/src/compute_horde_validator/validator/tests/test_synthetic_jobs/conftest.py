@@ -7,7 +7,6 @@ from compute_horde.miner_client.base import AbstractTransport
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
-    V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
@@ -91,15 +90,14 @@ def _patch_generator_factory(
         job_generator_factory,
     )
 
-
 @pytest.fixture
 def manifest_message():
-    return V0ExecutorManifestRequest(manifest={DEFAULT_EXECUTOR_CLASS: 1}).model_dump_json()
+    return {DEFAULT_EXECUTOR_CLASS: 1}
 
 
 @pytest.fixture
 def streaming_manifest_message():
-    return V0ExecutorManifestRequest(manifest={DEFAULT_LLM_EXECUTOR_CLASS: 1}).model_dump_json()
+    return {DEFAULT_LLM_EXECUTOR_CLASS: 1}
 
 
 @pytest.fixture

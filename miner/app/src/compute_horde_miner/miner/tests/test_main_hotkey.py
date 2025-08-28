@@ -1,110 +1,101 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import json
 import pytest
-from compute_horde.protocol_messages import (
-    GenericError,
-    V0MainHotkeyMessage,
-)
+from django.test import AsyncClient
+from django.urls import reverse
 
-from compute_horde_miner.miner.miner_consumer.validator_interface import (
-    MinerValidatorConsumer,
-)
+from compute_horde_miner.miner.views import get_main_hotkey
 
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_main_hotkey_request_authenticated():
-    """Test handling V0MainHotkeyRequest when validator is authenticated."""
-    consumer = MagicMock()
-    consumer.validator_authenticated = True
-    consumer.validator_key = "mock_validator"
-    consumer.send = AsyncMock()
-
+async def test_get_main_hotkey_success():
+    """Test HTTP endpoint for getting main hotkey successfully."""
     expected_main_hotkey = "hotkey1"
     mock_executor_manager = AsyncMock()
     mock_executor_manager.get_main_hotkey = AsyncMock(return_value=expected_main_hotkey)
 
     with patch(
-        "compute_horde_miner.miner.executor_manager.current.executor_manager", mock_executor_manager
+        "compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager
     ):
-        real_consumer = MinerValidatorConsumer(MagicMock())
-        real_consumer.validator_authenticated = True
-        real_consumer.validator_key = "mock_validator"
-        real_consumer.send = AsyncMock()
-
-        request = V0MainHotkeyMessage()
-        await real_consumer.handle_main_hotkey_request(request)
-
-        real_consumer.send.assert_called_once()
-        call_args = real_consumer.send.call_args[0][0]
-        response = V0MainHotkeyMessage.model_validate_json(call_args)
-        assert response.main_hotkey == expected_main_hotkey
+        request = MagicMock()
+        response = await get_main_hotkey(request)
+        
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data["main_hotkey"] == expected_main_hotkey
 
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_main_hotkey_request_unauthenticated():
-    """Test handling V0MainHotkeyRequest when validator is not authenticated."""
-    with patch("compute_horde_miner.miner.executor_manager.current.executor_manager", MagicMock()):
-        real_consumer = MinerValidatorConsumer(MagicMock())
-        real_consumer.validator_authenticated = False
-        real_consumer.validator_key = "mock_validator"
-        real_consumer.send = AsyncMock()
-
-        # Send main hotkey request
-        request = V0MainHotkeyMessage()
-        await real_consumer.handle_main_hotkey_request(request)
-
-        # Verify the error response
-        real_consumer.send.assert_called_once()
-        call_args = real_consumer.send.call_args[0][0]
-        response = GenericError.model_validate_json(call_args)
-        assert "Unauthenticated validator" in response.details
-
-
-@pytest.mark.django_db
-@pytest.mark.asyncio
-async def test_main_hotkey_request_none_response():
-    """Test handling V0MainHotkeyRequest when executor manager returns None."""
+async def test_get_main_hotkey_none_response():
+    """Test HTTP endpoint for getting main hotkey when executor manager returns None."""
     mock_executor_manager = AsyncMock()
     mock_executor_manager.get_main_hotkey = AsyncMock(return_value=None)
 
     with patch(
-        "compute_horde_miner.miner.executor_manager.current.executor_manager", mock_executor_manager
+        "compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager
     ):
-        real_consumer = MinerValidatorConsumer(MagicMock())
-        real_consumer.validator_authenticated = True
-        real_consumer.validator_key = "mock_validator"
-        real_consumer.send = AsyncMock()
-
-        request = V0MainHotkeyMessage()
-        await real_consumer.handle_main_hotkey_request(request)
-
-        real_consumer.send.assert_called_once()
-        call_args = real_consumer.send.call_args[0][0]
-        response = V0MainHotkeyMessage.model_validate_json(call_args)
-        assert response.main_hotkey is None
+        request = MagicMock()
+        response = await get_main_hotkey(request)
+        
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data["main_hotkey"] is None
 
 
 @pytest.mark.django_db
 @pytest.mark.asyncio
-async def test_main_hotkey_request_empty_string_response():
-    """Test handling V0MainHotkeyRequest when executor manager returns empty string."""
+async def test_get_main_hotkey_empty_string_response():
+    """Test HTTP endpoint for getting main hotkey when executor manager returns empty string."""
     mock_executor_manager = AsyncMock()
     mock_executor_manager.get_main_hotkey = AsyncMock(return_value="")
 
     with patch(
-        "compute_horde_miner.miner.executor_manager.current.executor_manager", mock_executor_manager
+        "compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager
     ):
-        real_consumer = MinerValidatorConsumer(MagicMock())
-        real_consumer.validator_authenticated = True
-        real_consumer.validator_key = "mock_validator"
-        real_consumer.send = AsyncMock()
+        request = MagicMock()
+        response = await get_main_hotkey(request)
+        
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data["main_hotkey"] == ""
 
-        request = V0MainHotkeyMessage()
-        await real_consumer.handle_main_hotkey_request(request)
 
-        real_consumer.send.assert_called_once()
-        call_args = real_consumer.send.call_args[0][0]
-        response = V0MainHotkeyMessage.model_validate_json(call_args)
-        assert response.main_hotkey == ""
+@pytest.mark.django_db
+@pytest.mark.asyncio
+async def test_get_main_hotkey_exception():
+    """Test HTTP endpoint for getting main hotkey when executor manager raises an exception."""
+    mock_executor_manager = AsyncMock()
+    mock_executor_manager.get_main_hotkey = AsyncMock(side_effect=Exception("Test error"))
+
+    with patch(
+        "compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager
+    ):
+        request = MagicMock()
+        response = await get_main_hotkey(request)
+        
+        assert response.status_code == 500
+        data = json.loads(response.content)
+        assert "error" in data
+        assert "Test error" in data["error"]
+
+
+@pytest.mark.django_db
+@pytest.mark.asyncio
+async def test_get_main_hotkey_url():
+    """Test that the hotkey URL endpoint works correctly."""
+    expected_main_hotkey = "hotkey1"
+    mock_executor_manager = AsyncMock()
+    mock_executor_manager.get_main_hotkey = AsyncMock(return_value=expected_main_hotkey)
+
+    with patch(
+        "compute_horde_miner.miner.views.current.executor_manager", mock_executor_manager
+    ):
+        client = AsyncClient()
+        response = await client.get("/v0.1/hotkey")
+        
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data["main_hotkey"] == expected_main_hotkey

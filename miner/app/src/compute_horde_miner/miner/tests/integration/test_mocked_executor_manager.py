@@ -95,11 +95,6 @@ async def run_regular_flow_test(validator_key: str, job_uuid: str, streaming: bo
                 "signature": "gibberish",
             }
         )
-        response = await communicator.receive_json_from(timeout=WEBSOCKET_TIMEOUT)
-        assert response == {
-            "message_type": "V0ExecutorManifestRequest",
-            "manifest": {DEFAULT_EXECUTOR_CLASS: 1},
-        }
         msg = {
             "message_type": "V0InitialJobRequest",
             "job_uuid": job_uuid,

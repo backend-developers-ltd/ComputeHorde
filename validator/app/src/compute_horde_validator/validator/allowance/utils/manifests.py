@@ -185,45 +185,28 @@ async def fetch_manifests_from_miners(
 ) -> dict[tuple[ss58_address, ExecutorClass], int]:
     """Only includes results for miners that have replied successfully."""
 
-    my_keypair = supertensor().wallet().get_hotkey()
+    # workaround for circular imports through `validator/tasks.py`
+    from ...clean_me_up import get_single_manifest
 
-    miner_clients = [
-        OrganicMinerClient(
-            miner_hotkey=miner[0],
-            miner_address=miner[1],
-            miner_port=miner[2],
-            job_uuid="ignore",
-            my_keypair=my_keypair,
+    logger.info(f"Scraping manifests for {len(miners)} miners")
+    tasks = [
+        asyncio.create_task(
+            get_single_manifest(
+                address=miner[1],
+                port=miner[2],
+                hotkey=miner[0],
+                timeout=settings.MANIFEST_FETCHING_TIMEOUT),
+            name=f"{miner[0]}.get_manifest",
         )
         for miner in miners
     ]
+    results = await asyncio.gather(*tasks)
 
-    try:
-        # workaround for circular imports through `validator/tasks.py`
-        from ...clean_me_up import get_single_manifest
+    # Process results and build the manifest dictionary
+    result_manifests = {}
+    for hotkey, manifest in results:
+        for executor_class in ExecutorClass:
+            if manifest is not None:
+                result_manifests[hotkey, executor_class] = manifest.get(executor_class, 0)
 
-        logger.info(f"Scraping manifests for {len(miner_clients)} miners")
-        tasks = [
-            asyncio.create_task(
-                get_single_manifest(client, settings.MANIFEST_FETCHING_TIMEOUT),
-                name=f"{client.miner_hotkey}.get_manifest",
-            )
-            for client in miner_clients
-        ]
-        results = await asyncio.gather(*tasks)
-
-        # Process results and build the manifest dictionary
-        result_manifests = {}
-        for hotkey, manifest in results:
-            for executor_class in ExecutorClass:
-                if manifest is not None:
-                    result_manifests[hotkey, executor_class] = manifest.get(executor_class, 0)
-
-        return result_manifests
-
-    finally:
-        close_tasks = [
-            asyncio.create_task(client.close(), name=f"{client.miner_hotkey}.close")
-            for client in miner_clients
-        ]
-        await asyncio.gather(*close_tasks, return_exceptions=True)
+    return result_manifests

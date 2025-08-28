@@ -11,7 +11,6 @@ from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
-    V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0JobFailedRequest,
     V0JobFinishedRequest,
@@ -39,6 +38,8 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 
 from ..helpers import (
     check_system_events,
+    create_mock_http_session,
+    mock_aiohttp_client_session,
 )
 
 MOCK_SCORE = 1
@@ -127,7 +128,6 @@ def wait_for_true(fun, timeout=5):
 
 async def miner_synthetic_jobs_scheme(
     mocked_synthetic_miner_client,
-    manifest_callback,
     expected_jobs,
     interaction_callback,
     miner_hotkey="miner_hotkey",
@@ -145,9 +145,6 @@ async def miner_synthetic_jobs_scheme(
     try:
         # wait for creation of mocked MinerClient to get instance
         miner_client = await await_for_not_none(lambda: mocked_synthetic_miner_client.instance)
-
-        # set manifest using manifest_callback
-        await manifest_callback(miner_client)
 
         # wait for task to consume manifest future result and setup jobs
         await await_for_true(lambda: len(miner_client.ctx.job_uuids) == expected_jobs)
@@ -171,7 +168,6 @@ async def miner_synthetic_jobs_scheme(
 def syntethic_batch_scheme_single_miner(
     settings,
     mocked_synthetic_miner_client,
-    manifest_callback,
     expected_jobs,
     interaction_callback,
     miner_hotkey="miner_hotkey",
@@ -199,9 +195,6 @@ def syntethic_batch_scheme_single_miner(
 
         # we change async state, eg. Futures - so run as coroutine threadsafe using loop from miner_manifest Future
         loop = miner_client.ctx._loop
-
-        future = asyncio.run_coroutine_threadsafe(manifest_callback(miner_client), loop)
-        future.result(timeout=5)
 
         wait_for_true(lambda: len(miner_client.ctx.job_uuids) == expected_jobs)
 
@@ -311,12 +304,8 @@ async def test_execute_synthetic_job(
     mocked_synthetic_miner_client,
     small_spin_up_times,
 ):
-    manifest_request = V0ExecutorManifestRequest(manifest={DEFAULT_EXECUTOR_CLASS: 1})
     job_uuid = None
-
-    async def manifest_callback(miner_client):
-        await miner_client.handle_message(manifest_request)
-
+    
     async def interaction_callback(miner_client, after_job_sent):
         nonlocal job_uuid
         job_uuid = list(miner_client.ctx.job_uuids)[0]
@@ -337,9 +326,9 @@ async def test_execute_synthetic_job(
             )
         return f2 is not None
 
-    await miner_synthetic_jobs_scheme(
-        mocked_synthetic_miner_client, manifest_callback, 1, interaction_callback
-    )
+    # Use the async context manager to mock aiohttp.ClientSession
+    async with mock_aiohttp_client_session({DEFAULT_EXECUTOR_CLASS: 1}):
+        await miner_synthetic_jobs_scheme(mocked_synthetic_miner_client, 1, interaction_callback)
 
     job = await SyntheticJob.objects.aget(job_uuid=job_uuid)
 
@@ -369,14 +358,7 @@ def test_create_and_run_synthetic_job_batch(
     override_weights_version_v2,
 ):
     current_online_executors = 2
-    manifest_request = V0ExecutorManifestRequest(
-        manifest={DEFAULT_EXECUTOR_CLASS: current_online_executors}
-    )
-
     job_uuids = []
-
-    async def manifest_callback(miner_client):
-        await miner_client.handle_message(manifest_request)
 
     async def interaction_callback(miner_client, after_job_sent):
         for job_uuid in miner_client.ctx.job_uuids:
@@ -394,14 +376,15 @@ def test_create_and_run_synthetic_job_batch(
                     )
                 )
 
-    syntethic_batch_scheme_single_miner(
-        settings,
-        mocked_synthetic_miner_client,
-        manifest_callback,
-        current_online_executors,
-        interaction_callback,
-        miner_hotkey="miner_hotkey",
-    )
+    mock_session = create_mock_http_session({DEFAULT_EXECUTOR_CLASS: current_online_executors})
+    with patch("aiohttp.ClientSession", return_value=mock_session):
+        syntethic_batch_scheme_single_miner(
+            settings,
+            mocked_synthetic_miner_client,
+            current_online_executors,
+            interaction_callback,
+            miner_hotkey="miner_hotkey",
+        )
 
     for job in SyntheticJob.objects.filter(job_uuid__in=job_uuids):
         assert abs(job.score - 1) < 0.0001

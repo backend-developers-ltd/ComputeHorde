@@ -15,7 +15,6 @@ from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutionDoneRequest,
-    V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0HordeFailedRequest,
     V0InitialJobRequest,
@@ -25,7 +24,6 @@ from compute_horde.protocol_messages import (
     V0JobFinishedRequest,
     V0JobRequest,
     V0MachineSpecsRequest,
-    V0MainHotkeyMessage,
     V0StreamingJobReadyRequest,
     V0VolumesReadyRequest,
     ValidatorAuthForMiner,
@@ -212,11 +210,6 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
 
         self.validator_authenticated = True
 
-        # (!) We should not send any messages until the validator authorizes itself.
-
-        manifest = await current.executor_manager.get_manifest()
-        await self.send(V0ExecutorManifestRequest(manifest=manifest).model_dump_json())
-
         # Handle messages that may have arrived during the authentication
         for msg in self.msg_queue:
             await self.handle(msg)
@@ -317,10 +310,6 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         if isinstance(msg, GenericError):
             logger.error(f"Received GenericError from validator: {msg.details}")
             # Nothing to do here - this doesn't tell us whether the job is dead.
-            return
-
-        if isinstance(msg, V0MainHotkeyMessage):
-            await self.handle_main_hotkey_request(msg)
             return
 
         assert_never(msg)
@@ -559,22 +548,6 @@ class MinerValidatorConsumer(BaseConsumer[ValidatorToMinerMessage], ValidatorInt
         )
 
         (await current_store()).store([created_receipt.to_receipt()])
-
-    async def handle_main_hotkey_request(self, msg: V0MainHotkeyMessage):
-        logger.info(f"Received main hotkey request from validator {self.validator_key}")
-
-        if not self.validator_authenticated:
-            logger.warning(
-                f"Received main hotkey request from unauthenticated validator {self.validator_key}"
-            )
-            await self.send(GenericError(details="Unauthenticated validator").model_dump_json())
-            return
-
-        # Get main hotkey from executor manager
-        main_hotkey = await current.executor_manager.get_main_hotkey()
-
-        await self.send(V0MainHotkeyMessage(main_hotkey=main_hotkey).model_dump_json())
-        logger.info(f"Sent main hotkey to validator {self.validator_key}: {main_hotkey}")
 
     async def _executor_ready(self, msg: V0ExecutorReadyRequest):
         logger.debug(f"_executor_ready for {msg}")

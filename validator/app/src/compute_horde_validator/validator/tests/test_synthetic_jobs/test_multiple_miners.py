@@ -58,6 +58,7 @@ from compute_horde_validator.validator.synthetic_jobs.batch_run import (
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 from ...synthetic_jobs.generator import llm_prompts
+from ..helpers import mock_aiohttp_client_session
 from .helpers import (
     check_miner_job_system_events,
     check_synthetic_job,
@@ -125,7 +126,10 @@ def active_validator_infos(active_validator_keypairs) -> list[ValidatorInfo]:
 
 @pytest_asyncio.fixture
 async def miners(miner_hotkeys: list[str]):
-    objs = [Miner(hotkey=hotkey) for hotkey in miner_hotkeys]
+    objs = [
+        Miner(hotkey=hotkey, address="127.0.0.1", port=8000 + ii)
+        for ii, hotkey in enumerate(miner_hotkeys)
+    ]
     await Miner.objects.abulk_create(objs)
     return objs
 
@@ -160,10 +164,8 @@ async def test_all_succeed(
     manifest_message: str,
 ):
     for job_uuid, transport in zip(job_uuids, transports):
-        await transport.add_message(manifest_message, send_before=1)
-
         accept_message = V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
-        await transport.add_message(accept_message, send_before=1)
+        await transport.add_message(accept_message, send_before=2)
 
         executor_ready_message = V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
         await transport.add_message(executor_ready_message, send_before=0)
@@ -181,15 +183,16 @@ async def test_all_succeed(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            miners,
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=1,
-    )
+    async with mock_aiohttp_client_session(manifest_message):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                miners,
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=1,
+        )
 
     for job_uuid, miner in zip(job_uuids, miners):
         await check_synthetic_job(job_uuid, miner.pk, SyntheticJob.Status.COMPLETED, 1)
@@ -398,10 +401,8 @@ async def test_some_streaming_succeed(
         transport = miner_behaviour.transport
 
         # WS configuration
-        await transport.add_message(streaming_manifest_message, send_before=1)
-
         accept_message = V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
-        await transport.add_message(accept_message, send_before=1)
+        await transport.add_message(accept_message, send_before=2)
 
         executor_ready_message = V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
         await transport.add_message(executor_ready_message, send_before=0)
@@ -496,15 +497,16 @@ async def test_some_streaming_succeed(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            miners,
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=10,
-    )
+    async with mock_aiohttp_client_session(streaming_manifest_message):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                miners,
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=10,
+        )
 
     for miner_behaviour in miner_behaviours:
         job_uuid = miner_behaviour.job_uuid
@@ -535,10 +537,8 @@ async def flow_0(
     transport = transports[index]
     job_uuid = job_uuids[index]
 
-    await transport.add_message(manifest_message, send_before=1)
-
     accept_message = V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
-    await transport.add_message(accept_message, send_before=1)
+    await transport.add_message(accept_message, send_before=2)
 
     executor_ready_message = V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(executor_ready_message, send_before=0)
@@ -555,7 +555,7 @@ async def flow_0(
 
 @pytest_asyncio.fixture
 async def flow_1(
-    transports: list[SimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
+    transports: list[SimulationTransport], job_uuids: list[uuid.UUID]
 ):
     """
     Job timed out
@@ -565,10 +565,8 @@ async def flow_1(
     transport = transports[index]
     job_uuid = job_uuids[index]
 
-    await transport.add_message(manifest_message, send_before=1)
-
     accept_message = V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
-    await transport.add_message(accept_message, send_before=1)
+    await transport.add_message(accept_message, send_before=2)
 
     executor_ready_message = V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(executor_ready_message, send_before=0)
@@ -585,7 +583,7 @@ async def flow_1(
 
 @pytest_asyncio.fixture
 async def flow_2(
-    transports: list[SimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
+    transports: list[SimulationTransport], job_uuids: list[uuid.UUID]
 ):
     """
     Job failed
@@ -595,10 +593,8 @@ async def flow_2(
     transport = transports[index]
     job_uuid = job_uuids[index]
 
-    await transport.add_message(manifest_message, send_before=1)
-
     accept_message = V0AcceptJobRequest(job_uuid=str(job_uuid)).model_dump_json()
-    await transport.add_message(accept_message, send_before=1)
+    await transport.add_message(accept_message, send_before=2)
 
     executor_ready_message = V0ExecutorReadyRequest(job_uuid=str(job_uuid)).model_dump_json()
     await transport.add_message(executor_ready_message, send_before=0)
@@ -612,7 +608,7 @@ async def flow_2(
 
 @pytest_asyncio.fixture
 async def flow_3(
-    transports: list[SimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
+    transports: list[SimulationTransport], job_uuids: list[uuid.UUID]
 ):
     """
     Job declined - no reason
@@ -622,15 +618,13 @@ async def flow_3(
     transport = transports[index]
     job_uuid = job_uuids[index]
 
-    await transport.add_message(manifest_message, send_before=1)
-
     decline_message = V0DeclineJobRequest(job_uuid=str(job_uuid)).model_dump_json()
-    await transport.add_message(decline_message, send_before=1)
+    await transport.add_message(decline_message, send_before=2)
 
 
 @pytest_asyncio.fixture
 async def flow_4(
-    transports: list[SimulationTransport], manifest_message: str, job_uuids: list[uuid.UUID]
+    transports: list[SimulationTransport], job_uuids: list[uuid.UUID]
 ):
     """
     Job declined - busy, but no receipts provided.
@@ -640,19 +634,16 @@ async def flow_4(
     transport = transports[index]
     job_uuid = job_uuids[index]
 
-    await transport.add_message(manifest_message, send_before=1)
-
     decline_message = V0DeclineJobRequest(
         job_uuid=str(job_uuid),
         reason=JobRejectionReason.BUSY,
     ).model_dump_json()
-    await transport.add_message(decline_message, send_before=1)
+    await transport.add_message(decline_message, send_before=2)
 
 
 @pytest_asyncio.fixture
 async def flow_5(
     transports: list[SimulationTransport],
-    manifest_message: str,
     job_uuids: list[uuid.UUID],
     active_validator_keypairs: list[bittensor_wallet.Keypair],
     inactive_validator_keypairs: list[bittensor_wallet.Keypair],
@@ -667,8 +658,6 @@ async def flow_5(
     job_uuid = job_uuids[index]
     miner_wallet = miner_wallets[index]
 
-    await transport.add_message(manifest_message, send_before=1)
-
     decline_message = V0DeclineJobRequest(
         job_uuid=str(job_uuid),
         reason=JobRejectionReason.BUSY,
@@ -676,13 +665,12 @@ async def flow_5(
             active_validator_keypairs[0], miner_wallet, inactive_validator_keypairs[0], job_uuid
         ),
     ).model_dump_json()
-    await transport.add_message(decline_message, send_before=1)
+    await transport.add_message(decline_message, send_before=2)
 
 
 @pytest_asyncio.fixture
 async def flow_6(
     transports: list[SimulationTransport],
-    manifest_message: str,
     job_uuids: list[uuid.UUID],
     active_validator_keypairs: list[bittensor_wallet.Keypair],
     inactive_validator_keypairs: list[bittensor_wallet.Keypair],
@@ -696,8 +684,6 @@ async def flow_6(
     transport = transports[index]
     job_uuid = job_uuids[index]
     miner_wallet = miner_wallets[index]
-
-    await transport.add_message(manifest_message, send_before=1)
 
     excuse = JobStartedReceiptPayload(
         job_uuid=str(uuid.uuid4()),
@@ -721,13 +707,12 @@ async def flow_6(
             )
         ],
     ).model_dump_json()
-    await transport.add_message(decline_message, send_before=1)
+    await transport.add_message(decline_message, send_before=2)
 
 
 @pytest_asyncio.fixture
 async def flow_7(
     transports: list[SimulationTransport],
-    manifest_message: str,
     job_uuids: list[uuid.UUID],
     active_validator_keypairs: list[bittensor_wallet.Keypair],
     inactive_validator_keypairs: list[bittensor_wallet.Keypair],
@@ -741,8 +726,6 @@ async def flow_7(
     transport = transports[index]
     job_uuid = job_uuids[index]
     miner_wallet = miner_wallets[index]
-
-    await transport.add_message(manifest_message, send_before=1)
 
     excuse = JobStartedReceiptPayload(
         job_uuid=str(uuid.uuid4()),
@@ -766,7 +749,7 @@ async def flow_7(
             )
         ],
     ).model_dump_json()
-    await transport.add_message(decline_message, send_before=1)
+    await transport.add_message(decline_message, send_before=2)
 
 
 @pytest_asyncio.fixture
@@ -802,6 +785,7 @@ async def test_complex(
     flow_7,
     flow_8,
     active_validator_infos: list[ValidatorInfo],
+    manifest_message: str,
 ):
     for transport, miner in zip(transports, miners):
         assert transport.name == miner.hotkey
@@ -810,15 +794,16 @@ async def test_complex(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            miners,
-            active_validator_infos,
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=2,
-    )
+    async with mock_aiohttp_client_session(manifest_message, wait_on_ports={8008: 5}):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                miners,
+                active_validator_infos,
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=2,
+        )
 
     assert await SyntheticJob.objects.acount() == 8
     assert (

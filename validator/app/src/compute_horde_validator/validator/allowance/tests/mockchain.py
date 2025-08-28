@@ -1,17 +1,16 @@
+import asyncio
 import datetime
 from contextlib import contextmanager
 from unittest import mock
 from unittest.mock import patch
 
 import turbobt
-from compute_horde.miner_client.organic import OrganicMinerClient
 from compute_horde.protocol_messages import V0ExecutorManifestRequest
 from compute_horde.test_wallet import get_test_validator_wallet
 from compute_horde_core.executor_class import ExecutorClass
 from pydantic import BaseModel
 
 from compute_horde_validator.validator.allowance.utils import supertensor
-from compute_horde_validator.validator.tests.transport import SimulationTransport
 
 NUM_MINERS = 250
 NUM_VALIDATORS = 6
@@ -302,44 +301,86 @@ def set_block_number(block_number_):
         def wallet(self):
             return get_test_validator_wallet()
 
-    # Create transport map from manifest responses
-    def create_transport_map():
-        transport_map = {}
-        responses = manifest_responses(block_number_)
+    responses = manifest_responses(block_number_)
 
-        for hotkey, manifest_request, delay in responses:
+    # Create mock HTTP responses from manifest responses
+    def create_mock_http_responses():
+        http_responses = {}
+        
+        for hotkey, manifest_request, _ in responses:
             if isinstance(manifest_request, V0ExecutorManifestRequest):
-                transport = SimulationTransport(f"sim_{hotkey}")
-                transport.add_message_sync(manifest_request, send_before=1, sleep_before=delay)
-                transport_map[hotkey] = transport
+                # Convert the manifest to the HTTP response format
+                http_response = {
+                    "manifest": manifest_request.manifest
+                }
+                http_responses[hotkey] = http_response
+        
+        return http_responses
 
-        return transport_map
+    # Create mock HTTP session
+    def create_mock_http_session(http_responses):
+        class MockResponse:
+            def __init__(self, status, data):
+                self.status = status
+                self._data = data
+            
+            async def json(self):
+                return self._data
+            
+            async def __aenter__(self):
+                return self
+            
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+        
+        class MockSession:
+            def __init__(self, http_responses):
+                self.http_responses = http_responses
+            
+            async def get(self, url):
+                # Extract hotkey from URL by looking up the address in neurons
+                # URL format: http://{address}:{port}/v0.1/manifest
+                address = url.split("://")[1].split(":")[0]
+                
+                # Find the hotkey for this address by looking up in neurons
+                neurons = list_neurons(block_number_, with_shield=False)
+                target_hotkey = None
+                for neuron in neurons:
+                    if neuron.axon_info.ip == address:
+                        target_hotkey = neuron.hotkey
+                        break
+                
+                if target_hotkey and target_hotkey in http_responses:
+                    # Find the delay for this hotkey
+                    target_delay = 0
+                    for response_hotkey, _, delay in responses:
+                        if response_hotkey == target_hotkey:
+                            target_delay = delay
+                            break
+                    
+                    # Simulate delay if specified
+                    if target_delay > 0:
+                        await asyncio.sleep(target_delay)
+                    
+                    # Return successful response
+                    return MockResponse(200, http_responses[target_hotkey])
+                else:
+                    # Return error response for unknown miners
+                    return MockResponse(404, {"error": "Miner not found"})
+            
+            async def __aenter__(self):
+                return self
+            
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+        
+        return MockSession(http_responses)
 
-    # Create mock init function for OrganicMinerClient
-    def create_mock_init_function(transport_map):
-        original_init = OrganicMinerClient.__init__
-
-        def mock_init(
-            self, miner_hotkey, miner_address, miner_port, job_uuid, my_keypair, transport=None
-        ):
-            simulation_transport = transport_map.get(miner_hotkey)
-            original_init(
-                self,
-                miner_hotkey,
-                miner_address,
-                miner_port,
-                job_uuid,
-                my_keypair,
-                transport=simulation_transport,
-            )
-
-        return mock_init
-
-    transport_map = create_transport_map()
-    mock_init = create_mock_init_function(transport_map)
+    http_responses = create_mock_http_responses()
+    mock_session = create_mock_http_session(http_responses)
 
     with (
         patch.object(supertensor, "_supertensor_instance", MockSuperTensor()),
-        patch.object(OrganicMinerClient, "__init__", mock_init),
+        patch("aiohttp.ClientSession", return_value=mock_session),
     ):
         yield
