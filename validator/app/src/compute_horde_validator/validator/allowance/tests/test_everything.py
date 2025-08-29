@@ -51,6 +51,14 @@ def configure_logs(caplog):
         yield
 
 
+def test_current_block():
+    with set_block_number(1000):
+        assert allowance().get_current_block() == 1000
+
+    with set_block_number(1005):
+        assert allowance().get_current_block() == 1005
+
+
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 def test_job_too_long():
     with set_block_number(1000):

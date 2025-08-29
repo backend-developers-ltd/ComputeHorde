@@ -36,6 +36,9 @@ class Allowance(AllowanceBase):
     def validate_foreign_receipt(self):
         raise NotImplementedError
 
+    def get_current_block(self) -> int:
+        return supertensor().get_current_block()
+
     def get_manifests(self) -> dict[ss58_address, dict[ExecutorClass, int]]:
         raise NotImplementedError
 
