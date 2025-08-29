@@ -15,6 +15,14 @@ def test_server_manager__default_path_should_not_raise() -> None:
     assert ServerManager("__default__").fetch_config()
 
 
+@pytest.mark.parametrize("executor_class", [executor_class for executor_class in ExecutorClass])
+def test_server_manager__default_executor_class(executor_class, settings) -> None:
+    settings.DEFAULT_EXECUTOR_CLASS = executor_class
+    config = ServerManager("__default__").fetch_config()
+    assert list(config.keys()) == [executor_class]
+    assert config[executor_class][0].executor_class == executor_class
+
+
 def test_server_manager__invalid_path_should_raise(tmp_path: Path) -> None:
     non_existent = tmp_path / "config.yaml"
     with pytest.raises(DockerExecutorConfigError):
