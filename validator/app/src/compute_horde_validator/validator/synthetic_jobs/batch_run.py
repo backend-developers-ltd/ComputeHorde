@@ -30,7 +30,6 @@ from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
     V0DeclineJobRequest,
     V0ExecutorFailedRequest,
-    V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0InitialJobRequest,
     V0JobAcceptedReceiptRequest,
@@ -193,12 +192,6 @@ class MinerClient(AbstractMinerClient[MinerToValidatorMessage, ValidatorToMinerM
                 description=str(msg),
                 miner_hotkey=self.miner_hotkey,
             )
-            return
-
-        # Note: Manifest is now queried via HTTP, not received via websocket
-        # TODO: Remove this once development is done
-        if isinstance(msg, V0ExecutorManifestRequest):
-            logger.warning("%s received unexpected manifest message via websocket", self.miner_name)
             return
 
         job_uuid = getattr(msg, "job_uuid", None)

@@ -350,7 +350,7 @@ def set_block_number(block_number_):
 
                 if target_hotkey and target_hotkey in http_responses:
                     # Find the delay for this hotkey
-                    target_delay = 0
+                    target_delay = 0.0
                     for response_hotkey, _, delay in responses:
                         if response_hotkey == target_hotkey:
                             target_delay = delay

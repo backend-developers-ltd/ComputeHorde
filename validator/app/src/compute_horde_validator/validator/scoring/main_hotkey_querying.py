@@ -67,7 +67,7 @@ async def _query_single_miner(miner: Miner) -> str | None:
             url = f"http://{miner.address}:{miner.port}/v0.1/hotkey"
             async with asyncio.timeout(10):
                 async with session.get(url) as response:
-                    data = await response.json()
+                    data: dict[str, str | None] = await response.json()
                     if response.status == 200:
                         return data.get("main_hotkey")
                     else:
