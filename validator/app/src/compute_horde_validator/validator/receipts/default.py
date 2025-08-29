@@ -16,7 +16,7 @@ from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPa
 from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer, TransferResult
 from compute_horde.utils import sign_blob
 from django.conf import settings
-from django.db.models import Exists, OuterRef
+from django.db.models import Count, Exists, OuterRef
 from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
 from typing_extensions import deprecated
@@ -229,7 +229,7 @@ class Receipts(ReceiptsBase):
     async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt:
         return await JobStartedReceipt.objects.aget(job_uuid=job_uuid)
 
-    async def get_finished_jobs_tuples_for_block_range(
+    async def get_finished_jobs_for_block_range(
         self, start_block: int, end_block: int, executor_class: str
     ) -> list[tuple[str, str, int, datetime.datetime | None, list[int]]]:
         """
@@ -298,6 +298,37 @@ class Receipts(ReceiptsBase):
             )
 
         return result
+    
+    async def get_busy_executor_count(
+        self, executor_class: str, at_time: datetime.datetime
+    ) -> dict[str, int]:
+        """
+        Count ongoing jobs per miner for the given executor_class at at_time.
+
+        A job is ongoing if its JobStartedReceipt is valid at at_time and there is no
+        JobFinishedReceipt with timestamp <= at_time for the same job_uuid.
+
+        Returns:
+            Dictionary mapping miner hotkeys to the number of ongoing jobs for that executor_class.
+        """
+        starts_qs = JobStartedReceipt.objects.valid_at(at_time).filter(
+            executor_class=executor_class
+        )
+
+        # Existence of a finish before or at at_time for the same job UUID
+        finishes = JobFinishedReceipt.objects.filter(
+            job_uuid=OuterRef("job_uuid"), timestamp__lte=at_time
+        )
+
+        ongoing = starts_qs.annotate(has_finished=Exists(finishes)).filter(has_finished=False)
+
+        rows = [
+            row
+            async for row in ongoing.values("miner_hotkey")
+            .annotate(n=Count("id"))
+            .values("miner_hotkey", "n")
+        ]
+        return {row["miner_hotkey"]: int(row["n"]) for row in rows}
 
     async def _catch_up(
         self,

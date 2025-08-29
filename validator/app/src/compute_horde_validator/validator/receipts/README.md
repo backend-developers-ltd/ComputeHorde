@@ -72,7 +72,7 @@ receipt: JobStartedReceipt = await receipts().get_job_started_receipt_by_uuid(jo
 # Raises: JobStartedReceipt.DoesNotExist if receipt not found
 
 # Finished jobs tuples for block range [start_block, end_block)
-rows = await receipts().get_finished_jobs_tuples_for_block_range(
+rows = await receipts().get_finished_jobs_for_block_range(
     start_block: int,
     end_block: int,
     executor_class: str,
@@ -87,6 +87,12 @@ Each row is a tuple of:
     block_ids: list[int],
 )
 """
+
+# Busy executors count per miner at a timestamp
+counts: dict[str, int] = await receipts().get_busy_executor_count(
+    executor_class: str,
+    at_time: datetime.datetime,
+)
 ```
 ## Miner selection modes
 

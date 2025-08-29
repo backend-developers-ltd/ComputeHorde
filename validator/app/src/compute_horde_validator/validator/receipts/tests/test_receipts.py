@@ -321,7 +321,7 @@ async def test_get_job_started_receipt_by_uuid(settings):
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_get_finished_jobs_tuples_for_block_range_returns_only_in_range(settings):
+async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings):
     # Setup block timestamps
     start_block = 100
     end_block = 105
@@ -406,7 +406,7 @@ async def test_get_finished_jobs_tuples_for_block_range_returns_only_in_range(se
         score_str="0.2",
     )
 
-    tuples = await receipts().get_finished_jobs_tuples_for_block_range(
+    tuples = await receipts().get_finished_jobs_for_block_range(
         start_block, end_block, executor_class="always_on.gpu-24gb"
     )
 
@@ -494,7 +494,7 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
         score_str="0.7",
     )
 
-    tuples = await receipts().get_finished_jobs_tuples_for_block_range(
+    tuples = await receipts().get_finished_jobs_for_block_range(
         start_block, end_block, executor_class=exec_gpu
     )
 
@@ -505,3 +505,74 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
     assert time_us == 90_000_000
     assert block_start_ts == start_ts
     assert block_ids == gpu_block_numbers
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings):
+    start_ts = datetime.datetime.now(datetime.UTC)
+    miner_a = "miner_A"
+    miner_b = "miner_B"
+    validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
+    executor = "always_on.gpu-24gb"
+
+    job_a = str(uuid.uuid4())
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=job_a,
+        miner_hotkey=miner_a,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts - datetime.timedelta(seconds=10),
+        executor_class=executor,
+        is_organic=True,
+        ttl=60,
+    )
+
+    job_a_finished = str(uuid.uuid4())
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=job_a_finished,
+        miner_hotkey=miner_a,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts - datetime.timedelta(seconds=20),
+        executor_class=executor,
+        is_organic=True,
+        ttl=60,
+    )
+    await JobFinishedReceipt.objects.acreate(
+        job_uuid=job_a_finished,
+        miner_hotkey=miner_a,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts - datetime.timedelta(seconds=1),
+        time_started=start_ts - datetime.timedelta(seconds=30),
+        time_took_us=1,
+        score_str="0",
+    )
+
+    job_b_other_exec = str(uuid.uuid4())
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=job_b_other_exec,
+        miner_hotkey=miner_b,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts - datetime.timedelta(seconds=5),
+        executor_class="always_on.llm.a6000",
+        is_organic=True,
+        ttl=60,
+    )
+
+    job_b_expired = str(uuid.uuid4())
+    await JobStartedReceipt.objects.acreate(
+        job_uuid=job_b_expired,
+        miner_hotkey=miner_b,
+        validator_hotkey=validator_hotkey,
+        validator_signature="sig",
+        timestamp=start_ts - datetime.timedelta(minutes=2),
+        executor_class=executor,
+        is_organic=True,
+        ttl=30,
+    )
+
+    counts = await receipts().get_busy_executor_count(executor_class=executor, at_time=start_ts)
+    assert counts == {miner_a: 1}

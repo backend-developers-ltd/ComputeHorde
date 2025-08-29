@@ -133,20 +133,13 @@ class ReceiptsBase(ABC):
         pass
 
     @abstractmethod
-    async def get_finished_jobs_tuples_for_block_range(
-        self, start_block: int, end_block: int, executor_class: str
-    ) -> list[tuple[str, str, int, datetime.datetime | None, list[int]]]:
+    async def get_busy_executor_count(
+        self, executor_class: str, at_time: datetime.datetime
+    ) -> dict[str, int]:
         """
-        Get tuples for jobs finished between start_block (inclusive) and end_block (exclusive)
-        for a specific executor class. End time (finish timestamp) is used for filtering.
+        Return counts of ongoing jobs per miner at the given time for the executor_class.
 
-        Returns a list of tuples with the following fields:
-            (
-                validator_hotkey: str,
-                miner_hotkey: str,
-                job_run_time_us: int,
-                block_start_time: datetime | None,
-                block_ids: list[int],
-            )
+        A job counts as ongoing if its JobStartedReceipt is valid at at_time (respects TTL)
+        and there is no JobFinishedReceipt with timestamp <= at_time for the same job_uuid.
         """
         pass
