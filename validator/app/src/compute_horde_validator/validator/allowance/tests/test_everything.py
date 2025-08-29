@@ -608,3 +608,11 @@ def test_allowance_reservation_corner_cases(configure_logs):
             "highest_unspent_allowance": LF(4.749230769230769),
             "highest_unspent_allowance_ss58": Matcher(r".*"),
         }
+
+
+# tests to add:
+# metrics VALIDATOR_STAKE_SHARE_REPORT, VALIDATOR_MINER_MANIFEST_REPORT, VALIDATOR_BLOCK_DURATION
+# system events: supertensor failures from process_block_allowance and sync_manifests
+
+# all the whacky precaching supertensor stuff, including errors (connection errors etc.) and the fact
+# that they geenrate system events and not stack traces. clean ups (maybe) and archive missing.

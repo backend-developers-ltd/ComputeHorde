@@ -278,7 +278,7 @@ def get_block_timestamp(block_number):
 
 
 @contextmanager
-def set_block_number(block_number_):
+def set_block_number(block_number_, oldest_reachable_block: float | int = float("-inf")):
     class MockSuperTensor(supertensor.BaseSuperTensor):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
@@ -301,6 +301,9 @@ def set_block_number(block_number_):
 
         def wallet(self):
             return get_test_validator_wallet()
+
+        def oldest_reachable_block(self) -> float | int:
+            return oldest_reachable_block
 
     # Create transport map from manifest responses
     def create_transport_map():
