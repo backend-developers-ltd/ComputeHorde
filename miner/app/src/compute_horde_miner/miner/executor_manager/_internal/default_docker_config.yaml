@@ -1,5 +1,5 @@
 self:
-  executor_class: always_on.llm.a6000
+  executor_class: DEFAULT_EXECUTOR_CLASS
   host: localhost
   ssh_port: 22
   username: ""
