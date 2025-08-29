@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from compute_horde.receipts import Receipt
 from compute_horde.receipts.models import JobFinishedReceipt, JobStartedReceipt
 from compute_horde.receipts.schemas import JobStartedReceiptPayload
+from typing_extensions import deprecated
 
 
 class ReceiptsBase(ABC):
@@ -84,6 +85,7 @@ class ReceiptsBase(ABC):
         """
         pass
 
+    @deprecated("Use database queries instead")
     @abstractmethod
     async def get_valid_job_started_receipts_for_miner(
         self, miner_hotkey: str, at_time: datetime.datetime
@@ -100,6 +102,7 @@ class ReceiptsBase(ABC):
         """
         pass
 
+    @deprecated("Use database queries instead")
     @abstractmethod
     async def get_job_finished_receipts_for_miner(
         self, miner_hotkey: str, job_uuids: list[str]
@@ -116,6 +119,7 @@ class ReceiptsBase(ABC):
         """
         pass
 
+    @deprecated("Use database queries instead")
     @abstractmethod
     async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt | None:
         """

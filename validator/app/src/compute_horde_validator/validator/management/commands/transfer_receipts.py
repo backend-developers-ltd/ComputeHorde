@@ -48,4 +48,3 @@ class Command(BaseCommand):
             debug_miner_ip=debug_miner_ip,
             debug_miner_port=debug_miner_port,
         )
-        return

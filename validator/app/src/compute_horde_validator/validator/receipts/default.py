@@ -19,6 +19,7 @@ from compute_horde.utils import sign_blob
 from django.conf import settings
 from django.utils import timezone
 from prometheus_client import Counter, Gauge, Histogram
+from typing_extensions import deprecated
 
 from compute_horde_validator.validator.allowance.utils.supertensor import supertensor
 from compute_horde_validator.validator.dynamic_config import aget_config
@@ -197,6 +198,7 @@ class Receipts(ReceiptsBase):
 
         return payload, validator_signature
 
+    @deprecated("Use database queries instead")
     async def get_valid_job_started_receipts_for_miner(
         self, miner_hotkey: str, at_time: datetime.datetime
     ) -> list[JobStartedReceipt]:
@@ -207,6 +209,7 @@ class Receipts(ReceiptsBase):
             )
         ]
 
+    @deprecated("Use database queries instead")
     async def get_job_finished_receipts_for_miner(
         self, miner_hotkey: str, job_uuids: list[str]
     ) -> list[JobFinishedReceipt]:
@@ -217,6 +220,7 @@ class Receipts(ReceiptsBase):
             )
         ]
 
+    @deprecated("Use database queries instead")
     async def get_job_started_receipt_by_uuid(self, job_uuid: str) -> JobStartedReceipt:
         return await JobStartedReceipt.objects.aget(job_uuid=job_uuid)
 
