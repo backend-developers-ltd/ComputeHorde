@@ -302,6 +302,7 @@ services:
       - AM_I_A_VALIDATOR=true
       # Override specific variables to ensure consistency with validator
       - BITTENSOR_NETWORK=${BITTENSOR_NETWORK}
+      - BITTENSOR_ARCHIVE_NETWORK=archive  # TODO: for now only!!!! make sure it works with no archive set (currently it doesn't)
       - BITTENSOR_NETUID=${BITTENSOR_NETUID}
       - BITTENSOR_WALLET_NAME=${BITTENSOR_WALLET_NAME}
       - BITTENSOR_WALLET_HOTKEY_NAME=${BITTENSOR_WALLET_HOTKEY_NAME}
