@@ -13,7 +13,6 @@ from compute_horde.transport import AbstractTransport
 from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_validator.validator.models import (
-    ComputeTimeAllowance,
     Cycle,
     MetagraphSnapshot,
     Miner,
@@ -48,17 +47,6 @@ def manifest(miner, cycle):
         executor_class=ExecutorClass.always_on__gpu_24gb,
         executor_count=5,
         online_executor_count=5,
-    )
-
-
-@pytest.fixture(autouse=True)
-def compute_time_allowance(cycle, miner, validator):
-    return ComputeTimeAllowance.objects.create(
-        cycle=cycle,
-        miner=miner,
-        validator=validator,
-        initial_allowance=1e10,
-        remaining_allowance=1e10,
     )
 
 
