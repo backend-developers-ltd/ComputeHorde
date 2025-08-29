@@ -258,8 +258,7 @@ ValidatorToMinerMessage = Annotated[
     | V0InitialJobRequest
     | V0JobRequest
     | V0JobAcceptedReceiptRequest
-    | V0JobFinishedReceiptRequest
-    | V0MainHotkeyMessage,
+    | V0JobFinishedReceiptRequest,
     Field(discriminator="message_type"),
 ]
 
@@ -286,7 +285,6 @@ ExecutorToMinerMessage = Annotated[
 MinerToValidatorMessage = Annotated[
     GenericError
     | UnauthorizedError
-    | V0ExecutorManifestRequest
     | V0MainHotkeyMessage
     | V0DeclineJobRequest
     | V0AcceptJobRequest

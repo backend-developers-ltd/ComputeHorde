@@ -8,7 +8,6 @@ import pytest
 from compute_horde.executor_class import DEFAULT_EXECUTOR_CLASS
 from compute_horde.protocol_messages import (
     V0AcceptJobRequest,
-    V0ExecutorManifestRequest,
     V0ExecutorReadyRequest,
     V0JobFinishedRequest,
 )
@@ -24,6 +23,7 @@ from compute_horde_validator.validator.models import (
 from compute_horde_validator.validator.synthetic_jobs.batch_run import execute_synthetic_batch_run
 from compute_horde_validator.validator.tests.transport import SimulationTransport
 
+from ..helpers import mock_aiohttp_client_session
 from .mock_generator import (
     TimeTookScoreMockSyntheticJobGeneratorFactory,
 )
@@ -54,11 +54,6 @@ async def test_synthetic_job_batch(
     job_uuids = [uuid.uuid4() for _ in range(executor_count)]
     job_generator_factory._uuids = job_uuids.copy()
 
-    manifest_message = V0ExecutorManifestRequest(
-        manifest={DEFAULT_EXECUTOR_CLASS: executor_count}
-    ).model_dump_json()
-    await transport.add_message(manifest_message, send_before=1)
-
     async def add_job_messages(request_class, send_before=1, sleep_before=0, **kwargs):
         for job_uuid in job_uuids:
             msg = request_class(
@@ -82,15 +77,16 @@ async def test_synthetic_job_batch(
         block=1000,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            [miner],
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=2,
-    )
+    async with mock_aiohttp_client_session({DEFAULT_EXECUTOR_CLASS: executor_count}):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                [miner],
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=2,
+        )
 
     await check_scores(job_uuids, transport)
 
@@ -150,11 +146,6 @@ async def test_synthetic_job_batch_non_peak_limits(
     job_uuids = [uuid.uuid4() for _ in range(executor_count)]
     job_generator_factory._uuids = job_uuids.copy()
 
-    manifest_message = V0ExecutorManifestRequest(
-        manifest={DEFAULT_EXECUTOR_CLASS: executor_count}
-    ).model_dump_json()
-    await transport.add_message(manifest_message, send_before=1)
-
     async def add_job_messages(request_class, send_before=1, sleep_before=0, **kwargs):
         for i, job_uuid in enumerate(job_uuids):
             msg = request_class(
@@ -179,15 +170,16 @@ async def test_synthetic_job_batch_non_peak_limits(
         block=current_block,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            [miner],
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=2,
-    )
+    async with mock_aiohttp_client_session({DEFAULT_EXECUTOR_CLASS: executor_count}):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                [miner],
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=2,
+        )
 
     # check sent jobs were limited by ratio
     expected_executor_count = math.ceil(peak_executor_count * 0.1)
@@ -225,11 +217,6 @@ async def test_synthetic_job_batch_non_peak_limits__validator_missed_peak(
     job_uuids = [uuid.uuid4() for _ in range(executor_count)]
     job_generator_factory._uuids = job_uuids.copy()
 
-    manifest_message = V0ExecutorManifestRequest(
-        manifest={DEFAULT_EXECUTOR_CLASS: executor_count}
-    ).model_dump_json()
-    await transport.add_message(manifest_message, send_before=1)
-
     async def add_job_messages(request_class, send_before=1, sleep_before=0, **kwargs):
         for i, job_uuid in enumerate(job_uuids):
             msg = request_class(
@@ -254,15 +241,16 @@ async def test_synthetic_job_batch_non_peak_limits__validator_missed_peak(
         block=current_block,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            [miner],
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=5,
-    )
+    async with mock_aiohttp_client_session({DEFAULT_EXECUTOR_CLASS: executor_count}):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                [miner],
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=5,
+        )
 
     # check sent jobs were limited by default limit
     expected_executor_count = 1
@@ -314,11 +302,6 @@ async def test_synthetic_job_batch_non_peak_limits__miner_missed_peak(
     job_uuids = [uuid.uuid4() for _ in range(executor_count)]
     job_generator_factory._uuids = job_uuids.copy()
 
-    manifest_message = V0ExecutorManifestRequest(
-        manifest={DEFAULT_EXECUTOR_CLASS: executor_count}
-    ).model_dump_json()
-    await transport.add_message(manifest_message, send_before=1)
-
     async def add_job_messages(request_class, send_before=1, sleep_before=0, **kwargs):
         for i, job_uuid in enumerate(job_uuids):
             msg = request_class(
@@ -343,15 +326,16 @@ async def test_synthetic_job_batch_non_peak_limits__miner_missed_peak(
         block=current_block,
         cycle=await Cycle.objects.acreate(start=708, stop=1430),
     )
-    await asyncio.wait_for(
-        execute_synthetic_batch_run(
-            [miner],
-            [],
-            batch.id,
-            create_miner_client=create_simulation_miner_client,
-        ),
-        timeout=5,
-    )
+    async with mock_aiohttp_client_session({DEFAULT_EXECUTOR_CLASS: executor_count}):
+        await asyncio.wait_for(
+            execute_synthetic_batch_run(
+                [miner],
+                [],
+                batch.id,
+                create_miner_client=create_simulation_miner_client,
+            ),
+            timeout=5,
+        )
 
     # check sent jobs were limited by default limit
     expected_executor_count = 1
