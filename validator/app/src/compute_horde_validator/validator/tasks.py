@@ -79,6 +79,7 @@ from compute_horde_validator.validator.synthetic_jobs.utils import (
 )
 
 from . import eviction
+from .allowance import tasks  # noqa
 from .clean_me_up import get_single_manifest
 from .dynamic_config import aget_config
 from .models import AdminJobRequest, MetagraphSnapshot, MinerManifest
