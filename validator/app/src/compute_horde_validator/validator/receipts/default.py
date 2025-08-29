@@ -233,19 +233,6 @@ class Receipts(ReceiptsBase):
     async def get_finished_jobs_for_block_range(
         self, start_block: int, end_block: int, executor_class: ExecutorClass
     ) -> list[tuple[str, str, int, datetime.datetime | None, list[int]]]:
-        """
-        Returns tuples for jobs whose finish (receipt) timestamp falls within the
-        given block range [start_block, end_block), filtered by executor class.
-
-        Tuple format:
-            (
-                validator_hotkey: str,
-                miner_hotkey: str,
-                job_run_time_us: int,
-                block_start_time: datetime | None,
-                block_ids: list[int],
-            )
-        """
         if start_block >= end_block:
             logger.warning(
                 "Invalid block range provided: start_block (%s) >= end_block (%s)",
