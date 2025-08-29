@@ -1,5 +1,6 @@
 import contextlib
 import time
+from typing import ContextManager
 
 from celery.utils.log import get_task_logger
 from django.conf import settings
@@ -50,14 +51,12 @@ def scan_blocks_and_calculate_allowance(
             with Lock(LockType.ALLOWANCE_FETCHING, LOCK_WAIT_TIMEOUT, settings.DEFAULT_DB_ALIAS):
                 start_time = time.time()
 
-                if backfilling_supertensor is not None:
-                    context = contextlib.nullcontext()
+                cm: ContextManager[SuperTensor]
+                if backfilling_supertensor is None:
+                    cm = PrecachingSuperTensor(cache=DjangoCache())
                 else:
-                    context = contextlib.ExitStack()
-                    backfilling_supertensor = PrecachingSuperTensor(cache=DjangoCache())
-                    context.enter_context(backfilling_supertensor)
-
-                with context:
+                    cm = contextlib.nullcontext(backfilling_supertensor)
+                with cm as backfilling_supertensor:
                     blocks.backfill_blocks_if_necessary(
                         current_block,
                         MAX_RUN_TIME,
