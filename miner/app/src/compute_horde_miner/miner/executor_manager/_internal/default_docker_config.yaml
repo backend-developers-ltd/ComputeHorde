@@ -1,0 +1,6 @@
+self:
+  executor_class: DEFAULT_EXECUTOR_CLASS
+  host: localhost
+  ssh_port: 22
+  username: ""
+  key_path: ""
