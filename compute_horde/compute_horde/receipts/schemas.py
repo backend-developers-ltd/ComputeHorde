@@ -43,6 +43,9 @@ class JobFinishedReceiptPayload(BaseReceiptPayload):
     time_started: datetime.datetime
     time_took_us: int  # micro-seconds
     score_str: str
+    block_numbers: list[int] = Field(
+        default_factory=list, description="List of block numbers used to pay for this job"
+    )
 
     @property
     def time_took(self):

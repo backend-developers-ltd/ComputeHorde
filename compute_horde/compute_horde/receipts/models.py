@@ -169,6 +169,10 @@ class JobFinishedReceipt(AbstractReceipt):
     time_started = models.DateTimeField()
     time_took_us = models.BigIntegerField()
     score_str = models.CharField(max_length=256)
+    block_numbers = models.JSONField(
+        default=list,
+        help_text="List of block numbers used to pay for this job",
+    )
 
     def time_took(self):
         return timedelta(microseconds=self.time_took_us)
@@ -189,6 +193,7 @@ class JobFinishedReceipt(AbstractReceipt):
                 time_started=self.time_started,
                 time_took_us=self.time_took_us,
                 score_str=self.score_str,
+                block_numbers=self.block_numbers,
             ),
             validator_signature=self.validator_signature,
             miner_signature=self.miner_signature,
@@ -223,6 +228,7 @@ class JobFinishedReceipt(AbstractReceipt):
             time_started=payload.time_started,
             time_took_us=payload.time_took_us,
             score_str=payload.score_str,
+            block_numbers=payload.block_numbers,
         )
 
 

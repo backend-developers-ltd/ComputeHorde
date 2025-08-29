@@ -35,7 +35,7 @@ payload, validator_signature = receipts().create_job_started_receipt(
     job_uuid: str,
     miner_hotkey: str,
     validator_hotkey: str,
-    executor_class: str,
+    executor_class: ExecutorClass,
     is_organic: bool,
     ttl: int,
 )
@@ -47,6 +47,7 @@ finished = receipts().create_job_finished_receipt(
     time_started: datetime.datetime,
     time_took_us: int,
     score_str: str,
+    block_numbers: list[int] | None = None,
 )
 ```
 
@@ -70,13 +71,26 @@ receipts: list[JobFinishedReceipt] = await receipts().get_job_finished_receipts_
 receipt: JobStartedReceipt = await receipts().get_job_started_receipt_by_uuid(job_uuid: str)
 # Raises: JobStartedReceipt.DoesNotExist if receipt not found
 
-# Completed job receipts for a block range [start_block, end_block)
-receipts: list[Receipt] = await receipts().get_completed_job_receipts_for_block_range(
+# Finished jobs for block range [start_block, end_block)
+rows: list[FinishedJobInfo] = await receipts().get_finished_jobs_for_block_range(
     start_block: int,
     end_block: int,
+    executor_class: ExecutorClass,
+)
+"""Each row is a FinishedJobInfo model with fields:
+- validator_hotkey: str
+- miner_hotkey: str
+- job_run_time_us: int
+- block_start_time: datetime | None
+- block_ids: list[int]
+"""
+
+# Busy executors count per miner at a timestamp
+counts: dict[str, int] = await receipts().get_busy_executor_count(
+    executor_class: ExecutorClass,
+    at_time: datetime.datetime,
 )
 ```
-
 ## Miner selection modes
 
 - **explicit**: when all `debug_miner_*` are passed to `run_receipts_transfer`
@@ -103,5 +117,6 @@ receipts: list[Receipt] = await receipts().get_completed_job_receipts_for_block_
 - `receipttransfer_transfer_errors_total{exc_type}` — per-exception count of transfer errors
 - `receipttransfer_transfer_duration` — histogram of total loop duration
 - `receipttransfer_catchup_pages_left` — gauge of pages left to catch up
+
 
 
