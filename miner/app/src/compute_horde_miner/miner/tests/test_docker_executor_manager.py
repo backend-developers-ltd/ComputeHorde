@@ -10,7 +10,7 @@ from compute_horde_core.executor_class import ExecutorClass
 
 from compute_horde_miner.miner.executor_manager._internal.docker import (
     DockerExecutorManager,
-    ServerConfig,
+    NamedServerConfig,
 )
 
 # NOTE: these tests use the local docker to run containers.
@@ -42,7 +42,7 @@ async def test_docker_executor_manager_default(settings):
 @pytest.fixture
 def localhost_is_not_local():
     """Force the DockerExecutorManager to treat localhost as remote."""
-    with patch.object(ServerConfig, "is_local", return_value=False):
+    with patch.object(NamedServerConfig, "is_local", return_value=False):
         yield
 
 

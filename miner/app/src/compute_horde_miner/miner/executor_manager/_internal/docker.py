@@ -7,7 +7,7 @@ from collections import deque
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Self, TypeAlias
+from typing import TypeAlias
 
 import aiodocker
 import asyncssh
@@ -37,14 +37,11 @@ class DockerExecutorConfigError(Exception):
 
 
 class ServerConfig(pydantic.BaseModel):
-    executor_class: ExecutorClass
+    executor_class: str
     host: str
     ssh_port: int
     username: str
     key_path: str
-
-    def is_local(self) -> bool:
-        return self.host in ("localhost", "127.0.0.1", "::1")
 
 
 ServerName: TypeAlias = str
@@ -52,10 +49,10 @@ ServerName: TypeAlias = str
 
 class NamedServerConfig(ServerConfig):
     name: ServerName
+    executor_class: ExecutorClass
 
-    @classmethod
-    def from_server_config(cls, server_config: ServerConfig, name: ServerName) -> Self:
-        return cls(**server_config.model_dump(), name=name)
+    def is_local(self) -> bool:
+        return self.host in ("localhost", "127.0.0.1", "::1")
 
 
 ServerConfigsPerClass: TypeAlias = dict[ExecutorClass, list[NamedServerConfig]]
@@ -99,8 +96,24 @@ class ServerManager:
 
         configs_per_class: dict[ExecutorClass, list[NamedServerConfig]] = {}
         for name, server_config in config.items():
-            named_config = NamedServerConfig.from_server_config(server_config, name)
-            configs_per_class.setdefault(server_config.executor_class, []).append(named_config)
+            executor_class: str | ExecutorClass = server_config.executor_class
+            if executor_class == "DEFAULT_EXECUTOR_CLASS":
+                executor_class = settings.DEFAULT_EXECUTOR_CLASS
+
+            try:
+                executor_class = ExecutorClass(executor_class)
+            except ValueError as e:
+                raise DockerExecutorConfigError("executor_class value is invalid") from e
+
+            named_config = NamedServerConfig(
+                name=name,
+                executor_class=executor_class,
+                host=server_config.host,
+                ssh_port=server_config.ssh_port,
+                username=server_config.username,
+                key_path=server_config.key_path,
+            )
+            configs_per_class.setdefault(executor_class, []).append(named_config)
 
         self._cached_config = configs_per_class
         self._cached_config_at = datetime.now()
@@ -308,7 +321,9 @@ class DockerExecutorManager(BaseExecutorManager):
 
 
 @contextlib.asynccontextmanager
-async def tunneled_docker_client(server_config: ServerConfig) -> AsyncGenerator[aiodocker.Docker]:
+async def tunneled_docker_client(
+    server_config: NamedServerConfig,
+) -> AsyncGenerator[aiodocker.Docker]:
     if server_config.is_local():
         # Skip tunneling if we're running locally
         async with aiodocker.Docker() as docker:
