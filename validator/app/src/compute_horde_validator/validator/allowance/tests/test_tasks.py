@@ -37,9 +37,9 @@ def test_blocks_scan_blocks_calls_process_for_missing_blocks_and_times_out(monke
         ) as proc_mock,
     ):
         with pytest.raises(blocks.TimesUpError):
-            blocks.scan_blocks_and_calculate_allowance(
-                report_callback=None,
+            allowance_tasks.scan_blocks_and_calculate_allowance(
                 backfilling_supertensor=back_st,
+                keep_running=False,
             )
 
         assert proc_mock.call_args_list == [
