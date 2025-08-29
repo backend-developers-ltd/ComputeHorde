@@ -407,17 +407,17 @@ async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings)
         score_str="0.2",
     )
 
-    tuples = await receipts().get_finished_jobs_for_block_range(
+    rows = await receipts().get_finished_jobs_for_block_range(
         start_block, end_block, executor_class=ExecutorClass.always_on__gpu_24gb
     )
 
-    assert len(tuples) == 1
-    validator_hotkey_t, miner_hotkey_t, time_took_us_t, block_start_time_t, block_ids_t = tuples[0]
-    assert miner_hotkey_t == miner_hotkey
-    assert validator_hotkey_t == validator_hotkey
-    assert time_took_us_t == 1
-    assert block_start_time_t == start_ts
-    assert block_ids_t == in_block_numbers
+    assert len(rows) == 1
+    item = rows[0]
+    assert item.miner_hotkey == miner_hotkey
+    assert item.validator_hotkey == validator_hotkey
+    assert item.job_run_time_us == 1
+    assert item.block_start_time == start_ts
+    assert item.block_ids == in_block_numbers
 
 
 @pytest.mark.asyncio
@@ -495,17 +495,17 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
         score_str="0.7",
     )
 
-    tuples = await receipts().get_finished_jobs_for_block_range(
+    rows = await receipts().get_finished_jobs_for_block_range(
         start_block, end_block, executor_class=exec_gpu
     )
 
-    assert len(tuples) == 1
-    v_hotkey, m_hotkey, time_us, block_start_ts, block_ids = tuples[0]
-    assert m_hotkey == miner_hotkey
-    assert v_hotkey == validator_hotkey
-    assert time_us == 90_000_000
-    assert block_start_ts == start_ts
-    assert block_ids == gpu_block_numbers
+    assert len(rows) == 1
+    item = rows[0]
+    assert item.miner_hotkey == miner_hotkey
+    assert item.validator_hotkey == validator_hotkey
+    assert item.job_run_time_us == 90_000_000
+    assert item.block_start_time == start_ts
+    assert item.block_ids == gpu_block_numbers
 
 
 @pytest.mark.asyncio

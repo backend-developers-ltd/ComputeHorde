@@ -71,21 +71,18 @@ receipts: list[JobFinishedReceipt] = await receipts().get_job_finished_receipts_
 receipt: JobStartedReceipt = await receipts().get_job_started_receipt_by_uuid(job_uuid: str)
 # Raises: JobStartedReceipt.DoesNotExist if receipt not found
 
-# Finished jobs tuples for block range [start_block, end_block)
-rows = await receipts().get_finished_jobs_for_block_range(
+# Finished jobs for block range [start_block, end_block)
+rows: list[FinishedJobInfo] = await receipts().get_finished_jobs_for_block_range(
     start_block: int,
     end_block: int,
     executor_class: ExecutorClass,
 )
-"""
-Each row is a tuple of:
-(
-    validator_hotkey: str,
-    miner_hotkey: str,
-    job_run_time_us: int,
-    block_start_time: datetime | None,
-    block_ids: list[int],
-)
+"""Each row is a FinishedJobInfo model with fields:
+- validator_hotkey: str
+- miner_hotkey: str
+- job_run_time_us: int
+- block_start_time: datetime | None
+- block_ids: list[int]
 """
 
 # Busy executors count per miner at a timestamp

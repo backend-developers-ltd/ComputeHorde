@@ -28,7 +28,7 @@ from compute_horde_validator.validator.models import MetagraphSnapshot, Miner
 from compute_horde_validator.validator.models.allowance.internal import Block
 
 from .base import ReceiptsBase
-from .types import TransferIsDisabled
+from .types import FinishedJobInfo, TransferIsDisabled
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +232,7 @@ class Receipts(ReceiptsBase):
 
     async def get_finished_jobs_for_block_range(
         self, start_block: int, end_block: int, executor_class: ExecutorClass
-    ) -> list[tuple[str, str, int, datetime.datetime | None, list[int]]]:
+    ) -> list[FinishedJobInfo]:
         if start_block >= end_block:
             logger.warning(
                 "Invalid block range provided: start_block (%s) >= end_block (%s)",
@@ -268,7 +268,7 @@ class Receipts(ReceiptsBase):
                     block_number
                 )
 
-        result: list[tuple[str, str, int, datetime.datetime | None, list[int]]] = []
+        result: list[FinishedJobInfo] = []
         for r in receipts:
             block_start_time: datetime.datetime | None = None
             if r.block_numbers:
@@ -276,12 +276,12 @@ class Receipts(ReceiptsBase):
                 block_start_time = block_number_to_timestamp.get(earliest)
 
             result.append(
-                (
-                    r.validator_hotkey,
-                    r.miner_hotkey,
-                    r.time_took_us,
-                    block_start_time,
-                    r.block_numbers,
+                FinishedJobInfo(
+                    validator_hotkey=r.validator_hotkey,
+                    miner_hotkey=r.miner_hotkey,
+                    job_run_time_us=r.time_took_us,
+                    block_start_time=block_start_time,
+                    block_ids=r.block_numbers,
                 )
             )
 
