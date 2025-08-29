@@ -322,7 +322,11 @@ def set_block_number(block_number_):
         def mock_init(
             self, miner_hotkey, miner_address, miner_port, job_uuid, my_keypair, transport=None
         ):
-            simulation_transport = transport_map.get(miner_hotkey)
+            # if a transport is explicitly provided (e.g. by tests that need
+            # to control miner messaging), respect it and pass it through unchanged.
+            simulation_transport = (
+                transport if transport is not None else transport_map.get(miner_hotkey)
+            )
             original_init(
                 self,
                 miner_hotkey,

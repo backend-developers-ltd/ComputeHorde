@@ -21,7 +21,7 @@ When a new job request arrives, the following sequence of operations should be p
     1.  Query the `allowance` module to get a list of miners with enough allowance for the job's required executor-seconds.
     2.  Iterate through the suitable miners and attempt to reserve the allowance for one of them.
     3.  The first successful reservation will result in a `JobRoute` being returned.
-3.  If a `JobRoute` is successfully obtained, it can be used to execute the job on the specified miner. The `allowance_reservation_id` from the route must be stored and used later to either spend or release the reservation based on the job's outcome.
+3.  If a `JobRoute` is successfully obtained, it can be used to execute the job on the specified miner. The `allowance_reservation_id` from the route must be stored and used later to either spend or release the reservation based on the job's outcome. `allowance_blocks` from the route needs to be used for the block ids in the generated receipts.
 4.  If `pick_miner_for_job_request` raises an exception (`NotEnoughAllowanceException` or `AllMinersBusy`), the job cannot be processed at this time and should be rejected.
 
 ## Overrides/Debug Mode
@@ -29,7 +29,7 @@ When a new job request arrives, the following sequence of operations should be p
 The routing module provides several overrides to facilitate development and special job handling:
 
 1.  **`DEBUG_MINER_KEY`**: If the `settings.DEBUG_MINER_KEY` is set, all jobs will be routed to this specific miner without any allowance checks. The returned `JobRoute` will have `allowance_reservation_id=None`.
-2.  **TRUSTED_MINER_FAKE_KEY**: If a job request has the `on_trusted_miner` flag set to `True`, the job is routed to a pseudo-miner identified by `TRUSTED_MINER_FAKE_KEY`. This also bypasses allowance checks, and the `JobRoute` will have `allowance_reservation_id=None`.
+2.  **TRUSTED_MINER_FAKE_KEY**: If a job request has the `on_trusted_miner` flag set to `True`, the job is routed to a pseudo-miner identified by `TRUSTED_MINER_FAKE_KEY`. This also bypasses allowance checks, and the `JobRoute` will have `allowance_reservation_id=None` and `allowance_blocks=None`.
 
 ## Public Interface
 
@@ -39,6 +39,7 @@ The primary data structure returned by this module is `JobRoute`.
 
 -   `JobRoute`: A dataclass containing:
     -   `miner`: An `allowance.types.Miner` object with the miner's connection details (address, port, hotkey).
+    -   `allowance_blocks`: An optional list of integers representing the allowance reserved block IDs. This is `None` for trusted miner routes.
     -   `allowance_reservation_id`: An optional integer representing the ID of the allowance reservation. This is `None` for debug/trusted miner routes.
 
 ### Methods
