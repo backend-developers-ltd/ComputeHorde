@@ -12,6 +12,7 @@ from compute_horde.receipts.schemas import (
     Receipt,
 )
 from compute_horde.utils import sign_blob
+from compute_horde_core.executor_class import ExecutorClass
 from django.utils import timezone
 
 from compute_horde_validator.validator.models import Miner
@@ -143,7 +144,7 @@ def test_create_job_started_receipt_returns_payload_and_signature(settings):
     job_uuid = str(uuid.uuid4())
     miner_hotkey = "miner_hotkey_1"
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-    executor_class = "always_on.gpu-24gb"
+    executor_class = ExecutorClass.always_on__gpu_24gb
     is_organic = True
     ttl = 300
 
@@ -160,7 +161,7 @@ def test_create_job_started_receipt_returns_payload_and_signature(settings):
     assert payload.job_uuid == job_uuid
     assert payload.miner_hotkey == miner_hotkey
     assert payload.validator_hotkey == validator_hotkey
-    assert payload.executor_class == executor_class
+    assert payload.executor_class == str(executor_class)
     assert payload.is_organic is is_organic
     assert payload.ttl == ttl
     assert payload.timestamp.tzinfo is datetime.UTC
@@ -407,7 +408,7 @@ async def test_get_finished_jobs_for_block_range_returns_only_in_range(settings)
     )
 
     tuples = await receipts().get_finished_jobs_for_block_range(
-        start_block, end_block, executor_class="always_on.gpu-24gb"
+        start_block, end_block, executor_class=ExecutorClass.always_on__gpu_24gb
     )
 
     assert len(tuples) == 1
@@ -433,8 +434,8 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
     miner_hotkey = "miner_hotkey_exec_filter"
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
 
-    exec_gpu = "always_on.gpu-24gb"
-    exec_llm = "always_on.llm.a6000"
+    exec_gpu = ExecutorClass.always_on__gpu_24gb
+    exec_llm = ExecutorClass.always_on__llm__a6000
 
     gpu_uuid = str(uuid.uuid4())
     await JobStartedReceipt.objects.acreate(
@@ -443,7 +444,7 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
         validator_hotkey=validator_hotkey,
         validator_signature="sig",
         timestamp=start_ts - datetime.timedelta(seconds=5),
-        executor_class=exec_gpu,
+        executor_class=str(exec_gpu),
         is_organic=True,
         ttl=60,
     )
@@ -467,7 +468,7 @@ async def test_get_completed_job_receipts_for_block_range_filters_by_executor_cl
         validator_hotkey=validator_hotkey,
         validator_signature="sig",
         timestamp=start_ts - datetime.timedelta(seconds=4),
-        executor_class=exec_llm,
+        executor_class=str(exec_llm),
         is_organic=False,
         ttl=60,
     )
@@ -514,7 +515,7 @@ async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings
     miner_a = "miner_A"
     miner_b = "miner_B"
     validator_hotkey = settings.BITTENSOR_WALLET().get_hotkey().ss58_address
-    executor = "always_on.gpu-24gb"
+    executor = ExecutorClass.always_on__gpu_24gb
 
     job_a = str(uuid.uuid4())
     await JobStartedReceipt.objects.acreate(
@@ -523,7 +524,7 @@ async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings
         validator_hotkey=validator_hotkey,
         validator_signature="sig",
         timestamp=start_ts - datetime.timedelta(seconds=10),
-        executor_class=executor,
+        executor_class=str(executor),
         is_organic=True,
         ttl=60,
     )
@@ -535,7 +536,7 @@ async def test_get_busy_executor_count_counts_only_valid_and_unfinished(settings
         validator_hotkey=validator_hotkey,
         validator_signature="sig",
         timestamp=start_ts - datetime.timedelta(seconds=20),
-        executor_class=executor,
+        executor_class=str(executor),
         is_organic=True,
         ttl=60,
     )

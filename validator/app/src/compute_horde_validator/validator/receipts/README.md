@@ -35,7 +35,7 @@ payload, validator_signature = receipts().create_job_started_receipt(
     job_uuid: str,
     miner_hotkey: str,
     validator_hotkey: str,
-    executor_class: str,
+    executor_class: ExecutorClass,
     is_organic: bool,
     ttl: int,
 )
@@ -75,7 +75,7 @@ receipt: JobStartedReceipt = await receipts().get_job_started_receipt_by_uuid(jo
 rows = await receipts().get_finished_jobs_for_block_range(
     start_block: int,
     end_block: int,
-    executor_class: str,
+    executor_class: ExecutorClass,
 )
 """
 Each row is a tuple of:
@@ -90,7 +90,7 @@ Each row is a tuple of:
 
 # Busy executors count per miner at a timestamp
 counts: dict[str, int] = await receipts().get_busy_executor_count(
-    executor_class: str,
+    executor_class: ExecutorClass,
     at_time: datetime.datetime,
 )
 ```

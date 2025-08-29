@@ -15,6 +15,7 @@ from compute_horde.receipts.schemas import JobFinishedReceiptPayload, JobStarted
 from compute_horde.receipts.store.local import N_ACTIVE_PAGES, LocalFilesystemPagedReceiptStore
 from compute_horde.receipts.transfer import MinerInfo, ReceiptsTransfer, TransferResult
 from compute_horde.utils import sign_blob
+from compute_horde_core.executor_class import ExecutorClass
 from django.conf import settings
 from django.db.models import Count, Exists, OuterRef
 from django.utils import timezone
@@ -184,7 +185,7 @@ class Receipts(ReceiptsBase):
         job_uuid: str,
         miner_hotkey: str,
         validator_hotkey: str,
-        executor_class: str,
+        executor_class: ExecutorClass,
         is_organic: bool,
         ttl: int,
     ) -> tuple[JobStartedReceiptPayload, str]:
@@ -193,7 +194,7 @@ class Receipts(ReceiptsBase):
             miner_hotkey=miner_hotkey,
             validator_hotkey=validator_hotkey,
             timestamp=datetime.datetime.now(datetime.UTC),
-            executor_class=executor_class,
+            executor_class=str(executor_class),
             is_organic=is_organic,
             ttl=ttl,
         )
@@ -230,7 +231,7 @@ class Receipts(ReceiptsBase):
         return await JobStartedReceipt.objects.aget(job_uuid=job_uuid)
 
     async def get_finished_jobs_for_block_range(
-        self, start_block: int, end_block: int, executor_class: str
+        self, start_block: int, end_block: int, executor_class: ExecutorClass
     ) -> list[tuple[str, str, int, datetime.datetime | None, list[int]]]:
         """
         Returns tuples for jobs whose finish (receipt) timestamp falls within the
@@ -262,7 +263,7 @@ class Receipts(ReceiptsBase):
         )
 
         starts = JobStartedReceipt.objects.filter(
-            job_uuid=OuterRef("job_uuid"), executor_class=executor_class
+            job_uuid=OuterRef("job_uuid"), executor_class=str(executor_class)
         )
         finished_qs = finished_qs.filter(Exists(starts))
 
@@ -298,9 +299,9 @@ class Receipts(ReceiptsBase):
             )
 
         return result
-    
+
     async def get_busy_executor_count(
-        self, executor_class: str, at_time: datetime.datetime
+        self, executor_class: ExecutorClass, at_time: datetime.datetime
     ) -> dict[str, int]:
         """
         Count ongoing jobs per miner for the given executor_class at at_time.
@@ -312,7 +313,7 @@ class Receipts(ReceiptsBase):
             Dictionary mapping miner hotkeys to the number of ongoing jobs for that executor_class.
         """
         starts_qs = JobStartedReceipt.objects.valid_at(at_time).filter(
-            executor_class=executor_class
+            executor_class=str(executor_class)
         )
 
         # Existence of a finish before or at at_time for the same job UUID
