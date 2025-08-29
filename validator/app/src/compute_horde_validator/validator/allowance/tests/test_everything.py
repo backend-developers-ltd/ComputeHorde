@@ -680,3 +680,11 @@ def test_manifests(configure_logs):
         assert (
             always_execs[target_ec] != responses_1000[always_inc_miner].manifest[target_ec]  # type: ignore[union-attr]
         )
+
+
+# tests to add:
+# metrics VALIDATOR_STAKE_SHARE_REPORT, VALIDATOR_MINER_MANIFEST_REPORT, VALIDATOR_BLOCK_DURATION
+# system events: supertensor failures from process_block_allowance and sync_manifests
+
+# all the whacky precaching supertensor stuff, including errors (connection errors etc.) and the fact
+# that they geenrate system events and not stack traces. clean ups (maybe) and archive missing.

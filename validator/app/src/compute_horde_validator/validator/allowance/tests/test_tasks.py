@@ -15,7 +15,7 @@ from compute_horde_validator.validator.allowance.utils.supertensor import supert
 
 @pytest.mark.django_db(transaction=True, databases=["default_alias", "default"])
 def test_blocks_scan_blocks_calls_process_for_missing_blocks_and_times_out(monkeypatch):
-    missing_blocks = [1000, 1001, 1002]
+    missing_blocks = list(range(1000, 1014))
     back_st = mock.MagicMock()
 
     def process_block_allowance_with_reporting_side_effect(block_number, st, *a, **kw):
@@ -29,7 +29,7 @@ def test_blocks_scan_blocks_calls_process_for_missing_blocks_and_times_out(monke
         mock.patch.object(blocks, "find_missing_blocks", new=lambda *_, **__: missing_blocks),
         freeze_time(datetime.datetime(2025, 1, 1, 12, 0, 0)) as freezer,
         mock.patch.object(blocks.time, "sleep"),  # type: ignore
-        set_block_number(1003),
+        set_block_number(1013, oldest_reachable_block=1005),
         mock.patch.object(
             blocks,
             "process_block_allowance_with_reporting",
@@ -43,10 +43,16 @@ def test_blocks_scan_blocks_calls_process_for_missing_blocks_and_times_out(monke
             )
 
         assert proc_mock.call_args_list == [
-            mock.call(1000, back_st),
-            mock.call(1001, back_st),
-            mock.call(1002, back_st),
-            mock.call(1004, supertensor(), live=True),
+            mock.call(1005, back_st),
+            mock.call(1006, back_st),
+            mock.call(1007, back_st),
+            mock.call(1008, back_st),
+            mock.call(1009, back_st),
+            mock.call(1010, back_st),
+            mock.call(1011, back_st),
+            mock.call(1012, back_st),
+            mock.call(1013, back_st),
+            mock.call(1014, supertensor(), live=True),
         ]
 
 
