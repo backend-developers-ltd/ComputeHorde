@@ -285,9 +285,11 @@ def process_block_allowance_with_reporting(
         if live and data:
             stake_shares, manifests, duration = data[max(data.keys())]
 
+            VALIDATOR_STAKE_SHARE_REPORT.clear()
             for validator_ss58, stake_share in stake_shares.items():
                 VALIDATOR_STAKE_SHARE_REPORT.labels(validator_ss58).set(stake_share)
 
+            VALIDATOR_MINER_MANIFEST_REPORT.clear()
             for miner_exec_class, count in manifests.items():
                 miner_hotkey, executor_class = miner_exec_class
                 VALIDATOR_MINER_MANIFEST_REPORT.labels(miner_hotkey, executor_class.value).set(
