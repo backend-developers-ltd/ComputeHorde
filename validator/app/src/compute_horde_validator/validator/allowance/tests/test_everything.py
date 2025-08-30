@@ -41,16 +41,6 @@ from .utils_for_tests import (
 )
 
 
-@pytest.fixture
-def configure_logs(caplog):
-    with (
-        caplog.at_level(logging.CRITICAL, logger="transport"),
-        caplog.at_level(logging.CRITICAL, logger="compute_horde.miner_client.base"),
-        caplog.at_level(logging.CRITICAL, logger="compute_horde.miner_client.organic"),
-    ):
-        yield
-
-
 def test_current_block():
     with set_block_number(1000):
         assert allowance().get_current_block() == 1000
@@ -612,7 +602,7 @@ def test_allowance_reservation_corner_cases(configure_logs):
 
 # tests to add:
 # metrics VALIDATOR_STAKE_SHARE_REPORT, VALIDATOR_MINER_MANIFEST_REPORT, VALIDATOR_BLOCK_DURATION
-# system events: supertensor failures from process_block_allowance and sync_manifests
+# system events: supertensor failures from process_block_allowance and sync_manifests - asserting that no stack trace is printed?
 
 # all the whacky precaching supertensor stuff, including errors (connection errors etc.) and the fact
 # that they geenrate system events and not stack traces. clean ups (maybe) and archive missing.

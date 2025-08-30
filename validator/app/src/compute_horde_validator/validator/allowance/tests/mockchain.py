@@ -284,6 +284,9 @@ def set_block_number(block_number_, oldest_reachable_block: float | int = float(
             super().__init__(*args, **kwargs)
             self.block_number = block_number_
 
+        def inc_block_number(self):
+            self.block_number += 1
+
         def get_current_block(self):
             return self.block_number
 
