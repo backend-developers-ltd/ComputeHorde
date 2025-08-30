@@ -15,7 +15,10 @@ from .. import tasks
 from ..default import allowance
 from ..metrics import (
     VALIDATOR_ALLOWANCE_CHECKPOINT,
+    VALIDATOR_BLOCK_DURATION,
+    VALIDATOR_MINER_MANIFEST_REPORT,
     VALIDATOR_RESERVE_ALLOWANCE_DURATION,
+    VALIDATOR_STAKE_SHARE_REPORT,
     VALIDATOR_UNDO_ALLOWANCE_RESERVATION_DURATION,
 )
 from ..tasks import evict_old_data
@@ -38,6 +41,7 @@ from .utils_for_tests import (
     assert_system_events,
     get_metric_values_by_remaining_labels,
     inject_blocks_with_allowances,
+    normalize_stake_dict,
 )
 
 
@@ -193,6 +197,37 @@ def test_complete(caplog, configure_logs):
         resp = allowance().find_miners_with_allowance(
             1.0, ExecutorClass.always_on__llm__a6000, 1001
         )
+    assert get_metric_values_by_remaining_labels(
+        VALIDATOR_STAKE_SHARE_REPORT, {}
+    ) == normalize_stake_dict(
+        {
+            "5DyzX6hd4nx2jQtdLzDGrCYar7D4LQqhKAUNc5hrDvqBSVLN": 9009,
+            "deregging_validator_5": 36036,
+            "regular_validator_0": 1001,
+            "regular_validator_1": 4004,
+            "regular_validator_3": 16016,
+            "stake_loosing_validator_4": 25025,
+        }
+    )
+    assert (
+        get_metric_values_by_remaining_labels(VALIDATOR_MINER_MANIFEST_REPORT, {}).items()
+        >= {
+            "whacky_miner_234always_on.gpu-24gb": 0.0,
+            "whacky_miner_234always_on.llm.a6000": 0.0,
+            "whacky_miner_234spin_up-4min.gpu-24gb": 4.0,
+            "timing_out_miner_248always_on.gpu-24gb": 4.0,
+            "timing_out_miner_248always_on.llm.a6000": 1.0,
+            "timing_out_miner_248spin_up-4min.gpu-24gb": 8.0,
+            "forgetting_miner_246always_on.gpu-24gb": 2.0,
+            "forgetting_miner_246always_on.llm.a6000": 0.0,
+            "forgetting_miner_246spin_up-4min.gpu-24gb": 6.0,
+        }.items()
+    )
+
+    assert len(get_metric_values_by_remaining_labels(VALIDATOR_MINER_MANIFEST_REPORT, {})) == 768
+
+    assert get_metric_values_by_remaining_labels(VALIDATOR_BLOCK_DURATION, {}) == {"": 11.99}
+
     highest_allowance = resp[0][1]
     number_of_executors = manifest_responses(1000)[0][1].manifest[  # type: ignore[union-attr]
         ExecutorClass.always_on__llm__a6000
@@ -220,13 +255,27 @@ def test_complete(caplog, configure_logs):
     assert LF(highest_allowance) == number_of_executors * (11.99 + 3 * 12.00 + 12.01) * 9009.0 / (
         1001 + 4004 + 9009 + 16016 + 25025 + 36036
     )
-    for block_number in range(1006, 1011):
+    for block_number in range(1006, 1010):
         with set_block_number(block_number):
             blocks.process_block_allowance_with_reporting(
                 block_number, supertensor_=supertensor(), live=True
             )
 
+    assert get_metric_values_by_remaining_labels(
+        VALIDATOR_STAKE_SHARE_REPORT, {}
+    ) == normalize_stake_dict(
+        {
+            "5DyzX6hd4nx2jQtdLzDGrCYar7D4LQqhKAUNc5hrDvqBSVLN": 9046.8378,
+            "regular_validator_0": 1004.0029999999999,
+            "regular_validator_1": 4018.4144,
+            "regular_validator_3": 16092.876799999998,
+            "stake_loosing_validator_4": 25160.135000000002,
+        }
+    )
+    assert get_metric_values_by_remaining_labels(VALIDATOR_BLOCK_DURATION, {}) == {"": 12.00}
+
     with set_block_number(1010):
+        blocks.process_block_allowance_with_reporting(1010, supertensor_=supertensor(), live=True)
         assert "deregging_miner_247" not in [n.hotkey_ss58 for n in allowance().neurons(block=1010)]
         assert "deregging_miner_247" not in [
             el[0]
@@ -234,6 +283,12 @@ def test_complete(caplog, configure_logs):
                 1.0, ExecutorClass.always_on__llm__a6000, 1010
             )
         ]
+
+    assert {
+        k: v
+        for k, v in get_metric_values_by_remaining_labels(VALIDATOR_STAKE_SHARE_REPORT, {}).items()
+        if k.startswith("deregging_miner_")
+    } == {}
 
     resp = allowance().find_miners_with_allowance(1.0, ExecutorClass.always_on__llm__a6000, 1001)
     highest_allowance = resp[0][1]
@@ -306,8 +361,8 @@ def test_complete(caplog, configure_logs):
         assert LF(dict(resp)[hotkey]) == allowance_, hotkey  # but nothing else should have changed
 
     for block_number in range(1011, 1102):
-        if not block_number % 25:
-            with set_block_number(block_number):
+        with set_block_number(block_number):
+            if not block_number % 25:
                 sync_manifests()
                 with (
                     freeze_time(datetime.datetime(2025, 1, 1, 12, 0, 0)) as freezer,
@@ -318,6 +373,27 @@ def test_complete(caplog, configure_logs):
                     ),
                 ):
                     tasks.scan_blocks_and_calculate_allowance(supertensor(), keep_running=False)
+            if block_number == 1026:
+                blocks.process_block_allowance_with_reporting(
+                    1026, supertensor_=supertensor(), live=True
+                )
+                assert (
+                    get_metric_values_by_remaining_labels(
+                        VALIDATOR_MINER_MANIFEST_REPORT, {}
+                    ).items()
+                    >= {
+                        "forgetting_miner_246always_on.gpu-24gb": 0.0,
+                        "forgetting_miner_246always_on.llm.a6000": 1.0,
+                        "forgetting_miner_246spin_up-4min.gpu-24gb": 1.0,
+                        "timing_out_miner_248always_on.gpu-24gb": 0.0,
+                        "timing_out_miner_248always_on.llm.a6000": 0.0,
+                        "timing_out_miner_248spin_up-4min.gpu-24gb": 0.0,
+                        "whacky_miner_234always_on.gpu-24gb": 0.0,
+                        "whacky_miner_234always_on.llm.a6000": 1.0,
+                        "whacky_miner_234spin_up-4min.gpu-24gb": 9.0,
+                    }.items()
+                )
+
     assert get_metric_values_by_remaining_labels(
         VALIDATOR_ALLOWANCE_CHECKPOINT,
         {
