@@ -33,10 +33,10 @@ logger = get_task_logger(__name__)
 LOCK_WAIT_TIMEOUT = 5.0
 
 
-MAX_RUN_TIME = 30
+MAX_RUN_TIME = 90
 
 @app.task(
-    time_limit=MAX_RUN_TIME + 30,
+    time_limit=MAX_RUN_TIME + 60,
 )
 def scan_blocks_and_calculate_allowance(
     backfilling_supertensor: SuperTensor | None = None,

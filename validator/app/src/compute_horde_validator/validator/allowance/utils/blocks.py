@@ -5,7 +5,7 @@ from typing import Any
 import turbobt
 from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Case, FloatField, Max, Min, Q, Sum, Value, When
 
 from compute_horde_validator.validator.locks import Lock, LockType
@@ -235,10 +235,23 @@ def process_block_allowance_with_reporting(
     Only call this once the block is already minted
     """
     try:
-        start = time.time()
-        data = process_block_allowance(block_number, supertensor_)
-        end = time.time()
-
+        try:
+            start = time.time()
+            data = process_block_allowance(block_number, supertensor_)
+            end = time.time()
+        except IntegrityError as e:
+            if 'validator_block_pkey' not in str(e):
+                raise
+            logger.info(f"Block {block_number} already processed but still attempted")
+            SystemEvent.objects.create(
+                type=SystemEvent.EventType.COMPUTE_TIME_ALLOWANCE,
+                subtype=SystemEvent.EventSubType.BLOCK_ALREADY_INSERTED_PROBABLY_BLOCK_CACHE_JITTER_IGNORE_ME_FOR_NOW,
+                data={
+                    "block_number": block_number,
+                    "error": str(e),
+                },
+            )
+            return
     except Exception as e:
         msg = f"Error processing block allowance for block {block_number}: {e!r}"
         if isinstance(e, SuperTensorError):
