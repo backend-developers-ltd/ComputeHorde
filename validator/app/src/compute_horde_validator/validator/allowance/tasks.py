@@ -1,6 +1,5 @@
 import contextlib
 import time
-from typing import ContextManager
 
 from celery.utils.log import get_task_logger
 from django.conf import settings
@@ -35,6 +34,7 @@ LOCK_WAIT_TIMEOUT = 5.0
 
 MAX_RUN_TIME = 90
 
+
 @app.task(
     time_limit=MAX_RUN_TIME + 60,
 )
@@ -51,7 +51,7 @@ def scan_blocks_and_calculate_allowance(
             with Lock(LockType.ALLOWANCE_FETCHING, LOCK_WAIT_TIMEOUT, settings.DEFAULT_DB_ALIAS):
                 start_time = time.time()
 
-                cm: ContextManager[SuperTensor]
+                cm: contextlib.AbstractContextManager[SuperTensor]
                 if backfilling_supertensor is None:
                     cm = PrecachingSuperTensor(cache=DjangoCache())
                 else:

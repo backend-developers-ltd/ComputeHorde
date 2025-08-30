@@ -247,7 +247,6 @@ class SuperTensor(BaseSuperTensor):
             self.loop.run_until_complete(self.archive_bittensor.close())
 
 
-
 N_THREADS = 10
 CACHE_AHEAD = 10
 

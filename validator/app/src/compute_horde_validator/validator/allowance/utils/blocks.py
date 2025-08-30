@@ -5,7 +5,7 @@ from typing import Any
 import turbobt
 from celery.utils.log import get_task_logger
 from compute_horde_core.executor_class import ExecutorClass
-from django.db import transaction, IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Case, FloatField, Max, Min, Q, Sum, Value, When
 
 from compute_horde_validator.validator.locks import Lock, LockType
@@ -23,7 +23,7 @@ from ..metrics import (
 )
 from ..types import AllowanceException, NotEnoughAllowanceException, ss58_address
 from .manifests import get_manifest_drops, get_manifests
-from .supertensor import SuperTensor, SuperTensorError, supertensor, CannotGetCurrentBlock
+from .supertensor import CannotGetCurrentBlock, SuperTensor, SuperTensorError, supertensor
 
 logger = get_task_logger(__name__)
 
@@ -45,9 +45,9 @@ def find_missing_blocks(current_block: int) -> list[int]:
     expected_block_numbers = set(range(lookback_block, current_block + 1))
 
     # Get existing block numbers from the database
-    existing_blocks = Block.objects.filter(
-        block_number__gte=lookback_block
-    ).values_list("block_number", flat=True)
+    existing_blocks = Block.objects.filter(block_number__gte=lookback_block).values_list(
+        "block_number", flat=True
+    )
     existing_block_numbers = set(existing_blocks)
 
     # Find missing block numbers
@@ -80,11 +80,13 @@ class Timer:
 def wait_for_block(target_block: int, timeout_seconds: float):
     timeout_seconds = max(timeout_seconds, MIN_BLOCK_WAIT_TIME)
     start = time.time()
+
     def safe_get_current_block():
         try:
             return supertensor().get_current_block()
         except CannotGetCurrentBlock:
             return target_block - 1
+
     while target_block > safe_get_current_block():
         if time.time() - start > timeout_seconds:
             logger.warning(
@@ -229,7 +231,10 @@ def process_block_allowance(
 
 
 def process_block_allowance_with_reporting(
-    block_number: int, supertensor_: SuperTensor, live=False, blocks_behind:int = 0,
+    block_number: int,
+    supertensor_: SuperTensor,
+    live=False,
+    blocks_behind: int = 0,
 ):
     """
     Only call this once the block is already minted
@@ -240,7 +245,7 @@ def process_block_allowance_with_reporting(
             data = process_block_allowance(block_number, supertensor_)
             end = time.time()
         except IntegrityError as e:
-            if 'validator_block_pkey' not in str(e):
+            if "validator_block_pkey" not in str(e):
                 raise
             logger.info(f"Block {block_number} already processed but still attempted")
             SystemEvent.objects.create(
@@ -332,21 +337,21 @@ def backfill_blocks_if_necessary(
         for block_number in missing_block_numbers:
             # TODO process_block_allowance_with_reporting never throws, but logs errors appropriately. maybe it should
             # be retried? otherwise random failures will leave holes until they are backfilled
-            process_block_allowance_with_reporting(block_number, backfilling_supertensor, blocks_behind=current_block - block_number)
+            process_block_allowance_with_reporting(
+                block_number, backfilling_supertensor, blocks_behind=current_block - block_number
+            )
             if not block_number % 100 and report_callback:
                 report_callback(block_number, block_number - 100)
             timer.check_time()
     except TimesUpError:
-        logger.debug(
-            "backfill_blocks_if_necessary times out gracefully, spawning a new task"
-        )
+        logger.debug("backfill_blocks_if_necessary times out gracefully, spawning a new task")
         raise
 
 
 def livefill_blocks(
-        current_block: int,
-        max_run_time: float | int,
-        report_callback: Callable[[int, int], Any] | None = None,
+    current_block: int,
+    max_run_time: float | int,
+    report_callback: Callable[[int, int], Any] | None = None,
 ):
     timer = Timer(max_run_time)
     try:
@@ -354,17 +359,13 @@ def livefill_blocks(
             wait_for_block(current_block + 1, timer.time_left())
             current_block += 1
 
-            process_block_allowance_with_reporting(
-                current_block, supertensor(), live=True
-            )
+            process_block_allowance_with_reporting(current_block, supertensor(), live=True)
             if not current_block % 100 and report_callback:
                 report_callback(current_block, current_block - 100)
             timer.check_time()
 
     except TimesUpError:
-        logger.debug(
-            "livefill_blocks times out gracefully, spawning a new task"
-        )
+        logger.debug("livefill_blocks times out gracefully, spawning a new task")
         raise
 
 
