@@ -39,6 +39,7 @@ from django.db import transaction
 from django.utils.timezone import now
 from numpy.typing import NDArray
 from pydantic import JsonValue, TypeAdapter
+from pylon_client import PylonClient
 
 from compute_horde_validator.celery import app
 from compute_horde_validator.validator import collateral
@@ -62,7 +63,6 @@ from compute_horde_validator.validator.organic_jobs.miner_driver import (
     drive_organic_job,
     execute_organic_job_request,
 )
-from compute_horde_validator.validator.pylon import pylon_client
 from compute_horde_validator.validator.routing.types import JobRoute
 from compute_horde_validator.validator.s3 import (
     download_prompts_from_s3_url,
@@ -797,13 +797,12 @@ def set_scores(bittensor: turbobt.Bittensor):
         logger.warning("Not setting scores, SERVING is disabled in constance config")
         return
 
-    current_block = pylon_client().get_latest_block()
-    block_hash = pylon_client().get_block_hash(current_block)
-    interval = CommitRevealInterval(current_block)
-    if current_block not in interval.commit_window:
+    current_block = async_to_sync(bittensor.blocks.head)()
+    interval = CommitRevealInterval(current_block.number)
+    if current_block.number not in interval.commit_window:
         logger.debug(
             "Outside of commit window, skipping, current block: %s, window: %s",
-            current_block,
+            current_block.number,
             interval.commit_window,
         )
         return
@@ -817,8 +816,8 @@ def set_scores(bittensor: turbobt.Bittensor):
                 return
 
             subnet = bittensor.subnet(settings.BITTENSOR_NETUID)
-            hyperparameters = async_to_sync(subnet.get_hyperparameters)(block_hash)
-            neurons = async_to_sync(subnet.list_neurons)(block_hash)
+            hyperparameters = async_to_sync(subnet.get_hyperparameters)(current_block.hash)
+            neurons = async_to_sync(subnet.list_neurons)(current_block.hash)
 
             batches = list(
                 SyntheticJobBatch.objects.select_related("cycle")
@@ -826,7 +825,7 @@ def set_scores(bittensor: turbobt.Bittensor):
                     scored=False,
                     should_be_scored=True,
                     started_at__gte=now() - timedelta(days=1),
-                    cycle__stop__lt=current_block,
+                    cycle__stop__lt=current_block.number,
                 )
                 .order_by("started_at")
             )
@@ -847,7 +846,7 @@ def set_scores(bittensor: turbobt.Bittensor):
                 ", ".join(str(batch.id) for batch in batches),
             )
 
-            hotkey_scores = _score_cycles(current_block)
+            hotkey_scores = _score_cycles(current_block.number)
             if not hotkey_scores:
                 logger.warning("No scores calculated, skipping weight setting")
                 return
@@ -874,7 +873,7 @@ def set_scores(bittensor: turbobt.Bittensor):
             weights_in_db = Weights(
                 uids=uids.tolist(),
                 weights=normalized_weights,
-                block=current_block,
+                block=current_block.number,
                 version_key=SCORING_ALGO_VERSION,
             )
 
@@ -893,7 +892,14 @@ def set_scores(bittensor: turbobt.Bittensor):
 
             try:
                 # Assume once it's passed to pylon, it will be committed
-                pylon_client().set_weights(weights_dict)
+                async def set_weights_via_pylon():
+                    async with PylonClient(
+                        base_url=f"http://{settings.PYLON_ADDRESS}:{settings.PYLON_PORT}"
+                    ) as client:
+                        # TODO: wait_for_inclusion=True, wait_for_finalization=False
+                        await client.set_weights(weights_dict)
+
+                async_to_sync(set_weights_via_pylon)()
                 logger.info("Successfully broadcasted latest weights to pylon client")
 
                 weights_in_db.save()
@@ -902,7 +908,7 @@ def set_scores(bittensor: turbobt.Bittensor):
                     type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
                     subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
                     long_description="Successfully committed weights",
-                    data={"weights_id": weights_in_db.id, "current_block": current_block},
+                    data={"weights_id": weights_in_db.id, "current_block": current_block.number},
                 )
 
             except Exception as e:
@@ -911,7 +917,7 @@ def set_scores(bittensor: turbobt.Bittensor):
                 save_weight_setting_failure(
                     subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
                     long_description=msg,
-                    data={"operation": "committing", "current_block": current_block},
+                    data={"operation": "committing", "current_block": current_block.number},
                 )
 
 
