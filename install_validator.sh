@@ -132,7 +132,6 @@ BITTENSOR_NETWORK=finney
 BITTENSOR_WALLET_NAME="$(. ~/tmpvars && echo "$WALLET_NAME")"
 BITTENSOR_WALLET_HOTKEY_NAME="$(. ~/tmpvars && echo "$HOTKEY_NAME")"
 HOST_WALLET_DIR=$HOME/.bittensor/wallets
-HOST_PYLON_DB_DIR=$HOME/.pylon
 COMPOSE_PROJECT_NAME=compute_horde_validator
 FACILITATOR_URI=wss://facilitator.computehorde.io/ws/v0/
 MIGRATING="$(. ~/tmpvars && echo "$MIGRATING")"
