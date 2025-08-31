@@ -1,48 +1,17 @@
 import datetime
 from abc import abstractmethod, ABC
 from collections import defaultdict
-from dataclasses import dataclass
 from typing import NamedTuple
 
 from compute_horde_core.executor_class import ExecutorClass
-from ..types import ss58_address, block_ids, block_id
+from ..types import ss58_address, block_ids, block_id, SpendingIssue, BlocksOutsideRange, DoubleSpentBlocks, \
+    InvalidatedBlocks, InsufficientAllowance, CannotSpend
 from ...models import Block
 from .. import settings
 
 validator_ss58 = ss58_address
 miner_ss58 = ss58_address
 amount = float
-
-
-class SpendingIssue:
-    pass
-
-
-@dataclass
-class BlocksOutsideRange(SpendingIssue):
-    allowed_range: range
-    blocks_outside_range: block_ids
-
-
-@dataclass
-class DoubleSpentBlocks(SpendingIssue):
-    double_spent_blocks: block_ids
-
-
-@dataclass
-class InvalidatedBlocks(SpendingIssue):
-    invalidated_blocks: block_ids
-
-
-@dataclass
-class InsufficientAllowance(SpendingIssue):
-    spendable_amount: amount
-    blocks: block_ids
-
-
-class NotEnoughAllowance(Exception):
-    def __init__(self, issues: list[SpendingIssue]):
-        self.issues = issues
 
 
 class ValidatorMinerExecutor(NamedTuple):
@@ -104,7 +73,7 @@ class SpendingBookkeeperBase(ABC):
             issues.append(
                 InsufficientAllowance(spendable_amount, list(spendable_allowances.keys()))
             )
-            raise NotEnoughAllowance(issues)
+            raise CannotSpend(issues)
         else:
             # We have enough allowance. Register the spending.
             self._register_transaction(triplet, list(spendable_allowances.keys()), spend_time)

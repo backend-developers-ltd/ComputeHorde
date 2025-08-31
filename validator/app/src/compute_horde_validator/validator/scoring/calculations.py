@@ -1,13 +1,105 @@
+import datetime
 import logging
 from collections import defaultdict
 from collections.abc import Callable, Sequence
+from typing import Generator, NamedTuple
 
 import numpy as np
 from constance import config
 
+from compute_horde_core.executor_class import ExecutorClass
+from compute_horde_validator.validator.allowance.default import allowance, ValidatorMinerExecutor
+from compute_horde_validator.validator.allowance.types import CannotSpend
 from compute_horde_validator.validator.models import Miner, OrganicJob, SyntheticJob
 
 logger = logging.getLogger(__name__)
+
+
+class SpendingInfo(NamedTuple):
+    job_uuid: str
+    executor_seconds_cost: int
+    paid_with_blocks: list[int]
+    started_at: datetime.datetime
+    finished_at: datetime.datetime
+
+
+def receipts__get_alleged_job_spendings(
+    block_start: int,
+    block_end: int,
+) -> Generator[tuple[ValidatorMinerExecutor, SpendingInfo], None, None]:
+    # TODO: Read from receipts data, maybe update receipt models for convenience
+    yield (
+        ValidatorMinerExecutor(
+            "some-validator",
+            "some-miner",
+            ExecutorClass.always_on__gpu_24gb,
+        ),
+        SpendingInfo(
+            job_uuid="some-job-uuid",
+            executor_seconds_cost=123,
+            paid_with_blocks=[1, 2, 3],
+            started_at=datetime.datetime.now(),
+            finished_at=datetime.datetime.now(),
+        ),
+    )
+    yield (
+        ValidatorMinerExecutor(
+            "another-validator",
+            "some-miner",
+            ExecutorClass.always_on__gpu_24gb,
+        ),
+        SpendingInfo(
+            job_uuid="another-job-uuid",
+            executor_seconds_cost=123,
+            paid_with_blocks=[1, 2, 3],
+            started_at=datetime.datetime.now(),
+            finished_at=datetime.datetime.now(),
+        ),
+    )
+    yield (
+        ValidatorMinerExecutor(
+            "some-validator",
+            "another-miner",
+            ExecutorClass.always_on__gpu_24gb,
+        ),
+        SpendingInfo(
+            job_uuid="yet-another-job-uuid",
+            executor_seconds_cost=123,
+            paid_with_blocks=[1, 2, 3],
+            started_at=datetime.datetime.now(),
+            finished_at=datetime.datetime.now(),
+        ),
+    )
+
+
+def calculate_allowance_paid_job_scores(
+    start_block: int, end_block: int
+) -> dict[str, dict[str, float]]:
+    """
+    Give scores based on executor seconds of finished jobs that were properly paid for with allowance
+    """
+    # Find out what jobs finished within the time
+    job_spendings = receipts__get_alleged_job_spendings(start_block, end_block)
+
+    # Ask allowance module for a bookkeeper, which will be used to validate the spendings in-memory
+    bookkeeper = allowance().get_temporary_bookkeeper(start_block, end_block)
+
+    # Try to execute the spendings, score successfully paid jobs, log invalid ones
+    scores: defaultdict[ExecutorClass, defaultdict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for triplet, spending in job_spendings:
+        try:
+            job_cost = spending.executor_seconds_cost
+            bookkeeper.spend(triplet, spending.started_at, spending.paid_with_blocks, job_cost)
+            scores[triplet.executor_class][triplet.miner] += job_cost
+        except CannotSpend as e:
+            # TODO: System event
+            logger.warning(f"Spending on job {spending.job_uuid} is invalid: {e}")
+
+    # Convert back to regular dicts and return
+    return {
+        executor_class: {miner: score for miner, score in miner_scores.items()}
+        for executor_class, miner_scores in scores.items()
+    }
 
 
 def normalize(scores: dict[str, float], weight: float = 1) -> dict[str, float]:
@@ -52,8 +144,8 @@ def horde_score(
     sum_agent = sum(benchmarks)
     inverted_n = 1 / len(benchmarks)
     avg_benchmark = sum_agent * inverted_n
-    scaled_inverted_n = reversed_sigmoid(inverted_n, beta=10**beta, delta=delta)
-    scaled_avg_benchmark = float(avg_benchmark**alpha)
+    scaled_inverted_n = reversed_sigmoid(inverted_n, beta=10 ** beta, delta=delta)
+    scaled_avg_benchmark = float(avg_benchmark ** alpha)
     return scaled_avg_benchmark * sum_agent * scaled_inverted_n
 
 

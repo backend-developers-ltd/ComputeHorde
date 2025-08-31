@@ -1,15 +1,17 @@
 # default implementation of the allowance module interface
+from collections import defaultdict
+
+from django.db.models import Q
 
 from compute_horde_core.executor_class import ExecutorClass
 
 from .base import AllowanceBase
-from .types import Miner, Neuron, block_ids, reservation_id, ss58_address
+from .types import Miner, Neuron, block_id, block_ids, reservation_id, ss58_address
 from .utils import blocks, booking, manifests, metagraph
 from .utils.spending import (
     SpendingBookkeeperBase,
-    ValiMinerExeclassBlock,
     AllowanceInfo,
-    InMemorySpendingBookkeeper,
+    InMemorySpendingBookkeeper, ValidatorMinerExecutor,
 )
 from .utils.supertensor import supertensor
 from . import settings
@@ -66,7 +68,7 @@ class Allowance(AllowanceBase):
             validator_ss58=self.my_ss58_address,
         )
 
-    def get_spending_validator(self, block_start: int, block_end: int) -> SpendingBookkeeperBase:
+    def get_temporary_bookkeeper(self, block_start: int, block_end: int) -> SpendingBookkeeperBase:
         # TODO: Check for off-by-one errors - lower and upper
         lower_bound = block_start - settings.BLOCK_EXPIRY
         upper_bound = block_end + 1
@@ -74,7 +76,7 @@ class Allowance(AllowanceBase):
         block_allowances_qs = (
             BlockAllowance.objects.filter(
                 block_id__gte=lower_bound,
-                block_id__lte=upper_bound + 1,  # So that we know when the last block ends
+                block_id__lte=upper_bound + 1,  # +1 so that we know when the last block ends
                 allowance__gt=0,
             )
             .filter(
@@ -90,30 +92,28 @@ class Allowance(AllowanceBase):
             )
         )
 
-        allowances = {}
-
+        allowances: defaultdict[ValidatorMinerExecutor, dict[block_id, AllowanceInfo]] = defaultdict(dict)
         for row in block_allowances_qs:
-            allowances[
-                ValiMinerExeclassBlock(
-                    validator=row["validator_ss58"],
-                    miner=row["miner_ss58"],
-                    block=row["block"],
-                    executor_class=ExecutorClass(row["executor_class"]),
-                )
-            ] = AllowanceInfo(
+            block = row["block"]
+            triplet = ValidatorMinerExecutor(
+                row["validator_ss58"],
+                row["miner_ss58"],
+                ExecutorClass(row["executor_class"]),
+            )
+            info = AllowanceInfo(
                 allowance=row["allowance"],
                 invalidated_at_block=row["invalidated_at_block"],
             )
+            allowances[triplet][block] = info
 
         blocks = [
-            block
-            for block in Block.objects.filter(
+            *Block.objects.filter(
                 block_number__gte=lower_bound,
                 block_number__lte=upper_bound,
             ).order_by("block_number")
         ]
 
-        return InMemorySpendingBookkeeper(allowances, blocks)
+        return InMemorySpendingBookkeeper(known_allowances=allowances, blocks=blocks)
 
 
 _allowance_instance: Allowance | None = None

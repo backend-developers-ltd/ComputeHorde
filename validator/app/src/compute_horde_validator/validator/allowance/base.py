@@ -138,11 +138,12 @@ class AllowanceBase(ABC):
         """
 
     @abstractmethod
-    def get_spending_validator(
+    def get_temporary_bookkeeper(
         self,
         block_start: int,
         block_end: int,
     ) -> SpendingBookkeeperBase:
         """
-        Get an object that can validate a sequence of allowance spending transactions against precaltulated allowance.
+        Get an object that can consume a sequence of allowance spending transactions and validate them one by one,
+        keeping the ongoing state of the allowances.
         """
