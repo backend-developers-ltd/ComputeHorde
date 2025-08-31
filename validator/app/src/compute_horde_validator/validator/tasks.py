@@ -849,7 +849,8 @@ def set_scores(bittensor: turbobt.Bittensor):
 
             hotkey_scores = _score_cycles(current_block)
             if not hotkey_scores:
-                logger.warning("No scores calculated")
+                logger.warning("No scores calculated, skipping weight setting")
+                return
 
             uids, weights = normalize_batch_scores(
                 hotkey_scores,
