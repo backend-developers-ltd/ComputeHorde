@@ -5,7 +5,10 @@ from compute_horde_core.executor_class import ExecutorClass
 from .base import AllowanceBase
 from .types import Miner, Neuron, block_ids, reservation_id, ss58_address
 from .utils import blocks, booking, manifests, metagraph
+from .utils.spending import SpendingValidatorBase, ValiMinerExeclassBlock, AmountAndInvalidation, SpendingValidator
 from .utils.supertensor import supertensor
+from . import settings
+from ..models import BlockAllowance, Block
 
 
 class Allowance(AllowanceBase):
@@ -57,6 +60,50 @@ class Allowance(AllowanceBase):
             job_start_block=job_start_block,
             validator_ss58=self.my_ss58_address,
         )
+
+    def get_spending_validator(self, block_start: int, block_end: int) -> SpendingValidatorBase:
+        # TODO: Check for off-by-one errors - lower and upper
+        lower_bound = block_start - settings.BLOCK_EXPIRY
+        upper_bound = block_end + 1
+
+        block_allowances_qs = BlockAllowance.objects.filter(
+            block_id__gte=lower_bound,
+            block_id__lte=upper_bound + 1,  # So that we know when the last block ends
+            allowance__gt=0,
+        ).filter(
+            Q(allowance_booking__is_spent=False) | Q(allowance_booking__isnull=True),
+        ).values(
+            "validator_ss58",
+            "miner_ss58",
+            "executor_class",
+            "block",
+            "allowance",
+            "invalidated_at_block",
+        )
+
+        allowances = {}
+
+        for row in block_allowances_qs:
+            allowances[
+                ValiMinerExeclassBlock(
+                    validator=row["validator_ss58"],
+                    miner=row["miner_ss58"],
+                    block=row["block"],
+                    executor_class=ExecutorClass(row["executor_class"]),
+                )
+            ] = AmountAndInvalidation(
+                allowance=row["allowance"],
+                invalidated_at_block=row["invalidated_at_block"],
+            )
+
+        blocks = [
+            block for block in Block.objects.filter(
+                block_number__gte=lower_bound,
+                block_number__lte=upper_bound,
+            ).order_by("block_number")
+        ]
+
+        return SpendingValidator(allowances, blocks)
 
 
 _allowance_instance: Allowance | None = None

@@ -11,6 +11,7 @@ from compute_horde_validator.validator.allowance.types import (
     reservation_id,
     ss58_address,
 )
+from compute_horde_validator.validator.allowance.utils.spending import SpendingValidatorBase
 
 
 class AllowanceBase(ABC):
@@ -134,4 +135,14 @@ class AllowanceBase(ABC):
     def neurons(self, block: int) -> list[Neuron]:
         """
         Return all neurons in the subnet for a given block. raises NeuronSnapshotMissing if the snapshot is missing.
+        """
+
+    @abstractmethod
+    def get_spending_validator(
+        self,
+        block_start: int,
+        block_end: int,
+    ) -> SpendingValidatorBase:
+        """
+        Get an object that can validate a sequence of allowance spending transactions against precaltulated allowance.
         """
