@@ -282,7 +282,6 @@ def test_set_scores__weight_commit_success(
 
         # Verify pylon client was called with correct weights
         mock_pylon_client.mock.set_weights.assert_called_once()
-        mock_pylon_client.mock.force_commit_weights.assert_called_once()
         actual_weights = mock_pylon_client.mock.set_weights.call_args.kwargs.get("weights", {})
 
         expected_weights_set = expected_weights_committed
@@ -305,7 +304,7 @@ def test_set_scores__weight_commit_success(
 
 @pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
 def test_set_scores__weight_commit_failure(settings, bittensor, mock_pylon_client):
-    """Test that pylon client set_weights failures are properly handled."""
+    """Test that pylon client failures are properly handled."""
     with patch(
         "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
     ):
@@ -316,32 +315,6 @@ def test_set_scores__weight_commit_failure(settings, bittensor, mock_pylon_clien
 
         # Verify pylon client was called
         mock_pylon_client.mock.set_weights.assert_called_once()
-        # force_commit_weights should not be called since set_weights failed
-        mock_pylon_client.mock.force_commit_weights.assert_not_called()
-
-        assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
-        check_system_events(
-            SystemEvent.EventType.WEIGHT_SETTING_FAILURE,
-            SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
-            1,
-        )
-
-
-@pytest.mark.django_db(databases=["default", "default_alias"], transaction=True)
-def test_set_scores__force_commit_weights_failure(settings, bittensor, mock_pylon_client):
-    """Test that pylon client force_commit_weights failures are properly handled."""
-    with patch(
-        "compute_horde_validator.validator.tasks.pylon_client", return_value=mock_pylon_client
-    ):
-        mock_pylon_client.override("get_latest_block", 1084)
-        # set_weights succeeds but force_commit_weights fails
-        mock_pylon_client.mock.force_commit_weights.side_effect = Exception("Commit failed")
-        setup_db()
-        set_scores()
-
-        # Verify both pylon client methods were called
-        mock_pylon_client.mock.set_weights.assert_called_once()
-        mock_pylon_client.mock.force_commit_weights.assert_called_once()
 
         assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
         check_system_events(
@@ -365,7 +338,6 @@ def test_set_scores__commit__too_early_or_too_late(
         set_scores()
 
         mock_pylon_client.mock.set_weights.assert_not_called()
-        mock_pylon_client.mock.force_commit_weights.assert_not_called()
 
         assert not Weights.objects.exists()
         assert not SystemEvent.objects.exists()
@@ -386,7 +358,6 @@ def test_set_scores__multiple_starts(settings, bittensor, mock_pylon_client):
             for _ in range(threads):
                 pool.submit(set_scores)
         mock_pylon_client.mock.set_weights.assert_called_once()
-        mock_pylon_client.mock.force_commit_weights.assert_called_once()
 
     assert SystemEvent.objects.using(settings.DEFAULT_DB_ALIAS).count() == 2
 

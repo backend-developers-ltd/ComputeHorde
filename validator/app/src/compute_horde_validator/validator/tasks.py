@@ -890,41 +890,22 @@ def set_scores(bittensor: turbobt.Bittensor):
                 batch.scored = True
                 batch.save()
 
-            # Send weights to the pylon database
             try:
+                # Assume once it's passed to pylon, it will be committed
                 pylon_client().set_weights(weights_dict)
                 logger.info("Successfully broadcasted latest weights to pylon client")
 
-            except Exception as e:
-                msg = f"Failed to broadcast latest weights to pylon client: {e}"
-                logger.warning(msg)
-                save_weight_setting_failure(
-                    subtype=SystemEvent.EventSubType.SET_WEIGHTS_ERROR,
-                    long_description=msg,
-                    data={"operation": "committing", "current_block": current_block},
-                )
-                return
-
-            # trigger weights committing
-            try:
-                result = pylon_client().force_commit_weights()
                 weights_in_db.save()
 
-                msg = f"Pylon successfully committed weights: {weights_in_db.id}, {result}"
-                logger.info(msg)
                 save_weight_setting_event(
                     type_=SystemEvent.EventType.WEIGHT_SETTING_SUCCESS,
                     subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_SUCCESS,
-                    long_description=msg,
-                    data={
-                        "operation": "committing",
-                        "weights_id": weights_in_db.id,
-                        "current_block": current_block,
-                    },
+                    long_description="Successfully committed weights",
+                    data={"weights_id": weights_in_db.id, "current_block": current_block},
                 )
 
             except Exception as e:
-                msg = f"Pylon failed to commit weights: {e}"
+                msg = f"Failed to broadcast latest weights to pylon client: {e}"
                 logger.warning(msg)
                 save_weight_setting_failure(
                     subtype=SystemEvent.EventSubType.COMMIT_WEIGHTS_ERROR,
